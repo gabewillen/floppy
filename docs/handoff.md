@@ -11,6 +11,20 @@ Last updated: 2026-10-18.
 
 ## Current state (2026-10-09) — resume here
 
+- **The identity, conversation and memory namespaces (2026-10-18, D115,
+  [plan](plans/original-domains.md) step 3):** `namespaces/identity`
+  (`<identity:hears_name>`, was `<bot:recognize>`;
+  `<identity:sorted_identities>`), `namespaces/memory` (`<memory:to_json>`,
+  `<memory:contents>`) and the `conversation` namespace's ten elements
+  (`<conversation:message_for_turn>`, was `<conversation:commit>`, and
+  the original's `_relationship_for_input`, `_participant_for_source`,
+  `_fail_turn`, `detector_refs`, `_new_track_ref`, `_content_for_detector`,
+  `_complete_turn` and the turn detector's `_ingest_content` and `_on_end`)
+  replace the conversation's, the turn detector's and reasoning's row
+  JavaScript, writing what it wrote. `isCommittedAppend` stays JavaScript
+  (it searches the history). Next in Q10's order: `behavior`. Open: the
+  plan's "To review (step 3)" list; the bot, conversation, identity and
+  memory namespace IRP baselines were measured on macOS arm64.
 - **The intuition and cognition namespaces (2026-10-18, D114,
   [plan](plans/original-domains.md) step 2):** `namespaces/intuition`
   (`<intuition:observe>`, `<intuition:escalate>`, the original's

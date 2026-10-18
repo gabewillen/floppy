@@ -29,7 +29,7 @@ invoked service). The decisions behind this plan are in
 | Persistent routines (`hsm.every` / `hsm.at` across turns) | Long-lived invoked children whose schedules are self-rescheduling `<send delay>` loops; each tick is an event to the parent, which decides on it in a new turn |
 | pydantic event data models | JSON Schema files referenced by `event:schema` on the transitions that take the event; scxml.rs checks them where the event is created (`<send>`, `<raise>`, a send between sessions) and on host input (decision D41) |
 | Hand-written payload validators (`model_validate`, field checks) | `event:schema` only; a `cond` correlates (which child, which turn, which timer) and never checks a payload's shape (decision D42) |
-| Helper functions (attention bias, envelopes, choice assembly and compaction, routing, confidence tuner, message commit) | floppy namespace elements that write to a `location` (`namespaces/bot`, `namespaces/conversation`, `namespaces/decision`, `namespaces/processing`, `namespaces/intuition`, `namespaces/cognition`; decisions D40, D113, D114) |
+| Helper functions (attention bias, envelopes, choice assembly and compaction, routing, confidence tuner, message commit) | floppy namespace elements that write to a `location` (`namespaces/bot`, `namespaces/conversation`, `namespaces/decision`, `namespaces/processing`, `namespaces/intuition`, `namespaces/cognition`, `namespaces/identity`, `namespaces/memory`; decisions D40, D113, D114, D115) |
 | Model-facing event choice lists and payload filling (Intuition, Processor) | `<decision:choice>` (the `decision` namespace) writes the enabled transitions with their `event:schema`, read through `session-snapshot-host`, as canonical choices; the `decision` service, invoked with it, asks a backend, fills the offered events' data to their schemas and validates it; `choose` emits the chosen event, `select` (the original's TypeSafe `Processor.process`, which intuition uses) emits `decision.selected` with every groundable event and its own confidence |
 | Event names `bot.*`, `bot.ability.*`, `phone.*` | Unchanged, byte for byte |
 | Telemetry (`telemetry`) | scxml.rs's OpenTelemetry facade (guests through the telemetry WIT; the native runtime, `scx`, through scxml.rs's own) |
@@ -273,7 +273,13 @@ D33 to D43.
 | `normalize_confidence`, `selection_confidence` | `<processing:selection_confidence>` | `namespaces/processing` element |
 | `ConfidenceTuner` (`observe`, `should_escalate`) | `<intuition:observe>`, `<intuition:escalate>` over the `confidence_tuner` datum (D114) | `namespaces/intuition` elements |
 | `model_facing_content`, `InputData.model_facing_content` (reasoning's `ProcessorInput` prompt, its environment block and its budgets) | `<cognition:model_facing_content>` (D114) | `namespaces/cognition` element |
-| `_message_for_turn`, `_model_safe_content`, `_stable_identity_basis`, `_stable_context_ref`, `relationship_context_ref`, `MessageProvenance` | `<conversation:commit>` (its `keylocation` receives the relationship context reference) | `namespaces/conversation` element |
+| `_message_for_turn`, `_model_safe_content`, `MessageProvenance` | `<conversation:message_for_turn>` (was `<conversation:commit>`, D115) | `namespaces/conversation` element |
+| `Conversation._relationship_for_input` (its identity collection score), `_stable_context_ref`, `_new_relationship_ref` | `<conversation:relationship_for_input>` (D115) | `namespaces/conversation` element |
+| `Conversation._participant_for_source`, `_fail_turn`'s participants, `detector_refs`, `_new_track_ref` | `<conversation:participant_for_source>`, `<conversation:fail_turn>`, `<conversation:detector_refs>`, `<conversation:new_track_ref>` (D115) | `namespaces/conversation` elements |
+| `_content_for_detector`, `Conversation._complete_turn` | `<conversation:content_for_detector>`, `<conversation:complete_turn>` (D115) | `namespaces/conversation` elements |
+| `TurnDetector._ingest_content`, `TurnDetector._on_end` | `<conversation:ingest_content>`, `<conversation:on_end>` over the detector's `turn_content` datum (D115) | `namespaces/conversation` elements |
+| `identity/recognition.py` `hears_name`, `identity/value.py` `sorted_identities` | `<identity:hears_name>` (was `<bot:recognize>`), `<identity:sorted_identities>` (D115) | `namespaces/identity` elements |
+| memory `Memory.to_json` (`_encode_content`, `value.identities_json`), `OutputData.contents` | `<memory:to_json>`, `<memory:contents>` (D115) | `namespaces/memory` elements |
 | `cognition.py` Cognition | `abilities/cognition/cognition.scx` | ability `.scx` child |
 | `autonomy.py` Autonomy | `abilities/autonomy/autonomy.scx` (phase 5: the inventory's ACTIVE turn behaviors the stimulus triggers run as `<content expr>` children of the chain `abilities/candidates_runner/candidates_runner.scx`, D93) | stage `.scx` child |
 | `intuition.py` Intuition | `abilities/intuition/intuition.scx` invoking `services/decision` | stage `.scx` child and service |
@@ -282,7 +288,7 @@ D33 to D43.
 | `conversation.py` Conversation | `abilities/conversation/conversation.scx` | ability `.scx` child |
 | `speaking.py` Speaking | `abilities/speaking/speaking.scx` (`idle` → `encoding` → `playing` → `recording`, decision D59) | ability `.scx` child |
 | `vocal/speech/encoding.py` SpeechEncoding | `abilities/vocal/vocal.scx`, speaking's child, invoking `services/speech` `encode` | ability `.scx` child and service |
-| `identity/identity.py` Identity, `identity/recognition.py` SpeechNameRecognizer | `abilities/identity/identity.scx`, one of the body's input abilities: each `environment.sound` is decoded by `abilities/speech_decoding/speech_decoding.scx` and the transcript matched by `<bot:recognize>`; text input is matched too (D43); adoption and recall through `abilities/memory/memory.scx` (decisions D43, D44) | ability `.scx` child |
+| `identity/identity.py` Identity, `identity/recognition.py` SpeechNameRecognizer | `abilities/identity/identity.scx`, one of the body's input abilities: each `environment.sound` is decoded by `abilities/speech_decoding/speech_decoding.scx` and the transcript matched by `<identity:hears_name>`; text input is matched too (D43); adoption and recall through `abilities/memory/memory.scx` (decisions D43, D44) | ability `.scx` child |
 | Reflection, Routines | `abilities/reflection/reflection.scx` (revising through `bots/builder/builder.scx`), `abilities/routines/routines.scx` over the chain `abilities/routines_runner/routines_runner.scx`; long-lived children of every cognition (D80) | ability `.scx` child |
 | Behaviors (Starlark) | builder-built `.scx` documents | generated `.scx` |
 | Memory and its providers | `abilities/memory/memory.scx` over `services/sql` (SQLite, phase 3) or `services/pgsql` (Postgres, phase 7), migrated by `abilities/migration/migration.scx` with `<migration:plan>` | ability `.scx` child + service |
@@ -437,8 +443,8 @@ decisions are D76 to D79.
   relationship in either direction, and an ambient relationship whose
   participants include a target matches at the similarity threshold);
   a new one takes the input's `relationship_context_ref`
-  (`{"identity_groups":[...]}`, which `<conversation:commit keylocation>`
-  writes) and the `session_ref` `relationship-` and that. The memory is
+  (`{"identity_groups":[...]}`) and the `session_ref` `relationship-` and
+  that (all of it `<conversation:relationship_for_input>`, D115). The memory is
   kept under the relationship's `context_ref`: `recalling_memory` recalls
   it before the turns and `remembering_memory` remembers the input, as
   the original's `Memory.to_json` writes it, after them, each its own invocation
