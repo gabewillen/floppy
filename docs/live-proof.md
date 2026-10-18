@@ -7,6 +7,20 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-18, the processing namespace and every stage's sends (D113), model `Qwen/Qwen3.8-Flash-Next`
+
+Each choice is now tagged with its offerer's session id, and each stage
+sends its own selections to `#_scxml_` + target (the body no longer
+routes). The runs used floppy commit `911cac09bb` (code at `89063fe603`),
+the same env files, backends and model as the entry below, no relay, and
+`cargo test -p floppy-tests --locked --test floppy_live -- --ignored
+--nocapture --test-threads=1 --exact <test>`, once each.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_cascade` | pass (26 s) | autonomy and intuition left the question unhandled, and reasoning's selection, sent to its target, answered it |
+| `floppy_live` `live_choices` | fail (25 s) | the body's choices were `bot.focus_device@session.floppy bot.ability.cognition.ignore@session.floppy.cognition bot.ability.communication.respond@session.floppy.communication bot.ability.identity.adopt@session.floppy.identity`, as the test expects. Intuition (TypeSafe) chose `bot.focus_device` and `bot.ability.cognition.ignore` with confidence 14, under the warmup floor, so it sent both as its environment actions (the body took the focus: `floppy.focus` `lamp`; the cognition logged the ignore) and escalated; reasoning then failed `schema-mismatch`, so the turn failed (`bot.processing.failed`). The arguments were not saved in this run (no relay capture), so which part of the call the dispatch schema refused is not known; the session-id `target` enum the model now fills is the new part of that schema |
+
 ## 2026-10-18, undeclared top-level argument fields dropped before the check (D112, amended), model `Qwen/Qwen3.8-Flash-Next`
 
 `generate` now drops each top-level field of a call's arguments that the
