@@ -7,6 +7,42 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-18, `live_choices` through the relay, and a selection without data sent with `{}`, model `Qwen/Qwen3.8-Flash-Next`
+
+A selection with no data is now sent with `{}`, as the original's
+`dispatch_selected_events` sends it. The runs used floppy commit
+`f8a759d09c`, the same env files, backends and model as the entry below,
+with one more env file setting `FLOPPY_BASE_URL` to a local relay in front
+of the vLLM that saved each request and reply body (no headers), and
+`cargo test -p floppy-tests --locked --test floppy_live -- --ignored
+--nocapture --test-threads=1 --exact <test>`, once each.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_choices` | fail (19 s) | as before: intuition sent its focus and ignore (confidence 14) and escalated, and reasoning failed `schema-mismatch`. The relay shows the refused part: the model's `dispatch` call put `bot.focus_device`'s `device` beside `event` (`{"device": "lamp", "event": "bot.focus_device", "reason": ..., "target": "session.floppy"}`), with no `data`, which the branch requires; its `target`s were right, and its respond branch was valid |
+| `floppy_live` `live_cascade` | pass (19 s) | |
+
+The schema matches the original's `dispatch_tool`: `target` is present
+when the event has an offerer and is then a required one-value enum with
+the original's description, and `data` is required when its schema
+requires a field. What differs from the original are the `target` values
+(session ids, a deliberate difference Q3 accepted; the original's are
+actor keys), and before D113 the body's own events offered no `target` at
+all. Sending the captured request again to the vLLM directly, twice for
+each variant, with only the `target`s changed:
+
+| Variant | The model's `bot.focus_device` selection |
+| --- | --- |
+| as sent (session ids, `bot.focus_device` targeted at `session.floppy`) | `device` beside `event`, no `data` (refused) |
+| `bot.focus_device` with no `target` (as before D113) | `data: {device: "lamp"}` (valid) |
+| the original's actor keys (`bot`, `cognition`, `communication`, `identity`) | `data: {device: "lamp"}`, `target: "bot"` (valid) |
+
+So this model fills the original's schema correctly with the original's
+actor keys and gets it wrong with session ids in the same places. The
+fault is the model's against a schema of the original's shape, but it is
+triggered by Q3's session-id targets: the fix (offering actor keys and
+sending to their sessions) reopens Q3 and is left to the maintainer.
+
 ## 2026-10-18, the processing namespace and every stage's sends (D113), model `Qwen/Qwen3.8-Flash-Next`
 
 Each choice is now tagged with its offerer's session id, and each stage
