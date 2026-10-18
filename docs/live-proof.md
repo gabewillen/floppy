@@ -7,6 +7,44 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-17, `generate.result` `{content, tool_calls}` and the original's dispatch tool (D112, amended) on the local vLLM, model `Qwen/Qwen3.8-Flash-Next`
+
+`generate` now returns every tool call and checks each one against the
+`parameters` it was sent with (`schema-mismatch`, all or nothing), and
+`<decision:selection>` builds the original's dispatch tool (`reason`
+optional, `data` required only when its schema requires a field). The
+runs used floppy commit `1fc03645f9`, env files
+`FLOPPY_LIVE_ENV_FILE=$PWD/.env:<scratch>/env.speech:<scratch>/env.voice`
+(the vLLM's `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` and `TYPESAFE_API_KEY`
+from `.env`; Gemini's OpenAI-compatible API as `FLOPPY_SPEECH_BASE_URL`
+and `FLOPPY_SPEECH_API_KEY`; a local LocalAI on `127.0.0.1:8089` as
+`FLOPPY_VOICE_BASE_URL` and `FLOPPY_VOICE_API_KEY`; no `FLOPPY_STREAM`, so
+no call streamed), `FLOPPY_LIVE_MODEL=Qwen/Qwen3.8-Flash-Next`, `cargo
+test -p floppy-tests --locked --test floppy_live -- --ignored --nocapture
+--test-threads=1` (186 s) and `--test environment_live` the same way
+(925 s). LocalAI's `pyannote-diarization` model serves NVIDIA Streaming
+Sortformer v2 (`diar_streaming_sortformer_4spk-v2`, on its
+`nemo-speech-cpp` backend), not pyannote; no run here reached
+diarization. The diagnosis reruns of `live_cascade`, `live_identity` and
+`live_conversation` went through a local relay that saved each request
+and reply body (no headers).
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_cascade` | fail | reasoning failed `schema-mismatch`: the model's `dispatch` call put a `reason` beside `events` at the root of its arguments, which the tool's `parameters` (`additionalProperties: false`, only `events`) do not admit; its one event branch (`bot.ability.communication.respond`, "The capital of France is Paris.") was valid. The rerun failed the same way |
+| `floppy_live` `live_choices` | pass | |
+| `floppy_live` `live_chat` | pass | speaking went through Gemini |
+| `floppy_live` `live_identity` | fail | turn 1's reasoning failed `schema-mismatch` for the same root `reason` (its branch, "I'm Floppy ...", was valid), so the addressed bot never answered. The rerun failed the same way |
+| `floppy_live` `live_conversation` | fail | `4 completed, 0 failed`: reflection's select failed `schema-mismatch` on turns 1 and 2, a behavior (`GabePingPong`) was learned ACTIVE only on turn 3, and turn 4 still recalled "green" through reasoning. In the relay rerun, select's calls on turns 1 and 2 put `bot.behavior.create`'s fields beside `event` with no `data` (which the branch requires) and put an unoffered `lifetime` in `data`; turns 3 and 4 selected a create and a change whose drafts failed the builder's simulation (`test-failed`), so nothing was learned |
+| `environment_live` `live_two_participants` | fail | `a` took its turn and said "The window is open." through Gemini, and the room delivered the sound to both bots. LocalAI answered one `/v1/vad` call from each bot (`200`) and got nothing more in the 15 minutes. The open-speech window closes only on a later sound without voice (the original's VAD End), and the test sends none after `a`'s speech (the deterministic `a_bots_speech_reaches_the_other_participant` sends `media/silence.wav`), so `b` never decoded the speech or took a turn. This is a gap in the test, not the model's doing, and it was not changed |
+
+Every `schema-mismatch` above is the model's output disagreeing with the
+schema it was sent: this server does not constrain decoding to the
+tool's `parameters`, and D112 refuses a call the schema does not admit
+instead of reading only `events` from it. During `floppy_live`, LocalAI
+answered two of its five `/v1/vad` calls `500`. `live_chat` passed
+regardless.
+
 ## 2026-10-16, generate's forced tool call (D112) on the local vLLM, model `Qwen/Qwen3.8-Flash-Next`
 
 `generate` now asks for schema-shaped output through one forced tool call
