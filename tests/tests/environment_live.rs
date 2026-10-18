@@ -106,6 +106,8 @@ fn live_two_participants() {
     );
     let room = room();
     let media = unique_scratch("environment-live-media");
+    std::fs::write(media.join("silence.wav"), support::hearing::silent_wav())
+        .expect("the media directory is writable");
     let mut args = Vec::new();
     for file in support::live_env_files() {
         args.push("--env-file".to_owned());
@@ -130,14 +132,25 @@ fn live_two_participants() {
             "content_type": "text/plain"
         }),
     );
-    // a's turn on the request, then its speech heard by b and b's turn on
-    // it (b's floppy.output), at most 15 minutes in all.
+    // a's turn on the request and its speech; then the silence that ends
+    // the utterance (the open-speech window closes on a sound without
+    // voice, the original's VAD End), as
+    // a_bots_speech_reaches_the_other_participant sends it; then b's turn
+    // on what it heard (b's floppy.output), at most 15 minutes in all.
     let heard = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        run.until(Duration::from_mins(15), |record| {
+        let mut records = run.until(Duration::from_mins(10), |record| {
+            record["type"] == "log" && record["label"] == "bot.ability.speaking.output"
+        });
+        run.event(
+            "environment.sound",
+            &json!({"audio": "media/silence.wav", "media_type": "audio/wav"}),
+        );
+        records.extend(run.until(Duration::from_mins(5), |record| {
             record["type"] == "log"
                 && record["label"] == "floppy.output"
                 && record["session"] == "session.b"
-        })
+        }));
+        records
     }));
     if let Ok(records) = heard {
         all.extend(records);
