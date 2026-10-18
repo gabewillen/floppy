@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- turn_detector-5: an image stimulus is its reference with image/*; a later event stimulus replaces it as {event, payload}. -->
+<!-- turn_detector-5: an image stimulus is no content, so a turn of one image fails as empty; with an event stimulus the turn is the event as {event, payload}. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="turn_detector" type="scxml" src="../../../turn_detector.scx">
@@ -17,7 +17,7 @@
       <send event="bot.ability.turn_detector.turn.start" target="#_turn_detector"><content expr='{"turn_ref": "t1", "content": {"kind": "image", "source_participant_ref": "caller", "content": "media/p.png"}}'/></send>
       <send event="bot.ability.turn_detector.turn.end" target="#_turn_detector"><content expr='{"turn_ref": "t1"}'/></send>
     </onentry>
-    <transition event="bot.ability.turn_detector.turn.complete" cond='JSON.stringify(_event.data.turn_ref) === "\"t1\"" &amp;&amp; JSON.stringify(_event.data.content) === "\"media/p.png\"" &amp;&amp; JSON.stringify(_event.data.content_type) === "\"image/*\""' target="step2"/>
+    <transition event="bot.ability.turn_detector.failed" cond='JSON.stringify(_event.data.stage) === "\"turn\"" &amp;&amp; JSON.stringify(_event.data.message) === "\"Turn closed with neither text, audio, nor modality-neutral content.\"" &amp;&amp; JSON.stringify(_event.data.turn_ref) === "\"t1\""' target="step2"/>
   </state>
   <state id="step2">
     <onentry>

@@ -43,9 +43,10 @@
     bot.ability.turn_detector.turn.silence.expired to itself.
   * Content (the original _ingest_content, <conversation:ingest_content>): text is stripped and kept when not
     empty; audio chunks are kept in order by reference (the first chunk's
-    sample_rate_hz and channels win); content, image and event stimuli
-    replace the modality-neutral content (content_type the stimulus's,
-    image/*, application/event).
+    sample_rate_hz and channels win); content and event stimuli replace
+    the modality-neutral content (content_type the stimulus's, or
+    application/event); an image stimulus changes nothing (the original's
+    images are turn attachments, parity gap 13).
 
   Output (normalizing): the closed turn (the original _on_end,
   <conversation:on_end>) answers the parent with

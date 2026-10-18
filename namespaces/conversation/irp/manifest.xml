@@ -75,7 +75,7 @@
     </test>
   </assert>
   <assert id="conversation-7" specnum="7" specid="#conversation-7">
-    <![CDATA[<conversation:ingest_content> takes a stimulus into the open turn's content (a text's stripped text when not empty, an audio chunk with the first rate and channels, a content, an image as image/*, an event as application/event), and <conversation:on_end> writes the closed turn {turn} with its text, audio or content, or {failure} at stage turn when it has neither text, audio nor content, or both text and audio.]]>
+    <![CDATA[<conversation:ingest_content> takes a stimulus into the open turn's content (a text's stripped text when not empty, an audio chunk with the first rate and channels, a content, an event as application/event; an image changes nothing), and <conversation:on_end> writes the closed turn {turn} with its text, audio or content, or {failure} at stage turn when it has neither text, audio nor content, or both text and audio.]]>
     <test id="360" conformance="mandatory" manual="false">
       <start uri="360/test360.txml"/>
     </test>

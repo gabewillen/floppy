@@ -11,6 +11,13 @@ Last updated: 2026-10-18.
 
 ## Current state (2026-10-09) — resume here
 
+- **Parity gap 13's small part (2026-10-18,
+  [parity-gaps](plans/parity-gaps.md)):** `<conversation:ingest_content>`
+  no longer takes an image stimulus as `image/*` content, as the original's
+  `0d0f5e2` deletes that branch; until the turn attachments are ported (the
+  rest of gap 13), an image adds nothing to a turn, and a turn of images
+  alone fails as empty. The conversation namespace IRP was re-prepared and
+  its baseline re-measured on macOS arm64.
 - **Q8: the decision service's kinds are OpenAI Decisions API's question
   types, with J16 and J17 (2026-10-18, D120,
   [plan](plans/original-domains.md#to-review-q8)):** `choice` (the default;

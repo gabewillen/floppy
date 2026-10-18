@@ -198,7 +198,7 @@
   }
  },
  {
-  "name": "an_image_is_image_content",
+  "name": "an_image_is_no_content",
   "stimuli": [
    {
     "kind": "image",
@@ -210,23 +210,18 @@
     "audio": [],
     "audio_channels": null,
     "audio_sample_rate_hz": null,
-    "content": "media/i.png",
-    "content_type": "image/*",
+    "content": null,
+    "content_type": null,
     "text_parts": []
    }
   ],
   "closed": {
-   "turn": {
-    "audio": [],
-    "channels": null,
-    "content": "media/i.png",
-    "content_type": "image/*",
+   "failure": {
     "conversation_ref": "relationship-x",
+    "message": "Turn closed with neither text, audio, nor modality-neutral content.",
     "participant_ref": "alice",
-    "sample_rate_hz": null,
-    "self_participant_ref": "alice",
     "source_participant_ref": "alice",
-    "text": "",
+    "stage": "turn",
     "turn_ref": "input-1:turn:alice"
    }
   }

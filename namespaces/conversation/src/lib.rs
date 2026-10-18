@@ -126,8 +126,10 @@
 //! object is the cleared content), with the stimulus `C` (an object with a
 //! `kind`, or `null` for none) taken in: a text's stripped text when not
 //! empty; an audio chunk that has content, the first rate and channels
-//! winning; a content's content and type; an image's content as `image/*`;
-//! an event as `{event, payload}` of type `application/event`.
+//! winning; a content's content and type; an event as `{event, payload}`
+//! of type `application/event`. An image is not the turn's content (the
+//! original's `0d0f5e2` deleted its `image/*` branch: images are a turn's
+//! attachments, parity gap 13), so it changes nothing.
 //!
 //! # `<conversation:on_end location="L" turn="T" participant_ref="P" conversation_ref="C" turn_ref="R" source_participant_ref="S"/>`
 //!
@@ -1896,10 +1898,6 @@ impl TurnContent {
             Some("content") => {
                 self.content = member("content");
                 self.content_type = member("content_type");
-            }
-            Some("image") => {
-                self.content = member("content");
-                self.content_type = Json::String("image/*".into());
             }
             Some("event") => {
                 let mut event = Map::new();
