@@ -159,7 +159,9 @@ Each event the body emits goes to its environment, which writes it as a
 `log` record labelled with its name, its text the event's data as JSON:
 `bot.activated`, `bot.activating.failed`, `bot.deactivated`, `bot.reboot`,
 `bot.processing.completed`, `bot.processing.failed`,
-`bot.processing.timed_out`, `bot.processing.cancel.timed_out`, and, from
+`bot.processing.timed_out`, `bot.processing.cancel.timed_out`,
+`bot.degraded` (`{stage: "processing_cancel"}`, when an unacknowledged
+cancel degrades it), and, from
 the communication,
 `bot.ability.speaking.output` (what was said),
 `bot.ability.communication.failed`, `bot.ability.conversation.failed`

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- floppy-3: bot.deactivate while activating ends the session with nothing sent. -->
+<!-- floppy-3: bot.deactivate while activating answers bot.deactivated and ends the session. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="floppy" type="scxml" src="../../../floppy.scx">
@@ -14,9 +14,12 @@
     <onentry>
       <send event="bot.deactivate" target="#_floppy"><content expr="{}"/></send>
     </onentry>
-    <transition event="done.invoke.floppy" target="step1"/>
+    <transition event="bot.deactivated" target="step1"/>
   </state>
   <state id="step1">
+    <transition event="done.invoke.floppy" target="step2"/>
+  </state>
+  <state id="step2">
     <transition target="pass"/>
   </state>
   <transition event="bot.ability"/>

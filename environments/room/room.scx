@@ -170,6 +170,9 @@
     <transition event="bot.processing.cancel.timed_out" event:schema="schemas/bot.processing.cancel.timed_out.json">
       <log label="bot.processing.cancel.timed_out" expr="eventDataJson(_event)"/>
     </transition>
+    <transition event="bot.degraded" event:schema="schemas/bot.degraded.json">
+      <log label="bot.degraded" expr="eventDataJson(_event)"/>
+    </transition>
     <transition event="bot.reboot" event:schema="schemas/bot.reboot.json">
       <log label="bot.reboot" expr="eventDataJson(_event)"/>
     </transition>

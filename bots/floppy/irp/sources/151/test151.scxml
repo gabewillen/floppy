@@ -39,9 +39,12 @@
     <transition event="bot.processing.failed" cond="_event.data.turn === 2" target="step6"/>
   </state>
   <state id="step6">
-    <transition event="done.invoke.floppy" cond='_event.data.reason === "turn 2: the cognition did not acknowledge its cancel"' target="step7"/>
+    <transition event="bot.degraded" cond="_event.data.stage === 'processing_cancel'" target="step7"/>
   </state>
   <state id="step7">
+    <transition event="done.invoke.floppy" cond='_event.data.reason === "turn 2: the cognition did not acknowledge its cancel"' target="step8"/>
+  </state>
+  <state id="step8">
     <transition target="pass"/>
   </state>
   <transition event="bot.ability"/>

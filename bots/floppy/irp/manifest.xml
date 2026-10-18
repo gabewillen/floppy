@@ -24,7 +24,7 @@
     </test>
   </assert>
   <assert id="floppy-3" specnum="3" specid="#floppy-3">
-    <![CDATA[`bot.deactivate` leaves `live` and ends the session in `inactive`: from `active` after sending `bot.deactivated` to its parent, from `activating` with nothing sent.]]>
+    <![CDATA[`bot.deactivate` leaves `live` and ends the session in `inactive`: from `active` or `activating`, after sending `bot.deactivated` to its parent (every accepted request is answered).]]>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>
@@ -57,7 +57,7 @@
     </test>
   </assert>
   <assert id="floppy-6" specnum="6" specid="#floppy-6">
-    <![CDATA[`bot.processing.timed_out` for the current turn moves to `cancelling_processing` and is passed on to the parent; the acknowledgement (`bot.ability.cognition.cancelled` or `bot.ability.processing.cancelled` for the turn) ends the turn with `bot.processing.failed`; `bot.processing.cancel.timed_out` for it degrades the bot: it sends `bot.processing.cancel.timed_out` and `bot.processing.failed`, and the session ends in the final state `degraded` with `{reason: "turn <n>: the cognition did not acknowledge its cancel"}`. A timer for another turn is not taken.]]>
+    <![CDATA[`bot.processing.timed_out` for the current turn moves to `cancelling_processing` and is passed on to the parent; the acknowledgement (`bot.ability.cognition.cancelled` or `bot.ability.processing.cancelled` for the turn) ends the turn with `bot.processing.failed`; `bot.processing.cancel.timed_out` for it degrades the bot: it sends `bot.processing.cancel.timed_out`, `bot.processing.failed` and `bot.degraded` `{stage: "processing_cancel"}`, and the session ends in the final state `degraded` with `{reason: "turn <n>: the cognition did not acknowledge its cancel"}`. A timer for another turn is not taken.]]>
     <test id="150" conformance="mandatory" manual="false">
       <start uri="150/test150.scxml"/>
     </test>

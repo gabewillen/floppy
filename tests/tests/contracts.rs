@@ -78,7 +78,7 @@ const FLOPPY_NAME: &str = "[floppy name]";
 const DIALECT: &str = "https://json-schema.org/draft/2020-12/schema";
 
 /// The body's events (`bots/floppy/schemas/`).
-const BODY_EVENTS: [&str; 12] = [
+const BODY_EVENTS: [&str; 13] = [
     "bot.deactivate",
     "bot.input",
     "bot.focus_device",
@@ -90,6 +90,7 @@ const BODY_EVENTS: [&str; 12] = [
     "bot.processing.failed",
     "bot.processing.timed_out",
     "bot.processing.cancel.timed_out",
+    "bot.degraded",
     "environment.visual",
 ];
 

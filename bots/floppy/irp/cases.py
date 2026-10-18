@@ -50,7 +50,7 @@ def for_turn(event, k):
 
 def degraded(k):
     return [for_turn("bot.processing.timed_out", k), for_turn("bot.processing.cancel.timed_out", k),
-            for_turn("bot.processing.failed", k),
+            for_turn("bot.processing.failed", k), expect("bot.degraded", "_event.data.stage === 'processing_cancel'"),
             expect(DONE, f"_event.data.reason === {js(f'turn {k}: the cognition did not acknowledge its cancel')}")]
 
 
@@ -75,10 +75,10 @@ def case(test_id, number, comment, steps, params=(), **options):
 
 S.statement(1, "Invoked, the body starts in `live`, which invokes the abilities (`cognition`, `communication`, `identity`, `listening`), and activates on its own (no `bot.activate`): it sends `bot.activated` to its parent, and takes a turn's input, only once every expected ability (the data `expected`) has sent its first `bot.ability.offers`.")
 S.statement(2, "While `activating`, an `error.*` event, an ability's `done.invoke`, or the activation timer (`activation_timeout_ms`) fails the activation: the body sends `bot.activating.failed` to its parent and its session ends in the final state `inactive`.")
-S.statement(3, "`bot.deactivate` leaves `live` and ends the session in `inactive`: from `active` after sending `bot.deactivated` to its parent, from `activating` with nothing sent.")
+S.statement(3, "`bot.deactivate` leaves `live` and ends the session in `inactive`: from `active` or `activating`, after sending `bot.deactivated` to its parent (every accepted request is answered).")
 S.statement(4, "`bot.reboot` `{reason}` re-enters `live`, and the body passes it on to its parent: the abilities are invoked again and the bot waits for their offers again (and sends `bot.activated` again) before it takes input; the turn count goes on.")
 S.statement(5, "In `unfocused` or `focused`, `bot.input` or a `bot.ability.cognition.input` `{stimulus}` handoff starts a `processing` turn, counted from 1; the cognition's `bot.ability.cognition.output` or `bot.ability.failed` for the current turn ends it (back to attention) with `bot.processing.completed` or `bot.processing.failed` to the parent, and one for another turn is dropped.")
-S.statement(6, "`bot.processing.timed_out` for the current turn moves to `cancelling_processing` and is passed on to the parent; the acknowledgement (`bot.ability.cognition.cancelled` or `bot.ability.processing.cancelled` for the turn) ends the turn with `bot.processing.failed`; `bot.processing.cancel.timed_out` for it degrades the bot: it sends `bot.processing.cancel.timed_out` and `bot.processing.failed`, and the session ends in the final state `degraded` with `{reason: \"turn <n>: the cognition did not acknowledge its cancel\"}`. A timer for another turn is not taken.")
+S.statement(6, "`bot.processing.timed_out` for the current turn moves to `cancelling_processing` and is passed on to the parent; the acknowledgement (`bot.ability.cognition.cancelled` or `bot.ability.processing.cancelled` for the turn) ends the turn with `bot.processing.failed`; `bot.processing.cancel.timed_out` for it degrades the bot: it sends `bot.processing.cancel.timed_out`, `bot.processing.failed` and `bot.degraded` `{stage: \"processing_cancel\"}`, and the session ends in the final state `degraded` with `{reason: \"turn <n>: the cognition did not acknowledge its cancel\"}`. A timer for another turn is not taken.")
 S.statement(7, "An input that arrives during a turn waits and starts the next turn when the bot returns to attention.")
 S.statement(8, "An ability that ends while the bot is active (`done.invoke.<id>`) degrades it: the session ends in `degraded` with `{reason: \"the ability <id> ended while active\"}`.")
 
@@ -100,8 +100,8 @@ case(112, 2, "an activation that times out (an expected ability never offers) fa
 
 case(120, 3, "bot.deactivate from active reports bot.deactivated and ends the session.",
      ACTIVE + [send(DEACTIVATE, js({})), expect("bot.deactivated"), LEFT])
-case(121, 3, "bot.deactivate while activating ends the session with nothing sent.",
-     [send(DEACTIVATE, js({})), LEFT],
+case(121, 3, "bot.deactivate while activating answers bot.deactivated and ends the session.",
+     [send(DEACTIVATE, js({})), expect("bot.deactivated"), LEFT],
      params=[GHOST])
 
 case(130, 4, "bot.reboot re-enters live: no input is taken until the abilities offer again.",

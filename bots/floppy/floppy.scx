@@ -10,7 +10,7 @@
     live -bot.deactivate-> deactivating -> inactive (final)
     live -bot.reboot (the cognition asks for one)-> live (re-entered:
       every ability is cancelled and invoked again)
-    activating -bot.deactivate-> inactive (the original's activation_cleanup)
+    activating -bot.deactivate-> deactivating (the original's activation_cancelling)
     cancelling_processing -cancel timeout-> degraded (a final sink)
 
   Joining (decision D107): the environment's <invoke> is the original's
@@ -35,6 +35,20 @@
   (activation_timeout_ms), an error event, or an ability ending while
   activating fails the activation (bot.activating.failed) and ends the
   session in inactive; an ability ending while active degrades the bot.
+
+  Lifecycle answers (the original's a2cbaa8): the activator is the
+  environment that invoked the body, and every terminal goes to it, its
+  parent. Every bot.deactivate is answered once: from activating or
+  active by bot.deactivated (leaving live cancels the abilities at once,
+  so the original's activation_cancelling and its timeout have nothing to
+  wait on). The original stamps a terminal with its request's envelope id;
+  an SCXML <send> cannot take its id from an expression, and the only
+  requester is the parent, so nothing is stamped. The transition into
+  degraded on an unacknowledged cancel announces bot.degraded {stage:
+  "processing_cancel"}; the original's other stages are cleanups that
+  SCXML's synchronous invoke cancel never leaves unfinished, and an
+  ability ending while active, which floppy degrades on, has no stage in
+  the original, so it ends with its reason only.
 
   Communication: bot.ability.communication.input from outside, while
   active, goes to the communication, which admits it into its
@@ -129,7 +143,7 @@
   environment, which logs it (decision D102): bot.activated,
   bot.activating.failed, bot.deactivated, bot.processing.completed,
   bot.processing.failed, bot.processing.timed_out,
-  bot.processing.cancel.timed_out, bot.reboot, plus the communication's
+  bot.processing.cancel.timed_out, bot.degraded, bot.reboot, plus the communication's
   bot.ability.speaking.output, bot.ability.communication.failed,
   bot.ability.conversation.failed and bot.ability.conversation.output, the
   listening's bot.ability.listening.failed, and any ability's
@@ -309,9 +323,10 @@
           <content expr="emptyData()"/>
         </send>
       </transition>
-      <!-- The original's activation_cleanup: the session ends in inactive,
-           with no bot.deactivated (the bot never became active). -->
-      <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json" target="inactive"/>
+      <!-- The original's activation_cancelling (a2cbaa8): every accepted
+           bot.deactivate is answered, so leaving live cancels the
+           abilities and deactivating answers bot.deactivated. -->
+      <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json" target="deactivating"/>
     </state>
 
     <state id="active" initial="unfocused">
@@ -547,6 +562,10 @@
           </send>
           <send event="bot.processing.failed" target="#_parent">
             <content expr="cancelledFailure()"/>
+          </send>
+          <!-- The original's transition into degraded announces it. -->
+          <send event="bot.degraded" target="#_parent">
+            <param name="stage" expr="'processing_cancel'"/>
           </send>
           <assign location="degraded_reason" expr="cancelUnacknowledgedReason()"/>
         </transition>

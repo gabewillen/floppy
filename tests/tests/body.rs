@@ -277,6 +277,43 @@ fn deactivate_cancels_the_abilities() {
 }
 
 #[test]
+fn deactivate_while_activating_is_answered_and_cancels_the_abilities() {
+    let body = layout(
+        &Cognition::Double("'silent'"),
+        &[("activation_timeout_ms", "60000")],
+    );
+    let mut run = start(&body);
+    // The silent cognition never offers, so the bot is still activating.
+    run.event("bot.deactivate", &json!({}));
+    let records = run.until(WAIT, label_is("done.invoke"));
+    // Every accepted bot.deactivate is answered (the original's
+    // activation_cancelling, a2cbaa8): never activated, the bot still
+    // reports bot.deactivated once its abilities are cancelled.
+    assert_eq!(
+        only(
+            &records,
+            &[
+                "double.exit",
+                "bot.activated",
+                "bot.activating.failed",
+                "bot.deactivated",
+                "done.invoke"
+            ]
+        ),
+        pairs(&[
+            ("double.exit", "Qwen/Qwen3.8-Flash-Next"),
+            ("bot.deactivated", "{}"),
+            ("done.invoke", r#"{"invokeid":"floppy"}"#),
+        ]),
+        "{records:?}"
+    );
+    close(
+        run,
+        "deactivate_while_activating_is_answered_and_cancels_the_abilities",
+    );
+}
+
+#[test]
 fn the_activation_passes_its_model_to_the_cognition() {
     let body = layout(&Cognition::Double("'ready'"), &[]);
     let mut run = start_with(&body, &[("model", "'some/model'")]);
@@ -484,6 +521,7 @@ fn an_unacknowledged_cancel_degrades_the_bot() {
                 "bot.processing.timed_out",
                 "bot.processing.cancel.timed_out",
                 "bot.processing.failed",
+                "bot.degraded",
                 "floppy.degraded"
             ]
         ),
@@ -500,6 +538,9 @@ fn an_unacknowledged_cancel_degrades_the_bot() {
                 "bot.processing.failed",
                 r#"{"message":"Bot processing timed out after 0.3 seconds.","turn":1}"#
             ),
+            // The transition into degraded announces it (the original's
+            // a2cbaa8).
+            ("bot.degraded", r#"{"stage":"processing_cancel"}"#),
         ])
     );
     // degraded is a final sink: the bot's session ends with its reason,
