@@ -233,7 +233,6 @@
       <param name="prompt" expr="designPrompt()"/>
       <param name="schema" expr="plan_schema"/>
       <param name="schemaname" expr="'topology_plan'"/>
-      <param name="strict" expr="true"/>
       <param name="max_completion_tokens" expr="max_completion_tokens"/>
     </invoke>
     <!-- A streamed reply's progress starts the inactivity bound, or starts
@@ -251,8 +250,8 @@
     </transition>
     <!-- The two events of this call of the generate service, each recorded
          (gen_id: a late event of an earlier attempt's call is not this one). -->
-    <transition event="generate.result" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.result","description":"The reply of the generate service: text without a requested schema, or the JSON value that satisfies the requested schema.","oneOf":[{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},{"type":"object","properties":{"json":true},"required":["json"],"additionalProperties":false}]}' cond="isFrom(_event, gen_id)">
-      <assign location="plan" expr="_event.data.json"/>
+    <transition event="generate.result" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.result","description":"The reply of the generate service as the original text generator returns it: its content and every tool call, each with its id, name and JSON-object arguments.","type":"object","properties":{"content":{"type":"string"},"tool_calls":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"args":{"type":"object"}},"required":["id","name","args"],"additionalProperties":false}}},"required":["content","tool_calls"],"additionalProperties":false}' cond="isFrom(_event, gen_id)">
+      <assign location="plan" expr="namedArgs(_event, 'topology_plan')"/>
     </transition>
     <transition event="generate.failed" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.failed","description":"The generation failed; code names why (closed).","type":"object","properties":{"code":{"enum":["unconfigured","transport","status","malformed","truncated","filtered","refusal","not-json","schema-mismatch"]}},"required":["code"],"additionalProperties":false}' cond="isFrom(_event, gen_id)">
       <assign location="gen_failure" expr="_event.data.code"/>
@@ -314,7 +313,6 @@
       <param name="prompt" expr="authorPrompt()"/>
       <param name="schema" expr="draft_schema"/>
       <param name="schemaname" expr="'scxml_draft'"/>
-      <param name="strict" expr="true"/>
       <param name="max_completion_tokens" expr="max_completion_tokens"/>
     </invoke>
     <transition event="generate.progress" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.progress","description":"The reply of a streamed generation is arriving: received counts its bytes so far.","type":"object","properties":{"received":{"type":"integer","minimum":0}},"required":["received"],"additionalProperties":false}' cond="isFrom(_event, gen_id)">
@@ -330,8 +328,8 @@
     </transition>
     <!-- The two events of this call of the generate service, each recorded
          (gen_id: a late event of an earlier attempt's call is not this one). -->
-    <transition event="generate.result" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.result","description":"The reply of the generate service: text without a requested schema, or the JSON value that satisfies the requested schema.","oneOf":[{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},{"type":"object","properties":{"json":true},"required":["json"],"additionalProperties":false}]}' cond="isFrom(_event, gen_id)">
-      <assign location="draft" expr="_event.data.json"/>
+    <transition event="generate.result" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.result","description":"The reply of the generate service as the original text generator returns it: its content and every tool call, each with its id, name and JSON-object arguments.","type":"object","properties":{"content":{"type":"string"},"tool_calls":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"args":{"type":"object"}},"required":["id","name","args"],"additionalProperties":false}}},"required":["content","tool_calls"],"additionalProperties":false}' cond="isFrom(_event, gen_id)">
+      <assign location="draft" expr="namedArgs(_event, 'scxml_draft')"/>
     </transition>
     <transition event="generate.failed" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.failed","description":"The generation failed; code names why (closed).","type":"object","properties":{"code":{"enum":["unconfigured","transport","status","malformed","truncated","filtered","refusal","not-json","schema-mismatch"]}},"required":["code"],"additionalProperties":false}' cond="isFrom(_event, gen_id)">
       <assign location="gen_failure" expr="_event.data.code"/>

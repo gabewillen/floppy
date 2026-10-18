@@ -390,10 +390,17 @@ function xmlText(element, level) {
   return open + '>' + inner + children.join(inner) + '\n' + '  '.repeat(level) + '</' + element.name + '>';
 }
 
-// The events of a generate.result object reply, else selected unchanged
-// (D41: the service's events are unchecked).
+// Temporary, until the mapping onto the original's domains moves it to Rust.
+// The original's _events_from_dispatch_tool_calls: the events of every
+// dispatch call of a generate.result, merged in call order (the service
+// returns only calls of its one function, each its schema admits), else
+// selected unchanged (D41: the service's events are unchecked).
 function generatedSelection(_event) {
-  return Object(_event.data).json instanceof Object && !Array.isArray(_event.data.json) ? _event.data.json.events : selected;
+  var calls = Object(_event.data).tool_calls;
+  if (!Array.isArray(calls)) {
+    return selected;
+  }
+  return calls.filter(function (call) { return Object(call).name === 'dispatch'; }).reduce(function (merged, call) { return merged.concat(call.args.events); }, []);
 }
 
 // The code of a generate.failed, else gen_failure unchanged.

@@ -14,18 +14,19 @@
 //!   parameter strictly closest to it within two edits ([`PARAMETERS`]).
 //! * `duplicate_param` (error): a parameter given twice.
 //! * `missing_param` (error): no `model`, or not exactly one of `prompt` and
-//!   `messages`; `schemaname` or `strict` without `schema`.
+//!   `messages`; `schemaname` without `schema`.
 //! * `invalid_value` (error, ECMAScript documents, literal `expr` only): a
 //!   `reasoning_effort` that is not one of [`REASONING_EFFORTS`] (a
-//!   machine-applicable fix to the one strictly closest within two edits), a `strict` or
+//!   machine-applicable fix to the one strictly closest within two edits), a
 //!   `stream` that is not `true` or `false`, a `schemaname` outside `[A-Za-z0-9_-]{1,64}`, or
 //!   an empty `model`, `prompt`, or `system`.
 //! * `schema_mismatch` (warning): a transition that can take the
 //!   invocation's events (in the invoking state, an ancestor, or a
-//!   descendant) handles `generate.failed`, or, for an `<invoke>` without a
-//!   `schema` parameter, `generate.result`, with a literal `event:schema`
-//!   that rejects data the service returns (each closed failure code, or a
-//!   `{"text": …}` reply); the help names the schema of what it returns.
+//!   descendant) handles `generate.failed` or `generate.result` with a
+//!   literal `event:schema` that rejects data the service returns (each
+//!   closed failure code, or a `{"content", "tool_calls"}` reply: a text
+//!   reply without a `schema` parameter, a tool call with one); the help
+//!   names the schema of what it returns.
 //!
 //! The decisions are the portable [`check`] over a plain [`Document`],
 //! tested natively; the guest maps the WIT types onto it.
@@ -46,14 +47,13 @@ use serde_json::Value as Json;
 /// The service's exact type URI.
 pub const SERVICE_URI: &str = "https://github.com/stateforward/floppy/services/generate";
 /// The parameters the service takes.
-pub const PARAMETERS: [&str; 10] = [
+pub const PARAMETERS: [&str; 9] = [
     "model",
     "prompt",
     "messages",
     "system",
     "schema",
     "schemaname",
-    "strict",
     "reasoning_effort",
     "stream",
     "max_completion_tokens",
@@ -315,10 +315,10 @@ fn parameters(document: &Document, invoke: &Element, findings: &mut Vec<Finding>
             "give either a `prompt` or a `messages` parameter",
         ));
     }
-    if !has("schema") && (has("schemaname") || has("strict")) {
+    if !has("schema") && has("schemaname") {
         findings.push(missing(
-            "`schemaname` and `strict` require a `schema` parameter",
-            "add the `schema` parameter, or remove `schemaname` and `strict`",
+            "`schemaname` requires a `schema` parameter",
+            "add the `schema` parameter, or remove `schemaname`",
         ));
     }
     has("schema")
@@ -401,8 +401,8 @@ fn value(name: &str, expr: &Attribute, findings: &mut Vec<Finding>) {
             format!("use one of {}", REASONING_EFFORTS.join(", ")),
             None,
         )),
-        (name @ ("strict" | "stream"), Literal::String(_)) => findings.push(invalid(
-            format!("{name} must be a boolean"),
+        ("stream", Literal::String(_)) => findings.push(invalid(
+            "stream must be a boolean".to_owned(),
             "write `true` or `false`".to_owned(),
             None,
         )),
@@ -478,23 +478,34 @@ fn returned(schema_given: bool) -> Vec<(&'static str, Json, Vec<Json>)> {
             .map(|code| serde_json::json!({ "code": code }))
             .collect(),
     )];
-    // With a schema the reply is `{"json": V}`, V satisfying a schema that
-    // is not known here, so only a reply without one is checked.
-    if !schema_given {
-        events.push((
-            RESULT_EVENT,
-            serde_json::json!({
-                "type": "object",
-                "properties": {"text": {"type": "string"}},
-                "required": ["text"],
-                "additionalProperties": false,
-            }),
-            vec![
-                serde_json::json!({ "text": "" }),
-                serde_json::json!({ "text": "a reply" }),
-            ],
-        ));
-    }
+    // The reply is the original's text-generator output: without a schema
+    // its content and no call, with one at least one call.
+    let samples = if schema_given {
+        vec![serde_json::json!({
+            "content": "",
+            "tool_calls": [{"id": "call-1", "name": "result", "args": {}}],
+        })]
+    } else {
+        vec![serde_json::json!({ "content": "a reply", "tool_calls": [] })]
+    };
+    events.push((
+        RESULT_EVENT,
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "content": {"type": "string"},
+                "tool_calls": {"type": "array", "items": {
+                    "type": "object",
+                    "properties": {"id": {"type": "string"}, "name": {"type": "string"}, "args": {"type": "object"}},
+                    "required": ["id", "name", "args"],
+                    "additionalProperties": false,
+                }},
+            },
+            "required": ["content", "tool_calls"],
+            "additionalProperties": false,
+        }),
+        samples,
+    ));
     events
 }
 

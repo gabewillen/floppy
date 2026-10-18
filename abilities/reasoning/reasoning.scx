@@ -54,15 +54,17 @@
   Choices: the body's assembled choices for the turn (the <param>
   choices: the body's own and each ability's offers, tagged with the
   offering ability's invoke id as target). A selection is returned, not
-  taken: the body routes it. The structured-output schema is built from
-  the choices by <decision:selection>, as the original's dispatch tool:
-  {events: [anyOf one branch per offered event]}, each branch {event (a
-  one-value enum), data (the event's schema without $schema, title and
-  examples), reason, and target (an enum of the abilities offering it) when
-  an ability offers it}, every field required and no extra property, sent
-  strict. The generate service returns only a reply that satisfies it, so a
-  selection outside the choices (event or target) fails the stage as
-  schema-mismatch. With no choices the stage fails without a model call.
+  taken: the body routes it. The original's dispatch tool is built from
+  the choices by <decision:selection> and offered as generate's one
+  tool, named dispatch: {events: [anyOf one branch per offered
+  event]}, each branch {event (a one-value enum), data (the event's
+  schema), reason (optional), and target (an enum of the abilities
+  offering it) when an ability offers it}. The generate service returns
+  the reply's tool calls only once every one is a dispatch call whose
+  arguments the tool's schema admits, so a selection outside the choices
+  (event, target or data) or a call of another tool fails the stage as
+  schema-mismatch; the events of every dispatch call are merged in order.
+  With no choices the stage fails without a model call.
 
   Dispatching (the original's apply activity dispatches the reasoned selections
   before bot.ability.reasoning.reasoned, cognition.types.
@@ -216,7 +218,6 @@
       <param name="prompt" expr="projection.prompt"/>
       <param name="schema" expr="schema"/>
       <param name="schemaname" expr="'dispatch'"/>
-      <param name="strict" expr="true"/>
     </invoke>
 
     <!-- A streamed reply's progress goes to the cognition, which bounds this

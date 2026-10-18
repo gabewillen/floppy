@@ -42,9 +42,10 @@
   <decision:choice> reads; <decision:pin> pins a change's and a break's
   name to the recalled inventory's names and drops both when it is empty
   (decision D100: the original offers both with any name, and a model
-  broke behaviors that did not exist), and <decision:selection> builds the strict
-  schema the generate service fills from {cognition_input,
-  cognition_output, prior_episodes, behaviors}. An empty selection goes to
+  broke behaviors that did not exist), and <decision:selection> builds the
+  original's dispatch tool, which the generate service offers as its one
+  tool, from {cognition_input, cognition_output, prior_episodes,
+  behaviors}; the events of every dispatch call it returns are merged. An empty selection goes to
   storing; more than one fails; one is sent to this session (#_internal),
   where scxml.rs checks its data against the event's schema and the
   transition taking it applies it. The model call is bounded by
@@ -307,7 +308,6 @@
       <param name="prompt" expr="selectPrompt()"/>
       <param name="schema" expr="schema"/>
       <param name="schemaname" expr="'dispatch'"/>
-      <param name="strict" expr="true"/>
     </invoke>
     <!-- A streamed reply's progress starts the inactivity bound, or starts
          it over (decision D101). -->

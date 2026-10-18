@@ -18,8 +18,8 @@ const P=[
   <param name="statements" expr="statements"/>
 </invoke>`},
  {id:'generate',kind:'service',uri:GH+'services/generate',ver:'0.1.0',
-  sum:'One model generation per <invoke> on an OpenAI-compatible Chat Completions API, with strict structured output and images by reference.',
-  params:['model','system','prompt','messages','schema','schemaname','strict'],events:['generate.result','generate.failed'],env:['apikey','baseurl'],origins:[],grant:'--dir …/services/generate=$PWD/media::/media',
+  sum:'One model generation per <invoke> on an OpenAI-compatible Chat Completions API, with one required function tool, as the original asks, and images by reference.',
+  params:['model','system','prompt','messages','schema','schemaname'],events:['generate.result','generate.failed'],env:['apikey','baseurl'],origins:[],grant:'--dir …/services/generate=$PWD/media::/media',
   artifact:'floppy_service_generate.virtualized.wasm',wit:'stateforward:scxml/invoked-service 0.2.0',used:['abilities/reading','abilities/reasoning','abilities/reflection','bots/builder'],
   snip:`<invoke id="read" type="${GH}services/generate"
         env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">

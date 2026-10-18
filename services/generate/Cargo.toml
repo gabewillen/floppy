@@ -1,6 +1,6 @@
 [package]
 name = "floppy-service-generate"
-description = "The `generate` invoked service: one provider-neutral model generation (text, or output a schema validates, read from a call of its one function tool) per `<invoke>`, as a Wasm component whose `invoke` export is an `async func`"
+description = "The `generate` invoked service: one provider-neutral model generation (text, or the calls of its one function tool) per `<invoke>`, as a Wasm component whose `invoke` export is an `async func`"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

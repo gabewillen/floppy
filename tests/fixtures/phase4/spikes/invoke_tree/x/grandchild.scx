@@ -18,7 +18,7 @@
     </invoke>
     <transition event="generate.result" target="done">
       <send event="spike.reply" target="#_parent">
-        <param name="text" expr="_event.data.text"/>
+        <param name="text" expr="_event.data.content"/>
       </send>
     </transition>
     <transition event="generate.failed" target="done">

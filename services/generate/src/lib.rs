@@ -32,17 +32,19 @@
 //! * `schema` (optional): a JSON Schema (a JSON object, or a string holding
 //!   one) that satisfies its dialect's metaschema (2020-12 unless `$schema`
 //!   names another supported dialect) and references nothing outside itself.
-//!   With it the request offers one function tool whose `parameters` are
-//!   the schema and requires a call of it (`tool_choice` `required`), as
-//!   the original's Chat Completions provider asks for its `dispatch` call
-//!   (decision D112; it never sends `response_format`), and the call's
-//!   `arguments` must parse as a JSON object and satisfy the schema
-//!   **before** anything is returned. `schemaname` (a string matching
-//!   `[A-Za-z0-9_-]{1,64}`, [`DEFAULT_SCHEMA_NAME`] without it) is the
-//!   function's `name`, and `strict` (a boolean, `false` without it) sends
-//!   the schema as [`strict_schema`] normalizes it (every object property
-//!   required); both require a schema. The arguments are still checked
-//!   against the schema as given.
+//!   With it the request offers one function tool, as the original's Chat
+//!   Completions provider offers its `dispatch` tool (decision D112; it
+//!   never sends `response_format`): the schema's root `description` is
+//!   the function's `description` and the rest of the schema its
+//!   `parameters`, and a call is required (`tool_choice` `required`). The
+//!   reply's calls are returned as the original's text generator returns
+//!   them, every call's `arguments` a JSON object, and every call is of
+//!   the function with arguments the schema admits **before** anything is
+//!   returned (a call of another name, or arguments it does not admit, fail
+//!   `schema-mismatch`, as the original's processing refuses a call that is
+//!   not its `dispatch`). `schemaname` (a string matching
+//!   `[A-Za-z0-9_-]{1,64}`, [`DEFAULT_SCHEMA_NAME`] without it, requiring
+//!   a schema) is the function's `name`.
 //! * `reasoning_effort` (optional, one of `none`, `minimal`, `low`,
 //!   `medium`, `high`, `xhigh`): sent as `reasoning_effort`, and
 //!   [`DEFAULT_REASONING_EFFORT`] without it. With a schema only `none` is
@@ -98,8 +100,11 @@
 //! with no data (the invoking session receives `done.invoke.<id>` after the
 //! event):
 //!
-//! * [`RESULT_EVENT`] `{"text": T}` (no schema) or `{"json": V}` (with a
-//!   schema; `V` satisfies it).
+//! * [`RESULT_EVENT`] the original's text-generator output, `{"content":
+//!   C, "tool_calls": [{"id": I, "name": N, "args": A}]}`: `C` the reply's
+//!   content (never empty without a schema; empty when a call has none),
+//!   and every call of the reply in order (the original's `TextToolCall`,
+//!   `A` a JSON object; at least one with a schema, none without).
 //! * [`FAILED_EVENT`] `{"code": C}` with one closed [`FailureCode`].
 //!
 //! A call that may stream (`stream`, or the run's `stream` slot) first
@@ -132,7 +137,7 @@
 //!  "model":"…",
 //!  "reasoning_effort":"none",
 //!  "tool_choice":"required",
-//!  "tools":[{"function":{"name":"result","parameters":{…}},"type":"function"}]}
+//!  "tools":[{"function":{"description":"…","name":"result","parameters":{…}},"type":"function"}]}
 //! ```
 //!
 //! The request never blocks the session: `outbound-http.fetch` (and, for a
@@ -196,12 +201,12 @@
 //! call, or calls with another finish reason, is malformed. Without a
 //! schema the answer is the content, and tool calls or no content (empty
 //! counts as none: a reasoning model's stream opens with an empty
-//! `content`) are malformed. With a schema the answer is the arguments of
-//! the first call of the function, never the content: a reply with no tool
-//! call ("did not include a required tool call") or none of that function
-//! is malformed, and arguments that are not a JSON object are not JSON. The
-//! arguments are checked against the compiled schema only once the whole
-//! reply arrived ([`structured_value`]).
+//! `content`) are malformed. With a schema the answer is the content and
+//! every call, as the original's text generator checks them: a reply with
+//! no tool call ("did not include a required tool call") is malformed, and
+//! a call whose arguments are not a JSON object is not JSON, and a call of
+//! another function, or one whose arguments the compiled schema does not
+//! admit, is a schema mismatch (checked only once the whole reply arrived).
 //!
 //! # Bounds
 //!
@@ -445,17 +450,19 @@ pub enum ImageReadFailure {
     TooLarge,
 }
 
-/// The one function tool of one invocation, whose `parameters`
-/// are the schema.
+/// The one function tool of one invocation: the schema's root
+/// `description` is the function's, and the rest of the schema its
+/// `parameters`.
 #[derive(Debug)]
 pub struct ResponseSchema {
     /// The function's `name`.
     pub name: String,
-    /// Whether the parameters are sent as [`strict_schema`] normalizes them.
-    pub strict: bool,
-    /// The canonical resolved schema.
-    pub schema: Json,
-    /// The schema compiled for checking the reply.
+    /// The function's `description`: the schema's root `description`.
+    pub description: Option<String>,
+    /// The function's `parameters`: the canonical resolved schema without
+    /// its root `description`.
+    pub parameters: Json,
+    /// The schema compiled for checking each call's arguments.
     pub compiled: CompiledSchema,
 }
 
@@ -486,7 +493,7 @@ pub enum FailureCode {
     /// The model service answered with a non-2xx status.
     Status,
     /// The answer is not a chat completion with text content (with a
-    /// schema, a call of its function), or exceeds
+    /// schema, with a tool call), or exceeds
     /// the host's response bound.
     Malformed,
     /// The reply was cut short by its token limit.
@@ -495,9 +502,10 @@ pub enum FailureCode {
     Filtered,
     /// The model refused the request.
     Refusal,
-    /// The call's arguments are not a JSON object.
+    /// A call's arguments are not a JSON object.
     NotJson,
-    /// The call's arguments do not satisfy the requested schema.
+    /// A call names a function the request did not offer, or has arguments
+    /// its `parameters` do not admit.
     SchemaMismatch,
 }
 
@@ -825,84 +833,33 @@ pub fn data_url(bytes: &[u8]) -> Option<String> {
     Some(url)
 }
 
-/// Resolves and compiles one response schema from its source text.
+/// Resolves and checks one response schema from its source text: the
+/// function tool it becomes, its root `description` the function's.
 ///
 /// # Errors
 ///
 /// A static detail when the text is not a JSON Schema its dialect's
 /// metaschema admits, references anything outside itself, or exceeds the
 /// schema bound.
-pub fn response_schema(
-    source: &str,
-    name: Option<&str>,
-    strict: bool,
-) -> Result<ResponseSchema, &'static str> {
+pub fn response_schema(source: &str, name: Option<&str>) -> Result<ResponseSchema, &'static str> {
     const INVALID: &str = "generate schema is not a self-contained JSON Schema";
     let resolved =
         scxml_event_schema::resolve(source.trim().as_bytes(), None).map_err(|_| INVALID)?;
-    let schema: Json = serde_json::from_str(&resolved.schema).map_err(|_| INVALID)?;
     let compiled = CompiledSchema::new(&resolved.schema).map_err(|_| INVALID)?;
+    let mut parameters: Json = serde_json::from_str(&resolved.schema).map_err(|_| INVALID)?;
+    let description = match parameters
+        .as_object_mut()
+        .map(|root| root.remove("description"))
+    {
+        Some(Some(Json::String(description))) => Some(description),
+        _ => None,
+    };
     Ok(ResponseSchema {
         name: name.unwrap_or(DEFAULT_SCHEMA_NAME).to_owned(),
-        strict,
-        schema,
+        description,
+        parameters,
         compiled,
     })
-}
-
-/// `schema` as strict structured outputs take it (the original's
-/// `_normalize_openai_schema`): `default`, `examples` and `title` dropped,
-/// `oneOf` sent as `anyOf`, and every object schema closed
-/// (`additionalProperties: false`) with all its properties required, at
-/// every depth. An optional property is then always present: a nullable
-/// one answers `null`.
-#[must_use]
-pub fn strict_schema(schema: &Json) -> Json {
-    let Json::Object(map) = schema else {
-        return schema.clone();
-    };
-    let mut out = Map::new();
-    for (key, value) in map {
-        match (key.as_str(), value) {
-            ("default" | "examples" | "title", _) => {}
-            ("properties" | "$defs" | "definitions", Json::Object(members)) => {
-                let members = members
-                    .iter()
-                    .map(|(name, member)| (name.clone(), strict_schema(member)))
-                    .collect();
-                out.insert(key.clone(), Json::Object(members));
-            }
-            ("anyOf" | "oneOf", Json::Array(branches)) => {
-                out.insert("anyOf".into(), branches.iter().map(strict_schema).collect());
-            }
-            ("items", _) => {
-                out.insert(key.clone(), strict_schema(value));
-            }
-            _ => {
-                out.insert(key.clone(), value.clone());
-            }
-        }
-    }
-    let names: Option<Vec<Json>> = out
-        .get("properties")
-        .and_then(Json::as_object)
-        .map(|properties| properties.keys().cloned().map(Json::from).collect());
-    if names.is_some() || out.get("type").and_then(Json::as_str) == Some("object") {
-        // The declared required names keep their order; the rest follow.
-        let mut required: Vec<Json> = out
-            .get("required")
-            .and_then(Json::as_array)
-            .cloned()
-            .unwrap_or_default();
-        for name in names.unwrap_or_default() {
-            if !required.contains(&name) {
-                required.push(name);
-            }
-        }
-        out.insert("additionalProperties".into(), Json::Bool(false));
-        out.insert("required".into(), Json::Array(required));
-    }
-    Json::Object(out)
 }
 
 /// An optional boolean parameter's value.
@@ -977,7 +934,6 @@ pub fn parse_parameters<'a>(
     let mut system = None;
     let mut schema = None;
     let mut schema_name = None;
-    let mut strict = None;
     let mut reasoning_effort = None;
     let mut stream = None;
     let mut max_completion_tokens = None;
@@ -989,7 +945,6 @@ pub fn parse_parameters<'a>(
             "system" => &mut system,
             "schema" => &mut schema,
             "schemaname" => &mut schema_name,
-            "strict" => &mut strict,
             "reasoning_effort" => &mut reasoning_effort,
             "stream" => &mut stream,
             "max_completion_tokens" => &mut max_completion_tokens,
@@ -1039,19 +994,18 @@ pub fn parse_parameters<'a>(
         return Err("generate conversation exceeds its bound");
     }
     let schema_name = schema_name_parameter(schema_name)?;
-    let strict = boolean_parameter(strict, "generate strict must be a boolean")?;
     let reasoning_effort = reasoning_effort_parameter(reasoning_effort, schema.is_some())?;
     let stream = boolean_parameter(stream, "generate stream must be a boolean")?.unwrap_or(false);
     let max_completion_tokens = max_completion_tokens_parameter(max_completion_tokens)?;
     let schema = match schema {
         None => {
-            if schema_name.is_some() || strict.is_some() {
-                return Err("generate schemaname and strict require a schema");
+            if schema_name.is_some() {
+                return Err("generate schemaname requires a schema");
             }
             None
         }
         Some(Data::JsonObject(text) | Data::String(text)) => {
-            Some(response_schema(text, schema_name, strict.unwrap_or(false))?)
+            Some(response_schema(text, schema_name)?)
         }
         Some(_) => return Err("generate schema must be a JSON object or a string holding one"),
     };
@@ -1156,19 +1110,15 @@ pub fn build_request(
         body.insert("max_completion_tokens".into(), tokens.into());
     }
     if let Some(schema) = &generation.schema {
+        let mut function = Map::new();
+        function.insert("name".into(), schema.name.clone().into());
+        if let Some(description) = &schema.description {
+            function.insert("description".into(), description.clone().into());
+        }
+        function.insert("parameters".into(), schema.parameters.clone());
         body.insert(
             "tools".into(),
-            serde_json::json!([{
-                "type": "function",
-                "function": {
-                    "name": schema.name,
-                    "parameters": if schema.strict {
-                        strict_schema(&schema.schema)
-                    } else {
-                        schema.schema.clone()
-                    },
-                },
-            }]),
+            serde_json::json!([{"type": "function", "function": function}]),
         );
         body.insert("tool_choice".into(), TOOL_CHOICE.into());
     }
@@ -1442,10 +1392,12 @@ pub fn completion_reply(body: &[u8]) -> Result<Reply, FailureCode> {
 }
 
 impl Reply {
-    /// What the reply answers, as the original's Chat Completions provider
-    /// takes it: with `function` (a schema, sent as the one tool, its
-    /// selection `required`), the arguments of its first call of
-    /// `function`; without, the content.
+    /// What the reply answers, as the original's Chat Completions text
+    /// generator returns it (its output's `content` and `tool_calls`):
+    /// `{"content": C, "tool_calls": [{"id", "name", "args"}]}`, every
+    /// call (the original's `TextToolCall`, its arguments a JSON object) in
+    /// order. With a tool (a schema, its call `required`) there is at least
+    /// one call; without, there is none and `C` is not empty.
     ///
     /// # Errors
     ///
@@ -1453,10 +1405,14 @@ impl Reply {
     /// `finish_reason` of `length` or `content_filter`;
     /// [`FailureCode::Malformed`] when the finish reason is `tool_calls`
     /// with no call or another with calls, when a required call is missing
-    /// or calls arrive without a tool, when no call names `function`, when
-    /// a stream's call has no `id` or name, or when there is no content;
-    /// [`FailureCode::NotJson`] when the arguments are not a JSON object.
-    pub fn answer(self, function: Option<&str>) -> Result<String, FailureCode> {
+    /// ("did not include a required tool call") or calls arrive without a
+    /// tool, when a stream's call has no `id` or name, or when there is no
+    /// content without a tool; [`FailureCode::NotJson`] when a call's
+    /// arguments are not a JSON object; [`FailureCode::SchemaMismatch`]
+    /// when a call names another function than the tool's, or has arguments
+    /// its schema does not admit (checked once the whole reply arrived,
+    /// every call before any is returned).
+    pub fn answer(self, tool: Option<&ResponseSchema>) -> Result<Json, FailureCode> {
         match self.finish_reason.as_deref() {
             Some("length") => return Err(FailureCode::Truncated),
             Some("content_filter") => return Err(FailureCode::Filtered),
@@ -1475,44 +1431,41 @@ impl Reply {
         {
             return Err(FailureCode::Malformed);
         }
-        let Some(function) = function else {
+        let Some(tool) = tool else {
             if !self.tool_calls.is_empty() || self.content.is_empty() {
                 return Err(FailureCode::Malformed);
             }
-            return Ok(self.content);
+            return Ok(serde_json::json!({ "content": self.content, "tool_calls": [] }));
         };
-        let call = self
+        if self.tool_calls.is_empty() {
+            return Err(FailureCode::Malformed);
+        }
+        let tool_calls = self
             .tool_calls
             .into_iter()
-            .find(|call| call.name == function)
-            .ok_or(FailureCode::Malformed)?;
-        let arguments: Json =
-            serde_json::from_str(&call.arguments).map_err(|_| FailureCode::NotJson)?;
-        if !arguments.is_object() {
-            return Err(FailureCode::NotJson);
-        }
-        Ok(call.arguments)
+            .map(|call| {
+                let args: Json =
+                    serde_json::from_str(&call.arguments).map_err(|_| FailureCode::NotJson)?;
+                if !args.is_object() {
+                    return Err(FailureCode::NotJson);
+                }
+                let data = json_data(&args)?;
+                if call.name != tool.name || !tool.compiled.admits(&data) {
+                    return Err(FailureCode::SchemaMismatch);
+                }
+                Ok(serde_json::json!({ "id": call.id, "name": call.name, "args": args }))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(serde_json::json!({ "content": self.content, "tool_calls": tool_calls }))
     }
-}
-
-/// The structured reply: `text` (the call's arguments) parsed as
-/// JSON, admitted by `schema`.
-///
-/// # Errors
-///
-/// [`FailureCode::NotJson`] when `text` is not JSON (or holds a number
-/// outside the data model's range), [`FailureCode::SchemaMismatch`] when the
-/// value does not satisfy the schema.
-pub fn structured_value(text: &str, schema: &CompiledSchema) -> Result<Json, FailureCode> {
-    let value: Json = serde_json::from_str(text).map_err(|_| FailureCode::NotJson)?;
-    if !schema.admits(&json_data(&value)?) {
-        return Err(FailureCode::SchemaMismatch);
-    }
-    Ok(value)
 }
 
 /// The data value of one JSON value: objects and arrays as canonical JSON
 /// text, scalars as themselves.
+///
+/// # Errors
+///
+/// [`FailureCode::NotJson`] for a number outside the data model's range.
 fn json_data(value: &Json) -> Result<Data, FailureCode> {
     Ok(match value {
         Json::Null => Data::Null,
@@ -1544,7 +1497,7 @@ pub fn is_event_stream(body: &[u8]) -> bool {
 }
 
 /// What one settled request becomes: [`RESULT_EVENT`] with the reply
-/// (`{"text": T}`, or `{"json": V}` with a schema, validated first), or
+/// ([`Reply::answer`]: `{"content": C, "tool_calls": [...]}`), or
 /// [`FAILED_EVENT`] with the failure's code.
 #[must_use]
 pub fn outcome(generation: &Generation, answered: Result<Response, TransportFailure>) -> Returned {
@@ -1556,26 +1509,14 @@ pub fn outcome(generation: &Generation, answered: Result<Response, TransportFail
     if !(200..300).contains(&response.status) {
         return Returned::failed(FailureCode::Status);
     }
-    let function = generation
-        .schema
-        .as_ref()
-        .map(|schema| schema.name.as_str());
     let reply = if is_event_stream(&response.body) {
         stream_reply(&response.body)
     } else {
         completion_reply(&response.body)
     };
-    let text = reply.and_then(|reply| reply.answer(function));
-    let text = match text {
-        Ok(text) => text,
+    let data = match reply.and_then(|reply| reply.answer(generation.schema.as_ref())) {
+        Ok(data) => data,
         Err(code) => return Returned::failed(code),
-    };
-    let data = match &generation.schema {
-        None => serde_json::json!({ "text": text }),
-        Some(schema) => match structured_value(&text, &schema.compiled) {
-            Ok(value) => serde_json::json!({ "json": value }),
-            Err(code) => return Returned::failed(code),
-        },
     };
     Returned {
         name: RESULT_EVENT,

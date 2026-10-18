@@ -54,11 +54,11 @@ function isGenerate(_event) {
 }
 
 function isGenerateTextResult(_event) {
-  return isGenerate(_event) && typeof Object(_event.data).text === 'string';
+  return isGenerate(_event) && typeof Object(_event.data).content === 'string';
 }
 
 function decodedImageText(_event) {
-  return _event.data.text.trim();
+  return _event.data.content.trim();
 }
 
 function imageDecodingFailedMessage(_event) {

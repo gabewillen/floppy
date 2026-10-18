@@ -18,7 +18,7 @@
     </test>
   </assert>
   <assert id="reasoning-3" specnum="3" specid="#reasoning-3">
-    <![CDATA[With choices it makes one structured generate call whose strict schema allows only the offered events (with their targets); the reply's selections, once checked (see 6), are returned as the model gave them with `handled: true`, each `{event, data, reason, target?}`, `bot.ability.cognition.ignore` selections included (the body routes them; dispatching only checks); an empty selection is handled with nothing selected.]]>
+    <![CDATA[With choices it makes one generate call offering the original's dispatch tool, which allows only the offered events (with their targets); the events of its dispatch calls, merged in order and once checked (see 6), are returned as the model gave them with `handled: true`, each `{event, data, reason, target?}`, `bot.ability.cognition.ignore` selections included (the body routes them; dispatching only checks); an empty selection is handled with nothing selected.]]>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>

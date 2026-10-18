@@ -37,9 +37,9 @@ const DOUBLE_INVOKE: &str =
 
 /// What the generate double does once invoked.
 enum Generate {
-    /// Answers `generate.result {text}` (an ECMAScript expression).
+    /// Answers `generate.result {content, tool_calls: []}` (an ECMAScript expression).
     Result(&'static str),
-    /// Answers `generate.result {text}` after one logical second.
+    /// Answers `generate.result {content, tool_calls: []}` after one logical second.
     Later(&'static str),
     /// Answers `generate.failed {code}`.
     Failed(&'static str),
@@ -52,7 +52,7 @@ enum Generate {
 fn double(generate: &Generate) -> String {
     let reply = |text: &str| {
         format!(
-            r##"<send event="generate.result" target="#_parent"><param name="text" expr="{text}"/></send>"##
+            r##"<send event="generate.result" target="#_parent"><param name="content" expr="{text}"/><param name="tool_calls" expr="[]"/></send>"##
         )
     };
     let (onentry, transitions) = match generate {

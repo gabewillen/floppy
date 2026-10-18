@@ -137,6 +137,14 @@ function designPrompt() {
   return JSON.stringify({task: 'design', spec: spec, constraints: constraints, previous_plan: previous_plan, diagnostics: diagnostics});
 }
 
+// The arguments of a generate.result's first call of the function
+// named, else null (D41: the service's events are unchecked).
+function namedArgs(_event, name) {
+  var calls = Object(_event.data).tool_calls;
+  var call = Array.isArray(calls) ? calls.filter(function (call) { return Object(call).name === name; })[0] : undefined;
+  return call === undefined ? null : Object(call).args;
+}
+
 function planGenerated(_event) {
   return _event.invokeid === gen_id && plan !== null;
 }
