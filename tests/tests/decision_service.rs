@@ -66,7 +66,7 @@ fn answer(target: &str, body: &[u8]) -> Option<String> {
         "/hold/v1/systemone" => "order.hold",
         "/abstain/v1/systemone" => "__unhandled__",
         "/stray/v1/systemone" => "order.refund",
-        "/classify/v1/systemone" => "complaint",
+        "/labels/v1/systemone" => "complaint",
         _ => return None,
     };
     let request: Json = serde_json::from_slice(body).ok()?;
@@ -376,7 +376,7 @@ fn a_choices_filtered_to_leave_out_the_chosen_event_never_fires_it() {
 }
 
 #[test]
-fn choose_fires_the_chosen_schema_transition_with_schema_valid_data() {
+fn choice_fires_the_chosen_schema_transition_with_schema_valid_data() {
     let (records, mock) = run("ship", "ship", &BOTH);
     assert_eq!(
         logs(&records),
@@ -432,7 +432,7 @@ fn choose_fires_the_chosen_schema_transition_with_schema_valid_data() {
 }
 
 #[test]
-fn choose_fires_another_transition_when_the_backend_prefers_it() {
+fn choice_fires_another_transition_when_the_backend_prefers_it() {
     let (records, _mock) = run("cancel", "cancel", &BOTH);
     assert_eq!(
         logs(&records),
@@ -447,15 +447,15 @@ fn choose_fires_another_transition_when_the_backend_prefers_it() {
     );
 }
 
-/// `select` (the original's `TypeSafe` processor): every groundable event comes
+/// `predicate` (the original's `TypeSafe` processor): every groundable event comes
 /// back in one `decision.selected`, each with its data and its own
 /// probability in the selection, and nothing is fired.
 #[test]
-fn select_returns_every_groundable_event_with_its_own_probability() {
+fn predicate_returns_every_groundable_event_with_its_own_probability() {
     let mock = Mock::start();
-    let env_path = env_file("select", &format!("{}/ship", mock.origin), &BOTH);
+    let env_path = env_file("predicate", &format!("{}/ship", mock.origin), &BOTH);
     let document = document(
-        r#"<param name="kind" expr="'select'"/>
+        r#"<param name="kind" expr="'predicate'"/>
       <param name="state" expr="order"/>"#,
     )
     .replace(
@@ -491,7 +491,7 @@ fn select_returns_every_groundable_event_with_its_own_probability() {
 }
 
 #[test]
-fn choose_returns_decision_abstain_when_none_fits() {
+fn choice_returns_decision_abstain_when_none_fits() {
     let (records, _mock) = run("abstain", "abstain", &BOTH);
     assert_eq!(
         logs(&records),
@@ -526,9 +526,9 @@ fn without_a_granted_key_nothing_is_sent() {
 }
 
 #[test]
-fn classify_returns_every_labels_probability() {
+fn a_choice_over_labels_returns_every_labels_probability() {
     let mock = Mock::start();
-    let env_path = env_file("classify", &format!("{}/classify", mock.origin), &BOTH);
+    let env_path = env_file("labels", &format!("{}/labels", mock.origin), &BOTH);
     let args = args(&env_path);
     let document = format!(
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml"
@@ -536,7 +536,7 @@ fn classify_returns_every_labels_probability() {
        version="1.0" datamodel="ecmascript" initial="classifying">
   <state id="classifying">
     <invoke id="classify" type="{service}" env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL">
-      <param name="kind" expr="'classify'"/>
+      <param name="kind" expr="'choice'"/>
       <param name="state" expr="'The order arrived damaged.'"/>
       <param name="labels" expr="['complaint', 'praise']"/>
     </invoke>

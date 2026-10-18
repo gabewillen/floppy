@@ -2,22 +2,20 @@
 
 ## Map status
 
-As of 2026-10-18, after step 4 (D116), the last of Q10's order.
+As of 2026-10-18, after step 4 (D116), the last of Q10's order, and Q8's rename with J16 and J17 (D120).
 
 | State | Rows |
 | --- | --- |
-| **Done** (moved as proposed) | E1, E2, E3, E4, E6, E8, E9, E10, E11, E12, E13; J1 to J6, J9, J10, J12 to J15, J18 to J24, J26, J31, J33, J39, J44, J45 |
+| **Done** (moved as proposed) | E1, E2, E3, E4, E6, E8, E9, E10, E11, E12, E13; J1 to J6, J9, J10, J12 to J24, J26, J31, J33, J39, J44, J45; Q8 |
 | **Kept** (choice (d), or kept by an answer) | E5 and E7 in `decision` (Q11), E14, E15; J11, J25 (D115: it searches the history), J29, J30, J34 to J37, J40, J42, J46 |
-| **Open** | J7, J8, J16, J17, J27, J28, J32, J38, J41, J43, J47; Q8 |
+| **Open** | J7, J8, J27, J28, J32, J38, J41, J43, J47 |
 
 Why each open row is open:
 
 - **J7** (`<behavior:next_after>`): blocked on scxml.rs. A routine is a builder draft, and `<scx:validate>` binds no extension package, so a draft that uses any namespace element fails with `XSD001`. `next_after` stays reflection.js's text, carried by the routine as data, until the validator can bind the run's packages (an upstream change).
 - **J8** (`reflection` namespace, `grounded_triggers`), **J28** (`listening` namespace, its name open) and **J32** (`environment`, `model_snapshot`): new namespaces outside Q10's order (`processing`; `intuition`, `cognition`; `identity`, `conversation`, `memory`; `behavior`, with `autonomy`), so no step built them.
-- **J16**, **J17** (into the `decision` service): service changes, not elements; they go with Q8's rename of the service's kinds, a separate change.
 - **J27**, **J38**, **J43**, **J47** (choice (a): plain SCXML or a schema): no step covered them; each is a small change of its own document or schema.
 - **J41** (`<migration:plan>` takes the version guard): the `migration` namespace was not in Q10's order.
-- **Q8**: answered, and recorded as a separate change after this plan.
 
 Also still open from the steps: the `target` actor-keys question (To review step 1, item 12) and every "To review" list below.
 
@@ -141,8 +139,8 @@ Names kept unchanged under the rule, because SCXML has no term for them:
 | J13 | `normalizedConfidence`, `selectionConfidence` (`abilities/intuition/intuition.js`) | `abilities/processing.py` `normalize_confidence`, `selection_confidence` | **Done (D113).** (b) `<processing:selection_confidence>` | Rounding half to even and taking the minimum is computation, and the original names it. |
 | J14 | `isLowConfidence` (`intuition.js`) | `ConfidenceTuner.should_escalate` | **Done (D114).** (b) `<intuition:escalate>` (E12) | It goes together with E12. |
 | J15 | `escalatedResult`'s filter (`intuition.js`): drops the deliberative handoff and the ignore | `abilities/cognition/intuition.py` `_environment_actions` | **Done (D113).** (a) send every selection: the handoff (`bot.ability.reasoning.input`) and the ignore go to their own offerers, which take them by transition. Fallback (b) `<intuition:environment_actions>` | Once dispatch is `<send>`, nothing needs filtering, because each event goes to the session that offers it. |
-| J16 | `processorChoices`, `isDeliberativeHandoff` (`intuition.js`): remove the handoff from the decision choices | `providers/typesafe/processing.py` (skips `is_deliberative_handoff_schema`) | (c) in the `decision` service | The original does this in the TypeSafe provider, and the `decision` service is that provider. |
-| J17 | `decisionState` (`intuition.js`): the TypeSafe state document `{"turn": {...}}` | `providers/typesafe/processing.py` `_stimulus_document` | (c) in the `decision` service, which takes the stimulus as a param | This is the provider's function too. |
+| J16 | `processorChoices`, `isDeliberativeHandoff` (`intuition.js`): remove the handoff from the decision choices | `providers/typesafe/processing.py` (skips `is_deliberative_handoff_schema`) | **Done (D120).** (c) in the `decision` service: `choice` and `predicate` never offer `bot.ability.reasoning.input` (by name, the original's `DELIBERATIVE_HANDOFF_EVENT_NAME`; to review, Q8) | The original does this in the TypeSafe provider, and the `decision` service is that provider. |
+| J17 | `decisionState` (`intuition.js`): the TypeSafe state document `{"turn": {...}}` | `providers/typesafe/processing.py` `_stimulus_document` | **Done (D120).** (c) in the `decision` service, which takes the stimulus as a param (`stimulus`, given instead of `state` and `data`) | This is the provider's function too. |
 | J18 | `pythonFloat`, `pythonVector`, `identityKey`, `codePointOrder`, `sortedIdentities`, `sameIdentity`, `identitiesJson` (`abilities/conversation/conversation.js`) | `abilities/identity/value.py` `sorted_identities`, `identities_json`, `normalize_identity` | **Done (D115).** (b) `<identity:sorted_identities>`; `identities_json` is part of `<memory:to_json>` (to review, step 3) | Sorting and serializing that must match Python byte for byte is fragile to write in JavaScript. |
 | J19 | `unitVector`, `cosineSimilarity`, `trackRef` (`conversation.js`) | `identity/value.py` cosine similarity; `conversation.py` `_new_track_ref` | **Done (D115).** (b) the cosine is part of `<conversation:relationship_for_input>`; `trackRef` is `<conversation:new_track_ref>` | Vector arithmetic. |
 | J20 | `relationshipIndexFor`, `relationshipScore`, `isSameParticipant`, `lowerScore`, `collectionScore`, `pairScore`, `bestAssignment` (`conversation.js`): choose the relationship an input belongs to by matching identity groups one to one | `conversation.py` `Conversation._relationship_for_input` (its identity collection score) | **Done (D115).** (b) `<conversation:relationship_for_input location indexlocation input>` | A one-to-one assignment search with similarity thresholds. |
@@ -386,7 +384,7 @@ It is not part of the TypeSafe API, so it leaves `decision`.
 | Q6 | **Answered.** Replace `<decision:tuner>`? | Yes, with `<intuition:observe>` and `<intuition:escalate>`. The maintainer offered "intuition:escalate or intuition:think"; `escalate` is the original's word, and team-lead is confirming it. The naming rule now drops modal prefixes like `should_`. |
 | Q7 | **Answered.** Is an element needed to read the generate result's `dispatch` calls? | No. Nested `<foreach>` over `_event.data.tool_calls` and `call.args.events` with `<send>` (3.3). generate refuses a call to a function it did not offer (a `services/generate` change), and the schema covers the original's other checks. Reflection's "at most one" and "empty" are handled as 3.3 says. |
 | Q7a | **Answered.** Reflection's at most one: `maxItems: 1` in the schema (A), or keep today's check (B)? | A ("A"). `<processing:send>` takes one attribute, `max`, which puts `maxItems` on the tool's `events` array. generate's schema check then refuses a second event as `schema-mismatch` before anything is sent, and reflection keeps no check of its own. |
-| Q8 | **Answered.** `services/decision`'s kinds (`choose`, `select`, `rank`, `classify`) are floppy's. Whose terms should they follow? | OpenAI Decisions API's question types ("use the openai decision api", then "Agree" to names, not backend): `choose` and `classify` become `choice`, `select` becomes one `predicate` per choice, `rank` becomes `score`. TypeSafe's `/v1/systemone` stays the backend; a `/v1/decisions` backend is a later swap with no rename. A separate change after this plan. |
+| Q8 | **Answered.** `services/decision`'s kinds (`choose`, `select`, `rank`, `classify`) are floppy's. Whose terms should they follow? | OpenAI Decisions API's question types ("use the openai decision api", then "Agree" to names, not backend): `choose` and `classify` become `choice`, `select` becomes one `predicate` per choice, `rank` becomes `score`. TypeSafe's `/v1/systemone` stays the backend; a `/v1/decisions` backend is a later swap with no rename. A separate change after this plan. **Done (D120)**: `select` became `predicate` with its behavior unchanged, not one predicate per choice (to review, Q8). |
 | Q9 | When a document has no functions left, may it drop its `<name>.js` and `<script src>`, which D65 and AGENTS.md currently require? | Yes. Amend D65 to "at most one root `<script src>`". **Taken on the recommendation overnight 2026-10-18 while the maintainer slept ("finish this up tonight to parity"); to review.** Not exercised by steps 1 to 4: every document still has functions, so D65 is unchanged. |
 | Q10 | Create every namespace in section 2 now, or each only when its first element lands (and fold one-element modules like `autonomy` into `cognition`)? | One at a time, in this order: `processing`, then `intuition` and `cognition`, then `identity`, `conversation` and `memory`, then `behavior`. `autonomy` stays its own namespace, following the original's module boundary (keep-the-original's-domains rule). **Taken on the recommendation overnight 2026-10-18 while the maintainer slept ("finish this up tonight to parity"); to review.** |
 | Q11 | `<decision:pin>` has no counterpart name in the original. Keep it as a `cognition` element (which name?), or drop it and rely on the body's guard (`isFocusCandidate`), as the original does? | Keep the pin as an element, unrenamed (`<decision:pin>` stays where it is) until the maintainer names it: no name is invented. **Taken on the recommendation overnight 2026-10-18 while the maintainer slept ("finish this up tonight to parity"); to review.** |
@@ -463,3 +461,16 @@ the closest to the original found, each for the maintainer to review:
 10. **Q9 is not exercised.** No document is left without functions, so D65 is unchanged.
 11. **Leftovers fixed on the way.** `tests/tests/namespace_irp.rs` never ran the identity and memory suites (it now does, with behavior and autonomy); `web/src/site-data.js`'s element table still listed `<decision:route>`, `selection`, `names`, `assemble` and `compact` (now the processing elements).
 12. **`scripts/namespace-irp.sh prepare` fails on macOS** at `cache-create`: its `mktemp -d` cache is under `/var`, a symlink. The corpora were prepared with `scx conformance prepare --cache` in the session scratchpad; the script is unchanged.
+
+## To review (Q8)
+
+Choices Q8's rename (2026-10-18, D120) made that the answer did not settle,
+each for the maintainer to review:
+
+1. **`select` is one `predicate` kind, not one predicate per choice.** One predicate question per event would give each event an independent probability and no pass criterion to win, so intuition would receive other confidences (today each is the event's share of one `selection` question, the original's TypeSafe `Processor.process`) and could no longer abstain as `declined`. The kind keeps the behavior byte for byte; only its name changed.
+2. **`choose` and `classify` are one `choice` kind, told apart by their parameter**: `choices` (the chosen event) or `labels` (`decision.classified`), exactly one of them. Each keeps its own default instructions.
+3. **The service's events keep their names**: `decision.selected`, `decision.ranked` (now returned by `score`), `decision.classified` (now by `choice` over labels), `decision.abstain`, `decision.failed`. Only the kinds were asked to change.
+4. **The batch's question names follow the kinds** for `score` (`score`, was `rank`) and `choice` over labels (`choice`, was `classify`); the event kinds' `selection` question is unchanged. No document in the tree uses those two kinds, so no live request changes.
+5. **J16 skips the handoff by name**, `bot.ability.reasoning.input` (the original's `DELIBERATIVE_HANDOFF_EVENT_NAME`), for `choice` over events as well as `predicate`, since the service is the TypeSafe provider for both; the original marks the schema (`__deliberative_handoff__`), which floppy's `bot.ability.reasoning.input` schema does not carry. `isDeliberativeHandoff` stays in `intuition.js` for `hasDeliberativeInput`, which the service now makes unreachable for the TypeSafe backend, as it is in the original.
+6. **J17's `stimulus` reads only `event` and `data`**: an object whose `event` is a string is the envelope, anything else is the data itself (the original's `_stimulus_document`). The stimulus's other members (`source`, `participants`) are ignored rather than refused, since they are the turn's and not the service's contract.
+7. **`services/decision` has no README**: its contract is the crate documentation in `src/lib.rs`, which this change rewrote.

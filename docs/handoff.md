@@ -11,6 +11,17 @@ Last updated: 2026-10-18.
 
 ## Current state (2026-10-09) — resume here
 
+- **Q8: the decision service's kinds are OpenAI Decisions API's question
+  types, with J16 and J17 (2026-10-18, D120,
+  [plan](plans/original-domains.md#to-review-q8)):** `choice` (the default;
+  was `choose`, and `classify` when given `labels`), `predicate` (was
+  `select`, its behavior unchanged: each event's confidence is still its
+  share of the one `selection` question) and `score` (was `rank`); the
+  events keep their names and TypeSafe's `/v1/systemone` stays the backend.
+  The service now never offers `bot.ability.reasoning.input` and builds the
+  original's `{"turn": {"envelope", "data"}}` state from a `stimulus` param,
+  so intuition passes its `choices` and `stimulus` as they are. Open: the
+  plan's "To review (Q8)" list.
 - **Parity gaps 3, 5 and 4 ported; gap 6 stopped (2026-10-18, D117 to
   D119, [parity-gaps](plans/parity-gaps.md)):** recalled context trims to
   the prompt budget instead of failing the turn (D117; open: on wasm the
@@ -234,8 +245,8 @@ Last updated: 2026-10-18.
 
 ## Intuition contract and reasoning prompt (2026-10-10)
 
-- **Intuition** uses the decision service's new kind `select` (the original's
-  TypeSafe `Processor.process`): `decision.selected {selections: [{event,
+- **Intuition** uses the decision service's kind `predicate` (`select`
+  until D120; the original's TypeSafe `Processor.process`): `decision.selected {selections: [{event,
   data, confidence}]}`, every groundable event with its own probability.
   Intuition observes their least confidence (0-100) with
   `<intuition:observe>` first, then `<intuition:escalate>` compares it with
@@ -243,9 +254,10 @@ Last updated: 2026-10-18.
   the environment actions before the turn escalates (D113; the
   2026-10-11 dedupe is gone). The service's pass
   criterion is the original's `__unhandled__`, its state document the original's
-  `{"turn": {"envelope": {"name"}, "data"}}`, and data grounds from the
-  non-null stimulus value then the enum (no `const`). `choose` lost its
-  `threshold` (and `below-threshold`).
+  `{"turn": {"envelope": {"name"}, "data"}}` (built by the service from
+  the `stimulus` param since D120), and data grounds from the
+  non-null stimulus value then the enum (no `const`). `choice` (`choose`
+  until D120) lost its `threshold` (and `below-threshold`).
 - **Reasoning** sends the original's `model_facing_xml(ProcessorInput)` under
   the original's budgets (`<cognition:model_facing_content>`, D114; it was
   `promptProjection()` in reasoning.js, checked byte-for-byte against the

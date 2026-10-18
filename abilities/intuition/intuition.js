@@ -4,11 +4,6 @@
 
 // deciding
 
-// The original's stimulus data mapping: the stimulus's object data, else {}.
-function stimulusData() {
-  return stimulus !== null && stimulus.data instanceof Object && !Array.isArray(stimulus.data) ? stimulus.data : ({});
-}
-
 function decisionTimeoutDelay() {
   return decision_timeout_ms + 'ms';
 }
@@ -16,21 +11,6 @@ function decisionTimeoutDelay() {
 // The original's deliberate handoff event (types.DELIBERATIVE_HANDOFF_EVENT_NAME).
 function isDeliberativeHandoff(name) {
   return name === 'bot.ability.reasoning.input';
-}
-
-// The choices the processor offers: the turn's, less the deliberate handoff
-// (the TypeSafe processor skips deliberative handoff schemas).
-function processorChoices() {
-  return choices.filter(function (choice) { return !isDeliberativeHandoff(choice.event); });
-}
-
-// The original _stimulus_document as the TypeSafe state {"turn": ...}: the
-// stimulus envelope's name and its data.
-function decisionState() {
-  if (stimulus === null) {
-    return ({turn: {data: null}});
-  }
-  return ({turn: {envelope: {name: stimulus.event}, data: stimulus.data === undefined ? null : stimulus.data}});
 }
 
 // A selected event with at least one selection (the service's events are

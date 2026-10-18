@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/intuition/irp/sources">
   <assert id="intuition-1" specnum="1" specid="#intuition-1">
-    <![CDATA[It asks the decision service (kind `select`) over the `choices` <param> less `bot.ability.reasoning.input`, with the stimulus's object data as evidence: each event's required data is filled from it. A confident product is handled: it sends every selection the service returned to its target and ends with donedata `{turn, handled: true, selected: [{event, data, target}], reason: "none", confidence_tuner}`.]]>
+    <![CDATA[It asks the decision service (kind `predicate`) over the `choices` <param> with the stimulus, so the service leaves out `bot.ability.reasoning.input` and takes the stimulus's object data as evidence: each event's required data is filled from it. A confident product is handled: it sends every selection the service returned to its target and ends with donedata `{turn, handled: true, selected: [{event, data, target}], reason: "none", confidence_tuner}`.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
