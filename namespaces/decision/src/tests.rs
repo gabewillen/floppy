@@ -1488,16 +1488,17 @@ fn the_new_elements_pass_host_failures_through() {
 }
 
 #[test]
-fn selection_builds_the_strict_dispatch_schema_of_the_choices() {
+fn selection_builds_the_originals_dispatch_tool_schema_of_the_choices() {
     let mut host = with_values(&[(
         "choices",
         json!([
-            {"event": "bot.clear_focus", "schema": {"$schema": "x", "title": "Clear", "examples": [{}], "type": "object", "properties": {"title": {"type": "string", "title": "kept"}}}},
+            {"event": "bot.clear_focus", "schema": {"$schema": "x", "title": "Clear", "description": "Clear the focus.", "examples": [{"why": "done"}], "type": "object", "properties": {"why": {"type": "string"}}}},
             {"event": "bot.ability.communication.respond", "description": "Say text.", "target": "communication",
              "schema": {"type": "object", "additionalProperties": true, "properties": {"text": {"type": "string"}}, "required": ["text"]}},
             {"event": "bot.ability.cognition.ignore", "target": "cognition", "schema": "not an object"},
             {"event": "bot.ability.cognition.ignore", "target": "communication", "description": "later", "schema": {}},
             {"event": "bot.ability.cognition.ignore", "target": "cognition", "schema": {}},
+            {"event": "bot.count", "schema": {"type": "integer"}},
         ]),
     )]);
     assert_eq!(
@@ -1513,34 +1514,37 @@ fn selection_builds_the_strict_dispatch_schema_of_the_choices() {
         panic!("expected a JSON object");
     };
     let reason =
-        json!({"type": "string", "description": "A short reason this event was selected."});
+        json!({"type": "string", "description": "Optional short reason this event was selected."});
+    let clear_example = json!({"event": "bot.clear_focus", "data": {"why": "done"}});
     let expected = json!({
+        "description": "Dispatch all events necessary for the input. Call once. Multi-select by listing every offered event this turn requires in the events array (for example a device action and speech together when both are needed). Each item must match one offered event branch; payload fields and requirements are defined on that event's data schema. An empty events list leaves the turn unhandled for the host cascade (e.g. deliberative reasoning); use an explicit ignore/pass event when the stage should handle the turn with no environment actions.",
         "type": "object",
         "properties": {"events": {
             "type": "array",
-            "description": "All events necessary for the input this turn; an empty array selects none.",
+            "description": "All events necessary for the input this turn. Each item is one offered event branch (enum-pinned name + that event's data schema). Include every action required together; empty array selects none.",
             "items": {"anyOf": [
                 {
                     "type": "object",
-                    "description": "bot.clear_focus",
+                    "description": "Clear the focus.",
                     "properties": {
                         "event": {"type": "string", "enum": ["bot.clear_focus"]},
-                        "data": {"type": "object", "properties": {"title": {"type": "string", "title": "kept"}}, "additionalProperties": false},
+                        "data": {"title": "Clear", "description": "Clear the focus.", "examples": [{"why": "done"}], "type": "object", "properties": {"why": {"type": "string"}}, "additionalProperties": false},
                         "reason": reason,
                     },
-                    "required": ["event", "data", "reason"],
+                    "required": ["event"],
                     "additionalProperties": false,
+                    "examples": [clear_example],
                 },
                 {
                     "type": "object",
-                    "description": "Say text.",
+                    "description": "bot.ability.communication.respond",
                     "properties": {
                         "event": {"type": "string", "enum": ["bot.ability.communication.respond"]},
                         "data": {"type": "object", "additionalProperties": true, "properties": {"text": {"type": "string"}}, "required": ["text"]},
                         "reason": reason,
-                        "target": {"type": "string", "enum": ["communication"], "description": "The ability that receives this event."},
+                        "target": {"type": "string", "enum": ["communication"], "description": "Actor that receives this event. Fixed for this turn because only one actor enables it in the live topology."},
                     },
-                    "required": ["event", "data", "reason", "target"],
+                    "required": ["event", "data", "target"],
                     "additionalProperties": false,
                 },
                 {
@@ -1548,19 +1552,35 @@ fn selection_builds_the_strict_dispatch_schema_of_the_choices() {
                     "description": "bot.ability.cognition.ignore",
                     "properties": {
                         "event": {"type": "string", "enum": ["bot.ability.cognition.ignore"]},
-                        "data": {"type": "object", "additionalProperties": false},
+                        "data": {"type": "object", "properties": {}, "additionalProperties": false},
                         "reason": reason,
-                        "target": {"type": "string", "enum": ["cognition", "communication"], "description": "The ability that receives this event."},
+                        "target": {"type": "string", "enum": ["cognition", "communication"], "description": "Actor that should receive the event. Required because multiple actors enable this event this turn; choose exactly one offered actor key."},
                     },
-                    "required": ["event", "data", "reason", "target"],
+                    "required": ["event", "target"],
+                    "additionalProperties": false,
+                },
+                {
+                    "type": "object",
+                    "description": "bot.count",
+                    "properties": {
+                        "event": {"type": "string", "enum": ["bot.count"]},
+                        "data": {"type": "object", "properties": {"value": {"type": "integer"}}, "required": ["value"], "additionalProperties": false},
+                        "reason": reason,
+                    },
+                    "required": ["event", "data"],
                     "additionalProperties": false,
                 },
             ]},
+            "examples": [[], clear_example],
         }},
         "required": ["events"],
         "additionalProperties": false,
     });
     assert_eq!(text, canonical_json(&expected));
+}
+
+#[test]
+fn selection_without_choices_offers_any_event_as_the_original_does() {
     let mut host = with_values(&[("choices", json!([]))]);
     execute(
         "selection",
@@ -1569,10 +1589,12 @@ fn selection_builds_the_strict_dispatch_schema_of_the_choices() {
         &mut host,
     )
     .expect("built");
+    let events = &assigned_any(&host, "schema")["properties"]["events"];
     assert_eq!(
-        assigned_any(&host, "schema")["properties"]["events"]["items"]["anyOf"],
-        json!([])
+        events["items"],
+        json!({"type": "object", "properties": {"event": {"type": "string"}, "data": {"type": "object", "additionalProperties": false}}, "required": ["event"], "additionalProperties": false})
     );
+    assert_eq!(events["examples"], json!([[]]));
 }
 
 #[test]

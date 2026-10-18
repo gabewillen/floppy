@@ -5,7 +5,7 @@ The implementation report plan of the `decision` namespace, in the format of the
 scxml.rs's own namespace suites
 ([scxml.rs/docs/conformance.md](../../../scxml.rs/docs/conformance.md#namespace-suites)):
 11 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
-("Statements"), tested by 26 mandatory documents. It runs through exactly
+("Statements"), tested by 27 mandatory documents. It runs through exactly
 the pipeline the W3C IRP runs through (the canonical compiler, the shipped
 Wasm components under the Wasmtime session host, the same oracles and report
 envelope), with the namespace's own extension package and component bound,

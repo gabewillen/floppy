@@ -42,10 +42,11 @@
   decision:names   location (required): receives the choices' names
                    (event or event@target, space separated).
                    choices (required): an expression.
-  decision:selection location (required): receives the strict selection
-                   schema ({events: [anyOf one branch per offered event]},
-                   each branch {event, data, reason, target?}) of the
-                   choices. choices (required): an expression.
+  decision:selection location (required): receives the original's
+                   dispatch tool schema ({events: [anyOf one branch per
+                   offered event]}, each branch {event, data, reason?,
+                   target?}, the tool's description its root description)
+                   of the choices. choices (required): an expression.
   decision:tuner   location (required): the confidence tuner state
                    {mean, var, n} it keeps (reset when malformed).
                    observe (optional): an expression of a reported 0-100

@@ -1057,7 +1057,7 @@ fn reasoning_selects_from_the_turns_choices() {
     // The body gives the cognition a database: reasoning recalls from
     // memory (no seam logs absent).
     assert!(texts(&records, "memory").is_empty(), "{records:?}");
-    // The model request: the dispatch schema of the choices, strict, and
+    // The model request: the original's dispatch tool of the choices, and
     // a prompt that carries the stimulus and what memory recalled (a fresh
     // database holds nothing).
     let requests = reasoning_requests(&mock);
@@ -1065,6 +1065,13 @@ fn reasoning_selects_from_the_turns_choices() {
     let body = &requests[0].body;
     let format = &body["tools"][0]["function"];
     assert_eq!(format["name"], "dispatch");
+    assert!(
+        format["description"]
+            .as_str()
+            .is_some_and(|description| description
+                .starts_with("Dispatch all events necessary for the input. Call once.")),
+        "{format}"
+    );
     assert_eq!(body["tool_choice"], "required");
     let branches = format["parameters"]["properties"]["events"]["items"]["anyOf"]
         .as_array()
@@ -1072,9 +1079,18 @@ fn reasoning_selects_from_the_turns_choices() {
     let pinned: Vec<String> = branches
         .iter()
         .map(|branch| {
+            // The original's branch: event and target required, data when
+            // its schema requires a field, reason optional.
+            let data_required = branch["properties"]["data"]["required"]
+                .as_array()
+                .is_some_and(|required| !required.is_empty());
             assert_eq!(
                 branch["required"],
-                json!(["event", "data", "reason", "target"]),
+                if data_required {
+                    json!(["event", "data", "target"])
+                } else {
+                    json!(["event", "target"])
+                },
                 "{branch}"
             );
             assert_eq!(branch["additionalProperties"], false);

@@ -68,7 +68,7 @@ const P=[
 ];
 const EL=[
  ['decision','choice','location events',6,'Offers events as enabled transitions the turn can select.'],
- ['decision','selection','location choices',2,'Builds the strict structured-output schema from the choices.'],
+ ['decision','selection','location choices',2,'Builds the original\'s dispatch tool schema from the choices.'],
  ['decision','names','location choices',5,'Writes the logged choice names.'],
  ['decision','assemble','location routeslocation choices offers bound overlocation sizelocation',1,'Appends each ability\u2019s latest offers, tagged with its invoke id.'],
  ['decision','compact','location bound overlocation',4,'Drops $schema, title and examples to fit the bound.'],

@@ -87,9 +87,12 @@
     </test>
   </assert>
   <assert id="decision-9" specnum="9" specid="#decision-9">
-    <![CDATA[<decision:selection> writes a strict schema {events: [anyOf one branch per offered event]}, each branch {event, data, reason, target?} with data the choice's schema without $schema, title and examples, the choice's description, and target an enum of the offering targets only when one has a target.]]>
+    <![CDATA[<decision:selection> writes the original's dispatch tool as one schema: its description as the root description and its parameters {events: [anyOf one branch per offered event]} with the original's descriptions and examples; each branch {event, data, reason?, target?} has event a one-value enum, data the choice's schema without $schema (an empty object for none, wrapped as value for a non-object), required only when the schema requires a field, the schema's description else the event name, and target, required, a sorted enum of the offering targets only when one has a target; nothing is normalized for strict decoding.]]>
     <test id="470" conformance="mandatory" manual="false">
       <start uri="470/test470.txml"/>
+    </test>
+    <test id="471" conformance="mandatory" manual="false">
+      <start uri="471/test471.txml"/>
     </test>
   </assert>
   <assert id="decision-10" specnum="10" specid="#decision-10">

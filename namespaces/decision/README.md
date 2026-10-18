@@ -4,7 +4,7 @@
 `decision` by convention): the synchronous half of a decision as a Wasm
 executable-content extension component (`floppy_decision`): reading,
 compacting, assembling and naming the choices, placing the selections,
-building a model's strict selection schema, and tuning the confidence
+building the original's dispatch tool schema, and tuning the confidence
 threshold. Asking a backend to choose is slow I/O and belongs to the
 `decision` invoked service ([`services/decision`](../../services/decision)).
 It reads its expressions and the session snapshot and assigns its results
@@ -18,7 +18,7 @@ through the data model; it never sends, and it does no I/O.
 | `<decision:assemble location choices offers bound? overlocation? sizelocation?>` | `collect_offered_events` | the turn's choices, tagged by offering target (`location`) |
 | `<decision:route location rejectionlocation selections choices>` | `dispatch_selected_events`, `_resolve_target` | the placed selections (`location`) and the first rejection message (`rejectionlocation`) |
 | `<decision:names location choices>` | | the choices' names (`location`) |
-| `<decision:selection location choices>` | `_selection_item_branch`, `dispatch_tool` | the strict selection schema (`location`) |
+| `<decision:selection location choices>` | `_selection_item_branch`, `dispatch_tool` | the dispatch tool schema (`location`) |
 | `<decision:tuner location thresholdlocation? observe?>` | `ConfidenceTuner` | the tuner state (`location`) and the threshold (`thresholdlocation`) |
 
 The exact semantics and failures are in [`src/lib.rs`](src/lib.rs); the
@@ -42,6 +42,6 @@ through the pipeline of scxml.rs's namespace suites.
 - <a id="decision-6"></a>**decision-6**. `<decision:assemble>` writes the document's own choices untagged, then each offer's choices in member-name order tagged with the member's name as target, compacted, with its size and whether it is over the bound.
 - <a id="decision-7"></a>**decision-7**. `<decision:route>` places each selection on the target it names when that target offers the event, else on the event's only offerer (null for the document's own); a selection that cannot be placed fails all of them with the original's message and an empty placement.
 - <a id="decision-8"></a>**decision-8**. `<decision:names>` writes the choices' events, event@target for a targeted one, space separated.
-- <a id="decision-9"></a>**decision-9**. `<decision:selection>` writes a strict schema {events: [anyOf one branch per offered event]}, each branch {event, data, reason, target?} with data the choice's schema without $schema, title and examples, the choice's description, and target an enum of the offering targets only when one has a target.
+- <a id="decision-9"></a>**decision-9**. `<decision:selection>` writes the original's dispatch tool as one schema: its description as the root description and its parameters {events: [anyOf one branch per offered event]} with the original's descriptions and examples; each branch {event, data, reason?, target?} has event a one-value enum, data the choice's schema without $schema (an empty object for none, wrapped as value for a non-object), required only when the schema requires a field, the schema's description else the event name, and target, required, a sorted enum of the offering targets only when one has a target; nothing is normalized for strict decoding.
 - <a id="decision-10"></a>**decision-10**. `<decision:tuner>` keeps the original's ConfidenceTuner state {mean, var, n}: anything else is replaced by the initial state, an observation moves it, and the threshold is the floor during the warmup, else max(floor/2, mean - k_sigma * deviation), as a probability; an observation that is not a number raises `error.execution` and assigns nothing.
 - <a id="decision-11"></a>**decision-11**. A location that does not hold what the element reads raises `error.execution` and assigns nothing.

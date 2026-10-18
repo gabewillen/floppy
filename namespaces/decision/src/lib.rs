@@ -6,8 +6,8 @@
 //!
 //! Executable content is synchronous and quick, so this namespace holds only
 //! the half of a decision that is: reading, compacting, assembling and
-//! naming the choices, placing the selections, building a model's strict
-//! selection schema, and tuning the confidence threshold. Asking a backend to
+//! naming the choices, placing the selections, building the original's
+//! dispatch tool schema, and tuning the confidence threshold. Asking a backend to
 //! choose is slow I/O and belongs to the `decision` invoked service
 //! (`services/decision`), which takes the choices this element writes as its
 //! `choices` parameter. Documents bind [`NAMESPACE_URI`] (conventionally with
@@ -156,20 +156,29 @@
 //!
 //! # `<decision:selection location="L" choices="X"/>`
 //!
-//! `location` receives the strict structured-output schema a model fills
-//! to select among the choices `choices` evaluates to (the original
-//! `_selection_item_branch` and `dispatch_tool`): `{events: [anyOf one
-//! branch per offered event]}`, the events in choices order, each offered
-//! once. A branch is `{event (a one-value enum), data, reason, target}`:
-//! `data` is the first such choice's schema without its top-level
-//! `$schema`, `title` and `examples`, with `type` `object` and
-//! `additionalProperties` `false` when it names neither (an empty object
-//! for a schema that is not an object); `reason` is a short string; the
-//! branch's `description` is the choice's, else the event name; `target`,
-//! an enum of the distinct targets offering the event in choices order, is
-//! present (and required) only when some choice of the event has a target.
-//! Every field is required and no other property is admitted, at the
-//! branch and at the top. The result is canonical JSON.
+//! `location` receives the original's `dispatch` tool for the choices
+//! `choices` evaluates to (`dispatch_tool` and `_selection_item_branch`)
+//! as one JSON Schema: the tool's `parameters`, with the tool's
+//! description ([`DISPATCH_DESCRIPTION`]) as its root `description`, which
+//! the generate service sends as the function's `description`. The
+//! parameters are `{events: [anyOf one branch per offered event]}` (the
+//! events in choices order, each offered once; `events` required, with the
+//! original's description and examples: `[]`, and the first branch's
+//! example when it has one), and with no choices an item is any
+//! `{event, data?}`. A branch is `{event, data, reason?, target?}` with the
+//! original's descriptions: `event` a one-value enum; `data` the first such
+//! choice's schema without its top-level `$schema` (an empty object for no
+//! schema or an empty one, the schema wrapped as the required property
+//! `value` for one of another type without `properties`, else with `type`
+//! `object` and `additionalProperties` `false` when it names neither);
+//! `reason` an optional string; `target`, present and required only when
+//! some choice of the event has one, an enum of the distinct targets
+//! offering it, sorted. `event` is required, and `data` when its schema
+//! requires a field; no other property is admitted. The branch's
+//! `description` is the data schema's, else the event name, and when the
+//! data schema's `examples` starts with an object the branch has one
+//! example, `{event, data, target}` (`target` only for a single target).
+//! Nothing is normalized for strict decoding. The result is canonical JSON.
 //!
 //! # `<decision:tuner location="L" thresholdlocation="T" observe="X"/>`
 //!
@@ -936,8 +945,10 @@ fn selection<H: ChoiceHost>(
     Ok(Executed::Handled)
 }
 
-/// The strict selection schema of `choices`, canonical JSON: see the crate
-/// documentation (`<decision:selection>`).
+/// The original's `dispatch` tool of `choices` as one JSON Schema, canonical
+/// JSON: its `parameters`, with its `description` as the root
+/// `description` (the generate service sends that as the function's). See
+/// the crate documentation (`<decision:selection>`).
 ///
 /// # Errors
 ///
@@ -945,7 +956,7 @@ fn selection<H: ChoiceHost>(
 pub fn selection_schema(choices: &Json) -> Result<String, &'static str> {
     // Each offered event once, in choices order: its first choice and the
     // distinct targets offering it.
-    let mut offered: Vec<(&Json, Vec<Json>)> = Vec::new();
+    let mut offered: Vec<(&Json, Vec<String>)> = Vec::new();
     for entry in checked_entries(choices, SELECTION_ENTRIES)? {
         let event = entry.get("event");
         let index = offered
@@ -955,79 +966,186 @@ pub fn selection_schema(choices: &Json) -> Result<String, &'static str> {
                 offered.push((entry, Vec::new()));
                 offered.len() - 1
             });
-        if let Some(target) = entry.get("target").filter(|target| target.is_string()) {
+        if let Some(target) = entry
+            .get("target")
+            .and_then(Json::as_str)
+            .filter(|target| !target.is_empty())
+        {
             let targets = &mut offered[index].1;
-            if !targets.contains(target) {
-                targets.push(target.clone());
+            if !targets.iter().any(|known| known == target) {
+                targets.push(target.to_owned());
             }
         }
     }
     let branches: Vec<Json> = offered
         .into_iter()
-        .map(|(choice, targets)| {
-            let event = choice.get("event").cloned().unwrap_or(Json::Null);
-            let description = choice
-                .get("description")
-                .filter(|description| description.is_string())
-                .cloned()
-                .unwrap_or_else(|| event.clone());
-            let mut properties = Map::new();
-            properties.insert(
-                "event".into(),
-                serde_json::json!({"type": "string", "enum": [event]}),
-            );
-            properties.insert(
-                "data".into(),
-                selection_data(choice.get("schema").unwrap_or(&Json::Null)),
-            );
-            properties.insert(
-                "reason".into(),
-                serde_json::json!({"type": "string", "description": "A short reason this event was selected."}),
-            );
-            let mut required = vec![
-                Json::from("event"),
-                Json::from("data"),
-                Json::from("reason"),
-            ];
-            if !targets.is_empty() {
-                properties.insert(
-                    "target".into(),
-                    serde_json::json!({"type": "string", "enum": targets, "description": "The ability that receives this event."}),
-                );
-                required.push("target".into());
-            }
-            serde_json::json!({
-                "type": "object",
-                "description": description,
-                "properties": properties,
-                "required": required,
-                "additionalProperties": false,
-            })
+        .map(|(choice, mut targets)| {
+            // The original's `_normalized_targets`: sorted, distinct.
+            targets.sort();
+            selection_branch(
+                choice.get("event").cloned().unwrap_or(Json::Null),
+                choice.get("schema").unwrap_or(&Json::Null),
+                &targets,
+            )
         })
         .collect();
+    let mut examples = vec![Json::Array(Vec::new())];
+    if let Some(example) = branches
+        .first()
+        .and_then(|branch| branch.get("examples"))
+        .and_then(Json::as_array)
+        .and_then(|examples| examples.first())
+    {
+        examples.push(example.clone());
+    }
+    let items = if branches.is_empty() {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "event": {"type": "string"},
+                "data": {"type": "object", "additionalProperties": false},
+            },
+            "required": ["event"],
+            "additionalProperties": false,
+        })
+    } else {
+        serde_json::json!({"anyOf": branches})
+    };
     Ok(canonical_json(&serde_json::json!({
+        "description": DISPATCH_DESCRIPTION,
         "type": "object",
         "properties": {"events": {
             "type": "array",
-            "description": "All events necessary for the input this turn; an empty array selects none.",
-            "items": {"anyOf": branches},
+            "description": DISPATCH_EVENTS_DESCRIPTION,
+            "items": items,
+            "examples": examples,
         }},
         "required": ["events"],
         "additionalProperties": false,
     })))
 }
 
-/// A choice's schema as a selection branch's `data`: the payload contract
-/// only (top-level `$schema`, `title` and `examples` dropped), an object
-/// admitting no undeclared property unless it says otherwise.
+/// The original's `dispatch` tool description, verbatim.
+pub const DISPATCH_DESCRIPTION: &str = "Dispatch all events necessary for the input. Call once. \
+    Multi-select by listing every offered event this turn requires in the events array \
+    (for example a device action and speech together when both are needed). \
+    Each item must match one offered event branch; payload fields and requirements are \
+    defined on that event's data schema. An empty events list leaves the turn unhandled for \
+    the host cascade (e.g. deliberative reasoning); use an explicit ignore/pass event when \
+    the stage should handle the turn with no environment actions.";
+
+/// The original's description of the `dispatch` tool's `events`, verbatim.
+const DISPATCH_EVENTS_DESCRIPTION: &str = "All events necessary for the input this turn. Each item is one offered \
+    event branch (enum-pinned name + that event's data schema). Include every action \
+    required together; empty array selects none.";
+
+/// One offered event's branch, as the original's `_selection_item_branch`
+/// builds it: `event` a one-value enum, `data` the event's schema
+/// ([`selection_data`]), `reason` optional, `target` an enum of the
+/// `targets` offering it when there are any; `event` required, `data`
+/// required when its schema requires a field, `target` when present; the
+/// schema's description (else the event name) and, when its `examples`
+/// starts with an object, one example.
+fn selection_branch(event: Json, schema: &Json, targets: &[String]) -> Json {
+    let data = selection_data(schema);
+    let description = data
+        .get("description")
+        .and_then(Json::as_str)
+        .filter(|description| !description.trim().is_empty())
+        .map_or_else(|| event.clone(), Json::from);
+    let data_required = data
+        .get("required")
+        .and_then(Json::as_array)
+        .is_some_and(|required| required.iter().any(Json::is_string));
+    let mut required = vec![Json::from("event")];
+    if data_required {
+        required.push("data".into());
+    }
+    let first_example = data
+        .get("examples")
+        .and_then(Json::as_array)
+        .and_then(|examples| examples.first())
+        .filter(|example| example.is_object())
+        .cloned();
+    let mut properties = Map::new();
+    properties.insert(
+        "event".into(),
+        serde_json::json!({"type": "string", "enum": [event]}),
+    );
+    properties.insert("data".into(), data);
+    properties.insert(
+        "reason".into(),
+        serde_json::json!({"type": "string", "description": "Optional short reason this event was selected."}),
+    );
+    match targets {
+        [] => {}
+        [target] => {
+            properties.insert(
+                "target".into(),
+                serde_json::json!({
+                    "type": "string",
+                    "enum": [target],
+                    "description": "Actor that receives this event. Fixed for this turn because only one actor enables it in the live topology.",
+                }),
+            );
+            required.push("target".into());
+        }
+        _ => {
+            properties.insert(
+                "target".into(),
+                serde_json::json!({
+                    "type": "string",
+                    "enum": targets,
+                    "description": "Actor that should receive the event. Required because multiple actors enable this event this turn; choose exactly one offered actor key.",
+                }),
+            );
+            required.push("target".into());
+        }
+    }
+    let mut branch = Map::new();
+    branch.insert("type".into(), "object".into());
+    branch.insert("description".into(), description);
+    branch.insert("properties".into(), Json::Object(properties));
+    branch.insert("required".into(), Json::Array(required));
+    branch.insert("additionalProperties".into(), Json::Bool(false));
+    if let Some(first) = first_example {
+        let mut example = Map::new();
+        example.insert("event".into(), event);
+        example.insert("data".into(), first);
+        if let [target] = targets {
+            example.insert("target".into(), Json::from(target.as_str()));
+        }
+        branch.insert("examples".into(), Json::Array(vec![Json::Object(example)]));
+    }
+    Json::Object(branch)
+}
+
+/// A choice's schema as a branch's `data`, as the original projects an
+/// event's payload schema: no schema (or an empty one) is an empty object;
+/// a schema of another type without `properties` is wrapped as the
+/// required property `value`; otherwise the schema (without a top-level
+/// `$schema`), `type` `object` and `additionalProperties` `false` when it
+/// names neither.
 fn selection_data(schema: &Json) -> Json {
     let mut out: Map<String, Json> = schema
         .as_object()
         .into_iter()
         .flatten()
-        .filter(|(key, _)| !["$schema", "title", "examples"].contains(&key.as_str()))
+        .filter(|(key, _)| key.as_str() != "$schema")
         .map(|(key, value)| (key.clone(), value.clone()))
         .collect();
+    if out.is_empty() {
+        return serde_json::json!({"type": "object", "properties": {}, "additionalProperties": false});
+    }
+    let typed = out.get("type").and_then(Json::as_str);
+    if out.get("type").is_some() && typed != Some("object") && !out.contains_key("properties") {
+        return serde_json::json!({
+            "type": "object",
+            "properties": {"value": Json::Object(out)},
+            "required": ["value"],
+            "additionalProperties": false,
+        });
+    }
     out.entry("type").or_insert_with(|| "object".into());
     out.entry("additionalProperties")
         .or_insert(Json::Bool(false));

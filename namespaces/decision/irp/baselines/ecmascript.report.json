@@ -6,21 +6,28 @@
     "kind": "namespace-irp",
     "source": "namespaces/decision/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "982c000e9b2d2cab703579f7ba9695418f79ce049578afb6337e965dfe2519f6",
-    "source_digest": "02edb514e994044f73768381dbdcc1b58b2f405d6e65977136d6dd866b609dd2",
-    "manifest_digest": "80dec813566c93be572914288f3aac8b17820755d4e926601b90b1d1a5b15ebf",
+    "corpus_digest": "e50400a0176fd174c1cacd66a514eff8c1d33cd25df856e76d348c1db4fe50e9",
+    "source_digest": "373b828c0b49de0ecce4b3cdf0359355ad037c8196741fdc4ac064c4aa1cb05d",
+    "manifest_digest": "d7cae70a2e74bf7e57fa4389f2bcad8d62817322cfe8f02924eda933ceb01c19",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
     "transformer": {
-      "name": "saxon-process",
+      "name": "saxon-process-sandboxed",
       "version": "SaxonJ-HE 12.8 from Saxonica",
       "command_argv": [
         "java",
         "-jar",
-        "saxon-he-12.8.jar"
+        "saxon-he-12.8.jar",
+        "-a:off",
+        "-p:off",
+        "-dtd:off",
+        "-expand:off",
+        "-ext:off",
+        "-xi:off",
+        "-xsiloc:off"
       ],
-      "executable_digest": "1202571b0b642654eb70550cf2216fdb0642c8accae3d9e120112ed921deee4d"
+      "executable_digest": "c13657d80564f40f10b8ab91b29fdc74080e7d8bb36d6cd06589292755d3476f"
     },
     "datamodel": "ecmascript",
     "provenance": "baseuri=https://github.com/stateforward/floppy/tree/main/namespaces/decision/irp/sources"
@@ -34,12 +41,12 @@
   "engine": {
     "name": "scxml-machine",
     "version": "0.2.0",
-    "source_digest": "fa539502555be6876cee2620b88b222833593c686d6de68cdd840da71ad0c21f"
+    "source_digest": "b3fde869dbf1c6e0b9494fb7013aef41e3436225ac598902afafdf761c9e2dd5"
   },
   "data_model": {
     "name": "scxml-data-model-ecmascript",
     "version": "0.2.0",
-    "source_digest": "eee3209122213ddb2832d90e121ec744af0fcee7cd78eab22c6ed0efa3d48b51"
+    "source_digest": "e84a0f3d2c9335c246e1e63d11927c9778ca51ce1891cbf024b93660b8d2d969"
   },
   "runner": {
     "name": "scxml-conformance/wasm",
@@ -55,9 +62,9 @@
     {
       "namespace_uri": "https://github.com/stateforward/floppy/namespaces/decision",
       "package_version": "0.1.0",
-      "manifest_sha256": "8c1f458b94f8af8dbb2444cd5a0987c253f284a6f520a8133c587476f83a4da9",
-      "schema_sha256": "f9e94a6d3f7f1f450ddada851a3460efea95044d19a328ca4ccf9a9d02a4afd8",
-      "component_sha256": "a975750dd3fdc48a2a62a6e0dab5cf6a9d633e2cc74547cf8a6197ef4a8713e9"
+      "manifest_sha256": "2c73fd20881708e5f6e211328056d42c4fac9114a4511c869bcccaa0643663c0",
+      "schema_sha256": "a80daa807b1cc15d82efd22f43f30490402d8a761a63783264168f2cfdb01655",
+      "component_sha256": "fbf842cc2b3f75d827c1bc8628e18a75cf9d6c542d46bd458d149efa6e26b495"
     }
   ],
   "ir_version": 5,
@@ -70,11 +77,11 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "547425ae6c2e61f5a0755e114b975cfe6bbe7e09f4a6d56f85bad7c8c47721d6",
+  "identity_digest": "42fc6e6bb02641d074a9bd17418c1cdb1f7b9c1457eeb496cd066934538a903e",
   "summary": {
-    "total_selected": 26,
-    "applicable_selected": 26,
-    "passed": 26,
+    "total_selected": 27,
+    "applicable_selected": 27,
+    "passed": 27,
     "failed": 0,
     "unsupported": 0,
     "invalid": 0,
@@ -84,8 +91,8 @@
     "not_passing": 0,
     "passed_under_erratum": 0,
     "mandatory": {
-      "applicable_selected": 26,
-      "passed": 26,
+      "applicable_selected": 27,
+      "passed": 27,
       "failed": 0,
       "unsupported": 0,
       "invalid": 0,
@@ -229,8 +236,8 @@
         "passed_under_erratum": 0
       },
       "#decision-9": {
-        "applicable_selected": 1,
-        "passed": 1,
+        "applicable_selected": 2,
+        "passed": 2,
         "failed": 0,
         "unsupported": 0,
         "invalid": 0,
@@ -243,8 +250,8 @@
     },
     "by_datamodel": {
       "ecmascript": {
-        "applicable_selected": 26,
-        "passed": 26,
+        "applicable_selected": 27,
+        "passed": 27,
         "failed": 0,
         "unsupported": 0,
         "invalid": 0,
@@ -774,6 +781,31 @@
     },
     {
       "id": "470",
+      "assertion_id": "decision-9",
+      "spec_num": "9",
+      "spec_id": "#decision-9",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "471",
       "assertion_id": "decision-9",
       "spec_num": "9",
       "spec_id": "#decision-9",
