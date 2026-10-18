@@ -7,6 +7,26 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-18, the identity, conversation and memory namespaces (D115), model `Qwen/Qwen3.8-Flash-Next`
+
+The identity ability now hears its name with `<identity:hears_name>`, the
+conversation keeps its relationships, turns and messages with the
+conversation namespace's elements, orders its sources with
+`<identity:sorted_identities>` and remembers with `<memory:to_json>`, the
+turn detector assembles and closes its turns with
+`<conversation:ingest_content>` and `<conversation:on_end>`, and reasoning
+reads its recalled rows with `<memory:contents>`. The runs used floppy
+commit `847bfc3bde` (code at `9eff0785a2`), the same env files, backends
+and model as the entries below (`FLOPPY_LIVE_ENV_FILE` naming `.env`,
+`env.speech` and `env.voice`), no relay, and `cargo test -p floppy-tests
+--locked --test floppy_live -- --ignored --nocapture --test-threads=1
+--exact <test>`, once each.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_identity` | pass (26 s) | the conversation committed the input (`inbound 0 from ["gabe"] (1 in its relationship)`), the identity logged `addressed as Floppy`, and reasoning answered the addressed turn ("I don't have a name yet, Gabe. Would you like to give me one?"), committed as `outbound 1` |
+| `floppy_live` `live_conversation` | fail (178 s) | `4 completed, 0 failed`, but no behavior was learned by turn 2: reflection created `IgnoreConversationTurn` on turn 1 and `PingPongReply` on turn 2, and each draft failed its simulation twice with the same diagnostic (`test-failed`: no `behavior.donedata`; then `XML001` for an unescaped `&`), so both revisions were abandoned and stayed DRAFT; turn 4's reflection select failed `malformed`. The conversation remembered every input and recalled the relationship's earlier ones (`recalled 0` to `recalled 3`, each `remembered 1`, through `<memory:to_json>`), one relationship throughout (1 to 4 messages in it). Reasoning answered every turn: turn 3 "pong" and turn 4 "Your favorite color is green, Gabe!", recalling turn 1. The reflection failures are the model's, the same kind as the run below |
+
 ## 2026-10-18, the intuition and cognition namespaces (D114), model `Qwen/Qwen3.8-Flash-Next`
 
 Intuition now tunes its confidence with `<intuition:observe>` and
