@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- conversation-8: no turns raise error.execution and assign nothing. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation">
+<datamodel>
+  <data id="m" expr="'untouched'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:complete_turn location="m" event="'e'" input="({source_ids: [], target_ids: [], content_type: 'text/plain'})" turns="[]" session_ref="'r'" sequence="0"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="m === 'untouched'" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

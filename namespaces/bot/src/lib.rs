@@ -1,19 +1,17 @@
-//! The `bot` extension namespace: `<bot:stimulus>` and `<bot:recognize>` as
-//! a
+//! The `bot` extension namespace: `<bot:stimulus>` as a
 //! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
 //! A bot body's per-turn bookkeeping that is synchronous and quick: the
 //! stimulus envelope the body hands its cognition (`bot.ability.cognition.input`
-//! `stimulus`), and the identity ability's text name recognition. The
-//! turn's attention bias is the `cognition` namespace's
-//! (`<cognition:attention_bias_for_turn>`).
+//! `stimulus`). The turn's attention bias is the `cognition` namespace's
+//! (`<cognition:attention_bias_for_turn>`), and the identity ability's text
+//! name recognition the `identity` namespace's (`<identity:hears_name>`).
 //! Documents bind [`NAMESPACE_URI`] (conventionally with the
 //! prefix `bot`):
 //!
 //! ```xml
 //! <bot:stimulus location="stimulus" event="_event.name" data="_event.data"
 //!               source="_event.invokeid"/>
-//! <bot:recognize location="addressed" name="name" text="heard"/>
 //! ```
 //!
 //! Every attribute but `location` is an expression of
@@ -32,17 +30,6 @@
 //! outside the session). `target` and `id` (optional) are included when
 //! present and their expression is not `undefined`; each is a string or
 //! `null`.
-//!
-//! # `<bot:recognize location="L" name="N" text="T"/>`
-//!
-//! Whether `text` names the bot (the reference `recognition.hears_name`, the text
-//! recognizer). `name` and `text` (required) each evaluate to a string, or
-//! to `null` (also `undefined`) when there is none. Each is split on white
-//! space into tokens kept to their letters and digits and lowercased, the
-//! empty ones dropped; the name is heard when its tokens appear as a whole
-//! run among the text's (so "Al" is not heard in "always"). A name with no
-//! tokens, or a missing name or text, is never heard. `location`
-//! (required) receives `true` or `false`.
 //!
 //! # Failures
 //!
@@ -158,7 +145,6 @@ pub fn execute<H: BotHost>(
 ) -> Result<Executed, Failure<H::Error>> {
     match local_name {
         "stimulus" => stimulus(attributes, content, host),
-        "recognize" => recognize(attributes, content, host),
         _ => Ok(Executed::NotHandled),
     }
 }
@@ -349,82 +335,6 @@ pub fn stimulus_json(
         "{{\"data\":{data},\"event\":{}{id},\"source\":{source}{target}}}",
         Json::from(event)
     )
-}
-
-/// Executes `<bot:recognize>`.
-fn recognize<H: BotHost>(
-    attributes: &[Attribute],
-    content: &[Content],
-    host: &mut H,
-) -> Result<Executed, Failure<H::Error>> {
-    let [location, name, text] = attribute_values(
-        attributes,
-        ["location", "name", "text"],
-        "bot:recognize takes only the location, name and text attributes",
-        "bot:recognize repeats an attribute",
-        "bot:recognize has an empty attribute",
-    )?;
-    let location = location.ok_or(Failure::Execution("bot:recognize requires a location"))?;
-    let name = name.ok_or(Failure::Execution("bot:recognize requires a name"))?;
-    let text = text.ok_or(Failure::Execution("bot:recognize requires a text"))?;
-    no_content(content, "bot:recognize holds no content")?;
-    let mut string_or_null = |expression: &str,
-                              failed: &'static str,
-                              malformed: &'static str|
-     -> Result<Option<String>, Failure<H::Error>> {
-        match evaluate(host, expression, failed)? {
-            Data::String(value) => Ok(Some(value)),
-            Data::Null | Data::Undefined | Data::Absent => Ok(None),
-            _ => Err(Failure::Execution(malformed)),
-        }
-    };
-    let name = string_or_null(
-        name,
-        "bot:recognize name did not evaluate",
-        "bot:recognize name is not a string or null",
-    )?;
-    let text = string_or_null(
-        text,
-        "bot:recognize text did not evaluate",
-        "bot:recognize text is not a string or null",
-    )?;
-    let addressed = match (name, text) {
-        (Some(name), Some(text)) => hears_name(&text, &name),
-        _ => false,
-    };
-    assign_to(
-        host,
-        location,
-        &Data::Bool(addressed),
-        "bot:recognize could not assign whether the name was heard",
-    )?;
-    Ok(Executed::Handled)
-}
-
-/// The reference `recognition._tokens`: the white-space separated words of
-/// `text`, each kept to its letters and digits and lowercased, the empty
-/// ones dropped.
-fn tokens(text: &str) -> Vec<String> {
-    text.split_whitespace()
-        .map(|word| {
-            word.chars()
-                .filter(|c| c.is_alphanumeric())
-                .flat_map(char::to_lowercase)
-                .collect::<String>()
-        })
-        .filter(|token| !token.is_empty())
-        .collect()
-}
-
-/// The reference `recognition.hears_name`: whether `name`'s tokens appear as a
-/// whole run among `text`'s; a name with no tokens is never heard.
-#[must_use]
-pub fn hears_name(text: &str, name: &str) -> bool {
-    let wanted = tokens(name);
-    !wanted.is_empty()
-        && tokens(text)
-            .windows(wanted.len())
-            .any(|run| run == wanted.as_slice())
 }
 
 #[cfg(target_arch = "wasm32")]

@@ -3,7 +3,7 @@
      numbered statement of namespaces/bot/README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/namespaces/bot/irp/sources">
   <assert id="bot-1" specnum="1" specid="#bot-1">
-    <![CDATA[Each element (stimulus, recognize) takes exactly its declared attributes, the required ones present and none empty, and no content, and the namespace has no other element: a malformed element raises error.execution and assigns nothing (its schema, package/bot.xsd, rejects it before any run under scx validate).]]>
+    <![CDATA[<bot:stimulus> takes exactly its declared attributes, the required ones present and none empty, and no content, and the namespace has no other element: a malformed element raises error.execution and assigns nothing (its schema, package/bot.xsd, rejects it before any run under scx validate).]]>
     <test id="201" conformance="mandatory" manual="false">
       <start uri="201/test201.txml"/>
     </test>
@@ -27,21 +27,6 @@
     </test>
     <test id="213" conformance="mandatory" manual="false">
       <start uri="213/test213.txml"/>
-    </test>
-  </assert>
-  <assert id="bot-3" specnum="3" specid="#bot-3">
-    <![CDATA[<bot:recognize> writes true exactly when the name's case-folded letter-and-digit tokens appear as a whole run among the text's; a missing name or one with no tokens is never heard, and a text that is neither a string nor null raises error.execution and assigns nothing.]]>
-    <test id="240" conformance="mandatory" manual="false">
-      <start uri="240/test240.txml"/>
-    </test>
-    <test id="241" conformance="mandatory" manual="false">
-      <start uri="241/test241.txml"/>
-    </test>
-    <test id="242" conformance="mandatory" manual="false">
-      <start uri="242/test242.txml"/>
-    </test>
-    <test id="243" conformance="mandatory" manual="false">
-      <start uri="243/test243.txml"/>
     </test>
   </assert>
 </assertions>

@@ -1,0 +1,939 @@
+[
+ {
+  "name": "first_input_begins_one",
+  "relationships": [],
+  "input": {
+   "source_ids": [
+    "alice"
+   ],
+   "target_ids": []
+  },
+  "index": 0,
+  "relationships_after": [
+   {
+    "context_ref": "<context_ref>",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-<context_ref>",
+    "source_ids": [
+     "alice"
+    ],
+    "target_ids": []
+   }
+  ]
+ },
+ {
+  "name": "targetless_joins_the_ambient",
+  "relationships": [
+   {
+    "session_ref": "relationship-a",
+    "context_ref": "a",
+    "source_ids": [
+     "alice"
+    ],
+    "target_ids": [
+     "bot"
+    ],
+    "participants": [],
+    "sequences": []
+   },
+   {
+    "session_ref": "relationship-b",
+    "context_ref": "b",
+    "source_ids": [
+     "bob"
+    ],
+    "target_ids": [],
+    "participants": [],
+    "sequences": []
+   }
+  ],
+  "input": {
+   "source_ids": [
+    "carol"
+   ],
+   "target_ids": []
+  },
+  "index": 1,
+  "relationships_after": [
+   {
+    "context_ref": "a",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-a",
+    "source_ids": [
+     "alice"
+    ],
+    "target_ids": [
+     "bot"
+    ]
+   },
+   {
+    "context_ref": "b",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-b",
+    "source_ids": [
+     "bob"
+    ],
+    "target_ids": []
+   }
+  ]
+ },
+ {
+  "name": "targetless_without_an_ambient_begins_one",
+  "relationships": [
+   {
+    "session_ref": "relationship-a",
+    "context_ref": "a",
+    "source_ids": [
+     "alice"
+    ],
+    "target_ids": [
+     "bot"
+    ],
+    "participants": [],
+    "sequences": []
+   }
+  ],
+  "input": {
+   "source_ids": [
+    "carol"
+   ],
+   "target_ids": []
+  },
+  "index": 1,
+  "relationships_after": [
+   {
+    "context_ref": "a",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-a",
+    "source_ids": [
+     "alice"
+    ],
+    "target_ids": [
+     "bot"
+    ]
+   },
+   {
+    "context_ref": "<context_ref>",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-<context_ref>",
+    "source_ids": [
+     "carol"
+    ],
+    "target_ids": []
+   }
+  ]
+ },
+ {
+  "name": "names_match_directly",
+  "relationships": [
+   {
+    "session_ref": "relationship-a",
+    "context_ref": "a",
+    "source_ids": [
+     "alice"
+    ],
+    "target_ids": [
+     "bob"
+    ],
+    "participants": [],
+    "sequences": []
+   },
+   {
+    "session_ref": "relationship-b",
+    "context_ref": "b",
+    "source_ids": [
+     "alice"
+    ],
+    "target_ids": [
+     "bot"
+    ],
+    "participants": [],
+    "sequences": []
+   }
+  ],
+  "input": {
+   "source_ids": [
+    "alice"
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  },
+  "index": 1,
+  "relationships_after": [
+   {
+    "context_ref": "a",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-a",
+    "source_ids": [
+     "alice"
+    ],
+    "target_ids": [
+     "bob"
+    ]
+   },
+   {
+    "context_ref": "b",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-b",
+    "source_ids": [
+     "alice"
+    ],
+    "target_ids": [
+     "bot"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "names_match_in_reverse",
+  "relationships": [
+   {
+    "session_ref": "relationship-a",
+    "context_ref": "a",
+    "source_ids": [
+     "alice"
+    ],
+    "target_ids": [
+     "bot"
+    ],
+    "participants": [],
+    "sequences": []
+   }
+  ],
+  "input": {
+   "source_ids": [
+    "bot"
+   ],
+   "target_ids": [
+    "alice"
+   ]
+  },
+  "index": 0,
+  "relationships_after": [
+   {
+    "context_ref": "a",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-a",
+    "source_ids": [
+     "alice"
+    ],
+    "target_ids": [
+     "bot"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "an_addressed_ambient_scores_the_threshold",
+  "relationships": [
+   {
+    "session_ref": "relationship-a",
+    "context_ref": "a",
+    "source_ids": [
+     "alice"
+    ],
+    "target_ids": [],
+    "participants": [
+     "bot"
+    ],
+    "sequences": []
+   }
+  ],
+  "input": {
+   "source_ids": [
+    "carol"
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  },
+  "index": 0,
+  "relationships_after": [
+   {
+    "context_ref": "a",
+    "participants": [
+     "bot"
+    ],
+    "sequences": [],
+    "session_ref": "relationship-a",
+    "source_ids": [
+     "alice"
+    ],
+    "target_ids": []
+   }
+  ]
+ },
+ {
+  "name": "an_exact_match_beats_an_addressed_ambient",
+  "relationships": [
+   {
+    "session_ref": "relationship-z",
+    "context_ref": "z",
+    "source_ids": [
+     "alice"
+    ],
+    "target_ids": [],
+    "participants": [
+     "bot"
+    ],
+    "sequences": []
+   },
+   {
+    "session_ref": "relationship-y",
+    "context_ref": "y",
+    "source_ids": [
+     "carol"
+    ],
+    "target_ids": [
+     "bot"
+    ],
+    "participants": [],
+    "sequences": []
+   }
+  ],
+  "input": {
+   "source_ids": [
+    "carol"
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  },
+  "index": 1,
+  "relationships_after": [
+   {
+    "context_ref": "z",
+    "participants": [
+     "bot"
+    ],
+    "sequences": [],
+    "session_ref": "relationship-z",
+    "source_ids": [
+     "alice"
+    ],
+    "target_ids": []
+   },
+   {
+    "context_ref": "y",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-y",
+    "source_ids": [
+     "carol"
+    ],
+    "target_ids": [
+     "bot"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "ties_go_to_the_lower_session_ref",
+  "relationships": [
+   {
+    "session_ref": "relationship-z",
+    "context_ref": "z",
+    "source_ids": [
+     "alice"
+    ],
+    "target_ids": [
+     "bot"
+    ],
+    "participants": [],
+    "sequences": []
+   },
+   {
+    "session_ref": "relationship-y",
+    "context_ref": "y",
+    "source_ids": [
+     "bot"
+    ],
+    "target_ids": [
+     "alice"
+    ],
+    "participants": [],
+    "sequences": []
+   }
+  ],
+  "input": {
+   "source_ids": [
+    "alice"
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  },
+  "index": 1,
+  "relationships_after": [
+   {
+    "context_ref": "z",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-z",
+    "source_ids": [
+     "alice"
+    ],
+    "target_ids": [
+     "bot"
+    ]
+   },
+   {
+    "context_ref": "y",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-y",
+    "source_ids": [
+     "bot"
+    ],
+    "target_ids": [
+     "alice"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "similar_embeddings_match",
+  "relationships": [
+   {
+    "session_ref": "relationship-a",
+    "context_ref": "a",
+    "source_ids": [
+     [
+      1,
+      0,
+      0
+     ]
+    ],
+    "target_ids": [
+     "bot"
+    ],
+    "participants": [],
+    "sequences": []
+   }
+  ],
+  "input": {
+   "source_ids": [
+    [
+     0.99,
+     0.1,
+     0
+    ]
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  },
+  "index": 0,
+  "relationships_after": [
+   {
+    "context_ref": "a",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-a",
+    "source_ids": [
+     [
+      1,
+      0,
+      0
+     ]
+    ],
+    "target_ids": [
+     "bot"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "dissimilar_embeddings_do_not_match",
+  "relationships": [
+   {
+    "session_ref": "relationship-a",
+    "context_ref": "a",
+    "source_ids": [
+     [
+      1,
+      0,
+      0
+     ]
+    ],
+    "target_ids": [
+     "bot"
+    ],
+    "participants": [],
+    "sequences": []
+   }
+  ],
+  "input": {
+   "source_ids": [
+    [
+     0,
+     1,
+     0
+    ]
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  },
+  "index": 1,
+  "relationships_after": [
+   {
+    "context_ref": "a",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-a",
+    "source_ids": [
+     [
+      1,
+      0,
+      0
+     ]
+    ],
+    "target_ids": [
+     "bot"
+    ]
+   },
+   {
+    "context_ref": "<context_ref>",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-<context_ref>",
+    "source_ids": [
+     [
+      0,
+      1,
+      0
+     ]
+    ],
+    "target_ids": [
+     "bot"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "two_to_two_embeddings_assign_one_to_one",
+  "relationships": [
+   {
+    "session_ref": "relationship-a",
+    "context_ref": "a",
+    "source_ids": [
+     [
+      1,
+      0,
+      0
+     ],
+     [
+      0,
+      1,
+      0
+     ]
+    ],
+    "target_ids": [
+     "bot"
+    ],
+    "participants": [],
+    "sequences": []
+   }
+  ],
+  "input": {
+   "source_ids": [
+    [
+     0.05,
+     1,
+     0.02
+    ],
+    [
+     0.99,
+     0.1,
+     0
+    ]
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  },
+  "index": 0,
+  "relationships_after": [
+   {
+    "context_ref": "a",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-a",
+    "source_ids": [
+     [
+      1,
+      0,
+      0
+     ],
+     [
+      0,
+      1,
+      0
+     ]
+    ],
+    "target_ids": [
+     "bot"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "an_ambiguous_assignment_is_refused",
+  "relationships": [
+   {
+    "session_ref": "relationship-a",
+    "context_ref": "a",
+    "source_ids": [
+     [
+      1,
+      0,
+      0
+     ],
+     [
+      0.99,
+      0.1,
+      0
+     ]
+    ],
+    "target_ids": [
+     "bot"
+    ],
+    "participants": [],
+    "sequences": []
+   }
+  ],
+  "input": {
+   "source_ids": [
+    [
+     1,
+     0,
+     0
+    ],
+    [
+     0.99,
+     0.1,
+     0
+    ]
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  },
+  "index": 1,
+  "relationships_after": [
+   {
+    "context_ref": "a",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-a",
+    "source_ids": [
+     [
+      1,
+      0,
+      0
+     ],
+     [
+      0.99,
+      0.1,
+      0
+     ]
+    ],
+    "target_ids": [
+     "bot"
+    ]
+   },
+   {
+    "context_ref": "<context_ref>",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-<context_ref>",
+    "source_ids": [
+     [
+      0.99,
+      0.1,
+      0
+     ],
+     [
+      1,
+      0,
+      0
+     ]
+    ],
+    "target_ids": [
+     "bot"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "groups_of_other_sizes_do_not_match",
+  "relationships": [
+   {
+    "session_ref": "relationship-a",
+    "context_ref": "a",
+    "source_ids": [
+     "alice",
+     "bob"
+    ],
+    "target_ids": [
+     "bot"
+    ],
+    "participants": [],
+    "sequences": []
+   }
+  ],
+  "input": {
+   "source_ids": [
+    "alice"
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  },
+  "index": 1,
+  "relationships_after": [
+   {
+    "context_ref": "a",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-a",
+    "source_ids": [
+     "alice",
+     "bob"
+    ],
+    "target_ids": [
+     "bot"
+    ]
+   },
+   {
+    "context_ref": "<context_ref>",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-<context_ref>",
+    "source_ids": [
+     "alice"
+    ],
+    "target_ids": [
+     "bot"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "mixed_names_and_embeddings",
+  "relationships": [
+   {
+    "session_ref": "relationship-a",
+    "context_ref": "a",
+    "source_ids": [
+     "alice",
+     [
+      1,
+      0,
+      0
+     ]
+    ],
+    "target_ids": [
+     "bot"
+    ],
+    "participants": [],
+    "sequences": []
+   },
+   {
+    "session_ref": "relationship-b",
+    "context_ref": "b",
+    "source_ids": [
+     "alice",
+     [
+      0,
+      1,
+      0
+     ]
+    ],
+    "target_ids": [
+     "bot"
+    ],
+    "participants": [],
+    "sequences": []
+   }
+  ],
+  "input": {
+   "source_ids": [
+    [
+     0.05,
+     1,
+     0.02
+    ],
+    "alice"
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  },
+  "index": 1,
+  "relationships_after": [
+   {
+    "context_ref": "a",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-a",
+    "source_ids": [
+     "alice",
+     [
+      1,
+      0,
+      0
+     ]
+    ],
+    "target_ids": [
+     "bot"
+    ]
+   },
+   {
+    "context_ref": "b",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-b",
+    "source_ids": [
+     "alice",
+     [
+      0,
+      1,
+      0
+     ]
+    ],
+    "target_ids": [
+     "bot"
+    ]
+   }
+  ]
+ },
+ {
+  "name": "an_embedding_target_addresses_an_ambient_participant",
+  "relationships": [
+   {
+    "session_ref": "relationship-a",
+    "context_ref": "a",
+    "source_ids": [
+     "alice"
+    ],
+    "target_ids": [],
+    "participants": [
+     [
+      1,
+      0,
+      0
+     ]
+    ],
+    "sequences": []
+   }
+  ],
+  "input": {
+   "source_ids": [
+    "carol"
+   ],
+   "target_ids": [
+    [
+     0.99,
+     0.1,
+     0
+    ]
+   ]
+  },
+  "index": 0,
+  "relationships_after": [
+   {
+    "context_ref": "a",
+    "participants": [
+     [
+      1,
+      0,
+      0
+     ]
+    ],
+    "sequences": [],
+    "session_ref": "relationship-a",
+    "source_ids": [
+     "alice"
+    ],
+    "target_ids": []
+   }
+  ]
+ },
+ {
+  "name": "vectors_of_other_sizes_do_not_match",
+  "relationships": [
+   {
+    "session_ref": "relationship-a",
+    "context_ref": "a",
+    "source_ids": [
+     [
+      1,
+      0
+     ]
+    ],
+    "target_ids": [
+     "bot"
+    ],
+    "participants": [],
+    "sequences": []
+   }
+  ],
+  "input": {
+   "source_ids": [
+    [
+     1,
+     0,
+     0
+    ]
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  },
+  "index": 1,
+  "relationships_after": [
+   {
+    "context_ref": "a",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-a",
+    "source_ids": [
+     [
+      1,
+      0
+     ]
+    ],
+    "target_ids": [
+     "bot"
+    ]
+   },
+   {
+    "context_ref": "<context_ref>",
+    "participants": [],
+    "sequences": [],
+    "session_ref": "relationship-<context_ref>",
+    "source_ids": [
+     [
+      1,
+      0,
+      0
+     ]
+    ],
+    "target_ids": [
+     "bot"
+    ]
+   }
+  ]
+ }
+]

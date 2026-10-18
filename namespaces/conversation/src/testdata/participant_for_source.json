@@ -1,0 +1,263 @@
+[
+ {
+  "relationship": {
+   "session_ref": "relationship-a",
+   "context_ref": "a",
+   "source_ids": [
+    "alice"
+   ],
+   "target_ids": [
+    "bot"
+   ],
+   "participants": [],
+   "sequences": []
+  },
+  "source": "alice",
+  "added": {
+   "context_ref": "a",
+   "participants": [
+    "alice"
+   ],
+   "sequences": [],
+   "session_ref": "relationship-a",
+   "source_ids": [
+    "alice"
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  },
+  "removed": {
+   "context_ref": "a",
+   "participants": [],
+   "sequences": [],
+   "session_ref": "relationship-a",
+   "source_ids": [
+    "alice"
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  }
+ },
+ {
+  "relationship": {
+   "session_ref": "relationship-a",
+   "context_ref": "a",
+   "source_ids": [
+    "alice"
+   ],
+   "target_ids": [
+    "bot"
+   ],
+   "participants": [
+    "alice"
+   ],
+   "sequences": []
+  },
+  "source": "alice",
+  "added": {
+   "context_ref": "a",
+   "participants": [
+    "alice"
+   ],
+   "sequences": [],
+   "session_ref": "relationship-a",
+   "source_ids": [
+    "alice"
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  },
+  "removed": {
+   "context_ref": "a",
+   "participants": [],
+   "sequences": [],
+   "session_ref": "relationship-a",
+   "source_ids": [
+    "alice"
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  }
+ },
+ {
+  "relationship": {
+   "session_ref": "relationship-a",
+   "context_ref": "a",
+   "source_ids": [
+    [
+     3,
+     4
+    ]
+   ],
+   "target_ids": [
+    "bot"
+   ],
+   "participants": [
+    [
+     3,
+     4
+    ]
+   ],
+   "sequences": []
+  },
+  "source": [
+   3,
+   4
+  ],
+  "added": {
+   "context_ref": "a",
+   "participants": [
+    [
+     3,
+     4
+    ]
+   ],
+   "sequences": [],
+   "session_ref": "relationship-a",
+   "source_ids": [
+    [
+     3,
+     4
+    ]
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  },
+  "removed": {
+   "context_ref": "a",
+   "participants": [],
+   "sequences": [],
+   "session_ref": "relationship-a",
+   "source_ids": [
+    [
+     3,
+     4
+    ]
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  }
+ },
+ {
+  "relationship": {
+   "session_ref": "relationship-a",
+   "context_ref": "a",
+   "source_ids": [
+    [
+     3,
+     4
+    ],
+    "bob"
+   ],
+   "target_ids": [
+    "bot"
+   ],
+   "participants": [
+    "bob"
+   ],
+   "sequences": []
+  },
+  "source": [
+   3,
+   4
+  ],
+  "added": {
+   "context_ref": "a",
+   "participants": [
+    "bob",
+    [
+     3,
+     4
+    ]
+   ],
+   "sequences": [],
+   "session_ref": "relationship-a",
+   "source_ids": [
+    [
+     3,
+     4
+    ],
+    "bob"
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  },
+  "removed": {
+   "context_ref": "a",
+   "participants": [
+    "bob"
+   ],
+   "sequences": [],
+   "session_ref": "relationship-a",
+   "source_ids": [
+    [
+     3,
+     4
+    ],
+    "bob"
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  }
+ },
+ {
+  "relationship": {
+   "session_ref": "relationship-a",
+   "context_ref": "a",
+   "source_ids": [
+    "a",
+    "b"
+   ],
+   "target_ids": [
+    "bot"
+   ],
+   "participants": [
+    "b",
+    "a",
+    "b"
+   ],
+   "sequences": []
+  },
+  "source": "b",
+  "added": {
+   "context_ref": "a",
+   "participants": [
+    "b",
+    "a",
+    "b"
+   ],
+   "sequences": [],
+   "session_ref": "relationship-a",
+   "source_ids": [
+    "a",
+    "b"
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  },
+  "removed": {
+   "context_ref": "a",
+   "participants": [
+    "a"
+   ],
+   "sequences": [],
+   "session_ref": "relationship-a",
+   "source_ids": [
+    "a",
+    "b"
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  }
+ }
+]

@@ -1,0 +1,118 @@
+[
+ {
+  "relationships": [],
+  "refs": []
+ },
+ {
+  "relationships": [
+   {
+    "session_ref": "relationship-b",
+    "context_ref": "b",
+    "source_ids": [
+     "bob"
+    ],
+    "target_ids": [
+     "bot"
+    ],
+    "participants": [
+     "bob",
+     [
+      3,
+      4
+     ],
+     "alice"
+    ],
+    "sequences": []
+   },
+   {
+    "session_ref": "relationship-a",
+    "context_ref": "a",
+    "source_ids": [
+     "alice"
+    ],
+    "target_ids": [],
+    "participants": [
+     "zed",
+     [
+      1,
+      0
+     ]
+    ],
+    "sequences": []
+   }
+  ],
+  "refs": [
+   [
+    "relationship-a",
+    "zed"
+   ],
+   [
+    "relationship-a",
+    [
+     1,
+     0
+    ]
+   ],
+   [
+    "relationship-b",
+    "alice"
+   ],
+   [
+    "relationship-b",
+    "bob"
+   ],
+   [
+    "relationship-b",
+    [
+     3,
+     4
+    ]
+   ]
+  ]
+ },
+ {
+  "relationships": [
+   {
+    "session_ref": "relationship-{\"identity_groups\":[[\"a\"],[\"b\"]]}",
+    "context_ref": "{\"identity_groups\":[[\"a\"],[\"b\"]]}",
+    "source_ids": [
+     "a"
+    ],
+    "target_ids": [
+     "b"
+    ],
+    "participants": [
+     "b",
+     "a"
+    ],
+    "sequences": []
+   },
+   {
+    "session_ref": "relationship-{\"identity_groups\":[[],[\"a\"]]}",
+    "context_ref": "{\"identity_groups\":[[],[\"a\"]]}",
+    "source_ids": [
+     "a"
+    ],
+    "target_ids": [],
+    "participants": [
+     "a"
+    ],
+    "sequences": []
+   }
+  ],
+  "refs": [
+   [
+    "relationship-{\"identity_groups\":[[\"a\"],[\"b\"]]}",
+    "a"
+   ],
+   [
+    "relationship-{\"identity_groups\":[[\"a\"],[\"b\"]]}",
+    "b"
+   ],
+   [
+    "relationship-{\"identity_groups\":[[],[\"a\"]]}",
+    "a"
+   ]
+  ]
+ }
+]

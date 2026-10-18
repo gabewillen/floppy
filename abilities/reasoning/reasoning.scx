@@ -16,9 +16,10 @@
   memory_consulted true. Reasoning writes nothing: the turn's episode is
   stored once, by reflection after the turn's output (decision D97; the
   original's _retain_activity inserted a second copy of it). The context is
-  the stimulus's target_device (the original _context_ref_from_input). A recalled
-  row that is not a JSON object is skipped, as the original skips one that does
-  not validate. A memory failure fails the stage ("Reasoning memory recall
+  the stimulus's target_device (the original _context_ref_from_input). The
+  recalled rows are read with <memory:contents> (the original's
+  OutputData.contents): a row that is not a JSON object is skipped, as the
+  original skips one that does not validate. A memory failure fails the stage ("Reasoning memory recall
   failed: ..."). Without
   a database (the original's Reasoning without a memory collaborator) recalling
   logs <log label="memory" expr="'absent'"> and sends its event with
@@ -87,7 +88,8 @@
 
   Bindings: the generate service package, the processing namespace
   (<processing:send> builds the dispatch tool) and the cognition namespace
-  (<cognition:model_facing_content> builds the prompt), resolved from their
+  (<cognition:model_facing_content> builds the prompt) and the memory
+  namespace (<memory:contents> reads the recalled rows), resolved from their
   repository URIs, and the
   memory ability's sql service package (a run grants it its directory,
   scx run's dir option); env scopes FLOPPY_API_KEY and
@@ -99,6 +101,7 @@
        xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory"
        xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
        version="1.0" datamodel="ecmascript" name="reasoning" initial="recalling">
   <datamodel>
@@ -171,8 +174,8 @@
         <param name="statements" expr="statements"/>
       </invoke>
       <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json">
-        <assign location="prior_episodes" expr="recalledContents(_event, 0)"/>
-        <assign location="standing_directives" expr="recalledContents(_event, 1)"/>
+        <memory:contents location="prior_episodes" result="_event.data.results[0]"/>
+        <memory:contents location="standing_directives" result="_event.data.results[1]"/>
         <send event="bot.ability.reasoning.recalled" target="#_internal">
           <param name="turn" expr="turn"/>
           <param name="host_input" expr="hostInput()"/>

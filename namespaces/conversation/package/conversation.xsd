@@ -1,32 +1,63 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   XML Schema of floppy's `conversation` extension namespace
-  (namespaces/conversation). It governs structure only; the extension
-  component governs what the element does. Bind it with the prefix
-  `conversation` by convention.
+  (namespaces/conversation), the original's conversation module and its
+  turn detector. It governs structure only; the extension component
+  governs what the element does. Bind it with the prefix `conversation` by
+  convention.
 
-  conversation:commit  location (required): receives the committed message
-                       {sequence, direction, source_ids, target_ids,
-                       content, content_type, provenance}.
-                       keylocation (optional): receives its relationship
-                       context reference, the original's relationship_context_ref
-                       of its source and target ids.
-                       direction (required): the literal inbound or
-                       outbound.
-                       event, message, sequence (required), provenance
-                       (optional): expressions of the committing event's
-                       name, the message, its position in the history, and
-                       the provenance whose id, source, target,
-                       session_ref and turn_ref it takes.
-                       It takes no other attribute and no content.
+  conversation:message_for_turn
+                   location (required): receives the committed message
+                   (the original's _message_for_turn).
+                   direction (required): the literal inbound or outbound.
+                   event, message, sequence (required), provenance
+                   (optional): expressions.
+  conversation:relationship_for_input
+                   location (required): holds and receives the
+                   relationships, a new one appended when none matches
+                   (the original's _relationship_for_input).
+                   indexlocation (required): receives the relationship's
+                   index. input (required): an expression.
+  conversation:participant_for_source, conversation:fail_turn
+                   location (required): holds and receives one
+                   relationship, the source added as a participant (the
+                   original's _participant_for_source) or dropped (its
+                   _fail_turn). source (required): an expression.
+  conversation:detector_refs
+                   location (required): receives the participants'
+                   (session_ref, source) pairs (the original's
+                   detector_refs). relationships (required): an
+                   expression.
+  conversation:new_track_ref
+                   location (required): receives the source's track (the
+                   original's _new_track_ref). source (required): an
+                   expression.
+  conversation:content_for_detector
+                   location (required): receives the stimulus that opens
+                   the source's turn (the original's _content_for_detector).
+                   input, source (required): expressions.
+  conversation:complete_turn
+                   location (required): receives the turns' committed
+                   message (the original's _complete_turn).
+                   event, input, turns, session_ref, sequence (required):
+                   expressions.
+  conversation:ingest_content
+                   location (required): holds and receives the open
+                   turn's content (the turn detector's _ingest_content).
+                   content (required): an expression.
+  conversation:on_end
+                   location (required): receives the closed turn (the
+                   turn detector's _on_end). turn, participant_ref,
+                   conversation_ref, turn_ref, source_participant_ref
+                   (required): expressions.
+                   None takes another attribute or content.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="https://github.com/stateforward/floppy/namespaces/conversation"
            elementFormDefault="qualified">
-  <xs:element name="commit">
+  <xs:element name="message_for_turn">
     <xs:complexType>
       <xs:attribute name="location" type="xs:string" use="required"/>
-      <xs:attribute name="keylocation" type="xs:string" use="optional"/>
       <xs:attribute name="direction" use="required">
         <xs:simpleType>
           <xs:restriction base="xs:string">
@@ -39,6 +70,70 @@
       <xs:attribute name="message" type="xs:string" use="required"/>
       <xs:attribute name="sequence" type="xs:string" use="required"/>
       <xs:attribute name="provenance" type="xs:string" use="optional"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="relationship_for_input">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="indexlocation" type="xs:string" use="required"/>
+      <xs:attribute name="input" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="participant_for_source">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="source" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="fail_turn">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="source" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="detector_refs">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="relationships" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="new_track_ref">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="source" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="content_for_detector">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="input" type="xs:string" use="required"/>
+      <xs:attribute name="source" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="complete_turn">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="event" type="xs:string" use="required"/>
+      <xs:attribute name="input" type="xs:string" use="required"/>
+      <xs:attribute name="turns" type="xs:string" use="required"/>
+      <xs:attribute name="session_ref" type="xs:string" use="required"/>
+      <xs:attribute name="sequence" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="ingest_content">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="content" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="on_end">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="turn" type="xs:string" use="required"/>
+      <xs:attribute name="participant_ref" type="xs:string" use="required"/>
+      <xs:attribute name="conversation_ref" type="xs:string" use="required"/>
+      <xs:attribute name="turn_ref" type="xs:string" use="required"/>
+      <xs:attribute name="source_participant_ref" type="xs:string" use="required"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>

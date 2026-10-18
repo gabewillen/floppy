@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- conversation-7: an event is application/event content. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation">
+<datamodel>
+  <data id="t" expr="null"/>
+  <data id="closed" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:ingest_content location="t" content="({kind: 'event', event: 'bot.x'})"/>
+    <conversation:on_end location="closed" turn="t" participant_ref="'alice'" conversation_ref="'c'" turn_ref="'t1'" source_participant_ref="'alice'"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="closed.turn.content.event === 'bot.x' &amp;&amp; JSON.stringify(closed.turn.content.payload) === '{}' &amp;&amp; closed.turn.content_type === 'application/event'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

@@ -30,7 +30,7 @@
     </test>
   </assert>
   <assert id="speaking-4" specnum="4" specid="#speaking-4">
-    <![CDATA[`recording` sends `bot.ability.conversation.append` `{message}` to its parent, the outbound message `<conversation:commit>` builds (content the text, content_type `text/plain`, sequence 0, provenance id `speaking-<n>` and event `bot.ability.conversation.append`), then answers `bot.ability.speaking.output` `{text, media_type, sample_rate_hz, channels}` and returns to `idle`.]]>
+    <![CDATA[`recording` sends `bot.ability.conversation.append` `{message}` to its parent, the outbound message `<conversation:message_for_turn>` builds (content the text, content_type `text/plain`, sequence 0, provenance id `speaking-<n>` and event `bot.ability.conversation.append`), then answers `bot.ability.speaking.output` `{text, media_type, sample_rate_hz, channels}` and returns to `idle`.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>

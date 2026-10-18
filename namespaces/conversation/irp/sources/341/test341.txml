@@ -1,18 +1,20 @@
 <?xml version="1.0"?>
-<!-- conversation-5: an empty event raises error.execution and assigns nothing. -->
+<!-- conversation-5: text/plain, audio and other content open the turn as text, audio and content stimuli. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation">
 <datamodel>
-  <data id="msg" expr='{"source_ids": ["user"], "target_ids": ["bot"], "content": "hello", "content_type": "text/plain", "extra": 1}'/>
-  <data id="m" expr="'untouched'"/>
-  <data id="k" expr="'untouched'"/>
+  <data id="t" expr="null"/>
+  <data id="a" expr="null"/>
+  <data id="c" expr="null"/>
 </datamodel>
 <state id="s0">
   <onentry>
-    <conversation:commit location="m" keylocation="k" direction="inbound" event="''" message="msg" sequence="0"/>
-    <raise event="executed"/>
+    <conversation:content_for_detector location="t" input="({content: 'hi', content_type: 'TEXT/plain'})" source="'alice'"/>
+    <conversation:content_for_detector location="a" input="({content: 'media/a.pcm', content_type: 'audio/pcm', sample_rate_hz: 16000})" source="'alice'"/>
+    <conversation:content_for_detector location="c" input="({content: {k: 1}, content_type: 'application/json'})" source="'alice'"/>
   </onentry>
-  <transition event="error.execution" cond="m === 'untouched' &amp;&amp; k === 'untouched'" conf:targetpass=""/>
-  <transition event="*" conf:targetfail=""/>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="t.kind === 'text' &amp;&amp; t.content === 'hi' &amp;&amp; t.source_participant_ref === 'alice' &amp;&amp; a.kind === 'audio' &amp;&amp; a.sample_rate_hz === 16000 &amp;&amp; a.channels === null &amp;&amp; c.kind === 'content' &amp;&amp; c.content.k === 1 &amp;&amp; c.content_type === 'application/json'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
 </state>
 <conf:pass/>
 <conf:fail/>

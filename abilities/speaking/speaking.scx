@@ -39,7 +39,7 @@
   data, so it travels in the sound): it is how the listening's sensitivity
   tells the bot's own voice from a sound that only arrives while it speaks.
 
-  recording builds the outbound message with <conversation:commit>
+  recording builds the outbound message with <conversation:message_for_turn>
   (the original's Message: direction outbound, content the text, content_type
   text/plain; sequence 0, the conversation numbers it) and sends
   bot.ability.conversation.append {message} to the parent, which holds the
@@ -214,9 +214,9 @@
       <send idlocation="timer" event="bot.ability.speaking.apply.failed" delayexpr="delay(recording_timeout_ms)">
         <param name="message" expr="'Conversation history recording timed out.'"/>
       </send>
-      <conversation:commit location="message" direction="outbound" event="'bot.ability.conversation.append'"
-                           message="({source_ids: [], target_ids: [], content: text, content_type: 'text/plain'})"
-                           provenance="({id: 'speaking-' + operation})" sequence="0"/>
+      <conversation:message_for_turn location="message" direction="outbound" event="'bot.ability.conversation.append'"
+                                     message="({source_ids: [], target_ids: [], content: text, content_type: 'text/plain'})"
+                                     provenance="({id: 'speaking-' + operation})" sequence="0"/>
       <send event="bot.ability.conversation.append" target="#_parent">
         <param name="message" expr="message"/>
       </send>

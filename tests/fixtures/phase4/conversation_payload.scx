@@ -1,20 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Test harness of abilities/conversation/conversation.js
-  (tests/tests/communication.rs,
-  the_remembered_input_is_the_original_memory_json): copied beside the script,
-  it loads it and logs memoryPayload() of each external payload event's
-  data as the input (payload).
+  Test harness of <memory:to_json> (tests/tests/communication.rs,
+  the_remembered_input_is_the_original_memory_json): it logs the memory
+  JSON of each external payload event's data as the conversation's input
+  (payload), as the conversation remembers it.
 -->
-<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="payload" initial="taking">
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory"
+       version="1.0" datamodel="ecmascript" name="payload" initial="taking">
   <datamodel>
-    <data id="input" expr="null"/>
+    <data id="payload" expr="null"/>
   </datamodel>
-  <script src="conversation.js"/>
   <state id="taking">
     <transition event="payload">
-      <assign location="input" expr="_event.data"/>
-      <log label="payload" expr="memoryPayload()"/>
+      <memory:to_json location="payload" message="_event.data"/>
+      <log label="payload" expr="payload"/>
     </transition>
   </state>
 </scxml>

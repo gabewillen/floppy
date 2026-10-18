@@ -18,11 +18,13 @@ other, and [docs/decisions.md](docs/decisions.md) records the decisions that sha
 | --- | --- |
 | `scxml.rs/` | scxml.rs as a squashed git subtree (see [docs/decisions.md](docs/decisions.md) for the source commit) |
 | `namespaces/decision/` | the canonical extension namespace (a Wasm component; synchronous executable content: `decision:choice` and the choice elements); the builder's `scx:validate` is scxml.rs's embedded `scx` namespace |
-| `namespaces/bot/` | the bot body's extension namespace (a Wasm component; synchronous executable content: `bot:stimulus`, `bot:recognize`) |
+| `namespaces/bot/` | the bot body's extension namespace (a Wasm component; synchronous executable content: `bot:stimulus`) |
 | `namespaces/processing/` | the original's processing module (a Wasm component; synchronous executable content: `processing:model_facing_schema`, `processing:collect_offered_events`, `processing:send`, `processing:selection_confidence`; [processing](namespaces/processing/README.md)) |
 | `namespaces/intuition/` | the original's intuition `ConfidenceTuner` (a Wasm component; synchronous executable content: `intuition:observe`, `intuition:escalate`; [intuition](namespaces/intuition/README.md)) |
 | `namespaces/cognition/` | the original's cognition module (a Wasm component; synchronous executable content: `cognition:attention_bias_for_turn`, `cognition:model_facing_content`; [cognition](namespaces/cognition/README.md)) |
-| `namespaces/conversation/` | the conversation's extension namespace (a Wasm component; synchronous executable content: `conversation:commit`) |
+| `namespaces/conversation/` | the original's conversation module and its turn detector (a Wasm component; synchronous executable content: `conversation:message_for_turn`, `conversation:relationship_for_input`, `conversation:complete_turn`, `conversation:on_end`, ...; [conversation](namespaces/conversation/README.md)) |
+| `namespaces/identity/` | the original's identity module (a Wasm component; synchronous executable content: `identity:hears_name`, `identity:sorted_identities`; [identity](namespaces/identity/README.md)) |
+| `namespaces/memory/` | the original's memory module (a Wasm component; synchronous executable content: `memory:to_json`, `memory:contents`; [memory](namespaces/memory/README.md)) |
 | `namespaces/migration/` | Alembic's revision walk as an extension namespace (a Wasm component; synchronous executable content: `migration:plan`) |
 | `namespaces/device/` | a bot's read of a device it holds (a Wasm component; synchronous executable content: `device:snapshot`, decision D109; [device](namespaces/device/README.md)) |
 | `services/{generate,decision}/` | canonical invoked services (Wasm components: model generation, decisions) |

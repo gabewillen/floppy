@@ -116,18 +116,20 @@ expected_imports() {
                 'stateforward:scxml/data-model-host@0.2.0' \
                 'stateforward:scxml/session-snapshot-host@0.2.0'
             ;;
-        # <bot:stimulus> and <bot:recognize>: evaluate their expressions and
-        # assign their results through the data model; no session snapshot,
-        # execution-host, or outbound-http.
+        # <bot:stimulus>: evaluates its expressions and assigns the envelope
+        # through the data model; no session snapshot, execution-host, or
+        # outbound-http.
         floppy_bot)
             printf '%s\n' \
                 'stateforward:scxml/types@0.2.0' \
                 'stateforward:scxml/telemetry@0.2.0' \
                 'stateforward:scxml/data-model-host@0.2.0'
             ;;
-        # <conversation:commit>: evaluates its expressions and assigns the
-        # committed message through the data model; no session snapshot,
-        # execution-host, or outbound-http.
+        # The conversation elements (<conversation:message_for_turn>,
+        # <conversation:relationship_for_input> and the rest of the
+        # original's conversation module and turn detector): evaluate their
+        # expressions and assign their results through the data model; no
+        # session snapshot, execution-host, or outbound-http.
         # <migration:plan>: evaluates its expressions and assigns the plan
         # through the data model; no session snapshot, execution-host, or
         # outbound-http.

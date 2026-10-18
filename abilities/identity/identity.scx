@@ -31,12 +31,12 @@
   of the body's input abilities, so each environment.sound reaches it;
   with a name to look for, classifying invokes
   abilities/speech_decoding/speech_decoding.scx on the sound and
-  <bot:recognize> looks for the name in the transcript (no transcript
+  <identity:hears_name> looks for the name in the transcript (no transcript
   leaves the ability). A decoding failure answers the body with
   bot.ability.failed {message} (the original _fail_from_stage) and goes back to
   listening. Text (the original recognition.hears_name, decision D43): the
   body also relays each outside bot.ability.communication.input to this
-  ability. <bot:recognize> decides whether its text (a string content with
+  ability. <identity:hears_name> decides whether its text (a string content with
   a text/* content_type) names the bot: the name's case-folded
   letter-and-digit tokens appear as a whole run in the text's (so a bot
   named "Al" is not addressed by "always"). Addressed: the body gets
@@ -84,13 +84,14 @@
   error.execution in its sender, and input from outside the session that
   does not is refused, so no cond rechecks a payload.
 
-  Bindings: the bot, decision and processing namespace packages and the memory ability's
+  Bindings: the bot, decision, identity and processing namespace packages and the memory ability's
   sql service package (a run grants it its directory: scx run's dir option).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       xmlns:identity="https://github.com/stateforward/floppy/namespaces/identity"
        xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
        version="1.0" datamodel="ecmascript" name="identity" initial="recalling">
   <datamodel>
@@ -198,7 +199,7 @@
       <!-- A nameless bot hears words and nothing follows from them. -->
       <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json"
                   cond="canRecognize()" target="recognized">
-        <bot:recognize location="addressed" name="name" text="heardText(_event.data)"/>
+        <identity:hears_name location="addressed" name="name" text="heardText(_event.data)"/>
       </transition>
       <transition event="environment.sound" event:schema="schemas/environment.sound.json"
                   cond="canRecognize()" target="classifying">
@@ -224,7 +225,7 @@
           <param name="media_type" expr="heard.media_type"/>
         </invoke>
         <transition event="done.invoke.speech_decoding" cond="hasTranscript(_event)" target="recognized">
-          <bot:recognize location="addressed" name="name" text="_event.data.text"/>
+          <identity:hears_name location="addressed" name="name" text="_event.data.text"/>
         </transition>
         <transition event="done.invoke.speech_decoding" target="listening">
           <log label="identity.recognition.failed" expr="recognitionFailedMessage(_event)"/>

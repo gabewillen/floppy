@@ -3,7 +3,7 @@
      numbered statement of namespaces/conversation/README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/namespaces/conversation/irp/sources">
   <assert id="conversation-1" specnum="1" specid="#conversation-1">
-    <![CDATA[<conversation:commit> takes location, direction (exactly inbound or outbound), event, message and sequence, optionally keylocation and provenance, no other attribute and no content: a malformed element raises error.execution and assigns nothing (its schema, package/conversation.xsd, rejects it before any run under scx validate).]]>
+    <![CDATA[Each element (message_for_turn, relationship_for_input, participant_for_source, fail_turn, detector_refs, new_track_ref, content_for_detector, complete_turn, ingest_content, on_end) takes exactly its declared attributes, the required ones present and none empty, message_for_turn's direction exactly inbound or outbound, and no content, and the namespace has no other element: a malformed element raises error.execution and assigns nothing (its schema, package/conversation.xsd, rejects it before any run under scx validate).]]>
     <test id="300" conformance="mandatory" manual="false">
       <start uri="300/test300.txml"/>
     </test>
@@ -16,9 +16,12 @@
     <test id="303" conformance="mandatory" manual="false">
       <start uri="303/test303.txml"/>
     </test>
+    <test id="304" conformance="mandatory" manual="false">
+      <start uri="304/test304.txml"/>
+    </test>
   </assert>
   <assert id="conversation-2" specnum="2" specid="#conversation-2">
-    <![CDATA[The committed message is {sequence, direction, source_ids, target_ids, content, content_type, provenance}, without the message's other members; inbound audio content is null, other content is kept as given, and absent content is null.]]>
+    <![CDATA[<conversation:message_for_turn> writes the committed message {sequence, direction, source_ids, target_ids, content, content_type, provenance}, without the message's other members: inbound audio content is null, other content is kept as given, and absent content is null; a provenance's id, source, target and session_ref are taken when they are strings, else null, and its turn_ref is taken as given; without a session_ref an inbound message's is relationship-<its relationship context reference> and an outbound one's null.]]>
     <test id="310" conformance="mandatory" manual="false">
       <start uri="310/test310.txml"/>
     </test>
@@ -30,30 +33,75 @@
     </test>
   </assert>
   <assert id="conversation-3" specnum="3" specid="#conversation-3">
-    <![CDATA[The relationship context reference is {"identity_groups":[...]} over the sorted source and target identity groups, the same in either direction, written to keylocation; without a provenance, an inbound message's session_ref is relationship-<reference> and an outbound one's is null.]]>
+    <![CDATA[<conversation:relationship_for_input> writes the index of the input's relationship: targetless input shares the first ambient relationship, other input the best scoring one in either direction (names equal, embeddings at least 0.85 alike, one to one); with none it appends a relationship whose context_ref is {"identity_groups":[...]} over the sorted identity groups, whose session_ref is relationship- and that, and whose participants and sequences are empty.]]>
     <test id="320" conformance="mandatory" manual="false">
       <start uri="320/test320.txml"/>
     </test>
     <test id="321" conformance="mandatory" manual="false">
       <start uri="321/test321.txml"/>
     </test>
+    <test id="322" conformance="mandatory" manual="false">
+      <start uri="322/test322.txml"/>
+    </test>
+    <test id="323" conformance="mandatory" manual="false">
+      <start uri="323/test323.txml"/>
+    </test>
   </assert>
   <assert id="conversation-4" specnum="4" specid="#conversation-4">
-    <![CDATA[A provenance's id, source, target and session_ref are taken when they are strings, else null, and its turn_ref is taken as given.]]>
+    <![CDATA[<conversation:participant_for_source> adds the source to the relationship's participants once, <conversation:fail_turn> drops it, and <conversation:detector_refs> writes [session_ref, participant] of every participant, ordered by session_ref and then identity.]]>
     <test id="330" conformance="mandatory" manual="false">
       <start uri="330/test330.txml"/>
     </test>
+    <test id="331" conformance="mandatory" manual="false">
+      <start uri="331/test331.txml"/>
+    </test>
   </assert>
   <assert id="conversation-5" specnum="5" specid="#conversation-5">
-    <![CDATA[A malformed value (a negative sequence, an empty event, a message without a content_type) raises error.execution and assigns nothing.]]>
+    <![CDATA[<conversation:new_track_ref> writes a name as its own track, an embedding as track- and its unit vector's JSON, and null for no source; <conversation:content_for_detector> writes the stimulus that opens the source's turn: text/plain string content as a text stimulus, audio/* string content as an audio stimulus with its rate and channels, anything else as a content stimulus.]]>
     <test id="340" conformance="mandatory" manual="false">
       <start uri="340/test340.txml"/>
     </test>
     <test id="341" conformance="mandatory" manual="false">
       <start uri="341/test341.txml"/>
     </test>
-    <test id="342" conformance="mandatory" manual="false">
-      <start uri="342/test342.txml"/>
+  </assert>
+  <assert id="conversation-6" specnum="6" specid="#conversation-6">
+    <![CDATA[<conversation:complete_turn> writes the inbound message of the turns' product: their texts joined by spaces as text/plain when any has text, each distinct text once; else no content for audio/*; else the input's content; with the first turn's turn_ref and the given session_ref.]]>
+    <test id="350" conformance="mandatory" manual="false">
+      <start uri="350/test350.txml"/>
+    </test>
+    <test id="351" conformance="mandatory" manual="false">
+      <start uri="351/test351.txml"/>
+    </test>
+  </assert>
+  <assert id="conversation-7" specnum="7" specid="#conversation-7">
+    <![CDATA[<conversation:ingest_content> takes a stimulus into the open turn's content (a text's stripped text when not empty, an audio chunk with the first rate and channels, a content, an image as image/*, an event as application/event), and <conversation:on_end> writes the closed turn {turn} with its text, audio or content, or {failure} at stage turn when it has neither text, audio nor content, or both text and audio.]]>
+    <test id="360" conformance="mandatory" manual="false">
+      <start uri="360/test360.txml"/>
+    </test>
+    <test id="361" conformance="mandatory" manual="false">
+      <start uri="361/test361.txml"/>
+    </test>
+    <test id="362" conformance="mandatory" manual="false">
+      <start uri="362/test362.txml"/>
+    </test>
+    <test id="363" conformance="mandatory" manual="false">
+      <start uri="363/test363.txml"/>
+    </test>
+  </assert>
+  <assert id="conversation-8" specnum="8" specid="#conversation-8">
+    <![CDATA[A value of the wrong kind (relationships that are not an array of relationships, a source that is not an identity, no turns, a stimulus that is not an object or null) raises error.execution and assigns nothing.]]>
+    <test id="370" conformance="mandatory" manual="false">
+      <start uri="370/test370.txml"/>
+    </test>
+    <test id="371" conformance="mandatory" manual="false">
+      <start uri="371/test371.txml"/>
+    </test>
+    <test id="372" conformance="mandatory" manual="false">
+      <start uri="372/test372.txml"/>
+    </test>
+    <test id="373" conformance="mandatory" manual="false">
+      <start uri="373/test373.txml"/>
     </test>
   </assert>
 </assertions>

@@ -648,15 +648,10 @@ fn the_conversation_commits_each_message_into_its_history() {
 }
 
 /// The remembered input is the original's `Memory.to_json` (the expected texts
-/// are its own).
+/// are its own), as `<memory:to_json>` writes it.
 #[test]
 fn the_remembered_input_is_the_original_memory_json() {
     let dir = unique_scratch("conversation-payload");
-    std::fs::copy(
-        workspace().join("abilities/conversation/conversation.js"),
-        dir.join("conversation.js"),
-    )
-    .expect("the script is copyable");
     let harness = dir.join("payload.scx");
     std::fs::copy(
         workspace().join("tests/fixtures/phase4/conversation_payload.scx"),
