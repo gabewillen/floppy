@@ -11,6 +11,23 @@ Last updated: 2026-10-18.
 
 ## Current state (2026-10-09) — resume here
 
+- **The behavior and autonomy namespaces, and no bot namespace (2026-10-18,
+  D116, [plan](plans/original-domains.md) step 4, the last):**
+  `namespaces/behavior` (`<behavior:instances_from_behavior_results>`,
+  `<behavior:replace_behavior_clauses>`, `<behavior:lifetime_errors>`,
+  `<behavior:verify_tick>`) and `namespaces/autonomy`
+  (`<autonomy:behavior_input_payload>`) replace the reflection's,
+  the builder's and autonomy's behavior JavaScript; a create's draft is
+  stored as an accepted change is, by `replace_behavior_clauses`.
+  `<bot:stimulus>` is plain `<assign>`s and `namespaces/bot` is gone, so
+  `decision` keeps only `choice` and `pin`. Open: J7 (`next_after` stays
+  JavaScript: `<scx:validate>` binds no extension package, so a routine
+  draft cannot use a namespace element; an scxml.rs change), the plan's
+  "To review (step 4)" list and its [Map status](plans/original-domains.md#map-status);
+  the behavior and autonomy namespace IRP baselines were measured on macOS
+  arm64. On macOS, `scripts/namespace-irp.sh prepare` fails at
+  `cache-create` (its `mktemp -d` is under the `/var` symlink); prepare
+  with `scx conformance prepare` and a `--cache` in the scratchpad.
 - **The identity, conversation and memory namespaces (2026-10-18, D115,
   [plan](plans/original-domains.md) step 3):** `namespaces/identity`
   (`<identity:hears_name>`, was `<bot:recognize>`;
