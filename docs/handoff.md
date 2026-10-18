@@ -7,20 +7,26 @@ history lives in [decisions.md](decisions.md) (numbered decisions),
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
-Last updated: 2026-10-16.
+Last updated: 2026-10-17.
 
 ## Current state (2026-10-09) — resume here
 
-- **Tools, not structured output (2026-10-16, D112):** the generate
-  service asks for schema-shaped output as the original does on Chat
-  Completions: one function tool (the `schemaname` and the schema as its
-  `parameters`, no `strict`), `"tool_choice": "required"`, and
-  `reasoning_effort` `none`; the answer is the first call of the function,
-  validated against the schema as before. It never sends
-  `response_format`, which the maintainer's local vLLM refuses (`400`).
-  The `<param>`s and events are unchanged. That server does not constrain
-  decoding, so a reply without a tool call is `malformed` and arguments
-  outside the schema are `schema-mismatch` (docs/live-proof.md).
+- **Tools, not structured output (2026-10-16, D112, amended
+  2026-10-17):** the generate service asks for schema-shaped output as the
+  original does on Chat Completions: one function tool (the `schemaname`,
+  the schema's root `description` as the function's, the rest of the
+  schema as its `parameters`, no `strict`), `"tool_choice": "required"`,
+  and `reasoning_effort` `none`. `generate.result` is always
+  `{content, tool_calls: [{id, name, args}]}`, each call of the function
+  checked against the schema before any is returned (`schema-mismatch`);
+  `strict` is gone. Reasoning and reflection merge the `dispatch` calls in
+  their `.js` (temporary), the builder takes its call by name, and
+  `<decision:selection>` builds the original's dispatch tool exactly.
+  Open: the maintainer's mapping of floppy's domains onto the original's
+  modules (with SCXML terms where SCXML has one; the maintainer dislikes
+  `<bot:verdict>`, `<decision:route>` and `<decision:tuner>`) moves the
+  merge to Rust, and the decision IRP baseline was measured on macOS
+  arm64.
 
 - **The environment (2026-10-16, D102 to D111,
   [plan](plans/environment.mdscript.md)):** the bot runs as a participant of
