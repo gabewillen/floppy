@@ -40,10 +40,15 @@ Last updated: 2026-10-17.
   address; the cognition input's `environment` field is rendered by
   reasoning as the original's environment block. Every environment run
   passes `--fuel 9223372036854775807` until average usage is measured
-  (D111). scxml.rs is at `b59f8111` (D104, D109, D110). Not proven live:
-  on 2026-10-16 the CPA gateway answered 502 and no speech or voice backend
-  is configured (docs/live-proof.md); `environment_live`'s
-  `live_two_participants` waits for both. Open: the bot and device
+  (D111). scxml.rs is at `b59f8111` (D104, D109, D110). Speech and voice
+  backends exist now, each through an env file in the session scratchpad
+  (outside the repository) named in `FLOPPY_LIVE_ENV_FILE` with `.env`:
+  `env.speech` (Gemini's OpenAI-compatible API, `FLOPPY_SPEECH_*`) and
+  `env.voice` (a local LocalAI on `127.0.0.1:8089`, `FLOPPY_VOICE_*`,
+  started by the scratchpad's `localai/start.sh`; its
+  `pyannote-diarization` model serves NVIDIA Streaming Sortformer v2).
+  `environment_live`'s `live_two_participants` passed on them with the
+  vLLM on 2026-10-17 (docs/live-proof.md). Open: the bot and device
   namespace IRP baselines were measured on macOS arm64 (regenerate on
   Linux x86_64).
 
@@ -287,8 +292,9 @@ Last updated: 2026-10-17.
   (2026-10-10), and on the Gemini API (D94) the speech round trip
   (speaking's encoder and hearing's decoder) and `floppy_live`'s
   `live_chat` with real spoken audio passed (2026-10-11,
-  [live-proof.md](live-proof.md)); the listening has not run live, since
-  its voice detection needs LocalAI (`FLOPPY_VOICE_BASE_URL`).
+  [live-proof.md](live-proof.md)); the listening ran live end to end on
+  2026-10-17 (`environment_live`'s `live_two_participants`, voice
+  detection on a local LocalAI at `FLOPPY_VOICE_BASE_URL`).
 
 ## Repositories
 
@@ -638,10 +644,11 @@ The remaining the original port runs as one ultracode run with these grants:
   web components + hsm.ts, marketplace of packages, a Mindstorms-style
   workshop whose pieces are inferred from element XSDs, live highlighting
   of running bots.
-- Live listening: voice detection (every sound) needs LocalAI at
-  `FLOPPY_VOICE_BASE_URL`, which no backend reachable from the cloud
-  session serves, so the listening has not run live end to end; speech
-  decoding and speaking have, on Gemini (live-proof.md, 2026-10-11).
+- Live listening: voice detection (every sound) runs on a local LocalAI
+  at `FLOPPY_VOICE_BASE_URL` (the session scratchpad's `env.voice`), and
+  speech decoding and speaking on Gemini (`env.speech`); the listening
+  ran live end to end on 2026-10-17 (live-proof.md). Diarization and
+  voice identification have not run live.
 - Going public: CI, publishing the prepared releases with `SHA256SUMS`
   ([release.md](release.md)), per-platform `scx` binaries, IRP identity
   regeneration on Linux CI.
