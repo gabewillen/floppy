@@ -20,7 +20,7 @@
 //! <transition event="generate.result">
 //!   <foreach array="_event.data.tool_calls" item="call">
 //!     <foreach array="call.args.events" item="s">
-//!       <send eventexpr="s.event" targetexpr="'#_scxml_' + s.target"><content expr="s.data"/></send>
+//!       <send eventexpr="s.event" targetexpr="'#_scxml_' + s.target"><content expr="selectionData(s)"/></send>
 //!     </foreach>
 //!   </foreach>
 //! </transition>

@@ -479,7 +479,7 @@
           <foreach array="selections" item="s">
             <if cond="hasNoTarget(s)">
               <send eventexpr="s.event" target="#_internal">
-                <content expr="s.data"/>
+                <content expr="selectionData(s)"/>
               </send>
             </if>
           </foreach>

@@ -337,7 +337,7 @@
         <foreach array="call.args.events" item="s">
           <log label="reflection.selected" expr="s.event"/>
           <send eventexpr="s.event" targetexpr="'#_scxml_' + s.target">
-            <content expr="s.data"/>
+            <content expr="selectionData(s)"/>
           </send>
           <assign location="selected[selected.length]" expr="s"/>
         </foreach>

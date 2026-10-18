@@ -143,7 +143,7 @@
       </if>
       <foreach array="_event.data.selections" item="s">
         <send eventexpr="s.event" targetexpr="'#_scxml_' + s.target">
-          <content expr="s.data"/>
+          <content expr="selectionData(s)"/>
         </send>
       </foreach>
     </transition>

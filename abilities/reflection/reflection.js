@@ -424,3 +424,9 @@ function revisingTimeoutDelay() {
 function revisingCeilingDelay() {
   return (bounds.revising_ceiling_ms === undefined ? revising_ceiling_ms : bounds.revising_ceiling_ms) + 'ms';
 }
+
+// The data a selection is sent with, as the original's dispatch_selected_events
+// takes it: its data object, else {} (no data, null, or a non-object).
+function selectionData(s) {
+  return s.data !== null && typeof s.data === 'object' && !Array.isArray(s.data) ? s.data : ({});
+}

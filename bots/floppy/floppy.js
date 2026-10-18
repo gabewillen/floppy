@@ -173,3 +173,9 @@ function hasNoTarget(s) {
 function staleReplyLog(_event) {
   return _event.name + ' for turn ' + _event.data.turn + ' (current ' + turn + ')';
 }
+
+// The data a selection is sent with, as the original's dispatch_selected_events
+// takes it: its data object, else {} (no data, null, or a non-object).
+function selectionData(s) {
+  return s.data !== null && typeof s.data === 'object' && !Array.isArray(s.data) ? s.data : ({});
+}

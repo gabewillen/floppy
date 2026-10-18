@@ -54,9 +54,12 @@
     </test>
   </assert>
   <assert id="reasoning-6" specnum="6" specid="#reasoning-6">
-    <![CDATA[Each selection is sent, in order, to the session its target names (`#_scxml_` + target) before the turn ends; a send that fails fails the turn with reason `the reasoning could not run (<error>)`.]]>
+    <![CDATA[Each selection is sent, in order, to the session its target names (`#_scxml_` + target) before the turn ends, its data `{}` when it has none (the original's `dispatch_selected_events`); a send that fails fails the turn with reason `the reasoning could not run (<error>)`.]]>
     <test id="150" conformance="mandatory" manual="false">
       <start uri="150/test150.scxml"/>
+    </test>
+    <test id="152" conformance="mandatory" manual="false">
+      <start uri="152/test152.scxml"/>
     </test>
     <test id="151" conformance="mandatory" manual="false">
       <start uri="151/test151.scxml"/>

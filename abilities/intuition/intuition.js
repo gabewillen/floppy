@@ -112,3 +112,9 @@ function couldNotRunResult(_event) {
 function decisionInstructions() {
   return environment === null ? instructions : instructions + '\n\nThe robot\'s environment: ' + JSON.stringify(environment);
 }
+
+// The data a selection is sent with, as the original's dispatch_selected_events
+// takes it: its data object, else {} (no data, null, or a non-object).
+function selectionData(s) {
+  return s.data !== null && typeof s.data === 'object' && !Array.isArray(s.data) ? s.data : ({});
+}
