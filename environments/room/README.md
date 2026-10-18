@@ -26,7 +26,10 @@ What it does (the original's behavior, decisions D103, D105, D108):
   law from the sender's placement (1 m reference, 1 cm clamp), and a
   participant below its threshold receives nothing.
 - **The bots' events** (`bot.activated`, `bot.processing.completed`, ...)
-  are logged as `<log label="EVENT">` with their data.
+  are logged as `<log label="EVENT">` with their data. A voice embedding is
+  never written: an identity that is an array of numbers in `source_ids` or
+  `target_ids`, and an embedding's JSON inside a `*_ref`, are written as
+  `<biometric:VoiceEmbedding>`, as the original's capture writes it.
 
 Each bot gets `environment` (the room's `_sessionid`, D106) and
 `owned_devices` (each held device's reference to its address,

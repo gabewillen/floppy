@@ -454,8 +454,11 @@ function isTextMessage() {
   return typeof message.content === 'string' && /^text\//i.test(message.content_type);
 }
 
+// A voice embedding is biometric and never logged: it is written as
+// <biometric:VoiceEmbedding>, as the original's capture writes it.
 function inboundCommitLog() {
-  return 'inbound ' + message.sequence + ' from ' + JSON.stringify(sortedIdentities(message.source_ids)) + ' (' + relationship().sequences.length + ' in its relationship)';
+  var sources = sortedIdentities(message.source_ids).map(function (id) { return Array.isArray(id) ? '<biometric:VoiceEmbedding>' : id; });
+  return 'inbound ' + message.sequence + ' from ' + JSON.stringify(sources) + ' (' + relationship().sequences.length + ' in its relationship)';
 }
 
 // conversation (append)

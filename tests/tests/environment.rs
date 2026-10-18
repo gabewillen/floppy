@@ -204,6 +204,39 @@ fn a_bot_activates_on_joining_its_environment() {
     drop(run.close(WAIT));
 }
 
+/// A voice embedding is biometric and never reaches the run's records
+/// (the original's capture writes a `VoiceEmbedding` as
+/// `<biometric:VoiceEmbedding>`): the room logs a conversation output
+/// whose source is an embedding with the marker in its place.
+#[test]
+fn a_voice_embedding_is_never_written_to_the_records() {
+    let dir = layout(&[]);
+    let mut run = start(&dir, &["floppy"]);
+    all_activated(&run, &["floppy"]);
+    // A product that is not text is no turn: the conversation's output
+    // reaches the room, which logs it.
+    run.event(
+        "bot.ability.communication.input",
+        &json!({"source_ids": [[0.28, 0.96]], "target_ids": ["floppy"], "content": {"a": 1}, "content_type": "application/json"}),
+    );
+    let mut records = run.until(WAIT, label_is("bot.ability.conversation.output"));
+    records.extend(run.close(WAIT).records);
+    let logged = logged(&records, "bot.ability.conversation.output");
+    let [output] = logged.as_slice() else {
+        panic!("one conversation output: {records:?}");
+    };
+    let marker = json!(["<biometric:VoiceEmbedding>"]);
+    assert_eq!(output["parent"]["data"]["source_ids"], marker, "{output}");
+    assert_eq!(output["messages"][0]["source_ids"], marker, "{output}");
+    assert_eq!(
+        output["messages"][0]["target_ids"],
+        json!(["floppy"]),
+        "{output}"
+    );
+    let text = serde_json::to_string(&records).expect("the records are JSON");
+    assert!(!text.contains("0.28") && !text.contains("0.96"), "{text}");
+}
+
 #[test]
 fn host_communication_input_goes_to_the_participants_it_targets() {
     let dir = layout(&[]);

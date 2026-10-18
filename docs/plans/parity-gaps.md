@@ -31,7 +31,7 @@ These are the original's commits floppy has not ported, measured on 2026-10-18 a
 | 21 | Voice catalogs, design and inception | `vocal/voice/*` (`ee601e9`, `8122301`, `16eac51`) | Encode only | M | to do |
 | 22 | Process runtime, CLI, Docker image | `runtime/*`, `cli.py` | Not applicable (D14) | — | decision 9 |
 | 23 | Transform codecs, transport peers, yamux over WebSocket, a LiveKit room | `protocols/*` | Not ported (D6) | L | needs decision 5 |
-| 24 | Telemetry metrics; never capture biometric values | `telemetry/*` (`58d4841`, `f8e40b3`) | To check: interpretation logs `voice_embedding` | S | to verify |
+| 24 | Telemetry metrics; never capture biometric values | `telemetry/*` (`58d4841`, `f8e40b3`) | To check: interpretation logs `voice_embedding` | S | done: the interpretation logs none, and the services' telemetry carries no attribute, but the room logged a conversation output whole, embedding identities and the refs built from them included, and the conversation logged its inbound sources; both now write an embedding as `<biometric:VoiceEmbedding>` (`environment.rs` `a_voice_embedding_is_never_written_to_the_records`). The metrics half (`58d4841`) is not ported |
 
 ## Decisions for the maintainer
 

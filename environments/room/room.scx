@@ -52,7 +52,10 @@
 
   Records: each event a bot sends its parent (bot.activated,
   bot.processing.completed, ...) is logged as <log label="EVENT"> with its
-  data as JSON, which keeps the run's records.
+  data as JSON, which keeps the run's records. A voice embedding is
+  biometric and is never written: an identity in source_ids or target_ids
+  that is an array of numbers is written as <biometric:VoiceEmbedding>, as
+  the original's capture writes its VoiceEmbedding.
 
   Contracts: every event the room takes references a byte-identical twin
   in schemas/ (of bots/floppy/schemas/ for the body's events, of

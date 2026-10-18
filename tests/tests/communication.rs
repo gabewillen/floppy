@@ -569,17 +569,18 @@ fn the_conversation_commits_each_message_into_its_history() {
         &json!({"request_ref": "s-1"}),
     );
     all.extend(run.until(WAIT, label_is("harness.snapshot")));
+    // A voice embedding is never logged (`<biometric:VoiceEmbedding>`).
     assert_eq!(
         texts(&all, "conversation"),
         strings(&[
-            r#"inbound 0 from ["alice","zed",[0.5,1]] (1 in its relationship)"#,
+            r#"inbound 0 from ["alice","zed","<biometric:VoiceEmbedding>"] (1 in its relationship)"#,
             r#"inbound 1 from ["alice"] (1 in its relationship)"#,
-            r#"inbound 2 from ["bob",[2,1.25]] (1 in its relationship)"#,
+            r#"inbound 2 from ["bob","<biometric:VoiceEmbedding>"] (1 in its relationship)"#,
             "outbound 3",
             "outbound 4",
             "outbound r-1 already committed",
             "outbound 5",
-            r#"inbound 6 from ["alice","zed",[0.5,1]] (2 in its relationship)"#,
+            r#"inbound 6 from ["alice","zed","<biometric:VoiceEmbedding>"] (2 in its relationship)"#,
             r#"inbound 7 from ["a\"b","bot"] (3 in its relationship)"#,
             r#"inbound 8 from ["bob"] (2 in its relationship)"#,
             r#"inbound 9 from ["carol"] (3 in its relationship)"#,
