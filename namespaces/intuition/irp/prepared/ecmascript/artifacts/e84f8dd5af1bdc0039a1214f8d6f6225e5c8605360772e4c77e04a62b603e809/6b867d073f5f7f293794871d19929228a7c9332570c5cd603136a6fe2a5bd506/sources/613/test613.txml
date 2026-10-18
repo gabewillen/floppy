@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- intuition-2: a confidence over the scale is clamped to 100. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:intuition="https://github.com/stateforward/floppy/namespaces/intuition">
+<datamodel>
+  <data id="t" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <intuition:observe location="t" confidence="250"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="t.mean === 100 &amp;&amp; t.n === 1" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

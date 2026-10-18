@@ -38,13 +38,15 @@ use serde_json::Value as Json;
 use support::{components, output, scratch, sha256_file, workspace};
 
 /// The namespaces that have a suite: every floppy namespace.
-const SUITES: [&str; 6] = [
+const SUITES: [&str; 8] = [
     "decision",
     "bot",
     "conversation",
     "migration",
     "device",
     "processing",
+    "intuition",
+    "cognition",
 ];
 
 /// Whether this host is the one the baselines are measured on.
@@ -265,6 +267,21 @@ fn migration_suite_passes() {
 #[test]
 fn device_suite_passes() {
     run_suite("device");
+}
+
+#[test]
+fn processing_suite_passes() {
+    run_suite("processing");
+}
+
+#[test]
+fn intuition_suite_passes() {
+    run_suite("intuition");
+}
+
+#[test]
+fn cognition_suite_passes() {
+    run_suite("cognition");
 }
 
 /// A namespace with no suite would leave its elements untested here.

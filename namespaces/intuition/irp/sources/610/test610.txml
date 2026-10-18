@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- intuition-2: a tuner state that is not one is read as the initial state, and a null confidence is not observed. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:intuition="https://github.com/stateforward/floppy/namespaces/intuition">
+<datamodel>
+  <data id="t" expr="'garbage'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <intuition:observe location="t" confidence="null"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="t.mean === 70 &amp;&amp; t['var'] === 100 &amp;&amp; t.n === 0" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

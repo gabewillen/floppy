@@ -7,6 +7,8 @@ members = [
     "namespaces/migration",
     "namespaces/device",
     "namespaces/processing",
+    "namespaces/intuition",
+    "namespaces/cognition",
     "services/generate",
     "services/generate/validator",
     "services/decision",

@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- intuition-3: a null confidence never escalates. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:intuition="https://github.com/stateforward/floppy/namespaces/intuition">
+<datamodel>
+  <data id="t" expr='{"mean": 80, "var": 100, "n": 8}'/>
+  <data id="e" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <intuition:escalate location="e" confidence="null" tuner="t"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="e === false" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

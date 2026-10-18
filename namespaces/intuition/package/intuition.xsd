@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  XML Schema of floppy's `intuition` extension namespace
+  (namespaces/intuition), the original's intuition ConfidenceTuner. It
+  governs structure only; the extension component governs what the element
+  does. Bind it with the prefix `intuition` by convention.
+
+  intuition:observe
+                   location (required): the tuner state {mean, var, n} it
+                   updates with the confidence (the original's observe).
+                   confidence (required): an expression of the reported
+                   confidence (0-100), null when there is none.
+  intuition:escalate
+                   location (required): receives whether the confidence is
+                   below the tuner's threshold (the original's
+                   should_escalate).
+                   confidence, tuner (required): expressions.
+                   Neither takes another attribute or content.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="https://github.com/stateforward/floppy/namespaces/intuition"
+           elementFormDefault="qualified">
+  <xs:element name="observe">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="confidence" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="escalate">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="confidence" type="xs:string" use="required"/>
+      <xs:attribute name="tuner" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

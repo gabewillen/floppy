@@ -1,0 +1,10 @@
+{
+  "format": "stateforward.scxml.extension-package/v2",
+  "namespace-uri": "https://github.com/stateforward/floppy/namespaces/intuition",
+  "package-version": "0.1.0",
+  "extension-artifact": "floppy_intuition.virtualized.wasm",
+  "schema-artifact": "intuition.xsd",
+  "schema-sha256": "4925c2c9da1d4b549a57a013c86cbeffbc7aecb19e807d8ad735805291b0bb36",
+  "wit-world": "stateforward:scxml/executable-content-extension",
+  "wit-version": "0.2.0"
+}

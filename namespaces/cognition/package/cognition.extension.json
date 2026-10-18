@@ -1,0 +1,10 @@
+{
+  "format": "stateforward.scxml.extension-package/v2",
+  "namespace-uri": "https://github.com/stateforward/floppy/namespaces/cognition",
+  "package-version": "0.1.0",
+  "extension-artifact": "floppy_cognition.virtualized.wasm",
+  "schema-artifact": "cognition.xsd",
+  "schema-sha256": "ee5c85f23ce71a26476e9e13e641b36c4779f39c3542f75801418b97a534cef7",
+  "wit-world": "stateforward:scxml/executable-content-extension",
+  "wit-version": "0.2.0"
+}

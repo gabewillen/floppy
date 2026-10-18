@@ -256,6 +256,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "floppy-cognition"
+version = "0.1.0"
+dependencies = [
+ "scxml-types",
+ "scxml-validator-core",
+ "serde_json",
+ "wit-bindgen 0.51.0",
+]
+
+[[package]]
 name = "floppy-conversation"
 version = "0.1.0"
 dependencies = [
@@ -280,6 +290,17 @@ dependencies = [
 name = "floppy-device"
 version = "0.1.0"
 dependencies = [
+ "scxml-types",
+ "scxml-validator-core",
+ "serde_json",
+ "wit-bindgen 0.51.0",
+]
+
+[[package]]
+name = "floppy-intuition"
+version = "0.1.0"
+dependencies = [
+ "scxml-event-schema",
  "scxml-types",
  "scxml-validator-core",
  "serde_json",
