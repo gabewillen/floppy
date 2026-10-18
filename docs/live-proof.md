@@ -7,6 +7,23 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-18, undeclared top-level argument fields dropped before the check (D112, amended), model `Qwen/Qwen3.8-Flash-Next`
+
+`generate` now drops each top-level field of a call's arguments that the
+tool's root `properties` do not declare (a stray `reason` beside
+`events`) before the strict check, as the original's dispatch parser
+reads only `args.events`; nested objects are still checked strictly. The
+runs used floppy commit `10e4424412`, the same env files, backends and
+model as the 2026-10-17 entries below, no relay, and `cargo test -p
+floppy-tests --locked --test floppy_live -- --ignored --nocapture
+--test-threads=1 --exact <test>`, one test at a time.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_cascade` | pass (28 s) | autonomy and intuition left the question unhandled and reasoning answered it |
+| `floppy_live` `live_identity` | pass (32 s) | turn 1 answered "I'm Floppy — your little companion robot. Good to meet you, Gabe."; turn 2 selected `bot.ability.identity.adopt` with a reply |
+| `floppy_live` `live_conversation` | fail (100 s) | `4 completed, 0 failed`: reflection's select still failed `schema-mismatch` on turns 1 and 2, so no behavior was learned by turn 2. The arguments were not saved in this run; the 2026-10-17 relay capture of the same turns showed mismatches inside an event (`bot.behavior.create`'s fields beside `event` with no `data`, an unoffered `lifetime` in `data`), which the amendment leaves strict. Turn 3 created `GabePingPong`, but its drafts failed `XML001` (an unescaped `&`) after a repair, so it stayed DRAFT. Turn 3 still answered "pong" and turn 4 "Green, Gabe." through reasoning |
+
 ## 2026-10-17, `live_two_participants` with the silence that ends the utterance, model `Qwen/Qwen3.8-Flash-Next`
 
 `live_two_participants` now sends `environment.sound` `media/silence.wav`
