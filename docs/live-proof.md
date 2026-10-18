@@ -7,6 +7,31 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-18, Q8's decision kinds (D120) and gap 13's `image/*` branch, on vLLM 0.30.0, model `Qwen/Qwen3.8-Flash-Next`
+
+The decision service's kinds are `choice`, `predicate` and `score`
+(intuition asks `predicate` with its `choices` and `stimulus`, the service
+leaving out the deliberative handoff and building the state), and the turn
+detector no longer takes an image as content. The model server changed
+engine since the runs below: the same model at the same base URL is now
+served by vLLM 0.30.0, which accepts `response_format` and decodes
+`tool_choice: "required"` to the tools' schemas, where tonight's earlier
+runs (every 2026-10-18 entry below) were on the tensorfold engine, which
+did not constrain decoding. The runs used floppy commit `78dd64526a`,
+`FLOPPY_LIVE_ENV_FILE` naming `.env`, `env.speech` and `env.voice` (Gemini
+speech, the local LocalAI for voices), no relay, and `cargo test -p
+floppy-tests --locked --test <file> -- --ignored --nocapture
+--test-threads=1 --exact <test>`, once each. No code was changed for them.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_cascade` | pass (25 s) | autonomy unhandled, intuition abstained (`declined`, `empty_product`), reasoning handled. Tensorfold tonight: pass |
+| `floppy_live` `live_choices` | fail (26 s) | reasoning's `dispatch` call is now valid (`bot.focus_device` with `data: {device: "lamp"}`, `target: "session.floppy"`), where on tensorfold it put `device` beside `event` and failed `schema-mismatch`; the turn completed (`bot.processing.completed`, turn 1). Intuition (TypeSafe, through `predicate`) chose `bot.focus_device` and `bot.ability.cognition.ignore` with confidence 14 and escalated, sending both as its environment actions, and reasoning then sent the focus again, so `floppy.focus` is logged twice (`lamp`, `lamp`) and the test's one-focus check fails. That is D113's removal of D87's dedupe (J12: the original dispatches the environment actions before reasoning and has no dedupe), which the test still expects; neither was changed |
+| `floppy_live` `live_chat` | pass (29 s) | reasoning answered "Hi Gabe! Nice to meet you. I'm floppy." and speaking said it through Gemini. Tensorfold tonight: pass, after its outage |
+| `floppy_live` `live_identity` | pass (30 s) | turn 1 addressed as Floppy and answered by reasoning; on turn 2 intuition chose the ignore and `bot.ability.identity.adopt` (confidence 6) and escalated, the identity adopted "Floppy" and the bot said "I'm Floppy! Nice to meet you, Gabe." Tensorfold tonight (D115): pass |
+| `floppy_live` `live_conversation` | fail (631 s) | `4 completed, 0 failed`, but no behavior was learned by turn 2: reflection created `RememberUserPreference` on turn 1 and changed it on turns 2 and 4, and every draft failed `scx:validate` with the same `XML001` after its fix (an unclosed attribute value; on turn 4 a regular expression written as an attribute), so each revision was abandoned and it stayed DRAFT. Reasoning chose the ignore on turns 1 to 3 (no "pong" on turn 3) and answered turn 4 "Your favorite color is green!", recalling turn 1. Tensorfold tonight: the same outcome (no behavior learned; drafts failed their simulation), so constrained decoding did not change the drafts' quality |
+| `environment_live` `live_two_participants` | pass (34 s) | `a` answered "The window is open." through reasoning and said it through Gemini; `b` heard it and intuition handled it with the ignore (confidence 62). Tensorfold (2026-10-17): pass |
+
 ## 2026-10-18, parity gaps 3, 5 and 4 (D117 to D119), model `Qwen/Qwen3.8-Flash-Next`
 
 Recalled context trims to the prompt budget (D117), lifecycle requests are
