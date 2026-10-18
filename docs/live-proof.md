@@ -7,6 +7,21 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-17, `live_two_participants` with the silence that ends the utterance, model `Qwen/Qwen3.8-Flash-Next`
+
+`live_two_participants` now sends `environment.sound` `media/silence.wav`
+(0.1 s of 16 kHz silence written into the shared media directory) once
+the room logs `a`'s `bot.ability.speaking.output`, as the deterministic
+`a_bots_speech_reaches_the_other_participant` does, so the open-speech
+window closes on a sound without voice (the original's VAD End). The run
+used floppy commit `d68fbda862`, the same env files, backends and model as
+the entry below, and `cargo test -p floppy-tests --locked --test
+environment_live -- --ignored --nocapture --test-threads=1` (27 s).
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `environment_live` `live_two_participants` | pass (26 s) | `a` answered "The window is open." through reasoning and said it through Gemini; the room delivered the speech and then the silence to both bots; LocalAI answered every `/v1/vad` call `200`; `b` heard it as `bot.ability.listening.speech.output` and took its turn, which intuition handled with `bot.ability.cognition.ignore` (TypeSafe, confidence 65); `a` took no turn on its own speech |
+
 ## 2026-10-17, `generate.result` `{content, tool_calls}` and the original's dispatch tool (D112, amended) on the local vLLM, model `Qwen/Qwen3.8-Flash-Next`
 
 `generate` now returns every tool call and checks each one against the
