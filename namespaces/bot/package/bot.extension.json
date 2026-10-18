@@ -4,7 +4,7 @@
   "package-version": "0.1.0",
   "extension-artifact": "floppy_bot.virtualized.wasm",
   "schema-artifact": "bot.xsd",
-  "schema-sha256": "c043b10c0ebe8346c48952adb3ea1a76d409e612644f0b8c85012d1c3dbb9958",
+  "schema-sha256": "67df3a4d98fdd8eafaede6b2ef928a5ce1115dbef1f587c3e1ae4ef0bab7b166",
   "wit-world": "stateforward:scxml/executable-content-extension",
   "wit-version": "0.2.0"
 }

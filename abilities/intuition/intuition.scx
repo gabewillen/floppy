@@ -27,17 +27,18 @@
   probability (decision.selected): the original's selections with their
   per-event confidences.
 
-  Confidence (the reference ConfidenceTuner, 0-100 scale): the tuner state
-  {mean, var, n} comes in as a <param> and goes back in <donedata>, so
-  it lives in the cognition across turns. The turn's confidence is the
-  minimum of its selections' confidences, each its probability normalized
-  to a whole 0-100 number (<processing:selection_confidence>, the reference
-  selection_confidence and normalize_confidence). <decision:tuner> observes
-  it first, then writes
-  the updated threshold (the original's defaults: the floor 35 during the warmup
-  of 8 observations, then max(floor / 2, mean - k_sigma * std); EMA alpha
-  0.08, variance floor 100) as a probability, and the turn escalates when
-  the confidence is below it (the original _tune_confidence, should_escalate).
+  Confidence (the original's ConfidenceTuner, 0-100 scale): the tuner state
+  {mean, var, n}, the confidence_tuner datum, comes in as a <param> and
+  goes back in <donedata>, so it lives in the cognition across turns. The
+  turn's confidence is the minimum of its selections' confidences, each its
+  probability normalized to a whole 0-100 number
+  (<processing:selection_confidence>, the original's selection_confidence
+  and normalize_confidence). <intuition:observe> observes it first (a null
+  confidence is not observed), then <intuition:escalate> writes whether it
+  is below the updated threshold (the original's defaults: the floor 35
+  during the warmup of 8 observations, then max(floor / 2, mean - k_sigma *
+  std); EMA alpha 0.08, variance floor 100), and the turn escalates when it
+  is (the original's _tune_confidence, observe then should_escalate).
 
   Classification (the original _classify_activity, its confidence_gate off, the
   default): a confident product is handled, every selection {event, data,
@@ -62,15 +63,15 @@
 
   Output: <donedata>, received by the cognition as done.invoke.intuition:
 
-    {turn, handled: true, selected: [{event, data, target}], reason: "none", tuner}
-    {turn, handled: false, reason, tuner}  (escalate to reasoning)
-    {turn, handled: false, failed: true, reason, tuner}
+    {turn, handled: true, selected: [{event, data, target}], reason: "none", confidence_tuner}
+    {turn, handled: false, reason, confidence_tuner}  (escalate to reasoning)
+    {turn, handled: false, failed: true, reason, confidence_tuner}
 
   A decision.failed, error.*, or no answer within decision_timeout_ms fails
   the stage (the cognition answers the turn with bot.ability.failed); the
   cognition's hop timeout bounds the whole stage too.
 
-  Bindings: the decision and processing namespace packages and the
+  Bindings: the intuition and processing namespace packages and the
   decision service package, resolved from their repository URIs; env scopes TYPESAFE_API_KEY and TYPESAFE_BASE_URL to the
   service's <invoke> (without a key it answers decision.failed
   unconfigured). An invoked service's events are not checked against
@@ -80,9 +81,9 @@
   by cond (Object(...) reads a non-object as {}).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       xmlns:intuition="https://github.com/stateforward/floppy/namespaces/intuition"
        xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
        version="1.0" datamodel="ecmascript" name="intuition" initial="deciding">
   <datamodel>
@@ -95,13 +96,13 @@
     <!-- The bot's environment (decision D106), in the decision's
          instructions. -->
     <data id="environment" expr="null"/>
-    <data id="tuner" expr="({mean: 70, var: 100, n: 0})"/>
+    <data id="confidence_tuner" expr="({mean: 70, var: 100, n: 0})"/>
     <data id="decision_timeout_ms" expr="20000"/>
     <data id="instructions" expr="'You decide what a small companion robot does with one stimulus it observed. Choose the offered event the robot should take for it. Abstain when none of them fits, so slower reasoning handles it.'"/>
     <!-- The decision in flight. -->
     <data id="stimulus_data" expr="({})"/>
     <data id="confidence" expr="null"/>
-    <data id="threshold" expr="null"/>
+    <data id="escalate" expr="false"/>
     <data id="decision_timer" expr="null"/>
     <data id="result" expr="null"/>
     <data id="failed_code" expr="null"/>
@@ -128,13 +129,14 @@
     </invoke>
 
     <!-- The decision service's own events. Every groundable event, each
-         with its own confidence: observe their minimum, then compare it
-         with the updated threshold. -->
+         with its own confidence: observe their minimum, then escalate
+         when it is below the updated threshold. -->
     <transition event="decision.selected" cond="hasSelections(_event)" target="done">
       <processing:selection_confidence location="confidence" selections="_event.data.selections"/>
-      <decision:tuner location="tuner" thresholdlocation="threshold" observe="confidence"/>
+      <intuition:observe location="confidence_tuner" confidence="confidence"/>
+      <intuition:escalate location="escalate" confidence="confidence" tuner="confidence_tuner"/>
       <log label="intuition" expr="tunedLog(_event)"/>
-      <if cond="isLowConfidence()">
+      <if cond="escalate">
         <assign location="result" expr="escalatedResult('low_confidence')"/>
       <elseif cond="hasDeliberativeInput(_event)"/>
         <assign location="result" expr="escalatedResult('deliberative_input')"/>

@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/intuition/irp/sources">
   <assert id="intuition-1" specnum="1" specid="#intuition-1">
-    <![CDATA[It asks the decision service (kind `select`) over the `choices` <param> less `bot.ability.reasoning.input`, with the stimulus's object data as evidence: each event's required data is filled from it. A confident product is handled: it sends every selection the service returned to its target and ends with donedata `{turn, handled: true, selected: [{event, data, target}], reason: "none", tuner}`.]]>
+    <![CDATA[It asks the decision service (kind `select`) over the `choices` <param> less `bot.ability.reasoning.input`, with the stimulus's object data as evidence: each event's required data is filled from it. A confident product is handled: it sends every selection the service returned to its target and ends with donedata `{turn, handled: true, selected: [{event, data, target}], reason: "none", confidence_tuner}`.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -15,7 +15,7 @@
     </test>
   </assert>
   <assert id="intuition-2" specnum="2" specid="#intuition-2">
-    <![CDATA[The turn's confidence is the minimum of its selections' probabilities as whole numbers on the 0-100 scale. The `tuner` <param> `{mean, var, n}` observes it and comes back updated in every donedata; the turn is low-confidence when the confidence is below the updated threshold (the floor 35 during the warmup of 8 observations, then `max(17.5, mean - std)`).]]>
+    <![CDATA[The turn's confidence is the minimum of its selections' probabilities as whole numbers on the 0-100 scale. The `confidence_tuner` <param> `{mean, var, n}` observes it (the original's `ConfidenceTuner.observe`) and comes back updated in every donedata; the turn is low-confidence when the confidence is below the updated threshold (`should_escalate`) (the floor 35 during the warmup of 8 observations, then `max(17.5, mean - std)`).]]>
     <test id="110" conformance="mandatory" manual="false">
       <start uri="110/test110.scxml"/>
     </test>
@@ -27,13 +27,13 @@
     </test>
   </assert>
   <assert id="intuition-3" specnum="3" specid="#intuition-3">
-    <![CDATA[A low-confidence product is unhandled and escalates: it sends its selections (the original's environment actions, dispatched before reasoning runs) and ends with `{turn, handled: false, reason: "low_confidence", tuner}`.]]>
+    <![CDATA[A low-confidence product is unhandled and escalates: it sends its selections (the original's environment actions, dispatched before reasoning runs) and ends with `{turn, handled: false, reason: "low_confidence", confidence_tuner}`.]]>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>
   </assert>
   <assert id="intuition-4" specnum="4" specid="#intuition-4">
-    <![CDATA[When the service abstains (the pass criterion wins, or no event could be offered) the product is empty: `{turn, handled: false, reason: "empty_product", tuner}` with no `selected`, and the tuner observes nothing.]]>
+    <![CDATA[When the service abstains (the pass criterion wins, or no event could be offered) the product is empty: `{turn, handled: false, reason: "empty_product", confidence_tuner}` with no `selected`, and the tuner observes nothing.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>
@@ -57,7 +57,7 @@
     </test>
   </assert>
   <assert id="intuition-6" specnum="6" specid="#intuition-6">
-    <![CDATA[A failed decision (`decision.failed {code}`) fails the stage with reason `the decision failed (<code>)`; one that cannot start (`error.*`) with `the decision could not run (<event>)`; and no answer within `decision_timeout_ms` with `the decision timed out after <n> ms`; each `{turn, handled: false, failed: true, reason, tuner}`.]]>
+    <![CDATA[A failed decision (`decision.failed {code}`) fails the stage with reason `the decision failed (<code>)`; one that cannot start (`error.*`) with `the decision could not run (<event>)`; and no answer within `decision_timeout_ms` with `the decision timed out after <n> ms`; each `{turn, handled: false, failed: true, reason, confidence_tuner}`.]]>
     <test id="150" conformance="mandatory" manual="false">
       <start uri="150/test150.scxml"/>
     </test>

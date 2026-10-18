@@ -4,7 +4,7 @@
 {"label":"cognition","parent":"session","session":"session.cognition","text":"turn 1: bot.input","type":"log"}
 {"label":"autonomy","parent":"session.cognition","session":"session.cognition.autonomy","text":"turn 1: no memory","type":"log"}
 {"label":"cognition.stage","parent":"session","session":"session.cognition","text":"autonomy unhandled (no-behaviors)","type":"log"}
-{"label":"intuition","parent":"session.cognition","session":"session.cognition.intuition","text":"turn 1: bot.ability.cognition.ignore bot.ability.communication.respond (confidence 33, threshold 0.35)","type":"log"}
+{"label":"intuition","parent":"session.cognition","session":"session.cognition.intuition","text":"turn 1: bot.ability.cognition.ignore bot.ability.communication.respond (confidence 33, escalate true)","type":"log"}
 {"label":"harness.sent","session":"session","text":"{\"text\":\"hi\"}","type":"log"}
 {"label":"cognition.ignore","parent":"session","session":"session.cognition","text":"turn 1","type":"log"}
 {"label":"cognition.tuner","parent":"session","session":"session.cognition","text":"{\"mean\":33,\"n\":1,\"var\":100}","type":"log"}

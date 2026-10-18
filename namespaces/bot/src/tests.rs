@@ -47,8 +47,19 @@ fn execution(result: Result<Executed, Failure<&'static str>>) -> &'static str {
     }
 }
 
+/// The data value of a JSON value (canonical JSON text for arrays and
+/// objects: `serde_json` sorts object members).
 fn data(value: &Json) -> Data {
-    data_of(value).expect("a JSON value")
+    match value {
+        Json::Null => Data::Null,
+        Json::Bool(value) => Data::Bool(*value),
+        Json::Number(value) => Data::Number(
+            scxml_types::FiniteNumber::new(value.as_f64().expect("a number")).expect("finite"),
+        ),
+        Json::String(text) => Data::String(text.clone()),
+        Json::Array(_) => Data::JsonArray(value.to_string()),
+        Json::Object(_) => Data::JsonObject(value.to_string()),
+    }
 }
 
 #[test]
@@ -85,229 +96,6 @@ fn other_local_names_are_not_handled() {
         Ok(Executed::NotHandled)
     );
     assert!(host.assigned.is_empty());
-}
-
-// <bot:attention>
-
-/// A host for one attention bias: the stimulus, the configured lamp and
-/// fan, and the focus.
-fn attention_host(stimulus: &Json, focus: &Json) -> FakeHost {
-    FakeHost {
-        values: BTreeMap::from([
-            ("stimulus".to_owned(), data(stimulus)),
-            ("devices".to_owned(), data(&json!(["lamp", "fan"]))),
-            ("focused_device".to_owned(), data(focus)),
-        ]),
-        ..FakeHost::default()
-    }
-}
-
-fn attention_attributes() -> Vec<Attribute> {
-    vec![
-        attr("location", "focus_candidates"),
-        attr("focuslocation", "focus"),
-        attr("stimulus", "stimulus"),
-        attr("devices", "devices"),
-        attr("focus", "focused_device"),
-    ]
-}
-
-/// The focus and candidates `<bot:attention>` assigns, in order.
-fn bias(stimulus: &Json, focus: &Json) -> Vec<(String, Data)> {
-    let mut host = attention_host(stimulus, focus);
-    assert_eq!(
-        execute("attention", &attention_attributes(), &[], &mut host),
-        Ok(Executed::Handled)
-    );
-    host.assigned
-}
-
-fn input(data: &Json) -> Json {
-    json!({"event": "bot.input", "data": data, "source": null})
-}
-
-fn assigned(focus: &Json, candidates: &Json) -> Vec<(String, Data)> {
-    vec![
-        ("focus".to_owned(), data(focus)),
-        ("focus_candidates".to_owned(), data(candidates)),
-    ]
-}
-
-#[test]
-fn attention_without_focus_or_device_has_no_candidates() {
-    assert_eq!(
-        bias(&input(&json!({"observation": {}})), &Json::Null),
-        assigned(&Json::Null, &json!([]))
-    );
-}
-
-#[test]
-fn attention_takes_a_configured_target_device_of_an_input() {
-    assert_eq!(
-        bias(&input(&json!({"target_device": "lamp"})), &Json::Null),
-        assigned(&Json::Null, &json!(["lamp"]))
-    );
-    // A device that is not configured is no candidate.
-    assert_eq!(
-        bias(&input(&json!({"target_device": "door"})), &Json::Null),
-        assigned(&Json::Null, &json!([]))
-    );
-}
-
-#[test]
-fn attention_puts_the_configured_focus_first_once() {
-    assert_eq!(
-        bias(&input(&json!({"target_device": "fan"})), &json!("lamp")),
-        assigned(&json!("lamp"), &json!(["lamp", "fan"]))
-    );
-    assert_eq!(
-        bias(&input(&json!({"target_device": "lamp"})), &json!("lamp")),
-        assigned(&json!("lamp"), &json!(["lamp"]))
-    );
-    // A focus that is no longer configured is dropped.
-    assert_eq!(
-        bias(&input(&json!({})), &json!("door")),
-        assigned(&Json::Null, &json!([]))
-    );
-}
-
-#[test]
-fn attention_takes_no_device_from_the_stimulus_source() {
-    // A device's input reaches the bot with its target_device stamped by
-    // the environment (decision D105): a source names no device.
-    let mut stimulus = input(&json!({"target_device": null}));
-    stimulus["source"] = json!("fan");
-    assert_eq!(
-        bias(&stimulus, &Json::Null),
-        assigned(&Json::Null, &json!([]))
-    );
-    // Any other event: never a target_device in its data.
-    let other = json!({"event": "bot.ability.conversation.output",
-                       "data": {"target_device": "lamp"}, "source": "fan"});
-    assert_eq!(bias(&other, &Json::Null), assigned(&Json::Null, &json!([])));
-}
-
-#[test]
-fn attention_refuses_a_sources_attribute() {
-    // The original's source map is gone: the environment stamps a device's
-    // input with its target_device (decision D105).
-    let mut stimulus = input(&json!({}));
-    stimulus["source"] = json!("mic");
-    let mut host = attention_host(&stimulus, &Json::Null);
-    host.values
-        .insert("sources".to_owned(), data(&json!({"mic": "fan"})));
-    let mut attributes = attention_attributes();
-    attributes.push(attr("sources", "sources"));
-    assert_eq!(
-        execution(execute("attention", &attributes, &[], &mut host)),
-        "bot:attention takes only the location, focuslocation, stimulus, devices and focus attributes"
-    );
-    assert!(host.assigned.is_empty());
-}
-
-#[test]
-fn attention_without_focuslocation_writes_the_candidates_only() {
-    let mut host = attention_host(&input(&json!({})), &json!("lamp"));
-    let attributes: Vec<Attribute> = attention_attributes()
-        .into_iter()
-        .filter(|attribute| attribute.local_name != "focuslocation")
-        .collect();
-    execute("attention", &attributes, &[], &mut host).expect("handled");
-    assert_eq!(
-        host.assigned,
-        [("focus_candidates".to_owned(), data(&json!(["lamp"])))]
-    );
-}
-
-#[test]
-fn malformed_attention_elements_or_values_raise_error_execution() {
-    let stimulus = input(&json!({}));
-    let without = |name: &str| -> Vec<Attribute> {
-        attention_attributes()
-            .into_iter()
-            .filter(|attribute| attribute.local_name != name)
-            .collect()
-    };
-    let with = |extra: Attribute| -> Vec<Attribute> {
-        let mut attributes = attention_attributes();
-        attributes.push(extra);
-        attributes
-    };
-    for attributes in [
-        without("location"),
-        without("stimulus"),
-        without("devices"),
-        without("focus"),
-        with(attr("model", "m")),
-        with(attr("focus", "focused_device")),
-        with(Attribute {
-            namespace_uri: Some("urn:other".into()),
-            local_name: "x".into(),
-            value: "y".into(),
-        }),
-    ] {
-        let mut host = attention_host(&stimulus, &Json::Null);
-        execution(execute("attention", &attributes, &[], &mut host));
-        assert!(host.assigned.is_empty());
-    }
-    let mut attributes = attention_attributes();
-    attributes[0] = attr("location", " ");
-    execution(execute(
-        "attention",
-        &attributes,
-        &[],
-        &mut attention_host(&stimulus, &Json::Null),
-    ));
-    execution(execute(
-        "attention",
-        &attention_attributes(),
-        &[Content::Start, Content::End],
-        &mut attention_host(&stimulus, &Json::Null),
-    ));
-    // Values of the wrong kind, and an expression that fails.
-    for (name, value) in [
-        ("stimulus", data(&json!([]))),
-        ("devices", data(&json!({}))),
-        ("focused_device", Data::Undefined),
-    ] {
-        let mut host = attention_host(&stimulus, &Json::Null);
-        host.values.insert(name.to_owned(), value);
-        execution(execute(
-            "attention",
-            &attention_attributes(),
-            &[],
-            &mut host,
-        ));
-        assert!(host.assigned.is_empty());
-    }
-    let mut host = attention_host(&stimulus, &Json::Null);
-    host.values.remove("devices");
-    execution(execute(
-        "attention",
-        &attention_attributes(),
-        &[],
-        &mut host,
-    ));
-    let mut host = attention_host(&stimulus, &Json::Null);
-    host.fail_assign = true;
-    execution(execute(
-        "attention",
-        &attention_attributes(),
-        &[],
-        &mut host,
-    ));
-    // A host failure passes through.
-    let mut attributes = attention_attributes();
-    attributes[2] = attr("stimulus", "fatal");
-    assert_eq!(
-        execute(
-            "attention",
-            &attributes,
-            &[],
-            &mut attention_host(&stimulus, &Json::Null)
-        ),
-        Err(Failure::Host("fatal"))
-    );
 }
 
 // <bot:stimulus>

@@ -1356,10 +1356,10 @@ fn low_confidence_is_observed_by_the_tuner_and_escalates() {
     let second = run.until(WAIT, turn_ended);
     for (records, n) in [(&first, 1), (&second, 2)] {
         // The tuner observes the selections' least confidence first; during
-        // the warmup the threshold is then the floor, 35.
+        // the warmup the threshold is then the floor, 35, so 34 escalates.
         assert_eq!(
             texts(records, "intuition")[0],
-            format!("turn {n}: {IGNORE} (confidence 34, threshold 0.35)")
+            format!("turn {n}: {IGNORE} (confidence 34, escalate true)")
         );
         assert_eq!(
             texts(records, "cognition.stage")[1],
@@ -1385,45 +1385,34 @@ fn after_the_warmup_the_threshold_follows_the_tuner() {
     let mock = Mock::start();
     let bot = layout(
         &mock,
-        Decision::Low,
+        Decision::Ignore,
         Generation::Ignore,
         &[(
             "abilities/cognition/cognition.scx",
-            &[("tuner", "({mean: 70, var: 100, n: 8})")],
+            &[("confidence_tuner", "({mean: 95, var: 100, n: 8})")],
         )],
     );
     let mut run = start(&bot);
-    // The threshold a turn's intuition log reports.
-    let threshold = |records: &[Json], n: u64| -> f64 {
-        texts(records, "intuition")[0]
-            .strip_prefix(&format!("turn {n}: {IGNORE} (confidence 34, threshold "))
-            .and_then(|rest| rest.strip_suffix(')'))
-            .and_then(|value| value.parse().ok())
-            .expect("a threshold")
-    };
     say(&mut run, "one");
     let first = run.until(WAIT, turn_ended);
-    // The original observes before it compares: delta = 34 - 70; mean = 70 +
-    // 0.08 * delta; variance = max(100, 0.92 * 100 + 0.08 * delta^2); the
-    // threshold is then max(35 / 2, mean - sqrt(variance)), about 53.1.
+    // The original observes before it compares: delta = 80 - 95; mean = 95
+    // + 0.08 * delta = 93.8; variance = max(100, 0.92 * 100 + 0.08 *
+    // delta^2) = 110; the threshold is then max(35 / 2, mean -
+    // sqrt(variance)), about 83.3, so a confidence of 80, well over the
+    // warmup's floor of 35, escalates.
     let tuner = json_text(&first, "cognition.tuner");
     let number = |key: &str| tuner[key].as_f64().expect("a number");
-    assert!((number("mean") - 67.12).abs() < 1e-9, "{tuner}");
-    assert!((number("var") - 195.68).abs() < 1e-9, "{tuner}");
+    assert!((number("mean") - 93.8).abs() < 1e-9, "{tuner}");
+    assert!((number("var") - 110.0).abs() < 1e-9, "{tuner}");
     assert_eq!(tuner["n"], 9);
-    let expected = (67.12 - 195.68_f64.sqrt()) / 100.0;
-    assert!((threshold(&first, 1) - expected).abs() < 1e-9);
+    assert_eq!(
+        texts(&first, "intuition")[0],
+        format!("turn 1: {IGNORE} (confidence 80, escalate true)")
+    );
     assert_eq!(
         texts(&first, "cognition.stage")[1],
         "intuition unhandled (low_confidence)"
     );
-    say(&mut run, "two");
-    let second = run.until(WAIT, turn_ended);
-    let delta: f64 = 34.0 - 67.12;
-    let mean = 67.12 + 0.08 * delta;
-    let variance = (0.92 * 195.68 + 0.08 * delta * delta).max(100.0);
-    let expected = (mean - variance.sqrt()) / 100.0;
-    assert!((threshold(&second, 2) - expected).abs() < 1e-9);
     close(
         run,
         &mock,
@@ -1501,7 +1490,7 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
     assert_eq!(
         texts(&records, "intuition"),
         strings(&[&format!(
-            "turn 1: {IGNORE} {RESPOND} (confidence 33, threshold 0.35)"
+            "turn 1: {IGNORE} {RESPOND} (confidence 33, escalate true)"
         )])
     );
     assert_eq!(

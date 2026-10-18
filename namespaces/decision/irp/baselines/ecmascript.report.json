@@ -6,9 +6,9 @@
     "kind": "namespace-irp",
     "source": "namespaces/decision/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "6438d64dcc3bc6fa8baadad9f6ba5f8be0cd793a6f058d4fd5f1b1439b156d2d",
-    "source_digest": "26f07531ec23d80901c89dfe9ad2403499162a1751beb4cfefe6dcdda21b3282",
-    "manifest_digest": "4723389f35ed5c4354d67fe1176bc3a793b962cd25bcce64ebe9d0f0c5f74c2e",
+    "corpus_digest": "d3eaad47b850a6b685df59c004e1bca6af6b4da48e307915db270eddce60b173",
+    "source_digest": "14b65f6f327c33e6738fcddfd799658524387508543098b9623ca9f8693235fb",
+    "manifest_digest": "5813315a2666062dfbde00f50052bc0030b32b1c5f02cad7bf45d9c13909ef34",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
@@ -62,9 +62,9 @@
     {
       "namespace_uri": "https://github.com/stateforward/floppy/namespaces/decision",
       "package_version": "0.1.0",
-      "manifest_sha256": "4b47261fada2a00994eb2dd40241362905bb52bc2feb92a561db0aff67e91e40",
-      "schema_sha256": "d421a9d0ed3157884895c52f40a675e7469dac2b92fa995d7d547e6afdf6e22f",
-      "component_sha256": "6be22b21b8120d7a0270caa5739f96a1124bb0528f0682028e830246ea5a7e32"
+      "manifest_sha256": "81409a9f0d738ff824ee554918b887220a4bb70161d63d7dfa48df96edf96bef",
+      "schema_sha256": "9b38f912258ec12453bccbd08234783fac967c7cfb5d17d3a51b8030a907fe5e",
+      "component_sha256": "e2f2bcd24cd35b1af9e2ab547448aad7fc555f2a5ff63c8c8d8c02db8a1f7f87"
     }
   ],
   "ir_version": 5,
@@ -77,11 +77,11 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "e33f29a6020b60e0dfd9b7f94da9a0cf941aeb150db4d2d3f2b057b8e1ba551a",
+  "identity_digest": "0efcf4ff11e485f62ae5c75f5ed4204d89acecbfb502b7c144ada274f0f1eddd",
   "summary": {
-    "total_selected": 16,
-    "applicable_selected": 16,
-    "passed": 16,
+    "total_selected": 11,
+    "applicable_selected": 11,
+    "passed": 11,
     "failed": 0,
     "unsupported": 0,
     "invalid": 0,
@@ -91,8 +91,8 @@
     "not_passing": 0,
     "passed_under_erratum": 0,
     "mandatory": {
-      "applicable_selected": 16,
-      "passed": 16,
+      "applicable_selected": 11,
+      "passed": 11,
       "failed": 0,
       "unsupported": 0,
       "invalid": 0,
@@ -116,8 +116,8 @@
     },
     "by_spec": {
       "#decision-1": {
-        "applicable_selected": 4,
-        "passed": 4,
+        "applicable_selected": 3,
+        "passed": 3,
         "failed": 0,
         "unsupported": 0,
         "invalid": 0,
@@ -164,18 +164,6 @@
         "passed_under_erratum": 0
       },
       "#decision-5": {
-        "applicable_selected": 4,
-        "passed": 4,
-        "failed": 0,
-        "unsupported": 0,
-        "invalid": 0,
-        "harness_error": 0,
-        "skipped": 0,
-        "not_applicable": 0,
-        "not_passing": 0,
-        "passed_under_erratum": 0
-      },
-      "#decision-6": {
         "applicable_selected": 1,
         "passed": 1,
         "failed": 0,
@@ -190,8 +178,8 @@
     },
     "by_datamodel": {
       "ecmascript": {
-        "applicable_selected": 16,
-        "passed": 16,
+        "applicable_selected": 11,
+        "passed": 11,
         "failed": 0,
         "unsupported": 0,
         "invalid": 0,
@@ -231,31 +219,6 @@
     },
     {
       "id": "401",
-      "assertion_id": "decision-1",
-      "spec_num": "1",
-      "spec_id": "#decision-1",
-      "datamodel": "ecmascript",
-      "conformance": "mandatory",
-      "manual": false,
-      "stage": "complete",
-      "disposition": "passed",
-      "diagnostics": [
-        {
-          "code": "LINT010",
-          "severity": "note",
-          "message": "expressions of this `ecmascript` machine were not syntax-checked"
-        }
-      ],
-      "configuration": [
-        "pass"
-      ],
-      "terminal_status": "finished",
-      "commands": 2,
-      "fuel_consumed": 2,
-      "oracle": "outcome-log"
-    },
-    {
-      "id": "402",
       "assertion_id": "decision-1",
       "spec_num": "1",
       "spec_id": "#decision-1",
@@ -495,110 +458,10 @@
       "oracle": "outcome-log"
     },
     {
-      "id": "480",
-      "assertion_id": "decision-5",
-      "spec_num": "5",
-      "spec_id": "#decision-5",
-      "datamodel": "ecmascript",
-      "conformance": "mandatory",
-      "manual": false,
-      "stage": "complete",
-      "disposition": "passed",
-      "diagnostics": [
-        {
-          "code": "LINT010",
-          "severity": "note",
-          "message": "expressions of this `ecmascript` machine were not syntax-checked"
-        }
-      ],
-      "configuration": [
-        "pass"
-      ],
-      "terminal_status": "finished",
-      "commands": 2,
-      "fuel_consumed": 2,
-      "oracle": "outcome-log"
-    },
-    {
-      "id": "481",
-      "assertion_id": "decision-5",
-      "spec_num": "5",
-      "spec_id": "#decision-5",
-      "datamodel": "ecmascript",
-      "conformance": "mandatory",
-      "manual": false,
-      "stage": "complete",
-      "disposition": "passed",
-      "diagnostics": [
-        {
-          "code": "LINT010",
-          "severity": "note",
-          "message": "expressions of this `ecmascript` machine were not syntax-checked"
-        }
-      ],
-      "configuration": [
-        "pass"
-      ],
-      "terminal_status": "finished",
-      "commands": 2,
-      "fuel_consumed": 2,
-      "oracle": "outcome-log"
-    },
-    {
-      "id": "482",
-      "assertion_id": "decision-5",
-      "spec_num": "5",
-      "spec_id": "#decision-5",
-      "datamodel": "ecmascript",
-      "conformance": "mandatory",
-      "manual": false,
-      "stage": "complete",
-      "disposition": "passed",
-      "diagnostics": [
-        {
-          "code": "LINT010",
-          "severity": "note",
-          "message": "expressions of this `ecmascript` machine were not syntax-checked"
-        }
-      ],
-      "configuration": [
-        "pass"
-      ],
-      "terminal_status": "finished",
-      "commands": 2,
-      "fuel_consumed": 2,
-      "oracle": "outcome-log"
-    },
-    {
-      "id": "483",
-      "assertion_id": "decision-5",
-      "spec_num": "5",
-      "spec_id": "#decision-5",
-      "datamodel": "ecmascript",
-      "conformance": "mandatory",
-      "manual": false,
-      "stage": "complete",
-      "disposition": "passed",
-      "diagnostics": [
-        {
-          "code": "LINT010",
-          "severity": "note",
-          "message": "expressions of this `ecmascript` machine were not syntax-checked"
-        }
-      ],
-      "configuration": [
-        "pass"
-      ],
-      "terminal_status": "finished",
-      "commands": 2,
-      "fuel_consumed": 2,
-      "oracle": "outcome-log"
-    },
-    {
       "id": "490",
-      "assertion_id": "decision-6",
-      "spec_num": "6",
-      "spec_id": "#decision-6",
+      "assertion_id": "decision-5",
+      "spec_num": "5",
+      "spec_id": "#decision-5",
       "datamodel": "ecmascript",
       "conformance": "mandatory",
       "manual": false,

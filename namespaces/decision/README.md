@@ -3,8 +3,9 @@
 `https://github.com/stateforward/floppy/namespaces/decision` (prefix
 `decision` by convention): the synchronous half of a decision as a Wasm
 executable-content extension component (`floppy_decision`): reading the
-choices (a TypeSafe `Choice` question's), grounding one property of them, and
-tuning the confidence threshold. What the original's processing module does
+choices (a TypeSafe `Choice` question's) and grounding one property of them.
+The original's `ConfidenceTuner` is the [`intuition`](../intuition)
+namespace. What the original's processing module does
 with the choices is the [`processing`](../processing) namespace. Asking a backend to choose is slow I/O and belongs to the
 `decision` invoked service ([`services/decision`](../../services/decision)).
 It reads its expressions and the session snapshot and assigns its results
@@ -14,7 +15,6 @@ through the data model; it never sends, and it does no I/O.
 | --- | --- | --- |
 | `<decision:choice location events?>` | the offered events of the active state | the choices `[{event, schema, description?}]` (`location`) |
 | `<decision:pin location event property values>` | `bot.focus_device` grounded in the focus candidates | the choices with the property's `enum` pinned (`location`) |
-| `<decision:tuner location thresholdlocation? observe?>` | `ConfidenceTuner` | the tuner state (`location`) and the threshold (`thresholdlocation`) |
 
 The exact semantics and failures are in [`src/lib.rs`](src/lib.rs); the
 structure is in [`package/decision.xsd`](package/decision.xsd), whose digest
@@ -33,5 +33,4 @@ through the pipeline of scxml.rs's namespace suites.
 - <a id="decision-2"></a>**decision-2**. `<decision:choice>` writes one choice {event, schema, description?} per event named by an active transition that carries an event:schema, in document order, each offered once (an earlier transition of the same state takes it); * and schemaless transitions are not offered, the description is the schema's description, else its title, first line, and events keeps only the choices a descriptor matches.
 - <a id="decision-3"></a>**decision-3**. A transition whose cond is exactly true is offered; one whose cond is false is not.
 - <a id="decision-4"></a>**decision-4**. `<decision:pin>` sets the values as the enum of the named property of every entry for the event, removes those entries when the values are empty, and raises `error.execution`, assigning nothing, for an entry whose schema has no such property.
-- <a id="decision-5"></a>**decision-5**. `<decision:tuner>` keeps the original's ConfidenceTuner state {mean, var, n}: anything else is replaced by the initial state, an observation moves it, and the threshold is the floor during the warmup, else max(floor/2, mean - k_sigma * deviation), as a probability; an observation that is not a number raises `error.execution` and assigns nothing.
-- <a id="decision-6"></a>**decision-6**. A location that does not hold what the element reads raises `error.execution` and assigns nothing.
+- <a id="decision-5"></a>**decision-5**. A location that does not hold what the element reads raises `error.execution` and assigns nothing.

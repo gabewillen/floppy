@@ -44,13 +44,7 @@ function selectionNames(_event) {
 }
 
 function tunedLog(_event) {
-  return 'turn ' + turn + ': ' + selectionNames(_event) + ' (confidence ' + confidence + ', threshold ' + threshold + ')';
-}
-
-// The reference should_escalate: the confidence is below the updated threshold
-// (written as a probability).
-function isLowConfidence() {
-  return confidence / 100 < threshold;
+  return 'turn ' + turn + ': ' + selectionNames(_event) + ' (confidence ' + confidence + ', escalate ' + escalate + ')';
 }
 
 function hasDeliberativeInput(_event) {
@@ -68,13 +62,13 @@ function product(_event) {
 
 // The turn's selections (the original's escalation reason none).
 function selectionResult(_event) {
-  return ({handled: true, selected: product(_event), reason: 'none', turn: turn, tuner: tuner});
+  return ({handled: true, selected: product(_event), reason: 'none', turn: turn, confidence_tuner: confidence_tuner});
 }
 
 // An escalating product: unhandled, its selections sent (the original
 // dispatches its _environment_actions before reasoning runs).
 function escalatedResult(reason) {
-  return ({handled: false, reason: reason, turn: turn, tuner: tuner});
+  return ({handled: false, reason: reason, turn: turn, confidence_tuner: confidence_tuner});
 }
 
 // An abstain with one of its reasons (the service's events are unchecked).
@@ -88,7 +82,7 @@ function abstainedLog(_event) {
 
 // The original's empty product: no selection, no observation.
 function abstainedResult() {
-  return ({handled: false, reason: 'empty_product', turn: turn, tuner: tuner});
+  return ({handled: false, reason: 'empty_product', turn: turn, confidence_tuner: confidence_tuner});
 }
 
 function failedCode(_event) {
@@ -96,15 +90,15 @@ function failedCode(_event) {
 }
 
 function decisionFailedResult() {
-  return ({handled: false, failed: true, reason: 'the decision failed (' + failed_code + ')', turn: turn, tuner: tuner});
+  return ({handled: false, failed: true, reason: 'the decision failed (' + failed_code + ')', turn: turn, confidence_tuner: confidence_tuner});
 }
 
 function timedOutResult() {
-  return ({handled: false, failed: true, reason: 'the decision timed out after ' + decision_timeout_ms + ' ms', turn: turn, tuner: tuner});
+  return ({handled: false, failed: true, reason: 'the decision timed out after ' + decision_timeout_ms + ' ms', turn: turn, confidence_tuner: confidence_tuner});
 }
 
 function couldNotRunResult(_event) {
-  return ({handled: false, failed: true, reason: 'the decision could not run (' + _event.name + ')', turn: turn, tuner: tuner});
+  return ({handled: false, failed: true, reason: 'the decision could not run (' + _event.name + ')', turn: turn, confidence_tuner: confidence_tuner});
 }
 
 // The decision's instructions: the robot's own, then its environment this

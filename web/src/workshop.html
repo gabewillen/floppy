@@ -707,7 +707,7 @@ const PART = {
   sql: { kind: "service", ver: "0.1.0", why: "keeps the robot's memory in a local database file", sandbox: "sees only its own folder" },
   speech: { kind: "service", ver: "0.1.0", why: "turns audio into text and text into speech", sandbox: "sees only the media folder you grant" },
   conversation: { kind: "namespace", ver: "0.1.0", why: "records each message the robot sends and receives", sandbox: "runs inside the robot, no access to anything" },
-  bot: { kind: "namespace", ver: "0.1.0", why: "tracks who and what the robot is paying attention to", sandbox: "runs inside the robot, no access to anything" },
+  cognition: { kind: "namespace", ver: "0.1.0", why: "tracks who and what the robot is paying attention to", sandbox: "runs inside the robot, no access to anything" },
 };
 const KEYED = [{ key: "apikey", label: "API key from", value: "FLOPPY_API_KEY" }, { key: "baseurl", label: "Model server", value: RELAY }];
 const SETTINGS = {
@@ -741,11 +741,11 @@ const RECIPES = {
   greeter: {
     name: "greeter", event: "visitor.arrived", goal: "Greet visitors and answer their questions out loud",
     plan: ["Notice someone arriving", "Pay attention to them and listen", "Work out an answer", "Say it out loud", "Go back to watching the door"],
-    parts: ["speech", "generate", "bot"],
+    parts: ["speech", "generate", "cognition"],
     skeleton: ["watching", "listening", "thinking", "speaking"],
     doc: () => N("scxml", { version: "1.0", datamodel: "ecmascript", initial: "watching" }, [
       N("state", { id: "watching" }, [N("transition", { event: "visitor.arrived", target: "listening" })]),
-      N("state", { id: "listening" }, [N("onentry", {}, [N("bot:attention", { location: "attention", stimulus: "_event.data", devices: "['camera','microphone']", focus: "'visitor'" })]),
+      N("state", { id: "listening" }, [N("onentry", {}, [N("cognition:attention_bias_for_turn", { location: "attention", stimulus: "_event.data", devices: "['camera','microphone']", focus: "'visitor'" })]),
         svc("speech", [prm("operation", "'decode'"), prm("audio", "_event.data.audio")], "ears"),
         N("transition", { event: "speech.result", target: "thinking" }), N("transition", { event: "visitor.left", target: "watching" })]),
       N("state", { id: "thinking" }, [svc("generate", [prm("model", "model"), prm("messages", "messages")]),

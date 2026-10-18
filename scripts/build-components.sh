@@ -116,7 +116,7 @@ expected_imports() {
                 'stateforward:scxml/data-model-host@0.2.0' \
                 'stateforward:scxml/session-snapshot-host@0.2.0'
             ;;
-        # <bot:attention> and <bot:stimulus>: evaluate their expressions and
+        # <bot:stimulus> and <bot:recognize>: evaluate their expressions and
         # assign their results through the data model; no session snapshot,
         # execution-host, or outbound-http.
         floppy_bot)

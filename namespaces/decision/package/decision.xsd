@@ -16,13 +16,7 @@
                    schema property it pins. event, property (required):
                    which. values (required): an expression of a JSON array,
                    the property's enum; empty, the event is removed.
-  decision:tuner   location (required): the confidence tuner state
-                   {mean, var, n} it keeps (reset when malformed).
-                   observe (optional): an expression of a reported 0-100
-                   confidence the state observes.
-                   thresholdlocation (optional): receives the threshold as
-                   a probability.
-                   None of them takes another attribute or content.
+                   Neither takes another attribute or content.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="https://github.com/stateforward/floppy/namespaces/decision"
@@ -39,13 +33,6 @@
       <xs:attribute name="event" type="xs:string" use="required"/>
       <xs:attribute name="property" type="xs:string" use="required"/>
       <xs:attribute name="values" type="xs:string" use="required"/>
-    </xs:complexType>
-  </xs:element>
-  <xs:element name="tuner">
-    <xs:complexType>
-      <xs:attribute name="location" type="xs:string" use="required"/>
-      <xs:attribute name="thresholdlocation" type="xs:string" use="optional"/>
-      <xs:attribute name="observe" type="xs:string" use="optional"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>

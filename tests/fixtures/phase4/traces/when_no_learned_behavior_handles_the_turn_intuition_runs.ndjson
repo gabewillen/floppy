@@ -9,7 +9,7 @@
 {"label":"autonomy.candidate","parent":"session.floppy.cognition.autonomy","session":"session.floppy.cognition.autonomy.candidates","text":"Declines","type":"log"}
 {"label":"autonomy.candidate.advance","parent":"session.floppy.cognition.autonomy","session":"session.floppy.cognition.autonomy.candidates","text":"Declines","type":"log"}
 {"label":"cognition.stage","parent":"session.floppy","session":"session.floppy.cognition","text":"autonomy unhandled (unhandled)","type":"log"}
-{"label":"intuition","parent":"session.floppy.cognition","session":"session.floppy.cognition.intuition","text":"turn 1: bot.ability.cognition.ignore (confidence 80, threshold 0.35)","type":"log"}
+{"label":"intuition","parent":"session.floppy.cognition","session":"session.floppy.cognition.intuition","text":"turn 1: bot.ability.cognition.ignore (confidence 80, escalate false)","type":"log"}
 {"label":"cognition.ignore","parent":"session.floppy","session":"session.floppy.cognition","text":"turn 1","type":"log"}
 {"label":"cognition.tuner","parent":"session.floppy","session":"session.floppy.cognition","text":"{\"mean\":80,\"n\":1,\"var\":100}","type":"log"}
 {"label":"cognition.stage","parent":"session.floppy","session":"session.floppy.cognition","text":"intuition handled (none)","type":"log"}

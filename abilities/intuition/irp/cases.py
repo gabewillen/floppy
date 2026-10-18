@@ -38,14 +38,14 @@ def run(choices, turn=1, stimulus=STIMULUS, tuner=None, focus_candidates=None, t
     if focus_candidates is not None:
         params.append(("focus_candidates", js(focus_candidates)))
     if tuner is not None:
-        params.append(("tuner", js(tuner)))
+        params.append(("confidence_tuner", js(tuner)))
     params.append(("decision_timeout_ms", js(timeout_ms)))
     return params
 
 
 def done(turn, handled, reason, extra=None):
     cond = (f"_event.data.turn === {turn} && _event.data.handled === {js(handled)}"
-            f" && _event.data.reason === {js(reason)} && typeof _event.data.tuner === 'object'")
+            f" && _event.data.reason === {js(reason)} && typeof _event.data.confidence_tuner === 'object'")
     if extra:
         cond += " && " + extra
     return expect(DONE, cond)
@@ -66,15 +66,15 @@ def failed(turn, reason, extra="true"):
 
 
 def tuner(n):
-    return f"_event.data.tuner.n === {n}"
+    return f"_event.data.confidence_tuner.n === {n}"
 
 
-S.statement(1, "It asks the decision service (kind `select`) over the `choices` <param> less `bot.ability.reasoning.input`, with the stimulus's object data as evidence: each event's required data is filled from it. A confident product is handled: it sends every selection the service returned to its target and ends with donedata `{turn, handled: true, selected: [{event, data, target}], reason: \"none\", tuner}`.")
-S.statement(2, "The turn's confidence is the minimum of its selections' probabilities as whole numbers on the 0-100 scale. The `tuner` <param> `{mean, var, n}` observes it and comes back updated in every donedata; the turn is low-confidence when the confidence is below the updated threshold (the floor 35 during the warmup of 8 observations, then `max(17.5, mean - std)`).")
-S.statement(3, "A low-confidence product is unhandled and escalates: it sends its selections (the original's environment actions, dispatched before reasoning runs) and ends with `{turn, handled: false, reason: \"low_confidence\", tuner}`.")
-S.statement(4, "When the service abstains (the pass criterion wins, or no event could be offered) the product is empty: `{turn, handled: false, reason: \"empty_product\", tuner}` with no `selected`, and the tuner observes nothing.")
+S.statement(1, "It asks the decision service (kind `select`) over the `choices` <param> less `bot.ability.reasoning.input`, with the stimulus's object data as evidence: each event's required data is filled from it. A confident product is handled: it sends every selection the service returned to its target and ends with donedata `{turn, handled: true, selected: [{event, data, target}], reason: \"none\", confidence_tuner}`.")
+S.statement(2, "The turn's confidence is the minimum of its selections' probabilities as whole numbers on the 0-100 scale. The `confidence_tuner` <param> `{mean, var, n}` observes it (the original's `ConfidenceTuner.observe`) and comes back updated in every donedata; the turn is low-confidence when the confidence is below the updated threshold (`should_escalate`) (the floor 35 during the warmup of 8 observations, then `max(17.5, mean - std)`).")
+S.statement(3, "A low-confidence product is unhandled and escalates: it sends its selections (the original's environment actions, dispatched before reasoning runs) and ends with `{turn, handled: false, reason: \"low_confidence\", confidence_tuner}`.")
+S.statement(4, "When the service abstains (the pass criterion wins, or no event could be offered) the product is empty: `{turn, handled: false, reason: \"empty_product\", confidence_tuner}` with no `selected`, and the tuner observes nothing.")
 S.statement(5, "Each selection is sent to its target, the one session the choices tag its event with (the decision service's single offerer, the original's `_single_enabler`): the ignore goes to the session that offers it, and an event several sessions offer names no target, so it reaches none.")
-S.statement(6, "A failed decision (`decision.failed {code}`) fails the stage with reason `the decision failed (<code>)`; one that cannot start (`error.*`) with `the decision could not run (<event>)`; and no answer within `decision_timeout_ms` with `the decision timed out after <n> ms`; each `{turn, handled: false, failed: true, reason, tuner}`.")
+S.statement(6, "A failed decision (`decision.failed {code}`) fails the stage with reason `the decision failed (<code>)`; one that cannot start (`error.*`) with `the decision could not run (<event>)`; and no answer within `decision_timeout_ms` with `the decision timed out after <n> ms`; each `{turn, handled: false, failed: true, reason, confidence_tuner}`.")
 
 S.case(100, 1, "a confident selection is sent and handled, its data the service's.",
        [sent("bot.say", {}), done(1, True, "none", f"{selected(('bot.say', {}))} && {tuner(1)}")],
@@ -92,7 +92,7 @@ S.case(102, 1, "the deliberate handoff is never offered to the service.",
 S.case(110, 2, "the confidence is the selections' minimum, observed by the tuner: 38 clears the warmup floor.",
        [sent("bot.say"), sent(IGNORE),
         done(1, True, "none", f"{selected(('bot.say', {}), (IGNORE, {}))} && {tuner(1)}"
-                              " && _event.data.tuner.mean === 38")],
+                              " && _event.data.confidence_tuner.mean === 38")],
        params=run([SAY, IGNORE_CHOICE]), backend=decided({"bot.say": 0.6, IGNORE: 0.38, ABSTAIN: 0.02}))
 S.case(111, 2, "past the warmup, the threshold follows the tuner's mean: 70 is low against a mean of 90.",
        [sent("bot.say"), done(1, False, "low_confidence", f"_event.data.selected === undefined && {tuner(21)}")],

@@ -4,8 +4,8 @@ The implementation report plan of the `bot` namespace, in the format of the
 [W3C SCXML IRP](../../../scxml.rs/tests/conformance/w3c-irp/README.md) and of
 scxml.rs's own namespace suites
 ([scxml.rs/docs/conformance.md](../../../scxml.rs/docs/conformance.md#namespace-suites)):
-4 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
-("Statements"), tested by 17 mandatory documents. It runs through exactly
+3 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
+("Statements"), tested by 11 mandatory documents. It runs through exactly
 the pipeline the W3C IRP runs through (the canonical compiler, the shipped
 Wasm components under the Wasmtime session host, the same oracles and report
 envelope), with the namespace's own extension package and component bound,
@@ -35,7 +35,7 @@ SAXON='java -jar /opt/saxon/saxon-he-12.8.jar' sh scripts/namespace-irp.sh prepa
 sh scripts/namespace-irp.sh baselines bot
 ```
 
-The current baseline (manifest SHA-256 `33e4bf5644e20d8a5e91002e9465cc78ec6fc1c8051fa5e7bedf8f0f7e27c800`,
+The current baseline (manifest SHA-256 `2b8945391bb09cef4c29de03cd2b5404108db2ceced23b633132cadd8330a24f`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
 measured on macOS arm64 after `<bot:verdict>` was dissolved into each
 stage's `<send>`; regenerate it on Linux x86_64, the host
@@ -43,4 +43,4 @@ stage's `<send>`; regenerate it on Linux x86_64, the host
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 17 / 17 | 0 | `5f11cc60a1d31608f4e32857e2e3abd28ccf72df55a8674d8fac7cc9159a58c4` | `15a5a9106e99f3f309db32213da6b1ab53fd9be747ed6b59c0af7aa942f7c963` |
+| ECMAScript | 11 / 11 | 0 | `f7e5b393147530fd493b4d2b73d0bf1cd58ef1ac6c2967583dfd5b18ce03f6f4` | `9376f65510e00ab7f309c8e4dce14ad4fe21928c4f4bede1c43c1f8499e21424` |

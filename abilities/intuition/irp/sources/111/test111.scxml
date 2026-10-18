@@ -7,7 +7,7 @@
     <param name="stimulus" expr='{"event": "bot.input", "data": {"observation": {"event": "text", "data": "hello"}}, "source": "body"}'/>
     <param name="focus" expr="null"/>
     <param name="choices" expr='[{"event": "bot.say", "schema": {}, "target": "session"}]'/>
-    <param name="tuner" expr='{"mean": 90, "var": 100, "n": 20}'/>
+    <param name="confidence_tuner" expr='{"mean": 90, "var": 100, "n": 20}'/>
     <param name="decision_timeout_ms" expr="150000"/>
   </invoke>
   <state id="boot">
@@ -18,7 +18,7 @@
     <transition event="bot.say" target="step1"/>
   </state>
   <state id="step1">
-    <transition event="done.invoke.intuition" cond="_event.data.turn === 1 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === &quot;low_confidence&quot; &amp;&amp; typeof _event.data.tuner === 'object' &amp;&amp; _event.data.selected === undefined &amp;&amp; _event.data.tuner.n === 21" target="step2"/>
+    <transition event="done.invoke.intuition" cond="_event.data.turn === 1 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === &quot;low_confidence&quot; &amp;&amp; typeof _event.data.confidence_tuner === 'object' &amp;&amp; _event.data.selected === undefined &amp;&amp; _event.data.confidence_tuner.n === 21" target="step2"/>
   </state>
   <state id="step2">
     <transition target="pass"/>

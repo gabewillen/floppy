@@ -20,7 +20,7 @@
     <transition event="bot.ability.cognition.ignore" target="step2"/>
   </state>
   <state id="step2">
-    <transition event="done.invoke.intuition" cond="_event.data.turn === 1 &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.reason === &quot;none&quot; &amp;&amp; typeof _event.data.tuner === 'object' &amp;&amp; JSON.stringify(_event.data.selected) === &quot;[{\&quot;data\&quot;:{},\&quot;event\&quot;:\&quot;bot.say\&quot;,\&quot;target\&quot;:\&quot;session\&quot;},{\&quot;data\&quot;:{},\&quot;event\&quot;:\&quot;bot.ability.cognition.ignore\&quot;,\&quot;target\&quot;:\&quot;session\&quot;}]&quot; &amp;&amp; _event.data.tuner.n === 1 &amp;&amp; _event.data.tuner.mean === 38" target="step3"/>
+    <transition event="done.invoke.intuition" cond="_event.data.turn === 1 &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.reason === &quot;none&quot; &amp;&amp; typeof _event.data.confidence_tuner === 'object' &amp;&amp; JSON.stringify(_event.data.selected) === &quot;[{\&quot;data\&quot;:{},\&quot;event\&quot;:\&quot;bot.say\&quot;,\&quot;target\&quot;:\&quot;session\&quot;},{\&quot;data\&quot;:{},\&quot;event\&quot;:\&quot;bot.ability.cognition.ignore\&quot;,\&quot;target\&quot;:\&quot;session\&quot;}]&quot; &amp;&amp; _event.data.confidence_tuner.n === 1 &amp;&amp; _event.data.confidence_tuner.mean === 38" target="step3"/>
   </state>
   <state id="step3">
     <transition target="pass"/>

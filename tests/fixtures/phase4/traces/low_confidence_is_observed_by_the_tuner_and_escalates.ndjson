@@ -7,7 +7,7 @@
 {"label":"cognition","parent":"session.floppy","session":"session.floppy.cognition","text":"turn 1: bot.input","type":"log"}
 {"label":"autonomy","parent":"session.floppy.cognition","session":"session.floppy.cognition.autonomy","text":"turn 1: 0 matched for bot.input","type":"log"}
 {"label":"cognition.stage","parent":"session.floppy","session":"session.floppy.cognition","text":"autonomy unhandled (no-behaviors)","type":"log"}
-{"label":"intuition","parent":"session.floppy.cognition","session":"session.floppy.cognition.intuition","text":"turn 1: bot.ability.cognition.ignore (confidence 34, threshold 0.35)","type":"log"}
+{"label":"intuition","parent":"session.floppy.cognition","session":"session.floppy.cognition.intuition","text":"turn 1: bot.ability.cognition.ignore (confidence 34, escalate true)","type":"log"}
 {"label":"cognition.ignore","parent":"session.floppy","session":"session.floppy.cognition","text":"turn 1","type":"log"}
 {"label":"cognition.tuner","parent":"session.floppy","session":"session.floppy.cognition","text":"{\"mean\":34,\"n\":1,\"var\":100}","type":"log"}
 {"label":"cognition.stage","parent":"session.floppy","session":"session.floppy.cognition","text":"intuition unhandled (low_confidence)","type":"log"}
@@ -25,7 +25,7 @@
 {"label":"cognition","parent":"session.floppy","session":"session.floppy.cognition","text":"turn 2: bot.input","type":"log"}
 {"label":"autonomy","parent":"session.floppy.cognition","session":"session.floppy.cognition.autonomy","text":"turn 2: 0 matched for bot.input","type":"log"}
 {"label":"cognition.stage","parent":"session.floppy","session":"session.floppy.cognition","text":"autonomy unhandled (no-behaviors)","type":"log"}
-{"label":"intuition","parent":"session.floppy.cognition","session":"session.floppy.cognition.intuition","text":"turn 2: bot.ability.cognition.ignore (confidence 34, threshold 0.35)","type":"log"}
+{"label":"intuition","parent":"session.floppy.cognition","session":"session.floppy.cognition.intuition","text":"turn 2: bot.ability.cognition.ignore (confidence 34, escalate true)","type":"log"}
 {"label":"cognition.ignore","parent":"session.floppy","session":"session.floppy.cognition","text":"turn 2","type":"log"}
 {"label":"cognition.tuner","parent":"session.floppy","session":"session.floppy.cognition","text":"{\"mean\":34,\"n\":2,\"var\":100}","type":"log"}
 {"label":"cognition.stage","parent":"session.floppy","session":"session.floppy.cognition","text":"intuition unhandled (low_confidence)","type":"log"}

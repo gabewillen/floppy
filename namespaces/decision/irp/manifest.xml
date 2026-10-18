@@ -10,9 +10,6 @@
     <test id="401" conformance="mandatory" manual="false">
       <start uri="401/test401.txml"/>
     </test>
-    <test id="402" conformance="mandatory" manual="false">
-      <start uri="402/test402.txml"/>
-    </test>
     <test id="403" conformance="mandatory" manual="false">
       <start uri="403/test403.txml"/>
     </test>
@@ -48,21 +45,6 @@
     </test>
   </assert>
   <assert id="decision-5" specnum="5" specid="#decision-5">
-    <![CDATA[<decision:tuner> keeps the original's ConfidenceTuner state {mean, var, n}: anything else is replaced by the initial state, an observation moves it, and the threshold is the floor during the warmup, else max(floor/2, mean - k_sigma * deviation), as a probability; an observation that is not a number raises error.execution and assigns nothing.]]>
-    <test id="480" conformance="mandatory" manual="false">
-      <start uri="480/test480.txml"/>
-    </test>
-    <test id="481" conformance="mandatory" manual="false">
-      <start uri="481/test481.txml"/>
-    </test>
-    <test id="482" conformance="mandatory" manual="false">
-      <start uri="482/test482.txml"/>
-    </test>
-    <test id="483" conformance="mandatory" manual="false">
-      <start uri="483/test483.txml"/>
-    </test>
-  </assert>
-  <assert id="decision-6" specnum="6" specid="#decision-6">
     <![CDATA[A location that does not hold what the element reads raises error.execution and assigns nothing.]]>
     <test id="490" conformance="mandatory" manual="false">
       <start uri="490/test490.txml"/>

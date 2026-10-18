@@ -105,13 +105,14 @@ function stageRunFailure(name, _event) {
 
 // running_intuition
 
-// The intuition's tuner from its donedata, else the one in hand.
+// The intuition's confidence tuner from its donedata, else the one in hand.
 function intuitionTuner(_event) {
-  return _event.data.tuner instanceof Object && !Array.isArray(_event.data.tuner) ? _event.data.tuner : tuner;
+  var state = _event.data.confidence_tuner;
+  return state instanceof Object && !Array.isArray(state) ? state : confidence_tuner;
 }
 
 function tunerLog() {
-  return JSON.stringify(tuner);
+  return JSON.stringify(confidence_tuner);
 }
 
 function intuitionFailure(_event) {

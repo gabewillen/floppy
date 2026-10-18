@@ -1,47 +1,24 @@
-//! The `bot` extension namespace: `<bot:attention>`, `<bot:stimulus>` and
-//! `<bot:recognize>` as a
+//! The `bot` extension namespace: `<bot:stimulus>` and `<bot:recognize>` as
+//! a
 //! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
 //! A bot body's per-turn bookkeeping that is synchronous and quick: the
-//! turn's attention bias (the reference `attention_bias_for_turn`, with the body's
-//! `_interrupt_reference` and `_target_device_reference`), the
 //! stimulus envelope the body hands its cognition (`bot.ability.cognition.input`
-//! `stimulus`), and the identity ability's text name recognition.
+//! `stimulus`), and the identity ability's text name recognition. The
+//! turn's attention bias is the `cognition` namespace's
+//! (`<cognition:attention_bias_for_turn>`).
 //! Documents bind [`NAMESPACE_URI`] (conventionally with the
 //! prefix `bot`):
 //!
 //! ```xml
 //! <bot:stimulus location="stimulus" event="_event.name" data="_event.data"
 //!               source="_event.invokeid"/>
-//! <bot:attention location="focus_candidates" focuslocation="focus"
-//!                stimulus="stimulus" devices="devices" focus="focused_device"/>
 //! <bot:recognize location="addressed" name="name" text="heard"/>
 //! ```
 //!
-//! Every attribute but `location` and `focuslocation` is an expression of
+//! Every attribute but `location` is an expression of
 //! the document's data model. Each element writes to its locations and
 //! never sends: the document's own `<send>` delivers what it computes.
-//!
-//! # `<bot:attention location="L" focuslocation="F" stimulus="X" devices="D" focus="G"/>`
-//!
-//! The turn's attention bias from device identity only (the original
-//! `attention_bias_for_turn`). `focus` is the currently focused device (any
-//! value; `null` when none), `devices` the configured devices (an array),
-//! and `stimulus` the turn's stimulus envelope (an object, see
-//! `<bot:stimulus>`).
-//!
-//! * The focus: `focus` when it is not `null` and is one of `devices`, else
-//!   `null`. It is the first focus candidate when it is not `null`.
-//! * The stimulus's device: for a `bot.input` stimulus, its data's
-//!   `target_device` when the data is an object that has one (the original
-//!   `_target_device_reference`, which its `_interrupt_reference` prefers:
-//!   the environment stamps a device's input with it, decision D105), else
-//!   `null`. It is appended to the candidates when it is not `null`, is one
-//!   of `devices`, and is not a candidate already.
-//!
-//! `focuslocation` (optional) receives the focus, then `location`
-//! (required) receives the candidates, a JSON array. Values compare as JSON
-//! values (ECMAScript strict equality on the strings device ids are).
 //!
 //! # `<bot:stimulus location="L" event="E" data="X" source="S" target="T" id="I"/>`
 //!
@@ -93,7 +70,7 @@
 )]
 
 use scxml_types::DataValue as Data;
-use serde_json::{Map, Value as Json};
+use serde_json::Value as Json;
 
 /// The namespace's name: the last path segment of its repository namespace
 /// URI before the tag.
@@ -180,7 +157,6 @@ pub fn execute<H: BotHost>(
     host: &mut H,
 ) -> Result<Executed, Failure<H::Error>> {
     match local_name {
-        "attention" => attention(attributes, content, host),
         "stimulus" => stimulus(attributes, content, host),
         "recognize" => recognize(attributes, content, host),
         _ => Ok(Executed::NotHandled),
@@ -274,108 +250,6 @@ fn number(value: f64) -> Json {
         return Json::from(value as i64);
     }
     serde_json::Number::from_f64(value).map_or(Json::Null, Json::Number)
-}
-
-/// The data value of a JSON value (canonical JSON text for arrays and
-/// objects: `serde_json` sorts object members).
-fn data_of(value: &Json) -> Option<Data> {
-    Some(match value {
-        Json::Null => Data::Null,
-        Json::Bool(value) => Data::Bool(*value),
-        Json::Number(value) => Data::Number(scxml_types::FiniteNumber::new(value.as_f64()?).ok()?),
-        Json::String(text) => Data::String(text.clone()),
-        Json::Array(_) => Data::JsonArray(value.to_string()),
-        Json::Object(_) => Data::JsonObject(value.to_string()),
-    })
-}
-
-/// Executes `<bot:attention>`.
-fn attention<H: BotHost>(
-    attributes: &[Attribute],
-    content: &[Content],
-    host: &mut H,
-) -> Result<Executed, Failure<H::Error>> {
-    let [location, focus_location, stimulus, devices, focus] = attribute_values(
-        attributes,
-        ["location", "focuslocation", "stimulus", "devices", "focus"],
-        "bot:attention takes only the location, focuslocation, stimulus, devices and focus attributes",
-        "bot:attention repeats an attribute",
-        "bot:attention has an empty attribute",
-    )?;
-    let location = location.ok_or(Failure::Execution("bot:attention requires a location"))?;
-    let stimulus = stimulus.ok_or(Failure::Execution("bot:attention requires a stimulus"))?;
-    let devices = devices.ok_or(Failure::Execution("bot:attention requires devices"))?;
-    let focus = focus.ok_or(Failure::Execution("bot:attention requires a focus"))?;
-    no_content(content, "bot:attention holds no content")?;
-    let Some(Json::Object(stimulus)) = json_of(&evaluate(
-        host,
-        stimulus,
-        "bot:attention stimulus did not evaluate",
-    )?) else {
-        return Err(Failure::Execution(
-            "bot:attention stimulus is not an object",
-        ));
-    };
-    let Some(Json::Array(devices)) = json_of(&evaluate(
-        host,
-        devices,
-        "bot:attention devices did not evaluate",
-    )?) else {
-        return Err(Failure::Execution("bot:attention devices is not an array"));
-    };
-    let focus = json_of(&evaluate(
-        host,
-        focus,
-        "bot:attention focus did not evaluate",
-    )?)
-    .ok_or(Failure::Execution(
-        "bot:attention focus is not a JSON value",
-    ))?;
-    let (focus, candidates) = attention_bias(&stimulus, &devices, &focus);
-    if let Some(focus_location) = focus_location {
-        let focus =
-            data_of(&focus).ok_or(Failure::Execution("bot:attention focus is not finite"))?;
-        assign_to(
-            host,
-            focus_location,
-            &focus,
-            "bot:attention could not assign focuslocation",
-        )?;
-    }
-    assign_to(
-        host,
-        location,
-        &Data::JsonArray(Json::Array(candidates).to_string()),
-        "bot:attention could not assign the focus candidates",
-    )?;
-    Ok(Executed::Handled)
-}
-
-/// The reference `attention_bias_for_turn`: the turn's focus and focus candidates
-/// (see the crate documentation, `<bot:attention>`).
-#[must_use]
-pub fn attention_bias(
-    stimulus: &Map<String, Json>,
-    devices: &[Json],
-    focus: &Json,
-) -> (Json, Vec<Json>) {
-    let mut candidates = Vec::new();
-    let focus = if !focus.is_null() && devices.contains(focus) {
-        candidates.push(focus.clone());
-        focus.clone()
-    } else {
-        Json::Null
-    };
-    let mut reference = Json::Null;
-    if stimulus.get("event").and_then(Json::as_str) == Some("bot.input")
-        && let Some(Json::Object(data)) = stimulus.get("data")
-    {
-        reference = data.get("target_device").cloned().unwrap_or(Json::Null);
-    }
-    if !reference.is_null() && devices.contains(&reference) && !candidates.contains(&reference) {
-        candidates.push(reference);
-    }
-    (focus, candidates)
 }
 
 /// Executes `<bot:stimulus>`.

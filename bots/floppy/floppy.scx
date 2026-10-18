@@ -73,7 +73,7 @@
   unfocused or focused starts a processing turn; the stimulus is the
   envelope {event, data, source} <bot:stimulus> writes for bot.input, or
   the handoff's stimulus as given. The body counts the turn, computes the
-  turn's attention bias with <bot:attention> (focus, focus_candidates:
+  turn's attention bias with <cognition:attention_bias_for_turn> (focus, focus_candidates:
   the original's attention_bias_for_turn from device identity only), assembles the turn's choices (below), sends bot.ability.cognition.input
   {turn, stimulus, focus, focus_candidates, choices} to the cognition, and
   arms bot.processing.timed_out
@@ -173,6 +173,7 @@
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
+       xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:device="https://github.com/stateforward/floppy/namespaces/device"
        xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
@@ -426,8 +427,8 @@
       <state id="processing">
         <onentry>
           <assign location="turn" expr="nextTurn()"/>
-          <bot:attention location="focus_candidates" focuslocation="focus" stimulus="stimulus"
-                         devices="devices" focus="focused_device"/>
+          <cognition:attention_bias_for_turn location="focus_candidates" focuslocation="focus"
+                                             stimulus="stimulus" devices="devices" focus="focused_device"/>
           <assign location="device_snapshots" expr="({})"/>
         </onentry>
         <!-- The live state of every held device (decision D109): the

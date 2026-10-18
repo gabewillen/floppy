@@ -1,11 +1,10 @@
-//! The `decision` extension namespace: `<decision:choice>`,
-//! `<decision:pin>` and `<decision:tuner>` as a
+//! The `decision` extension namespace: `<decision:choice>` and
+//! `<decision:pin>` as a
 //! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
 //! Executable content is synchronous and quick, so this namespace holds only
 //! the half of a decision that is: reading the choices (the choices of a
-//! `TypeSafe` `Choice` question), grounding one property of them, and tuning
-//! the confidence threshold. What the original's processing module does with
+//! `TypeSafe` `Choice` question) and grounding one property of them. What the original's processing module does with
 //! the choices (their model-facing schemas, the turn's offered events, the
 //! dispatch tool, the selection confidence) is the `processing` namespace
 //! (`namespaces/processing`). Asking a backend to
@@ -83,25 +82,6 @@
 //! is required. An entry for `E` whose schema has no object
 //! `properties.<P>` is `error.execution`.
 //!
-//! # `<decision:tuner location="L" thresholdlocation="T" observe="X"/>`
-//!
-//! The original's `ConfidenceTuner` on its 0–100 scale, with its defaults (floor
-//! [`TUNER_FLOOR`], EMA alpha [`TUNER_ALPHA`], `k_sigma` [`TUNER_K_SIGMA`],
-//! warmup [`TUNER_WARMUP`] observations, variance floor
-//! [`TUNER_VAR_FLOOR`]). `location` (required) holds the tuner state
-//! `{mean, var, n}` (numbers, `n` a non-negative integer); anything
-//! else there is replaced by the initial state `{mean:`
-//! [`TUNER_MEAN`]`, var:` [`TUNER_VAR_FLOOR`]`, n: 0}`. `observe`
-//! (optional) is an expression of a reported confidence, a number on the
-//! 0–100 scale (clamped to it), which the state observes: the first sets
-//! the mean, later ones move the mean and variance by the EMA (variance
-//! never under the floor). `thresholdlocation` (optional) then receives
-//! the threshold as a probability (the 0–100 threshold divided by 100):
-//! the floor during the warmup, else `max(floor / 2, mean - k_sigma *
-//! sqrt(max(variance, variance floor)))`. `location` always receives the
-//! resulting state, after `thresholdlocation`. An `observe` that is not a
-//! number is `error.execution`.
-//!
 //! # Failures
 //!
 //! A malformed element, a missing or malformed snapshot, a schema that does
@@ -149,27 +129,6 @@ pub const NAMESPACE_URI: &str = "https://github.com/stateforward/floppy/namespac
 
 /// Upper bound on a choice event name's bytes (wasm builds only).
 pub const MAX_EVENT_NAME_BYTES: usize = wasm_bound(256);
-
-/// The tuner's absolute confidence floor (the reference `_DEFAULT_CONFIDENCE_FLOOR`).
-pub const TUNER_FLOOR: f64 = 35.0;
-
-/// The tuner's EMA weight (the reference `_DEFAULT_TUNER_ALPHA`).
-pub const TUNER_ALPHA: f64 = 0.08;
-
-/// The tuner's standard deviations under the mean (the original
-/// `_DEFAULT_TUNER_K_SIGMA`).
-pub const TUNER_K_SIGMA: f64 = 1.0;
-
-/// Observations before the tuner leaves its floor (the original
-/// `_DEFAULT_TUNER_WARMUP`).
-pub const TUNER_WARMUP: u64 = 8;
-
-/// The tuner's variance floor and initial variance (the original
-/// `_DEFAULT_TUNER_VAR_FLOOR`).
-pub const TUNER_VAR_FLOOR: f64 = 100.0;
-
-/// The tuner's initial mean (the reference `_DEFAULT_TUNER_MEAN`).
-pub const TUNER_MEAN: f64 = 70.0;
 
 /// One attribute of an element.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -323,7 +282,6 @@ pub fn execute<H: ChoiceHost>(
     match local_name {
         "choice" => choice(attributes, content, host),
         "pin" => pin(attributes, content, host),
-        "tuner" => tuner(attributes, content, host),
         _ => Ok(Executed::NotHandled),
     }
 }
@@ -482,156 +440,6 @@ pub fn pin_choices(
         pinned.push(entry);
     }
     Ok(canonical_json(&Json::Array(pinned)))
-}
-
-/// Executes `<decision:tuner>`.
-fn tuner<H: ChoiceHost>(
-    attributes: &[Attribute],
-    content: &[Content],
-    host: &mut H,
-) -> Result<Executed, Failure<H::Error>> {
-    let [location, threshold_location, observe] = attribute_values(
-        attributes,
-        ["location", "thresholdlocation", "observe"],
-        "decision:tuner takes only the location, thresholdlocation and observe attributes",
-        "decision:tuner repeats an attribute",
-    )?;
-    let location = required(location, "decision:tuner requires a non-empty location")?;
-    let threshold_location = optional(
-        threshold_location,
-        "decision:tuner thresholdlocation is empty",
-    )?;
-    let observe = optional(observe, "decision:tuner observe is empty")?;
-    no_content(content, "decision:tuner holds no content")?;
-    let state = match host.read(location).map_err(Failure::Host)? {
-        Ok(Data::JsonObject(text)) => serde_json::from_str(&text)
-            .ok()
-            .as_ref()
-            .and_then(Tuner::from_json),
-        _ => None,
-    }
-    .unwrap_or_default();
-    let confidence = observe
-        .map(|observe| match host.read(observe).map_err(Failure::Host)? {
-            Ok(Data::Number(value)) => Ok(value.get()),
-            _ => Err(Failure::Execution("decision:tuner observe is not a number")),
-        })
-        .transpose()?;
-    let state = confidence.map_or(state, |confidence| state.observed(confidence));
-    if let Some(threshold_location) = threshold_location {
-        let threshold = scxml_types::FiniteNumber::new(state.threshold() / 100.0)
-            .map_err(|_| Failure::Execution("decision:tuner threshold is not finite"))?;
-        assign_to(
-            host,
-            threshold_location,
-            &Data::Number(threshold),
-            "decision:tuner could not assign thresholdlocation",
-        )?;
-    }
-    assign_to(
-        host,
-        location,
-        &Data::JsonObject(canonical_json(&state.to_json())),
-        "decision:tuner could not assign the tuner state",
-    )?;
-    Ok(Executed::Handled)
-}
-
-/// The original's `ConfidenceTuner` state on the 0–100 scale: see the crate
-/// documentation (`<decision:tuner>`).
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Tuner {
-    /// The running mean of the observed confidences.
-    pub mean: f64,
-    /// Their running variance.
-    pub var: f64,
-    /// How many were observed.
-    pub n: u64,
-}
-
-impl Default for Tuner {
-    fn default() -> Self {
-        Self {
-            mean: TUNER_MEAN,
-            var: TUNER_VAR_FLOOR,
-            n: 0,
-        }
-    }
-}
-
-impl Tuner {
-    /// The state `{mean, var, n}` holds, when it is one: numbers, `n` a
-    /// non-negative integer.
-    #[must_use]
-    pub fn from_json(value: &Json) -> Option<Self> {
-        let n = value.get("n")?;
-        let n = n.as_u64().or_else(|| {
-            n.as_f64()
-                .filter(|n| n.fract() == 0.0 && *n >= 0.0 && *n <= 9_007_199_254_740_991.0)
-                .map(|n| {
-                    #[allow(
-                        clippy::cast_possible_truncation,
-                        clippy::cast_sign_loss,
-                        reason = "a non-negative integer within the safe-integer range"
-                    )]
-                    let n = n as u64;
-                    n
-                })
-        })?;
-        Some(Self {
-            mean: value.get("mean")?.as_f64()?,
-            var: value.get("var")?.as_f64()?,
-            n,
-        })
-    }
-
-    /// The state after observing `confidence` (clamped to 0–100).
-    #[must_use]
-    pub fn observed(self, confidence: f64) -> Self {
-        let conf = confidence.clamp(0.0, 100.0);
-        if self.n == 0 {
-            return Self {
-                mean: conf,
-                var: TUNER_VAR_FLOOR,
-                n: 1,
-            };
-        }
-        let delta = conf - self.mean;
-        Self {
-            mean: self.mean + TUNER_ALPHA * delta,
-            var: TUNER_VAR_FLOOR.max((1.0 - TUNER_ALPHA) * self.var + TUNER_ALPHA * delta * delta),
-            n: self.n + 1,
-        }
-    }
-
-    /// The escalation threshold on the 0–100 scale.
-    #[must_use]
-    pub fn threshold(self) -> f64 {
-        if self.n < TUNER_WARMUP {
-            return TUNER_FLOOR;
-        }
-        let std = self.var.max(TUNER_VAR_FLOOR).sqrt();
-        (0.5 * TUNER_FLOOR).max(self.mean - TUNER_K_SIGMA * std)
-    }
-
-    /// The state as `{mean, n, var}`; an integral mean or variance is
-    /// written as an integer.
-    #[must_use]
-    pub fn to_json(self) -> Json {
-        let number = |value: f64| {
-            if value.fract() == 0.0 && value.abs() <= 9_007_199_254_740_991.0 {
-                #[allow(
-                    clippy::cast_possible_truncation,
-                    reason = "an integral value within the safe-integer range"
-                )]
-                let value = value as i64;
-                Json::from(value)
-            } else {
-                serde_json::Number::from_f64(value).map_or(Json::Null, Json::Number)
-            }
-        };
-        serde_json::json!({"mean": number(self.mean), "var": number(self.var), "n": self.n})
-    }
 }
 
 /// `<decision:pin>`'s choice-entry failures (see `checked_entries`).

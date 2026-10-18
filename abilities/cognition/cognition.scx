@@ -23,14 +23,15 @@
   abilities/reasoning/reasoning.scx, in sibling directories) with the turn as <param>s; it answers through its top-level
   final state's <donedata>, received here as done.invoke.<stage> (the
   invoke ids are the stage names; the substates are running_<stage>):
-  {turn, handled, selected?, reason?, tuner?, failed?}. Leaving a stage's
+  {turn, handled, selected?, reason?, confidence_tuner?, failed?}. Leaving a stage's
   substate cancels it (SCXML 6.4), which replaces the original's stage cancel
   tokens. Handled ends the turn with the stage's selections as the output;
   unhandled goes on to the next stage (autonomy always does without
   a database: it gets the stimulus and the database, and runs the learned
   behaviors the stimulus triggers);
   failed (or an error.* from the stage) answers bot.ability.failed. The
-  intuition tuner state is passed in by <param> and kept from the donedata.
+  intuition's confidence tuner state (the original's ConfidenceTuner) is
+  passed in by <param> and kept from the donedata.
 
   Dispatch: each stage sends its own selections, as the original's stages
   dispatch theirs (cognition.types.dispatch_selected_events): an
@@ -146,8 +147,8 @@
     <!-- The bot's environment this turn (decision D106), for reasoning's
          prompt and the intuition's instructions. -->
     <data id="environment" expr="null"/>
-    <!-- The intuition's confidence tuner (the reference ConfidenceTuner). -->
-    <data id="tuner" expr="({mean: 70, var: 100, n: 0})"/>
+    <!-- The intuition's confidence tuner (the original's ConfidenceTuner). -->
+    <data id="confidence_tuner" expr="({mean: 70, var: 100, n: 0})"/>
     <!-- The stage in hand: its name, hop timers, and answer. -->
     <data id="stage" expr="null"/>
     <data id="hop_timer" expr="null"/>
@@ -277,23 +278,23 @@
         <param name="focus_candidates" expr="focus_candidates"/>
         <param name="choices" expr="choices"/>
         <param name="environment" expr="environment"/>
-        <param name="tuner" expr="tuner"/>
+        <param name="confidence_tuner" expr="confidence_tuner"/>
       </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
                   cond="isCurrentTurn(_event)" target="cancelling_intuition"/>
       <transition event="done.invoke.intuition" cond="isHandled(_event)" target="completing">
-        <assign location="tuner" expr="intuitionTuner(_event)"/>
+        <assign location="confidence_tuner" expr="intuitionTuner(_event)"/>
         <log label="cognition.tuner" expr="tunerLog()"/>
         <log label="cognition.stage" expr="stageLog('intuition handled', _event)"/>
         <assign location="selected" expr="_event.data.selected"/>
       </transition>
       <transition event="done.invoke.intuition" cond="isUnhandled(_event)" target="running_reasoning">
-        <assign location="tuner" expr="intuitionTuner(_event)"/>
+        <assign location="confidence_tuner" expr="intuitionTuner(_event)"/>
         <log label="cognition.tuner" expr="tunerLog()"/>
         <log label="cognition.stage" expr="stageLog('intuition unhandled', _event)"/>
       </transition>
       <transition event="done.invoke.intuition" cond="matchesStageOutput(_event)" target="failing">
-        <assign location="tuner" expr="intuitionTuner(_event)"/>
+        <assign location="confidence_tuner" expr="intuitionTuner(_event)"/>
         <log label="cognition.tuner" expr="tunerLog()"/>
         <assign location="failure" expr="intuitionFailure(_event)"/>
       </transition>
