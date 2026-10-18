@@ -42,7 +42,10 @@
 //!   the function with arguments the schema admits **before** anything is
 //!   returned (a call of another name, or arguments it does not admit, fail
 //!   `schema-mismatch`, as the original's processing refuses a call that is
-//!   not its `dispatch`). `schemaname` (a string matching
+//!   not its `dispatch`). A top-level field of the arguments that the
+//!   schema's root `properties` do not declare is dropped before the check
+//!   and is not returned (the original's processing reads only `events`);
+//!   nested objects are checked strictly. `schemaname` (a string matching
 //!   `[A-Za-z0-9_-]{1,64}`, [`DEFAULT_SCHEMA_NAME`] without it, requiring
 //!   a schema) is the function's `name`.
 //! * `reasoning_effort` (optional, one of `none`, `minimal`, `low`,
@@ -1444,11 +1447,12 @@ impl Reply {
             .tool_calls
             .into_iter()
             .map(|call| {
-                let args: Json =
+                let mut args: Json =
                     serde_json::from_str(&call.arguments).map_err(|_| FailureCode::NotJson)?;
-                if !args.is_object() {
+                let Some(fields) = args.as_object_mut() else {
                     return Err(FailureCode::NotJson);
-                }
+                };
+                undeclared_dropped(fields, &tool.parameters);
                 let data = json_data(&args)?;
                 if call.name != tool.name || !tool.compiled.admits(&data) {
                     return Err(FailureCode::SchemaMismatch);
@@ -1458,6 +1462,20 @@ impl Reply {
             .collect::<Result<Vec<_>, _>>()?;
         Ok(serde_json::json!({ "content": self.content, "tool_calls": tool_calls }))
     }
+}
+
+/// Drops each top-level field of a call's arguments that the root
+/// `properties` of the tool's `parameters` do not declare, as the
+/// original's processing reads only the fields it knows (its dispatch
+/// parser reads `args.events` alone): a model's stray `reason` beside
+/// `events` is not the tool's. Only the root is touched; nested objects are
+/// checked as the schema says. Parameters whose root declares no
+/// `properties` object leave the arguments as they are.
+fn undeclared_dropped(fields: &mut serde_json::Map<String, Json>, parameters: &Json) {
+    let Some(declared) = parameters.get("properties").and_then(Json::as_object) else {
+        return;
+    };
+    fields.retain(|name, _| declared.contains_key(name));
 }
 
 /// The data value of one JSON value: objects and arrays as canonical JSON

@@ -746,6 +746,50 @@ fn a_tool_reply_returns_every_call_its_schema_admits() {
 }
 
 #[test]
+fn a_calls_undeclared_top_level_fields_are_dropped_and_nested_ones_still_fail() {
+    // A dispatch-shaped schema: only `events` at the root, each event
+    // closed (`additionalProperties: false`, `data` required).
+    let schema = r#"{"type":"object","additionalProperties":false,"required":["events"],"properties":{"events":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["event","data"],"properties":{"event":{"enum":["bot.say"]},"data":{"type":"object","additionalProperties":false,"required":["text"],"properties":{"text":{"type":"string"}}},"reason":{"type":"string"}}}}}}"#;
+    let generation = parse(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        ("schema", text(schema)),
+        ("schemaname", text("dispatch")),
+    ])
+    .expect("valid");
+    // A stray `reason` beside `events` is not the tool's: it is dropped
+    // before the check and not returned (the original reads only
+    // `args.events`).
+    let event = serde_json::json!({"event": "bot.say", "data": {"text": "hi"}, "reason": "asked"});
+    let stray = serde_json::json!({"events": [event], "reason": "why"}).to_string();
+    let answered = calls_result(
+        "",
+        &[("call-1", "dispatch", serde_json::json!({"events": [event]}))],
+    );
+    assert_eq!(
+        outcome(&generation, ok(tool_completion("dispatch", &stray))),
+        answered
+    );
+    assert_eq!(
+        outcome(&generation, ok(tool_reply("dispatch", &stray))),
+        answered
+    );
+    // Inside an event the schema stays strict: an unoffered field, or an
+    // event missing its required `data`, is a schema mismatch.
+    for arguments in [
+        r#"{"events":[{"event":"bot.say","data":{"text":"hi"},"lifetime":"persistent"}]}"#,
+        r#"{"events":[{"event":"bot.say","data":{"text":"hi","lifetime":"persistent"}}]}"#,
+        r#"{"events":[{"event":"bot.say","text":"hi"}],"reason":"why"}"#,
+    ] {
+        assert_eq!(
+            outcome(&generation, ok(tool_completion("dispatch", arguments))),
+            Returned::failed(FailureCode::SchemaMismatch),
+            "{arguments}"
+        );
+    }
+}
+
+#[test]
 fn a_tool_reply_needs_a_call_and_keeps_its_calls_in_index_order() {
     let generation = parse(&[
         ("model", text("m")),
