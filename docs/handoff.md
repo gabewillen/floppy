@@ -7,10 +7,24 @@ history lives in [decisions.md](decisions.md) (numbered decisions),
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
-Last updated: 2026-10-17.
+Last updated: 2026-10-18.
 
 ## Current state (2026-10-09) — resume here
 
+- **The processing namespace and every stage's sends (2026-10-18, D113,
+  [plan](plans/original-domains.md) step 1):** `namespaces/processing`
+  (`<processing:model_facing_schema>`, `<processing:collect_offered_events>`,
+  `<processing:send max?>`, `<processing:selection_confidence>`) replaces
+  `<decision:compact>`, `<decision:assemble>`, `<decision:selection>` and
+  intuition's confidence JavaScript; `<decision:route>`, `<decision:names>`,
+  `<bot:verdict>`, the body's `routing` state, the reasoning and reflection
+  `.js` merges and D87's dedupe are gone. Every choice is tagged with its
+  offerer's session id, and each stage sends its own selections with
+  `<foreach>` + `<send targetexpr="'#_scxml_' + s.target">`; the decision
+  service names each selection's only offerer. Next in Q10's order:
+  `intuition` and `cognition`. Open: the plan's "To review (step 1)" list;
+  the decision, bot and processing namespace IRP baselines were measured
+  on macOS arm64.
 - **Tools, not structured output (2026-10-16, D112, amended
   2026-10-17 and 2026-10-18):** the generate service asks for schema-shaped output as the
   original does on Chat Completions: one function tool (the `schemaname`,
@@ -21,14 +35,12 @@ Last updated: 2026-10-17.
   checked against the schema before any is returned (`schema-mismatch`),
   after its top-level fields the schema's root `properties` do not
   declare are dropped (the original reads only `args.events`; nested
-  objects stay strict); `strict` is gone. Reasoning and reflection merge the `dispatch` calls in
-  their `.js` (temporary), the builder takes its call by name, and
-  `<decision:selection>` builds the original's dispatch tool exactly.
-  Open: the maintainer's mapping of floppy's domains onto the original's
-  modules (with SCXML terms where SCXML has one; the maintainer dislikes
-  `<bot:verdict>`, `<decision:route>` and `<decision:tuner>`) moves the
-  merge to Rust, and the decision IRP baseline was measured on macOS
-  arm64.
+  objects stay strict); `strict` is gone. Reasoning and reflection send
+  the `dispatch` calls' events with nested `<foreach>` (D113), the builder
+  takes its call by name, and `<processing:send>` builds the original's
+  dispatch tool exactly. The maintainer's mapping of floppy's domains onto
+  the original's modules is [plans/original-domains.md](plans/original-domains.md);
+  its step 1 is done (above).
 
 - **The environment (2026-10-16, D102 to D111,
   [plan](plans/environment.mdscript.md)):** the bot runs as a participant of
@@ -90,7 +102,7 @@ Last updated: 2026-10-17.
   listening's sensitivity scores the bot's own sound against the efference
   copy and the interpretation withholds its product. Voice detection still
   runs on it and fails without `FLOPPY_VOICE_BASE_URL`, as designed.
-- **Selections the body can't place (audit item 4, 2026-10-10):** a turn
+- **Selections the body can't place (audit item 4, 2026-10-10; superseded by D113, 2026-10-18):** a turn
   whose selections cannot all be placed fails with `bot.processing.failed`
   and the original's `SelectionRejectionError` message, never
   `bot.processing.completed`; `floppy.route.dropped` is gone. `<bot:verdict>`
@@ -171,12 +183,9 @@ Last updated: 2026-10-17.
   data, confidence}]}`, every groundable event with its own probability.
   Intuition observes their least confidence (0-100) with `<decision:tuner>`
   first, then compares it with the updated threshold (the original
-  `_tune_confidence`). `low_confidence` and `deliberative_input` hand out
-  the environment actions in the unhandled donedata's `selected`; the
-  cognition routes them first in the turn's output, and leaves out a
-  reasoning selection that repeats one (same event and data), so a turn
-  acts once (2026-10-11, from `live_choices` on 2026-10-12, where
-  `bot.focus_device` was routed twice). The service's pass
+  `_tune_confidence`). `low_confidence` and `deliberative_input` send
+  the environment actions before the turn escalates (D113; the
+  2026-10-11 dedupe is gone). The service's pass
   criterion is the original's `__unhandled__`, its state document the original's
   `{"turn": {"envelope": {"name"}, "data"}}`, and data grounds from the
   non-null stimulus value then the enum (no `const`). `choose` lost its
