@@ -11,6 +11,18 @@ Last updated: 2026-10-18.
 
 ## Current state (2026-10-09) — resume here
 
+- **The intuition and cognition namespaces (2026-10-18, D114,
+  [plan](plans/original-domains.md) step 2):** `namespaces/intuition`
+  (`<intuition:observe>`, `<intuition:escalate>`, the original's
+  `ConfidenceTuner`, its state the `confidence_tuner` datum) replaces
+  `<decision:tuner>`; `namespaces/cognition`
+  (`<cognition:attention_bias_for_turn>`,
+  `<cognition:model_facing_content failurelocation?>`) replaces
+  `<bot:attention>` and reasoning's prompt JavaScript, rendering the same
+  bytes. `<decision:pin>` stays (Q11); `autonomy` is a later step. Next in
+  Q10's order: `identity`, `conversation` and `memory`. Open: the plan's
+  "To review (step 2)" list; the four namespace IRP baselines touched were
+  measured on macOS arm64.
 - **The processing namespace and every stage's sends (2026-10-18, D113,
   [plan](plans/original-domains.md) step 1):** `namespaces/processing`
   (`<processing:model_facing_schema>`, `<processing:collect_offered_events>`,
@@ -181,9 +193,9 @@ Last updated: 2026-10-18.
 - **Intuition** uses the decision service's new kind `select` (the original's
   TypeSafe `Processor.process`): `decision.selected {selections: [{event,
   data, confidence}]}`, every groundable event with its own probability.
-  Intuition observes their least confidence (0-100) with `<decision:tuner>`
-  first, then compares it with the updated threshold (the original
-  `_tune_confidence`). `low_confidence` and `deliberative_input` send
+  Intuition observes their least confidence (0-100) with
+  `<intuition:observe>` first, then `<intuition:escalate>` compares it with
+  the updated threshold (the original's `_tune_confidence`, D114). `low_confidence` and `deliberative_input` send
   the environment actions before the turn escalates (D113; the
   2026-10-11 dedupe is gone). The service's pass
   criterion is the original's `__unhandled__`, its state document the original's
@@ -191,8 +203,10 @@ Last updated: 2026-10-18.
   non-null stimulus value then the enum (no `const`). `choose` lost its
   `threshold` (and `below-threshold`).
 - **Reasoning** sends the original's `model_facing_xml(ProcessorInput)` under
-  the original's budgets (`promptProjection()` in reasoning.js), checked
-  byte-for-byte against the original's renderer on sample inputs. The reasoning
+  the original's budgets (`<cognition:model_facing_content>`, D114; it was
+  `promptProjection()` in reasoning.js, checked byte-for-byte against the
+  original's renderer on sample inputs, and the element renders what that
+  JavaScript rendered). The reasoning
   and intuition system prompts still describe floppy's old inputs (gap 9,
   the maintainer's).
 - **Tests in worktrees:** a `target/` copied from another checkout keeps

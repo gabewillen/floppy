@@ -29,7 +29,7 @@ invoked service). The decisions behind this plan are in
 | Persistent routines (`hsm.every` / `hsm.at` across turns) | Long-lived invoked children whose schedules are self-rescheduling `<send delay>` loops; each tick is an event to the parent, which decides on it in a new turn |
 | pydantic event data models | JSON Schema files referenced by `event:schema` on the transitions that take the event; scxml.rs checks them where the event is created (`<send>`, `<raise>`, a send between sessions) and on host input (decision D41) |
 | Hand-written payload validators (`model_validate`, field checks) | `event:schema` only; a `cond` correlates (which child, which turn, which timer) and never checks a payload's shape (decision D42) |
-| Helper functions (attention bias, envelopes, choice assembly and compaction, routing, confidence tuner, message commit) | floppy namespace elements that write to a `location` (`namespaces/bot`, `namespaces/conversation`, `namespaces/decision`; decision D40) |
+| Helper functions (attention bias, envelopes, choice assembly and compaction, routing, confidence tuner, message commit) | floppy namespace elements that write to a `location` (`namespaces/bot`, `namespaces/conversation`, `namespaces/decision`, `namespaces/processing`, `namespaces/intuition`, `namespaces/cognition`; decisions D40, D113, D114) |
 | Model-facing event choice lists and payload filling (Intuition, Processor) | `<decision:choice>` (the `decision` namespace) writes the enabled transitions with their `event:schema`, read through `session-snapshot-host`, as canonical choices; the `decision` service, invoked with it, asks a backend, fills the offered events' data to their schemas and validates it; `choose` emits the chosen event, `select` (the original's TypeSafe `Processor.process`, which intuition uses) emits `decision.selected` with every groundable event and its own confidence |
 | Event names `bot.*`, `bot.ability.*`, `phone.*` | Unchanged, byte for byte |
 | Telemetry (`telemetry`) | scxml.rs's OpenTelemetry facade (guests through the telemetry WIT; the native runtime, `scx`, through scxml.rs's own) |
@@ -214,7 +214,7 @@ D33 to D43.
   input event's fields and takes its result as `done.invoke.<stage>`
   `<donedata>`; leaving the stage cancels it, which replaces the original's
   cancel-token protocol. State a stage keeps across turns (the intuition's
-  tuner) is passed in by `<param>` and returned in `<donedata>`.
+  `confidence_tuner`) is passed in by `<param>` and returned in `<donedata>`.
 - **Partial selections.** A stage that leaves the turn unhandled may still
   hand out selections (the intuition's environment actions on
   `low_confidence` or `deliberative_input`, the reference `_environment_actions`)
@@ -262,7 +262,7 @@ D33 to D43.
 | --- | --- | --- |
 | `bot.py` Bot body | `bots/floppy/floppy.scx` | bot root `.scx` |
 | `bot.py` attachment Group, `_AttachmentOperation`, `_ProcessingOperation` | the body's `<invoke>`s in `live`, its offers bookkeeping and its delayed `<send>`/`<cancel>` | composition inside the body |
-| `attention_bias_for_turn`, `_interrupt_reference`, `_target_device_reference` | `<bot:attention>` | `namespaces/bot` element |
+| `attention_bias_for_turn`, `_interrupt_reference`, `_target_device_reference` | `<cognition:attention_bias_for_turn>` (D114) | `namespaces/cognition` element |
 | stimulus envelope | `<bot:stimulus>` | `namespaces/bot` element |
 | `without_ignore_selections`, `attention_selection_error` | the ignore sent to the cognition, the focus device's pinned enum and the body's guards (D113) | plain SCXML |
 | `model_facing_event_json_schema` and the 32 KiB bound | `<processing:model_facing_schema>` | `namespaces/processing` element |
@@ -271,8 +271,8 @@ D33 to D43.
 | `dispatch_selected_events`, `_resolve_target`, `fill_unique_selection_targets` | each stage's `<foreach>`/`<send targetexpr="'#_scxml_' + s.target">`, every choice tagged with its offerer's session id (D113) | plain SCXML |
 | `_selection_item_branch`, `dispatch_tool` | `<processing:send>` | `namespaces/processing` element |
 | `normalize_confidence`, `selection_confidence` | `<processing:selection_confidence>` | `namespaces/processing` element |
-| `ConfidenceTuner` | `<decision:tuner>` | `namespaces/decision` element |
-| `model_facing_xml`, `InputData.model_facing_payload` (reasoning's `ProcessorInput` prompt and its budgets) | `promptProjection()` in `abilities/reasoning/reasoning.js` | ability script |
+| `ConfidenceTuner` (`observe`, `should_escalate`) | `<intuition:observe>`, `<intuition:escalate>` over the `confidence_tuner` datum (D114) | `namespaces/intuition` elements |
+| `model_facing_content`, `InputData.model_facing_content` (reasoning's `ProcessorInput` prompt, its environment block and its budgets) | `<cognition:model_facing_content>` (D114) | `namespaces/cognition` element |
 | `_message_for_turn`, `_model_safe_content`, `_stable_identity_basis`, `_stable_context_ref`, `relationship_context_ref`, `MessageProvenance` | `<conversation:commit>` (its `keylocation` receives the relationship context reference) | `namespaces/conversation` element |
 | `cognition.py` Cognition | `abilities/cognition/cognition.scx` | ability `.scx` child |
 | `autonomy.py` Autonomy | `abilities/autonomy/autonomy.scx` (phase 5: the inventory's ACTIVE turn behaviors the stimulus triggers run as `<content expr>` children of the chain `abilities/candidates_runner/candidates_runner.scx`, D93) | stage `.scx` child |
