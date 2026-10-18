@@ -7,6 +7,27 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-18, the behavior and autonomy namespaces (D116), model `Qwen/Qwen3.8-Flash-Next`
+
+The reflection now reads its inventory with
+`<behavior:instances_from_behavior_results>`, stores a create's draft and an
+accepted change with `<behavior:replace_behavior_clauses>` and tells the
+builder this turn's input with `<autonomy:behavior_input_payload>`; the
+builder checks a draft's lifetime with `<behavior:lifetime_errors>` and a
+routine's forced tick with `<behavior:verify_tick>`; autonomy runs its
+candidates with `<autonomy:behavior_input_payload>`; and every stimulus
+envelope is assigned with plain `<assign>`s (no `bot` namespace). The runs
+used floppy commit `40cb897863` (code at `f30e15ab6a`), the same env files,
+backends and model as the entries below (`FLOPPY_LIVE_ENV_FILE` naming
+`.env`, `env.speech` and `env.voice`), no relay, and `cargo test -p
+floppy-tests --locked --test floppy_live -- --ignored --nocapture
+--test-threads=1 --exact <test>`, once each.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_cascade` | pass (30 s) | |
+| `floppy_live` `live_conversation` | pass (130 s) | `4 completed, 0 failed`; reflection created `IgnoreConversationTurn` (`ACTIVE turn []`) and `ReplyPongToPing` (`ACTIVE turn ["bot.ability.conversation.output"]`), each accepted, so a behavior was learned by turn 2 (the runs on D114 and D115 learned none: the model's choices). Autonomy matched nothing on turn 3 (`0 matched for bot.ability.conversation.output`), so reasoning answered "pong" there, and turn 4 recalled green ("Your favorite color is green, Gabe!") |
+
 ## 2026-10-18, the identity, conversation and memory namespaces (D115), model `Qwen/Qwen3.8-Flash-Next`
 
 The identity ability now hears its name with `<identity:hears_name>`, the
