@@ -38,7 +38,14 @@ use serde_json::Value as Json;
 use support::{components, output, scratch, sha256_file, workspace};
 
 /// The namespaces that have a suite: every floppy namespace.
-const SUITES: [&str; 5] = ["decision", "bot", "conversation", "migration", "device"];
+const SUITES: [&str; 6] = [
+    "decision",
+    "bot",
+    "conversation",
+    "migration",
+    "device",
+    "processing",
+];
 
 /// Whether this host is the one the baselines are measured on.
 const BASELINE_HOST: bool = cfg!(all(target_os = "linux", target_arch = "x86_64"));

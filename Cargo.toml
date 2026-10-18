@@ -6,6 +6,7 @@ members = [
     "namespaces/conversation",
     "namespaces/migration",
     "namespaces/device",
+    "namespaces/processing",
     "services/generate",
     "services/generate/validator",
     "services/decision",

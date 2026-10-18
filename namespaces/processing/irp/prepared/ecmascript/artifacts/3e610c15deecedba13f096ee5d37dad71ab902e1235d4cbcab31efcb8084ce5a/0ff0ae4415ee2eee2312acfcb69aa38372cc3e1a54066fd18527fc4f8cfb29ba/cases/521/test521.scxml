@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- processing-3: with devices and focus, the focused device's events are offered under its reference's place in name order, tagged with its id. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="own" expr="[]"/>
+  <data id="offers" expr="{&#34;zeta&#34;: [{&#34;event&#34;: &#34;z.go&#34;, &#34;schema&#34;: {&#34;type&#34;: &#34;object&#34;}}]}"/>
+  <data id="devices" expr="{&#34;lamp&#34;: {&#34;id&#34;: &#34;room.lamp&#34;, &#34;state&#34;: &#34;off&#34;, &#34;attributes&#34;: {}, &#34;events&#34;: [&#34;lamp.on&#34;]}, &#34;fan&#34;: {&#34;id&#34;: &#34;room.fan&#34;, &#34;state&#34;: &#34;off&#34;, &#34;attributes&#34;: {}, &#34;events&#34;: [&#34;fan.on&#34;]}}"/>
+  <data id="focus" expr="'lamp'"/>
+  <data id="choices" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <processing:collect_offered_events location="choices" choices="own" offers="offers" devices="devices" focus="focus"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="choices.map(function (c) { return c.event + '@' + c.target; }).join(',') === 'lamp.on@room.lamp,z.go@' + _sessionid + '.zeta' &amp;&amp; choices[0].schema.type === 'object'" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

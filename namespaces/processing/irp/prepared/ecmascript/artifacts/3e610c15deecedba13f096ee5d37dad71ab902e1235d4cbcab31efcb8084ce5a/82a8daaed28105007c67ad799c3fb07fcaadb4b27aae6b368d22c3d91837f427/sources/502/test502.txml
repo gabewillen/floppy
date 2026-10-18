@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- processing-1: a selection_confidence with content raises error.execution and assigns nothing. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing">
+<datamodel>
+  <data id="l" expr="'untouched'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <processing:selection_confidence location="l" selections="[]">50</processing:selection_confidence>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="l === 'untouched'" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

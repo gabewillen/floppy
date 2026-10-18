@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!-- processing-4: max puts maxItems on the events array; without it the array is unbounded. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing">
+<datamodel>
+  <data id="choices" expr='[{"event": "tool.go", "schema": {"type": "object"}, "target": "a"}]'/>
+  <data id="bounded" expr="null"/>
+  <data id="unbounded" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <processing:send location="bounded" choices="choices" max="1"/>
+    <processing:send location="unbounded" choices="choices"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="bounded.properties.events.maxItems === 1 &amp;&amp; !('maxItems' in unbounded.properties.events)" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

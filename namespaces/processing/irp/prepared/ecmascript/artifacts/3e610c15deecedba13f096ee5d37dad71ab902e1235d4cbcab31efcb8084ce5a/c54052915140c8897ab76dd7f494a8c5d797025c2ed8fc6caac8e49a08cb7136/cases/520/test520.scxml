@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- processing-3: collecting tags the document's own choices with its _sessionid, then each offer's in member-name order with its child's session id, and reports the size. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="own" expr="[{&#34;event&#34;: &#34;bot.say&#34;, &#34;schema&#34;: {&#34;type&#34;: &#34;object&#34;}}]"/>
+  <data id="offers" expr="{&#34;zeta&#34;: [{&#34;event&#34;: &#34;z.go&#34;, &#34;schema&#34;: {&#34;type&#34;: &#34;object&#34;}}], &#34;alpha&#34;: [{&#34;event&#34;: &#34;a.go&#34;, &#34;schema&#34;: {&#34;type&#34;: &#34;object&#34;}}]}"/>
+  <data id="choices" expr="null"/>
+  <data id="over" expr="null"/>
+  <data id="size" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <processing:collect_offered_events location="choices" choices="own" offers="offers" overlocation="over" sizelocation="size"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="over === false &amp;&amp; size &gt; 0 &amp;&amp; choices.map(function (c) { return c.event + '@' + c.target; }).join(',') === 'bot.say@' + _sessionid + ',a.go@' + _sessionid + '.alpha,z.go@' + _sessionid + '.zeta'" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>
