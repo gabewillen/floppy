@@ -7,6 +7,30 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-18, parity gaps 3, 5 and 4 (D117 to D119), model `Qwen/Qwen3.8-Flash-Next`
+
+Recalled context trims to the prompt budget (D117), lifecycle requests are
+answered and `bot.degraded` announced (D118), and stimuli and cognition
+inputs carry producer-stamped `participants` (D119). The runs used floppy
+commit `5a7ef2618f`, the same env files, backends and model as the entries
+below (`FLOPPY_LIVE_ENV_FILE` naming `.env`, `env.speech` and `env.voice`),
+and `cargo test -p floppy-tests --locked --test floppy_live -- --ignored
+--nocapture --test-threads=1 --exact <test>`. The first round of the three
+ran while the vLLM was refusing connections, so each test ran again once
+it answered; every run is listed, in order.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_cascade` | fail (52 s) | `the reasoning failed (transport)`: intuition abstained, and reasoning's call could not connect |
+| `floppy_live` `live_chat` | fail (43 s) | the same `transport` failure on turn 1 |
+| `floppy_live` `live_conversation` | fail (49 s) | the same `transport` failure on all four turns |
+| `floppy_live` `live_cascade` (relay) | pass (49 s) | through a local relay in front of the vLLM that saved each request and reply body (no headers): both calls answered |
+| `floppy_live` `live_cascade` | pass (51 s) | autonomy unhandled, intuition unhandled (`empty_product`), reasoning handled |
+| `floppy_live` `live_chat` | fail (37 s) | `transport` again; through the relay the next run showed the cause, `Connection refused` from the vLLM, which then refused every request for about two minutes before answering again |
+| `floppy_live` `live_conversation` | fail (40 s) | `transport` on every turn, during the same outage |
+| `floppy_live` `live_chat` | pass (34 s) | after the vLLM answered again |
+| `floppy_live` `live_conversation` | fail (177 s) | `4 completed, 0 failed`, but no behavior was learned by turn 2: reflection created `PingPongReply` on turn 2, and its draft failed its simulation twice with the same diagnostic (`test-failed`: `done=false`), so the revision was abandoned; turn 3 broke it and turn 4's change failed the same way. Reasoning acknowledged turn 2 ("Got it, Gabe. Green is on file, and ping gets pong.") and chose `bot.ability.cognition.ignore` on turns 3 and 4. The conversation stamped and the body copied the turn's participants (`gabe` source, `floppy` target); nothing reads them yet. The reflection failures are the model's, the same kind as the D114 and D115 runs below |
+
 ## 2026-10-18, the behavior and autonomy namespaces (D116), model `Qwen/Qwen3.8-Flash-Next`
 
 The reflection now reads its inventory with

@@ -11,6 +11,19 @@ Last updated: 2026-10-18.
 
 ## Current state (2026-10-09) — resume here
 
+- **Parity gaps 3, 5 and 4 ported; gap 6 stopped (2026-10-18, D117 to
+  D119, [parity-gaps](plans/parity-gaps.md)):** recalled context trims to
+  the prompt budget instead of failing the turn (D117; open: on wasm the
+  data model's 64 KiB value bound refuses a prompt before it is big enough
+  to trim, so the maintainer lowers the budget or the bound is raised
+  upstream); a `bot.deactivate` while activating answers
+  `bot.deactivated`, and an unacknowledged cancel announces `bot.degraded
+  {stage: "processing_cancel"}` (D118); stimuli and cognition inputs carry
+  producer-stamped `participants`, the conversation stamping with
+  `<conversation:turn_participants>` (D119). Gap 6
+  (`bot.ability.speaking.stop`) waits on decision 6 and gap 11: the
+  original's stop is built on `c88b6cd`'s streamed utterance and its
+  `OutputData` (`voice_id`, `spoken`, `unspoken`).
 - **The behavior and autonomy namespaces, and no bot namespace (2026-10-18,
   D116, [plan](plans/original-domains.md) step 4, the last):**
   `namespaces/behavior` (`<behavior:instances_from_behavior_results>`,
