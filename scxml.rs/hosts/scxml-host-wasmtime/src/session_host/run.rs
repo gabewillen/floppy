@@ -569,6 +569,7 @@ impl MachineHandle {
         // Every bound extension component gets its own instance for this
         // session, initialized before the machine runs anything.
         let namespaces = core.session_namespaces(execution_context, spec.bindings.as_deref())?;
+        let base_uri = spec.bindings.as_ref().and_then(|b| b.base_uri());
         let (mut store, machine) = instantiate_session_machine(
             &core.engine,
             core.machine(),
@@ -579,7 +580,7 @@ impl MachineHandle {
             SessionMachine {
                 machine_ir: spec.machine_ir,
                 data_model,
-                scripts: embedder.scripts(),
+                scripts: embedder.scripts(base_uri),
                 session_id: spec.session_id.clone(),
                 links: Box::new(links),
                 call_budget: Arc::clone(&core.call_budget),

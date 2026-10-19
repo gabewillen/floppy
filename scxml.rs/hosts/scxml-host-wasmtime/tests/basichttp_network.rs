@@ -101,7 +101,7 @@ impl SessionEmbedder for Documents {
             .map(|(_, text)| text.clone().into())
     }
 
-    fn scripts(&self) -> MachineScripts {
+    fn scripts(&self, _base_uri: Option<&str>) -> MachineScripts {
         MachineScripts::none()
     }
 }

@@ -615,11 +615,17 @@ hard cutover.
   files: `EmbeddedDocument::event_schemas` carries the files an embedder
   read for one `<invoke src>` document to the Wasmtime host, which hands
   them to that document's compile (an inline `<content>` document below it
-  still gets none). `snapshot run` and `run` read a literal `file:` child's
-  files relative to the child's own directory before the session, exactly
-  as they read the root's; a remote or `srcexpr` child gets none (nothing
-  is fetched for a schema, and nothing is read while a document runs), so a
-  reference rejects it and its `<invoke>` raises `error.execution`.
+  still gets none). `snapshot run` and `run` load every `<invoke src>`
+  child's files against the child's own base URI (read relative to its
+  directory for a `file:` child, exactly as they read the root's, and
+  fetched for an `https:` one): a literal child's before the session, a
+  `srcexpr` child's when its `<invoke>` runs.
+- A `srcexpr` document is fetched each time its `<invoke>` runs, as it is
+  then (never from the run's fetch memo), with the schema files and the
+  `<script src>` files it names, so a document the run writes loads as
+  written. `SessionEmbedder::scripts` takes the base URI of the document
+  the new session runs, and the CLI serves each session the scripts its own
+  document names, resolved against that base URI.
 - Each repository namespace has its own implementation report plan,
   `namespaces/{env,event}/irp`: W3C IRP-format assertions over
   numbered statements added to each namespace's README, `.txml` documents
@@ -1436,8 +1442,8 @@ hard cutover.
 - `event:schema` references only files relative to the document: no
   repository-namespace resource or other absolute URI. Of the child
   documents the Wasmtime host compiles when invoked, only an `<invoke src>`
-  document whose embedder supplies them gets schema files (the CLI: a
-  literal `file:` child); inline `<content>`, remote, and `srcexpr`
+  document whose embedder supplies them gets schema files (the CLI: every
+  `<invoke src>` child, literal or `srcexpr`); inline `<content>`
   children, and documents the browser host compiles, get none (inline
   schemas and `event:schemaexpr` only). A session snapshot never evaluates `event:schemaexpr`, and lists
   schemas on transitions only.

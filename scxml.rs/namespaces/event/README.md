@@ -362,13 +362,14 @@ that it behaves the same under each. Both data models pass 31 of 31
 
 - A reference to a repository-namespace resource or any absolute URI: only
   files relative to the document.
-- Schema files for documents compiled without the CLI's file access. A
-  literal `<invoke src>` child loaded from a `file:` URL gets its own files:
-  `snapshot run` and `run` read them relative to the child's directory
-  before the session and the Wasmtime host hands them to its compile
+- Schema files for documents compiled without the CLI's file access. An
+  `<invoke src>` child (literal or `srcexpr`, `file:` or `https:`) gets its
+  own files: `snapshot run` and `run` load them against the child's own base
+  URI (a literal child's before the session, a `srcexpr` child's when its
+  `<invoke>` runs) and the Wasmtime host hands them to its compile
   (`EmbeddedDocument::event_schemas`). Every other child document a host
-  compiles when it is invoked (inline `<content>`, a remote or `srcexpr`
-  `<invoke src>`, and every child the browser host compiles) gets no schema
+  compiles when it is invoked (inline `<content>`, and every child the
+  browser host compiles) gets no schema
   files, so it may use inline schemas and `event:schemaexpr` only (a
   reference rejects the document). A browser page supplies a document's
   schema files to the validator and compiler (`eventSchemas`).

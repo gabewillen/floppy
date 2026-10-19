@@ -321,11 +321,11 @@ fn invoke_src_loads_relative_file_and_absolute_uris_and_lists_them() {
     }
 }
 
-/// A literal `<invoke src>` child's `event:schema` files are read relative
-/// to the child's own directory before the session and reach its compile,
-/// so it runs; a file outside its directory is never read (`EVENT004`
-/// rejects the child), and a `srcexpr` child gets none (nothing is read
-/// while the document runs), so their `<invoke>` raises `error.execution`.
+/// An `<invoke src>` child's `event:schema` files are read relative to the
+/// child's own directory (a literal child's before the session, a `srcexpr`
+/// child's when its `<invoke>` runs) and reach its compile, so it runs; a
+/// file outside its directory is never read (`EVENT004` rejects the child),
+/// so its `<invoke>` raises `error.execution`.
 #[test]
 fn a_literal_invoke_src_child_compiles_with_its_own_event_schema_files() {
     let directory = scratch("invoke-src-event-schemas");
@@ -361,6 +361,10 @@ fn a_literal_invoke_src_child_compiles_with_its_own_event_schema_files() {
         ),
         (
             r#"<invoke type="scxml" srcexpr="'children/child.scx'"/>"#,
+            "done",
+        ),
+        (
+            r#"<invoke type="scxml" srcexpr="'children/outside.scx'"/>"#,
             "failed",
         ),
     ] {
@@ -1473,6 +1477,98 @@ fn a_recorded_service_send_replays_its_parts_without_the_network() {
 }
 
 const FILES: &str = "https://stateforward.org/scxml/services/files";
+
+/// The `--service-*` options binding the files service example.
+fn files_binding() -> Vec<String> {
+    let (dir, _) = release();
+    let component = Path::new(dir).join("scxml_service_files.virtualized.wasm");
+    let digest = format!(
+        "{:x}",
+        Sha256::digest(fs::read(&component).expect("the files component is readable"))
+    );
+    let manifest = workspace().join("components/scxml-service-files/package/files.service.json");
+    vec![
+        "--service-package".to_owned(),
+        manifest.display().to_string(),
+        "--service-component".into(),
+        format!("{FILES}={}", component.display()),
+        "--service-component-sha256".into(),
+        format!("{FILES}={digest}"),
+    ]
+}
+
+/// `text` as an ECMAScript string literal inside a double-quoted XML
+/// attribute.
+fn script_string(text: &str) -> String {
+    let literal = format!("'{}'", text.replace('\\', "\\\\").replace('\'', "\\'"));
+    literal
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+/// A document the run writes and then invokes by `srcexpr` loads as it is
+/// when its `<invoke>` runs, with the schema file its `event:schema`
+/// references and the script its `<script src>` names, both resolved
+/// against its own URL: invoked again after its script is rewritten, it
+/// runs the new script.
+#[test]
+fn a_srcexpr_child_written_during_the_run_loads_its_own_files_as_they_are() {
+    let directory = scratch("srcexpr-written");
+    let workspace_dir = directory.join("workspace");
+    fs::create_dir_all(&workspace_dir).expect("the workspace is creatable");
+    let child = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" version="1.0" datamodel="ecmascript"><script src="c.js"/><state id="c0"><transition event="go" event:schema="c.json#/$defs/go" target="f"/><transition cond="true" target="f"/></state><final id="f"><donedata><content expr="v"/></donedata></final></scxml>"#;
+    let write = |id: &str, name: &str, text: &str, next: &str| {
+        format!(
+            r#"<state id="{id}"><invoke type="{FILES}"><param name="name" expr="'{name}'"/><param name="text" expr="{}"/></invoke><transition event="done.invoke" target="{next}"/><transition event="error.*" target="failed"/></state>"#,
+            script_string(text)
+        )
+    };
+    let simulate = |id: &str, next: &str| {
+        format!(
+            r#"<state id="{id}"><invoke id="{id}-kid" type="scxml" srcexpr="'workspace/c.scx'"/><transition event="done.invoke.{id}-kid" target="{next}"><assign location="seen" expr="seen.concat([_event.data])"/></transition><transition event="error.*" target="failed"/></state>"#
+        )
+    };
+    let body = [
+        r#"<datamodel><data id="seen" expr="[]"/></datamodel>"#.to_owned(),
+        write("s0", "c.json", r#"{"$defs": {"go": {"type": "object", "required": ["n"]}}}"#, "w1"),
+        write("w1", "c.js", "var v = 'one';", "w2"),
+        write("w2", "c.scx", child, "first"),
+        simulate("first", "w3"),
+        write("w3", "c.js", "var v = 'two';", "second"),
+        simulate("second", "done"),
+        r#"<final id="done"><donedata><content expr="seen"/></donedata></final><final id="failed"><donedata><content expr="'failed'"/></donedata></final>"#.to_owned(),
+    ]
+    .concat();
+    let args = [
+        vec![
+            "--clock".to_owned(),
+            "logical".into(),
+            "--on-eof".into(),
+            "close".into(),
+        ],
+        files_binding(),
+        vec![
+            "--dir".into(),
+            format!("{FILES}={}::/workspace", workspace_dir.display()),
+        ],
+    ]
+    .concat();
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    let output = run(&document(&directory, &body), &args, "");
+    let records = parse_records(&output);
+    let done = records
+        .iter()
+        .find(|record| record["type"] == "done")
+        .unwrap_or_else(|| panic!("{records:?}\n{}", stderr(&output)));
+    assert_eq!(
+        done["data"],
+        serde_json::json!(["one", "two"]),
+        "{records:?}\n{}",
+        stderr(&output)
+    );
+}
 
 /// The files service imports `wasi:filesystem`: `run` binds it only with a
 /// `--dir` grant (wasmtime's `--dir HOST::GUEST`, scoped to its type URI),

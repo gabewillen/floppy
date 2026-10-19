@@ -268,7 +268,11 @@ pub trait SessionEmbedder {
     fn document(&self, kind: DocumentKind, uri: &str) -> Option<EmbeddedDocument>;
 
     /// The external-script capability of one new session (root or child).
-    fn scripts(&self) -> MachineScripts;
+    /// `base_uri` is the base URI of the document the session runs
+    /// ([`EmbeddedDocument::base_uri`], also for an inline `<content>`
+    /// session below one), `None` for the host's: a relative `<script src>`
+    /// of that document names a script relative to it (RFC 3986 §5.1).
+    fn scripts(&self, base_uri: Option<&str>) -> MachineScripts;
 }
 
 /// One external event the embedder injects into the root session (a batch

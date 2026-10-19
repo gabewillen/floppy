@@ -373,12 +373,14 @@ In detail:
   listing cannot say whether the run holds its value.
 - An `event:schema` ([namespaces/event](../namespaces/event/README.md))
   references only files relative to the document, never a
-  repository-namespace resource or another absolute URI. A literal
-  `<invoke src>` child loaded from a `file:` URL gets the files it
-  references, read relative to its own directory before the session
-  (`EmbeddedDocument::event_schemas`); every other child document the
-  Wasmtime host compiles when it is invoked (inline `<content>`, a remote or
-  `srcexpr` `<invoke src>`), and every document the browser host compiles
+  repository-namespace resource or another absolute URI. An
+  `<invoke src>` child (literal or `srcexpr`, `file:` or `https:`) gets the
+  files it references, resolved against its own base URI
+  (`EmbeddedDocument::event_schemas`): a literal child's before the
+  session, a `srcexpr` child's each time its `<invoke>` runs, as they are
+  then, like the `srcexpr` document itself and the scripts its
+  `<script src>` names (`SessionEmbedder::scripts`). An inline `<content>`
+  child, and every document the browser host compiles
   without the page supplying them, get no schema files, so a schema-file
   reference rejects it; a browser page supplies a
   document's schema files to the validator and compiler

@@ -908,7 +908,7 @@ impl SessionEmbedder for PreparedSources {
         text.map(EmbeddedDocument::from)
     }
 
-    fn scripts(&self) -> MachineScripts {
+    fn scripts(&self, _base_uri: Option<&str>) -> MachineScripts {
         let trusted = self.sources.values().filter_map(|text| {
             TrustedComponentDigest::from_hex(&hex::encode(Sha256::digest(text.as_bytes()))).ok()
         });

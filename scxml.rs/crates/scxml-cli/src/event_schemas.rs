@@ -4,15 +4,17 @@
 //! `validate`, `compile`, `snapshot run`, and `run` read every referenced
 //! file relative to the document's directory before validating, and hand the
 //! bytes to the validator and compiler keyed by the reference as authored.
-//! `snapshot run` and `run` also read, before the session, the files of
-//! every literal `<invoke src>` document loaded from a `file:` URL, relative
-//! to that child's directory, for its compile ([`crate::documents`]).
+//! `snapshot run` and `run` also load the files of every `<invoke src>`
+//! document, relative to that child's own base URI, for its compile
+//! ([`crate::documents`]): a literal one's before the session, a `srcexpr`
+//! one's when its `<invoke>` runs. A child loaded from a `file:` URL has
+//! them read from its directory as the root's are; one loaded from an
+//! `https:` URL has them fetched ([`fetch`]).
 //! Only a path the vocabulary accepts is read
 //! ([`scxml_event_schema::resource_problem`]): relative, without a scheme,
 //! query, or `.`/`..` segment, percent-decoded. A file that resolves outside
 //! the document's directory (through a symbolic link), is not a regular file,
 //! or cannot be read is left out, and the validator reports it (`EVENT004`).
-//! Nothing is fetched, and nothing is read while a document runs.
 
 use std::fs;
 use std::io::Read as _;
@@ -38,6 +40,40 @@ pub(crate) fn load(document: &Path, source: &[u8]) -> Resources {
     for reference in references {
         let bytes = root.as_ref().and_then(|root| read_below(root, &reference));
         match bytes {
+            Some(bytes) => {
+                resources.insert(reference, bytes);
+            }
+            None => missing = true,
+        }
+    }
+    if missing {
+        span.event(SignalEvent::InputRejected);
+        span.fail(ErrorCategory::InputRead);
+    } else {
+        span.event(SignalEvent::ExternalReadCompleted);
+    }
+    resources
+}
+
+/// Fetches every schema file `source` (the document at `document`, an
+/// `https:` URL) references, each resolved against that URL (a reference
+/// has no scheme, query, or `.`/`..` segment, so it stays below the
+/// document's directory) and fetched by `fetch`. A file `fetch` does not
+/// return is left out, and the validator reports it (`EVENT004`).
+pub(crate) fn fetch(
+    document: &url::Url,
+    source: &[u8],
+    mut fetch: impl FnMut(&url::Url) -> Option<Vec<u8>>,
+) -> Resources {
+    let references = references(source);
+    if references.is_empty() {
+        return Resources::new();
+    }
+    let span = observe(Module::Cli, Operation::CliReadEventSchema);
+    let mut resources = Resources::new();
+    let mut missing = false;
+    for reference in references {
+        match document.join(&reference).ok().and_then(|url| fetch(&url)) {
             Some(bytes) => {
                 resources.insert(reference, bytes);
             }
@@ -173,6 +209,32 @@ mod tests {
         );
         assert_eq!(percent_decode("%2e%2E"), None);
         fs::remove_dir_all(&directory).expect("the fixture directory is removed");
+    }
+
+    /// A remote document's references resolve against its own URL, each
+    /// fetched once; one the fetcher does not return is left out.
+    #[test]
+    fn a_remote_document_fetches_its_references_against_its_url() {
+        let document = url::Url::parse("https://example.com/kits/machine.scxml").expect("a URL");
+        let source = format!(
+            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="{EVENT_NAMESPACE_URI}" version="1.0"><state id="s"><transition event="a" event:schema="schemas/a.json#/$defs/a"/><transition event="b" event:schema="missing.json"/><transition event="c" event:schema="../outside.json"/></state></scxml>"#
+        );
+        let mut asked = Vec::new();
+        let resources = fetch(&document, source.as_bytes(), |url| {
+            asked.push(url.to_string());
+            (url.path() == "/kits/schemas/a.json").then(|| br#"{"$defs":{"a":{}}}"#.to_vec())
+        });
+        assert_eq!(
+            asked,
+            [
+                "https://example.com/kits/missing.json",
+                "https://example.com/kits/schemas/a.json"
+            ]
+        );
+        assert_eq!(
+            resources.keys().map(String::as_str).collect::<Vec<_>>(),
+            ["schemas/a.json"]
+        );
     }
 
     /// A reference to a FIFO is not a regular file: it is left out (the
