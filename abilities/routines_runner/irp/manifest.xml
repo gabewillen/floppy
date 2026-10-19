@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/routines_runner/irp/sources">
   <assert id="routines_runner-1" specnum="1" specid="#routines_runner-1">
-    <![CDATA[It takes the `<param>` `routines` `[{name, source}]` and runs the first routine's source as its child `routine` (`<invoke><content expr>`); on start it sends nothing of its own, and it never reaches a final state.]]>
+    <![CDATA[It takes the `<param>` `routines` `[{name, source}]` (`source` the path of the routine's program, decision D121) and runs the first routine as its child `routine` (`<invoke srcexpr>` on its source); on start it sends nothing of its own, and it never reaches a final state.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -42,7 +42,7 @@
     </test>
   </assert>
   <assert id="routines_runner-6" specnum="6" specid="#routines_runner-6">
-    <![CDATA[A routine whose source does not compile (`error.execution` in the runner) stays stopped, logged `routines.failed` `<name> (error.execution)`, and the rest keep running.]]>
+    <![CDATA[A routine whose program does not compile (`error.execution` in the runner) stays stopped, logged `routines.failed` `<name> (error.execution)`, and the rest keep running.]]>
     <test id="150" conformance="mandatory" manual="false">
       <start uri="150/test150.scxml"/>
     </test>

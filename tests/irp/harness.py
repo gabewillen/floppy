@@ -30,6 +30,12 @@ step is one of
 and the case passes when every expect was met in order. Any other event
 the harness receives (error.* included) fails it, logging the event.
 
+A suite's learned behaviors are programs `S.behavior(text)` writes as
+irp/behaviors/<digest>.scxml (the extension of test documents, which keeps
+them out of the checks every floppy `.scx` document is held to), returning
+that file's path relative to the document under test, which a behavior
+row's source names (decision D121).
+
 A suite's media is a library of files, `S.media({name: bytes})` (built
 with wav, pcm and png below): each case's irp/sources/<id>/media/ holds
 exactly the library files its document or backend names as `media/<name>`,
@@ -37,6 +43,7 @@ so a name the library lacks (an output, or a file a case expects missing)
 is never there.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -107,9 +114,15 @@ class Suite:
         self.statements = []
         self.cases = []
         self.library = {}
+        self.behaviors = {}
 
     def media(self, files):
         self.library.update(files)
+
+    def behavior(self, text):
+        name = hashlib.sha256(text.encode()).hexdigest()[:16]
+        self.behaviors[name] = text
+        return f"irp/behaviors/{name}.scxml"
 
     def statement(self, number, text):
         self.statements.append((f"{self.name}-{number}", text))
@@ -239,6 +252,15 @@ class Suite:
             self.write_media(case, os.path.join(directory, "media"), document)
         for stale in set(os.listdir(sources)) - listed:
             raise SystemExit(f"{sources}/{stale} is no case of cases.py")
+        behaviors = os.path.join(suite, "behaviors")
+        if os.path.isdir(behaviors):
+            for stale in set(os.listdir(behaviors)) - {f"{name}.scxml" for name in self.behaviors}:
+                os.remove(os.path.join(behaviors, stale))
+        if self.behaviors:
+            os.makedirs(behaviors, exist_ok=True)
+            for name, text in sorted(self.behaviors.items()):
+                with open(os.path.join(behaviors, f"{name}.scxml"), "w") as out:
+                    out.write(text)
         manifest = [
             '<?xml version="1.0"?>',
             f"<!-- The {self.name} document's implementation report plan: each assertion is a",

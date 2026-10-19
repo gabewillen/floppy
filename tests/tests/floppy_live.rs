@@ -10,7 +10,9 @@
 //! `FLOPPY_LIVE_MODEL`, else `Qwen/Qwen3.8-Flash-Next`, given to the bot
 //! as its `model` param by the room that invokes it
 //! (`environments/room/room.scx`, laid out beside a scratch copy of the
-//! bot). Each test writes the run's records under
+//! bot, the files service granted the layout's `behaviors/`, where the
+//! builder reflection invokes writes a learned behavior's documents). Each
+//! test writes the run's records under
 //! `target/floppy-live/` and prints pass or fail only; no value is ever
 //! printed.
 
@@ -70,6 +72,9 @@ fn start_holding(body: &Path, devices: &[&str]) -> Run {
         &[("floppy", devices)],
         &[("model", &model)],
     );
+    // The builder (reflection's) writes and reads its documents in the
+    // layout's behaviors directory (decision D121).
+    args.extend(support::behaviors_grant(&room));
     args.push(room.display().to_string());
     Run::start(&args, &[])
 }

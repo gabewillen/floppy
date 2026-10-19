@@ -12,7 +12,9 @@
 //! `voice_detection` and hands over no product, decision D98); the model
 //! is `FLOPPY_LIVE_MODEL`, else `Qwen/Qwen3.8-Flash-Next`, given to both
 //! bots as their `model` param. Both bots' speech services share one media
-//! grant, so `b` reads the audio `a` wrote. The run's records are written
+//! grant, so `b` reads the audio `a` wrote, and the files service the
+//! layout's behaviors directory, where the builder reflection invokes
+//! writes a learned behavior's documents. The run's records are written
 //! under `target/floppy-live/`; only pass or fail is printed, never a
 //! value.
 
@@ -114,6 +116,9 @@ fn live_two_participants() {
         args.push(file.display().to_string());
     }
     args.extend(support::speech_grant(&media));
+    // The builder (reflection's) writes and reads its documents in the
+    // layout's behaviors directory (decision D121).
+    args.extend(support::behaviors_grant(&room));
     args.push(room.display().to_string());
     let started = Instant::now();
     let mut run = Run::start(&args, &[]);

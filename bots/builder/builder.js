@@ -43,7 +43,7 @@ function firstDiagnosticSummary() {
 
 // Whether the builder.request data satisfies schemas/builder.request.json.
 function satisfiesBuilderRequest(_event) {
-  return _event.data !== null && typeof _event.data === 'object' && !Array.isArray(_event.data) && Object.keys(_event.data).every(function (k) { return ['spec', 'constraints', 'max_attempts', 'model', 'generate_timeout_ms', 'generate_ceiling_ms', 'min_every_ms', 'turn_after_bound_ms'].indexOf(k) >= 0; }) && isOptionalBound(_event.data.min_every_ms) && isOptionalBound(_event.data.turn_after_bound_ms) && typeof _event.data.spec === 'string' && _event.data.spec.trim().length > 0 && (_event.data.constraints === undefined || (Array.isArray(_event.data.constraints) && _event.data.constraints.length <= 32 && _event.data.constraints.every(function (c) { return typeof c === 'string'; }))) && (_event.data.max_attempts === undefined || (Number.isInteger(_event.data.max_attempts) && _event.data.max_attempts >= 1 && _event.data.max_attempts <= 8)) && (_event.data.model === undefined || (typeof _event.data.model === 'string' && _event.data.model.length > 0)) && isOptionalGenerateBound(_event.data.generate_timeout_ms) && isOptionalGenerateBound(_event.data.generate_ceiling_ms);
+  return _event.data !== null && typeof _event.data === 'object' && !Array.isArray(_event.data) && Object.keys(_event.data).every(function (k) { return ['spec', 'name', 'constraints', 'max_attempts', 'model', 'generate_timeout_ms', 'generate_ceiling_ms', 'min_every_ms', 'turn_after_bound_ms'].indexOf(k) >= 0; }) && isOptionalBound(_event.data.min_every_ms) && isOptionalBound(_event.data.turn_after_bound_ms) && typeof _event.data.spec === 'string' && _event.data.spec.trim().length > 0 && (_event.data.name === undefined || (typeof _event.data.name === 'string' && _event.data.name.length > 0)) && (_event.data.constraints === undefined || (Array.isArray(_event.data.constraints) && _event.data.constraints.length <= 32 && _event.data.constraints.every(function (c) { return typeof c === 'string'; }))) && (_event.data.max_attempts === undefined || (Number.isInteger(_event.data.max_attempts) && _event.data.max_attempts >= 1 && _event.data.max_attempts <= 8)) && (_event.data.model === undefined || (typeof _event.data.model === 'string' && _event.data.model.length > 0)) && isOptionalGenerateBound(_event.data.generate_timeout_ms) && isOptionalGenerateBound(_event.data.generate_ceiling_ms);
 }
 
 // An absent lifetime bound, or one of 1 ms to 1 day.
@@ -54,6 +54,10 @@ function isOptionalBound(value) {
 // A lifetime bound of the request, else null (not checked).
 function requestBound(value) {
   return value === undefined ? null : value;
+}
+
+function requestName(_event) {
+  return _event.data.name === undefined ? null : _event.data.name;
 }
 
 function requestConstraints(_event) {
@@ -155,55 +159,59 @@ function authorLog() {
   return mode + ' draft, attempt ' + attempt;
 }
 
-function previousTests() {
-  return draft === null ? null : draft.tests;
+// The previous draft's field, before author forgets it (null: none).
+function previousDraft(field) {
+  return draft === null ? null : draft[field];
 }
 
 function authorPrompt() {
-  return JSON.stringify({task: mode, spec: spec, constraints: constraints, plan: plan, previous_scxml: mode === 'repair' ? scxml_text : null, previous_tests: mode === 'repair' ? previous_tests : null, diagnostics: diagnostics});
+  var repair = mode === 'repair';
+  return JSON.stringify({task: mode, name: fileName(), spec: spec, constraints: constraints, plan: plan, previous_scxml: repair ? scxml_text : null, previous_schemas: repair ? previous_schemas : null, previous_script: repair ? previous_script : null, previous_tests: repair ? previous_tests : null, diagnostics: diagnostics});
 }
 
 function draftGenerated(_event) {
   return _event.invokeid === gen_id && draft !== null;
 }
 
+// writing (decision D121): the draft's three documents, beside each other.
+
+// The name its documents are written under: the request's, else the plan's,
+// with every run of other characters than letters, digits, _ and - as _, so
+// it is one plain file name and a relative URI as it stands.
+function fileName() {
+  return String(name !== null ? name : plan.name).replace(/[^A-Za-z0-9_-]+/g, '_');
+}
+
+function draftFile(extension) {
+  return fileName() + extension;
+}
+
+// The path of its .scx, relative to this document and to every document
+// that invokes a learned behavior: each sits two levels below the layout
+// root, whose behaviors directory the run grants the files service.
+function draftPath() {
+  return '../../behaviors/' + draftFile('.scx');
+}
+
+function schemasText() {
+  return JSON.stringify(draft.schemas);
+}
+
+function writeFailedDiagnostics() {
+  return [{kind: 'draft', code: 'write-failed', message: 'the draft could not be written as ' + draftFile('.scx') + ', .json and .js (error.execution: no directory granted to the files service, or a name it refuses)'}];
+}
+
 // validate
 
-// The JSON value of a schemas entry's text, or null when it does not parse.
-function parseSchemaText(text) {
-  var value = null;
-  try { value = JSON.parse(text); } catch (e) { value = null; }
-  return value;
-}
-
-function isSchemaValue(value) {
-  return !(value === null || (typeof value !== 'object' && typeof value !== 'boolean') || Array.isArray(value));
-}
-
-function schemaErrors(schemas) {
-  var errors = [];
-  schemas.forEach(function (s) {
-    if (!isSchemaValue(parseSchemaText(s.schema))) {
-      errors.push({kind: 'draft', code: 'schema-not-json', message: 'the schemas entry of ' + JSON.stringify(s.event) + ' is not a JSON Schema object as JSON text: ' + JSON.stringify(String(s.schema).slice(0, 200))});
-    }
-  });
-  return errors;
-}
-
-function parsedSchemas(schemas) {
-  return schemas.map(function (s) { return {event: s.event, schema: parseSchemaText(s.schema)}; });
-}
-
-function hasSchemaErrors() {
-  return report !== null && schema_errors.length > 0;
-}
-
-function schemaErrorDiagnostics() {
-  return schema_errors.slice(0, 20);
+// The validator's errors but EVENT004: it is not given the draft's schema
+// file (scx:eventschema names a literal file), which writing wrote and the
+// simulation's compile reads.
+function validatorErrors() {
+  return report.validator.diagnostics.filter(function (d) { return d.severity === 'error' && d.code !== 'EVENT004'; });
 }
 
 function isValidatorClean() {
-  return report !== null && report.validator.counts.errors === 0;
+  return report !== null && validatorErrors().length === 0;
 }
 
 function hasTestsWithinBounds() {
@@ -227,7 +235,7 @@ function isValidated() {
 }
 
 function validateDiagnostics() {
-  return report.validator.diagnostics.filter(function (d) { return d.severity === 'error'; }).slice(0, 20).map(function (d) { return {kind: 'validate', code: d.code, label: d.primary.message ? d.primary.message : d.message, message: d.help ? d.message + ' Help: ' + d.help : d.message}; });
+  return validatorErrors().slice(0, 20).map(function (d) { return {kind: 'validate', code: d.code, label: d.primary.message ? d.primary.message : d.message, message: d.help ? d.message + ' Help: ' + d.help : d.message}; });
 }
 
 function validatorFailedDiagnostics() {
@@ -337,8 +345,9 @@ function diagnosticsFingerprint() {
 
 // The last draft a check rejected (validate, lifetime, simulate, apply),
 // else rejected unchanged: the original drafts the rejected source.
+// One that could not be written is not.
 function rejectedDraft() {
-  return diagnostics.length > 0 && ['draft', 'validate', 'lifetime', 'simulate', 'apply'].indexOf(diagnostics[0].kind) >= 0 && typeof scxml_text === 'string' ? scxml_text : rejected;
+  return diagnostics.length > 0 && ['draft', 'validate', 'lifetime', 'simulate', 'apply'].indexOf(diagnostics[0].kind) >= 0 && diagnostics[0].code !== 'write-failed' && typeof scxml_text === 'string' ? scxml_text : rejected;
 }
 
 function nextAttemptLog() {
@@ -378,7 +387,7 @@ function doneLog() {
 }
 
 function doneData() {
-  return {scxml: scxml_text, schemas: parsed_schemas, tests: draft.tests, report: {attempts: attempt, failures: failures, fixes_applied: fixes_applied, warnings: warnings, plan: plan, decisions: decisions, history: attempt_log, simulation: sim_results}};
+  return {scxml: scxml_text, schemas: draft.schemas, script: draft.script, path: draftPath(), tests: draft.tests, report: {attempts: attempt, failures: failures, fixes_applied: fixes_applied, warnings: warnings, plan: plan, decisions: decisions, history: attempt_log, simulation: sim_results}};
 }
 
 // failed
@@ -392,6 +401,7 @@ function failedData() {
   var data = {reason: failure_reason, diagnostics: diagnostics.map(function (d) { return {kind: d.kind, code: d.code, message: d.message}; }), history: attempt_log};
   if (rejected !== null) {
     data.scxml = rejected;
+    data.path = draftPath();
   }
   return data;
 }

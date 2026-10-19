@@ -142,6 +142,22 @@ function revisionFailedMessage(detail) {
   return 'Reflection revision failed: ' + detail;
 }
 
+// reading
+
+// No program to read: an unknown row, or one with no source yet.
+function hasNoDocuments() {
+  return existing_behavior === undefined || existing_behavior.source === '';
+}
+
+// The file of the row's program named by its path's last segment.
+function documentFile(extension) {
+  return existing_behavior.source.split('/').pop().replace(/\.scx$/, '') + extension;
+}
+
+function seededSchemas(_event) {
+  return JSON.parse(_event.data.seed);
+}
+
 // authoring
 
 function isUnknownBehavior() {
@@ -170,11 +186,11 @@ function changeWriteInputWithIntent() {
 // which checks the document it builds against the original check()'s lifetime
 // bounds (min_every, turn_after_bound).
 function builderRequest() {
-  return ({spec: change_instructions + '\n\n' + JSON.stringify(write), model: model, min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms});
+  return ({spec: change_instructions + '\n\n' + JSON.stringify(write), name: intent.name, model: model, min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms});
 }
 
 function builderConstraints() {
-  return [turnContract(), routineContract(), no_schema_files];
+  return [turnContract(), routineContract()];
 }
 
 // The turn behavior contract with the grounded triggers it is stored under
@@ -241,13 +257,13 @@ function routineContract() {
 
 // The builder's done: a document that validated and passed its simulation.
 function isBuilt(_event) {
-  return typeof Object(_event.data).reason !== 'string' && typeof Object(_event.data).scxml === 'string' && _event.data.scxml.length > 0;
+  return typeof Object(_event.data).reason !== 'string' && typeof Object(_event.data).scxml === 'string' && _event.data.scxml.length > 0 && typeof _event.data.path === 'string';
 }
 
 // The builder's failed with the last draft it rejected (the original: a failed
 // check, which drafts the rejected source).
 function hasRejectedDraft(_event) {
-  return typeof Object(_event.data).reason === 'string' && typeof _event.data.scxml === 'string' && _event.data.scxml.length > 0;
+  return typeof Object(_event.data).reason === 'string' && typeof _event.data.scxml === 'string' && _event.data.scxml.length > 0 && typeof _event.data.path === 'string';
 }
 
 // The original diagnostic.Report.render of the builder's diagnostics.
@@ -298,14 +314,15 @@ function appliedBehavior() {
 }
 
 function appliedBehaviorWithSource() {
-  return Object.assign(behavior, {reason: intent.reason || null, source: written});
+  return Object.assign(behavior, {reason: intent.reason || null, source: path});
 }
 
-// The accepted Instance, ACTIVE with the written source and lifetime, the
+// The accepted Instance, ACTIVE with the written documents' path as its
+// source and their lifetime, the
 // grounded triggers and the existing row's examples and usage counters.
 function acceptedInstance() {
   var e = existing_behavior;
-  return ({name: intent.name, source: written, description: behavior.description || '', examples: e.examples, lifetime: lifetime, status: 'ACTIVE', triggers: triggers,
+  return ({name: intent.name, source: path, description: behavior.description || '', examples: e.examples, lifetime: lifetime, status: 'ACTIVE', triggers: triggers,
     used_count: e.used_count, last_used_at: e.last_used_at, failed_count: e.failed_count, last_failed_at: e.last_failed_at});
 }
 
@@ -315,9 +332,9 @@ function acceptedLog() {
 
 // abandoning
 
-// The original Revision._persist_draft: the rejected source, DRAFT validation.
+// The original Revision._persist_draft: the rejected draft's path, DRAFT validation.
 function draftBehaviorStatements() {
-  return [{sql: draft_behavior, parameters: [written, intent.name]}];
+  return [{sql: draft_behavior, parameters: [path, intent.name]}];
 }
 
 function draftLog() {

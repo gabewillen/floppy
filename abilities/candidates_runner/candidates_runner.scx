@@ -22,9 +22,10 @@
   order: [{name, source}], at least one), database, silence_ms and
   memory_timeout_ms.
 
-  Candidates: as Autonomy describes; the candidate's source is run as the
-  child "candidate" by <invoke><content expr> with the <param>s turn and
-  input. Handled with selections, dispatching sends each to the session
+  Candidates: as Autonomy describes; the candidate's source is the path
+  of its program (the builder's <name>.scx, beside its <name>.json and
+  <name>.js; decision D121), run as the child "candidate" by <invoke
+  srcexpr> with the <param>s turn and input. Handled with selections, dispatching sends each to the session
   its target names (#_scxml_ + target, decision D104; a learned behavior
   names its targets, the session ids its turn's choices carry) and then
   raises bot.ability.autonomy.candidate.dispatch.succeeded, which a send
@@ -74,8 +75,7 @@
       <log label="autonomy.candidate" expr="candidateName()"/>
       <send event="bot.ability.autonomy.candidate.silent" delayexpr="silenceDelay()"/>
     </onentry>
-    <invoke id="candidate" type="scxml">
-      <content expr="candidateSource()"/>
+    <invoke id="candidate" type="scxml" srcexpr="candidateSource()">
       <param name="turn" expr="turn"/>
       <param name="input" expr="input"/>
     </invoke>
@@ -88,8 +88,8 @@
     <transition event="bot.ability.autonomy.candidate.silent" target="advancing">
       <log label="autonomy.candidate.silent" expr="candidateSilentLog()"/>
     </transition>
-    <!-- A source that does not compile fails the invocation with no
-         invokeid (SCXML 3.12.2); nothing else here raises one. -->
+    <!-- A source that does not load or compile fails the invocation with
+         no invokeid (SCXML 3.12.2); nothing else here raises one. -->
     <transition event="error.*" target="recording_failure">
       <log label="autonomy.candidate.failed" expr="candidateFailedLog(_event)"/>
     </transition>

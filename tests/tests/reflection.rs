@@ -61,12 +61,13 @@ const BEHAVIOR: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version
 
 const PLAN: &str = r#"{"name":"GreetOnKnock","summary":"Answer a knock with a greeting.","states":[{"id":"answering","kind":"atomic","parent":"","purpose":"Decide the answer."},{"id":"answered","kind":"final","parent":"","purpose":"Carry the answer."}],"events":[],"transitions":[{"source":"answering","event":"","target":"answered","description":"Answer at once."}]}"#;
 
-/// The builder's draft: `scxml` with one test that drives nothing and
-/// expects the behavior to finish.
+/// The builder's draft: `scxml`, no schema and no script, with one test
+/// that drives nothing and expects the behavior to finish.
 fn draft(scxml: &str) -> String {
     json!({
         "scxml": scxml,
-        "schemas": [],
+        "schemas": {"$defs": {}},
+        "script": "",
         "tests": [{"name": "answers its turn", "events": [], "settle_ms": 2000, "expect_events": [], "expect_done": true}],
     })
     .to_string()
@@ -101,6 +102,18 @@ fn create_selection() -> Json {
     }])
 }
 
+fn change_selection() -> Json {
+    json!([{
+        "event": "bot.behavior.change",
+        "data": {
+            "event": "bot.behavior.change",
+            "name": "GreetOnKnock",
+            "reason": "It should greet by name.",
+        },
+        "reason": "a regression",
+    }])
+}
+
 fn break_selection(name: &str) -> Json {
     json!([{
         "event": "bot.behavior.break",
@@ -117,6 +130,7 @@ fn selection(route: &str) -> Option<Json> {
             Some(create_selection())
         }
         "break" => Some(break_selection("GreetOnKnock")),
+        "change" => Some(change_selection()),
         "breakunknown" => Some(break_selection("Nobody")),
         "two" => Some(json!([
             break_selection("GreetOnKnock")[0].clone(),
@@ -423,6 +437,24 @@ fn stored(episode: &Json) -> Json {
     json!([{"context_ref": "door", "scope": "memory", "kind": "task", "content": episode}])
 }
 
+/// The path the builder writes `GreetOnKnock`'s documents under, the row's
+/// source (decision D121).
+const GREET_PATH: &str = "../../behaviors/GreetOnKnock.scx";
+
+/// The behaviors directory of the layout whose harness is `harness`: where
+/// the builder writes, the run's files grant (`support::behaviors_grant`).
+fn behaviors(harness: &Path) -> PathBuf {
+    harness
+        .parent()
+        .and_then(Path::parent)
+        .expect("the harness is <layout>/abilities/reflection_harness.scx")
+        .join("behaviors")
+}
+
+/// A seed of one ACTIVE turn behavior named `GreetOnKnock` whose program the
+/// builder wrote ([`GREET_PATH`]).
+const SEED_STORED: &str = "[{sql: &quot;INSERT INTO bot_behavior (name, source, description, status) VALUES ('GreetOnKnock', '../../behaviors/GreetOnKnock.scx', 'Say hello.', 'ACTIVE')&quot;}, {sql: &quot;INSERT INTO bot_behavior_trigger (behavior_name, \\&quot;trigger\\&quot;) VALUES ('GreetOnKnock', 'environment.sound')&quot;}]";
+
 /// A seed of one ACTIVE turn behavior named `GreetOnKnock`, used once.
 const SEED_BEHAVIOR: &str = "[{sql: &quot;INSERT INTO bot_behavior (name, source, description, status, used_count, last_used_at) VALUES ('GreetOnKnock', '&lt;scxml/&gt;', 'Say hello.', 'ACTIVE', '1', '2026-10-09T00:00:00Z')&quot;}, {sql: &quot;INSERT INTO bot_behavior_trigger (behavior_name, \\&quot;trigger\\&quot;) VALUES ('GreetOnKnock', 'environment.sound')&quot;}]";
 
@@ -649,7 +681,7 @@ fn a_create_is_built_and_stored_active_with_grounded_triggers_on(database: &str)
     assert_eq!(
         json_log(&records, "inventory"),
         json!([{
-            "name": "GreetOnKnock", "source": BEHAVIOR,
+            "name": "GreetOnKnock", "source": GREET_PATH,
             "description": "Say hello when a knock sound arrives.",
             "lifetime": "turn", "status": "ACTIVE", "status_reason": "",
             "used_count": "0", "failed_count": "0", "triggers": ["environment.sound"],
@@ -658,7 +690,23 @@ fn a_create_is_built_and_stored_active_with_grounded_triggers_on(database: &str)
     let behavior = &json_log(&records, "episodes")[0]["content"]["behavior"];
     assert_eq!(behavior["name"], "GreetOnKnock");
     assert_eq!(behavior["triggers"], json!(["environment.sound"]));
-    assert_eq!(behavior["source"], BEHAVIOR);
+    assert_eq!(behavior["source"], GREET_PATH);
+    // The row's source is the path of the documents the builder wrote
+    // under the intent's name (decision D121).
+    let written = behaviors(&harness);
+    assert_eq!(
+        std::fs::read_to_string(written.join("GreetOnKnock.scx")).expect("the chart is written"),
+        BEHAVIOR
+    );
+    assert_eq!(
+        std::fs::read_to_string(written.join("GreetOnKnock.json"))
+            .expect("the schemas are written"),
+        r#"{"$defs":{}}"#
+    );
+    assert_eq!(
+        std::fs::read_to_string(written.join("GreetOnKnock.js")).expect("the script is written"),
+        ""
+    );
     // The builder was asked once, with the intent, the DRAFT stub, and the
     // turn behavior contract.
     let drafts = mock.requests("scxml_draft");
@@ -872,14 +920,75 @@ fn a_failed_build_leaves_a_validation_draft_on(database: &str) {
     assert_eq!(
         json_log(&records, "inventory"),
         json!([{
-            "name": "GreetOnKnock", "source": rejected_behavior(),
+            "name": "GreetOnKnock", "source": GREET_PATH,
             "description": "Say hello when a knock sound arrives.",
             "lifetime": "turn", "status": "DRAFT", "status_reason": "validation",
             "used_count": "0", "failed_count": "0",
             "triggers": ["environment.sound", "phone.incoming_call"],
         }])
     );
+    assert_eq!(
+        std::fs::read_to_string(behaviors(&harness).join("GreetOnKnock.scx"))
+            .expect("the rejected draft is written"),
+        rejected_behavior(),
+        "the DRAFT row's path names the rejected draft"
+    );
     assert_eq!(json_log(&records, "episodes"), stored(&unapplied_episode()));
+}
+
+/// A change revises the stored program: reading reads its three documents
+/// back through the files service (decision D121), the builder is given
+/// them as the existing row's `scxml`, `schemas` and `script`, and the
+/// revision is written under the same name, so the row keeps its path.
+#[test]
+fn a_change_reads_the_stored_documents_back_for_the_builder() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "change", SEED_STORED, SQLITE);
+    let stored_dir = behaviors(&harness);
+    std::fs::create_dir_all(&stored_dir).expect("the behaviors directory is creatable");
+    let old = BEHAVIOR.replace("Hello!", "Hi!");
+    std::fs::write(stored_dir.join("GreetOnKnock.scx"), &old).expect("writable");
+    std::fs::write(
+        stored_dir.join("GreetOnKnock.json"),
+        r#"{"$defs": {"knock": {"type": "object"}}}"#,
+    )
+    .expect("writable");
+    std::fs::write(stored_dir.join("GreetOnKnock.js"), "// stored\n").expect("writable");
+    let mut run = start(&harness, &env);
+    let records = reflect(&mut run, 1);
+    drop(run.close(WAIT));
+    assert_eq!(
+        texts(&records, "harness.output"),
+        ["answered"],
+        "{records:?}"
+    );
+    let drafts = mock.requests("scxml_draft");
+    assert_eq!(drafts.len(), 1, "{records:?}");
+    let prompt: Json =
+        serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
+    let spec = prompt["spec"].as_str().expect("the spec");
+    let write: Json = serde_json::from_str(spec.rsplit("\n\n").next().expect("the input"))
+        .expect("the change write input is JSON");
+    let existing = &write["existing_behavior"];
+    assert_eq!(existing["source"], GREET_PATH, "{existing}");
+    assert_eq!(existing["scxml"], old.as_str(), "{existing}");
+    assert_eq!(
+        existing["schemas"],
+        json!({"$defs": {"knock": {"type": "object"}}}),
+        "{existing}"
+    );
+    assert_eq!(existing["script"], "// stored\n", "{existing}");
+    assert_eq!(prompt["name"], "GreetOnKnock", "{prompt}");
+    assert_eq!(
+        json_log(&records, "inventory")[0]["source"],
+        GREET_PATH,
+        "the revision keeps the row's path"
+    );
+    assert_eq!(
+        std::fs::read_to_string(stored_dir.join("GreetOnKnock.scx")).expect("readable"),
+        BEHAVIOR,
+        "the revision is written over the stored chart"
+    );
 }
 
 /// A change call that fails without a draft to check (every generation

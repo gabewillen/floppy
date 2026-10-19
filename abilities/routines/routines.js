@@ -18,7 +18,7 @@ function routinesSelectStatements() {
 
 // The recalled rows, as the routines the chain runs.
 function routinesFromMemoryOutput(event) {
-  return event.data.results[0].rows.map(function (r) { return {name: r.values[0], source: r.values[1]}; });
+  return event.data.results[0].rows.map(function (r) { return {name: r.values[0], source: r.values[1], updated_at: r.values[2]}; });
 }
 
 // The reference inventory.revision: the recalled rows differ from the running set.

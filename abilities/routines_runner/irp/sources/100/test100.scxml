@@ -3,7 +3,7 @@
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="routines_runner" type="scxml" src="../../../routines_runner.scx">
-    <param name="routines" expr='[{"name": "Quiet", "source": "&lt;scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"s\"&gt;&lt;state id=\"s\"/&gt;&lt;/scxml&gt;"}]'/>
+    <param name="routines" expr='[{"name": "Quiet", "source": "irp/behaviors/8d78f13157212a64.scxml"}]'/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>

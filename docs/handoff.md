@@ -11,6 +11,22 @@ Last updated: 2026-10-18.
 
 ## Current state (2026-10-09) — resume here
 
+- **Multi-document learned behaviors (2026-10-18, D121):** the builder's
+  author tool call returns `scxml`, `schemas` (`$defs` by input event) and
+  `script`, and the builder writes them as `<name>.scx`, `<name>.json` and
+  `<name>.js` through the new `services/files` (scxml.rs's files example's
+  `name`/`text`/`seed`) into the run's `behaviors/` grant
+  (`--dir https://github.com/stateforward/floppy/services/files=HOST::/behaviors`;
+  every bot and builder run needs it now, and the test harness grants the
+  layout's `behaviors/`). The chart references `<name>.json#/$defs/<event>`
+  and one root `<script src="<name>.js"/>`; it is validated with
+  `EVENT004` waived and simulated by `srcexpr` on
+  `../../behaviors/<name>.scx`. A behavior row's `source` is that path;
+  reflection reads a stored program back with `seed` for a change; the
+  candidates and routines runners invoke by `srcexpr`. scxml.rs is at
+  `c8bb69a8` (a `srcexpr` child's schema files and scripts load against
+  its own base URI, fetched each time it is invoked). Open: D121's "To
+  review" list under "Open decisions" below.
 - **Parity gap 13's small part (2026-10-18,
   [parity-gaps](plans/parity-gaps.md)):** `<conversation:ingest_content>`
   no longer takes an image stimulus as `image/*` content, as the original's
@@ -128,7 +144,7 @@ Last updated: 2026-10-18.
   address; the cognition input's `environment` field is rendered by
   reasoning as the original's environment block. Every environment run
   passes `--fuel 9223372036854775807` until average usage is measured
-  (D111). scxml.rs is at `b59f8111` (D104, D109, D110). Speech and voice
+  (D111). scxml.rs is at `c8bb69a8` (D121), on top of `b59f8111` (D104, D109, D110). Speech and voice
   backends exist now, each through an env file in the session scratchpad
   (outside the repository) named in `FLOPPY_LIVE_ENV_FILE` with `.env`:
   `env.speech` (Gemini's OpenAI-compatible API, `FLOPPY_SPEECH_*`) and
@@ -426,7 +442,7 @@ Last updated: 2026-10-18.
 - Build floppy's components: `scripts/build-components.sh` (publishes a dev
   package cache under `target/components/package-cache`).
 - Run the builder bot (dev, until floppy has a release):
-  `scx run --offline --cache-dir target/components/package-cache --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx`
+  `scx run --offline --cache-dir target/components/package-cache --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --dir "https://github.com/stateforward/floppy/services/files=$PWD/behaviors::/behaviors" bots/builder/builder.scx`
   with a `builder.request` event on stdin (see `bots/builder/README.md`).
 - Live tests: `FLOPPY_LIVE_ENV_FILE` (colon-separated env files) and
   `FLOPPY_LIVE_MODEL`.
@@ -717,6 +733,36 @@ The remaining the original port runs as one ultracode run with these grants:
 ## Open decisions (waiting on the user)
 
 1. Send the gateway report (reasoning buffering, keep-alives, abort on disconnect).
+2. D121, to review (choices made closest to the design where it left a
+   question open):
+   - The path is `../../behaviors/<name>.scx`, written in `builder.js`: it
+     resolves the same from the builder and from the candidates and
+     routines runners only because each sits two levels below the layout
+     root. A path given to the builder (a request field or `<param>`)
+     would free that, at the cost of a new name.
+   - The files service's guest directory is fixed at `/behaviors`, as the
+     example's is at `/workspace`.
+   - `<scx:validate>` waives `EVENT004`: `<scx:eventschema uri>` is a
+     literal, and the draft's file name is not known until run time, so
+     the validator never sees the schema file (the simulation's compile
+     does). A `uriexpr` upstream would close it; it was not added (no
+     ceremony in scxml.rs).
+   - scxml.rs fetches a `srcexpr` document (and its schema files and
+     scripts) each time its `<invoke>` runs, never from the run's memo,
+     so a repaired draft written under the same name loads as written.
+   - A row's `source` column holds the path (no migration of the
+     original's schema); routines tell a revision by `updated_at` (second
+     resolution), since a revised program keeps its path.
+   - The builder writes every draft before validating it, so a change
+     being built overwrites the stored program's files at once, and a
+     failed change leaves its rejected draft there, as its DRAFT row says;
+     it always writes `<name>.js` (empty for no script) so a read back
+     finds all three.
+   - The builder makes a name one plain file name (each run of characters
+     other than letters, digits, `_` and `-` becomes `_`), so two names
+     can share a file; a read back that fails fails the revision.
+   - `SessionEmbedder::scripts` takes the session's base URI (a host API
+     change in scxml.rs), and the CLI keys scripts by URL.
 
 ## Backlog (agreed, not started)
 

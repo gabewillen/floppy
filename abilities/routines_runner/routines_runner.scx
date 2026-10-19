@@ -11,11 +11,11 @@
               rest_region { rest_deciding -> rest_on | rest_off } }
 
   Input: the <param> routines, the ACTIVE persistent rows Routines
-  selected from behavior inventory, in inventory order: [{name, source}],
-  at least one. Each routine is its bot_behavior row's source, run by
-  <invoke><content expr> (no file, no srcexpr); like every invoked child it
-  gets no schema files, so it carries no event:schema references
-  (docs/plans/phase5-behaviors.mdscript.md, "Persistent Routine
+  selected from behavior inventory, in inventory order: [{name, source,
+  updated_at}], at least one. Each routine's source is the path of its
+  program, the builder's <name>.scx beside its <name>.json and <name>.js
+  (decision D121), run by <invoke srcexpr>, so it gets its schema file and
+  script (docs/plans/phase5-behaviors.mdscript.md, "Persistent Routine
   Contract").
 
   Ticks: each bot.behavior.tick the routine sends its parent (#_parent)
@@ -26,9 +26,9 @@
   transition's event:schema as it arrives.
 
   Stopping: a routine that ends, fails (error.communication.routine), or
-  cannot start (a source that does not compile raises error.execution in
-  this session), stays
-  stopped until its source changes (the original: "it stays stopped until
+  cannot start (a source that does not load or compile raises
+  error.execution in this session), stays
+  stopped until its row changes (the original: "it stays stopped until
   changed"), and the rest keep running. Each runner nests one level deeper
   (scxml.rs bounds the nested invoke depth at 32 below the root session),
   so a chain longer than that stops at the bound, logged as
@@ -56,9 +56,7 @@
     <!-- The first routine. -->
     <state id="routine_region" initial="routine_on">
       <state id="routine_on">
-        <invoke id="routine" type="scxml">
-          <content expr="routineSource(0)"/>
-        </invoke>
+        <invoke id="routine" type="scxml" srcexpr="routineSource(0)"/>
         <transition event="done.invoke.routine" target="routine_off"/>
         <transition event="error.communication.routine error.execution" target="routine_off">
           <log label="routines.failed" expr="routineFailure(0, _event)"/>

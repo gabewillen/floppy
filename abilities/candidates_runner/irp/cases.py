@@ -28,7 +28,7 @@ INPUT = {"text": "hello", "focus": None, "focus_candidates": []}
 
 def run(candidates, input=INPUT, turn=3, database=DB, silence_ms=None, memory_timeout_ms=None):
     params = [("turn", js(turn)), ("input", js(input)),
-              ("candidates", js([{"name": name, "source": source} for name, source in candidates])),
+              ("candidates", js([{"name": name, "source": S.behavior(source)} for name, source in candidates])),
               ("database", database)]
     if silence_ms is not None:
         params.append(("silence_ms", js(silence_ms)))
@@ -49,7 +49,7 @@ def answer(tried, handled, rejection=None, extra=None):
 
 HANDLED_SELECTED = f"_event.data.selected.length === 1 && _event.data.selected[0].event === '{IGNORE}' && _event.data.selected[0].reason === 'handled'"
 
-S.statement(1, "It runs the first of its `candidates` <param> (`[{name, source}]`) as the child `candidate` from its source, with the <param>s `turn` and `input`. A candidate that answers by its donedata `{turn, handled: true, selected}` for this turn with at least one selection, all sent, has its use persisted, and the runner ends with donedata `{tried: [name], handled: true, selected, rejection: null}`, `selected` the candidate's own selections; it sends its parent nothing else.")
+S.statement(1, "It runs the first of its `candidates` <param> (`[{name, source}]`, `source` the path of the candidate's program, decision D121) as the child `candidate` by `<invoke srcexpr>` on its source, with the <param>s `turn` and `input`. A candidate that answers by its donedata `{turn, handled: true, selected}` for this turn with at least one selection, all sent, has its use persisted, and the runner ends with donedata `{tried: [name], handled: true, selected, rejection: null}`, `selected` the candidate's own selections; it sends its parent nothing else.")
 S.statement(2, "The handled candidate's selections are sent, in order, each to the session its `target` names (`#_scxml_` + target, the session ids its turn's selections carry), before its use is persisted.")
 S.statement(3, "An answer that does not handle this turn (`handled` not `true`, no selections, or another turn) is not handled: with no candidates left, the runner ends with `{tried: [name], handled: false, selected: null, rejection: null}`.")
 S.statement(4, "When its candidate does not handle the turn and candidates are left, the runner invokes itself for the rest (with the same turn, input, database and bounds) and ends with the rest's donedata, its own candidate first in `tried`.")

@@ -26,14 +26,47 @@ use support::{Finished, Run, logs, unique_scratch, workspace};
 /// Bounded wait for the whole run (scx startup included).
 const WAIT: Duration = Duration::from_secs(120);
 
+/// The routine the harness stores as `name`, ticking every 60 s with
+/// `text`: the harness's `routine` template.
+fn routine(name: &str, text: &str) -> String {
+    format!(
+        r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="waiting"><state id="waiting"><onentry><send event="every" delay="60s"/></onentry><transition event="every" target="waiting"><send event="bot.behavior.tick" target="#_parent"><content expr="({{name: '{name}', trigger: 'every', scheduled_at: '2026-10-05T08:00:00-04:00', fired_at: '2026-10-05T08:00:00-04:00', output: [{{event: 'bot.speaking.say', data: {{text: '{text}'}}}}]}})"/></send></transition></state></scxml>"##
+    )
+}
+
+/// Writes each `(name, program)` of `programs` as `<name>.scx` into the
+/// behaviors directory of the scratch root `dir`, where a row's source,
+/// `../../behaviors/<name>.scx`, names it (decision D121).
+fn write_programs(dir: &Path, programs: &[(&str, &str)]) {
+    let behaviors = dir.join("behaviors");
+    std::fs::create_dir_all(&behaviors).expect("the behaviors directory is creatable");
+    for (name, program) in programs {
+        std::fs::write(behaviors.join(format!("{name}.scx")), program)
+            .expect("the program is writable");
+    }
+}
+
 /// Lays out the routines, their runner and the ability schemas with the
-/// harness beside them; `database` (an ECMAScript expression) replaces the
-/// harness's database path. Returns the harness.
+/// harness beside them, and the programs of its rows (revision one);
+/// `database` (an ECMAScript expression) replaces the harness's database
+/// path. Returns the harness.
 fn layout(database: &str) -> PathBuf {
     let dir = unique_scratch("routines");
     for name in ["memory", "routines", "routines_runner"] {
         support::copy_ability(name, &dir.join("abilities"));
     }
+    let programs: Vec<(&str, String)> = ["Alpha", "Beta", "Gamma", "Delta"]
+        .into_iter()
+        .map(|name| (name, routine(name, "one")))
+        .chain([("Epsilon", "not scxml".to_owned())])
+        .collect();
+    write_programs(
+        &dir,
+        &programs
+            .iter()
+            .map(|(name, program)| (*name, program.as_str()))
+            .collect::<Vec<_>>(),
+    );
     let harness =
         std::fs::read_to_string(workspace().join("tests/fixtures/phase5/routines_harness.scx"))
             .expect("the harness is readable")
@@ -46,16 +79,26 @@ fn layout(database: &str) -> PathBuf {
     path
 }
 
+/// Runs `harness` (`<root>/abilities/harness.scx`), granting the files
+/// service its root's behaviors directory when it binds it.
 fn run(harness: &Path) -> Finished {
-    let run = Run::start(
-        &[
-            "--clock".to_owned(),
-            "logical".to_owned(),
-            harness.display().to_string(),
-        ],
-        &[],
-    );
-    run.finish(WAIT)
+    let root = harness
+        .parent()
+        .and_then(Path::parent)
+        .expect("the harness is <root>/abilities/harness.scx");
+    let mut args = vec!["--clock".to_owned(), "logical".to_owned()];
+    if support::binds(harness, "files") {
+        args.extend([
+            "--dir".to_owned(),
+            format!(
+                "{}={}::/behaviors",
+                support::service_uri("files"),
+                root.join("behaviors").display()
+            ),
+        ]);
+    }
+    args.push(harness.display().to_string());
+    Run::start(&args, &[]).finish(WAIT)
 }
 
 fn texts(finished: &Finished, label: &str) -> Vec<String> {
@@ -71,8 +114,10 @@ fn strings(values: &[&str]) -> Vec<String> {
 }
 
 /// The ACTIVE persistent routines start and tick; a BROKEN routine and a
-/// turn behavior do not, and one whose source is not SCXML stays stopped. A reconcile after the inventory changed restarts
-/// the changed routine on its new source and stops the deleted one.
+/// turn behavior do not, and one whose program is not SCXML stays stopped.
+/// A reconcile after the inventory changed restarts the changed routine on
+/// its new program, written over its path (its row's `updated_at` changed),
+/// and stops the deleted one.
 #[test]
 fn routines_run_the_active_persistent_rows_and_reconcile_their_changes() {
     let finished = run(&layout("'/memory/floppy.sqlite'"));
@@ -118,6 +163,12 @@ fn a_failed_inventory_load_keeps_the_running_set() {
         &[
             "--clock".to_owned(),
             "logical".to_owned(),
+            "--dir".to_owned(),
+            format!(
+                "{}={}::/behaviors",
+                support::service_uri("files"),
+                unique_scratch("routines-behaviors").display()
+            ),
             harness.display().to_string(),
         ],
         &[],
@@ -250,9 +301,10 @@ fn an_at_routine_ticks_at_its_occurrence_and_an_empty_tick_is_refused() {
     </transition>
   </state>
 </scxml>"##;
+    write_programs(&dir, &[("Silent", silent), ("MorningBriefing", &at)]);
     let routines = serde_json::json!([
-        {"name": "Silent", "source": silent},
-        {"name": "MorningBriefing", "source": at},
+        {"name": "Silent", "source": "../../behaviors/Silent.scx"},
+        {"name": "MorningBriefing", "source": "../../behaviors/MorningBriefing.scx"},
     ]);
     let harness = format!(
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="harness" initial="live">

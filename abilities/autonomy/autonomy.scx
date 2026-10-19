@@ -46,8 +46,9 @@
   abilities/candidates_runner/candidates_runner.scx as the child
   "candidates", which tries them one at a time, one runner each, and
   answers {tried, handled, selected, rejection}. Each behavior's source is
-  an SCXML document (phase 5 plan, "Turn Behavior Contract"), run as the
-  runner's child "candidate" by <invoke><content expr>, with the <param>s
+  the path of its SCXML document (phase 5 plan, "Turn Behavior Contract"),
+  which the builder wrote beside its schema file and script (decision
+  D121), run as the runner's child "candidate" by <invoke srcexpr>, with the <param>s
   turn and input
   (the stimulus's data, or {event: data} when it is not an object, plus
   focus and focus_candidates: the original's behavior_input_payload,
@@ -82,7 +83,8 @@
   fires after its state was left arrives where nothing takes it.
 
   Contracts: the Memory ability's events reference abilities/schemas/ by
-  event:schema. A candidate is builder output and gets no schema files.
+  event:schema. A candidate is builder output, loaded from its path with
+  the schema file and script beside it.
 
   Bindings: the autonomy namespace package (the Memory ability binds the
   sql service).

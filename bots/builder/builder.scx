@@ -9,9 +9,9 @@
     <send event="builder.request" target="#_builder"><content expr="..."/></send>
 
   It ends in exactly one of two top-level final states, whose <donedata>
-  carries the result: done {scxml, schemas, tests, report} or failed
-  {reason, diagnostics, history, scxml?} (scxml: the last draft a check
-  rejected, when there is one). Run directly, scx run prints that data in its done
+  carries the result: done {scxml, schemas, script, path, tests, report} or
+  failed {reason, diagnostics, history, scxml?, path?} (scxml: the last draft
+  a check rejected, when there is one, and path where it was written). Run directly, scx run prints that data in its done
   record; invoked, the parent receives it as done.invoke.<id> (SCXML 6.4).
   Progress goes to <log>, labelled with the stage. The event:schema
   contracts below are inline copies of schemas/*.json (an invoked child is
@@ -23,12 +23,17 @@
   event contract.
 
   intake -> design (an invoked generate service: topology plan) -> author
-  (an invoked generate service: draft SCXML + event schemas + test scripts)
-  -> validate (scx:validate; machine-applicable
-  fixes through apply_fixes, at most 2 passes per draft; with the request's
+  (an invoked generate service: the draft as three fields, its SCXML
+  structure, its input events' schemas as one JSON object with $defs keyed
+  by event, and its ECMAScript, or none, + test scripts) -> writing (the
+  files service: the draft as three documents beside each other,
+  <name>.scx, <name>.json and <name>.js, in the directory the run grants it,
+  so the model never escapes one inside another; decision D121) -> validate
+  (scx:validate; EVENT004, the schema file it is not given, waived; machine-applicable
+  fixes through apply_fixes and writing, at most 2 passes per draft; with the request's
   min_every_ms and turn_after_bound_ms, the original check()'s lifetime bounds,
   E0009, <behavior:lifetime_errors>) -> simulate (each test script drives the draft as an invoked
-  child with its own invoke id; with those bounds, a persistent routine,
+  child, by <invoke srcexpr> on its path, with its own invoke id; with those bounds, a persistent routine,
   a draft that sends bot.behavior.tick, also gets its first schedule's
   event at once and must tick with a selection, the reference verify_apply,
   E0008, <behavior:verify_tick>) -> done. Every failure goes through retry_gate, which takes its
@@ -67,8 +72,10 @@
   and wasi grants), nothing more (docs/decisions.md, D28).
 
   Bindings: the scx namespace (built into scx), and the decision and
-  behavior namespace packages and the generate and decision service packages, resolved from their
-  repository URIs; the env
+  behavior namespace packages and the generate, decision and files service packages, resolved from their
+  repository URIs (the files service's directory is the run's dir grant,
+  https://github.com/stateforward/floppy/services/files=HOST::/behaviors,
+  HOST the behaviors directory beside bots, ../../behaviors/ from here); the env
   attributes below scope FLOPPY_API_KEY and FLOPPY_BASE_URL to the generate
   service's invokes and TYPESAFE_API_KEY and TYPESAFE_BASE_URL to the
   decision service's. The generate service has no default backend: when the
@@ -87,6 +94,9 @@
     <!-- The request. -->
     <data id="spec" expr="''"/>
     <data id="constraints" expr="[]"/>
+    <!-- The name the draft's documents are written under (the plan's
+         name unless the request names one). -->
+    <data id="name" expr="null"/>
     <!-- An optional failure cap; null (no cap) unless the request sets it. -->
     <data id="max_attempts" expr="null"/>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
@@ -112,12 +122,12 @@
     <data id="previous_plan" expr="null"/>
     <data id="draft" expr="null"/>
     <data id="previous_tests" expr="null"/>
+    <data id="previous_schemas" expr="null"/>
+    <data id="previous_script" expr="null"/>
     <data id="scxml_text" expr="null"/>
-    <data id="parsed_schemas" expr="[]"/>
     <data id="report" expr="null"/>
     <data id="fixed" expr="null"/>
     <data id="mode" expr="'author'"/>
-    <data id="schema_errors" expr="[]"/>
     <data id="lifetime_errors" expr="[]"/>
     <!-- The draft's lifetime (persistent when it sends bot.behavior.tick)
          and a persistent routine's schedule events, in document order. -->
@@ -135,10 +145,10 @@
     <data id="choices" expr="[]"/>
     <data id="stage_run" expr="0"/>
     <data id="design_system" expr="'You are the design stage of the floppy builder bot. Plan the topology of one SCXML 1.0 state machine that implements the specification and honours every constraint. Use concise lowercase state ids (letters, digits, underscores). Name events with dotted lowercase names. Inputs are events the machine receives from its invoker; outputs are events it sends to its invoker. Model timing with delayed timer events, never with loops. When diagnostics or a previous plan are given, the previous attempt failed: plan again so that it cannot fail the same way. Answer with the plan only.'"/>
-    <data id="author_system" expr="'You are the author stage of the floppy builder bot. Write one complete SCXML 1.0 document that implements the plan and the specification. Rules: the root element is scxml in the namespace http://www.w3.org/2005/07/scxml with version 1.0 and datamodel ecmascript; use the schema attribute of the namespace https://github.com/stateforward/scxml.rs/namespaces/event (bound to the prefix event) to give each input event an inline JSON Schema on the transitions that take it, written as single-quoted JSON; every transition target names an existing state id; event descriptors are separated by spaces, never commas; send every output to the invoker with a send element whose target is #_parent, exactly once per occurrence (announce a state from its own onentry, not also from the transitions into it); the machine starts on its own in its initial state unless the specification names a start event; every state is reachable; implement timing with delayed sends (for example delay 3s) and cancel pending timers on exit. Also return schemas: one entry per input event, its schema as the JSON text of a JSON Schema object (for example {&quot;type&quot;:&quot;object&quot;}) equal to the inline one; and tests: one to eight test scripts, each with input events (name, data as JSON object text or the empty string, delay_ms from the start of the test), settle_ms (the total observation time from the start of the test, larger than every delay_ms), expect_events (the output event names the machine must send to #_parent, in order; other outputs may appear between them), and expect_done (whether the machine reaches a top-level final state within settle_ms; a machine that cycles forever never does). When the task is repair, previous_scxml and previous_tests failed with the given diagnostics: a simulate diagnostic means either the machine or the test expectation is wrong, so fix whichever disagrees with the specification, fix every other diagnostic, and keep what already works.'"/>
+    <data id="author_system" expr="'You are the author stage of the floppy builder bot. Write one complete SCXML 1.0 document that implements the plan and the specification. Rules: the root element is scxml in the namespace http://www.w3.org/2005/07/scxml with version 1.0 and datamodel ecmascript; give each input event a JSON Schema in schemas, under $defs keyed by the event name, and reference it on the transitions that take it with the schema attribute of the namespace https://github.com/stateforward/scxml.rs/namespaces/event (bound to the prefix event) as NAME.json#/$defs/EVENT, where NAME is the name given and EVENT the event name; write the ECMAScript the document needs (the functions its cond and expr attributes call) as plain ECMAScript in script, or leave script empty, and when script is not empty the root holds exactly one script element, with src NAME.js, and no other; every transition target names an existing state id; event descriptors are separated by spaces, never commas; send every output to the invoker with a send element whose target is #_parent, exactly once per occurrence (announce a state from its own onentry, not also from the transitions into it); the machine starts on its own in its initial state unless the specification names a start event; every state is reachable; implement timing with delayed sends (for example delay 3s) and cancel pending timers on exit. Also return tests: one to eight test scripts, each with input events (name, data as JSON object text or the empty string, delay_ms from the start of the test), settle_ms (the total observation time from the start of the test, larger than every delay_ms), expect_events (the output event names the machine must send to #_parent, in order; other outputs may appear between them), and expect_done (whether the machine reaches a top-level final state within settle_ms; a machine that cycles forever never does). When the task is repair, previous_scxml, previous_schemas, previous_script and previous_tests failed with the given diagnostics: a simulate diagnostic means either the machine or the test expectation is wrong, so fix whichever disagrees with the specification, fix every other diagnostic, and keep what already works.'"/>
     <data id="triage_instructions" expr="'An SCXML draft failed. Choose how the builder continues: repair the draft from its diagnostics when they are local mistakes, redesign the plan when the diagnostics show the topology is wrong or there is no plan, abandon only when the specification cannot be built as a state machine.'"/>
     <data id="plan_schema" expr='({"type":"object","properties":{"name":{"type":"string"},"summary":{"type":"string"},"states":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"kind":{"type":"string","enum":["atomic","compound","parallel","final"]},"parent":{"type":"string"},"purpose":{"type":"string"}},"required":["id","kind","parent","purpose"],"additionalProperties":false}},"events":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"direction":{"type":"string","enum":["input","output","internal"]},"description":{"type":"string"}},"required":["name","direction","description"],"additionalProperties":false}},"transitions":{"type":"array","items":{"type":"object","properties":{"source":{"type":"string"},"event":{"type":"string"},"target":{"type":"string"},"description":{"type":"string"}},"required":["source","event","target","description"],"additionalProperties":false}}},"required":["name","summary","states","events","transitions"],"additionalProperties":false})'/>
-    <data id="draft_schema" expr='({"type":"object","properties":{"scxml":{"type":"string"},"schemas":{"type":"array","items":{"type":"object","properties":{"event":{"type":"string"},"schema":{"type":"string"}},"required":["event","schema"],"additionalProperties":false}},"tests":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"events":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"data":{"type":"string"},"delay_ms":{"type":"integer"}},"required":["name","data","delay_ms"],"additionalProperties":false}},"settle_ms":{"type":"integer"},"expect_events":{"type":"array","items":{"type":"string"}},"expect_done":{"type":"boolean"}},"required":["name","events","settle_ms","expect_events","expect_done"],"additionalProperties":false}}},"required":["scxml","schemas","tests"],"additionalProperties":false})'/>
+    <data id="draft_schema" expr='({"type":"object","properties":{"scxml":{"type":"string"},"schemas":{"type":"object","properties":{"$defs":{"type":"object","additionalProperties":{"type":"object"}}},"required":["$defs"],"additionalProperties":false},"script":{"type":"string"},"tests":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"events":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"data":{"type":"string"},"delay_ms":{"type":"integer"}},"required":["name","data","delay_ms"],"additionalProperties":false}},"settle_ms":{"type":"integer"},"expect_events":{"type":"array","items":{"type":"string"}},"expect_done":{"type":"boolean"}},"required":["name","events","settle_ms","expect_events","expect_done"],"additionalProperties":false}}},"required":["scxml","schemas","script","tests"],"additionalProperties":false})'/>
     <!-- Counters. -->
     <data id="attempt" expr="0"/>
     <data id="failures" expr="0"/>
@@ -187,11 +197,12 @@
 
   <!-- Waits for builder.request; no timeout: the invoker owns the lifetime. -->
   <state id="intake">
-    <transition event="builder.request" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"builder.request","description":"Ask the builder bot to build one SCXML machine from a natural-language specification.","type":"object","properties":{"spec":{"type":"string","minLength":1},"constraints":{"type":"array","items":{"type":"string"},"maxItems":32},"max_attempts":{"type":"integer","minimum":1,"maximum":8},"model":{"type":"string","minLength":1},"generate_timeout_ms":{"type":"integer","minimum":1,"maximum":3600000},"generate_ceiling_ms":{"type":"integer","minimum":1,"maximum":3600000},"min_every_ms":{"type":"integer","minimum":1,"maximum":86400000},"turn_after_bound_ms":{"type":"integer","minimum":1,"maximum":86400000}},"required":["spec"],"additionalProperties":false}'
+    <transition event="builder.request" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"builder.request","description":"Ask the builder bot to build one SCXML machine from a natural-language specification.","type":"object","properties":{"spec":{"type":"string","minLength":1},"name":{"type":"string","minLength":1},"constraints":{"type":"array","items":{"type":"string"},"maxItems":32},"max_attempts":{"type":"integer","minimum":1,"maximum":8},"model":{"type":"string","minLength":1},"generate_timeout_ms":{"type":"integer","minimum":1,"maximum":3600000},"generate_ceiling_ms":{"type":"integer","minimum":1,"maximum":3600000},"min_every_ms":{"type":"integer","minimum":1,"maximum":86400000},"turn_after_bound_ms":{"type":"integer","minimum":1,"maximum":86400000}},"required":["spec"],"additionalProperties":false}'
                 cond="satisfiesBuilderRequest(_event)"
                 target="design">
       <assign location="spec" expr="_event.data.spec"/>
       <assign location="constraints" expr="requestConstraints(_event)"/>
+      <assign location="name" expr="requestName(_event)"/>
       <assign location="max_attempts" expr="requestMaxAttempts(_event)"/>
       <assign location="model" expr="requestModel(_event)"/>
       <assign location="generate_timeout_ms" expr="requestGenerateTimeoutMs(_event)"/>
@@ -290,7 +301,9 @@
     <onentry>
       <assign location="attempt" expr="increment(attempt)"/>
       <log label="author" expr="authorLog()"/>
-      <assign location="previous_tests" expr="previousTests()"/>
+      <assign location="previous_tests" expr="previousDraft('tests')"/>
+      <assign location="previous_schemas" expr="previousDraft('schemas')"/>
+      <assign location="previous_script" expr="previousDraft('script')"/>
       <assign location="draft" expr="null"/>
       <assign location="gen_failure" expr="null"/>
       <assign location="stage_run" expr="increment(stage_run)"/>
@@ -339,7 +352,7 @@
     <transition event="generate.failed" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.failed","description":"The generation failed; code names why (closed).","type":"object","properties":{"code":{"enum":["unconfigured","transport","status","malformed","truncated","filtered","refusal","not-json","schema-mismatch"]}},"required":["code"],"additionalProperties":false}' cond="isFrom(_event, gen_id)">
       <assign location="gen_failure" expr="_event.data.code"/>
     </transition>
-    <transition event="done.invoke" cond="draftGenerated(_event)" target="validate">
+    <transition event="done.invoke" cond="draftGenerated(_event)" target="writing">
       <assign location="scxml_text" expr="draft.scxml"/>
       <assign location="fix_passes" expr="0"/>
     </transition>
@@ -362,7 +375,41 @@
     </transition>
   </state>
 
-  <!-- Checks the draft: its schemas parse, the validator is clean, its test
+  <!-- Writes the draft as three documents beside each other through the
+       files service (decision D121): <name>.scx (its text, fixes applied),
+       <name>.json (its schemas) and <name>.js (its script, empty for none),
+       which the chart references by relative URI; the simulation and every
+       later invoker load them from the draft's path. One at a time, so a
+       write that fails ends the writing with one error. -->
+  <state id="writing" initial="writing_scxml">
+    <transition event="error.*" target="retry_gate">
+      <assign location="diagnostics" expr="writeFailedDiagnostics()"/>
+    </transition>
+    <state id="writing_scxml">
+      <invoke id="write_scxml" type="https://github.com/stateforward/floppy/services/files">
+        <param name="name" expr="draftFile('.scx')"/>
+        <param name="text" expr="scxml_text"/>
+      </invoke>
+      <transition event="done.invoke.write_scxml" target="writing_schemas"/>
+    </state>
+    <state id="writing_schemas">
+      <invoke id="write_schemas" type="https://github.com/stateforward/floppy/services/files">
+        <param name="name" expr="draftFile('.json')"/>
+        <param name="text" expr="schemasText()"/>
+      </invoke>
+      <transition event="done.invoke.write_schemas" target="writing_script"/>
+    </state>
+    <state id="writing_script">
+      <invoke id="write_script" type="https://github.com/stateforward/floppy/services/files">
+        <param name="name" expr="draftFile('.js')"/>
+        <param name="text" expr="draft.script"/>
+      </invoke>
+      <transition event="done.invoke.write_script" target="validate"/>
+    </state>
+  </state>
+
+  <!-- Checks the draft: the validator is clean (but for EVENT004: it is not
+       given the schema file, which simulate's compile reads), its test
        scripts are within bounds. -->
   <state id="validate">
     <onentry>
@@ -374,17 +421,12 @@
       </if>
       <assign location="report" expr="null"/>
       <assign location="fixed" expr="null"/>
-      <assign location="schema_errors" expr="schemaErrors(draft.schemas)"/>
-      <assign location="parsed_schemas" expr="parsedSchemas(draft.schemas)"/>
       <behavior:lifetime_errors location="lifetime_errors" scxml="scxml_text"
           min_every="min_every_ms" turn_after_bound="turn_after_bound_ms"
           lifetimelocation="lifetime" scheduleslocation="schedules"/>
       <scx:validate location="report" expr="scxml_text" name="draft.scx"
                    applyfixes="machine-applicable" fixedlocation="fixed"/>
     </onentry>
-    <transition cond="hasSchemaErrors()" target="retry_gate">
-      <assign location="diagnostics" expr="schemaErrorDiagnostics()"/>
-    </transition>
     <!-- The original check(): E0009 when the request names the bounds. -->
     <transition cond="hasLifetimeErrors()" target="retry_gate">
       <assign location="diagnostics" expr="lifetime_errors"/>
@@ -406,17 +448,19 @@
     </transition>
   </state>
 
-  <!-- Takes the validator's machine-applicable fixes, then validates again. -->
+  <!-- Takes the validator's machine-applicable fixes, then writes and
+       validates again. -->
   <state id="apply_fixes">
     <onentry>
       <assign location="scxml_text" expr="fixed"/>
       <assign location="fix_passes" expr="increment(fix_passes)"/>
       <assign location="fixes_applied" expr="increment(fixes_applied)"/>
     </onentry>
-    <transition target="validate"/>
+    <transition target="writing"/>
   </state>
 
-  <!-- Runs every test script against the draft as an invoked child. The
+  <!-- Runs every test script against the draft as an invoked child, loaded
+       from its path (the documents writing wrote). The
        timeout covers the longest simulation validate admits (max_tests
        tests of at most sim_test_cap_ms each) plus a margin. -->
   <state id="simulate" initial="sim_next">
@@ -447,7 +491,8 @@
 
     <!-- One test: the draft runs as a fresh invocation (its own generated
          id in candidate_id, so nothing a cancelled earlier candidate left
-         on the queue counts) for the script's settle time. -->
+         on the queue counts) for the script's settle time, by srcexpr on
+         its path, so it gets its schema file and script. -->
     <state id="sim_run">
       <onentry>
         <if cond="reportsProgress()">
@@ -474,9 +519,7 @@
         </foreach>
         <cancel sendid="sim-settle"/>
       </onexit>
-      <invoke idlocation="candidate_id" type="scxml">
-        <content expr="scxml_text"/>
-      </invoke>
+      <invoke idlocation="candidate_id" type="scxml" srcexpr="draftPath()"/>
       <!-- The builder's own control events never carry an invoke id and
            carry this run's tag; a candidate's events of the same names fall
            through to the recorder below, and an earlier run's are dropped. -->
@@ -627,7 +670,7 @@
     <onentry>
       <log label="done" expr="doneLog()"/>
     </onentry>
-    <donedata event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"done","description":"The donedata of the final state done of the builder bot: an SCXML machine that validates and passes its own simulation.","type":"object","properties":{"scxml":{"type":"string","minLength":1},"schemas":{"type":"array","items":{"type":"object","properties":{"event":{"type":"string"},"schema":{"type":["object","boolean"]}},"required":["event","schema"],"additionalProperties":false}},"tests":{"type":"array","items":{"type":"object"}},"report":{"type":"object","properties":{"attempts":{"type":"integer","minimum":1},"failures":{"type":"integer","minimum":0},"fixes_applied":{"type":"integer","minimum":0},"warnings":{"type":"integer","minimum":0},"plan":{"type":"object"},"decisions":{"type":"array","items":{"type":"string"}},"history":{"type":"array","items":{"type":"object"}},"simulation":{"type":"array","items":{"type":"object"}}},"required":["attempts","failures","fixes_applied","warnings","plan","decisions","history","simulation"],"additionalProperties":false}},"required":["scxml","schemas","tests","report"],"additionalProperties":false}'>
+    <donedata event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"done","description":"The donedata of the final state done of the builder bot: an SCXML machine that validates and passes its own simulation, as its three documents and the path of the one invoked.","type":"object","properties":{"scxml":{"type":"string","minLength":1},"schemas":{"type":"object"},"script":{"type":"string"},"path":{"type":"string","minLength":1},"tests":{"type":"array","items":{"type":"object"}},"report":{"type":"object","properties":{"attempts":{"type":"integer","minimum":1},"failures":{"type":"integer","minimum":0},"fixes_applied":{"type":"integer","minimum":0},"warnings":{"type":"integer","minimum":0},"plan":{"type":"object"},"decisions":{"type":"array","items":{"type":"string"}},"history":{"type":"array","items":{"type":"object"}},"simulation":{"type":"array","items":{"type":"object"}}},"required":["attempts","failures","fixes_applied","warnings","plan","decisions","history","simulation"],"additionalProperties":false}},"required":["scxml","schemas","script","path","tests","report"],"additionalProperties":false}'>
       <content expr="doneData()"/>
     </donedata>
   </final>
@@ -636,7 +679,7 @@
     <onentry>
       <log label="failed" expr="failedLog()"/>
     </onentry>
-    <donedata event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"failed","description":"The donedata of the final state failed of the builder bot: why it could not build a machine that validates and passes its simulation, and the last draft a check rejected, when there is one.","type":"object","properties":{"reason":{"enum":["invalid-request","unconfigured","no-progress","attempts-exhausted","abandoned"]},"diagnostics":{"type":"array","items":{"type":"object","properties":{"kind":{"enum":["request","generate","draft","validate","lifetime","simulate","apply","timeout"]},"code":{"type":"string"},"message":{"type":"string"}},"required":["kind","code","message"],"additionalProperties":false}},"history":{"type":"array","items":{"type":"object"}},"scxml":{"type":"string","minLength":1}},"required":["reason","diagnostics","history"],"additionalProperties":false}'>
+    <donedata event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"failed","description":"The donedata of the final state failed of the builder bot: why it could not build a machine that validates and passes its simulation, and the last draft a check rejected, when there is one.","type":"object","properties":{"reason":{"enum":["invalid-request","unconfigured","no-progress","attempts-exhausted","abandoned"]},"diagnostics":{"type":"array","items":{"type":"object","properties":{"kind":{"enum":["request","generate","draft","validate","lifetime","simulate","apply","timeout"]},"code":{"type":"string"},"message":{"type":"string"}},"required":["kind","code","message"],"additionalProperties":false}},"history":{"type":"array","items":{"type":"object"}},"scxml":{"type":"string","minLength":1},"path":{"type":"string","minLength":1}},"required":["reason","diagnostics","history"],"additionalProperties":false}'>
       <content expr="failedData()"/>
     </donedata>
   </final>

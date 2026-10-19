@@ -37,7 +37,11 @@
 //! A case passes when `scx run` ends with the root finished (exit 0) and
 //! the run logged `Outcome` `pass`. The run grants each service the
 //! document tree binds a fresh scratch directory, as the integration tests
-//! do. `FLOPPY_IRP_SUITE=<name>` runs only that document's suite.
+//! do; a case whose document binds the files service (the builder and the
+//! documents that invoke it, decision D121) runs in a scratch copy of
+//! `bots/`, `abilities/` and `environments/` of its own, the files service
+//! granted that copy's `behaviors/`, so cases never share the documents
+//! the builder writes. `FLOPPY_IRP_SUITE=<name>` runs only that document's suite.
 
 #![allow(
     missing_docs,
@@ -266,6 +270,19 @@ fn run_case(document: &Path, case: &Path, test: &str) -> Option<String> {
     )
     .expect("the env file is writable");
     let mut args = vec!["--env-file".to_owned(), env.display().to_string()];
+    // The builder writes a draft's documents into the layout's behaviors
+    // directory: a layout of the case's own.
+    let start = if binds(document, "files") {
+        let root = unique_scratch("irp-layout");
+        for kind in ["bots", "abilities", "environments"] {
+            support::copy_tree(&workspace().join(kind), &root.join(kind));
+        }
+        let copied = root.join(start.strip_prefix(workspace()).unwrap_or(&start));
+        args.extend(support::behaviors_grant(&copied));
+        copied
+    } else {
+        start
+    };
     if binds(document, "sql") {
         args.extend(support::memory_grant());
     }

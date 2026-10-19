@@ -95,7 +95,7 @@ in the gitignored `.env`), `decision` uses TypeSafe through its own
 | 2 | Builder bot: `bots/builder/` SCXML (intake, design, author, `scx:validate`, fix or regenerate with bounded retries as states, simulate the draft as an invoked child via `#_<invokeid>`, ending in the final states `done`/`failed` whose `<donedata>` carries the result), run with `scx run` | `bots/builder/builder.scx` implemented (contract schemas in `bots/builder/schemas`; design and author invoke the generate service and triage invokes the decision service on the `decision:choice` choices, each with `<finalize>`/`done.invoke` and a `builder.timeout` that preempts and cancels the call; cond-based fallback; simulation as an invoked child); runs with `scx run --env-file .env bots/builder/builder.scx` (decisions D14, D16; [bots/builder/README.md](../bots/builder/README.md#running)); deterministic harness in `tests/tests/builder_bot.rs`, which runs that command (including a timeout firing while a generation is in flight); live results in [live-proof.md](live-proof.md) |
 | 3 | Memory service on SQLite | Done: `services/sql` (`floppy_service_sql`), one SQLite transaction of the original's `Statement`s per `<invoke>` on a database file in a directory the run grants (`--dir URI=HOST::/memory`), answering `sql.result` or `sql.failed`; the original's Memory ability as `abilities/memory/memory.scx`, which migrates the original's schema and applies statements through it, answering `bot.ability.memory.output` or `bot.ability.failed`; reasoning recalls cognitive episodes and standing directives (it retained each turn's episode until D97 left that to reflection), the identity recalls and remembers its adopted name, and the conversation recalls and remembers a relationship's memories (decisions D44 to D47, [plan](plans/phase3-memory.mdscript.md)). Reflection and behaviors use it in phase 5 |
 | 4 | Bot core: body and cognition as SCXML, abilities as invoked children, the original's pydantic event models as `event:schema` JSON Schemas, `bot.*` names unchanged | Done through the script-validator cutover: the body `bots/floppy/floppy.scx`; `abilities/` cognition (autonomy seam, intuition, reasoning), communication (conversation, speaking in text mode); the `bot` and `conversation` namespaces and the decision elements; event contracts and runtime `event:schema` checks; no `<script>` (decisions D33 to D43, [Phase 4 conventions](#phase-4-conventions)). Identity, the phase 5 seams, and the saved live examples finish it ([plan](plans/phase4-bot-core.mdscript.md)) |
-| 5 | Behaviors and routines: learned behaviors authored by the builder bot, validated, simulated, stored in memory, invoked when matched; routines as long-lived children | Done. The cognition runs reflection and routines beside its turns in every bot run (D80; with no database each logs `absent`). Autonomy runs the SpeechHeard seed and then the ACTIVE turn behaviors the stimulus triggers, each source by `<content expr>` under a 1 s silence bound, and records usage; reflection recalls the episodes and the inventory, selects at most one of `bot.behavior.create`, `change`, `break` through its enabled transitions, revises a behavior with the builder bot (which checks the reference `check()`'s lifetime bounds and forces a routine's first tick) and stores it ACTIVE (or the rejected source DRAFT `validation`), and stores the turn's episode; routines reconciles the ACTIVE persistent rows into a chain of runners that passes `bot.behavior.tick` up. All of it is kept by the Memory ability (decisions D60 to D64, D73 to D75, D80, [plan](plans/phase5-behaviors.mdscript.md)) |
+| 5 | Behaviors and routines: learned behaviors authored by the builder bot, validated, simulated, stored in memory, invoked when matched; routines as long-lived children | Done. The cognition runs reflection and routines beside its turns in every bot run (D80; with no database each logs `absent`). Autonomy runs the SpeechHeard seed and then the ACTIVE turn behaviors the stimulus triggers, each by `<invoke srcexpr>` on its row's path (D121) under a 1 s silence bound, and records usage; reflection recalls the episodes and the inventory, selects at most one of `bot.behavior.create`, `change`, `break` through its enabled transitions, revises a behavior with the builder bot (which checks the reference `check()`'s lifetime bounds and forces a routine's first tick) and stores it ACTIVE (or the rejected source DRAFT `validation`), and stores the turn's episode; routines reconciles the ACTIVE persistent rows into a chain of runners that passes `bot.behavior.tick` up. All of it is kept by the Memory ability (decisions D60 to D64, D73 to D75, D80, [plan](plans/phase5-behaviors.mdscript.md)) |
 | 6 | Speech, vision, and devices as services (`speech`, `vision`, `phone`, audio) | Done for speech and vision; devices are out of scope. `services/speech` (`floppy_service_speech`) decodes and encodes speech on OpenAI-compatible audio APIs and detects, diarizes and identifies voices on LocalAI's voice APIs (decisions D57, D66); the generate service reads images (D58). The original's hearing leaves, Listening (`Perceiving{Listening, Sensing}`, Sensitivity, Interpretation with the open-speech window; decision D67) and the SpeechHeard seed turn `environment.sound` into the turn's `bot.ability.listening.speech.output` stimulus and then `bot.ability.communication.input`; vocal and Speaking speak audio (D59, superseding D38); vision and Reading are ported, invoked by nothing yet as in the original ([Phase 6 conventions](#phase-6-conventions), [plan](plans/phase6-speech-vision.mdscript.md)) |
 | 7 | Defaults and release: PGlite memory, tagged releases with `SHA256SUMS` for repository namespaces and services (releases wait for going public) | Done except publishing. Memory on Postgres: `services/pgsql` behind the unchanged Memory ability, selected by its `database` (a `postgresql://` URI), migrating the original's full head schema in the Postgres dialect through the Alembic-style migration ability, with every ability's SQL portable to both engines and tested on Postgres 16; PGlite is reached over its socket server, not compiled into a component (decisions D48 to D51, D69 to D72). Defaults: README.md's [Defaults](../README.md#defaults) and `.env.example`, checked by `tests/tests/defaults.rs`; there is no default backend, so every run names its endpoint with `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (decision D31). Releases: canonical Linux builds, `SHA256SUMS` and a dry run of the release layout, prepared and checked locally ([release.md](release.md)); no tag, release or upload until the repositories are public ([plan](plans/phase7-pglite-defaults.mdscript.md)) |
 
@@ -285,7 +285,7 @@ D33 to D43.
 | behavior `schedule.At.next_after` | `next_after` in `abilities/reflection/reflection.js`, carried by a routine as data (a draft cannot use a namespace element: `<scx:validate>` binds no package, D116) | routine ECMAScript |
 | autonomy `behavior_input_payload` | `<autonomy:behavior_input_payload>` (D116) | `namespaces/autonomy` element |
 | `cognition.py` Cognition | `abilities/cognition/cognition.scx` | ability `.scx` child |
-| `autonomy.py` Autonomy | `abilities/autonomy/autonomy.scx` (phase 5: the inventory's ACTIVE turn behaviors the stimulus triggers run as `<content expr>` children of the chain `abilities/candidates_runner/candidates_runner.scx`, D93) | stage `.scx` child |
+| `autonomy.py` Autonomy | `abilities/autonomy/autonomy.scx` (phase 5: the inventory's ACTIVE turn behaviors the stimulus triggers run as `<invoke srcexpr>` children of the chain `abilities/candidates_runner/candidates_runner.scx`, D93, each by its row's path, D121) | stage `.scx` child |
 | `intuition.py` Intuition | `abilities/intuition/intuition.scx` invoking `services/decision` | stage `.scx` child and service |
 | `reasoning.py` Reasoning | `abilities/reasoning/reasoning.scx` invoking `services/generate` | stage `.scx` child and service |
 | `communication.py` Communication | `abilities/communication/communication.scx` | ability `.scx` child |
@@ -308,21 +308,26 @@ D33 to D43.
 
 ### Builder output
 
-A builder-produced behavior or routine document is stored as its
-inventory row's `bot_behavior.source` and runs as an SCXML child invoked
-from that text (`<invoke id><content expr="source"/></invoke>`, phase 5),
-the one exception to the literal relative `src` rule. scxml.rs reads
-`event:schema` files only for a literal `<invoke src>` child; an invoked
-source gets none, and a schema-file reference rejects it when it is
-invoked (`error.execution`). So builder output carries no `event:schema`
-reference (and, like every floppy document, no inline schema and no
-`<script>`): its host checks what it answers. `abilities/autonomy/autonomy.scx`
+A builder-produced behavior or routine is three documents beside each
+other (decision D121): `<name>.scx` (its structure), `<name>.json` (its
+input events' schemas, `$defs` keyed by event) and `<name>.js` (its
+ECMAScript, or empty), which the builder writes through `services/files`
+into the run's behaviors directory (`behaviors/`, beside `bots/` and
+`abilities/`). Its inventory row's `bot_behavior.source` is the path of
+the `.scx`, `../../behaviors/<name>.scx`, and it runs as an SCXML child
+invoked by that path (`<invoke id srcexpr="source">`), the one exception
+to the literal relative `src` rule. scxml.rs loads a `srcexpr` child's
+schema files and scripts against its own base URI, as it is when invoked,
+so builder output references `<name>.json#/$defs/<event>` and carries at
+most its one root `<script src="<name>.js"/>`; its host checks what it
+answers. `abilities/autonomy/autonomy.scx`
 runs the ACTIVE turn behaviors the stimulus triggers with `turn` and
 `input` and answers with the first one's `<donedata>` `handled` and
 `selected` (the phase 5 plan's "Turn Behavior Contract").
 `tests/fixtures/phase4/behavior_double.scx` stands in for one;
 `tests/tests/contracts.rs` checks the rule on it and
-`tests/tests/cognition.rs` runs it from a memory inventory.
+`tests/tests/cognition.rs` writes it into a layout's behaviors directory
+and runs it by path from a memory inventory.
 
 ## Phase 6 conventions
 

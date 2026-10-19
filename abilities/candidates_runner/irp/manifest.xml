@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/candidates_runner/irp/sources">
   <assert id="candidates_runner-1" specnum="1" specid="#candidates_runner-1">
-    <![CDATA[It runs the first of its `candidates` <param> (`[{name, source}]`) as the child `candidate` from its source, with the <param>s `turn` and `input`. A candidate that answers by its donedata `{turn, handled: true, selected}` for this turn with at least one selection, all sent, has its use persisted, and the runner ends with donedata `{tried: [name], handled: true, selected, rejection: null}`, `selected` the candidate's own selections; it sends its parent nothing else.]]>
+    <![CDATA[It runs the first of its `candidates` <param> (`[{name, source}]`, `source` the path of the candidate's program, decision D121) as the child `candidate` by `<invoke srcexpr>` on its source, with the <param>s `turn` and `input`. A candidate that answers by its donedata `{turn, handled: true, selected}` for this turn with at least one selection, all sent, has its use persisted, and the runner ends with donedata `{tried: [name], handled: true, selected, rejection: null}`, `selected` the candidate's own selections; it sends its parent nothing else.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>

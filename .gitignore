@@ -2,6 +2,9 @@ target/
 .env*
 node_modules/
 media/
+# Learned behaviors: the documents the builder writes through the files
+# service (decision D121), in the directory a run grants it.
+/behaviors/
 # A document IRP case's media is checked-in input (tests/tests/document_irp.rs).
 !**/irp/sources/*/media/
 

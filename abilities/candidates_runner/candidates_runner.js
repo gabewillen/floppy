@@ -9,7 +9,7 @@ function candidateName() {
   return candidates[0].name;
 }
 
-// The SCXML source of the first candidate.
+// The path of the first candidate's program (its source).
 function candidateSource() {
   return candidates[0].source;
 }

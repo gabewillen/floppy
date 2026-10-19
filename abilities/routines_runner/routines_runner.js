@@ -4,6 +4,7 @@
 
 // routine_on
 
+// The path of the routine's program (its source).
 function routineSource(index) {
   return routines[index].source;
 }

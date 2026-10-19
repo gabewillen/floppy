@@ -56,9 +56,41 @@ fn builder_source() -> String {
     std::fs::read_to_string(builder_dir().join("builder.scx")).expect("builder.scx is readable")
 }
 
-/// The builder document the README runs.
+/// The builder document the README runs, laid out with its script and
+/// schemas in a scratch layout of its own ([`builder_layout`]).
 fn builder_document() -> PathBuf {
-    PathBuf::from("bots/builder/builder.scx")
+    builder_layout(&builder_source())
+}
+
+/// `builder` as `<layout>/bots/builder/builder.scx` in a fresh scratch
+/// layout, with `builder.js` and `schemas/` beside it: the documents it
+/// writes go to that layout's `behaviors/` (the run's files grant,
+/// `support::behaviors_grant`, decision D121), so parallel tests never share
+/// them.
+fn builder_layout(builder: &str) -> PathBuf {
+    let dir = support::unique_scratch("builder-layout").join("bots/builder");
+    std::fs::create_dir_all(dir.join("schemas")).expect("the layout is creatable");
+    std::fs::copy(builder_dir().join("builder.js"), dir.join("builder.js"))
+        .expect("the builder's script is copyable");
+    for entry in std::fs::read_dir(builder_dir().join("schemas")).expect("schemas/ is listable") {
+        let path = entry.expect("a directory entry").path();
+        std::fs::copy(
+            &path,
+            dir.join("schemas").join(path.file_name().expect("a name")),
+        )
+        .expect("the schema is copyable");
+    }
+    write(&dir, "builder.scx", builder)
+}
+
+/// The behaviors directory of the layout `document` (a [`builder_layout`])
+/// sits in.
+fn behaviors_of(document: &Path) -> PathBuf {
+    document
+        .ancestors()
+        .nth(3)
+        .expect("the document is <layout>/bots/builder/builder.scx")
+        .join("behaviors")
 }
 
 /// The flags of the builder's README command on `clock`, running
@@ -131,11 +163,23 @@ fn validate(path: &Path, bindings: &[String]) -> support::Output {
     output(&args)
 }
 
-/// Validates and compiles `scxml` with no package (as the builder's drafts
-/// are): whether it compiled.
-fn compiles(name: &str, scxml: &str) -> bool {
+/// Validates and compiles the builder's documents in `data` (its done or
+/// failed data: `scxml`, `schemas` and `script`) as `<name>.scx`,
+/// `<name>.json` and `<name>.js` beside each other, with no package (as the
+/// builder's drafts are): whether it compiled.
+fn compiles(name: &str, data: &Json) -> bool {
     let dir = support::unique_scratch("compile");
-    let path = write(&dir, name, scxml);
+    write(&dir, &format!("{name}.json"), &data["schemas"].to_string());
+    write(
+        &dir,
+        &format!("{name}.js"),
+        data["script"].as_str().unwrap_or_default(),
+    );
+    let path = write(
+        &dir,
+        &format!("{name}.scx"),
+        data["scxml"].as_str().unwrap_or_default(),
+    );
     let compiled = output(&[
         "compile".to_owned(),
         path.display().to_string(),
@@ -161,6 +205,20 @@ const SLOW_PLAN_HOLD_BOUND: Duration = Duration::from_mins(3);
 
 const BUTTON_SCHEMA: &str = r#"{"type":"object","additionalProperties":false}"#;
 
+/// The button's schema as the drafts' `schemas` carry it.
+fn button_schema() -> Json {
+    serde_json::from_str(BUTTON_SCHEMA).expect("the button schema is JSON")
+}
+
+/// The drafts' `schemas`: one schema per input event, under `$defs`.
+fn schemas(events: &[&str]) -> Json {
+    let defs: Map<String, Json> = events
+        .iter()
+        .map(|event| ((*event).to_owned(), button_schema()))
+        .collect();
+    json!({"$defs": defs})
+}
+
 /// The traffic light with `{green}` as its green state's transitions and
 /// `{yellow_target}` as the target of yellow's timer.
 fn traffic_light(green: &str, yellow_target: &str) -> String {
@@ -185,12 +243,13 @@ fn traffic_light(green: &str, yellow_target: &str) -> String {
     )
 }
 
-/// The traffic light's green transitions, separately.
+/// The traffic light's green transitions, separately: the button's schema
+/// is a reference into the draft's own `traffic_light.json` (the plan's
+/// name).
 fn green_separate() -> String {
-    format!(
-        r#"<transition event="pedestrian.button" event:schema='{BUTTON_SCHEMA}' target="yellow"/>
+    r#"<transition event="pedestrian.button" event:schema="traffic_light.json#/$defs/pedestrian.button" target="yellow"/>
     <transition event="light.timer" target="yellow"/>"#
-    )
+        .to_owned()
 }
 
 /// The same transitions merged with a comma-separated descriptor list
@@ -223,11 +282,38 @@ fn tests() -> Json {
     ])
 }
 
-/// A draft: the document, the button's schema, and two test scripts.
+/// A draft: the document, the button's schema, no script, and two test
+/// scripts.
 fn draft(scxml: &str) -> String {
     json!({
         "scxml": scxml,
-        "schemas": [{"event": "pedestrian.button", "schema": BUTTON_SCHEMA}],
+        "schemas": schemas(&["pedestrian.button"]),
+        "script": "",
+        "tests": tests(),
+    })
+    .to_string()
+}
+
+/// The script of [`scripted_draft`].
+const SCRIPT: &str = "function mayGo() {\n  return true;\n}\n";
+
+/// A valid draft with a script: its root `<script src="traffic_light.js"/>`
+/// and red's timer guarded by the script's `mayGo()`.
+fn scripted_draft() -> String {
+    json!({
+        "scxml": traffic_light(&green_separate(), "red")
+            .replacen(
+                r#"initial="green">"#,
+                r#"initial="green">
+    <script src="traffic_light.js"/>"#,
+                1,
+            )
+            .replace(
+                r#"<transition event="light.timer" target="green"/>"#,
+                r#"<transition event="light.timer" cond="mayGo()" target="green"/>"#,
+            ),
+        "schemas": schemas(&["pedestrian.button"]),
+        "script": SCRIPT,
         "tests": tests(),
     })
     .to_string()
@@ -269,7 +355,8 @@ fn service_draft() -> String {
   <final id="answered"><onentry><send target="#_parent" event="answer.ready"/></onentry></final>
   <final id="unanswered"><onentry><send target="#_parent" event="answer.failed"/></onentry></final>
 </scxml>"##,
-        "schemas": [],
+        "schemas": schemas(&[]),
+        "script": "",
         "tests": [{
             "name": "the draft asks generate and answers",
             "events": [],
@@ -289,7 +376,8 @@ fn impostor_draft() -> String {
             "<onentry><send target=\"#_parent\" event=\"light.green\"/>",
             "<onentry><send target=\"#_parent\" event=\"sim.settle\"/><send target=\"#_parent\" event=\"sim.drive\"/><send target=\"#_parent\" event=\"light.green\"/>",
         ),
-        "schemas": [{"event": "pedestrian.button", "schema": BUTTON_SCHEMA}],
+        "schemas": schemas(&["pedestrian.button"]),
+        "script": "",
         "tests": [{
             "name": "control names are outputs",
             "events": [],
@@ -317,19 +405,18 @@ fn stale_timeout_draft() -> String {
 /// twice fails.
 fn two_ping_draft() -> String {
     json!({
-        "scxml": format!(
-            r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" version="1.0" datamodel="ecmascript" name="two_pings" initial="first">
+        "scxml": r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" version="1.0" datamodel="ecmascript" name="two_pings" initial="first">
   <state id="first">
     <onentry><send target="#_parent" event="ready"/></onentry>
-    <transition event="ping" event:schema='{BUTTON_SCHEMA}' target="second"/>
+    <transition event="ping" event:schema="traffic_light.json#/$defs/ping" target="second"/>
   </state>
   <state id="second">
-    <transition event="ping" event:schema='{BUTTON_SCHEMA}' target="end"/>
+    <transition event="ping" event:schema="traffic_light.json#/$defs/ping" target="end"/>
   </state>
   <final id="end"/>
-</scxml>"##
-        ),
-        "schemas": [{"event": "ping", "schema": BUTTON_SCHEMA}],
+</scxml>"##,
+        "schemas": schemas(&["ping"]),
+        "script": "",
         "tests": [
             {"name": "first run", "events": [{"name": "ping", "data": "{}", "delay_ms": 0}],
              "settle_ms": 1000, "expect_events": ["ready"], "expect_done": false},
@@ -359,7 +446,8 @@ fn routine_draft(delay: &str, output: &str) -> String {
   </state>
 </scxml>"##
         ),
-        "schemas": [],
+        "schemas": schemas(&[]),
+        "script": "",
         "tests": [{"name": "waits", "events": [], "settle_ms": 1000, "expect_events": [], "expect_done": false}],
     })
     .to_string()
@@ -488,7 +576,7 @@ fn mock_reply(
             Some(completion(&match authors {
                 1 => invalid_draft(),
                 2 => internal_delay_draft(),
-                _ => draft(&traffic_light(&green_separate(), "red")),
+                _ => scripted_draft(),
             }))
         }
         (
@@ -546,6 +634,7 @@ impl Received {
 /// `/repair/v1` answers the plan, then the invalid draft, then the fixable
 /// one, then valid drafts; `/progress/v1` answers the plan, the invalid
 /// draft, a draft with a delayed internal send, then valid drafts;
+/// (`/progress/v1`'s valid one with a script, [`scripted_draft`]);
 /// `/broken/v1` answers the plan, then only invalid
 /// drafts; `/service/v1` answers the plan, then a draft that invokes
 /// `generate`, and that draft's own generation with text; `/impostor/v1` answers the plan, then a valid draft
@@ -702,13 +791,10 @@ fn run(mock: &Mock, test: &str, route: &str, env: &[&str], request: &Json) -> Ve
     run_deciding(mock, test, route, "typesafe", env, request)
 }
 
-/// [`run`] with `builder` as the text of the builder document, run from a
-/// scratch file.
+/// [`run`] with `builder` as the text of the builder document, laid out
+/// as [`builder_layout`].
 fn run_builder(mock: &Mock, test: &str, route: &str, builder: &str, request: &Json) -> Vec<Json> {
-    let dir = scratch("builder-variant");
-    std::fs::copy(builder_dir().join("builder.js"), dir.join("builder.js"))
-        .expect("the builder's script is copyable");
-    let document = write(&dir, &format!("{test}.scx"), builder);
+    let document = builder_layout(builder);
     let env = env_file(test, mock, route, "typesafe", &ALL);
     start(&document, "logical", &[env], request, &[])
         .finish(Duration::from_mins(5))
@@ -724,9 +810,29 @@ fn run_deciding(
     env: &[&str],
     request: &Json,
 ) -> Vec<Json> {
+    run_deciding_in(
+        &builder_document(),
+        mock,
+        test,
+        route,
+        decision_route,
+        env,
+        request,
+    )
+}
+
+/// [`run_deciding`] of the builder `document` (a [`builder_layout`]).
+fn run_deciding_in(
+    document: &Path,
+    mock: &Mock,
+    test: &str,
+    route: &str,
+    decision_route: &str,
+    env: &[&str],
+    request: &Json,
+) -> Vec<Json> {
     let env = env_file(test, mock, route, decision_route, env);
-    let finished =
-        start(&builder_document(), "logical", &[env], request, &[]).finish(Duration::from_mins(5));
+    let finished = start(document, "logical", &[env], request, &[]).finish(Duration::from_mins(5));
     assert!(
         !finished.records.is_empty(),
         "the session ran: {}",
@@ -878,13 +984,12 @@ fn the_builder_repairs_an_invalid_draft_fixes_it_simulates_it_and_reports_done()
         "{scxml}"
     );
     assert!(
-        compiles("traffic_light.scx", scxml),
-        "the built machine validates and compiles"
+        compiles("traffic_light", &done),
+        "the built machine validates and compiles with its schema file"
     );
-    assert_eq!(
-        done["schemas"],
-        json!([{"event": "pedestrian.button", "schema": {"type": "object", "additionalProperties": false}}])
-    );
+    assert_eq!(done["schemas"], schemas(&["pedestrian.button"]));
+    assert_eq!(done["script"], "");
+    assert_eq!(done["path"], "../../behaviors/traffic_light.scx");
     assert_eq!(done["tests"], tests());
 
     let report = &done["report"];
@@ -932,6 +1037,10 @@ fn assert_repair_requests(received: &[Received]) {
     let first = authors[0].user_input();
     assert_eq!(first["task"], "author");
     assert_eq!(first["plan"]["name"], "traffic_light");
+    assert_eq!(
+        first["name"], "traffic_light",
+        "the draft is told the name its documents reference: the plan's"
+    );
     let second = authors[1].user_input();
     assert_eq!(second["task"], "repair");
     assert_eq!(second["diagnostics"][0]["code"], "SCXML005");
@@ -946,7 +1055,15 @@ fn assert_repair_requests(received: &[Received]) {
         tests(),
         "the repair sees the failed draft's tests"
     );
+    assert_eq!(
+        second["previous_schemas"],
+        schemas(&["pedestrian.button"]),
+        "the repair sees the failed draft's schemas"
+    );
+    assert_eq!(second["previous_script"], "");
     assert_eq!(first["previous_tests"], Json::Null);
+    assert_eq!(first["previous_schemas"], Json::Null);
+    assert_eq!(first["previous_script"], Json::Null);
     for request in designs.iter().chain(&authors) {
         assert_eq!(
             request.authorization.as_deref(),
@@ -1225,16 +1342,21 @@ fn a_turn_behaviors_delayed_send_beyond_the_silence_bound_is_rejected() {
 
 /// A failure that differs from the one before it is progress: the builder
 /// keeps repairing (an invalid draft, then one with a delayed internal send)
-/// until the fixed draft ends in `done`.
+/// until the fixed draft, which has a script, ends in `done`. Its three
+/// documents are the files the builder wrote beside each other under the
+/// request's name, which the simulation loaded by path (decision D121).
 #[test]
 fn a_different_diagnostic_each_time_keeps_repairing_until_done() {
     let mock = Mock::start();
-    let records = run(
+    let document = builder_document();
+    let records = run_deciding_in(
+        &document,
         &mock,
         "progress",
         "progress",
+        "typesafe",
         &["FLOPPY_API_KEY", "FLOPPY_BASE_URL"],
-        &json!({"spec": SPEC}),
+        &json!({"spec": SPEC, "name": "traffic light"}),
     );
     assert!(finished(&records), "{records:?}");
     let (label, done) = answer(&records);
@@ -1243,6 +1365,29 @@ fn a_different_diagnostic_each_time_keeps_repairing_until_done() {
     assert_eq!(report["attempts"], 3, "{report}");
     assert_eq!(report["failures"], 2, "{report}");
     assert_eq!(report["history"][0]["diagnostics"][0]["code"], "SCXML005");
+    // The request's name, one plain file name: `traffic_light`.
+    assert_eq!(done["path"], "../../behaviors/traffic_light.scx", "{done}");
+    assert_eq!(done["script"], SCRIPT, "{done}");
+    let behaviors = behaviors_of(&document);
+    let read = |file: &str| {
+        std::fs::read_to_string(behaviors.join(file))
+            .unwrap_or_else(|error| panic!("{file} is written: {error}"))
+    };
+    assert_eq!(
+        read("traffic_light.scx"),
+        done["scxml"].as_str().unwrap_or_default()
+    );
+    assert_eq!(
+        serde_json::from_str::<Json>(&read("traffic_light.json")).expect("JSON"),
+        schemas(&["pedestrian.button"])
+    );
+    assert_eq!(read("traffic_light.js"), SCRIPT);
+    assert!(
+        report["simulation"]
+            .as_array()
+            .is_some_and(|results| results.iter().all(|result| result["passed"] == true)),
+        "the simulation loaded the draft and its script from its path: {report}"
+    );
     assert!(
         report["history"][1]["diagnostics"]
             .as_array()
@@ -1500,18 +1645,18 @@ fn a_cancelled_candidates_builder_timeout_does_not_end_the_simulation() {
 
 /// The `sim.drive` of a test whose candidate fails to start is not taken by
 /// the next test: that test's `ping` is sent once. The builder here is
-/// `builder.scx` with its first test's invocation content replaced by a
-/// text that is no SCXML document (a validated draft gives no way to make
-/// the child's start fail).
+/// `builder.scx` with its first test's invocation path replaced by one where
+/// no document is (a validated draft gives no way to make the child's start
+/// fail).
 #[test]
 fn a_failed_invocations_sim_drive_does_not_drive_the_next_test() {
     let source = builder_source();
     let failing = source.replacen(
-        r#"<content expr="scxml_text"/>"#,
-        r#"<content expr="sim_index === 0 ? 'not a document' : scxml_text"/>"#,
+        r#"srcexpr="draftPath()""#,
+        r#"srcexpr="sim_index === 0 ? 'missing.scx' : draftPath()""#,
         1,
     );
-    assert_ne!(failing, source, "the builder invokes scxml_text");
+    assert_ne!(failing, source, "the builder invokes the draft's path");
     let mock = Mock::start();
     let records = run_builder(
         &mock,
@@ -1608,8 +1753,13 @@ fn live_builder_through_an_env_file() {
     let pass = if label == "done" {
         {
             let scxml = data["scxml"].as_str().unwrap_or_default().to_owned();
-            let valid = compiles("traffic_light.scx", &scxml);
+            let valid = compiles("traffic_light", &data);
             std::fs::write(out.join("traffic_light.scx"), &scxml).expect("writable");
+            std::fs::write(
+                out.join("traffic_light.js"),
+                data["script"].as_str().unwrap_or_default(),
+            )
+            .expect("writable");
             for member in ["schemas", "tests", "report"] {
                 std::fs::write(
                     out.join(format!("{member}.json")),

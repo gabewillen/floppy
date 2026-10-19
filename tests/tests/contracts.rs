@@ -40,14 +40,16 @@
 //! * every `cond`, and every `expr` outside `<data>`, is at most 160
 //!   characters [floppy rule];
 //! * every `<invoke type="scxml">` has a literal `id` and either a
-//!   literal relative `src`, a `srcexpr`, or a `<content expr>` (the
-//!   candidates runner invokes a builder-produced behavior from its
-//!   inventory row's source).
+//!   literal relative `src` or a `srcexpr` (the candidates and routines
+//!   runners invoke a builder-produced behavior by its inventory row's
+//!   source, the path of its program).
 //!
-//! Builder output, the documents a `srcexpr` or `<content expr>` invokes,
-//! gets no schema files (scxml.rs reads them only for a literal `src`
-//! child), so it carries no
-//! `event:schema` reference; it meets the rest of the structure rule.
+//! Builder output, the documents a `srcexpr` invokes, is three documents
+//! beside each other in a directory (decision D121), `<name>.scx`,
+//! `<name>.json` and `<name>.js`, which scxml.rs loads against the
+//! document's own base URI: every `event:schema` it carries references
+//! `<name>.json`, and it carries at most its one root
+//! `<script src="<name>.js"/>`; it meets the rest of the structure rule.
 //! `tests/fixtures/phase4/behavior_double.scx`, the stand-in for one, is
 //! checked here.
 //!
@@ -822,8 +824,8 @@ fn unknown_domain_names(document: &Parsed, known: &BTreeSet<String>) -> Vec<Stri
 /// `<name>/<name>.scx`, else any `<script>`; a `cond` or (outside `<data>`) `expr` over
 /// [`MAX_EXPRESSION_CHARS`], a transition taking one contract event without
 /// an `event:schema`, or an SCXML `<invoke>` without a literal `id` and
-/// either a literal relative `src`, a `srcexpr` (builder output; see
-/// [`builder_output_problems`]) or a `<content expr>` (a stored behavior).
+/// either a literal relative `src` or a `srcexpr` (builder output, a stored
+/// behavior's path; see [`builder_output_problems`]).
 fn structure_problems(
     document: &Parsed,
     contract: &BTreeSet<String>,
@@ -873,19 +875,12 @@ fn structure_problems(
                 let literal_src = element
                     .attribute("src")
                     .is_some_and(|src| !src.value.contains(':') && !src.value.starts_with('/'));
+                // A stored behavior's source (decision D121): its path.
                 let srcexpr =
                     element.attribute("src").is_none() && element.attribute("srcexpr").is_some();
-                // A stored behavior's source (phase 5): `<content expr>`.
-                let content = element.attribute("src").is_none()
-                    && element.attribute("srcexpr").is_none()
-                    && element.children.iter().any(|child| {
-                        matches!(child, scxml_syntax::Node::Element(content)
-                            if content.name.local_name == "content"
-                                && content.attribute("expr").is_some())
-                    });
-                if element.attribute("id").is_none() || !(literal_src || srcexpr || content) {
+                if element.attribute("id").is_none() || !(literal_src || srcexpr) {
                     problems.push(
-                        "an SCXML <invoke> without a literal id and a relative src, a srcexpr or a <content expr>"
+                        "an SCXML <invoke> without a literal id and a relative src or a srcexpr"
                             .to_owned(),
                     );
                 }
@@ -949,21 +944,57 @@ fn script_problems(document: &Parsed) -> Vec<String> {
 }
 
 /// The builder output rule's problems in one document a `srcexpr`
-/// invokes: any `event:schema` (a `srcexpr` child gets no schema files, and
-/// floppy documents carry no inline schema), and the structure rule's.
+/// invokes, `<name>.scx` (decision D121): an `event:schema` that is not a
+/// reference into `<name>.json` (floppy documents carry no inline schema),
+/// a `<script>` other than one root `<script src="<name>.js"/>`, and the
+/// structure rule's.
 fn builder_output_problems(document: &Parsed) -> Vec<String> {
+    let stem = document
+        .path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .expect("a UTF-8 document name");
+    let schemas = format!("{stem}.json#");
+    let script = format!("{stem}.js");
     let mut problems = Vec::new();
     document.with(|root| {
+        let mut roots = 0;
+        for child in &root.children {
+            if let scxml_syntax::Node::Element(element) = child
+                && element.name.local_name == "script"
+                && element
+                    .attribute("src")
+                    .is_some_and(|src| src.value == script)
+                && element.children.is_empty()
+            {
+                roots += 1;
+            }
+        }
+        let mut all = 0;
         root.visit(&mut |element| {
-            if element.attributes.iter().any(is_schema_attribute) {
-                problems.push(format!(
-                    "<{}> carries an event:schema",
-                    element.name.local_name
-                ));
+            if element.name.local_name == "script" {
+                all += 1;
+            }
+            for attribute in element.attributes.iter().filter(|a| is_schema_attribute(a)) {
+                if !attribute.value.starts_with(&schemas) {
+                    problems.push(format!(
+                        "<{}> carries an event:schema that is not {schemas}...",
+                        element.name.local_name
+                    ));
+                }
             }
         });
+        if all != roots || roots > 1 {
+            problems.push(format!(
+                "a <script> other than one root <script src=\"{script}\"/>"
+            ));
+        }
     });
-    problems.extend(structure_problems(document, &BTreeSet::new(), false));
+    problems.extend(
+        structure_problems(document, &BTreeSet::new(), false)
+            .into_iter()
+            .filter(|problem| problem != "a <script> element"),
+    );
     problems
 }
 
@@ -1098,23 +1129,55 @@ fn validate_judges_a_literal_payload_against_the_childs_schema_file() {
 }
 
 #[test]
-fn builder_output_carries_no_event_schema_and_meets_the_structure_rule() {
+fn builder_output_references_its_own_documents_and_meets_the_structure_rule() {
     let double = workspace().join("tests/fixtures/phase4/behavior_double.scx");
     let problems = builder_output_problems(&Parsed::read(&double));
     assert!(problems.is_empty(), "{problems:#?}");
     validates_clean(&double).expect("the behavior double validates clean");
-    // A schema reference, valid in a literal child, breaks builder output.
+    // Three documents beside each other: the chart, its schemas and its
+    // script.
+    let dir = support::unique_scratch("contracts-builder-output");
+    std::fs::write(
+        dir.join("greet.json"),
+        r#"{"$defs": {"knock": {"type": "object"}}}"#,
+    )
+    .expect("writable");
+    std::fs::write(
+        dir.join("greet.js"),
+        "function greeting() {\n  return 'hello';\n}\n",
+    )
+    .expect("writable");
+    let greet = support::write(
+        &dir,
+        "greet.scx",
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" version="1.0" datamodel="ecmascript" initial="waiting"><datamodel><data id="said" expr="null"/></datamodel><script src="greet.js"/><state id="waiting"><transition event="knock" event:schema="greet.json#/$defs/knock" target="done"><assign location="said" expr="greeting()"/></transition></state><final id="done"/></scxml>"#,
+    );
+    let problems = builder_output_problems(&Parsed::read(&greet));
+    assert!(problems.is_empty(), "{problems:#?}");
+    validates_clean(&greet).expect("the three documents validate clean");
+    // A schema file of another name, valid in a literal child, breaks
+    // builder output.
     let referencing = Parsed::read(&fixture("good/child/child.scx"));
     assert!(
         builder_output_problems(&referencing)
             .iter()
-            .any(|problem| problem.ends_with("carries an event:schema")),
-        "the good child references its schema files"
+            .any(|problem| problem.contains("carries an event:schema that is not child.json#")),
+        "the good child references its schemas/ files"
+    );
+    // So does a script of another name.
+    let other = support::write(
+        &dir,
+        "other.scx",
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript"><script src="greet.js"/><final id="done"/></scxml>"#,
+    );
+    assert_eq!(
+        builder_output_problems(&Parsed::read(&other)),
+        [r#"a <script> other than one root <script src="other.js"/>"#]
     );
 }
 
 #[test]
-fn an_scxml_invoke_needs_a_literal_id_and_a_relative_src_a_srcexpr_or_content() {
+fn an_scxml_invoke_needs_a_literal_id_and_a_relative_src_or_a_srcexpr() {
     let dir = support::unique_scratch("contracts-invoke");
     let problems = |invoke: &str| {
         let text = format!(
@@ -1129,21 +1192,19 @@ fn an_scxml_invoke_needs_a_literal_id_and_a_relative_src_a_srcexpr_or_content() 
     for allowed in [
         r#"<invoke id="child" type="scxml" src="child.scx"/>"#,
         r#"<invoke id="behavior" type="scxml" srcexpr="behavior"/>"#,
-        r#"<invoke id="candidate" type="scxml"><content expr="source"/></invoke>"#,
     ] {
         assert!(problems(allowed).is_empty(), "{allowed}");
     }
     for refused in [
         r#"<invoke type="scxml" srcexpr="behavior"/>"#,
+        r#"<invoke id="candidate" type="scxml"><content expr="source"/></invoke>"#,
         r#"<invoke id="candidate" type="scxml"><content>text</content></invoke>"#,
         r#"<invoke id="child" type="scxml" src="/abs/child.scx"/>"#,
         r#"<invoke id="child" type="scxml" src="https://example.com/child.scx"/>"#,
     ] {
         assert_eq!(
             problems(refused),
-            [
-                "an SCXML <invoke> without a literal id and a relative src, a srcexpr or a <content expr>"
-            ],
+            ["an SCXML <invoke> without a literal id and a relative src or a srcexpr"],
             "{refused}"
         );
     }

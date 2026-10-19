@@ -420,6 +420,14 @@ struct Bot {
     env: PathBuf,
 }
 
+/// The scratch root `bot` is laid out in.
+fn bot_layout(bot: &Bot) -> &Path {
+    bot.body
+        .ancestors()
+        .nth(3)
+        .expect("the body is <layout>/bots/floppy/floppy.scx")
+}
+
 /// Lays out the bot with `edits` (`(path under the scratch root, [(id,
 /// expr)])`) and an env file for `decision` and `generation`.
 fn layout(
@@ -680,7 +688,8 @@ fn intuition_handles_an_ignore_without_reasoning() {
 /// The memory path every inventory test gives the cognition.
 const DATABASE: &str = "/memory/floppy.sqlite";
 
-/// One learned behavior row: name, trigger, status, lifetime and source.
+/// One learned behavior row: name, trigger, status, and its program's
+/// text, which [`inventory`] writes as the builder does (decision D121).
 struct Learned<'a> {
     name: &'a str,
     trigger: &'a str,
@@ -744,18 +753,25 @@ fn transact(grant: &[String], database: &str, statements: &Json) -> Json {
 
 /// `database` holding `learned` as the original's inventory rows
 /// (`bot_behavior`, `bot_behavior_trigger`), in a fresh memory directory
-/// for [`DATABASE`]; returns the run's grant.
-fn inventory(database: &str, learned: &[Learned<'_>]) -> Vec<String> {
+/// for [`DATABASE`]; returns the run's grant. Each row's program is
+/// written as `<name>.scx` into the behaviors directory of `layout` (the
+/// scratch root holding `abilities/`), and its source is that file's path,
+/// `../../behaviors/<name>.scx`, as the builder writes one (decision D121).
+fn inventory(database: &str, layout: &Path, learned: &[Learned<'_>]) -> Vec<String> {
     let grant = if database == DATABASE {
         support::memory_grant()
     } else {
         support::pgsql_grant()
     };
+    let behaviors = layout.join("behaviors");
+    std::fs::create_dir_all(&behaviors).expect("the behaviors directory is creatable");
     let mut statements = Vec::new();
     for row in learned {
+        std::fs::write(behaviors.join(format!("{}.scx", row.name)), row.source)
+            .expect("the behavior is writable");
         statements.push(json!({
             "sql": "INSERT INTO bot_behavior (name, source, lifetime, status) VALUES (?, ?, 'turn', ?)",
-            "parameters": [row.name, row.source, row.status],
+            "parameters": [row.name, format!("../../behaviors/{}.scx", row.name), row.status],
         }));
         statements.push(json!({
             "sql": "INSERT INTO bot_behavior_trigger (behavior_name, \"trigger\") VALUES (?, ?)",
@@ -840,8 +856,18 @@ fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
     let double =
         std::fs::read_to_string(workspace().join("tests/fixtures/phase4/behavior_double.scx"))
             .expect("the double is readable");
+    let bot = layout(
+        &mock,
+        Decision::Fail,
+        Generation::Fail,
+        &[(
+            "abilities/cognition/cognition.scx",
+            &[("database", format!("'{database}'").as_str())],
+        )],
+    );
     let grant = inventory(
         database,
+        bot_layout(&bot),
         &[
             Learned {
                 name: "Asilent",
@@ -880,16 +906,6 @@ fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
                 source: &double,
             },
         ],
-    );
-    let memory = format!("'{database}'");
-    let bot = layout(
-        &mock,
-        Decision::Fail,
-        Generation::Fail,
-        &[(
-            "abilities/cognition/cognition.scx",
-            &[("database", memory.as_str())],
-        )],
     );
     support::use_database(&bot.body, database);
     let mut run = start_with(&bot, &grant);
@@ -948,15 +964,6 @@ fn a_learned_behavior_whose_selection_cannot_be_sent_fails_the_turn() {
     let unoffered = turn_behavior(
         "({turn: turn, handled: true, selected: [{event: 'bot.ability.reasoning.input', data: {}}]})",
     );
-    let grant = inventory(
-        DATABASE,
-        &[Learned {
-            name: "Unoffered",
-            trigger: "bot.input",
-            status: "ACTIVE",
-            source: &unoffered,
-        }],
-    );
     let memory = format!("'{DATABASE}'");
     let bot = layout(
         &mock,
@@ -966,6 +973,16 @@ fn a_learned_behavior_whose_selection_cannot_be_sent_fails_the_turn() {
             "abilities/cognition/cognition.scx",
             &[("database", memory.as_str())],
         )],
+    );
+    let grant = inventory(
+        DATABASE,
+        bot_layout(&bot),
+        &[Learned {
+            name: "Unoffered",
+            trigger: "bot.input",
+            status: "ACTIVE",
+            source: &unoffered,
+        }],
     );
     support::use_database(&bot.body, DATABASE);
     let mut run = start_with(&bot, &grant);
@@ -996,15 +1013,6 @@ fn a_learned_behavior_whose_selection_cannot_be_sent_fails_the_turn() {
 fn when_no_learned_behavior_handles_the_turn_intuition_runs() {
     let mock = Mock::start();
     let declines = turn_behavior("({turn: turn, handled: false})");
-    let grant = inventory(
-        DATABASE,
-        &[Learned {
-            name: "Declines",
-            trigger: "bot.input",
-            status: "ACTIVE",
-            source: &declines,
-        }],
-    );
     let memory = format!("'{DATABASE}'");
     let bot = layout(
         &mock,
@@ -1014,6 +1022,16 @@ fn when_no_learned_behavior_handles_the_turn_intuition_runs() {
             "abilities/cognition/cognition.scx",
             &[("database", memory.as_str())],
         )],
+    );
+    let grant = inventory(
+        DATABASE,
+        bot_layout(&bot),
+        &[Learned {
+            name: "Declines",
+            trigger: "bot.input",
+            status: "ACTIVE",
+            source: &declines,
+        }],
     );
     let mut run = start_with(&bot, &grant);
     say(&mut run, "background noise");
@@ -2163,8 +2181,13 @@ fn autonomy_runs_the_seeds_before_the_learned_behaviors() {
             // The harness stands in for the cognition: the double's
             // selection goes to it.
             .replace("'session.floppy.cognition'", "'session'");
+    let harness = autonomy_harness(&format!("'{DATABASE}'"));
     let grant = inventory(
         DATABASE,
+        harness
+            .parent()
+            .and_then(Path::parent)
+            .expect("the harness is <layout>/abilities/harness.scx"),
         &[Learned {
             name: "Double",
             trigger: SPEECH,
@@ -2172,7 +2195,6 @@ fn autonomy_runs_the_seeds_before_the_learned_behaviors() {
             source: &double,
         }],
     );
-    let harness = autonomy_harness(&format!("'{DATABASE}'"));
     let mut args = grant.clone();
     args.push(harness.display().to_string());
     let mut run = Run::start(&args, &[]);

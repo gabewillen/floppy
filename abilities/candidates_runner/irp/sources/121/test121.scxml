@@ -5,7 +5,7 @@
   <invoke id="candidates_runner" type="scxml" src="../../../candidates_runner.scx">
     <param name="turn" expr="3"/>
     <param name="input" expr='{"text": "hello", "focus": null, "focus_candidates": []}'/>
-    <param name="candidates" expr='[{"name": "Empty", "source": "&lt;scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"done\"&gt;&lt;datamodel&gt;&lt;data id=\"turn\" expr=\"0\"/&gt;&lt;data id=\"input\" expr=\"null\"/&gt;&lt;/datamodel&gt;&lt;final id=\"done\"&gt;&lt;donedata&gt;&lt;content expr=\"({turn: turn, handled: true, selected: []})\"/&gt;&lt;/donedata&gt;&lt;/final&gt;&lt;/scxml&gt;"}]'/>
+    <param name="candidates" expr='[{"name": "Empty", "source": "irp/behaviors/fe7cb97688a98758.scxml"}]'/>
     <param name="database" expr="'/memory/floppy.sqlite'"/>
   </invoke>
   <state id="boot">

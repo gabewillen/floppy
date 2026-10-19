@@ -29,6 +29,7 @@ other, and [docs/decisions.md](docs/decisions.md) records the decisions that sha
 | `namespaces/migration/` | Alembic's revision walk as an extension namespace (a Wasm component; synchronous executable content: `migration:plan`) |
 | `namespaces/device/` | a bot's read of a device it holds (a Wasm component; synchronous executable content: `device:snapshot`, decision D109; [device](namespaces/device/README.md)) |
 | `services/{generate,decision}/` | canonical invoked services (Wasm components: model generation, decisions) |
+| `services/files/` | the files service (a Wasm component: reads and writes the directory the run grants, where the builder writes a learned behavior's three documents; decision D121; [files](services/files/README.md)) |
 | `services/{sql,pgsql}/` | the memory engines (Wasm components: one SQLite or Postgres transaction per `<invoke>`, [sql](services/sql/README.md), [pgsql](services/pgsql/README.md)) |
 | `services/speech/` | the speech service (a Wasm component: speech decoding and encoding on OpenAI-compatible audio APIs, voice detection, diarization and identification on LocalAI's voice APIs; decisions D57, D66; [speech](services/speech/README.md)) |
 | `bots/builder/` | the builder bot: its SCXML document (`builder.scx`), schemas, and saved live examples |
@@ -59,15 +60,16 @@ SCXML_WASM_ARTIFACTS_DIR="$PWD/target/components/scxml" \
   cargo install --locked --path scxml.rs/crates/scxml-cli
 # The builder bot, with the locally built packages.
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button"}}' |
-  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx
+  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --dir "https://github.com/stateforward/floppy/services/files=$PWD/behaviors::/behaviors" bots/builder/builder.scx
 # The floppy bot in its environment, the room, which activates it: say hello.
 printf '%s\n' \
   '{"name":"bot.ability.communication.input","data":{"source_ids":["gabe"],"target_ids":["floppy"],"content":"Hi floppy!","content_type":"text/plain"}}' |
   scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" \
-    --dir "https://github.com/stateforward/floppy/services/speech=$PWD/media::/media" --fuel 9223372036854775807 environments/room/room.scx
+    --dir "https://github.com/stateforward/floppy/services/speech=$PWD/media::/media" --dir "https://github.com/stateforward/floppy/services/files=$PWD/behaviors::/behaviors" \
+    --fuel 9223372036854775807 environments/room/room.scx
 # A bot, with the packages of floppy's latest GitHub release (once one is
 # published: docs/release.md).
-scx run --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx
+scx run --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --dir "https://github.com/stateforward/floppy/services/files=$PWD/behaviors::/behaviors" bots/builder/builder.scx
 ```
 
 A bot's document is all a run needs: its namespaces and `<invoke type>`s are
@@ -83,7 +85,11 @@ names from a directory the run grants, so every run that binds it gives one
 runs grant the `speech` service the same directory, where it reads what
 the bot hears and writes what it says, and the floppy bot's
 memory is a file in the directory the run grants the `sql` service (create
-`memory/` first). Each bot's README gives its input events and output
+`memory/` first). The builder writes each draft, a learned behavior, as
+three documents (`<name>.scx`, `<name>.json`, `<name>.js`) into the
+directory the run grants the `files` service, `behaviors/` (create it
+first; it is ignored by git), where the documents that run a learned
+behavior load it by its path (decision D121). Each bot's README gives its input events and output
 ([bots/builder/README.md](bots/builder/README.md#running),
 [bots/floppy/README.md](bots/floppy/README.md#running)).
 
