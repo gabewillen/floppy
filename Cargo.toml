@@ -16,6 +16,7 @@ members = [
     "services/generate/validator",
     "services/decision",
     "services/sql",
+    "services/files",
     "services/speech",
     "services/pgsql",
     "tests/spikes/pglite",

@@ -54,7 +54,7 @@ expected_wasi_virt_rev='448f6df8f688cee5d6995e96b1ffc31f9bf00742'
 expected_wasi_sdk='25.0'
 session_components='scxml_machine scxml_compiler scxml_data_model_ecmascript scxml_data_model_xpath scxml_data_model_null scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_clock scxml_resolver_github scx'
 namespace_components='floppy_decision floppy_conversation floppy_migration floppy_device floppy_processing floppy_intuition floppy_cognition floppy_identity floppy_memory floppy_behavior floppy_autonomy'
-service_components='floppy_service_generate floppy_service_decision floppy_service_sql floppy_service_speech floppy_service_pgsql'
+service_components='floppy_service_generate floppy_service_decision floppy_service_sql floppy_service_files floppy_service_speech floppy_service_pgsql'
 # Package validator components (stateforward:scxml-validator/package-validator),
 # each named by its package's manifest (`validator-artifact`).
 validator_components='floppy_service_generate_validator'
@@ -190,6 +190,27 @@ expected_imports() {
                 'wasi:io/streams@0.2.12' \
                 'wasi:filesystem/types@0.2.12' \
                 'wasi:filesystem/preopens@0.2.12'
+            ;;
+        # The files service: one async `invoke` export and the files of the
+        # directory the run grants (a learned behavior's documents). It
+        # keeps exactly the filesystem it imports for the host (which links
+        # it only under `--dir`): the filesystem interfaces, the wasi:io
+        # interfaces they use, and wasi:clocks/wall-clock for their
+        # timestamps, at the standard library's 0.2.9 versions (it uses no
+        # interface of its world that raises them); wasi:cli and the 0.2
+        # monotonic clock are denied by the composed provider of the
+        # example it is modeled on
+        # (scxml.rs/components/scxml-service-files/wasi-cli-deny.wat).
+        floppy_service_files)
+            printf '%s\n' \
+                'stateforward:scxml/types@0.2.0' \
+                'stateforward:scxml/telemetry@0.2.0' \
+                'wasi:io/poll@0.2.9' \
+                'wasi:clocks/wall-clock@0.2.9' \
+                'wasi:io/error@0.2.9' \
+                'wasi:io/streams@0.2.9' \
+                'wasi:filesystem/types@0.2.9' \
+                'wasi:filesystem/preopens@0.2.9'
             ;;
         # The speech service: one async `invoke` export, one request through
         # outbound-http's async `fetch`, and the media files in the directory
@@ -349,15 +370,17 @@ build_component() {
         virt_input=$seeded
         ;;
     esac
-    if [ "$component" = floppy_service_sql ] || [ "$component" = floppy_service_speech ] || [ "$component" = floppy_service_generate ] || [ "$component" = floppy_service_pgsql ]; then
-        # The sql, speech and generate services keep their filesystem
+    if [ "$component" = floppy_service_sql ] || [ "$component" = floppy_service_files ] || [ "$component" = floppy_service_speech ] || [ "$component" = floppy_service_generate ] || [ "$component" = floppy_service_pgsql ]; then
+        # The sql, files, speech and generate services keep their filesystem
         # imports for the host (and pgsql its sockets): a wasi-virt adapter would virtualize the
         # filesystem too, so the standard library's and wasi-libc's other
         # WASI imports (wasi:cli and the monotonic clock) are satisfied by
         # a pinned deny-all provider instead (see the .wat header; generate
-        # uses sql's), as scxml.rs does for its files example service.
+        # uses sql's, and files its model's, scxml.rs's files example
+        # service's), as scxml.rs does for that example.
         name=${component#floppy_service_}
         wat="$workspace/services/$name/wasi-cli-deny.wat"
+        [ "$name" != files ] || wat="$workspace/scxml.rs/components/scxml-service-files/wasi-cli-deny.wat"
         [ -f "$wat" ] || wat="$workspace/services/sql/wasi-cli-deny.wat"
         deny="$run_tmp/wasi-cli-deny-$name.wasm"
         wasm-tools parse "$wat" -o "$deny"

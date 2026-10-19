@@ -273,7 +273,9 @@ impl Run {
     /// service (decided by [`binds`]) and that grants it no directory gets
     /// a fresh one ([`memory_grant`], [`media_grant`],
     /// [`speech_media_grant`]): each imports `wasi:filesystem`, and a run
-    /// that binds one without a `--dir` grant is refused. One that binds the pgsql service gets the network
+    /// that binds one without a `--dir` grant is refused. One that binds the
+    /// files service gets the behaviors directory of its layout
+    /// ([`behaviors_grant`]). One that binds the pgsql service gets the network
     /// ([`pgsql_grant`]).
     pub fn start(args: &[String], env: &[(&str, &str)]) -> Self {
         let mut full = vec!["run".to_owned()];
@@ -303,6 +305,15 @@ impl Run {
             if !granted && args.iter().any(|arg| binds(&workspace().join(arg), name)) {
                 full.splice(1..1, grant());
             }
+        }
+        let files = service_uri("files");
+        if !args.iter().any(|arg| arg.starts_with(&format!("{files}=")))
+            && let Some(document) = args
+                .iter()
+                .map(|arg| workspace().join(arg))
+                .find(|path| binds(path, "files"))
+        {
+            full.splice(1..1, behaviors_grant(&document));
         }
         let mut command = command(&full);
         for (name, value) in env {
@@ -574,6 +585,37 @@ pub fn speech_media_grant() -> Vec<String> {
             "{}={}::/media",
             service_uri("speech"),
             unique_scratch("speech-media").display()
+        ),
+    ]
+}
+
+/// `--dir` granting the files service the behaviors directory of the
+/// layout `document` sits in (decision D121): the nearest ancestor holding
+/// `bots/` (the workspace, or a scratch layout), whose `behaviors/` the
+/// documents that invoke a learned behavior (two levels below it) name as
+/// `../../behaviors/<name>.scx`; created when missing. A document in no
+/// such layout gets a fresh scratch directory.
+pub fn behaviors_grant(document: &Path) -> Vec<String> {
+    let layout = document.canonicalize().ok().and_then(|path| {
+        path.ancestors()
+            .skip(1)
+            .find(|dir| dir.join("bots").is_dir())
+            .map(Path::to_path_buf)
+    });
+    let directory = match layout {
+        Some(layout) => {
+            let directory = layout.join("behaviors");
+            std::fs::create_dir_all(&directory).expect("the behaviors directory is creatable");
+            directory
+        }
+        None => unique_scratch("behaviors"),
+    };
+    vec![
+        "--dir".to_owned(),
+        format!(
+            "{}={}::/behaviors",
+            service_uri("files"),
+            directory.display()
         ),
     ]
 }

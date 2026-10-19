@@ -371,6 +371,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "floppy-service-files"
+version = "0.1.0"
+dependencies = [
+ "scxml-types",
+ "scxml-validator-core",
+ "wit-bindgen 0.51.0",
+]
+
+[[package]]
 name = "floppy-service-generate"
 version = "0.1.0"
 dependencies = [
