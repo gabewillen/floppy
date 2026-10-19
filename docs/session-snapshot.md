@@ -422,8 +422,8 @@ scx snapshot diff A.json B.json [--format human|json] [--include-trace-context] 
   macrostep and listed (`document `URL``, `= for: <invoke src="…">`, and
   its size and SHA-256); a `<script src>` of DOC that cannot be fetched
   rejects it (SCXML 5.8), and any other failure raises `error.execution`
-  when its element runs. An `<invoke srcexpr>` URI is fetched when the
-  invoke runs. Remote documents are fetched over HTTPS only, within 16 MiB,
+  when its element runs. An `<invoke srcexpr>` URI is fetched each time the
+  invoke runs, as the document is then. Remote documents are fetched over HTTPS only, within 16 MiB,
   at most 5 redirects (each to `https:`), and the connect and total
   timeouts, with no retry and no credentials; `--offline` forbids them. A
   document's HTTP `Content-Type`, or else a URL ending in `.json` or `.xml`

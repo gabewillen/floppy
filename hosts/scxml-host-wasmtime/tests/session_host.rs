@@ -126,7 +126,7 @@ impl SessionEmbedder for Documents {
             .map(|(_, text)| text.clone().into())
     }
 
-    fn scripts(&self) -> MachineScripts {
+    fn scripts(&self, _base_uri: Option<&str>) -> MachineScripts {
         MachineScripts::none()
     }
 }
@@ -2094,7 +2094,7 @@ impl SessionEmbedder for Scripted {
         None
     }
 
-    fn scripts(&self) -> MachineScripts {
+    fn scripts(&self, _base_uri: Option<&str>) -> MachineScripts {
         let digest = format!("{:x}", Sha256::digest(&self.0));
         MachineScripts::runtime(
             Box::new(ScriptText(self.0.clone())),

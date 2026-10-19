@@ -405,9 +405,10 @@ The full list, with evidence, is in
   release serves its package only under the exact URI its manifest names
   (pinned or tagless), and a child loaded by `<invoke srcexpr>` or
   `<content expr>` compiles against what the run already bound.
-- An `event:schema` references only files relative to the document; child
-  documents compiled when invoked get no schema files, and a browser page
-  supplies them to the validator and compiler itself.
+- An `event:schema` references only files relative to the document; an
+  inline `<content>` child gets no schema files (an `<invoke src>` child,
+  literal or `srcexpr`, gets its own), and a browser page supplies them to
+  the validator and compiler itself.
 
 ## Security
 

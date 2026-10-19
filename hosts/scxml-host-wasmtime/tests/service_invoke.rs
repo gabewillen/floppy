@@ -193,7 +193,7 @@ impl SessionEmbedder for NoResources {
         None
     }
 
-    fn scripts(&self) -> MachineScripts {
+    fn scripts(&self, _base_uri: Option<&str>) -> MachineScripts {
         MachineScripts::none()
     }
 }
