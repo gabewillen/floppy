@@ -763,6 +763,12 @@ The remaining the original port runs as one ultracode run with these grants:
      can share a file; a read back that fails fails the revision.
    - `SessionEmbedder::scripts` takes the session's base URI (a host API
      change in scxml.rs), and the CLI keys scripts by URL.
+   - Live (2026-10-19, docs/live-proof.md): no `XML001` came from a schema
+     or a script any more, but no behavior was learned either (the drafts
+     fail their simulation on the turn behavior contract), and one draft
+     whose simulation looped (a raise re-entering its own state) ended the
+     whole run with `scx`'s fatal `command-bound` (D28: a simulated draft
+     runs in the run).
 
 ## Backlog (agreed, not started)
 

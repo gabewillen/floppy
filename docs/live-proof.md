@@ -7,6 +7,25 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-19, multi-document learned behaviors (D121), on vLLM 0.30.0, model `Qwen/Qwen3.8-Flash-Next`
+
+The builder's author call returns `scxml`, `schemas` and `script`, which it
+writes as `<name>.scx`, `<name>.json` and `<name>.js` through the files
+service into the layout's `behaviors/` (the live tests grant it) and
+simulates by `srcexpr` on the path; scxml.rs `c8bb69a8` loads the child's
+schema file and script against its own base URI. The runs used floppy
+commit `8dccba2ae4`, `FLOPPY_LIVE_ENV_FILE` naming `.env`, `env.speech`
+and `env.voice`, the same vLLM 0.30.0 server as the entry below, and
+`cargo test -p floppy-tests --locked --test floppy_live -- --ignored
+--nocapture --test-threads=1 --exact <test>`. No code was changed for
+them.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_cascade` | pass (22 s) | autonomy unhandled (`no-behaviors`), intuition abstained (`declined`, `empty_product`), reasoning handled. Tonight (D120): pass |
+| `floppy_live` `live_conversation`, run 1 | fail (335 s) | `4 completed, 0 failed`, but no behavior was learned by turn 2: reflection created `PingPongResponse` on turn 2 and changed it on turns 3 and 4; each revision was abandoned after no progress and the row stayed DRAFT, its source `../../behaviors/PingPongResponse.scx`. Of 23 drafts, 14 failed their simulation (`test-failed`: the turn behavior waited for an input event, or the test expected the selection as an output sent to `#_parent`, instead of finishing with it in its donedata), 3 failed `XML001` (all on turn 4, in the chart itself: no root element, an unclosed `datamodel` value, an attribute without `=`), 2 `XSD-cvc-elt.1` (a `<region>` element), 2 `PKG005` (`ecmaescript`, `ecmaSCRIPT`), 1 `SCXML005` and 1 `XSD-cvc-complex-type.2.4`. Tonight's run (D120) had every draft fail the same `XML001` after its fix, an unclosed attribute value or a regular expression written as an attribute, inside the one SCXML text that carried the schemas and expressions; here no failure came from a schema or a script, the documents were written apart (the last chart, `PingPongResponse.json` and a 1.3 KiB `PingPongResponse.js` of the functions its conds call), and most drafts validated and reached the simulation. Reasoning answered every turn (turn 3 "pong", turn 4 "Your favorite color is green, Gabe.") |
+| `floppy_live` `live_conversation`, run 2 | fail (124 s) | the run ended on turn 4 with `scx`'s fatal `command-bound` error ("a machine call stopped at its per-call command bound before a stable configuration"): reflection's change of `Preference Recall` (created earlier and stayed DRAFT, files `Preference_Recall.*`) simulated a draft whose compound initial state raises `decide` on entry and takes it to its own children, which exits and re-enters it, so the raise repeats in one macrostep without end. A simulated draft runs in the run (D28), so its runaway ended the whole run; turns 1 to 3 had settled. Its drafts failed `XSD-cvc-datatype-valid` (`name="Preference Recall"`, not an NMTOKEN) and then `simulate` `test-failed`; no `XML001` |
+
 ## 2026-10-18, Q8's decision kinds (D120) and gap 13's `image/*` branch, on vLLM 0.30.0, model `Qwen/Qwen3.8-Flash-Next`
 
 The decision service's kinds are `choice`, `predicate` and `score`
