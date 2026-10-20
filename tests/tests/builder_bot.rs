@@ -436,6 +436,34 @@ fn later_runaway_draft() -> String {
     )
 }
 
+/// [`scripted_draft`] with an eventless transition out of green guarded by
+/// `mayGo()`, whose script throws: the script is loaded and declares the
+/// function, so the draft passes D123's pre-checks and is simulated, and
+/// the cond fails on every evaluation (the 2026-10-20 live run 1's
+/// `PingPongReply`, whose cond threw because its script was not loaded).
+fn throwing_cond_draft() -> String {
+    let mut draft: Json = serde_json::from_str(&scripted_draft()).expect("the draft is JSON");
+    let scxml = draft["scxml"].as_str().expect("scxml is text").replacen(
+        r#"<transition event="light.timer" target="yellow"/>"#,
+        r#"<transition event="light.timer" target="yellow"/>
+    <transition cond="mayGo()" target="yellow"/>"#,
+        1,
+    );
+    draft["scxml"] = scxml.into();
+    draft["script"] = "function mayGo() {\n  throw new Error('not yet');\n}\n".into();
+    draft.to_string()
+}
+
+/// `/throwing/v1`'s `authors`th draft: [`throwing_cond_draft`], then
+/// [`scripted_draft`].
+fn throwing_route_draft(authors: usize) -> String {
+    if authors == 1 {
+        throwing_cond_draft()
+    } else {
+        scripted_draft()
+    }
+}
+
 /// A draft whose timer transition `into` (yellow's or red's) carries a
 /// cond with an unescaped `&&` (`XML001`): the light's transition on
 /// `light.timer` into `into`, guarded by `true && true`.
@@ -634,6 +662,7 @@ fn mock_reply(
             | "/runaway/v1/chat/completions"
             | "/rendered/v1/chat/completions"
             | "/unloaded/v1/chat/completions"
+            | "/throwing/v1/chat/completions"
             | "/nested/v1/chat/completions",
             Some("topology_plan"),
         ) => Some(completion(PLAN)),
@@ -689,6 +718,9 @@ fn mock_reply(
                 2 => unloaded_script_draft(false),
                 _ => scripted_draft(),
             }))
+        }
+        ("/throwing/v1/chat/completions", Some("scxml_draft")) => {
+            Some(completion(&throwing_route_draft(authors)))
         }
         ("/nested/v1/chat/completions", Some("scxml_draft")) => {
             Some(completion(&nested_final_draft(authors > 1)))
@@ -767,6 +799,8 @@ impl Received {
 /// yellow's, one whose `scxml` is a placeholder, then valid drafts;
 /// `/unloaded/v1` answers the plan, a scripted draft without its root
 /// `<script src>`, one without its script, then the scripted draft;
+/// `/throwing/v1` answers the plan, a scripted draft whose eventless
+/// cond throws, then the scripted draft;
 /// `/nested/v1` answers the plan, a draft whose only final is inside a
 /// state, then one that also has a top-level final;
 /// `/broken/v1` answers the plan, then only invalid
@@ -2009,6 +2043,42 @@ fn a_runaway_drafts_simulation_fails_its_tests_and_is_repaired() {
             .as_str()
             .is_some_and(|m| m.contains("test button ends green early")
                 && m.contains("error error.communication.")),
+        "{report}"
+    );
+}
+
+/// A draft whose eventless transition's cond throws on every evaluation
+/// fails its tests and is repaired, and the build runs on: scxml.rs
+/// `cf8f293a` stops such a cond at the per-call command bound (one command
+/// per failure) instead of running out of fuel, so the candidate's start is
+/// ended as D122 ends a runaway (`error.execution`), where the 2026-10-20
+/// live run 1 ended with `machine session failed: protocol`.
+#[test]
+fn a_draft_whose_eventless_cond_always_throws_fails_its_tests_and_is_repaired() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "throwing",
+        "throwing",
+        &["FLOPPY_API_KEY", "FLOPPY_BASE_URL"],
+        &json!({"spec": SPEC}),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    assert_eq!(done["script"], SCRIPT, "{done}");
+    let report = &done["report"];
+    assert_eq!(report["failures"], 1, "{report}");
+    let failed = report["history"][0]["diagnostics"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(failed.len(), 2, "both tests' starts failed: {report}");
+    assert!(
+        failed.iter().all(|d| d["code"] == "test-failed"
+            && d["message"]
+                .as_str()
+                .is_some_and(|m| m.contains("error error.execution"))),
         "{report}"
     );
 }

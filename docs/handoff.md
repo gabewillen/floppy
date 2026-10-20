@@ -11,6 +11,17 @@ Last updated: 2026-10-20.
 
 ## Current state (2026-10-09) — resume here
 
+- **A cond that always throws ends only its session (2026-10-20,
+  scxml.rs `cf8f293a`):** a transition condition that fails on every
+  evaluation now costs one command per failure and stops at the per-call
+  command bound instead of running out of fuel; the root then fails with
+  `command-bound`, and an invoked session is ended as D122 ends a runaway
+  (`error.execution` for a start, `error.communication.<invokeid>` later).
+  This resolves D123's open eventless-cond failure (`live_conversation`
+  run 1's `machine session failed: protocol`): a simulated draft whose
+  eventless cond throws fails its test with `error error.execution` and is
+  repaired, which `tests/tests/builder_bot.rs`'s `/throwing` route proves
+  with no builder change. Not yet rerun live on it.
 - **Builder diagnostics a repair can act on; `live_conversation`
   passes (2026-10-20, D123):** each validate diagnostic carries `line`
   and `rendered` (`scx validate`'s form: `--> NAME.scx:line:column`, the
@@ -22,14 +33,14 @@ Last updated: 2026-10-20.
   loaded (`script-not-loaded`) or a call no script declares
   (`undeclared-function`) is rejected before its simulation. Live:
   `live_conversation` passes (`GabePingPongRoutine` learned on turn 2,
-  answered turn 3). Open (D123): an eventless transition whose cond
-  throws ends the whole run (`host-failure` or `machine session failed:
-  protocol`), an scxml.rs bug to fix upstream (a six-line reproduction in
-  D123); the model still sends stub calls and writes tests expecting
+  answered turn 3). An eventless transition whose cond
+  throws ended the whole run (`host-failure` or `machine session failed:
+  protocol`), an scxml.rs bug resolved upstream by `cf8f293a` (above).
+  Open (D123): the model still sends stub calls and writes tests expecting
   outputs now and then; `parallel_tool_calls` and `minLength` were not
   used (D123 says why).
 - **A runaway invoked session ends only itself (2026-10-20, D122):**
-  scxml.rs is at `f920cb47`: an invoked session whose call stops at the
+  scxml.rs `f920cb47` (now under `cf8f293a`): an invoked session whose call stops at the
   per-call command bound is ended as a cancelled invocation is (a start
   that stopped there fails its `<invoke>` with `error.execution`, a later
   call queues `error.communication.<invokeid>`); only the root's own stop
@@ -175,7 +186,7 @@ Last updated: 2026-10-20.
   address; the cognition input's `environment` field is rendered by
   reasoning as the original's environment block. Every environment run
   passes `--fuel 9223372036854775807` until average usage is measured
-  (D111). scxml.rs is at `f920cb47` (D122), on top of `c8bb69a8` (D121) and `b59f8111` (D104, D109, D110). Speech and voice
+  (D111). scxml.rs is at `cf8f293a` (D123's eventless-cond fix), on top of `f920cb47` (D122), on top of `c8bb69a8` (D121) and `b59f8111` (D104, D109, D110). Speech and voice
   backends exist now, each through an env file in the session scratchpad
   (outside the repository) named in `FLOPPY_LIVE_ENV_FILE` with `.env`:
   `env.speech` (Gemini's OpenAI-compatible API, `FLOPPY_SPEECH_*`) and
