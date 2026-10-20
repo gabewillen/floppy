@@ -1025,7 +1025,12 @@ interface machine-capability-types {
     /// An invoked SCXML session (`session`): the host constructs the invoked
     /// machine session, links its data model and I/O processors, calls its
     /// `start-invoked`, and runs it to a stable configuration. An invoked
-    /// session may invoke in turn, at any depth.
+    /// session may invoke in turn, at any depth. An invoked session whose
+    /// call stops at its command bound is ended as `cancel-invocation`
+    /// ends it (nothing it sends reaches this session from then on, its
+    /// `cancel` runs, and no `done.invoke` follows): a start that stopped
+    /// there fails with `invalid-input`, and a later call becomes
+    /// `communication-error` (`error.communication.<invoke-id>`).
     ///
     /// An invoked service (`service`): the host instantiates the service
     /// component bound to exactly `type-uri` in a store of its own and calls
@@ -1039,7 +1044,7 @@ interface machine-capability-types {
     ///
     /// Errors (returned here, or passed to `invocation-completed`):
     /// `invalid-input` when the invoked session is rejected at load or at
-    /// its start, the service's `invoke` returned an error or trapped, the
+    /// its start or its start stops at its command bound, the service's `invoke` returned an error or trapped, the
     /// service imports an interface the host does not link or a resource
     /// the run does not grant, or the host's invoke limits leave no room
     /// for it; `unavailable` when no service component is bound to the

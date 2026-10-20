@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- An invoked session whose call stops at the machine's per-call command
+     bound (a raise that re-enters its own state without end) is ended as a
+     cancelled invocation is: its cancel runs, cancelling the sessions it
+     invoked, nothing more it sends reaches its invoking session, and no
+     done.invoke follows. A start that stopped there fails its <invoke>
+     (error.execution); a later call queues error.communication.<invokeid>.
+     The root runs on: neither session nor the grandchild answers
+     #_scxml_<sessionid> afterwards. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="a">
+  <state id="a">
+    <invoke id="first">
+      <content>
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="f0">
+          <state id="f0">
+            <onentry><raise event="again"/></onentry>
+            <transition event="again" target="f0"/>
+          </state>
+        </scxml>
+      </content>
+    </invoke>
+    <invoke id="second">
+      <content>
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="k0">
+          <state id="k0" initial="idle">
+            <invoke id="grand">
+              <content>
+                <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="g0">
+                  <state id="g0">
+                    <onentry><send event="ready" target="#_parent"/></onentry>
+                  </state>
+                </scxml>
+              </content>
+            </invoke>
+            <state id="idle">
+              <transition event="ready">
+                <send event="up" target="#_parent"/>
+              </transition>
+              <transition event="go" target="loop">
+                <send event="looping" target="#_parent"/>
+              </transition>
+            </state>
+            <state id="loop">
+              <onentry><raise event="again"/></onentry>
+              <transition event="again" target="loop"/>
+            </state>
+          </state>
+        </scxml>
+      </content>
+    </invoke>
+    <transition event="error.execution">
+      <log label="start" expr="_event.name"/>
+    </transition>
+    <transition event="up">
+      <log label="up" expr="_event.invokeid"/>
+      <send event="go" target="#_second"/>
+    </transition>
+    <transition event="looping">
+      <log label="looping" expr="_event.invokeid"/>
+    </transition>
+    <transition event="error.communication" target="b">
+      <log label="ended" expr="_event.name + ' ' + _event.invokeid"/>
+    </transition>
+    <transition event="done.invoke" target="fail"/>
+  </state>
+  <state id="b">
+    <onentry><send event="settle" delay="10ms"/></onentry>
+    <onentry><send id="to-second" event="ping" target="#_scxml_session.second"/></onentry>
+    <onentry><send id="to-grand" event="ping" target="#_scxml_session.second.grand"/></onentry>
+    <transition event="error.communication">
+      <log label="gone" expr="_event.sendid"/>
+    </transition>
+    <transition event="done.invoke" target="fail"/>
+    <transition event="settle" target="pass"/>
+  </state>
+  <final id="pass"/>
+  <final id="fail"/>
+</scxml>

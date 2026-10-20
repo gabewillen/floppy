@@ -512,8 +512,16 @@ per level (the same for a cancel):
   command and in every delivery pass;
 - a session whose cancellation began sends nothing more to its invoking
   session, and cancelling a session cancels the sessions it invoked;
-- a failure, trap, or command-bound stop of any session fails the whole
-  session, as it fails the Wasmtime run;
+- an invoked session whose call stops at its per-call command bound is
+  ended as its invoking session's cancel would end it (SCXML 6.4): nothing
+  it sends reaches its invoking session from then on, its `cancel` runs
+  (cancelling the sessions it invoked), and no `done.invoke` follows; a
+  start that stopped there fails its `<invoke>` (`error.execution` in the
+  invoking session), and a later call queues
+  `error.communication.<invokeid>` for it, as under Wasmtime. Any other
+  failure or trap of any session, and a failure of that cancel, fails the
+  whole session, as it fails the Wasmtime run; the root's own stop at the
+  bound leaves it unstable until `resume`;
 - depth and breadth are the Wasmtime host's: an invoked session invokes in
   turn, with no limit unless the page sets one in
   `invokeLimits: { maxInvokeDepth?, maxInvokedSessions? }` (non-negative

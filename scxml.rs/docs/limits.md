@@ -139,7 +139,11 @@ toggle eventlessly traps after 505 commands and 0.22 to 0.25 s
 transition loop, a `<raise>` loop, a 0 ms self-send chain) of narrower
 machines, a 64-region one among them, stop earlier, at the machine's
 1 024-command per-call bound, and a command budget the caller sets
-(`--max-commands`; none by default) bounds the calls. The fuel default is
+(`--max-commands`; none by default) bounds the calls. The root's stop at that
+bound fails the run (`command-bound`); an invoked session's ends only that
+session, as a cancelled invocation ends (on the same call's budget), and its
+invoking session receives `error.execution` for a start that stopped there or
+`error.communication.<invokeid>` for a later call. The fuel default is
 sized from the largest single call of each workload, the smallest fuel it runs
 under, on documents `compile` accepts (`default_fuel_sizing_workloads` in
 hosts/scxml-host-wasmtime/tests/fuel_sizing.rs bisects and prints them and

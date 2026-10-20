@@ -941,6 +941,20 @@ hard cutover.
   document at its last checkpoint it returns (`unavailable` for a target no
   running session of the run answers), in both hosts; nothing is recorded.
   `<example:snapshot>` gains `target`.
+- An invoked session whose call stops at the machine's per-call command
+  bound (1,024 commands: a `<raise>` that re-enters its own state without
+  end, an eventless loop) no longer fails the whole run, in both hosts: it
+  is ended as a cancelled invocation is (from then on nothing it sends
+  reaches its invoking session, its `cancel` runs on the same call's
+  budget, cancelling the sessions it invoked, and no `done.invoke`
+  follows). A start that stopped there fails its `<invoke>` with
+  `error.execution` (`start-invocation`'s `invalid-input`), and a later
+  call queues `error.communication.<invokeid>` (the `communication-error`
+  message an invoked service's failure after its start sends); the
+  invoking session runs on. The root's own stop there still fails the run
+  (`RunFailure::CommandBound`, `command-bound`), and any other failure or
+  trap of any session still does. A finished invoked session runs nothing
+  more (the rest of a due batch it finished in is dropped).
 - `#_scxml_<sessionid>` reaches any session of the sender's run while it
   runs (SCXML C.1 leaves the accessible sessions to the platform): a
   sibling, a grandchild, or the root, immediately or when a delayed send

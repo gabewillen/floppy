@@ -796,9 +796,13 @@ export const COMPILE_STATUSES: readonly CompileStatus[];
  * between the sessions in the Wasmtime scheduler's order: root events to
  * children, children's events and then their `done.invoke` to the root, one
  * delivery at a time. A command returns the root's last call result after that
- * work settled. A child failure, trap, or command-bound stop fails the whole
- * session (the child's ScxmlSessionError or ScxmlHostError), as it fails the
- * Wasmtime run.
+ * work settled. A child whose call stops at its command bound is ended as
+ * its invoking session's cancel would end it (its exit runs, the sessions it
+ * invoked are cancelled, and no `done.invoke` follows): its `<invoke>` fails
+ * with error.execution when its start stopped there, and its invoking
+ * session receives error.communication.<invokeid> when a later call did. Any
+ * other child failure or trap fails the whole session (the child's
+ * ScxmlSessionError or ScxmlHostError), as it fails the Wasmtime run.
  *
  * Run to completion: one operation at a time. While a method runs
  * (including a timer-driven delivery), any MachineSession method a
