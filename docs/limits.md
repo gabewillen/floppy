@@ -136,7 +136,9 @@ fuel: the heavy nested `<foreach>`/`<script>` document traps inside its
 `start` after 0.23 to 0.25 s, and a 128-region parallel machine whose regions
 toggle eventlessly traps after 505 commands and 0.22 to 0.25 s
 (`default_fuel_runaway_call_time` prints them). Logical runaways (an eventless
-transition loop, a `<raise>` loop, a 0 ms self-send chain) of narrower
+transition loop, a `<raise>` loop, a 0 ms self-send chain, an eventless
+transition whose condition fails on every evaluation, each failure one
+command) of narrower
 machines, a 64-region one among them, stop earlier, at the machine's
 1 024-command per-call bound, and a command budget the caller sets
 (`--max-commands`; none by default) bounds the calls. The root's stop at that

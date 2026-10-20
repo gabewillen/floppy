@@ -299,8 +299,9 @@ pub const DEFAULT_MEMORIES: usize = 100;
 ///
 /// Logical runaways are bounded before fuel: one machine call runs at most
 /// `scxml_engine::MAX_COMMANDS_PER_RUN` (1 024) commands, so an eventless
-/// transition loop, a `<raise>` loop, or a 0 ms self-send chain of the root
-/// session stops the run with `RunFailure::CommandBound` (under
+/// transition loop, a `<raise>` loop, a 0 ms self-send chain, or an
+/// eventless transition whose condition fails on every evaluation of the
+/// root session stops the run with `RunFailure::CommandBound` (under
 /// 1 000 000 000 fuel for 1 024 commands of a two-state loop), and the
 /// run's command budget bounds the calls. An invoked session's runaway ends
 /// only that session, as a cancelled invocation ends, on the same call's

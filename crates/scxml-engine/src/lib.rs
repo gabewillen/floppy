@@ -2209,6 +2209,23 @@ impl Engine {
             self.internal.pop_front();
             consumed.push(event.clone());
             self.current_event = Some(event.clone());
+            if transitions.is_empty()
+                && self.internal.len().saturating_add(consumed.len()) > queue_len
+            {
+                // A condition failed during this resume and its error event
+                // was appended (SCXML 5.9.1). The command ends here with the
+                // ignored event bound as `_event`, and the next resume runs
+                // the eventless selection on it once, first, so a condition
+                // that fails on every evaluation costs one command each and
+                // stops at the per-call command bound.
+                dispositions.push(DisposedEvent {
+                    event,
+                    disposition: EventDisposition::Ignored,
+                });
+                return self
+                    .step(Vec::new(), None, dispositions)
+                    .map(|step| InternalScan::CommandResult(Box::new(step)));
+            }
             let (transitions, disposition) = if transitions.is_empty() {
                 let eventless = match self.select_transitions(None, Some(&event), evaluator) {
                     Ok(eventless) => eventless,
@@ -5434,18 +5451,30 @@ mod tests {
 
         // A cond that cannot be evaluated as a boolean raises error.execution
         // and evaluates as false; every previously queued internal event stays
-        // ordered and accounted for in the same processing round.
-        let step = engine
-            .resume(&mut FailingEvaluator)
-            .expect("a cond evaluation failure must not abort the round");
-        assert_eq!(
-            step.event_dispositions
-                .iter()
-                .map(|disposed| (
+        // ordered and accounted for in the same macrostep. The command that
+        // appended the error ends at the next ignored event, so the round
+        // takes two resumes.
+        let mut dispositions = Vec::new();
+        let mut resumes = 0;
+        let step = loop {
+            let step = engine
+                .resume(&mut FailingEvaluator)
+                .expect("a cond evaluation failure must not abort the round");
+            resumes += 1;
+            dispositions.extend(step.event_dispositions.iter().map(|disposed| {
+                (
                     disposed.event.name.as_str().to_owned(),
-                    disposed.disposition
-                ))
-                .collect::<Vec<_>>(),
+                    disposed.disposition,
+                )
+            }));
+            if step.stable {
+                break step;
+            }
+            complete_empty_effect_step(&mut engine, &step);
+        };
+        assert_eq!(resumes, 2, "the failed cond ends its command once");
+        assert_eq!(
+            dispositions,
             vec![
                 ("noise".to_owned(), EventDisposition::Ignored),
                 ("finish".to_owned(), EventDisposition::Ignored),
