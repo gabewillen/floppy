@@ -21,7 +21,10 @@ Last updated: 2026-10-20.
   fails its test (`test-failed`, `error error.execution` or
   `error error.communication.<invokeid>`) and is repaired; the builder
   needed no change (`sim_run`'s `error.*` transition already took both),
-  and `tests/tests/builder_bot.rs` proves both cases.
+  and `tests/tests/builder_bot.rs` proves both cases. Live (2026-10-20,
+  docs/live-proof.md): `live_cascade` passes; `live_conversation` still
+  learns no behavior (its drafts failed `XML001` in the chart and other
+  validation codes; none ran away, so D122 was not reached live).
 - **Multi-document learned behaviors (2026-10-18, D121):** the builder's
   author tool call returns `scxml`, `schemas` (`$defs` by input event) and
   `script`, and the builder writes them as `<name>.scx`, `<name>.json` and

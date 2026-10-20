@@ -7,6 +7,25 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-20, a runaway invoked session ends only itself (D122), on vLLM 0.30.0, model `Qwen/Qwen3.8-Flash-Next`
+
+scxml.rs `f920cb47` ends an invoked session whose call stops at the
+per-call command bound as a cancelled invocation is (`error.execution` for
+a start, `error.communication.<invokeid>` for a later call), so a builder
+draft whose simulation runs away fails its test instead of ending the run.
+The runs used floppy commit `3b9507e5d5`, `FLOPPY_LIVE_ENV_FILE` naming
+`.env`, `env.speech` and `env.voice`, the same vLLM 0.30.0 server as the
+entries below, and `cargo test -p floppy-tests --locked --test floppy_live
+-- --ignored --nocapture --test-threads=1 --exact <test>`, once each. No
+code was changed for them. The local LocalAI behind `env.voice` was not
+running, so every voice detection failed (`the backend is unreachable`),
+which neither test checks.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_cascade` | pass (22 s) | autonomy unhandled (`no-behaviors`), intuition unhandled (`empty_product`), reasoning handled. 2026-10-19 (D121): pass |
+| `floppy_live` `live_conversation` | fail (124 s) | `4 completed, 0 failed`, and the run was not ended by any draft (no `command-bound`; none of this run's drafts ran away, so D122's path was not reached live), but no behavior was learned by turn 2: reflection selected nothing on turns 1 and 2, created `FollowStandingRules` on turn 3 and changed it on turn 4, and each revision was abandoned after the same diagnostic twice, so the row stayed DRAFT. Of the 7 failed drafts, 4 failed `XML001` in the chart (turn 3: an unescaped `&`, twice; turn 4: no root element, twice), 1 `XSD-cvc-complex-type.4` (a `<foreach>` without `item`), 1 `SCXML012` (an atomic state with an `initial`), and 1 reached the simulation and failed `test-failed` (its test expected `done=true` with no input; the draft did not finish). Reasoning answered turn 1 ("Hi Gabe! Got it, green is your favorite color. I'll remember that."), chose the ignore on turn 2, said "pong" on turn 3 and "Your favorite color is green, Gabe." on turn 4 |
+
 ## 2026-10-19, multi-document learned behaviors (D121), on vLLM 0.30.0, model `Qwen/Qwen3.8-Flash-Next`
 
 The builder's author call returns `scxml`, `schemas` and `script`, which it
