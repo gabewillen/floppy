@@ -7,10 +7,21 @@ history lives in [decisions.md](decisions.md) (numbered decisions),
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
-Last updated: 2026-10-18.
+Last updated: 2026-10-20.
 
 ## Current state (2026-10-09) — resume here
 
+- **A runaway invoked session ends only itself (2026-10-20, D122):**
+  scxml.rs is at `f920cb47`: an invoked session whose call stops at the
+  per-call command bound is ended as a cancelled invocation is (a start
+  that stopped there fails its `<invoke>` with `error.execution`, a later
+  call queues `error.communication.<invokeid>`); only the root's own stop
+  still fails the run with `command-bound`. A builder draft whose
+  simulation runs away (the 2026-10-19 `live_conversation` run 2) now
+  fails its test (`test-failed`, `error error.execution` or
+  `error error.communication.<invokeid>`) and is repaired; the builder
+  needed no change (`sim_run`'s `error.*` transition already took both),
+  and `tests/tests/builder_bot.rs` proves both cases.
 - **Multi-document learned behaviors (2026-10-18, D121):** the builder's
   author tool call returns `scxml`, `schemas` (`$defs` by input event) and
   `script`, and the builder writes them as `<name>.scx`, `<name>.json` and
@@ -23,9 +34,9 @@ Last updated: 2026-10-18.
   `EVENT004` waived and simulated by `srcexpr` on
   `../../behaviors/<name>.scx`. A behavior row's `source` is that path;
   reflection reads a stored program back with `seed` for a change; the
-  candidates and routines runners invoke by `srcexpr`. scxml.rs is at
+  candidates and routines runners invoke by `srcexpr`. scxml.rs
   `c8bb69a8` (a `srcexpr` child's schema files and scripts load against
-  its own base URI, fetched each time it is invoked). Open: D121's "To
+  its own base URI, fetched each time it is invoked) came with it. Open: D121's "To
   review" list under "Open decisions" below.
 - **Parity gap 13's small part (2026-10-18,
   [parity-gaps](plans/parity-gaps.md)):** `<conversation:ingest_content>`
@@ -144,7 +155,7 @@ Last updated: 2026-10-18.
   address; the cognition input's `environment` field is rendered by
   reasoning as the original's environment block. Every environment run
   passes `--fuel 9223372036854775807` until average usage is measured
-  (D111). scxml.rs is at `c8bb69a8` (D121), on top of `b59f8111` (D104, D109, D110). Speech and voice
+  (D111). scxml.rs is at `f920cb47` (D122), on top of `c8bb69a8` (D121) and `b59f8111` (D104, D109, D110). Speech and voice
   backends exist now, each through an env file in the session scratchpad
   (outside the repository) named in `FLOPPY_LIVE_ENV_FILE` with `.env`:
   `env.speech` (Gemini's OpenAI-compatible API, `FLOPPY_SPEECH_*`) and
@@ -765,10 +776,9 @@ The remaining the original port runs as one ultracode run with these grants:
      change in scxml.rs), and the CLI keys scripts by URL.
    - Live (2026-10-19, docs/live-proof.md): no `XML001` came from a schema
      or a script any more, but no behavior was learned either (the drafts
-     fail their simulation on the turn behavior contract), and one draft
-     whose simulation looped (a raise re-entering its own state) ended the
-     whole run with `scx`'s fatal `command-bound` (D28: a simulated draft
-     runs in the run).
+     fail their simulation on the turn behavior contract). (Resolved by
+     D122: the draft whose simulation looped no longer ends the run; it
+     fails its test and is repaired.)
 
 ## Backlog (agreed, not started)
 
