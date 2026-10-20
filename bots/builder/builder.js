@@ -173,6 +173,15 @@ function draftGenerated(_event) {
   return _event.invokeid === gen_id && draft !== null;
 }
 
+// A generated draft whose scxml has no scxml element.
+function draftWithoutDocument(_event) {
+  return draftGenerated(_event) && draft.scxml.indexOf('<scxml') < 0;
+}
+
+function noDocumentDiagnostics() {
+  return [{kind: 'draft', code: 'no-document', message: 'the draft\'s scxml holds no scxml element (it was ' + JSON.stringify(draft.scxml.slice(0, 80)) + '): scxml is the whole document text, from its root element to its end, and a repair returns all of it, not only what changed'}];
+}
+
 // writing (decision D121): the draft's three documents, beside each other.
 
 // The name its documents are written under: the request's, else the plan's,
@@ -226,6 +235,59 @@ function testsOutOfBoundsDiagnostics() {
   return [{kind: 'draft', code: 'tests-out-of-bounds', message: 'the draft must carry one to eight test scripts of at most 32 events each'}];
 }
 
+// The draft's script checks (decision D123): a script that is not empty is
+// loaded by <script src="NAME.js">, and every function a cond or expr calls
+// by its bare name is declared by the script, or is In or an ECMAScript
+// global. A cond that throws (its function undeclared) on an eventless
+// transition is retried every microstep, and scxml.rs ends the whole run
+// there, not only the simulated child.
+function scriptErrors() {
+  var errors = [];
+  if (draft.script.trim() !== '' && scxml_text.indexOf('src="' + draftFile('.js') + '"') < 0) {
+    errors.push({kind: 'draft', code: 'script-not-loaded', message: 'script is not empty, but the document has no <script src="' + draftFile('.js') + '"/> as the first child of its root after datamodel, so none of its functions is defined'});
+  }
+  var undeclared = calledFunctions().filter(function (name) { return declaredFunctions().indexOf(name) < 0 && ECMASCRIPT_GLOBALS.indexOf(name) < 0; });
+  if (undeclared.length > 0) {
+    errors.push({kind: 'draft', code: 'undeclared-function', message: 'the document calls ' + undeclared.join(', ') + ', which script does not declare: declare each as a function in script, or call none'});
+  }
+  return errors;
+}
+
+var ECMASCRIPT_GLOBALS = ['In', 'Array', 'Boolean', 'Date', 'Error', 'Number', 'Object', 'RegExp', 'String', 'decodeURIComponent', 'encodeURIComponent', 'isFinite', 'isNaN', 'parseFloat', 'parseInt'];
+
+// The distinct bare names the document's cond and *expr attributes call.
+function calledFunctions() {
+  var names = [];
+  scxml_text.replace(/\s(?:cond|[a-z]*expr)\s*=\s*("[^"]*"|'[^']*')/g, function (attribute, quoted) {
+    unescapedAttribute(quoted.slice(1, -1)).replace(/(^|[^.\w$])([A-Za-z_$][\w$]*)\s*\(/g, function (call, before, name) {
+      if (names.indexOf(name) < 0 && ['function', 'if', 'return', 'typeof', 'while', 'for', 'switch', 'catch'].indexOf(name) < 0) {
+        names.push(name);
+      }
+      return call;
+    });
+    return attribute;
+  });
+  return names;
+}
+
+function unescapedAttribute(value) {
+  return value.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+}
+
+// The names script declares: function declarations and var, let or const.
+function declaredFunctions() {
+  var names = [];
+  draft.script.replace(/(?:function\s+|(?:var|let|const)\s+)([A-Za-z_$][\w$]*)/g, function (declaration, name) {
+    names.push(name);
+    return declaration;
+  });
+  return names;
+}
+
+function hasScriptErrors() {
+  return isReadyToSimulate() && script_errors.length > 0;
+}
+
 function hasMachineApplicableFixes() {
   return report !== null && typeof fixed === 'string' && fixed !== scxml_text && fix_passes < 2;
 }
@@ -234,8 +296,47 @@ function isValidated() {
   return report !== null;
 }
 
+// Each error with rendered, the form scx validate prints it in (rustc's):
+// a repair is told the line and column of what it names, not only its code.
 function validateDiagnostics() {
-  return validatorErrors().slice(0, 20).map(function (d) { return {kind: 'validate', code: d.code, label: d.primary.message ? d.primary.message : d.message, message: d.help ? d.message + ' Help: ' + d.help : d.message}; });
+  return validatorErrors().slice(0, 20).map(function (d) { var at = sourceAt(d.primary.span); return {kind: 'validate', code: d.code, label: d.primary.message ? d.primary.message : d.message, line: at.text.trim(), message: d.help ? d.message + ' Help: ' + d.help : d.message, rendered: renderedDiagnostic(d, at)}; });
+}
+
+// The character index of the UTF-8 byte offset of the report's source text
+// (the report's spans count bytes).
+function charIndexOfByte(text, byte) {
+  var bytes = 0;
+  var i = 0;
+  while (i < text.length && bytes < byte) {
+    var c = text.codePointAt(i);
+    bytes += c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4;
+    i += c >= 0x10000 ? 2 : 1;
+  }
+  return i;
+}
+
+// Where a span starts in the report's source text: its line and column
+// (from 1), the text of that line, and how many characters of it the span
+// covers (at least one).
+function sourceAt(span) {
+  var text = report.validator.source_text;
+  var start = charIndexOfByte(text, span.start);
+  var end = charIndexOfByte(text, span.end);
+  var lineStart = text.lastIndexOf('\n', start - 1) + 1;
+  var lineEnd = text.indexOf('\n', start);
+  var line = text.slice(lineStart, lineEnd < 0 ? text.length : lineEnd);
+  return {line: text.slice(0, lineStart).split('\n').length, column: start - lineStart + 1, text: line, width: Math.max(1, Math.min(end, lineStart + line.length) - start)};
+}
+
+// A validator diagnostic as scx validate renders it: the code and message,
+// --> file:line:column, the source line (at most 160 characters around the
+// span) with the span marked and its label, then its notes, help and fixes.
+function renderedDiagnostic(d, at) {
+  var from = Math.max(0, at.column - 81);
+  var shown = at.text.slice(from, from + 160);
+  var gutter = ' '.repeat(String(at.line).length);
+  var caret = ' '.repeat(at.column - 1 - from) + '^'.repeat(Math.max(1, Math.min(at.width, shown.length - (at.column - 1 - from))));
+  return ['error[' + d.code + ']: ' + d.message, gutter + '--> ' + draftFile('.scx') + ':' + at.line + ':' + at.column, gutter + ' |', at.line + ' | ' + shown, gutter + ' | ' + caret + ' ' + d.primary.message].concat(d.notes.map(function (n) { return gutter + ' = note: ' + n; }), d.help ? [gutter + ' = help: ' + d.help] : [], d.fixes.map(function (f) { return gutter + ' = suggestion: ' + f.message; })).join('\n');
 }
 
 function validatorFailedDiagnostics() {
@@ -333,14 +434,39 @@ function allTestsPassed() {
 }
 
 function simulateDiagnostics() {
-  return sim_results.filter(function (r) { return !r.passed; }).map(function (r) { return r.apply.length > 0 ? r.apply.map(function (m) { return {kind: 'apply', code: 'E0008', message: m}; }) : [{kind: 'simulate', code: 'test-failed', message: 'test ' + r.name + ' expected the outputs ' + JSON.stringify(r.expected) + ' in order and done=' + r.expect_done + ', observed ' + JSON.stringify(r.observed) + ' and done=' + r.done + (r.error === null ? '' : ', error ' + r.error)}]; }).reduce(function (all, d) { return all.concat(d); }, []);
+  return sim_results.filter(function (r) { return !r.passed; }).map(function (r) { return r.apply.length > 0 ? r.apply.map(function (m) { return {kind: 'apply', code: 'E0008', message: m}; }) : [{kind: 'simulate', code: 'test-failed', message: 'test ' + r.name + ' expected the outputs ' + JSON.stringify(r.expected) + ' in order and done=' + r.expect_done + ', observed ' + JSON.stringify(r.observed) + ' and done=' + r.done + (r.error === null ? '' : ', error ' + r.error) + doneMismatch(r)}]; }).reduce(function (all, d) { return all.concat(d); }, []);
+}
+
+// What a test's done mismatch means for a machine the simulation invokes
+// with no param and sends only the test's events.
+function doneMismatch(r) {
+  return r.done === r.expect_done ? '' : r.done ? ' (it reached a top-level final state the test did not expect)' : !hasTopLevelFinal() ? ' (it has no top-level final state: each of its final elements is inside a state, which it only completes; a final that ends the machine is a child of scxml itself)' : ' (it reached no top-level final state: invoked with no param, each data item keeps its own expr, and it waited for an event the test never sent, or cycled)';
+}
+
+// Whether the draft (well-formed: it validated) has a final element that is
+// a child of its root, found by the depth of each tag outside comments.
+function hasTopLevelFinal() {
+  var depth = 0;
+  var found = false;
+  scxml_text.replace(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>/g, '').replace(/<(\/?)([A-Za-z_][\w:.-]*)((?:\s+[^\s=\/>]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(\/?)>/g, function (tag, close, name, attributes, empty) {
+    if (close) {
+      depth -= 1;
+    } else {
+      found = found || (depth === 1 && name.split(':').pop() === 'final');
+      depth += empty ? 0 : 1;
+    }
+    return tag;
+  });
+  return found;
 }
 
 // retry_gate
 
-// The sorted, distinct kind|code|identity of the diagnostics.
+// The sorted, distinct kind|code|identity of the diagnostics: a validate
+// diagnostic's identity is its label and the trimmed source line it marks
+// (the same mistake left in place; one fixed, another found, is progress).
 function diagnosticsFingerprint() {
-  return JSON.stringify(diagnostics.map(function (d) { return d.kind + '|' + d.code + '|' + (d.kind === 'validate' ? d.label : d.message); }).sort().filter(function (key, i, keys) { return i === 0 || key !== keys[i - 1]; }));
+  return JSON.stringify(diagnostics.map(function (d) { return d.kind + '|' + d.code + '|' + (d.kind === 'validate' ? d.label + '|' + d.line : d.message); }).sort().filter(function (key, i, keys) { return i === 0 || key !== keys[i - 1]; }));
 }
 
 // The last draft a check rejected (validate, lifetime, simulate, apply),

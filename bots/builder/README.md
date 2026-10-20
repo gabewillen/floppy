@@ -107,7 +107,16 @@ intake -> design -> author -> writing -> validate -> simulate -> done
   delays, a settle time, the outputs expected in order, and whether the
   machine finishes). A repair sees the failed draft, its schemas, its
   script, its tests, and the diagnostics; `unconfigured` ends the build in
-  `failed` as in `design`.
+  `failed` as in `design`. A draft whose `scxml` holds no `<scxml`
+  element (empty, or a placeholder a model's stub call holds) is a `draft`
+  diagnostic, `no-document`, quoting what it held, before anything is
+  written (decision D123). The author's rules keep every `cond` and `expr`
+  beyond a literal, an identifier or a dotted path a call of a function of
+  `script` (as decision D65 keeps floppy's own documents), so no attribute
+  holds `&`, `<` or `>`; they say the constraints win where they differ
+  from the builder's rules (a turn behavior sends nothing to its invoker,
+  so its tests expect no outputs), and ask for exactly one call of
+  `scxml_draft`.
 * `writing`: three invocations of the files service write the three
   documents; one that fails (no grant, a name the service refuses) is a
   `draft` diagnostic, `write-failed`.
@@ -117,7 +126,23 @@ intake -> design -> author -> writing -> validate -> simulate -> done
   is the draft's; the simulation's compile reads the file); when the fixes
   change the text, `apply_fixes` takes them and writes and validates again
   (at most 2 passes per draft);
-  otherwise the error diagnostics feed back to `author`. With the
+  a clean draft whose `script` is not empty but whose document has no
+  `<script src="NAME.js"/>` (`script-not-loaded`), or whose `cond` and
+  `*expr` attributes call a bare function name `script` does not declare
+  and that is neither `In` nor an ECMAScript global (`undeclared-function`,
+  naming them), is a `draft` diagnostic before it is simulated (decision
+  D123): such a cond throws, and on an eventless transition scxml.rs
+  retries it every microstep until the whole run fails, not only the
+  simulated child;
+  otherwise the error diagnostics feed back to `author`, each with
+  `line` (the trimmed source line its primary span starts on) and
+  `rendered`, the form `scx validate` prints it in: `error[CODE]: message`,
+  `--> NAME.scx:line:column`, that line (at most 160 characters around
+  the span) with the span marked by `^` and its label, then its notes,
+  help and fixes (decision D123). A simulate diagnostic whose `done`
+  differs from the test's says what that means (the machine reached no
+  top-level final state, invoked with no param and sent only the test's
+  events, or reached one the test did not expect). With the
   request's `min_every_ms` and `turn_after_bound_ms`, a clean draft is then
   checked against the reference `check()`'s lifetime bounds (`instance.py`
   `_lifetime_errors`, diagnostics of kind `lifetime`, code `E0009`): a
@@ -166,17 +191,21 @@ intake -> design -> author -> writing -> validate -> simulate -> done
   optional `max_attempts` also ends it (`attempts-exhausted`). A fingerprint
   is the sorted, distinct list of each diagnostic's kind, code, and
   identity, taken from the canonical report rather than prose: a validator
-  diagnostic's identity is its primary label (the report gives no element
-  path, and byte spans shift between drafts), so two drafts fail the same
-  way when they have the same set of codes with the same primary labels; a
+  diagnostic's identity is its primary label and the trimmed source line
+  it marks (the report gives no element path, and byte spans shift between
+  drafts), so two drafts fail the same way when they have the same set of
+  codes with the same primary labels on the same lines; a
   simulation diagnostic's identity is its message, which names the failing
   test, its expected and observed outputs, its expected and observed
   `done`, and its error, so the same test failing with the same mismatch is
   the same failure; any other diagnostic (a generation failure, a timeout, a
   write failure) is identified by its message, which the
   builder writes. A primary label often says only what kind of thing is
-  wrong (`SCXML005`'s is "unknown target identifier"), so a draft that
-  replaces one unknown target with another counts as the same failure.
+  wrong (`SCXML005`'s is "unknown target identifier"), so a validate
+  diagnostic's identity also has the trimmed source line it marks
+  (decision D123): a draft that leaves the mistake where it was is the
+  same failure, and one that fixes it and makes the same kind of mistake
+  on another line is progress.
 * `triage`: `decision:choice` (synchronous executable content) writes the
   state's enabled `event:schema` transitions as the canonical choices:
   `triage.repair` (guarded by `plan !== null`, so it is among the choices only

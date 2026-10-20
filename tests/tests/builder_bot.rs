@@ -436,6 +436,69 @@ fn later_runaway_draft() -> String {
     )
 }
 
+/// A draft whose timer transition `into` (yellow's or red's) carries a
+/// cond with an unescaped `&&` (`XML001`): the light's transition on
+/// `light.timer` into `into`, guarded by `true && true`.
+fn ampersand_draft(into: &str) -> String {
+    draft(&traffic_light(&green_separate(), "red").replace(
+        &format!(r#"<transition event="light.timer" target="{into}"/>"#),
+        &format!(r#"<transition event="light.timer" cond="true && true" target="{into}"/>"#),
+    ))
+}
+
+/// [`scripted_draft`] without its root `<script src>`, as the 2026-10-20
+/// live `PingPongReply` draft was (`script-not-loaded`), or without its
+/// script (`undeclared-function`).
+fn unloaded_script_draft(script: bool) -> String {
+    let mut draft: Json = serde_json::from_str(&scripted_draft()).expect("the draft is JSON");
+    if script {
+        let scxml = draft["scxml"]
+            .as_str()
+            .expect("scxml is text")
+            .replace(r#"<script src="traffic_light.js"/>"#, "");
+        draft["scxml"] = scxml.into();
+    } else {
+        draft["script"] = "".into();
+    }
+    draft.to_string()
+}
+
+/// A draft that finishes at once, with one test that expects it to: its
+/// `final` is inside `root`, which it only completes (the 2026-10-20 live
+/// `PingPongReply` drafts), or `root`'s `done.state.root` leads to a
+/// top-level `final`.
+fn nested_final_draft(top_level: bool) -> String {
+    let (exit, end) = if top_level {
+        (
+            r#"<transition event="done.state.root" target="out"/>"#,
+            r#"<final id="out"/>"#,
+        )
+    } else {
+        ("", "")
+    };
+    json!({
+        "scxml": format!(
+            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="finisher" initial="root">
+  <state id="root" initial="go">
+    {exit}
+    <state id="go"><transition target="end"/></state>
+    <final id="end"/>
+  </state>
+  {end}
+</scxml>"#
+        ),
+        "schemas": schemas(&[]),
+        "script": "",
+        "tests": [{"name": "finishes", "events": [], "settle_ms": 1000, "expect_events": [], "expect_done": true}],
+    })
+    .to_string()
+}
+
+/// A draft whose `scxml` holds no document, as a model's stub call does.
+fn placeholder_draft() -> String {
+    draft("placeholder")
+}
+
 /// A draft that finishes on its second `ping`, with two tests that each
 /// send one `ping` and expect it not to finish: a test whose `ping` is sent
 /// twice fails.
@@ -568,7 +631,10 @@ fn mock_reply(
             | "/lifetime/v1/chat/completions"
             | "/emptytick/v1/chat/completions"
             | "/afterbound/v1/chat/completions"
-            | "/runaway/v1/chat/completions",
+            | "/runaway/v1/chat/completions"
+            | "/rendered/v1/chat/completions"
+            | "/unloaded/v1/chat/completions"
+            | "/nested/v1/chat/completions",
             Some("topology_plan"),
         ) => Some(completion(PLAN)),
         ("/flaky/v1/chat/completions", Some("topology_plan")) => {
@@ -609,6 +675,24 @@ fn mock_reply(
             2 => later_runaway_draft(),
             _ => draft(&traffic_light(&green_separate(), "red")),
         })),
+        ("/rendered/v1/chat/completions", Some("scxml_draft")) => {
+            Some(completion(&match authors {
+                1 => ampersand_draft("green"),
+                2 => ampersand_draft("red"),
+                3 => placeholder_draft(),
+                _ => draft(&traffic_light(&green_separate(), "red")),
+            }))
+        }
+        ("/unloaded/v1/chat/completions", Some("scxml_draft")) => {
+            Some(completion(&match authors {
+                1 => unloaded_script_draft(true),
+                2 => unloaded_script_draft(false),
+                _ => scripted_draft(),
+            }))
+        }
+        ("/nested/v1/chat/completions", Some("scxml_draft")) => {
+            Some(completion(&nested_final_draft(authors > 1)))
+        }
         ("/repair/v1/chat/completions", Some("scxml_draft")) => Some(completion(&match authors {
             1 => invalid_draft(),
             2 => fixable_draft(),
@@ -678,7 +762,13 @@ impl Received {
 /// draft, a draft with a delayed internal send, then valid drafts;
 /// (`/progress/v1`'s valid one with a script, [`scripted_draft`]);
 /// `/runaway/v1` answers the plan, a draft whose start runs away, a draft
-/// whose button runs it away, then valid drafts;
+/// whose button runs it away, then valid drafts; `/rendered/v1` answers the
+/// plan, a draft with an unescaped `&&` in red's cond, one with it in
+/// yellow's, one whose `scxml` is a placeholder, then valid drafts;
+/// `/unloaded/v1` answers the plan, a scripted draft without its root
+/// `<script src>`, one without its script, then the scripted draft;
+/// `/nested/v1` answers the plan, a draft whose only final is inside a
+/// state, then one that also has a top-level final;
 /// `/broken/v1` answers the plan, then only invalid
 /// drafts; `/service/v1` answers the plan, then a draft that invokes
 /// `generate`, and that draft's own generation with text; `/impostor/v1` answers the plan, then a valid draft
@@ -1439,6 +1529,155 @@ fn a_different_diagnostic_each_time_keeps_repairing_until_done() {
                 .iter()
                 .any(|diagnostic| diagnostic["code"] == "SCXML070")),
         "{report}"
+    );
+}
+
+/// A repair is told where a validate diagnostic is, as `scx validate` renders
+/// it (the 2026-10-20 live drafts repeated `XML001` without it), and of a
+/// draft whose `scxml` holds no document; the same code and label on another
+/// line is progress, not the same failure. `/rendered/v1` answers an
+/// unescaped `&&` in red's cond, then in yellow's, then a placeholder, then
+/// a valid draft, which ends in done.
+#[test]
+fn a_repair_is_told_the_line_of_each_diagnostic_and_of_a_draft_with_no_document() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "rendered",
+        "rendered",
+        &["FLOPPY_API_KEY", "FLOPPY_BASE_URL"],
+        &json!({"spec": SPEC}),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    let codes: Vec<&Json> = done["report"]["history"]
+        .as_array()
+        .expect("the history")
+        .iter()
+        .map(|attempt| &attempt["diagnostics"][0]["code"])
+        .collect();
+    assert_eq!(
+        codes,
+        [&json!("XML001"), &json!("XML001"), &json!("no-document")],
+        "{done}"
+    );
+
+    let received = mock.received();
+    let authors = chat_requests(&received, "scxml_draft");
+    assert_eq!(authors.len(), 4);
+    let parameters = &authors[0].body["tools"][0]["function"]["parameters"];
+    assert!(
+        parameters.pointer("/properties/scxml/minLength").is_none(),
+        "no minLength on scxml: the live vLLM's decoding of one runs away into parallel calls until truncated: {parameters}"
+    );
+    for (request, into) in [(&authors[1], "green"), (&authors[2], "red")] {
+        let draft = traffic_light(&green_separate(), "red").replace(
+            &format!(r#"<transition event="light.timer" target="{into}"/>"#),
+            &format!(r#"<transition event="light.timer" cond="true && true" target="{into}"/>"#),
+        );
+        let (index, line) = draft
+            .lines()
+            .enumerate()
+            .find(|(_, line)| line.contains("&&"))
+            .expect("the draft has its &&");
+        let column = line.find("&&").expect("the line has its &&") + 1;
+        let diagnostic = &request.user_input()["diagnostics"][0];
+        assert_eq!(diagnostic["code"], "XML001", "{diagnostic}");
+        assert_eq!(diagnostic["line"], line.trim(), "{diagnostic}");
+        let rendered = diagnostic["rendered"].as_str().expect("rendered text");
+        let number = index + 1;
+        for expected in [
+            "error[XML001]: ".to_owned(),
+            format!(" --> traffic_light.scx:{number}:{column}\n"),
+            format!("{number} | {line}\n"),
+            format!("| {}^", " ".repeat(column - 1)),
+            "= help: escape a literal `&` as `&amp;`".to_owned(),
+        ] {
+            assert!(rendered.contains(&expected), "{expected:?} in {rendered}");
+        }
+    }
+    let no_document = &authors[3].user_input()["diagnostics"][0];
+    assert_eq!(no_document["kind"], "draft", "{no_document}");
+    assert_eq!(no_document["code"], "no-document", "{no_document}");
+    assert!(
+        no_document["message"]
+            .as_str()
+            .is_some_and(|message| message.contains(r#"(it was "placeholder")"#)),
+        "{no_document}"
+    );
+}
+
+/// A draft whose script is not loaded, or whose cond calls a function no
+/// script declares, is told so before it is simulated (decision D123): its
+/// conds would throw, and one on an eventless transition is retried every
+/// microstep, which ended the 2026-10-20 live run (`machine session failed:
+/// protocol`). `/unloaded/v1` answers the scripted draft without its root
+/// `<script src>`, then without its script, then whole, which ends in done.
+#[test]
+fn a_draft_whose_script_is_not_loaded_or_not_declared_is_repaired_before_its_simulation() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "unloaded",
+        "unloaded",
+        &["FLOPPY_API_KEY", "FLOPPY_BASE_URL"],
+        &json!({"spec": SPEC}),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    assert_eq!(done["script"], SCRIPT, "{done}");
+    let history = done["report"]["history"].as_array().expect("the history");
+    assert_eq!(history.len(), 2, "{done}");
+    assert_eq!(history[0]["diagnostics"][0]["code"], "script-not-loaded");
+    assert!(
+        history[0]["diagnostics"][0]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains(r#"<script src="traffic_light.js"/>"#)),
+        "{done}"
+    );
+    assert_eq!(history[1]["diagnostics"][0]["code"], "undeclared-function");
+    assert!(
+        history[1]["diagnostics"][0]["message"]
+            .as_str()
+            .is_some_and(|message| message.starts_with("the document calls mayGo, ")),
+        "{done}"
+    );
+    let simulated = records
+        .iter()
+        .filter(|record| record["type"] == "log" && record["label"] == "simulate")
+        .count();
+    assert_eq!(
+        simulated, 1,
+        "only the whole draft is simulated: {records:?}"
+    );
+}
+
+/// A test that expects the draft to finish, failed by a draft whose only
+/// final is inside a state, says so (decision D123): it reached no
+/// top-level final state because it has none. `/nested/v1` answers that
+/// draft, then one whose root leads to a top-level final, which ends in done.
+#[test]
+fn a_draft_with_no_top_level_final_is_told_so_when_its_test_expects_done() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "nested",
+        "nested",
+        &["FLOPPY_API_KEY", "FLOPPY_BASE_URL"],
+        &json!({"spec": "a machine that finishes at once"}),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    let diagnostic = &done["report"]["history"][0]["diagnostics"][0];
+    assert_eq!(diagnostic["code"], "test-failed", "{done}");
+    assert!(
+        diagnostic["message"].as_str().is_some_and(|message| message.ends_with(
+            "observed [] and done=false (it has no top-level final state: each of its final elements is inside a state, which it only completes; a final that ends the machine is a child of scxml itself)"
+        )),
+        "{diagnostic}"
     );
 }
 
