@@ -400,6 +400,42 @@ fn stale_timeout_draft() -> String {
     ))
 }
 
+/// A valid draft whose green state raises `light.again` on entry and takes
+/// it back into itself: its start never ends, so the candidate's start
+/// stops at scxml.rs's per-call command bound (decision D122).
+fn start_runaway_draft() -> String {
+    draft(&traffic_light(
+        &format!(
+            "{}\n    <transition event=\"light.again\" target=\"green\"/>",
+            green_separate()
+        ),
+        "red",
+    )
+    .replace(
+        "<onentry><send target=\"#_parent\" event=\"light.green\"/>",
+        "<onentry><raise event=\"light.again\"/><send target=\"#_parent\" event=\"light.green\"/>",
+    ))
+}
+
+/// A valid draft whose button leads into `spin`, which raises `spin.again`
+/// on entry and takes it back into itself: the call that delivers the
+/// button stops at scxml.rs's per-call command bound (decision D122).
+fn later_runaway_draft() -> String {
+    draft(
+        &traffic_light(&green_separate(), "red")
+            .replace(
+                r#"target="yellow"/>
+    <transition event="light.timer" target="yellow"/>"#,
+                r#"target="spin"/>
+    <transition event="light.timer" target="yellow"/>"#,
+            )
+            .replace(
+                "  </state>\n</scxml>",
+                "  </state>\n  <state id=\"spin\">\n    <onentry><raise event=\"spin.again\"/></onentry>\n    <transition event=\"spin.again\" target=\"spin\"/>\n  </state>\n</scxml>",
+            ),
+    )
+}
+
 /// A draft that finishes on its second `ping`, with two tests that each
 /// send one `ping` and expect it not to finish: a test whose `ping` is sent
 /// twice fails.
@@ -531,7 +567,8 @@ fn mock_reply(
             | "/progress/v1/chat/completions"
             | "/lifetime/v1/chat/completions"
             | "/emptytick/v1/chat/completions"
-            | "/afterbound/v1/chat/completions",
+            | "/afterbound/v1/chat/completions"
+            | "/runaway/v1/chat/completions",
             Some("topology_plan"),
         ) => Some(completion(PLAN)),
         ("/flaky/v1/chat/completions", Some("topology_plan")) => {
@@ -567,6 +604,11 @@ fn mock_reply(
         ("/emptytick/v1/chat/completions", Some("scxml_draft")) => {
             Some(completion(&routine_draft("3600s", "[]")))
         }
+        ("/runaway/v1/chat/completions", Some("scxml_draft")) => Some(completion(&match authors {
+            1 => start_runaway_draft(),
+            2 => later_runaway_draft(),
+            _ => draft(&traffic_light(&green_separate(), "red")),
+        })),
         ("/repair/v1/chat/completions", Some("scxml_draft")) => Some(completion(&match authors {
             1 => invalid_draft(),
             2 => fixable_draft(),
@@ -635,6 +677,8 @@ impl Received {
 /// one, then valid drafts; `/progress/v1` answers the plan, the invalid
 /// draft, a draft with a delayed internal send, then valid drafts;
 /// (`/progress/v1`'s valid one with a script, [`scripted_draft`]);
+/// `/runaway/v1` answers the plan, a draft whose start runs away, a draft
+/// whose button runs it away, then valid drafts;
 /// `/broken/v1` answers the plan, then only invalid
 /// drafts; `/service/v1` answers the plan, then a draft that invokes
 /// `generate`, and that draft's own generation with text; `/impostor/v1` answers the plan, then a valid draft
@@ -1680,6 +1724,53 @@ fn a_failed_invocations_sim_drive_does_not_drive_the_next_test() {
     assert!(
         message.contains("test first run") && message.contains("error error.execution"),
         "{failed}"
+    );
+}
+
+/// A draft whose simulation runs away (a raise that re-enters its own
+/// state) fails its tests and is repaired, and the build runs on: scxml.rs
+/// ends a candidate whose call stops at the per-call command bound as a
+/// cancelled invocation, raising `error.execution` for a start that
+/// stopped there and queueing `error.communication.<invokeid>` for a later
+/// call (decision D122), where the run used to end with `command-bound`.
+#[test]
+fn a_runaway_drafts_simulation_fails_its_tests_and_is_repaired() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "runaway",
+        "runaway",
+        &["FLOPPY_API_KEY", "FLOPPY_BASE_URL"],
+        &json!({"spec": SPEC}),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    let report = &done["report"];
+    assert_eq!(report["failures"], 2, "{report}");
+    let diagnostics = |attempt: usize| {
+        report["history"][attempt]["diagnostics"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+    };
+    let start = diagnostics(0);
+    assert_eq!(start.len(), 2, "both tests' starts ran away: {report}");
+    assert!(
+        start.iter().all(|d| d["code"] == "test-failed"
+            && d["message"]
+                .as_str()
+                .is_some_and(|m| m.contains("error error.execution"))),
+        "{report}"
+    );
+    let later = diagnostics(1);
+    assert_eq!(later.len(), 1, "only the button's test ran away: {report}");
+    assert!(
+        later[0]["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("test button ends green early")
+                && m.contains("error error.communication.")),
+        "{report}"
     );
 }
 
