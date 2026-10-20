@@ -687,6 +687,70 @@ fn an_invoked_runaway_is_ended_and_its_recorded_run_replays() {
     assert_eq!(live_records[1..], parse_records(&replay)[1..]);
 }
 
+/// An eventless transition whose cond throws on every evaluation (each is
+/// false and raises `error.execution`, SCXML 5.9.1) in the root fails the
+/// run with `command-bound`, exit 1, where it used to trap on fuel and fail
+/// with `host-failure`.
+#[test]
+fn a_root_whose_eventless_cond_throws_fails_with_command_bound() {
+    let directory = scratch("throwing-cond-root");
+    let doc = document(
+        &directory,
+        r#"<state id="s0"><transition cond="not x" target="done"/></state><final id="done"/>"#,
+    );
+    let output = run(&doc, &["--clock", "logical"], "");
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    let records = parse_records(&output);
+    let error = records
+        .iter()
+        .find(|record| record["type"] == "error")
+        .expect("an error record");
+    assert_eq!(error["code"], "command-bound", "{records:?}");
+    assert_eq!(error["fatal"], true);
+}
+
+/// An invoked session whose eventless cond throws on every evaluation, at
+/// its start and later on an event the root forwards, is ended and the run
+/// goes on: the root logs `error.execution`, then
+/// `error.communication.<invokeid>`, and finishes, exit 0.
+#[test]
+fn an_invoked_session_whose_eventless_cond_throws_is_ended() {
+    let directory = scratch("throwing-cond-invoked");
+    let at_start = r#"<invoke id="first"><content><scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript"><state id="a"><transition cond="not x" target="b"/></state><final id="b"/></scxml></content></invoke>"#;
+    let later = r#"<invoke id="later"><content><scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript"><state id="idle"><transition event="go" target="a"/></state><state id="a"><transition cond="not x" target="b"/></state><final id="b"/></scxml></content></invoke>"#;
+    let doc = document(
+        &directory,
+        &format!(
+            r##"<state id="s0">{at_start}{later}<transition event="error.execution"><log label="first" expr="_event.name"/></transition><transition event="go"><send event="go" target="#_later"/></transition><transition event="error.communication" target="done"><log label="later" expr="_event.name"/></transition><transition event="done.invoke" target="failed"/></state><final id="done"/><final id="failed"/>"##
+        ),
+    );
+    let output = run(&doc, &["--clock", "logical"], "{\"name\":\"go\"}\n");
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    let records = parse_records(&output);
+    let labels: Vec<(String, String)> = records
+        .iter()
+        .filter(|record| record["type"] == "log")
+        .map(|record| {
+            (
+                record["label"].as_str().unwrap_or_default().to_owned(),
+                record["text"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .trim_matches('"')
+                    .to_owned(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        labels,
+        [
+            ("first".to_owned(), "error.execution".to_owned()),
+            ("later".to_owned(), "error.communication.later".to_owned()),
+        ],
+        "{records:?}"
+    );
+}
+
 const ECHO: &str = "https://stateforward.org/scxml/services/echo";
 
 /// A recorded run binds its invoked services' component digests: the same

@@ -425,12 +425,13 @@ fn wasm_only_rejected_microstep_after_a_recoverable_guard_error_leaves_the_engin
 fn failed_internal_scan_restores_the_internal_queue_exactly() {
     // Start enters s0, whose onentry raises e1. The first eventless
     // selection finds nothing; e1's selection hits a recoverable guard
-    // error; the eventless re-selection with e1 bound then fails fatally.
-    // The rollback must restore the queue to exactly [e1], without the
-    // error.execution the failed scan produced.
+    // error, then a fatal one in the same selection. The rollback must
+    // restore the queue to exactly [e1], without the error.execution the
+    // failed scan produced.
     let body = r#"<state id="s0">
     <onentry><raise event="e1"/></onentry>
     <transition event="e1" cond="recoverable" target="x"/>
+    <transition event="e1" cond="fatal" target="x"/>
     <transition cond="eventless" target="x"/>
   </state>
   <state id="x"/>"#;
@@ -445,7 +446,7 @@ fn failed_internal_scan_restores_the_internal_queue_exactly() {
     };
     let failure = engine
         .run(Command::Start, &mut recorder)
-        .expect_err("the fatal eventless guard fails the scan");
+        .expect_err("the fatal guard fails the scan");
     assert_eq!(
         failure.error,
         EngineError::Evaluation(EvaluationError::Platform)

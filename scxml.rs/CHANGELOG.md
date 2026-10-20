@@ -955,6 +955,17 @@ hard cutover.
   (`RunFailure::CommandBound`, `command-bound`), and any other failure or
   trap of any session still does. A finished invoked session runs nothing
   more (the rest of a due batch it finished in is dropped).
+- A transition condition that fails on every evaluation (an eventless
+  `cond` that throws: each failure is false and queues `error.execution`,
+  SCXML 5.9.1, so the transition is selected again without end) now stops
+  at the per-call command bound, as any other logical runaway does: the
+  root fails the run with `command-bound`, and an invoked session is ended
+  as above. The engine ends a command when it dequeues an internal event
+  that enables nothing after a condition of the same command failed, with
+  that event bound as `_event` for the next command's eventless selection;
+  before, one command scanned up to 10,000 such events, re-evaluating the
+  condition for each, and the call ran out of fuel (`host-failure`, a trap
+  in the machine component).
 - `#_scxml_<sessionid>` reaches any session of the sender's run while it
   runs (SCXML C.1 leaves the accessible sessions to the platform): a
   sibling, a grandchild, or the root, immediately or when a delayed send

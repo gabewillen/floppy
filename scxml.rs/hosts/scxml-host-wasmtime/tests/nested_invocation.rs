@@ -1766,3 +1766,92 @@ fn a_recorded_run_with_runaway_invoked_sessions_replays_byte_for_byte() {
     assert_eq!(replay.take_outputs(), outputs);
     replay.close().expect("close");
 }
+
+/// An ECMAScript document whose eventless transition's cond throws on
+/// every microstep (a syntax error): each evaluation is false and raises
+/// `error.execution`, and the eventless transition is selected again,
+/// without end, so a call that enters `a` stops at the machine's per-call
+/// command bound (SCXML 5.9.1, 3.13).
+const THROWING_COND: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript"><state id="a"><transition cond="not x" target="b"/></state><final id="b"/></scxml>"#;
+
+/// An invoked session whose eventless cond throws on every microstep
+/// stops at its command bound in its start and fails only its `<invoke>`
+/// with `error.execution`; the run goes on to its pass state.
+#[test]
+fn an_invoked_session_whose_eventless_cond_throws_fails_its_invoke_with_error_execution() {
+    let root = scxml(
+        "r0",
+        r#"<state id="r0">
+              <invoke id="child" type="scxml" src="child.scxml"/>
+              <transition event="error.execution" target="pass"><log label="root-got-error"/></transition>
+              <transition event="done.invoke.child" target="fail"/>
+            </state>
+            <final id="pass"/>
+            <final id="fail"/>"#,
+    );
+    let outcome = run_with_budget(
+        &host(),
+        &root,
+        vec![("child.scxml", THROWING_COND.to_owned())],
+        SnapshotRequest::none(),
+        RUNAWAY_COMMANDS,
+    );
+    assert_eq!(outcome.terminal, Terminal::Finished);
+    assert_eq!(outcome.configuration, ["pass"]);
+    assert_eq!(labels(&outcome), ["root-got-error"]);
+}
+
+/// A running invoked session that enters an eventless cond that throws on
+/// every microstep later (on an event the root sends it once it is
+/// ready) is ended, and its
+/// invoking session receives `error.communication.<invokeid>`.
+#[test]
+fn a_running_invoked_session_whose_eventless_cond_throws_is_ended_with_error_communication() {
+    let child = r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript"><state id="idle"><onentry><send target="#_parent" event="ready"/></onentry><transition event="go" target="a"/></state><state id="a"><transition cond="not x" target="b"/></state><final id="b"/></scxml>"##;
+    let root = scxml(
+        "r0",
+        r##"<state id="r0">
+              <invoke id="child" type="scxml" src="child.scxml"/>
+              <transition event="ready"><send event="go" target="#_child"/></transition>
+              <transition event="error.communication.child" target="pass"><log label="root-got-error"/></transition>
+              <transition event="done.invoke.child" target="fail"/>
+              <transition event="error.execution" target="fail"/>
+            </state>
+            <final id="pass"/>
+            <final id="fail"/>"##,
+    );
+    let outcome = run_with_budget(
+        &host(),
+        &root,
+        vec![("child.scxml", child.to_owned())],
+        SnapshotRequest::none(),
+        RUNAWAY_COMMANDS,
+    );
+    assert_eq!(outcome.terminal, Terminal::Finished);
+    assert_eq!(outcome.configuration, ["pass"]);
+    assert_eq!(labels(&outcome), ["root-got-error"]);
+}
+
+/// The root session's own eventless cond that throws on every microstep
+/// fails the run with `RunFailure::CommandBound`.
+#[test]
+fn a_root_whose_eventless_cond_throws_fails_the_run_with_command_bound() {
+    let (ir, data_model) = lower(THROWING_COND);
+    let error = host()
+        .run(&SessionRun {
+            machine_ir: &ir,
+            data_model: data_model.as_deref(),
+            session_id: "root",
+            events: &[],
+            external_client: None,
+            embedder: Rc::new(Documents(Vec::new())),
+            max_commands: RUNAWAY_COMMANDS,
+            snapshots: SnapshotRequest::none(),
+        })
+        .expect_err("the root's throwing cond fails the run");
+    assert!(
+        matches!(error.failure, RunFailure::CommandBound),
+        "{:?}",
+        error.failure
+    );
+}
