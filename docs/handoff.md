@@ -11,6 +11,23 @@ Last updated: 2026-10-20.
 
 ## Current state (2026-10-09) — resume here
 
+- **Builder diagnostics a repair can act on; `live_conversation`
+  passes (2026-10-20, D123):** each validate diagnostic carries `line`
+  and `rendered` (`scx validate`'s form: `--> NAME.scx:line:column`, the
+  marked line, notes, help, fixes) and is fingerprinted by label and line;
+  the author rules say the constraints win (a turn behavior's tests expect
+  no outputs), keep every non-trivial `cond`/`expr` a call of `script`
+  (no `&` in XML), need a top-level `final`, and ask for one call; a draft
+  with no document (`no-document`, a model's stub call), a script not
+  loaded (`script-not-loaded`) or a call no script declares
+  (`undeclared-function`) is rejected before its simulation. Live:
+  `live_conversation` passes (`GabePingPongRoutine` learned on turn 2,
+  answered turn 3). Open (D123): an eventless transition whose cond
+  throws ends the whole run (`host-failure` or `machine session failed:
+  protocol`), an scxml.rs bug to fix upstream (a six-line reproduction in
+  D123); the model still sends stub calls and writes tests expecting
+  outputs now and then; `parallel_tool_calls` and `minLength` were not
+  used (D123 says why).
 - **A runaway invoked session ends only itself (2026-10-20, D122):**
   scxml.rs is at `f920cb47`: an invoked session whose call stops at the
   per-call command bound is ended as a cancelled invocation is (a start

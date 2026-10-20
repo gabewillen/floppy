@@ -7,6 +7,35 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-20, builder diagnostics a repair can act on (D123), on vLLM 0.30.0, model `Qwen/Qwen3.8-Flash-Next`
+
+The builder renders each validate diagnostic as `scx validate` does (line,
+column, the marked source line, notes, help, fixes) and fingerprints it by
+label and line; its author rules no longer contradict the turn behavior
+contract, keep expressions in the script, and ask for one call; and it
+rejects a draft with no document, a script not loaded, or a call no script
+declares before simulating it, and says when a draft has no top-level
+`final`. The runs used floppy commit `0233b7e315` with the D123 changes in
+the working tree (each run's state below; run 3's is the committed one),
+`FLOPPY_LIVE_ENV_FILE` naming `.env`, `env.speech` and `env.voice`, the same
+vLLM 0.30.0 server as the entries below, and `cargo test -p floppy-tests
+--locked --test floppy_live -- --ignored --nocapture --test-threads=1
+--exact live_conversation`. LocalAI was not running, so voice detection
+failed as before, which the test does not check. Before them, the builder
+was run alone (`scx run` of `bots/builder/builder.scx`, a scratch layout)
+on reflection's turn-3 `builder.request`, rebuilt from `reflection.scx`
+and `reflection.js`, about ten times, some through a local relay that
+saved the request and reply bodies (no headers): that found the causes in
+D123, among them `tool_choice: required` answered with up to 13 parallel
+`scxml_draft` calls (stub calls first) and, with `minLength` on `scxml`,
+replies cut at `length` (3 of 3 replays; 0 of 3 without it).
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `live_conversation`, run 1 | fail (59 s) | before the script checks: reflection created `PingPongReply` on turn 2 (earlier than on any run below); its repaired draft carried a script but no `<script src="PingPongReply.js"/>`, so its eventless `cond="isExactPing(input)"` threw in every microstep, and its simulation ended the whole run with `machine session failed: protocol` (the scxml.rs bug in D123; a six-line document reproduces it as `host-failure`); the harness then failed writing turn 3's input (`Broken pipe`) |
+| `live_conversation`, run 2 | fail (260 s) | `4 completed, 0 failed`, with the script checks: no run-ending failure (two drafts were told `undeclared-function` instead of being simulated), but no behavior was learned by turn 2: `PingPongReply`, created on turn 2 and changed on turns 3 and 4, kept failing `test-failed` with `done=false` (each draft's only `final` inside a state) or a test expecting a `respond` output, and each revision was abandoned after no progress. Reasoning chose the ignore on turns 1, 3 and 4 and answered turn 2 |
+| `live_conversation`, run 3 | pass (255 s) | `4 completed, 0 failed`, with the top-level `final` message and rules (the committed D123): reflection created `GabePingPongRoutine` on turn 2, whose draft failed `SCXML014` once and was built in 2 attempts and accepted (`ACTIVE turn ["bot.ability.conversation.output"]`); on turn 3 autonomy matched it (`1 matched`) and the turn answered "pong"; turn 4 answered "Your favorite color is green." Turn 3's change was built in 8 attempts and accepted; turn 4's change failed (`test-failed`, its test expecting a `respond` output, twice) and left the row DRAFT, its draft the rejected one. Across the run the builder still received 3 drafts with no document (`""`, `"placeholder"` twice) and wrote tests expecting outputs; reasoning chose the ignore on turn 1 |
+
 ## 2026-10-20, a runaway invoked session ends only itself (D122), on vLLM 0.30.0, model `Qwen/Qwen3.8-Flash-Next`
 
 scxml.rs `f920cb47` ends an invoked session whose call stops at the
