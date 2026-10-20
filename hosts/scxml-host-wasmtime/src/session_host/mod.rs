@@ -414,8 +414,9 @@ pub struct SessionOutcome {
 pub enum RunFailure {
     /// The shared command budget was exhausted.
     CommandBudget,
-    /// A machine call stopped at its per-call command bound without
-    /// reaching a stable configuration.
+    /// A machine call of the root session stopped at its per-call command
+    /// bound without reaching a stable configuration (an invoked session's
+    /// stop there ends only that session, SCXML 6.4).
     CommandBound,
     /// A machine session failed; the closed WIT code label and the
     /// component's bounded static detail.
@@ -467,7 +468,7 @@ impl std::fmt::Display for SessionHostError {
         match &self.failure {
             RunFailure::CommandBudget => formatter.write_str("the run exhausted its command budget"),
             RunFailure::CommandBound => formatter.write_str(
-                "a machine call stopped at its per-call command bound before a stable configuration",
+                "a root machine call stopped at its per-call command bound before a stable configuration",
             ),
             RunFailure::Machine { code, .. } => write!(formatter, "machine session failed: {code}"),
             RunFailure::Harness { code, message } => write!(formatter, "[{code}] {message}"),

@@ -1093,22 +1093,78 @@ impl RunSessions {
     /// call of the fuel budget: the call, every start, cancel, and
     /// continuation carried out for it, spend one budget (compiling a
     /// document the embedder served aside, `SessionLinks::compile_invocation`).
+    ///
+    /// An invoked session whose call stops at its command bound is ended
+    /// ([`Self::end_at_command_bound`]) on the same budget, and its
+    /// invoking session receives `error.communication.<invokeid>`, as for
+    /// an invoked service that fails after its start; the root's stop
+    /// fails the run. A finished invoked session runs nothing (the rest of
+    /// a due batch drained before it finished, or was ended).
     fn command(
         &mut self,
         key: SessionKey,
         call: impl FnOnce(&mut MachineHandle) -> MachineResult,
     ) -> Result<(), RunFailure> {
-        let core = Rc::clone(&self.core);
-        let result = core.call_budget.hold(|| {
-            let result = call(&mut *self.session(key)?);
-            self.carry_out_deferred(key, result)
-        })?;
-        if key.is_root() {
-            return self.root_step(result);
+        if !key.is_root() && self.is_finished(key) {
+            return Ok(());
         }
-        let step = settle(&self.shared, result)?;
-        self.shared.sessions.borrow_mut().observe_step(key, step);
-        Ok(())
+        let core = Rc::clone(&self.core);
+        core.call_budget.hold(|| {
+            let result = call(&mut *self.session(key)?);
+            let result = self.carry_out_deferred(key, result)?;
+            if key.is_root() {
+                return self.root_step(result);
+            }
+            match settle(&self.shared, result) {
+                Ok(step) => {
+                    self.shared.sessions.borrow_mut().observe_step(key, step);
+                    Ok(())
+                }
+                Err(RunFailure::CommandBound) => {
+                    // Queued before its cancellation begins, which drops
+                    // whatever it sends from then on.
+                    self.shared
+                        .invoked_sessions
+                        .borrow_mut()
+                        .push_to_parent(key, Invoked::CommunicationError);
+                    self.end_at_command_bound(key)
+                }
+                Err(failure) => Err(failure),
+            }
+        })
+    }
+
+    /// Ends the invoked session `key`, whose call stopped at its command
+    /// bound, as its invoking session's cancel would (SCXML 6.4): from now
+    /// on nothing it sends reaches its invoking session, its `cancel` runs
+    /// (cancelling the sessions it invoked as its own exit reaches them, on
+    /// this loop), and it is finished, so it runs nothing more and no
+    /// `done.invoke` follows. It stays in the run, as a finished session
+    /// does, until its invoking session cancels the invocation. Only the
+    /// session's own store ran away; a failure of its cancel is the run's.
+    fn end_at_command_bound(&mut self, key: SessionKey) -> Result<(), RunFailure> {
+        let span = scxml_telemetry::observe(
+            scxml_telemetry::Module::HostWasmtime,
+            scxml_telemetry::Operation::HostWasmtimeInvokedSessionCancel,
+        );
+        self.shared.invoked_sessions.borrow_mut().begin_cancel(key);
+        self.shared.touch(key);
+        let ended = (|| {
+            let result = self.session(key)?.cancel();
+            let result = self.carry_out_deferred(key, result)?;
+            settle(&self.shared, result)
+        })();
+        match ended {
+            Ok(step) => {
+                span.event(scxml_telemetry::SignalEvent::TransformationCompleted);
+                self.shared.sessions.borrow_mut().observe_step(key, step);
+                Ok(())
+            }
+            Err(failure) => {
+                span.fail(scxml_telemetry::ErrorCategory::Execution);
+                Err(failure)
+            }
+        }
     }
 
     /// Carries out the invocation request the call that returned `result`
@@ -1254,8 +1310,10 @@ impl RunSessions {
 
     /// The result of the `start-invocation` request of the session
     /// `child`, whose `start-invoked` returned `started`. A child that
-    /// rejected its start fails that `<invoke>` (`error.execution` in the
-    /// invoking session) and is dropped; any other failure is the run's.
+    /// rejected its start, or whose start stopped at its command bound
+    /// (ended first, [`Self::end_at_command_bound`]), fails that `<invoke>`
+    /// (`error.execution` in the invoking session) and is dropped; any
+    /// other failure is the run's.
     fn complete_start(
         &mut self,
         child: SessionKey,
@@ -1274,6 +1332,16 @@ impl RunSessions {
             Ok(step) => {
                 self.shared.sessions.borrow_mut().observe_step(child, step);
                 Ok(())
+            }
+            Err(RunFailure::CommandBound) => {
+                let ended = self.end_at_command_bound(child);
+                self.drop_sessions(child);
+                match ended {
+                    Ok(()) => Err(invalid_input(
+                        "the invoked session stopped at its command bound",
+                    )),
+                    Err(failure) => Err(fatal(&self.shared, failure)),
+                }
             }
             Err(failure) => {
                 self.drop_sessions(child);

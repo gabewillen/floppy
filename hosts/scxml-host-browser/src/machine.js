@@ -705,12 +705,13 @@ class Child {
 }
 
 /**
- * Runs one child command. Returns `{callResult}`, or `{error, rejected}`: the
- * run's latched fault wins; a machine failure is the child's
- * ScxmlSessionError (`rejected` when it is `invalid-input` or `execution`,
- * the class a parent treats as a rejected child); a trap is a host error.
- * A call that stopped at the per-call command bound is a failure, as under
- * the Wasmtime scheduler.
+ * Runs one child command. Returns `{callResult}`, `{bound: true}`, or
+ * `{error, rejected}`: the run's latched fault wins; a machine failure is
+ * the child's ScxmlSessionError (`rejected` when it is `invalid-input` or
+ * `execution`, the class a parent treats as a rejected child); a trap is a
+ * host error. `bound` is a call that stopped at the per-call command bound:
+ * the child is then ended (endAtCommandBound), as under the Wasmtime
+ * scheduler.
  */
 function runChild(run, child, body) {
   return childOutcome(run, child, callDeferred(child.instance, body));
@@ -734,11 +735,30 @@ function childOutcome(run, child, { value: callResult, thrown }) {
   }
   if (callResult.returnData !== undefined) child.returnData = callResult.returnData;
   if (callResult.doneTraceContext !== undefined) child.doneTraceContext = callResult.doneTraceContext;
-  if (!callResult.stable && callResult.status === 'running') {
-    const error = { version: 'v1', code: 'capacity-exhausted', detail: 'child-command-bound' };
-    return { error: new ScxmlSessionError(error, { sessionFailed: true }), rejected: false };
-  }
+  if (!callResult.stable && callResult.status === 'running') return { bound: true };
   return { callResult };
+}
+
+/**
+ * Ends the invoked session `child`, whose call stopped at its command bound,
+ * as its invoking session's cancel would (SCXML 6.4): from now on nothing it
+ * sends reaches its invoking session, its `cancel` runs (cancelling the
+ * sessions it invoked as its own exit reaches them, iteratively), and it is
+ * finished, so it runs nothing more and no `done.invoke` follows. It stays
+ * in the run, as a finished session does, until its invoking session
+ * cancels the invocation. Only the session's own instance ran away; a
+ * failure of its cancel is the run's. Returns the cancel's runChild
+ * outcome.
+ */
+function endAtCommandBound(run, child) {
+  run.invokedSessions.beginCancel(child.instance.links.key);
+  return childOutcome(run, child, callDeferred(child.instance, (session) => session.cancel()));
+}
+
+/** The run fault of a child cancel that stopped at its command bound (its exit cannot loop). */
+function cancelBoundError() {
+  const error = { version: 'v1', code: 'capacity-exhausted', detail: 'child-command-bound' };
+  return new ScxmlSessionError(error, { sessionFailed: true });
 }
 
 /**
@@ -1492,12 +1512,24 @@ function discardDeferred(run) {
 
 /**
  * The `start-invocation` result of a deferred start whose `start-invoked`
- * ended as `raw`: a child that rejected its start fails the `<invoke>`
- * (error.execution in the invoking session) and is dropped; any other
- * failure is a run fault.
+ * ended as `raw`: a child that rejected its start, or whose start stopped
+ * at its command bound (ended first, endAtCommandBound), fails the
+ * `<invoke>` (error.execution in the invoking session) and is dropped; any
+ * other failure is a run fault.
  */
 function completeStart(run, request, raw) {
   const started = childOutcome(run, request.child, raw);
+  if (started.bound) {
+    const ended = endAtCommandBound(run, request.child);
+    run.remove(request.child.instance.links.key);
+    disposeInvokedSession(request.child);
+    const error = ended.bound ? cancelBoundError() : ended.error;
+    if (error === undefined) {
+      return { tag: 'err', val: componentFailure('invalid-input', 'the invoked session stopped at its command bound').payload };
+    }
+    run.latch(error);
+    return { tag: 'err', val: hostFailure().payload };
+  }
   if (started.error !== undefined) {
     run.remove(request.child.instance.links.key);
     disposeInvokedSession(request.child);
@@ -1517,8 +1549,9 @@ function completeStart(run, request, raw) {
 function completeCancel(run, request, cancelled) {
   run.remove(request.child.instance.links.key);
   disposeInvokedSession(request.child);
-  if (cancelled.error !== undefined) {
-    run.latch(cancelled.error);
+  const error = cancelled.bound ? cancelBoundError() : cancelled.error;
+  if (error !== undefined) {
+    run.latch(error);
     return { tag: 'err', val: hostFailure().payload };
   }
   return { tag: 'ok', val: undefined };
@@ -1720,12 +1753,27 @@ export class MachineSession {
     }
   }
 
-  /** Runs one invoked session's command at executor level; a failure fails the run. */
+  /**
+   * Runs one invoked session's command at executor level; a failure fails
+   * the run. A finished session runs nothing (the rest of a due batch
+   * drained before it finished, or was ended). A call that stopped at its
+   * command bound ends the session (endAtCommandBound, in the same span)
+   * and queues `error.communication.<invokeid>` for its invoking session,
+   * as for an invoked service that fails after its start.
+   */
   #childAt(key, body) {
     const child = this.#run.session(key);
     if (child === undefined) throw this.#fail(new ScxmlHostError('host-invariant'));
+    if (child.finished) return;
     const span = this.#telemetry.start('command');
-    const result = this.#telemetry.within(span, () => runChild(this.#run, child, body));
+    const result = this.#telemetry.within(span, () => {
+      const outcome = runChild(this.#run, child, body);
+      if (!outcome.bound) return outcome;
+      // Queued before its cancellation begins, which drops whatever it sends from then on.
+      this.#run.invokedSessions.pushToParent(key, { tag: 'communication-error' });
+      const ended = endAtCommandBound(this.#run, child);
+      return ended.bound ? { error: cancelBoundError() } : ended;
+    });
     this.#telemetry.end(span, result.error === undefined ? 'ok' : 'failed');
     if (result.error !== undefined) throw this.#fail(result.error);
   }

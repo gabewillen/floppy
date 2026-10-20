@@ -107,6 +107,15 @@ disagree are in [spec-errata.md](spec-errata.md).
   location from the child's event data, SCXML 6.5.2), and autoforward, and a host that links the capability (the
   Wasmtime session host) owns the invoked sessions, `done.invoke`, and
   cross-session routing, ordered by the pure `scxml-scheduler` crate.
+  An invoked session whose call stops at the 1024-command bound is ended as
+  a cancelled invocation is (its `cancel` runs, cancelling the sessions it
+  invoked; nothing more it sends reaches its invoking session, and no
+  `done.invoke` follows): a start that stopped there raises
+  `error.execution` for its `<invoke>`, and a later call
+  `error.communication.<invokeid>`, in the invoking session, which runs on
+  (proven by `hosts/scxml-host-wasmtime/tests/nested_invocation.rs` and the
+  `invoked-runaway` host-parity case); only the root's own stop, and any
+  other failure or trap of a session, fails the run.
   Delayed sends run on the `scxml-ioprocessor-scxml` and `scxml-clock`
   components. See [conformance.md](conformance.md#component-execution) for exactly
   who does what.

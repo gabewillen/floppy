@@ -631,6 +631,62 @@ fn a_recorded_run_replays_its_records_and_snapshots_byte_for_byte() {
     );
 }
 
+/// An invoked session that runs away (a raise that re-enters its own state
+/// without end), at its start and later on an event the root forwards, is
+/// ended, and the run goes on: the root logs `error.execution` and then
+/// `error.communication.<invokeid>` and finishes, exit 0, where the
+/// runaway used to fail the whole run with `command-bound`. A recorded run
+/// replays to the same records.
+#[test]
+fn an_invoked_runaway_is_ended_and_its_recorded_run_replays() {
+    let directory = scratch("invoked-runaway");
+    let child = |initial: &str| {
+        format!(
+            r#"<invoke id="{initial}"><content><scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="{initial}"><state id="{initial}"><transition event="go" target="loop"/></state><state id="loop"><onentry><raise event="again"/></onentry><transition event="again" target="loop"/></state></scxml></content></invoke>"#
+        )
+    };
+    let at_start = r#"<invoke id="first"><content><scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="f0"><state id="f0"><onentry><raise event="again"/></onentry><transition event="again" target="f0"/></state></scxml></content></invoke>"#;
+    let doc = document(
+        &directory,
+        &format!(
+            r##"<state id="s0">{at_start}{later}<transition event="error.execution"><log label="first" expr="_event.name"/></transition><transition event="go"><send event="go" target="#_later"/></transition><transition event="error.communication" target="done"><log label="later" expr="_event.name"/></transition><transition event="done.invoke" target="failed"/></state><final id="done"/><final id="failed"/>"##,
+            later = child("later"),
+        ),
+    );
+    let log = directory.join("session.ndjson");
+    let log_arg = log.display().to_string();
+    let live = run(&doc, &["--record", &log_arg], "{\"name\":\"go\"}\n");
+    assert_eq!(live.status.code(), Some(0), "{}", stderr(&live));
+    let live_records = parse_records(&live);
+    let labels: Vec<(String, String)> = live_records
+        .iter()
+        .filter(|record| record["type"] == "log")
+        .map(|record| {
+            (
+                record["label"].as_str().unwrap_or_default().to_owned(),
+                record["text"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .trim_matches('"')
+                    .to_owned(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        labels,
+        [
+            ("first".to_owned(), "error.execution".to_owned()),
+            ("later".to_owned(), "error.communication.later".to_owned()),
+        ],
+        "{live_records:?}"
+    );
+
+    let replay = run(&doc, &["--replay", &log_arg], "");
+    assert_eq!(replay.status.code(), Some(0), "{}", stderr(&replay));
+    // Everything after `opened` (whose clock differs) is identical.
+    assert_eq!(live_records[1..], parse_records(&replay)[1..]);
+}
+
 const ECHO: &str = "https://stateforward.org/scxml/services/echo";
 
 /// A recorded run binds its invoked services' component digests: the same

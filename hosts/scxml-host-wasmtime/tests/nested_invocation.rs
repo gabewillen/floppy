@@ -1451,3 +1451,318 @@ fn a_send_between_sessions_keeps_the_receiving_documents_contracts() {
         ]
     );
 }
+
+/// The command budget of a run with runaway sessions: each runaway call
+/// charges the machine's 1 024 commands to it.
+const RUNAWAY_COMMANDS: u64 = 100_000;
+
+/// An invoked document whose state `loop` raises an event that re-enters
+/// it, without end: a call that enters `loop` stops at the machine's
+/// per-call command bound. `before` is the content of its enclosing state
+/// `c0` ahead of the states `idle` (its initial state) and `loop`.
+fn runaway(before: &str, idle: &str) -> String {
+    scxml(
+        "c0",
+        &format!(
+            r#"<state id="c0" initial="idle">
+              {before}
+              <onexit><log label="child-exit"/></onexit>
+              <state id="idle">{idle}</state>
+              <state id="loop">
+                <onentry><raise event="again"/></onentry>
+                <transition event="again" target="loop"/>
+              </state>
+            </state>"#
+        ),
+    )
+}
+
+/// A grandchild that tells its invoking session it started and logs when
+/// it is cancelled.
+fn cancelled_grandchild() -> String {
+    scxml(
+        "g0",
+        r##"<state id="g0">
+              <onentry><send target="#_parent" event="ready"/></onentry>
+              <onexit><log label="grandchild-exit"/></onexit>
+            </state>"##,
+    )
+}
+
+/// The labels of `outcome`'s logs, without their sessions.
+fn labels(outcome: &SessionOutcome) -> Vec<String> {
+    logs(outcome)
+        .iter()
+        .map(|log| {
+            log.split_once(':')
+                .map(|(_, label)| label.to_owned())
+                .unwrap_or_default()
+        })
+        .collect()
+}
+
+/// An invoked session whose start stops at its command bound (its initial
+/// state raises an event that re-enters it forever) fails only its
+/// `<invoke>`: it is cancelled (its exit runs) and dropped, the invoking
+/// session receives `error.execution` and no `done.invoke`, and the run
+/// goes on to its pass state (SCXML 6.4).
+#[test]
+fn an_invoked_session_whose_start_runs_away_fails_its_invoke_with_error_execution() {
+    let child = scxml(
+        "c0",
+        r#"<state id="c0">
+              <onentry><raise event="again"/></onentry>
+              <onexit><log label="child-exit"/></onexit>
+              <transition event="again" target="c0"/>
+            </state>"#,
+    );
+    let root = scxml(
+        "r0",
+        r#"<state id="r0">
+              <invoke id="child" type="scxml" src="child.scxml"/>
+              <transition event="error.execution" target="pass"><log label="root-got-error"/></transition>
+              <transition event="done.invoke.child" target="fail"/>
+            </state>
+            <final id="pass"/>
+            <final id="fail"/>"#,
+    );
+    let outcome = run_with_budget(
+        &host(),
+        &root,
+        vec![("child.scxml", child)],
+        SnapshotRequest::none(),
+        RUNAWAY_COMMANDS,
+    );
+    assert_eq!(outcome.terminal, Terminal::Finished);
+    assert_eq!(outcome.configuration, ["pass"]);
+    let labels = labels(&outcome);
+    assert_eq!(labels.last().map(String::as_str), Some("root-got-error"));
+    assert!(
+        labels[..labels.len() - 1]
+            .iter()
+            .all(|label| label == "child-exit"),
+        "{labels:?}"
+    );
+}
+
+/// A session that stops at its command bound in its start after it
+/// invoked a grandchild (a second `<invoke>` that fails takes it into the
+/// loop) is cancelled as its invoking session's cancel would cancel it:
+/// its exit runs, then the grandchild's, and its own invoking session
+/// receives `error.execution`.
+#[test]
+fn a_runaway_start_cancels_the_sessions_the_runaway_invoked() {
+    let child = runaway(
+        r#"<invoke id="gc" type="scxml" src="grandchild.scxml"/>
+           <invoke id="missing" type="scxml" src="missing.scxml"/>"#,
+        r#"<transition event="error.execution" target="loop"/>"#,
+    );
+    let root = scxml(
+        "r0",
+        r#"<state id="r0">
+              <invoke id="child" type="scxml" src="child.scxml"/>
+              <transition event="error.execution" target="pass"><log label="root-got-error"/></transition>
+              <transition event="done.invoke.child" target="fail"/>
+              <transition event="ready" target="fail"/>
+            </state>
+            <final id="pass"/>
+            <final id="fail"/>"#,
+    );
+    let outcome = run_with_budget(
+        &host(),
+        &root,
+        vec![
+            ("child.scxml", child),
+            ("grandchild.scxml", cancelled_grandchild()),
+        ],
+        SnapshotRequest::none(),
+        RUNAWAY_COMMANDS,
+    );
+    assert_eq!(outcome.terminal, Terminal::Finished);
+    assert_eq!(outcome.configuration, ["pass"]);
+    assert_eq!(
+        labels(&outcome),
+        ["child-exit", "grandchild-exit", "root-got-error"]
+    );
+}
+
+/// A running invoked session that stops at its command bound later (on an
+/// event from the grandchild it invoked) is ended: its cancel runs,
+/// cancelling the grandchild, nothing it sends reaches its invoking
+/// session, no `done.invoke` follows, and its invoking session receives
+/// `error.communication.<invokeid>`, as for an invoked service that fails
+/// after its start (no `<invoke>` start is pending to fail).
+#[test]
+fn a_running_invoked_session_that_runs_away_is_ended_with_error_communication() {
+    let child = runaway(
+        r#"<invoke id="gc" type="scxml" src="grandchild.scxml"/>"#,
+        r##"<transition event="ready" target="loop"><send target="#_parent" event="looping"/></transition>"##,
+    );
+    let root = scxml(
+        "r0",
+        r#"<state id="r0">
+              <invoke id="child" type="scxml" src="child.scxml"/>
+              <transition event="error.communication.child" target="r1"><log label="root-got-error"/></transition>
+              <transition event="done.invoke.child" target="fail"/>
+              <transition event="error.execution" target="fail"/>
+            </state>
+            <state id="r1">
+              <onentry><send event="quiet" delay="10ms"/></onentry>
+              <transition event="quiet" target="pass"/>
+              <transition event="done.invoke.child" target="fail"/>
+            </state>
+            <final id="pass"/>
+            <final id="fail"/>"#,
+    );
+    let outcome = run_with_budget(
+        &host(),
+        &root,
+        vec![
+            ("child.scxml", child),
+            ("grandchild.scxml", cancelled_grandchild()),
+        ],
+        SnapshotRequest::none(),
+        RUNAWAY_COMMANDS,
+    );
+    assert_eq!(outcome.terminal, Terminal::Finished);
+    assert_eq!(outcome.configuration, ["pass"]);
+    // `looping` was sent inside the call that ran away: it is queued for
+    // the root before the error, and the root ignores it.
+    assert_eq!(
+        labels(&outcome),
+        ["child-exit", "grandchild-exit", "root-got-error"]
+    );
+}
+
+/// The root session's own runaway still fails the run with
+/// `RunFailure::CommandBound`, after an invoked session's runaway was
+/// contained.
+#[test]
+fn the_root_s_own_runaway_still_fails_the_run_with_command_bound() {
+    let child = runaway(
+        "",
+        r#"<onentry><raise event="go"/></onentry><transition event="go" target="loop"/>"#,
+    );
+    let root = scxml(
+        "r0",
+        r#"<state id="r0">
+              <invoke id="child" type="scxml" src="child.scxml"/>
+              <transition event="error.execution" target="r1"/>
+            </state>
+            <state id="r1">
+              <onentry><raise event="spin"/></onentry>
+              <transition event="spin" target="r1"/>
+            </state>"#,
+    );
+    let (ir, data_model) = lower(&root);
+    let error = host()
+        .run(&SessionRun {
+            machine_ir: &ir,
+            data_model: data_model.as_deref(),
+            session_id: "root",
+            events: &[],
+            external_client: None,
+            embedder: Rc::new(Documents(vec![("child.scxml", child)])),
+            max_commands: RUNAWAY_COMMANDS,
+            snapshots: SnapshotRequest::none(),
+        })
+        .expect_err("the root's runaway fails the run");
+    assert!(
+        matches!(error.failure, RunFailure::CommandBound),
+        "{:?}",
+        error.failure
+    );
+}
+
+/// A recorded live session in which an invoked session runs away, at its
+/// start and later on an event the root forwards, replays to the same
+/// snapshots and outputs: the containment is a pure function of the run.
+#[test]
+fn a_recorded_run_with_runaway_invoked_sessions_replays_byte_for_byte() {
+    let at_start = scxml(
+        "c0",
+        r#"<state id="c0">
+              <onentry><raise event="again"/></onentry>
+              <transition event="again" target="c0"/>
+            </state>"#,
+    );
+    let later = runaway(
+        r#"<invoke id="gc" type="scxml" src="grandchild.scxml"/>"#,
+        r#"<transition event="go" target="loop"/>"#,
+    );
+    let root = scxml(
+        "r0",
+        r##"<state id="r0">
+              <invoke id="first" type="scxml" src="at-start.scxml"/>
+              <invoke id="second" type="scxml" src="later.scxml"/>
+              <transition event="error.execution"><log label="first-failed"/></transition>
+              <transition event="go"><send target="#_second" event="go"/></transition>
+              <transition event="error.communication.second" target="pass"><log label="second-ended"/></transition>
+            </state>
+            <final id="pass"/>"##,
+    );
+    let (ir, data_model) = lower(&root);
+    let documents = || {
+        Rc::new(Documents(vec![
+            ("at-start.scxml", at_start.clone()),
+            ("later.scxml", later.clone()),
+            ("grandchild.scxml", cancelled_grandchild()),
+        ]))
+    };
+    let host = host();
+    let open = |clock, recording: Recording| {
+        host.open(SessionOpen {
+            machine_ir: &ir,
+            data_model: data_model.as_deref(),
+            session_id: "root",
+            embedder: documents(),
+            max_commands: RUNAWAY_COMMANDS,
+            clock,
+            record: recording == Recording::On,
+            replay: None,
+            http: LiveHttp::default(),
+        })
+        .expect("the session opens")
+    };
+    let clock = ManualClock::new();
+    let mut live = open(LiveClock::Timed(Box::new(clock.clone())), Recording::On);
+    let options = Options::default();
+    let mut snapshots = vec![live.snapshot(&options).expect("snapshot")];
+    clock.set(5);
+    let step = live
+        .send(&ScriptedEvent::named("go"))
+        .expect("the second child's runaway is contained");
+    assert_eq!(step.status, LiveStatus::Finished);
+    snapshots.push(live.snapshot(&options).expect("snapshot"));
+    let outputs = live.take_outputs();
+    let labels: Vec<&str> = outputs
+        .iter()
+        .filter_map(|output| match output {
+            SessionOutput::Log { entry, .. } => entry.label.as_deref(),
+            SessionOutput::Done { .. } => None,
+        })
+        .collect();
+    assert_eq!(
+        labels,
+        [
+            "first-failed",
+            "child-exit",
+            "grandchild-exit",
+            "second-ended"
+        ],
+        "{outputs:?}"
+    );
+    let records = live.take_recorded();
+    live.close().expect("close");
+
+    let mut replay = open(LiveClock::Logical, Recording::Off);
+    let mut replayed = Vec::new();
+    for record in &records {
+        if let Applied::Snapshot(bytes) = replay.apply(record).expect("the record applies") {
+            replayed.push(bytes);
+        }
+    }
+    assert_eq!(replayed, snapshots, "the snapshots replay byte for byte");
+    assert_eq!(replay.take_outputs(), outputs);
+    replay.close().expect("close");
+}
