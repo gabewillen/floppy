@@ -11,3 +11,6 @@ media/
 # .env.example names every variable the bots read; it holds no values.
 !.env.example
 web/dist/
+
+# Agent/tooling scratch
+.pi/
