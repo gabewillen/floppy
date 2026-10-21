@@ -434,7 +434,15 @@ function allTestsPassed() {
 }
 
 function simulateDiagnostics() {
-  return sim_results.filter(function (r) { return !r.passed; }).map(function (r) { return r.apply.length > 0 ? r.apply.map(function (m) { return {kind: 'apply', code: 'E0008', message: m}; }) : [{kind: 'simulate', code: 'test-failed', message: 'test ' + r.name + ' expected the outputs ' + JSON.stringify(r.expected) + ' in order and done=' + r.expect_done + ', observed ' + JSON.stringify(r.observed) + ' and done=' + r.done + (r.error === null ? '' : ', error ' + r.error) + doneMismatch(r)}]; }).reduce(function (all, d) { return all.concat(d); }, []);
+  return sim_results.filter(function (r) { return !r.passed; }).map(function (r) { return r.apply.length > 0 ? r.apply.map(function (m) { return {kind: 'apply', code: 'E0008', message: m}; }) : [{kind: 'simulate', code: 'test-failed', message: 'test ' + r.name + ' expected the outputs ' + JSON.stringify(r.expected) + ' in order and done=' + r.expect_done + ', observed ' + JSON.stringify(r.observed) + ' and done=' + r.done + (r.error === null ? '' : ', error ' + simError(r)) + doneMismatch(r)}]; }).reduce(function (all, d) { return all.concat(d); }, []);
+}
+
+// A test's error event name without the candidate's generated invoke id
+// (error.communication.<invokeid>): the id is new on every run, so with it
+// the same test failing with the same error would never be the same failure.
+function simError(r) {
+  var suffix = '.' + r.invokeid;
+  return typeof r.invokeid === 'string' && r.error.slice(-suffix.length) === suffix ? r.error.slice(0, -suffix.length) : r.error;
 }
 
 // What a test's done mismatch means for a machine the simulation invokes
@@ -462,11 +470,13 @@ function hasTopLevelFinal() {
 
 // retry_gate
 
-// The sorted, distinct kind|code|identity of the diagnostics: a validate
-// diagnostic's identity is its label and the trimmed source line it marks
-// (the same mistake left in place; one fixed, another found, is progress).
+// The sorted, distinct identities of the failure's diagnostics: kind|code
+// and, for a validate diagnostic, its primary label (not the line it marks:
+// the same mistake moves around between drafts), else its message (a
+// simulate message names the test, its expected and observed outputs, its
+// done and its error; the rest are the builder's own or a namespace's).
 function diagnosticsFingerprint() {
-  return JSON.stringify(diagnostics.map(function (d) { return d.kind + '|' + d.code + '|' + (d.kind === 'validate' ? d.label + '|' + d.line : d.message); }).sort().filter(function (key, i, keys) { return i === 0 || key !== keys[i - 1]; }));
+  return diagnostics.map(function (d) { return d.kind + '|' + d.code + '|' + (d.kind === 'validate' ? d.label : d.message); }).sort().filter(function (key, i, keys) { return i === 0 || key !== keys[i - 1]; });
 }
 
 // The last draft a check rejected (validate, lifetime, simulate, apply),
@@ -484,8 +494,15 @@ function retryGateLog() {
   return 'failure ' + failures + (max_attempts === null ? '' : ' of ' + max_attempts) + firstDiagnosticSummary();
 }
 
+// A diagnostic an earlier failure of this build already had, consecutive
+// or not: the same failure more than once ends the build (decision D124).
 function isNoProgress() {
-  return fingerprint === previous_fingerprint;
+  return fingerprint.some(function (key) { return fingerprints.indexOf(key) >= 0; });
+}
+
+// The identities of every failure so far, this one's included.
+function nextFingerprints() {
+  return fingerprints.concat(fingerprint);
 }
 
 function isAttemptsExhausted() {

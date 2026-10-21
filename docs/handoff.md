@@ -11,6 +11,18 @@ Last updated: 2026-10-20.
 
 ## Current state (2026-10-09) — resume here
 
+- **The same failure more than once ends the build (2026-10-20, D124):**
+  the maintainer's rule, "if it gets the same failure more than once it
+  should end". `retry_gate` ends with `no-progress` as soon as any
+  diagnostic of a failure is one an earlier failure of the same build had,
+  consecutive or not: `fingerprints` (every identity seen in the build)
+  replaces `previous_fingerprint`. A validate diagnostic's identity is
+  kind|code plus its label (no line: the same mistake moves around), any
+  other's kind|code plus its message; a `test-failed` message now names its
+  error without the candidate's generated invoke id, which made every
+  `error.communication` failure look new. `max_attempts` stays. This
+  catches the live run 2's `E0009`, repeated four times among other
+  diagnostics. Not yet run live.
 - **A cond that always throws ends only its session (2026-10-20,
   scxml.rs `cf8f293a`):** a transition condition that fails on every
   evaluation now costs one command per failure and stops at the per-call
@@ -30,7 +42,8 @@ Last updated: 2026-10-20.
 - **Builder diagnostics a repair can act on; `live_conversation`
   passes (2026-10-20, D123):** each validate diagnostic carries `line`
   and `rendered` (`scx validate`'s form: `--> NAME.scx:line:column`, the
-  marked line, notes, help, fixes) and is fingerprinted by label and line;
+  marked line, notes, help, fixes) and was fingerprinted by label and
+  line (D124 drops the line);
   the author rules say the constraints win (a turn behavior's tests expect
   no outputs), keep every non-trivial `cond`/`expr` a call of `script`
   (no `&` in XML), need a top-level `final`, and ask for one call; a draft

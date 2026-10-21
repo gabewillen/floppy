@@ -32,7 +32,7 @@ final states and its parent receives that state's done data as
 | --- | --- | --- |
 | `builder.request` | an event to the builder (standard input when run directly) | `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?}`: the specification, the name the draft's documents are written under (default the plan's; each run of characters other than letters, digits, `_` and `-` becomes `_`; reflection sends the behavior's), extra constraints (strings), an optional failure cap (1 to 8, no default: without it only the no-progress rule ends the loop), the generate service's model (default `Qwen/Qwen3.8-Flash-Next`, a reasoning model), the time each streamed generation may go without progress, and each generation may take in all, before `builder.timeout` cancels it (1 ms to 1 h each, defaults 30000 and 1200000), and the reference `check()`'s lifetime bounds (1 ms to 1 day each, no default: without them neither the lifetime check nor the forced tick runs; reflection sends 60000 and 1000, the original's `ROUTINE_MIN_EVERY` and `TURN_SILENCE_BOUND`) |
 | final state `done` | its `<donedata>` ([`schemas/done.json`](schemas/done.json)) | `{scxml, schemas, script, path, tests, report}`: the built document's three parts (its SCXML, its input event schemas as one object with `$defs` keyed by event, and its ECMAScript, `""` for none), the path of the `.scx` they were written as (`../../behaviors/<name>.scx`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
-| final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics, history, scxml?, path?}`: `invalid-request`, `unconfigured` (the run holds no `FLOPPY_BASE_URL` or no `FLOPPY_API_KEY`; the first generation ends the build at once), `no-progress` (the same failure twice in a row), `attempts-exhausted` (the request's cap), or `abandoned`, with the last diagnostics (`{kind, code, message}`), the failure history (every failure's attempt and diagnostics, as in `done`'s report), and `scxml`, the last draft a check (`validate`, the lifetime check, `simulate`) rejected, with `path`, where it was written, both absent when no draft was rejected (the original's revision drafts the rejected source) |
+| final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics, history, scxml?, path?}`: `invalid-request`, `unconfigured` (the run holds no `FLOPPY_BASE_URL` or no `FLOPPY_API_KEY`; the first generation ends the build at once), `no-progress` (a diagnostic an earlier failure of the build already had, consecutive or not; decision D124), `attempts-exhausted` (the request's cap), or `abandoned`, with the last diagnostics (`{kind, code, message}`), the failure history (every failure's attempt and diagnostics, as in `done`'s report), and `scxml`, the last draft a check (`validate`, the lifetime check, `simulate`) rejected, with `path`, where it was written, both absent when no draft was rejected (the original's revision drafts the rejected source) |
 
 The builder answers exactly once, by finishing. Run directly, `scx run`
 prints the done data in its `done` record and exits 0; invoked, the parent
@@ -183,29 +183,26 @@ intake -> design -> author -> writing -> validate -> simulate -> done
 * `done`: a final state whose `<donedata>` carries the result.
 * `retry_gate`: every failure (generation, draft, validation, simulation,
   timeout) passes through it. It counts the failure and takes its
-  fingerprint, which the datamodel keeps (`fingerprint`, and the previous
-  failure's in `previous_fingerprint`), and a guarded transition
-  (`fingerprint === previous_fingerprint`) ends the build in `failed` with
-  the reason `no-progress` and the repeated diagnostics: the same failure
-  twice in a row means the repair loop is making no progress. A request's
-  optional `max_attempts` also ends it (`attempts-exhausted`). A fingerprint
-  is the sorted, distinct list of each diagnostic's kind, code, and
-  identity, taken from the canonical report rather than prose: a validator
-  diagnostic's identity is its primary label and the trimmed source line
-  it marks (the report gives no element path, and byte spans shift between
-  drafts), so two drafts fail the same way when they have the same set of
-  codes with the same primary labels on the same lines; a
-  simulation diagnostic's identity is its message, which names the failing
-  test, its expected and observed outputs, its expected and observed
-  `done`, and its error, so the same test failing with the same mismatch is
-  the same failure; any other diagnostic (a generation failure, a timeout, a
-  write failure) is identified by its message, which the
-  builder writes. A primary label often says only what kind of thing is
-  wrong (`SCXML005`'s is "unknown target identifier"), so a validate
-  diagnostic's identity also has the trimmed source line it marks
-  (decision D123): a draft that leaves the mistake where it was is the
-  same failure, and one that fixes it and makes the same kind of mistake
-  on another line is progress.
+  fingerprint, the sorted, distinct identities of its diagnostics, which
+  the datamodel keeps (`fingerprint`, and those of every earlier failure
+  of the build in `fingerprints`), and a guarded transition ends the build
+  in `failed` with the reason `no-progress` and the repeated diagnostics as
+  soon as any diagnostic of the failure is one an earlier failure already
+  had, consecutive or not (decision D124, the maintainer's rule: "if it
+  gets the same failure more than once it should end"). A request's
+  optional `max_attempts` also ends it (`attempts-exhausted`). A
+  diagnostic's identity is its kind and code and, taken from the canonical
+  report rather than prose, for a validator diagnostic its primary label
+  (not the source line it marks: the same mistake moves around between
+  drafts, so the same code and label on another line is the same failure),
+  and for any other its message: a simulation diagnostic's names the
+  failing test, its expected and observed outputs, its expected and
+  observed `done`, and its error without the candidate's generated invoke
+  id (which is new on every run), so the same test failing with the same
+  mismatch is the same failure and two different test failures are not;
+  any other diagnostic (a generation failure, a timeout, a write failure,
+  a draft check, `E0009`, `E0008`) is identified by the message the
+  builder or its namespace writes.
 * `triage`: `decision:choice` (synchronous executable content) writes the
   state's enabled `event:schema` transitions as the canonical choices:
   `triage.repair` (guarded by `plan !== null`, so it is among the choices only

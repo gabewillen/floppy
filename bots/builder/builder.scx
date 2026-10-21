@@ -37,8 +37,9 @@
   a draft that sends bot.behavior.tick, also gets its first schedule's
   event at once and must tick with a selection, the reference verify_apply,
   E0008, <behavior:verify_tick>) -> done. Every failure goes through retry_gate, which takes its
-  fingerprint and gives up (no-progress) when it equals the previous
-  failure's, or at the request's optional max_attempts; triage then reads its enabled
+  fingerprint and gives up (no-progress) when any of its diagnostics is one an
+  earlier failure of the build had, consecutive or not (decision D124), or at
+  the request's optional max_attempts; triage then reads its enabled
   event:schema transitions with decision:choice and invokes the decision
   service to pick one (repair while there is a plan, redesign, abandon).
   When the decision is unavailable (no key granted, backend failure:
@@ -162,15 +163,16 @@
     <data id="decisions" expr="[]"/>
     <data id="attempt_log" expr="[]"/>
     <data id="failure_reason" expr="null"/>
-    <!-- The failure's fingerprint and the previous failure's (retry_gate):
-         the sorted, distinct kind|code|identity of its diagnostics, where a
-         validate diagnostic's identity is its primary label and the trimmed
-         source line it marks (no byte span, which shifts between drafts) and
-         any other's is its message (a
-         simulate message names the test, its expected and observed
-         outputs, and its done and error; the rest are the builder's own). -->
-    <data id="fingerprint" expr="null"/>
-    <data id="previous_fingerprint" expr="null"/>
+    <!-- The failure's fingerprint and those of every earlier failure of the
+         build (retry_gate): the sorted, distinct kind|code|identity of its
+         diagnostics, where a validate diagnostic's identity is its primary
+         label (not the source line it marks, as the same mistake moves
+         around between drafts) and any other's is its message (a simulate
+         message names the test, its expected and observed outputs, and its
+         done and error, without the candidate's generated invoke id; the
+         rest are the builder's own or a namespace's). -->
+    <data id="fingerprint" expr="[]"/>
+    <data id="fingerprints" expr="[]"/>
     <!-- Simulation. -->
     <data id="max_tests" expr="8"/>
     <data id="sim_test_cap_ms" expr="120000"/>
@@ -588,9 +590,11 @@
     </state>
   </state>
 
-  <!-- Counts one failure and takes its fingerprint; the same failure twice
-       in a row is no progress, so the build ends there (or at the request's
-       optional max_attempts). -->
+  <!-- Counts one failure and takes its fingerprint; a diagnostic an earlier
+       failure of the build already had, consecutive or not, is no progress,
+       so the build ends there (decision D124: "if it gets the same failure
+       more than once it should end"), or at the request's optional
+       max_attempts. -->
   <state id="retry_gate">
     <onentry>
       <assign location="failures" expr="increment(failures)"/>
@@ -606,7 +610,7 @@
       <assign location="failure_reason" expr="'attempts-exhausted'"/>
     </transition>
     <transition target="triage">
-      <assign location="previous_fingerprint" expr="fingerprint"/>
+      <assign location="fingerprints" expr="nextFingerprints()"/>
     </transition>
   </state>
 

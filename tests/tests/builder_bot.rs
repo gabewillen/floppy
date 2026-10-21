@@ -338,6 +338,24 @@ fn internal_delay_draft() -> String {
     ))
 }
 
+/// [`invalid_draft`] (`SCXML005`) whose green timer is also a delayed send
+/// to `#_internal` (`SCXML070`).
+fn invalid_internal_delay_draft() -> String {
+    draft(&traffic_light(&green_separate(), "amber").replace(
+        "<send id=\"green-timer\" event=\"light.timer\" delay=\"30s\"/>",
+        "<send id=\"green-timer\" target=\"#_internal\" event=\"light.timer\" delay=\"30s\"/>",
+    ))
+}
+
+/// [`invalid_draft`] (`SCXML005`) whose red timer also has both `delay` and
+/// `delayexpr` (`SCXML014`).
+fn invalid_two_delays_draft() -> String {
+    draft(&traffic_light(&green_separate(), "amber").replace(
+        "<send id=\"red-timer\" event=\"light.timer\" delay=\"20s\"/>",
+        "<send id=\"red-timer\" event=\"light.timer\" delay=\"20s\" delayexpr=\"'20s'\"/>",
+    ))
+}
+
 /// A draft that invokes the `generate` service the builder's run binds,
 /// with the builder's own `env` scopes, and reports its answer to its
 /// invoker: its test expects `answer.ready` and the child to finish.
@@ -638,6 +656,23 @@ fn system_one(chosen: &str, body: &[u8]) -> Option<String> {
     Some(json!({"model": "jev-latest", "answers": answers}).to_string())
 }
 
+/// The `authors`th draft of the routes that prove which failures repeat
+/// (`/rendered/v1`, `/moved/v1`, `/again/v1`, `/changed/v1`; see [`Mock`]).
+fn diagnostics_route_draft(path: &str, authors: usize) -> String {
+    match (path, authors) {
+        ("/rendered/v1/chat/completions" | "/moved/v1/chat/completions", 1) => {
+            ampersand_draft("green")
+        }
+        ("/rendered/v1/chat/completions", 2) => placeholder_draft(),
+        ("/rendered/v1/chat/completions", _) => draft(&traffic_light(&green_separate(), "red")),
+        ("/moved/v1/chat/completions", _) => ampersand_draft("red"),
+        ("/again/v1/chat/completions", 2) => internal_delay_draft(),
+        ("/changed/v1/chat/completions", 1) => invalid_internal_delay_draft(),
+        ("/changed/v1/chat/completions", _) => invalid_two_delays_draft(),
+        _ => invalid_draft(),
+    }
+}
+
 /// The mock's answer to one request on `path` requiring the function of
 /// `schema`, after `authors` draft and `plans` plan requests on that path.
 fn mock_reply(
@@ -661,6 +696,9 @@ fn mock_reply(
             | "/afterbound/v1/chat/completions"
             | "/runaway/v1/chat/completions"
             | "/rendered/v1/chat/completions"
+            | "/moved/v1/chat/completions"
+            | "/again/v1/chat/completions"
+            | "/changed/v1/chat/completions"
             | "/unloaded/v1/chat/completions"
             | "/throwing/v1/chat/completions"
             | "/nested/v1/chat/completions",
@@ -704,14 +742,13 @@ fn mock_reply(
             2 => later_runaway_draft(),
             _ => draft(&traffic_light(&green_separate(), "red")),
         })),
-        ("/rendered/v1/chat/completions", Some("scxml_draft")) => {
-            Some(completion(&match authors {
-                1 => ampersand_draft("green"),
-                2 => ampersand_draft("red"),
-                3 => placeholder_draft(),
-                _ => draft(&traffic_light(&green_separate(), "red")),
-            }))
-        }
+        (
+            "/rendered/v1/chat/completions"
+            | "/moved/v1/chat/completions"
+            | "/again/v1/chat/completions"
+            | "/changed/v1/chat/completions",
+            Some("scxml_draft"),
+        ) => Some(completion(&diagnostics_route_draft(path, authors))),
         ("/unloaded/v1/chat/completions", Some("scxml_draft")) => {
             Some(completion(&match authors {
                 1 => unloaded_script_draft(true),
@@ -795,8 +832,13 @@ impl Received {
 /// (`/progress/v1`'s valid one with a script, [`scripted_draft`]);
 /// `/runaway/v1` answers the plan, a draft whose start runs away, a draft
 /// whose button runs it away, then valid drafts; `/rendered/v1` answers the
-/// plan, a draft with an unescaped `&&` in red's cond, one with it in
-/// yellow's, one whose `scxml` is a placeholder, then valid drafts;
+/// plan, a draft with an unescaped `&&` in red's cond, one whose `scxml`
+/// is a placeholder, then valid drafts; `/moved/v1` answers the plan, the
+/// `&&` in red's cond, then in yellow's; `/again/v1` answers the plan, the
+/// invalid draft, one with a delayed internal send, then the invalid draft
+/// again; `/changed/v1` answers the plan, the invalid draft with a delayed
+/// internal send, then the invalid draft with a send with both `delay` and
+/// `delayexpr`;
 /// `/unloaded/v1` answers the plan, a scripted draft without its root
 /// `<script src>`, one without its script, then the scripted draft;
 /// `/throwing/v1` answers the plan, a scripted draft whose eventless
@@ -1568,10 +1610,9 @@ fn a_different_diagnostic_each_time_keeps_repairing_until_done() {
 
 /// A repair is told where a validate diagnostic is, as `scx validate` renders
 /// it (the 2026-10-20 live drafts repeated `XML001` without it), and of a
-/// draft whose `scxml` holds no document; the same code and label on another
-/// line is progress, not the same failure. `/rendered/v1` answers an
-/// unescaped `&&` in red's cond, then in yellow's, then a placeholder, then
-/// a valid draft, which ends in done.
+/// draft whose `scxml` holds no document. `/rendered/v1` answers an
+/// unescaped `&&` in red's cond, then a placeholder, then a valid draft,
+/// which ends in done.
 #[test]
 fn a_repair_is_told_the_line_of_each_diagnostic_and_of_a_draft_with_no_document() {
     let mock = Mock::start();
@@ -1591,47 +1632,42 @@ fn a_repair_is_told_the_line_of_each_diagnostic_and_of_a_draft_with_no_document(
         .iter()
         .map(|attempt| &attempt["diagnostics"][0]["code"])
         .collect();
-    assert_eq!(
-        codes,
-        [&json!("XML001"), &json!("XML001"), &json!("no-document")],
-        "{done}"
-    );
+    assert_eq!(codes, [&json!("XML001"), &json!("no-document")], "{done}");
 
     let received = mock.received();
     let authors = chat_requests(&received, "scxml_draft");
-    assert_eq!(authors.len(), 4);
+    assert_eq!(authors.len(), 3);
     let parameters = &authors[0].body["tools"][0]["function"]["parameters"];
     assert!(
         parameters.pointer("/properties/scxml/minLength").is_none(),
         "no minLength on scxml: the live vLLM's decoding of one runs away into parallel calls until truncated: {parameters}"
     );
-    for (request, into) in [(&authors[1], "green"), (&authors[2], "red")] {
-        let draft = traffic_light(&green_separate(), "red").replace(
-            &format!(r#"<transition event="light.timer" target="{into}"/>"#),
-            &format!(r#"<transition event="light.timer" cond="true && true" target="{into}"/>"#),
-        );
-        let (index, line) = draft
-            .lines()
-            .enumerate()
-            .find(|(_, line)| line.contains("&&"))
-            .expect("the draft has its &&");
-        let column = line.find("&&").expect("the line has its &&") + 1;
-        let diagnostic = &request.user_input()["diagnostics"][0];
-        assert_eq!(diagnostic["code"], "XML001", "{diagnostic}");
-        assert_eq!(diagnostic["line"], line.trim(), "{diagnostic}");
-        let rendered = diagnostic["rendered"].as_str().expect("rendered text");
-        let number = index + 1;
-        for expected in [
-            "error[XML001]: ".to_owned(),
-            format!(" --> traffic_light.scx:{number}:{column}\n"),
-            format!("{number} | {line}\n"),
-            format!("| {}^", " ".repeat(column - 1)),
-            "= help: escape a literal `&` as `&amp;`".to_owned(),
-        ] {
-            assert!(rendered.contains(&expected), "{expected:?} in {rendered}");
-        }
+    let request = &authors[1];
+    let draft = traffic_light(&green_separate(), "red").replace(
+        r#"<transition event="light.timer" target="green"/>"#,
+        r#"<transition event="light.timer" cond="true && true" target="green"/>"#,
+    );
+    let (index, line) = draft
+        .lines()
+        .enumerate()
+        .find(|(_, line)| line.contains("&&"))
+        .expect("the draft has its &&");
+    let column = line.find("&&").expect("the line has its &&") + 1;
+    let diagnostic = &request.user_input()["diagnostics"][0];
+    assert_eq!(diagnostic["code"], "XML001", "{diagnostic}");
+    assert_eq!(diagnostic["line"], line.trim(), "{diagnostic}");
+    let rendered = diagnostic["rendered"].as_str().expect("rendered text");
+    let number = index + 1;
+    for expected in [
+        "error[XML001]: ".to_owned(),
+        format!(" --> traffic_light.scx:{number}:{column}\n"),
+        format!("{number} | {line}\n"),
+        format!("| {}^", " ".repeat(column - 1)),
+        "= help: escape a literal `&` as `&amp;`".to_owned(),
+    ] {
+        assert!(rendered.contains(&expected), "{expected:?} in {rendered}");
     }
-    let no_document = &authors[3].user_input()["diagnostics"][0];
+    let no_document = &authors[2].user_input()["diagnostics"][0];
     assert_eq!(no_document["kind"], "draft", "{no_document}");
     assert_eq!(no_document["code"], "no-document", "{no_document}");
     assert!(
@@ -1640,6 +1676,106 @@ fn a_repair_is_told_the_line_of_each_diagnostic_and_of_a_draft_with_no_document(
             .is_some_and(|message| message.contains(r#"(it was "placeholder")"#)),
         "{no_document}"
     );
+}
+
+/// The same code and label on another line is the same failure (decision
+/// D124: the same mistake moves around between drafts, so a validate
+/// diagnostic's identity has no line). `/moved/v1` answers an unescaped
+/// `&&` in red's cond, then in yellow's, and the build ends there.
+#[test]
+fn the_same_validate_diagnostic_on_another_line_ends_the_build_with_no_progress() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "moved",
+        "moved",
+        &["FLOPPY_API_KEY", "FLOPPY_BASE_URL"],
+        &json!({"spec": SPEC}),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, failed) = answer(&records);
+    assert_eq!(label, "failed", "{failed}");
+    assert_eq!(failed["reason"], "no-progress", "{failed}");
+    assert_eq!(failed["diagnostics"][0]["code"], "XML001", "{failed}");
+    assert_eq!(
+        failed["history"].as_array().map(Vec::len),
+        Some(2),
+        "{failed}"
+    );
+    assert_eq!(
+        chat_requests(&mock.received(), "scxml_draft").len(),
+        2,
+        "no third draft"
+    );
+}
+
+/// A failure that repeats an earlier one ends the build even when another
+/// failure came between them (decision D124: "if it gets the same failure
+/// more than once it should end"). `/again/v1` answers the invalid draft
+/// (`SCXML005`), one with a delayed internal send (`SCXML070`), then the
+/// invalid draft again.
+#[test]
+fn a_failure_repeated_after_another_ends_the_build_with_no_progress() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "again",
+        "again",
+        &["FLOPPY_API_KEY", "FLOPPY_BASE_URL"],
+        &json!({"spec": SPEC}),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, failed) = answer(&records);
+    assert_eq!(label, "failed", "{failed}");
+    assert_eq!(failed["reason"], "no-progress", "{failed}");
+    let codes: Vec<&Json> = failed["history"]
+        .as_array()
+        .expect("the history")
+        .iter()
+        .map(|attempt| &attempt["diagnostics"][0]["code"])
+        .collect();
+    assert_eq!(
+        codes,
+        [&json!("SCXML005"), &json!("SCXML070"), &json!("SCXML005")],
+        "{failed}"
+    );
+    assert_eq!(chat_requests(&mock.received(), "scxml_draft").len(), 3);
+}
+
+/// A diagnostic an earlier failure had ends the build even when the rest of
+/// the failure's diagnostics changed (decision D124; the 2026-10-20 live
+/// `PingPongResponder` repeated `E0009` four times among other diagnostics).
+/// `/changed/v1` answers a draft with `SCXML005` and `SCXML070`, then one
+/// with `SCXML005` and `SCXML014`.
+#[test]
+fn a_repeated_diagnostic_among_changed_ones_ends_the_build_with_no_progress() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "changed",
+        "changed",
+        &["FLOPPY_API_KEY", "FLOPPY_BASE_URL"],
+        &json!({"spec": SPEC}),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, failed) = answer(&records);
+    assert_eq!(label, "failed", "{failed}");
+    assert_eq!(failed["reason"], "no-progress", "{failed}");
+    let codes = |attempt: &Json| {
+        let mut codes: Vec<String> = attempt["diagnostics"]
+            .as_array()
+            .expect("the diagnostics")
+            .iter()
+            .filter_map(|diagnostic| diagnostic["code"].as_str().map(str::to_owned))
+            .collect();
+        codes.sort();
+        codes
+    };
+    let history = failed["history"].as_array().expect("the history");
+    assert_eq!(history.len(), 2, "{failed}");
+    assert_eq!(codes(&history[0]), ["SCXML005", "SCXML070"], "{failed}");
+    assert_eq!(codes(&history[1]), ["SCXML005", "SCXML014"], "{failed}");
+    assert_eq!(chat_requests(&mock.received(), "scxml_draft").len(), 2);
 }
 
 /// A draft whose script is not loaded, or whose cond calls a function no
@@ -2005,7 +2141,8 @@ fn a_failed_invocations_sim_drive_does_not_drive_the_next_test() {
 /// ends a candidate whose call stops at the per-call command bound as a
 /// cancelled invocation, raising `error.execution` for a start that
 /// stopped there and queueing `error.communication.<invokeid>` for a later
-/// call (decision D122), where the run used to end with `command-bound`.
+/// call (decision D122), where the run used to end with `command-bound`;
+/// its diagnostic names that error without the invoke id (decision D124).
 #[test]
 fn a_runaway_drafts_simulation_fails_its_tests_and_is_repaired() {
     let mock = Mock::start();
@@ -2042,8 +2179,8 @@ fn a_runaway_drafts_simulation_fails_its_tests_and_is_repaired() {
         later[0]["message"]
             .as_str()
             .is_some_and(|m| m.contains("test button ends green early")
-                && m.contains("error error.communication.")),
-        "{report}"
+                && m.ends_with(", error error.communication")),
+        "the error without the candidate's generated invoke id, new on every run (decision D124): {report}"
     );
 }
 

@@ -42,7 +42,7 @@
     </test>
   </assert>
   <assert id="builder-5" specnum="5" specid="#builder-5">
-    <![CDATA[A failure whose diagnostics equal the previous failure's ends in `failed` `{reason: "no-progress"}` with those diagnostics and, when a check rejected a draft, its `scxml`; at the request's `max_attempts` failures it ends in `failed` `{reason: "attempts-exhausted"}`.]]>
+    <![CDATA[A failure with any diagnostic an earlier failure of the build had, consecutive or not (decision D124), ends in `failed` `{reason: "no-progress"}` with those diagnostics and, when a check rejected a draft, its `scxml`; at the request's `max_attempts` failures it ends in `failed` `{reason: "attempts-exhausted"}`.]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>
