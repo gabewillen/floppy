@@ -7,7 +7,7 @@ history lives in [decisions.md](decisions.md) (numbered decisions),
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
-Last updated: 2026-10-20.
+Last updated: 2026-10-21.
 
 ## Current state (2026-10-09) — resume here
 
@@ -22,7 +22,18 @@ Last updated: 2026-10-20.
   error without the candidate's generated invoke id, which made every
   `error.communication` failure look new. `max_attempts` stays. This
   catches the live run 2's `E0009`, repeated four times among other
-  diagnostics. Not yet run live.
+  diagnostics. Live (2026-10-21, docs/live-proof.md), on the maintainer's
+  lab (mosfet's stack: `gemma-4-26b-a4b` on the vLLM at
+  `192.168.2.2:8100`, the systemone decision server at
+  `192.168.2.2:8102`): `live_cascade` passes; `live_conversation` failed
+  both runs with no run ended early and no behavior learned, every
+  revision ended `no-progress` by D124 on a repeated diagnostic (most
+  non-consecutive; repeats of `XML001`, `<assign>` misuse and the
+  8192-token `truncated`), and the decision server chose the ignore on
+  turn 3's "ping". The lab's model and decision servers match floppy's
+  wire formats; its speech and voice servers do not (speech-to-text and
+  text-to-speech on two origins, voice not LocalAI's API), so speech stayed
+  on Gemini and voice was unconfigured.
 - **A cond that always throws ends only its session (2026-10-20,
   scxml.rs `cf8f293a`):** a transition condition that fails on every
   evaluation now costs one command per failure and stops at the per-call

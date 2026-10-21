@@ -7,6 +7,38 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-21, D124's no-progress on the lab's mosfet stack, model `gemma-4-26b-a4b`
+
+The first runs on the maintainer's lab, the original's (mosfet's) stack:
+the model is `gemma-4-26b-a4b` on the lab's vLLM (`192.168.2.2:8100`,
+`/v1`; vLLM 0.32.0rc1, `max_model_len` 262144) and the decision service is
+the lab's systemone server (`192.168.2.2:8102`, `POST /v1/systemone`,
+model `pplx-decider-flash-v1.2`, run by mosfet with a 2048-token context).
+The lab's servers take no key. The runs used floppy commit `6b6dec1215`
+(D124), `FLOPPY_LIVE_MODEL=gemma-4-26b-a4b`, `FLOPPY_LIVE_ENV_FILE` naming
+`env.speech` and `env.lab` (`FLOPPY_BASE_URL`, `FLOPPY_API_KEY`,
+`TYPESAFE_BASE_URL`, `TYPESAFE_API_KEY`, the keys placeholders; no `.env`,
+so no maintainer key reached the lab), and `cargo test -p floppy-tests
+--locked --test floppy_live -- --ignored --nocapture --test-threads=1
+--exact <test>`. No code was changed for them. Before them, one chat
+completion and one systemone call (one `choice` question) were answered
+200. floppy's wire formats match the model and decision servers (the
+generate service's base URL with `/v1`, the decision service's origin
+without it). The lab's speech and voice servers do not match floppy's:
+speech-to-text (`:8001`, `/v1/audio/transcriptions`) and text-to-speech
+(`:8002`, `/v1/audio/speech`) are on two origins where the speech service
+takes one base URL for both, and voiceprint (`:8003`, `/v1/embed`) and
+diarization (`:8005`, `/v1/diarize`) are not LocalAI's `/vad`,
+`/audio/diarization` and `/voice/embed`; so speech stayed on `env.speech`
+(Gemini), and no voice backend was configured (every voice detection
+failed `the backend is not configured`, which neither test checks).
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_conversation`, run 1 | fail (292 s) | `4 completed, 0 failed`, no run ended early, but no behavior was learned by turn 2: every revision was abandoned with `no-progress`, three of the four on a diagnostic an earlier, non-consecutive failure of the same build had (D124). Turn 1 created `UserFavoriteColorMemory`: 2 attempts, both `author-failed` (`truncated`: the 8192-token bound). Turn 2 created `PingPongRule`: `XML001` (an attribute `+` on `<send>`), `truncated`, `XML001` again, ended; the row stayed DRAFT. Turn 3 changed it: `XML001`, `no-document` (`"type:"`), `XML001` again, ended. Turn 4 changed it: `XML001`, `XSD-cvc-complex-type.3.2.2` (`<assign>` with `name`), `script-not-loaded`, the `<assign>` again, ended. Reasoning answered turns 1, 2 and 4 (turn 4 "Your favorite color is green."); on turn 3, the "ping", the lab's decision server chose the ignore (intuition handled, confidence 57) |
+| `floppy_live` `live_conversation`, run 2 | fail (339 s) | `4 completed, 0 failed`, no run ended early, no behavior learned by turn 2; every revision abandoned with `no-progress` on a repeat (D124). Turn 1 created `RememberFavoriteColor`: `XSD-cvc-complex-type.3.2.2` (`<assign>` with `name`), `no-document` (a fragment of the draft schema), `truncated`, `XML001` (an attribute `event:bot.ability.conversation.input#$defs`), `truncated` again, ended. Turn 2 created `PingPongGame`: `truncated`, `SCXML008` (`<cancel>`), then `schema` on `<transition>` and `<assign>` inside `<send>`, ended as a repeat though its first diagnostic was new (the log names only each failure's first diagnostic, so the one repeated from failure 2 is not recorded); the row stayed DRAFT. Turn 3 changed it: the same `schema` diagnostic twice, ended. Turn 4 changed it: `<assign>` inside `<send>` twice, ended. Reasoning answered turns 1, 2 and 4 ("Your favorite color is green!"); on turn 3 the decision server chose the ignore (confidence 59) |
+| `floppy_live` `live_cascade` | pass (20 s) | autonomy unhandled (`no-behaviors`), intuition unhandled (`empty_product`, the lab's decision server abstained), reasoning handled. 2026-10-20 on the Qwen vLLM: pass |
+
 ## 2026-10-20, a cond that always throws ends only its session (scxml.rs `cf8f293a`), on vLLM 0.30.0, model `Qwen/Qwen3.8-Flash-Next`
 
 scxml.rs `cf8f293a` stops a transition condition that fails on every
