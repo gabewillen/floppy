@@ -21,7 +21,12 @@ Last updated: 2026-10-20.
   run 1's `machine session failed: protocol`): a simulated draft whose
   eventless cond throws fails its test with `error error.execution` and is
   repaired, which `tests/tests/builder_bot.rs`'s `/throwing` route proves
-  with no builder change. Not yet rerun live on it.
+  with no builder change. Live (2026-10-20, docs/live-proof.md):
+  `live_cascade` passes; `live_conversation` failed both runs with no run
+  ended early (run 1: reflection selected nothing on any turn, no drafts;
+  run 2: `PingPongResponder` was abandoned on turns 2 and 3, on `E0009`
+  lifetime and `no-document`, and accepted only on turn 4, after the
+  turn-2 deadline; reasoning chose the ignore on turn 3's "ping").
 - **Builder diagnostics a repair can act on; `live_conversation`
   passes (2026-10-20, D123):** each validate diagnostic carries `line`
   and `rendered` (`scx validate`'s form: `--> NAME.scx:line:column`, the
