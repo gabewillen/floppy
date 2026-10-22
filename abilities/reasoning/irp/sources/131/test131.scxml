@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- reasoning-4: a selection of an event outside the choices fails the turn as schema-mismatch. -->
+<!-- reasoning-4: a selection of an event outside the choices is repaired once, and the same rejection again fails the turn. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="reasoning" type="scxml" src="../../../reasoning.scx">
@@ -15,7 +15,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.reasoning" cond='_event.data.turn === 1 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.failed === true &amp;&amp; _event.data.reason === "the reasoning failed (schema-mismatch)"' target="step1"/>
+    <transition event="done.invoke.reasoning" cond='_event.data.turn === 1 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.failed === true &amp;&amp; _event.data.reason === "Selection rejected: schema-mismatch"' target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

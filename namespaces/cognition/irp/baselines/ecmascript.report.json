@@ -6,28 +6,21 @@
     "kind": "namespace-irp",
     "source": "namespaces/cognition/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "c731c96bb433bae08fccd0818d643b9a40882df6c296eba84c5bb58fab6b8b84",
-    "source_digest": "bf1fbed93cb4207f2dc8306cd1b6f4680f724e6330378060eb313a41e9c9cef9",
-    "manifest_digest": "e6b5596a2afee58a89225824c7658db29bfaed9c49d229ec2a0c39913a4e3929",
+    "corpus_digest": "047abeee43eac5fc8e206fc8d52623af3692f7e75b7c6d0c67fe1a25d4fe013b",
+    "source_digest": "76382267a4f5d3f7eb2f6495abf950c25691571cbb28c66375e57d5be2036f7b",
+    "manifest_digest": "671c945c9daf3461eaea586edd151468b9fcd0ca99c809b3e43aed14054e4206",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
     "transformer": {
-      "name": "saxon-process-sandboxed",
+      "name": "saxon-process",
       "version": "SaxonJ-HE 12.8 from Saxonica",
       "command_argv": [
         "java",
         "-jar",
-        "saxon-he-12.8.jar",
-        "-a:off",
-        "-p:off",
-        "-dtd:off",
-        "-expand:off",
-        "-ext:off",
-        "-xi:off",
-        "-xsiloc:off"
+        "saxon-he-12.8.jar"
       ],
-      "executable_digest": "c13657d80564f40f10b8ab91b29fdc74080e7d8bb36d6cd06589292755d3476f"
+      "executable_digest": "56444c4a59b4ccda95e4693045645c083c89112a5fe66f8f8622c1a2a3c254c2"
     },
     "datamodel": "ecmascript",
     "provenance": "baseuri=https://github.com/stateforward/floppy/tree/main/namespaces/cognition/irp/sources"
@@ -41,17 +34,17 @@
   "engine": {
     "name": "scxml-machine",
     "version": "0.2.0",
-    "source_digest": "b3fde869dbf1c6e0b9494fb7013aef41e3436225ac598902afafdf761c9e2dd5"
+    "source_digest": "dff3fc8cedae948050fb2cd1bc417c9ac835b35059f1477dc30d8b4f2e746452"
   },
   "data_model": {
     "name": "scxml-data-model-ecmascript",
     "version": "0.2.0",
-    "source_digest": "e84a0f3d2c9335c246e1e63d11927c9778ca51ce1891cbf024b93660b8d2d969"
+    "source_digest": "b8ca1a4238a8036c4c007d5cc58819b7a813402ddce88076597f178b9fb0f311"
   },
   "runner": {
     "name": "scxml-conformance/wasm",
     "version": "0.2.0",
-    "source_digest": "d7eac1d8e8b8a47312cef5eb06ab22dd43d9c5bd7130a5b9da6cddfcccb8eee3"
+    "source_digest": "3b6be0410f9c49955d4696f74088899323c31109bb66e16a60f8912bb46dcb17"
   },
   "manual_oracle": {
     "name": "scxml-conformance-manual-oracle",
@@ -62,9 +55,9 @@
     {
       "namespace_uri": "https://github.com/stateforward/floppy/namespaces/cognition",
       "package_version": "0.1.0",
-      "manifest_sha256": "79ba8fa8db243d6341fee4eeadf0e182d52647b1b102b9b1c02e5fa9a1359a71",
-      "schema_sha256": "ee5c85f23ce71a26476e9e13e641b36c4779f39c3542f75801418b97a534cef7",
-      "component_sha256": "1dca19b221813da7c12cb000d8b4e65ef34fc100407f12dd63c4feafcd81f19f"
+      "manifest_sha256": "f7ab8f0764d69616e8e7f7fdf095e72de6150fd01d4d3fe15f2d2d9e06a071ed",
+      "schema_sha256": "9feaf3d566eecf693ec0f88fe9c5e338d584f56e48d0d3f90ad222918bb6e398",
+      "component_sha256": "2eeb6e66c31a3e5d6585a2da1cdc1030882c4a32dde56d0f1fdab3d071a20c29"
     }
   ],
   "ir_version": 5,
@@ -77,11 +70,11 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "362a3558f4baccde1453fc29efb77265f50e812545a51ee548cb6cb4a8c88223",
+  "identity_digest": "beaf8f1a11521de447fe45fc273f29bfe0b4dd1d1e6478c24054e48ff2a9ef8b",
   "summary": {
-    "total_selected": 17,
-    "applicable_selected": 17,
-    "passed": 17,
+    "total_selected": 21,
+    "applicable_selected": 21,
+    "passed": 21,
     "failed": 0,
     "unsupported": 0,
     "invalid": 0,
@@ -91,8 +84,8 @@
     "not_passing": 0,
     "passed_under_erratum": 0,
     "mandatory": {
-      "applicable_selected": 17,
-      "passed": 17,
+      "applicable_selected": 21,
+      "passed": 21,
       "failed": 0,
       "unsupported": 0,
       "invalid": 0,
@@ -140,8 +133,8 @@
         "passed_under_erratum": 0
       },
       "#cognition-3": {
-        "applicable_selected": 3,
-        "passed": 3,
+        "applicable_selected": 5,
+        "passed": 5,
         "failed": 0,
         "unsupported": 0,
         "invalid": 0,
@@ -152,8 +145,8 @@
         "passed_under_erratum": 0
       },
       "#cognition-4": {
-        "applicable_selected": 3,
-        "passed": 3,
+        "applicable_selected": 4,
+        "passed": 4,
         "failed": 0,
         "unsupported": 0,
         "invalid": 0,
@@ -164,8 +157,8 @@
         "passed_under_erratum": 0
       },
       "#cognition-5": {
-        "applicable_selected": 2,
-        "passed": 2,
+        "applicable_selected": 3,
+        "passed": 3,
         "failed": 0,
         "unsupported": 0,
         "invalid": 0,
@@ -178,8 +171,8 @@
     },
     "by_datamodel": {
       "ecmascript": {
-        "applicable_selected": 17,
-        "passed": 17,
+        "applicable_selected": 21,
+        "passed": 21,
         "failed": 0,
         "unsupported": 0,
         "invalid": 0,
@@ -493,6 +486,81 @@
       "oracle": "outcome-log"
     },
     {
+      "id": "723",
+      "assertion_id": "cognition-3",
+      "spec_num": "3",
+      "spec_id": "#cognition-3",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "724",
+      "assertion_id": "cognition-4",
+      "spec_num": "4",
+      "spec_id": "#cognition-4",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "725",
+      "assertion_id": "cognition-3",
+      "spec_num": "3",
+      "spec_id": "#cognition-3",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
       "id": "730",
       "assertion_id": "cognition-4",
       "spec_num": "4",
@@ -594,6 +662,31 @@
     },
     {
       "id": "741",
+      "assertion_id": "cognition-5",
+      "spec_num": "5",
+      "spec_id": "#cognition-5",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "742",
       "assertion_id": "cognition-5",
       "spec_num": "5",
       "spec_id": "#cognition-5",

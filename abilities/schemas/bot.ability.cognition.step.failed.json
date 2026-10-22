@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.cognition.step.failed",
+  "description": "A step of the bot's cognition failed, so the turn it was taking failed.\n\nThe bot perceives this as a turn of its own: which step failed and why, and which turn failed for which stimulus. Only that turn failed; nothing was rebooted and every ability kept its state. A step that fails while the bot perceives a failed step is not handed back again. A decision layer or an intuition that fails is not handed back either: its turn goes on to the next stage, so the stage is reflex (a behavior) or reasoning in practice.",
+  "properties": {
+    "message": {
+      "description": "Human-readable failure message for the ability operation.",
+      "examples": [
+        "Provider request failed."
+      ],
+      "title": "Message",
+      "type": "string"
+    },
+    "stage": {
+      "description": "The stage of cognition that failed: reflex (a behavior running, or the decision model choosing on what no behavior handled), intuition (the fast words) or reasoning (the deliberate thinking).",
+      "enum": [
+        "reflex",
+        "intuition",
+        "reasoning"
+      ],
+      "examples": [
+        "reasoning"
+      ],
+      "title": "Stage",
+      "type": "string"
+    },
+    "turn": {
+      "description": "The body's processing turn that failed, counted from 1; the original's turn_id [floppy field].",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "stimulus": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Name of the stimulus the failed turn was taken up for, when it has one.",
+      "examples": [
+        "bot.input"
+      ],
+      "title": "Stimulus"
+    }
+  },
+  "required": [
+    "message",
+    "stage",
+    "turn"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "message": "Cognition's reasoning step failed, so the turn failed: Provider request failed.",
+      "stage": "reasoning",
+      "turn": 3,
+      "stimulus": "bot.input"
+    }
+  ]
+}

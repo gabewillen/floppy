@@ -37,8 +37,10 @@
 //! nothing.
 //!
 //! One test runs the real cognition (`abilities/cognition/cognition.scx` and its
-//! stages) with no backend: the intuition's decision fails fast with
-//! `unconfigured`, and so does the turn.
+//! stages) with no backend: the decision layer's decision fails fast with
+//! `unconfigured` and hands the turn on to reasoning, whose model call
+//! fails the same way, and so does the turn; its failure, handed back,
+//! fails the next turn alike.
 //!
 //! Every test ends by comparing its whole run with its pinned trace under
 //! `tests/fixtures/phase4/traces/` (`support::trace`; `FLOPPY_TRACE_BLESS=1`
@@ -917,22 +919,29 @@ fn an_unacknowledged_cancel_degrades_the_bot() {
 }
 
 #[test]
-fn without_a_decision_backend_the_real_cognitions_turn_fails_unconfigured() {
+fn without_a_backend_the_real_cognitions_turns_fail_unconfigured() {
     let body = layout(&Cognition::Real, &[]);
     let mut run = start(&body);
     activated(&mut run);
     run.event("bot.input", &input("text", "hello"));
-    let records = run.until(WAIT, label_is("bot.processing.failed"));
+    let mut records = run.until(WAIT, label_is("bot.processing.failed"));
+    records.extend(run.until(WAIT, label_is("bot.processing.failed")));
     assert_eq!(
         only(&records, &["bot.processing.failed"]),
-        pairs(&[(
-            "bot.processing.failed",
-            r#"{"message":"the decision failed (unconfigured)","turn":1}"#
-        )])
+        pairs(&[
+            (
+                "bot.processing.failed",
+                r#"{"message":"the reasoning failed (unconfigured)","turn":1}"#
+            ),
+            (
+                "bot.processing.failed",
+                r#"{"message":"the reasoning failed (unconfigured)","turn":2}"#
+            )
+        ])
     );
     close(
         run,
-        "without_a_decision_backend_the_real_cognitions_turn_fails_unconfigured",
+        "without_a_backend_the_real_cognitions_turns_fail_unconfigured",
     );
 }
 
