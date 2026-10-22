@@ -398,6 +398,10 @@ fn transcript(records: &[Json]) -> String {
         "bot.ability.speaking.output",
         "bot.reboot",
         "identity.heard",
+        "identity.recognition.failed",
+        "interpretation.degraded",
+        "listening.degraded",
+        "environment.sound",
         "communication.product",
         "conversation",
     ];
@@ -514,5 +518,91 @@ fn live_conversation() {
     assert!(
         answer.to_lowercase().contains("green"),
         "the fourth turn did not recall green (target/floppy-live/live_conversation.txt)"
+    );
+}
+
+/// The bot hears a spoken question end to end: `environment.sound` of
+/// `tests/fixtures/live/question-24k.pcm` ("Hey floppy, what is the
+/// capital of France?", 24 kHz mono PCM spoken by Gemini) and then a
+/// second of silence, which closes the utterance. The listening detects
+/// the voice (`FLOPPY_VOICE_BASE_URL`, `LocalAI`'s `/vad` or
+/// `scripts/vad-server.py`), decodes the words (`FLOPPY_SPEECH_BASE_URL`)
+/// and hands them over as a turn, which the bot answers aloud. The env
+/// files must also hold the speech and voice variables.
+#[test]
+#[ignore = "makes real decision, model, speech and voice calls; needs FLOPPY_LIVE_ENV_FILE"]
+fn live_listening() {
+    let media = unique_scratch("floppy-live-media");
+    std::fs::copy(
+        workspace().join("tests/fixtures/live/question-24k.pcm"),
+        media.join("question.pcm"),
+    )
+    .expect("the question is copyable");
+    std::fs::write(media.join("silence.pcm"), vec![0_u8; 48_000]).expect("writable");
+    let mut args = vec![
+        "--dir".to_owned(),
+        format!(
+            "{}={}::/media",
+            support::service_uri("speech"),
+            media.display()
+        ),
+    ];
+    for file in support::live_env_files() {
+        args.push("--env-file".to_owned());
+        args.push(file.display().to_string());
+    }
+    args.push(
+        workspace()
+            .join("bots/floppy/floppy.scx")
+            .display()
+            .to_string(),
+    );
+    let mut run = Run::start(&args, &[]);
+    run.event("bot.activate", &json!({"model": model()}));
+    run.until(Duration::from_mins(2), |record| {
+        record["type"] == "log" && record["label"] == "bot.activated"
+    });
+    for name in ["question.pcm", "silence.pcm"] {
+        run.event(
+            "environment.sound",
+            &json!({
+                "audio": format!("media/{name}"),
+                "media_type": "audio/pcm",
+                "sample_rate_hz": 24000,
+                "channels": 1
+            }),
+        );
+    }
+    let answered = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        run.until(Duration::from_mins(6), |record| {
+            record["type"] == "log"
+                && matches!(
+                    record["label"].as_str(),
+                    Some(
+                        "bot.ability.speaking.output"
+                            | "bot.processing.failed"
+                            | "bot.ability.listening.failed"
+                    )
+                )
+        })
+    }))
+    .is_ok();
+    let finished = run.close(Duration::from_mins(1));
+    let all = finished.all;
+    keep("live_listening", &all);
+    std::fs::write(
+        workspace().join("target/floppy-live/live_listening.txt"),
+        transcript(&all),
+    )
+    .expect("writable");
+    let said = texts(&all, "floppy.say");
+    let pass = answered
+        && texts(&all, "bot.ability.listening.failed").is_empty()
+        && texts(&all, "bot.processing.failed").is_empty()
+        && said.iter().any(|text| text.contains("Paris"));
+    println!("live listening: {}", if pass { "pass" } else { "fail" });
+    assert!(
+        pass,
+        "the spoken question was not answered (target/floppy-live/live_listening.txt)"
     );
 }
