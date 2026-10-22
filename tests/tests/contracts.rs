@@ -95,7 +95,7 @@ const BODY_EVENTS: [&str; 13] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 75] = [
+const ABILITY_EVENTS: [&str; 81] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -137,6 +137,14 @@ const ABILITY_EVENTS: [&str; 75] = [
     "bot.ability.identity.adopt.failed",
     "bot.ability.identity.addressed",
     "bot.ability.identity.recalled",
+    "bot.ability.identity.ask",
+    "bot.ability.identity.named",
+    // The original's Persona: its revise, its output and its private
+    // completions.
+    "bot.ability.persona.revise",
+    "bot.ability.persona.output",
+    "bot.ability.persona.recalled",
+    "bot.ability.persona.revised",
     "bot.behavior.create",
     "bot.behavior.change",
     "bot.behavior.break",
