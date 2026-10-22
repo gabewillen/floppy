@@ -334,6 +334,7 @@ version = "0.1.0"
 dependencies = [
  "scxml-types",
  "scxml-validator-core",
+ "serde",
  "serde_json",
  "wit-bindgen 0.51.0",
 ]

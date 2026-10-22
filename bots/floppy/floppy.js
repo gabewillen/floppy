@@ -12,6 +12,13 @@ function delay(ms) {
   return ms + 'ms';
 }
 
+// The identity's and the persona's bring-up budget: half the activation
+// timeout, so a memory that never answers leaves them awake on their
+// fallbacks before the activation gives up on them.
+function bringUpTimeout() {
+  return Math.floor(activation_timeout_ms / 2);
+}
+
 function abilityTarget(id) {
   return '#_' + id;
 }
@@ -44,6 +51,16 @@ function isWaiting(_event) {
 // waiting without the ability whose offers _event carries.
 function waitingWithout(_event) {
   return waiting.filter(function (ability) { return ability !== _event.data.ability; });
+}
+
+// The abilities' offers a turn may select from: every ability's but the
+// persona's, whose revision only reflection may select (the original's
+// Cognition, which shows the persona every turn and lets reflection alone
+// revise it).
+function turnOffers() {
+  var turn = Object.assign({}, offers);
+  delete turn.persona;
+  return turn;
 }
 
 // activating
@@ -118,6 +135,38 @@ function focusDeviceEnabled() {
 // Whether the routed bot.focus_device names a candidate device.
 function isFocusCandidate(_event) {
   return focus_candidates.indexOf(_event.data.device) >= 0 && devices.indexOf(_event.data.device) >= 0;
+}
+
+// The short-term register's reads: one more asked, one answered, and
+// whether the answer arriving is to the last read asked.
+function turnReadAsked() {
+  return turn_reads + 1;
+}
+
+function turnReadAnswered() {
+  return Math.max(0, turn_reads - 1);
+}
+
+function isLastTurnRead() {
+  return turn_reads === 1;
+}
+
+// The register's answer to a read it could not serve (stm.scx's failure
+// message for the request), which answers that read.
+function isTurnReadFailure(_event) {
+  return _event.data.message.indexOf('short-term memory bot.ability.memory.stm.recent_turns failed') === 0;
+}
+
+// The short-term register's record of an admitted stimulus (the original's
+// event_record): its name, its data's bounded projection (stm_payload), and
+// the source a sound names (floppy carries the original's envelope source
+// in the sound); floppy has no envelope id or target.
+function stmRecord(name, _event) {
+  const record = {stimulus_name: name, payload: stm_payload};
+  if (typeof _event.data.source === 'string' && _event.data.source !== '') {
+    record.source = _event.data.source;
+  }
+  return record;
 }
 
 // Percepts (the original's _hold_percept and _dispatch_bot_processing)

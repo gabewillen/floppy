@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- memory-5: an object keeps its bounded scalar fields and drops the rest (long strings, nested values, null, an empty key). --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="p" expr="null"/>
+  <data id="d" expr="({kind: 'knock', count: 3, ratio: 0.5, flag: true, edge: 'y'.repeat(40), long: 'x'.repeat(41), nested: {a: 1}, list: [1], none: null, '': 'empty'})"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <memory:stm_projection location="p" data="d"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="JSON.stringify(Object.keys(p).sort()) === '[&#34;count&#34;,&#34;edge&#34;,&#34;flag&#34;,&#34;kind&#34;,&#34;ratio&#34;]' &amp;&amp; p.kind === 'knock' &amp;&amp; p.ratio === 0.5" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

@@ -23,7 +23,7 @@ other, and [docs/decisions.md](docs/decisions.md) records the decisions that sha
 | `namespaces/cognition/` | the original's cognition module (a Wasm component; synchronous executable content: `cognition:attention_bias_for_turn`, `cognition:model_facing_content`; [cognition](namespaces/cognition/README.md)) |
 | `namespaces/conversation/` | the original's conversation module and its turn detector (a Wasm component; synchronous executable content: `conversation:message_for_turn`, `conversation:relationship_for_input`, `conversation:complete_turn`, `conversation:on_end`, ...; [conversation](namespaces/conversation/README.md)) |
 | `namespaces/identity/` | the original's identity module (a Wasm component; synchronous executable content: `identity:hears_name`, `identity:sorted_identities`; [identity](namespaces/identity/README.md)) |
-| `namespaces/memory/` | the original's memory module (a Wasm component; synchronous executable content: `memory:to_json`, `memory:contents`; [memory](namespaces/memory/README.md)) |
+| `namespaces/memory/` | the original's memory module (a Wasm component; synchronous executable content: `memory:to_json`, `memory:contents`, `memory:cut_at_word`, `memory:stm_projection`; [memory](namespaces/memory/README.md)) |
 | `namespaces/behavior/` | the original's behavior package (a Wasm component; synchronous executable content: `behavior:instances_from_behavior_results`, `behavior:replace_behavior_clauses`, `behavior:lifetime_errors`, `behavior:verify_tick`; [behavior](namespaces/behavior/README.md)) |
 | `namespaces/autonomy/` | the original's autonomy module (a Wasm component; synchronous executable content: `autonomy:behavior_input_payload`; [autonomy](namespaces/autonomy/README.md)) |
 | `namespaces/migration/` | Alembic's revision walk as an extension namespace (a Wasm component; synchronous executable content: `migration:plan`) |
@@ -110,12 +110,14 @@ ability grants both, as the quick start does. Before its statements, the
 Memory ability brings the database to the head revision through the
 migration ability
 ([`abilities/migration/migration.scx`](abilities/migration/migration.scx),
-Alembic's `command.upgrade` with `<migration:plan>`), with the original's
-revisions `0001` and `0002` in the engine's dialect
+Alembic's `command.upgrade` with `<migration:plan>`), with floppy's
+revisions `0001`, `0002` and `0003` in the engine's dialect
 ([`abilities/memory/sqlite/`](abilities/memory/sqlite/),
 [`abilities/memory/postgresql/`](abilities/memory/postgresql/)), and records
-the version in Alembic's `alembic_version`, so the original database is used in
-place. The bot ships with SQLite (the body's `database` `<data>`); Postgres
+the version in Alembic's `alembic_version`, so every floppy database upgrades
+in place. `0003_stm_turns` is the original's `0002_stm_turns`; the original
+rewrote its `0001` in place, so a database the original's current Alembic
+wrote is refused (D165, proposed). The bot ships with SQLite (the body's `database` `<data>`); Postgres
 support is tested on Postgres 16.
 
 ## Defaults
@@ -189,6 +191,7 @@ them). Both directions therefore call the Gemini API, so
 | `bots/floppy/floppy.scx` | `activation_timeout_ms` | `30000` | activation until every ability offers (the original's 30 s attachment timeout) |
 | `bots/floppy/floppy.scx` | `firmware_timeout_ms` | `30000` | the firmware's start until its first offers, once every ability is ready (the original's attachment bound; decision D160) |
 | `bots/floppy/floppy.scx` | `processing_timeout_ms` | `300000` | one turn (the original's 5 min processing timeout) |
+| `bots/floppy/floppy.scx` | `reading_turns_timeout_ms` | `1000` | reading the short-term register's recent turns before each turn; the turn starts without them after it (floppy's) |
 | `abilities/cognition/cognition.scx` | `child_operation_timeout_ms` | `30000` | each cascade stage without progress (the original's 30 s): autonomy's and the intuition's from their start, reasoning's once its reply streams (the first progress arms it, each later one re-arms it); live streamed replies had at most 6.2 s between chunks (decision D101; the bot's `bounds` param's `child_operation_timeout_ms` overrides it) |
 | `abilities/cognition/cognition.scx` | `child_operation_ceiling_ms` | `240000` | each cascade stage in all, the backstop and the only bound of a reasoning reply that is not streamed, inside the body's `processing_timeout_ms` with the stages before reasoning (decision D101; the bot's `bounds` param's `child_operation_ceiling_ms` overrides it) |
 | `abilities/intuition/intuition.scx` | `decision_timeout_ms` | `20000` | the intuition's decision |
@@ -202,6 +205,12 @@ them). Both directions therefore call the Gemini API, so
 | `abilities/reflection/reflection.scx` | `select_ceiling_ms` | `600000` | reflection's select generation in all, the backstop (decision D101) |
 | `abilities/reflection/reflection.scx` | `revising_timeout_ms` | `30000` | reflection's revising through the builder without progress while a builder generation streams: its first progress arms it, each later one re-arms it, and the builder's next stage disarms it (decision D101; the bot's `bounds` param's `revising_timeout_ms` overrides it) |
 | `abilities/reflection/reflection.scx` | `revising_ceiling_ms` | `1800000` | reflection's revising in all, the backstop (live revisions on the maintainer's vLLM ran past 600 s while making progress; decision D101; the bot's `bounds` param's `revising_ceiling_ms` overrides it) |
+| `abilities/identity/identity.scx` | `recall_attempt_timeout_ms` | `1000` | one attempt to recall the adopted name from memory, asked again after `recall_retry_delay_ms` (the original's 1 s and 100 ms) |
+| `abilities/identity/identity.scx` | `bring_up_timeout_ms` | `30000` | recalling the name until memory answers, then the identity wakes with the session's name and says so (the original's 30 s attachment timeout; the body passes half its `activation_timeout_ms`) |
+| `abilities/persona/persona.scx` | `recall_attempt_timeout_ms` | `1000` | one attempt to recall the self-written description from memory, asked again after `recall_retry_delay_ms` (the original's 1 s and 100 ms) |
+| `abilities/persona/persona.scx` | `bring_up_timeout_ms` | `30000` | recalling the description until memory answers, then the persona wakes with none and says so (the original's 30 s attachment timeout; the body passes half its `activation_timeout_ms`) |
+| `abilities/memory/memory.scx` | `operation_timeout_ms` | `60000` | one memory operation, its migration and transaction together, which then fails with kind `timeout` (the original's 60 s operation timeout) |
+| `abilities/stm/stm.scx` | `open_timeout_ms` | `30000` | opening the short-term register (its database migrated), after which it is degraded (the original's 30 s attachment timeout) |
 | `abilities/reading/reading.scx` | `stage_timeout_ms` | `30000` | each reading stage (the original's 30 s) |
 | `abilities/conversation/conversation.scx` | `turn_timeout_ms` | `5000` | a turn detector's readiness, and then its turn, for each source of an input (the original's 5 s) |
 | `abilities/turn_detector/turn_detector.scx` | `end_of_turn_silence_seconds` | `0.5` | the silence that closes an open or paused turn (the original's 0.5 s; at least 0.01 s) |
@@ -215,6 +224,11 @@ The cognition always runs reflection and routines beside its turns, as
 The original's bots compose them. The floppy bot's `database` is
 `/memory/floppy.sqlite`, so its runs grant the `sql` service a memory
 directory; without a database reflection and routines log `absent`.
+Its `traits`, which give it its persona, are `['warm', 'patient',
+'curious', 'honest']`, the original's companion example's owner traits
+(the original composes a persona only from traits, and the floppy bot
+always has one); an environment's `<invoke>` may give others as a
+`<param>`, one to 24 traits of at most 200 characters each.
 
 Contributor rules are in [AGENTS.md](AGENTS.md).
 

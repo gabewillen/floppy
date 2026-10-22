@@ -1,0 +1,320 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's Persona ability (the reference abilities/persona): the traits the
+  bot's owner gave it and the description of itself it writes and keeps.
+  The body (bots/floppy/floppy.scx) invokes it as its child "persona".
+
+    recalling { asking <-> waiting } -bot.ability.persona.recalled-> knowing
+    knowing -bot.ability.persona.revise-> revising
+      -bot.ability.persona.revised-> knowing
+      -bot.ability.failed (from memory)-> knowing
+    knowing -error.execution-> failed (final)
+
+  Inputs: traits, the invoker's <param name="traits"> (the original's
+  Traits, persona/trait.py: one to 24 traits, each a word or short phrase
+  of at most 200 characters once the white space around it is stripped,
+  in the owner's order). Traits come from composition and nowhere else: the
+  bot never writes them, memory never stores them as their own row, and no
+  revision changes them. database, the <param> (the memory database file;
+  null: no memory). bring_up_timeout_ms, recall_attempt_timeout_ms and
+  recall_retry_delay_ms, <param>s with the original's defaults (below).
+  bot.ability.persona.revise {text, reason}, which the bot selects.
+
+  recalling (the original Persona._recall): with a database it invokes the
+  memory ability (abilities/memory/memory.scx) to select the descriptions
+  the bot wrote (query_tags self_persona, subject_ref self, the 50 most
+  recent, oldest first, the original description.py and memory/fact.py)
+  and sends bot.ability.persona.recalled {description} to #_internal with
+  the most recent one that decodes as the original's Description (a row
+  that does not is skipped, so one damaged row never costs the bot the
+  description written before it), else with none. A memory that does not
+  answer yet is not an empty one (the original's asking and waiting): an
+  attempt that fails (logged as persona.recall.failed, "Persona could not
+  recall a description from memory: ...") or does not answer within
+  recall_attempt_timeout_ms (1 s) is asked again after
+  recall_retry_delay_ms (100 ms). When the bring-up budget
+  (bring_up_timeout_ms, 30 s by default; the body passes half its
+  activation_timeout_ms) runs out
+  first, it sends bot.ability.failed {message: "Persona could not recall
+  a description: memory did not answer within the bring-up budget."} to
+  the parent and wakes with none, as the original's _give_up_recalling
+  does. Without a database it logs <log label="memory" expr="'absent'">
+  and wakes with none: a bot with no memory wakes with no description
+  every time.
+
+  Outputs: bot.ability.persona.output {traits, description} to the parent
+  (the original's OutputEvent, told to its owner): once on waking (on
+  entering knowing from recalling), with the description it remembered or
+  none (null), and once after every revision it wrote down. The send
+  carries the event's own event:schema, so traits that are not 1 to 24
+  traits of at most 200 characters are refused where the event is created
+  (error.execution in this session): the persona then ends in failed,
+  whose donedata is {message}, as the original refuses to compose a
+  persona from such traits, and its invoker gets done.invoke.persona.
+
+  Offers: bot.ability.persona.revise {text, reason} (the original's
+  ReviseEvent; text at most 2000 characters, reason at most 500, neither
+  blank) is offered on every entry into knowing, through
+  <decision:choice events="bot.ability.persona.revise">, made
+  model-facing by <processing:model_facing_schema> ($schema, title and
+  examples dropped), in bot.ability.offers {ability: "persona", choices},
+  from knowing's onentry, after the output; the first offers are the
+  ability's readiness. A bot that never revises is working correctly:
+  keeping the description it has is a decision this ability makes
+  available and never makes. In the original only reflection, composed
+  with the same persona, may select a revision.
+
+  revising (the original Persona._revise) writes the description down
+  before it becomes the bot's: the original's Description {text, reason,
+  traits, kind: "fact"}, the owner's traits it was written under
+  included. With a database it inserts it as a self-fact (scope long_term,
+  kind fact, sensitivity standard, retention retain, content_format
+  application/json, query_tags self_persona, subject_ref self; the recall
+  orders ties in created_at by memory_id, so two revisions in one second
+  keep their order) and sends bot.ability.persona.revised {description} to
+  #_internal; a write that fails answers the parent with
+  bot.ability.failed {message: "Persona could not remember its revision:
+  ..."} (the original's _fail_revision) and goes back to knowing, and the
+  bot keeps the description it had (fail-closed); the bot may select a
+  revision again. The original's private bot.ability.persona.revise.failed
+  and bot.ability.persona.recall.failed are not sent: the memory's own
+  bot.ability.failed is taken where it arrives (and a private event named
+  under bot.ability.persona.revise would be matched, and its data judged,
+  by the revise transitions' schema). Without a database
+  it logs <log label="memory" expr="'absent'"> and sends revised.
+  Revision is append-only: the current description is the most recent row.
+
+  Deferral (the original's defer): a revise that arrives while recalling or
+  revising is held by <event:defer/> (scxml.rs namespaces/event) and comes
+  back, in order, once the configuration changes, so knowing takes it by
+  the same transition as on arrival.
+
+  Logs: persona.description (the description woken with, "recalled" and
+  its text or null, and each revision, "revised" and its text),
+  persona.recall.failed (each recall attempt that failed),
+  persona.revise.failed, persona.offers, persona.offers.dropped (offers over
+  32768 bytes), memory (absent), and persona.failed.
+
+  Contracts: every event it takes names its abilities/schemas/ file by
+  event:schema, and the output names its own. A send or raise whose data
+  does not satisfy it is error.execution in its sender, and input from
+  outside the session that does not is refused, so no cond rechecks a
+  payload.
+
+  Bindings: the decision and processing namespace packages and the memory
+  ability's sql service package (a run grants it its directory: scx run's
+  dir option).
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
+       version="1.0" datamodel="ecmascript" name="persona" initial="recalling">
+  <datamodel>
+    <!-- The owner's traits, the invoker's <param> (null: none given, which
+         the output's schema refuses). -->
+    <data id="traits" expr="null"/>
+    <!-- The bot's most recent self-written description, or null. -->
+    <data id="description" expr="null"/>
+    <!-- The selected revision {text, reason}, while revising. -->
+    <data id="revision" expr="null"/>
+    <!-- Whether entering knowing tells the owner (on waking and after a
+         revision, never after a revision that failed). -->
+    <data id="telling" expr="false"/>
+    <!-- The offers. -->
+    <data id="offered" expr="[]"/>
+    <data id="offers_over" expr="false"/>
+    <!-- Memory: the database file (null: no memory) and the original's
+         statements (persona/description.py over memory/fact.py's self-fact
+         helpers). The SQL runs on both engines (SQLite and Postgres). A
+         memory id is the next row count as 32 zero-padded digits (neither
+         engine's randomness is unique across invocations in Wasm); JSON
+         rows are told by their content_format, the 50 most recent by
+         created_at, then memory_id (the insertion order), read oldest
+         first (the original's recent_select). -->
+    <data id="database" expr="null"/>
+    <data id="description_select" expr="'SELECT content FROM (SELECT content, created_at, memory_id FROM bot_memory WHERE query_tags = ?1 AND subject_ref = ?2 AND content_format = \'application/json\' ORDER BY created_at DESC, memory_id DESC LIMIT 50) AS recent ORDER BY created_at, memory_id'"/>
+    <data id="description_insert" expr="'INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT substr(\'00000000000000000000000000000000\', 1, 32 - length(n)) || n FROM (SELECT CAST(COUNT(*) + 1 AS TEXT) AS n FROM bot_memory) AS c), ?1, NULL, ?2, ?3, ?4, ?5, ?6, ?7, ?8)'"/>
+    <data id="description_parameters" expr="[]"/>
+    <!-- Recall's time bounds (the original persona.py): one attempt, the
+         pause before the next, and the bring-up budget (the original's
+         attachment timeout, 30 s; the body passes half its
+         activation_timeout_ms, so the budget runs out first),
+         which an invoker may set as <param>s. -->
+    <data id="recall_attempt_timeout_ms" expr="1000"/>
+    <data id="recall_retry_delay_ms" expr="100"/>
+    <data id="bring_up_timeout_ms" expr="30000"/>
+  </datamodel>
+  <script src="persona.js"/>
+
+  <!-- Wake up remembering the description, when there is a memory to have
+       kept it in; else with none. -->
+  <state id="recalling" initial="recalling_from">
+    <onentry>
+      <assign location="traits" expr="ownerTraits()"/>
+    </onentry>
+    <state id="recalling_from">
+      <transition cond="hasNoDatabase()" target="recalling_nothing"/>
+      <transition target="recalling_memory"/>
+    </state>
+    <state id="recalling_nothing">
+      <onentry>
+        <log label="memory" expr="'absent'"/>
+        <send event="bot.ability.persona.recalled" target="#_internal">
+          <param name="description" expr="null"/>
+        </send>
+      </onentry>
+    </state>
+    <!-- A memory that does not answer yet is not an empty one (the
+         original's asking and waiting): an attempt that fails or takes
+         longer than recall_attempt_timeout_ms is asked again after
+         recall_retry_delay_ms, until the bring-up budget runs out. -->
+    <state id="recalling_memory" initial="asking">
+      <onentry>
+        <send id="recalling-memory-after" event="recalling_memory.after" delayexpr="delay(bring_up_timeout_ms)"/>
+      </onentry>
+      <onexit>
+        <cancel sendid="recalling-memory-after"/>
+      </onexit>
+      <state id="asking">
+        <onentry>
+          <send id="asking-after" event="asking.after" delayexpr="delay(recall_attempt_timeout_ms)"/>
+        </onentry>
+        <onexit>
+          <cancel sendid="asking-after"/>
+        </onexit>
+        <invoke id="recall" type="scxml" src="../memory/memory.scx">
+          <param name="database" expr="database"/>
+          <param name="statements" expr="descriptionSelectStatements()"/>
+        </invoke>
+        <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json">
+          <send event="bot.ability.persona.recalled" target="#_internal">
+            <param name="description" expr="latestDescription(_event)"/>
+          </send>
+        </transition>
+        <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="waiting">
+          <log label="persona.recall.failed" expr="recallFailedMessage(_event)"/>
+        </transition>
+        <transition event="asking.after" target="waiting">
+          <log label="persona.recall.failed" expr="'Persona could not recall a description from memory: memory did not answer in time.'"/>
+        </transition>
+      </state>
+      <state id="waiting">
+        <onentry>
+          <send id="waiting-after" event="waiting.after" delayexpr="delay(recall_retry_delay_ms)"/>
+        </onentry>
+        <onexit>
+          <cancel sendid="waiting-after"/>
+        </onexit>
+        <transition event="waiting.after" target="asking"/>
+      </state>
+      <!-- The bring-up budget ran out with memory still not answering:
+           say so, and know the traits. -->
+      <transition event="recalling_memory.after">
+        <send event="bot.ability.failed" target="#_parent">
+          <param name="message" expr="'Persona could not recall a description: memory did not answer within the bring-up budget.'"/>
+        </send>
+        <send event="bot.ability.persona.recalled" target="#_internal">
+          <param name="description" expr="null"/>
+        </send>
+      </transition>
+    </state>
+    <transition event="bot.ability.persona.recalled" event:schema="../schemas/bot.ability.persona.recalled.json" target="knowing">
+      <assign location="description" expr="_event.data.description"/>
+      <assign location="telling" expr="true"/>
+      <log label="persona.description" expr="recalledLog()"/>
+    </transition>
+    <!-- A revise waits for the description the bot woke up with. -->
+    <transition event="bot.ability.persona.revise" event:schema="../schemas/bot.ability.persona.revise.json">
+      <event:defer/>
+    </transition>
+  </state>
+
+  <state id="knowing">
+    <!-- Tell the owner (on waking and after a revision), then the offers,
+         read on entry: the choices are knowing's own transitions. One
+         block: an output refused (traits out of bounds) offers nothing. -->
+    <onentry>
+      <if cond="telling">
+        <send event="bot.ability.persona.output" target="#_parent" event:schema="../schemas/bot.ability.persona.output.json">
+          <param name="traits" expr="traits"/>
+          <param name="description" expr="description"/>
+        </send>
+        <assign location="telling" expr="false"/>
+      </if>
+      <decision:choice location="offered" events="bot.ability.persona.revise"/>
+      <processing:model_facing_schema location="offered" bound="32768" overlocation="offers_over"/>
+      <if cond="offers_over">
+        <log label="persona.offers.dropped" expr="'the offers are over 32768 bytes'"/>
+      </if>
+      <log label="persona.offers" expr="offered"/>
+      <send event="bot.ability.offers" target="#_parent">
+        <param name="ability" expr="'persona'"/>
+        <param name="choices" expr="offered"/>
+      </send>
+    </onentry>
+    <transition event="bot.ability.persona.revise" event:schema="../schemas/bot.ability.persona.revise.json" target="revising">
+      <assign location="revision" expr="_event.data"/>
+    </transition>
+    <!-- What it knows could not be told: end, as the original refuses to
+         compose a persona from traits out of bounds. -->
+    <transition event="error.execution" target="failed">
+      <log label="persona.failed" expr="failedMessage(_event)"/>
+    </transition>
+  </state>
+
+  <!-- Write the selected description down before it becomes the bot's
+       (fail-closed: a description that could not be written down is one
+       the bot did not take). -->
+  <state id="revising" initial="revising_from">
+    <state id="revising_from">
+      <transition cond="hasNoDatabase()" target="revising_nothing"/>
+      <transition target="revising_memory"/>
+    </state>
+    <state id="revising_nothing">
+      <onentry>
+        <log label="memory" expr="'absent'"/>
+        <send event="bot.ability.persona.revised" target="#_internal">
+          <param name="description" expr="revisedDescription()"/>
+        </send>
+      </onentry>
+    </state>
+    <state id="revising_memory">
+      <onentry>
+        <assign location="description_parameters" expr="descriptionInsertParameters()"/>
+        <assign location="description_parameters" expr="descriptionInsertParametersCompleted()"/>
+      </onentry>
+      <invoke id="remember" type="scxml" src="../memory/memory.scx">
+        <param name="database" expr="database"/>
+        <param name="statements" expr="descriptionInsertStatements()"/>
+      </invoke>
+      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json">
+        <send event="bot.ability.persona.revised" target="#_internal">
+          <param name="description" expr="revisedDescription()"/>
+        </send>
+      </transition>
+      <!-- Not taken (the original's _fail_revision): the bot keeps the
+           description it had and may select a revision again. -->
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="knowing">
+        <log label="persona.revise.failed" expr="reviseFailedMessage(_event)"/>
+        <send event="bot.ability.failed" target="#_parent">
+          <param name="message" expr="reviseFailedMessage(_event)"/>
+        </send>
+      </transition>
+    </state>
+    <transition event="bot.ability.persona.revised" event:schema="../schemas/bot.ability.persona.revised.json" target="knowing">
+      <assign location="description" expr="_event.data.description"/>
+      <assign location="telling" expr="true"/>
+      <log label="persona.description" expr="revisedLog()"/>
+    </transition>
+    <transition event="bot.ability.persona.revise" event:schema="../schemas/bot.ability.persona.revise.json">
+      <event:defer/>
+    </transition>
+  </state>
+
+  <final id="failed">
+    <donedata>
+      <param name="message" expr="failedMessage(_event)"/>
+    </donedata>
+  </final>
+</scxml>

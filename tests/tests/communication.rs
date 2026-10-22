@@ -4,7 +4,8 @@
 //!
 //! Each test lays out a scratch copy of the repository's shape (the body
 //! under `bots/floppy/`, the communication, conversation, speaking,
-//! identity, memory and every schema under `abilities/`) with
+//! identity, memory, the short-term register and every schema under
+//! `abilities/`) with
 //! `tests/fixtures/phase4/cognition_double.scx` as `abilities/cognition/cognition.scx`
 //! (no model; its behavior per turn is the `bot.input` observation's name,
 //! or a conversation product's last text). No backend is involved: the
@@ -112,6 +113,8 @@ fn layout(speaking: &Speaking, edits: &[(&str, &[(&str, &str)])]) -> PathBuf {
         "speaking",
         "identity",
         "memory",
+        "stm",
+        "persona",
     ] {
         support::copy_ability(name, &abilities);
     }

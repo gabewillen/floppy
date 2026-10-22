@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.identity.named",
+  "additionalProperties": false,
+  "description": "The name this bot answers to: the name it took as its own, exactly as it was given, or none when it has not taken one yet. Told by the bot's Identity to whoever asks it (AskEvent) and to whoever selected an adoption once the name is taken. A name a visitor gives for themselves is theirs and never appears here.",
+  "properties": {
+    "name": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The name the bot took and answers to; None while it has not taken one.",
+      "title": "Name"
+    }
+  },
+  "type": "object"
+}

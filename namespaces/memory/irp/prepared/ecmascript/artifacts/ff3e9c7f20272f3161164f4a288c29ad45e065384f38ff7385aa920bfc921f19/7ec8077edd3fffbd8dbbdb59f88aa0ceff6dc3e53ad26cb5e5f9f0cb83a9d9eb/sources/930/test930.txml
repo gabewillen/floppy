@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- memory-4: words within 2048 UTF-8 bytes are kept as they are, not cut. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory">
+<datamodel>
+  <data id="t" expr="null"/>
+  <data id="w" expr="'Hi there, I\'m Maya.  '"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <memory:cut_at_word location="t" words="w"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="t.text === w &amp;&amp; t.cut === false" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

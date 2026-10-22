@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.memory.stm.recent_turns",
+  "additionalProperties": false,
+  "description": "Short-term memory read of turns: the newest turns inside the recency window, returned oldest first. within may narrow the register's window, never widen it.",
+  "examples": [
+    {
+      "limit": 32
+    },
+    {
+      "limit": 8,
+      "within": 300000
+    }
+  ],
+  "properties": {
+    "limit": {
+      "default": 32,
+      "description": "Most turns to return; the newest are kept.",
+      "examples": [
+        32
+      ],
+      "maximum": 256,
+      "minimum": 1,
+      "title": "Limit",
+      "type": "integer"
+    },
+    "within": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Only turns written this recently, in milliseconds; the register's own recency window when omitted or longer.",
+      "examples": [
+        300000
+      ],
+      "title": "Within"
+    }
+  },
+  "type": "object"
+}
