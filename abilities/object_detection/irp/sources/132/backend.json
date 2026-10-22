@@ -1,0 +1,22 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "[{\"label\": \"a\", \"confidence\": true, \"box\": {\"x\": false, \"y\": 0, \"width\": true, \"height\": 1}}, {\"label\": \"b\", \"confidence\": \" 0.5\\n\", \"box\": {\"x\": \"0.25\", \"y\": \"0\", \"width\": \".5\", \"height\": \"5e-1\"}}, {\"label\": \"c\", \"confidence\": false, \"box\": {\"x\": 0, \"y\": \"0.5\", \"width\": \"1\", \"height\": \"_0.5\"}}, {\"label\": \"c\", \"confidence\": false, \"box\": {\"x\": 0, \"y\": \"0.5\", \"width\": \"1\", \"height\": \"0.5\"}}, {\"label\": \"d\", \"confidence\": \"1e-1\", \"box\": {\"x\": 0, \"y\": 0, \"width\": \"0.5_0\", \"height\": \"+0.5\"}}, {\"label\": \"e\", \"confidence\": \"0x1\", \"box\": {\"x\": 0, \"y\": 0, \"width\": 0.5, \"height\": 0.5}}, {\"label\": \"f\", \"confidence\": \"\", \"box\": {\"x\": 0, \"y\": 0, \"width\": 0.5, \"height\": 0.5}}, {\"label\": \"g\", \"confidence\": \"nan\", \"box\": {\"x\": 0, \"y\": 0, \"width\": 0.5, \"height\": 0.5}}, {\"label\": \"h\", \"confidence\": 0.5, \"box\": {\"x\": null, \"y\": 0, \"width\": 0.5, \"height\": 0.5}}, {\"label\": \"i\", \"confidence\": \"+_1\", \"box\": {\"x\": \"0\", \"y\": \"0\", \"width\": \"0_.5\", \"height\": \"1e_0\"}}, {\"label\": \"j\", \"confidence\": \"1__0\", \"box\": {\"x\": 0, \"y\": 0, \"width\": 0.5, \"height\": 0.5}}, {\"label\": \"k\", \"confidence\": \"0.5_\", \"box\": {\"x\": 0, \"y\": 0, \"width\": 0.5, \"height\": 0.5}}]"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
