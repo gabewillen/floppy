@@ -48,6 +48,10 @@ const SETTLE: Duration = Duration::from_secs(1);
 const FAKE_KEYS: &str = "FLOPPY_API_KEY=floppy-fake\nTYPESAFE_API_KEY=ts-floppy-fake\n";
 const IGNORE: &str = "bot.ability.cognition.ignore";
 const RESPOND: &str = "bot.ability.communication.respond";
+/// The deliberative handoff the intuition tier is offered (decision D144).
+const HANDOFF: &str = "bot.ability.reasoning.input";
+/// The model a bot composing the intuition tier gives it.
+const INTUITION_MODEL: &str = "chat-model";
 const ADOPT: &str = "bot.ability.identity.adopt";
 /// The turn's choices as the body collects them, each `event@target`: the
 /// cognition's offer, the communication's and the identity's, each tagged
@@ -108,6 +112,11 @@ enum Generation {
     /// A stream of keep-alive comments only, as a gateway sends while its
     /// model says nothing ([`support::answer_with_pings`]).
     Pings,
+    /// The intuition tier's model ([`INTUITION_MODEL`]) says it is
+    /// thinking and hands the turn on; any other answers as [`Self::Respond`].
+    HandOff,
+    /// The intuition tier's model answers 500; any other as [`Self::Respond`].
+    IntuitionFails,
 }
 
 impl Generation {
@@ -122,6 +131,8 @@ impl Generation {
             Self::Repeat => "grepeat",
             Self::Fail => "gfail",
             Self::Hang => "ghang",
+            Self::HandOff => "ghandoff",
+            Self::IntuitionFails => "gintuitionfails",
         }
     }
 }
@@ -236,6 +247,16 @@ fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
         "/grespond/v1/chat/completions" => selection(json!([
             {"event": RESPOND, "data": {"text": "Hi! I am floppy."}, "reason": "greet"}
         ])),
+        "/ghandoff/v1/chat/completions" if body["model"] == INTUITION_MODEL => selection(json!([
+            {"event": RESPOND, "data": {"text": "Let me think."}, "reason": "hold on"},
+            {"event": HANDOFF, "data": {}, "reason": "this needs thought"}
+        ])),
+        "/gintuitionfails/v1/chat/completions" if body["model"] == INTUITION_MODEL => fail(),
+        "/ghandoff/v1/chat/completions" | "/gintuitionfails/v1/chat/completions" => {
+            selection(json!([
+                {"event": RESPOND, "data": {"text": "Hi! I am floppy."}, "reason": "greet"}
+            ]))
+        }
         "/grepeat/v1/chat/completions" => selection(json!([
             {"event": RESPOND, "data": {"text": "hi"}, "reason": "answer"}
         ])),
@@ -1379,6 +1400,125 @@ fn an_abstention_escalates_to_reasoning() {
     );
     assert_eq!(texts(&records, "floppy.output").len(), 1);
     close(run, &mock, "an_abstention_escalates_to_reasoning");
+}
+
+/// The activation settings of a bot that composes the intuition tier.
+fn with_intuition() -> [(&'static str, &'static str); 1] {
+    [("intuition_model", "'chat-model'")]
+}
+
+/// The chat requests the intuition tier sent (its model's).
+fn intuition_requests(mock: &Mock) -> Vec<Received> {
+    reasoning_requests(mock)
+        .into_iter()
+        .filter(|request| request.body["model"] == INTUITION_MODEL)
+        .collect()
+}
+
+/// Whether a chat request's dispatch tool offers the handoff.
+fn offers_handoff(request: &Received) -> bool {
+    request.body["tools"].to_string().contains(HANDOFF)
+}
+
+/// The intuition tier (decision D144): a bot that composes one answers in
+/// words on its chat model, without thinking first, before reasoning is
+/// ever asked; it is offered the deliberative handoff, the body never is.
+#[test]
+fn intuition_answers_in_words_without_reasoning() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Respond, &[]);
+    let mut run = start_activated(&bot, &with_intuition());
+    say(&mut run, "hello");
+    let records = run.until(WAIT, turn_ended);
+    assert_eq!(
+        texts(&records, "cognition.stage"),
+        strings(&[
+            "autonomy unhandled (no-behaviors)",
+            "decision unhandled (empty_product)",
+            "intuition handled"
+        ]),
+        "{records:?}"
+    );
+    let requests = reasoning_requests(&mock);
+    assert_eq!(requests.len(), 1, "only intuition is asked");
+    assert_eq!(requests[0].body["model"], INTUITION_MODEL);
+    assert_eq!(requests[0].body["reasoning_effort"], "none");
+    assert!(offers_handoff(&requests[0]));
+    assert!(
+        !texts(&records, "cognition.offers")
+            .concat()
+            .contains(HANDOFF)
+    );
+    assert_eq!(texts(&records, "floppy.output").len(), 1);
+    close(run, &mock, "intuition_answers_in_words_without_reasoning");
+}
+
+/// Intuition selecting the handoff hands the turn on to reasoning: what it
+/// said first is sent, rides the turn's acted into reasoning's prompt, and
+/// leads the turn's output (the reference's deliberation, D-R-52).
+#[test]
+fn intuition_hands_the_turn_to_reasoning_after_what_it_said() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::HandOff, &[]);
+    let mut run = start_activated(&bot, &with_intuition());
+    say(&mut run, "hello");
+    let records = run.until(WAIT, turn_ended);
+    assert_eq!(
+        texts(&records, "cognition.stage"),
+        strings(&[
+            "autonomy unhandled (no-behaviors)",
+            "decision unhandled (empty_product)",
+            "intuition unhandled (handoff)",
+            "reasoning handled"
+        ]),
+        "{records:?}"
+    );
+    assert_eq!(intuition_requests(&mock).len(), 1);
+    let reasoning: Vec<Received> = reasoning_requests(&mock)
+        .into_iter()
+        .filter(|request| request.body["model"] != INTUITION_MODEL)
+        .collect();
+    assert_eq!(reasoning.len(), 1);
+    assert!(
+        !offers_handoff(&reasoning[0]),
+        "reasoning is never offered the handoff"
+    );
+    let prompt = reasoning[0].body["messages"].to_string();
+    assert!(
+        prompt.contains("cognition:acted") && prompt.contains("Let me think."),
+        "{prompt}"
+    );
+    let output = &json_text(&records, "floppy.output")["output"];
+    assert_eq!(output.as_array().map(Vec::len), Some(2), "{output}");
+    assert_eq!(output[0]["data"]["text"], "Let me think.");
+    close(
+        run,
+        &mock,
+        "intuition_hands_the_turn_to_reasoning_after_what_it_said",
+    );
+}
+
+/// A failing intuition hands the same turn on to reasoning, as a failing
+/// decision layer does (the reference `_cascade_intuition_failure`, D-R-36).
+#[test]
+fn a_failing_intuition_cascades_to_reasoning() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::IntuitionFails, &[]);
+    let mut run = start_activated(&bot, &with_intuition());
+    say(&mut run, "hello");
+    let records = run.until(WAIT, turn_ended);
+    assert_eq!(
+        texts(&records, "cognition.cascaded"),
+        strings(&[r#"{"stage":"intuition","reason":"the intuition failed (status)"}"#])
+    );
+    assert_eq!(
+        texts(&records, "cognition.stage")
+            .last()
+            .map(String::as_str),
+        Some("reasoning handled")
+    );
+    assert!(texts(&records, "cognition.handed_back").is_empty());
+    close(run, &mock, "a_failing_intuition_cascades_to_reasoning");
 }
 
 #[test]

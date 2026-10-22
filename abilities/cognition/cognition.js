@@ -46,12 +46,12 @@ function hopTimeoutLog(_event) {
     : 'turn ' + turn + ': ' + stage + ' after ' + inactivityMs() + ' ms without progress';
 }
 
-// running_autonomy, running_decision, running_reasoning
+// running_autonomy, running_decision, running_intuition, running_reasoning
 
 // The reference's tier of the stage in hand: reflex (autonomy and the
-// decision layer) or reasoning.
+// decision layer), intuition or reasoning.
 function tier() {
-  return stage === 'reasoning' ? 'reasoning' : 'reflex';
+  return stage === 'reasoning' || stage === 'intuition' ? stage : 'reflex';
 }
 
 // The tier's own step bound (bounds.<tier>_timeout_ms, the reference
@@ -208,10 +208,41 @@ function tunerLog() {
   return JSON.stringify(confidence_tuner);
 }
 
-// The cognition.cascaded log of a decision layer that failed (the reference
-// _cascade_decision_failure).
+// The cognition.cascaded log of a decision layer or an intuition that
+// failed (the reference _cascade_decision_failure and
+// _cascade_intuition_failure).
 function cascadedLog(reason) {
-  return ({stage: 'reflex', reason: reason});
+  return ({stage: tier(), reason: reason});
+}
+
+// The tier the decision layer's pass chose (its donedata's hand_to), else null.
+function handTo(_event) {
+  return typeof _event.data.hand_to === 'string' ? _event.data.hand_to : null;
+}
+
+// after_decision
+
+// The intuition tier takes the turn: it is composed, the decision layer's
+// pass did not choose reasoning, and the turn perceives no handed-back
+// failure of intuition (the reference _takes_intuition).
+function takesIntuition() {
+  return intuition_model !== null && hand_to !== 'reasoning' && !perceivesFailureOf(['intuition']);
+}
+
+// running_intuition
+
+// The turn's choices and the deliberative handoff, offered by this ability
+// (the reference's call surface, offered to intuition only).
+function intuitionChoices() {
+  return choices.concat(handoff.map(function (choice) {
+    return Object.assign({}, choice, {target: _sessionid});
+  }));
+}
+
+// What the intuition tier learned of its model's request bytes a token.
+function intuitionBytesPerTokenAfter(_event) {
+  var learned = _event.data.bytes_per_token;
+  return typeof learned === 'number' && learned > 0 ? learned : intuition_bytes_per_token;
 }
 
 // completing

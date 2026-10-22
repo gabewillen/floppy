@@ -48,7 +48,7 @@ function hasRecalledWithoutChoices(_event) {
 }
 
 function noChoicesResult() {
-  return ({turn: turn, handled: false, failed: true, reason: 'the reasoning has no choices to select from'});
+  return ({turn: turn, handled: false, failed: true, reason: 'the ' + tier + ' has no choices to select from'});
 }
 
 // applying
@@ -121,17 +121,25 @@ function hasSelection() {
 }
 
 function failedResult() {
-  return ({turn: turn, handled: false, failed: true, reason: 'the reasoning failed (' + (gen_failure === null ? 'no selection' : gen_failure) + ')'});
+  return ({turn: turn, handled: false, failed: true, reason: 'the ' + tier + ' failed (' + (gen_failure === null ? 'no selection' : gen_failure) + ')'});
 }
 
 function couldNotRunResult(_event) {
-  return ({turn: turn, handled: false, failed: true, reason: 'the reasoning could not run (' + _event.name + ')'});
+  return ({turn: turn, handled: false, failed: true, reason: 'the ' + tier + ' could not run (' + _event.name + ')'});
+}
+
+// The deliberative handoff (the reference's DELIBERATIVE_HANDOFF_EVENT_NAME),
+// selected by a tier offered it: it is never sent, it hands the turn on.
+function isHandoff(s) {
+  return tier === 'intuition' && s.event === 'bot.ability.reasoning.input';
 }
 
 // done
 
+// Handled, or handed on to reasoning with what was dispatched first as the
+// turn's acted (the reference's with_acts).
 function selectedResult() {
-  return ({turn: turn, handled: true, selected: selected});
+  return handed_on ? ({turn: turn, handled: false, reason: 'handoff', acted: selected}) : ({turn: turn, handled: true, selected: selected});
 }
 
 // The data a selection is sent with, as the original's dispatch_selected_events

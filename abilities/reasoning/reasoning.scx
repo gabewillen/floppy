@@ -2,7 +2,20 @@
 <!--
   floppy's Reasoning stage (the reference abilities/cognition/reasoning): the slow
   System 2 pass. The cognition (abilities/cognition/cognition.scx) invokes it once
-  per turn that intuition left unhandled.
+  per turn that its earlier stages left unhandled.
+
+  Tiers (the reference's deliberation.Deliberation, which reasoning and
+  intuition share; decision D144): the <param> tier is reasoning, or
+  intuition, the chat tier the cognition invokes this chart as when the bot
+  composes one. Intuition asks its own model (both tiers ask with
+  reasoning_effort none, the generate service's only one with a schema, as
+  the reference's Chat Completions provider asks) and is offered the
+  deliberative handoff,
+  bot.ability.reasoning.input, among its choices: selecting it sends the
+  stage's other selections, in order, and hands the turn on, its donedata
+  unhandled with what was sent as its acted. The handoff is never sent, and
+  a tier not offered it cannot select it (the dispatch tool's schema
+  refuses it). Its failures name the tier ("the intuition failed (...)").
 
     recalling -> applying (an invoked generate service) -> done
 
@@ -107,11 +120,12 @@
   cognition, which passes it to the next turn's reasoning.
 
   Input: the <param>s turn, stimulus, focus, focus_candidates, choices,
-  model, database, environment, self, acted, max_context_tokens,
+  tier, model, database, environment, self, acted, max_context_tokens,
   completion_reserve_tokens and bytes_per_token. Output: <donedata>, received by the cognition as
   done.invoke.reasoning:
 
     {turn, handled: true, selected: [{event, data, reason, target}], bytes_per_token}
+    {turn, handled: false, reason: "handoff", acted: [{event, data, reason, target}], bytes_per_token}
     {turn, handled: false, failed: true, reason, bytes_per_token}
 
   The cognition's hop timeout bounds the stage (leaving it cancels the model
@@ -142,6 +156,9 @@
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <!-- The tier this chart thinks as (decision D144): reasoning, or
+         intuition, the chat tier the cognition invokes it as. -->
+    <data id="tier" expr="'reasoning'"/>
     <data id="choices" expr="[]"/>
     <!-- The bot's environment (decision D106): its prompt renders it as
          the environment block. -->
@@ -162,6 +179,8 @@
     <data id="prompt" expr="null"/>
     <data id="prompt_failure" expr="null"/>
     <data id="selected" expr="null"/>
+    <!-- Whether the selections held the deliberative handoff. -->
+    <data id="handed_on" expr="false"/>
     <data id="gen_failure" expr="null"/>
     <!-- Selection repair (the reference's deliberation, decision D142): the
          rejection of this attempt ({key, message}), the attempts repaired
@@ -268,6 +287,7 @@
     <onentry>
       <processing:send location="schema" choices="choices"/>
       <assign location="selected" expr="null"/>
+      <assign location="handed_on" expr="false"/>
       <assign location="gen_failure" expr="null"/>
       <assign location="rejection" expr="null"/>
       <assign location="budget" expr="fitBudget()"/>
@@ -302,16 +322,20 @@
       </send>
     </transition>
     <!-- Every dispatch call's events, in order: each sent to its target
-         and kept. -->
+         and kept, but the deliberative handoff, which hands the turn on. -->
     <transition event="generate.result">
       <assign location="bytes_per_token" expr="observedBytesPerToken(_event)"/>
       <assign location="selected" expr="[]"/>
       <foreach array="_event.data.tool_calls" item="call">
         <foreach array="call.args.events" item="s">
-          <send eventexpr="s.event" targetexpr="'#_scxml_' + s.target">
-            <content expr="selectionData(s)"/>
-          </send>
-          <assign location="selected[selected.length]" expr="s"/>
+          <if cond="isHandoff(s)">
+            <assign location="handed_on" expr="true"/>
+          <else/>
+            <send eventexpr="s.event" targetexpr="'#_scxml_' + s.target">
+              <content expr="selectionData(s)"/>
+            </send>
+            <assign location="selected[selected.length]" expr="s"/>
+          </if>
         </foreach>
       </foreach>
     </transition>

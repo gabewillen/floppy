@@ -86,4 +86,16 @@
       <start uri="170/test170.scxml"/>
     </test>
   </assert>
+  <assert id="reasoning-9" specnum="9" specid="#reasoning-9">
+    <![CDATA[As the intuition tier (the `<param>` tier `intuition`, decision D144) it may select the deliberative handoff, `bot.ability.reasoning.input`, among its choices: the handoff is never sent, the other selections are sent in order, and it ends `{turn, handled: false, reason: "handoff", acted}`, acted what was sent; a selection without the handoff is handled as reasoning's is, and its failures name the tier (`the intuition failed (<code>)`).]]>
+    <test id="180" conformance="mandatory" manual="false">
+      <start uri="180/test180.scxml"/>
+    </test>
+    <test id="181" conformance="mandatory" manual="false">
+      <start uri="181/test181.scxml"/>
+    </test>
+    <test id="182" conformance="mandatory" manual="false">
+      <start uri="182/test182.scxml"/>
+    </test>
+  </assert>
 </assertions>

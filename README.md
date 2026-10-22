@@ -157,6 +157,11 @@ the `model` `<data>` of `bots/builder/builder.scx` (a `builder.request`'s
 `abilities/reflection/reflection.scx` (each takes its invoker's by `<param>`), and
 `abilities/reading/reading.scx` (the original's image decoder).
 
+A bot composes the chat intuition tier only when its environment gives an
+`intuition_model` `<param>` (none by default, as the reference's bot
+composes intuition only when given a model; decision D144): the cognition
+then asks that chat model for the turn before reasoning.
+
 ### Speech and voice models
 
 The listening's hearing leaves name the speech service's models:

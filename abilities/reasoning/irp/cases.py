@@ -70,6 +70,8 @@ S.statement(7, "With a database it recalls prior episodes and standing directive
 
 S.statement(8, "Its model call streams its reply when the run's `FLOPPY_STREAM` is `true`, and each `generate.progress` the generate service returns while the reply arrives is sent on to the parent unchanged, so the cognition can bound the stage by inactivity (decision D101).")
 
+S.statement(9, "As the intuition tier (the `<param>` tier `intuition`, decision D144) it may select the deliberative handoff, `bot.ability.reasoning.input`, among its choices: the handoff is never sent, the other selections are sent in order, and it ends `{turn, handled: false, reason: \"handoff\", acted}`, acted what was sent; a selection without the handoff is handled as reasoning's is, and its failures name the tier (`the intuition failed (<code>)`).")
+
 # Every other case drops the streamed reply's progress (statement 8).
 _case = S.case
 
@@ -165,3 +167,23 @@ _case(170, 8, "a streamed reply's progress reaches the parent before the turn en
       [expect("generate.progress", "_event.data.received > 0"), SAID,
        expect(DONE, "_event.data.turn === 1 && _event.data.handled === true && _event.data.selected.length === 1")],
       params=turn(), backend=selection(SAY), stream=True, ignore=("generate.progress",))
+
+HANDOFF = "bot.ability.reasoning.input"
+# The cognition offers the handoff to intuition as its own (here, the
+# stage's own session stands in for it, as for the ignore).
+HAND_ON = {"event": HANDOFF, "data": {}, "reason": "this needs thought", "target": OWN}
+INTUITION_CHOICES = CHOICES + [{"event": HANDOFF, "schema": OBJECT, "description": "Hand this turn to reasoning.",
+                                "target": OWN}]
+INTUITION = ("tier", "'intuition'")
+S.case(180, 9, "intuition selecting the handoff sends its other selections and hands the turn on with them as acted.",
+       [SAID, expect(DONE, "_event.data.turn === 1 && _event.data.handled === false && _event.data.reason === 'handoff'"
+                     " && _event.data.failed === undefined && _event.data.acted.length === 1"
+                     " && _event.data.acted[0].event === 'bot.ability.communication.respond'")],
+       params=turn(choices=INTUITION_CHOICES, extra=[INTUITION]), backend=selection(SAY, HAND_ON))
+S.case(181, 9, "intuition selecting no handoff handles the turn with its selections.",
+       [SAID, expect(DONE, "_event.data.handled === true && _event.data.selected.length === 1")],
+       params=turn(choices=INTUITION_CHOICES, extra=[INTUITION]), backend=selection(SAY))
+S.case(182, 9, "an intuition whose model answers 500 fails as the intuition.",
+       [failed("the intuition failed (status)")],
+       params=turn(choices=INTUITION_CHOICES, extra=[INTUITION]),
+       backend=[{"path": CHAT, "status": 500, "body": {"error": {"message": "boom"}}}])

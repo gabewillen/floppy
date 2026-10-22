@@ -101,6 +101,7 @@ S.statement(5, "A decision layer that fails (`the decision failed (status)`, or 
 S.statement(6, "A step that makes no progress for `child_operation_timeout_ms` (from its start for autonomy and the decision layer; for reasoning from its streamed reply's first `generate.progress`, each later one starting it over), or runs `child_operation_ceiling_ms` in all (the `<param>` `bounds` overriding either, decision D101, and its `reflex_timeout_ms`, `intuition_timeout_ms` or `reasoning_timeout_ms` bounding one tier), fails only its turn: `bot.ability.failed` `{message: \"Cognition's <stage> step took longer than <seconds> seconds, so the turn failed.\", turn, input}`, then the failure handed back to its parent as a `bot.ability.cognition.input` whose stimulus is `bot.ability.cognition.step.timed_out` `{message, stage, timeout_seconds, turn}`; the cognition is idle again (it offers). A turn whose stimulus is a handed-back failure hands nothing back when it fails too.")
 S.statement(7, "`bot.ability.cognition.cancel` `{turn}` for the turn in hand cancels the stage and is acknowledged with `bot.ability.cognition.cancelled` `{turn}`, and the cognition is idle again (it offers); in `idle` a cancel is acknowledged at once; a cancel for another turn is not taken and the turn goes on.")
 S.statement(8, "`bot.ability.cognition.ignore` (its offer) is taken in `idle` and while processing, and only logged: it sends nothing and does not end a turn.")
+S.statement(10, "With an `intuition_model` (the `<param>`; none by default composes no intuition tier, decision D144), a turn the decision layer leaves unhandled goes to the intuition tier first, offered the deliberative handoff `bot.ability.reasoning.input` as the cognition's own: its selections handle the turn, or, when they hold the handoff, the others are sent first and the turn goes on to reasoning, whose output follows them. An intuition that fails hands the same turn on to reasoning (`cognition.cascaded`).")
 S.statement(9, "The events it takes are checked against `abilities/schemas/` where they are created: a `bot.ability.cognition.input` without a stimulus is refused at its sender (`error.execution` there) and starts no turn.")
 
 S.case(100, 1, "the cognition offers ignore on start.", [READY])
@@ -174,3 +175,21 @@ S.case(171, 8, "an ignore during a turn sends nothing and the turn is answered."
 S.case(180, 9, "an input without a stimulus is refused at the sender; the cognition stays idle and acknowledges a cancel at once.",
        [READY, send(INPUT, js({"turn": 1})), expect("error.execution"),
         send(CANCEL, js({"turn": 1})), expect(CANCELLED, "_event.data.turn === 1")])
+
+INTUITION = ("intuition_model", "'chat-model'")
+HANDOFF = "bot.ability.reasoning.input"
+INTUITED_HANDOFF = chat([{"event": RESPOND, "data": {"text": "hi"}, "reason": "hold on", "target": "session"},
+                         {"event": HANDOFF, "data": {}, "reason": "this needs thought", "target": "session.cognition"}])
+S.case(190, 10, "an intuition tier handles the turn the decision layer left unhandled, without reasoning.",
+       [READY, send(INPUT, turn(1)), output(1, REASONED)],
+       params=[SLOW, INTUITION], backend=[DECIDE_ABSTAIN, REASONED_IGNORE], clock="logical", ignore=[OFFERS])
+S.case(191, 10, "an intuition that selects the handoff sends its respond first; the output is it, then reasoning's ignore.",
+       [READY, send(INPUT, turn(1, choices=(IGNORE, RESPOND))), SAID_HI,
+        output(1, f"_event.data.output.length === 2 && _event.data.output[0].event === {js(RESPOND)}"
+                  f" && _event.data.output[1].event === {js(IGNORE)}")],
+       params=[SLOW, INTUITION], backend=[DECIDE_ABSTAIN, INTUITED_HANDOFF, REASONED_IGNORE], clock="logical",
+       ignore=[OFFERS])
+S.case(192, 10, "a failed intuition cascades the turn to reasoning, which answers it.",
+       [READY, send(INPUT, turn(1)), output(1, REASONED)],
+       params=[SLOW, INTUITION], backend=[DECIDE_ABSTAIN, chat(status=500), REASONED_IGNORE], clock="logical",
+       ignore=[OFFERS])
