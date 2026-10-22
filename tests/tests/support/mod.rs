@@ -714,7 +714,7 @@ pub fn copy_tree(from: &Path, to: &Path) {
 /// replaces.
 const ROOM_BOT: &str = r#"    <!-- The bot floppy, supervised. -->
     <state id="supervising.floppy" initial="running.floppy">
-      <state id="running.floppy">
+      <state id="running.floppy" initial="starting.floppy">
         <onentry>
           <assign location="participants" expr="joined('floppy')"/>
         </onentry>
@@ -726,15 +726,19 @@ const ROOM_BOT: &str = r#"    <!-- The bot floppy, supervised. -->
           <param name="owned_devices" expr="ownedDevices('floppy')"/>
           <param name="placed_on" expr="placedOn('floppy')"/>
         </invoke>
-        <!-- Stable after stable_after_ms active (the original arms it in
-             running, which it enters on bot.activated). -->
-        <transition event="room.activated" cond="isFor(_event, 'floppy')">
-          <!-- A reboot activates it again: the count starts over. -->
-          <cancel sendid="stable.floppy"/>
-          <send id="stable.floppy" event="room.stable" delayexpr="stableDelay()">
-            <param name="participant" expr="'floppy'"/>
-          </send>
-        </transition>
+        <!-- Stable after stable_after_ms from its first bot.activated (the
+             original arms it once, in running, which it enters on
+             activation); a reboot's activation does not re-arm it. -->
+        <state id="starting.floppy">
+          <transition event="room.activated" cond="isFor(_event, 'floppy')" target="serving.floppy"/>
+        </state>
+        <state id="serving.floppy">
+          <onentry>
+            <send id="stable.floppy" event="room.stable" delayexpr="stableDelay()">
+              <param name="participant" expr="'floppy'"/>
+            </send>
+          </onentry>
+        </state>
         <transition event="room.stable" cond="isFor(_event, 'floppy')">
           <assign location="attempts.floppy" expr="0"/>
         </transition>

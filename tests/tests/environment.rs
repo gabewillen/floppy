@@ -383,6 +383,71 @@ fn a_bot_sent_bot_deactivate_in_its_backoff_is_not_restarted() {
 }
 
 #[test]
+fn a_bot_that_runs_stable_after_ms_has_its_attempts_reset() {
+    let dir = layout(&[("processing_timeout_ms", "300")]);
+    let room = support::environment(&dir, &["floppy"], &[]);
+    // With max_restarts 2 a second failed attempt would be its last; a
+    // bot active for stable_after_ms between them starts counting again.
+    supervise(
+        &room,
+        "{max_restarts: 2, backoff_initial_ms: 200, backoff_max_ms: 200, stable_after_ms: 1500}",
+    );
+    let mut run = Run::start(&[room.display().to_string()], &[]);
+    all_activated(&run, &["floppy"]);
+    run.event("bot.input", &input("deaf", "x"));
+    let mut records = run.until(WAIT, label_is("room.restarted"));
+    records.extend(run.until(WAIT, label_is("bot.activated")));
+    std::thread::sleep(Duration::from_millis(3000));
+    run.event("bot.input", &input("deaf", "x"));
+    records.extend(run.until(WAIT, label_is("room.restarted")));
+    let finished = run.close(WAIT);
+    records.extend(finished.records);
+    assert_eq!(
+        logs(&records)
+            .into_iter()
+            .filter(|(label, _)| label.starts_with("room."))
+            .collect::<Vec<_>>(),
+        support::labelled(&[
+            (
+                "room.restarted",
+                r#"{"participant":"floppy","attempt":1,"delay_ms":200}"#
+            ),
+            (
+                "room.restarted",
+                r#"{"participant":"floppy","attempt":1,"delay_ms":200}"#
+            ),
+        ])
+    );
+}
+
+#[test]
+fn an_unfocused_body_focuses_a_held_percepts_device_at_the_turns_end() {
+    let dir = layout(&[("processing_timeout_ms", "1500")]);
+    let mut run = start_with_lamp(&dir, &["floppy"], &[("floppy", &["lamp"])]);
+    all_activated(&run, &["floppy"]);
+    // A host input with no device: the turn starts unfocused and hangs.
+    run.event("bot.input", &input("hang", "x"));
+    run.until(WAIT, label_is("double.participants"));
+    // The lamp's input is held; when the turn ends, the reflex floor
+    // focuses its device before the next turn takes it.
+    run.event("bot.input", &lamp_input("reply", &json!("y")));
+    let records = run.until(WAIT, |record| {
+        label_is("double.input")(record)
+            && record["text"]
+                .as_str()
+                .is_some_and(|text| text.starts_with("2 "))
+    });
+    assert_eq!(
+        logs(&records)
+            .into_iter()
+            .filter(|(label, _)| label == "floppy.focus" || label == "double.input")
+            .collect::<Vec<_>>(),
+        support::labelled(&[("floppy.focus", "lamp"), ("double.input", r#"2 reply "y""#)])
+    );
+    drop(run.close(WAIT));
+}
+
+#[test]
 fn a_degraded_bot_is_restarted_after_a_backoff_until_its_budget_is_spent() {
     let dir = layout(&[("processing_timeout_ms", "300")]);
     let room = support::environment(&dir, &["floppy"], &[]);
