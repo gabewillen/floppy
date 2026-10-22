@@ -6,28 +6,21 @@
     "kind": "namespace-irp",
     "source": "namespaces/behavior/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "dbaa603476cf98afe53054d8d20d2b619d747fb3dcfeb2017c782cbb2b9bb7e0",
-    "source_digest": "21c85e96990f7571bf2a354e3d59f3c144141e072da0a1c0797ad2d66f9e00fa",
-    "manifest_digest": "7859ec4537b319a391b64cfcdc21f781057b44813b51eff9e18e63340b4efe7c",
+    "corpus_digest": "1e98fcc309019dd5c050c03b3d848c1c8448191ebbd45ea5c7da67c88db3e567",
+    "source_digest": "1cae2dbe49b884e886812219f34b801d0104ffacf5c8822502b0ba25abb85cfc",
+    "manifest_digest": "7757639294b08633d0421725450591bbda1852344e0996b0a72962ceab27dc0a",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
     "transformer": {
-      "name": "saxon-process-sandboxed",
+      "name": "saxon-process",
       "version": "SaxonJ-HE 12.8 from Saxonica",
       "command_argv": [
         "java",
         "-jar",
-        "saxon-he-12.8.jar",
-        "-a:off",
-        "-p:off",
-        "-dtd:off",
-        "-expand:off",
-        "-ext:off",
-        "-xi:off",
-        "-xsiloc:off"
+        "saxon-he-12.8.jar"
       ],
-      "executable_digest": "c13657d80564f40f10b8ab91b29fdc74080e7d8bb36d6cd06589292755d3476f"
+      "executable_digest": "25c6dfe3cd6b0f0c5a9a0bcf80bd726422ac95f7b812e2b8d1b56ba869154230"
     },
     "datamodel": "ecmascript",
     "provenance": "baseuri=https://github.com/stateforward/floppy/tree/main/namespaces/behavior/irp/sources"
@@ -41,17 +34,17 @@
   "engine": {
     "name": "scxml-machine",
     "version": "0.2.0",
-    "source_digest": "b3fde869dbf1c6e0b9494fb7013aef41e3436225ac598902afafdf761c9e2dd5"
+    "source_digest": "dff3fc8cedae948050fb2cd1bc417c9ac835b35059f1477dc30d8b4f2e746452"
   },
   "data_model": {
     "name": "scxml-data-model-ecmascript",
     "version": "0.2.0",
-    "source_digest": "e84a0f3d2c9335c246e1e63d11927c9778ca51ce1891cbf024b93660b8d2d969"
+    "source_digest": "b8ca1a4238a8036c4c007d5cc58819b7a813402ddce88076597f178b9fb0f311"
   },
   "runner": {
     "name": "scxml-conformance/wasm",
     "version": "0.2.0",
-    "source_digest": "d7eac1d8e8b8a47312cef5eb06ab22dd43d9c5bd7130a5b9da6cddfcccb8eee3"
+    "source_digest": "3b6be0410f9c49955d4696f74088899323c31109bb66e16a60f8912bb46dcb17"
   },
   "manual_oracle": {
     "name": "scxml-conformance-manual-oracle",
@@ -62,9 +55,9 @@
     {
       "namespace_uri": "https://github.com/stateforward/floppy/namespaces/behavior",
       "package_version": "0.1.0",
-      "manifest_sha256": "5ecf0234fce9f2db0c78686941c8e74ce4a2d52bf85312c2d77a817f2805c9f9",
-      "schema_sha256": "28a8ee40b7737b6acea4cdcc696752d4691f60661d8ae323a42047f05fe5157b",
-      "component_sha256": "e8bf6d2b64c7c39028c072132bef4da567dbdbfbf590e77432adb4cf37ad51a3"
+      "manifest_sha256": "67e955278353cd96960096ee4cf2981741f279e427a3e4193a6464bfeef57def",
+      "schema_sha256": "6f51762cf0a1078912af31a1df72fc19a8cc2e8ee6ec147b4c8043b26ea7c89c",
+      "component_sha256": "5ac75c5a1ba6b22cdf48b07da50082d978b5e17b5d81ddde432e121281c89567"
     }
   ],
   "ir_version": 5,
@@ -77,11 +70,11 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "57157df0664b91a523907fbe454e92ea546ebacbe024398fcea2b3aba38f15c2",
+  "identity_digest": "5866672592576e73cf089160b1ac508a392e8867990f0c0e8b49f970f00991ad",
   "summary": {
-    "total_selected": 18,
-    "applicable_selected": 18,
-    "passed": 18,
+    "total_selected": 23,
+    "applicable_selected": 23,
+    "passed": 23,
     "failed": 0,
     "unsupported": 0,
     "invalid": 0,
@@ -91,8 +84,8 @@
     "not_passing": 0,
     "passed_under_erratum": 0,
     "mandatory": {
-      "applicable_selected": 18,
-      "passed": 18,
+      "applicable_selected": 23,
+      "passed": 23,
       "failed": 0,
       "unsupported": 0,
       "invalid": 0,
@@ -116,8 +109,8 @@
     },
     "by_spec": {
       "#behavior-1": {
-        "applicable_selected": 4,
-        "passed": 4,
+        "applicable_selected": 5,
+        "passed": 5,
         "failed": 0,
         "unsupported": 0,
         "invalid": 0,
@@ -174,12 +167,24 @@
         "not_applicable": 0,
         "not_passing": 0,
         "passed_under_erratum": 0
+      },
+      "#behavior-6": {
+        "applicable_selected": 4,
+        "passed": 4,
+        "failed": 0,
+        "unsupported": 0,
+        "invalid": 0,
+        "harness_error": 0,
+        "skipped": 0,
+        "not_applicable": 0,
+        "not_passing": 0,
+        "passed_under_erratum": 0
       }
     },
     "by_datamodel": {
       "ecmascript": {
-        "applicable_selected": 18,
-        "passed": 18,
+        "applicable_selected": 23,
+        "passed": 23,
         "failed": 0,
         "unsupported": 0,
         "invalid": 0,
@@ -622,6 +627,131 @@
       "assertion_id": "behavior-5",
       "spec_num": "5",
       "spec_id": "#behavior-5",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "250",
+      "assertion_id": "behavior-6",
+      "spec_num": "6",
+      "spec_id": "#behavior-6",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "251",
+      "assertion_id": "behavior-6",
+      "spec_num": "6",
+      "spec_id": "#behavior-6",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "252",
+      "assertion_id": "behavior-6",
+      "spec_num": "6",
+      "spec_id": "#behavior-6",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "253",
+      "assertion_id": "behavior-6",
+      "spec_num": "6",
+      "spec_id": "#behavior-6",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "254",
+      "assertion_id": "behavior-1",
+      "spec_num": "1",
+      "spec_id": "#behavior-1",
       "datamodel": "ecmascript",
       "conformance": "mandatory",
       "manual": false,

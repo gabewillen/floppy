@@ -80,6 +80,30 @@ def routine(delay, output):
 
 
 CHIME = "[{event: 'bot.speaking.say', data: {text: 'Hourly chime.'}}]"
+
+
+# A turn behavior that declares the params turn and input and decides at
+# once, selecting `data` for the session communication.
+def greeter(data):
+    return f"""<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="greeter" initial="deciding">
+  <datamodel>
+    <data id="turn" expr="0"/>
+    <data id="input" expr="null"/>
+  </datamodel>
+  <state id="deciding">
+    <transition target="decided"/>
+  </state>
+  <final id="decided">
+    <donedata>
+      <content expr="({{turn: turn, handled: true, selected: [{{event: 'bot.ability.communication.respond', target: 'communication', data: {data}}}]}})"/>
+    </donedata>
+  </final>
+</scxml>"""
+
+
+DECIDES = [{"name": "decides", "events": [], "settle_ms": 500, "expect_events": [], "expect_done": True}]
+# The live turn (decision D131): a knock at the door on turn 2.
+LIVE = {"turn_after_bound_ms": 1000, "apply": {"turn": 2, "input": {"label": "knock", "focus": "door"}, "targets": ["communication"]}}
 WAITS = [{"name": "waits", "events": [], "settle_ms": 500, "expect_events": [], "expect_done": False}]
 BOUNDS = {"min_every_ms": 60000, "turn_after_bound_ms": 1000}
 
@@ -103,7 +127,7 @@ def built(extra=""):
                         " && _event.data.report.simulation.every(function (r) { return r.passed; })" + (f" && {extra}" if extra else ""))
 
 
-S.statement(1, "It waits in `intake` for `builder.request` `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?}`; data its schema refuses is refused at the sender (its send raises `error.execution` there) and the builder keeps waiting; a request whose spec is only whitespace ends in the final state `failed` with `{reason: \"invalid-request\", diagnostics: [{kind: \"request\", code: \"invalid-request\"}]}`, which the invoker receives as `done.invoke.<id>`.")
+S.statement(1, "It waits in `intake` for `builder.request` `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?}`; data its schema refuses is refused at the sender (its send raises `error.execution` there) and the builder keeps waiting; a request whose spec is only whitespace ends in the final state `failed` with `{reason: \"invalid-request\", diagnostics: [{kind: \"request\", code: \"invalid-request\"}]}`, which the invoker receives as `done.invoke.<id>`.")
 S.statement(2, "A request is planned (`design`, schema `topology_plan`), authored (`author`, schema `scxml_draft`: its `scxml`, `schemas` and `script`), written as `<name>.scx`, `<name>.json` and `<name>.js` through the files service (`writing`; the request's `name`, else the plan's; decision D121), validated (`validate`) and simulated (`simulate`, each test script driving the draft as an invoked child by `srcexpr` on its path); a draft that validates and passes every test ends in the final state `done` with `{scxml, schemas, script, path, tests, report: {attempts, failures, fixes_applied, warnings, plan, decisions, history, simulation}}`, `path` `../../behaviors/<name>.scx`.")
 S.statement(3, "A draft whose validator errors all have machine-applicable fixes is fixed (`apply_fixes`, at most 2 passes per draft) and validated again, without a new attempt: `report.fixes_applied` counts it.")
 S.statement(4, "Every failure goes through `retry_gate`, then `triage`, which asks the decision service to choose among its enabled transitions: `triage.repair` authors the draft again from the same plan (`report.decisions` `[\"triage.repair\"]`), `triage.redesign` plans again, `triage.abandon` ends in `failed` `{reason: \"abandoned\"}`. When the decision is unavailable it falls back (`fallback`): repair when there is a plan, else redesign.")
@@ -111,6 +135,8 @@ S.statement(5, "A failure with any diagnostic an earlier failure of the build ha
 S.statement(6, "Each check has its own diagnostics: a validator error (`kind` `validate`, its code), a draft that cannot be written (`draft` `write-failed`), test scripts out of bounds (`draft` `tests-out-of-bounds`, one to eight), and a test whose outputs or done differ from its expectations (`simulate` `test-failed`).")
 S.statement(7, "A generation that fails (`generate.failed`) is a `generate` diagnostic `<stage>-failed`; one that runs `generate_ceiling_ms` in all, or, once its reply streams, makes no progress for `generate_timeout_ms` (the first `generate.progress` arms it, each later one re-arms it), is cancelled, a `timeout` diagnostic `<stage>-timeout` (decision D101).")
 S.statement(8, "With the request's lifetime bounds (`min_every_ms`, `turn_after_bound_ms`), a draft that sends `bot.behavior.tick` (a persistent routine) whose schedule is shorter than `min_every_ms` is a `lifetime` diagnostic `E0009`; a routine within the bounds also gets a forced first tick, whose output must select at least one event (else an `apply` diagnostic `E0008`).")
+
+S.statement(9, "With the request's `apply` `{turn, input, targets}`, a draft that sends no `bot.behavior.tick` also runs once with the params `turn` and `input` (the simulation result `live turn`) and must end within min(`turn_after_bound_ms`, 2000) ms in a top-level final state whose donedata is `{turn, handled: true, selected}` with the live turn and selections naming targets among `targets` with data agreeing with `input`, else an `apply` diagnostic `E0008` (`<behavior:verify_apply>`, decision D131).")
 
 S.case(100, 1, "a request refused by its schema raises error.execution at the sender; the builder keeps waiting and answers a whitespace spec invalid-request.",
        [send(REQUEST, js({"spec": "x", "colour": "blue"})), expect("error.execution"),
@@ -210,3 +236,14 @@ S.case(135, 4, "each failure is triaged again: two different failures, two decis
               " && JSON.stringify(_event.data.report.decisions) === '[\"triage.repair\",\"triage.repair\"]'")],
        backend=[PLAN, draft(INVALID), draft(PINGER, tests=[]), draft(PINGER),
                 decided("triage.repair")], clock="wall")
+S.case(180, 9, "with a live turn, a turn behavior that selects on its input is built after its run on that turn.",
+       [send(REQUEST, request(**LIVE)),
+        expect(DONE, "_event.data.scxml.indexOf('greeter') >= 0 && _event.data.report.simulation.length === 2"
+                     " && _event.data.report.simulation[1].name === 'live turn' && _event.data.report.simulation[1].passed === true"
+                     " && _event.data.tests.length === 1")],
+       backend=[PLAN, draft(greeter("{text: 'Who is there?', label: input === null ? 'none' : input.label}"), tests=DECIDES, schemas=NO_SCHEMAS)], clock="wall")
+S.case(181, 9, "with a live turn, a turn behavior whose selection hardcodes an input value is an apply E0008 diagnostic.",
+       [send(REQUEST, request(max_attempts=1, **LIVE)),
+        failed("attempts-exhausted", "_event.data.diagnostics.length === 1 && _event.data.diagnostics[0].kind === 'apply' && _event.data.diagnostics[0].code === 'E0008'"
+                                     " && _event.data.diagnostics[0].message === 'selection data[\"label\"]=\"doorbell\" does not match live event value \"knock\"; read identifiers from input at runtime.'")],
+       backend=[PLAN, draft(greeter("{text: 'Who is there?', label: 'doorbell'}"), tests=DECIDES, schemas=NO_SCHEMAS)], clock="wall")

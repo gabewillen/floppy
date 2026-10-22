@@ -234,7 +234,19 @@ function changeWriteInputWithIntent() {
 // which checks the document it builds against the original check()'s lifetime
 // bounds (min_every, turn_after_bound).
 function builderRequest() {
-  return ({spec: change_instructions + '\n\n' + JSON.stringify(write), name: intent.name, model: model, min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms});
+  return ({spec: change_instructions + '\n\n' + JSON.stringify(write), name: intent.name, model: model, min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms, apply: liveTurn()});
+}
+
+// The live turn the builder runs a turn behavior on (the reference _check's
+// verify_apply): this turn, its behavior_input as autonomy builds it, and the
+// sessions its output names (a learned behavior names its targets, D104).
+function liveTurn() {
+  return ({turn: turn, input: behavior_input, targets: outputTargets()});
+}
+
+// The distinct targets of this turn's cognition_output, at most 32.
+function outputTargets() {
+  return cognition_output.map(function (s) { return s.target; }).filter(function (t, i, a) { return typeof t === 'string' && t.length > 0 && a.indexOf(t) === i; }).slice(0, 32);
 }
 
 function builderConstraints() {
@@ -242,10 +254,11 @@ function builderConstraints() {
 }
 
 // The turn behavior contract with the grounded triggers it is stored under
-// (autonomy matches them against the stimulus event) and this turn's input
-// (behavior_input, as autonomy builds it).
+// (autonomy matches them against the stimulus event), the targets this
+// turn's output names, and this turn's input (behavior_input, as autonomy
+// builds it).
 function turnContract() {
-  return turn_contract.replace(/TRIGGERS|INPUT/g, function (m) { return JSON.stringify(m === 'INPUT' ? behavior_input : triggers); });
+  return turn_contract.replace(/TRIGGERS|TARGETS|INPUT/g, function (m) { return JSON.stringify(m === 'INPUT' ? behavior_input : m === 'TARGETS' ? outputTargets() : triggers); });
 }
 
 // The original schedule.At.next_after for an at schedule {time: 'HH:MM', days,

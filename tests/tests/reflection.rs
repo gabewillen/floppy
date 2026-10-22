@@ -54,10 +54,47 @@ const BEHAVIOR: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version
   </state>
   <final id="answered">
     <donedata>
-      <content expr="({turn: turn, handled: true, selected: [{event: 'bot.ability.communication.respond', data: {text: 'Hello!'}, reason: 'a knock'}]})"/>
+      <content expr="({turn: turn, handled: true, selected: [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Hello!'}, reason: 'a knock'}]})"/>
     </donedata>
   </final>
 </scxml>"#;
+
+/// A behavior that answers only a knock, read from its param `input`: run
+/// with no param (its own test) it is unhandled, so only the builder's run
+/// on the live turn (decision D131) can find it handled.
+const GROUNDED: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="GreetOnKnock" initial="answering">
+  <datamodel>
+    <data id="turn" expr="0"/>
+    <data id="input" expr="null"/>
+  </datamodel>
+  <script src="GreetOnKnock.js"/>
+  <state id="answering">
+    <transition cond="knocked(input)" target="answered"/>
+    <transition target="unanswered"/>
+  </state>
+  <final id="answered">
+    <donedata>
+      <content expr="answer(turn, input)"/>
+    </donedata>
+  </final>
+  <final id="unanswered">
+    <donedata>
+      <content expr="({turn: turn, handled: false, selected: []})"/>
+    </donedata>
+  </final>
+</scxml>"#;
+
+/// [`GROUNDED`]'s script.
+const GROUNDED_SCRIPT: &str = "function knocked(input) {\n  return input !== null && input.label === 'knock';\n}\nfunction answer(turn, input) {\n  return {turn: turn, handled: true, selected: [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Hello!', label: input.label}, reason: 'a knock'}]};\n}\n";
+
+/// [`BEHAVIOR`] with the label of the knock it was learned from hardcoded
+/// as another (a prior episode's) value.
+fn hardcoded_behavior() -> String {
+    BEHAVIOR.replace(
+        "data: {text: 'Hello!'}",
+        "data: {text: 'Hello!', label: 'doorbell'}",
+    )
+}
 
 const PLAN: &str = r#"{"name":"GreetOnKnock","summary":"Answer a knock with a greeting.","states":[{"id":"answering","kind":"atomic","parent":"","purpose":"Decide the answer."},{"id":"answered","kind":"final","parent":"","purpose":"Carry the answer."}],"events":[],"transitions":[{"source":"answering","event":"","target":"answered","description":"Answer at once."}]}"#;
 
@@ -71,6 +108,13 @@ fn draft(scxml: &str) -> String {
         "tests": [{"name": "answers its turn", "events": [], "settle_ms": 2000, "expect_events": [], "expect_done": true}],
     })
     .to_string()
+}
+
+/// [`draft`] with `script`.
+fn scripted_draft(scxml: &str, script: &str) -> String {
+    let mut draft: Json = serde_json::from_str(&draft(scxml)).expect("the draft is JSON");
+    draft["script"] = script.into();
+    draft.to_string()
 }
 
 /// A non-streamed Chat Completions answer carrying `content`, as the
@@ -170,9 +214,8 @@ fn dispatch_reply(route: &str, attempt: usize, body: &Json) -> Option<String> {
 fn selection(route: &str) -> Option<Json> {
     match route {
         "none" => Some(json!([])),
-        "create" | "buildfail" | "genfail" | "slowbuild" | "stallbuild" | "slowplain" => {
-            Some(create_selection())
-        }
+        "create" | "buildfail" | "genfail" | "slowbuild" | "stallbuild" | "slowplain"
+        | "livebound" | "livehardcoded" => Some(create_selection()),
         "break" => Some(break_selection("GreetOnKnock")),
         "change" => Some(change_selection()),
         "breakunknown" => Some(break_selection("Nobody")),
@@ -197,6 +240,12 @@ fn answer(target: &str, body: &Json, attempt: usize) -> Option<String> {
         "topology_plan" => Some(completion(PLAN)),
         "scxml_draft" if route == "buildfail" => Some(completion(&draft(&rejected_behavior()))),
         "scxml_draft" if route == "genfail" => None,
+        "scxml_draft" if route == "livebound" => {
+            Some(completion(&scripted_draft(GROUNDED, GROUNDED_SCRIPT)))
+        }
+        "scxml_draft" if route == "livehardcoded" => {
+            Some(completion(&draft(&hardcoded_behavior())))
+        }
         "scxml_draft" => Some(completion(&draft(BEHAVIOR))),
         _ => None,
     }
@@ -982,6 +1031,79 @@ fn the_builder_is_told_the_triggers_and_the_input_the_behavior_runs_with() {
         contract.contains("never handled true with an empty list"),
         "{contract}"
     );
+    // The builder runs it on this turn itself (decision D131), so its own
+    // tests no longer stand for that run.
+    assert!(
+        contract.contains("The builder runs it once itself"),
+        "{contract}"
+    );
+    assert!(
+        !contract.contains("Its tests drive no input events and expect it to finish."),
+        "{contract}"
+    );
+}
+
+/// The original's `_check` runs a turn behavior once on the live turn
+/// (`verify_apply`, decision D131): a draft that answers only a knock read
+/// from its param `input` is unhandled under its own test (no param) and
+/// handled on this turn, so its ACTIVE row proves reflection sent the turn
+/// and its input and the builder ran the draft with them.
+#[test]
+fn a_create_passes_only_when_its_draft_selects_on_the_live_input() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "livebound", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let records = reflect(&mut run, 1);
+    drop(run.close(WAIT));
+    assert_eq!(
+        texts(&records, "harness.output"),
+        ["answered"],
+        "{records:?}"
+    );
+    assert_eq!(
+        texts(&records, "reflection.inventory"),
+        [r#"GreetOnKnock ACTIVE turn ["environment.sound"] (accept)"#]
+    );
+    let drafts = mock.requests("scxml_draft");
+    assert_eq!(drafts.len(), 1);
+    let prompt: Json =
+        serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
+    let contract = prompt["constraints"][0]
+        .as_str()
+        .expect("the turn behavior contract");
+    assert!(
+        contract.contains(r#"whose targets are among ["communication"]"#),
+        "{contract}"
+    );
+    assert!(
+        contract.contains("The builder runs it once itself"),
+        "{contract}"
+    );
+}
+
+/// A create whose draft hardcodes a value of an earlier turn's input fails
+/// the run on the live turn the same way after its repair, so it is
+/// abandoned as a DRAFT, with the original's binding message adapted to
+/// `input`.
+#[test]
+fn a_create_whose_draft_hardcodes_an_input_value_is_abandoned() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "livehardcoded", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let records = reflect(&mut run, 1);
+    drop(run.close(WAIT));
+    let failed = texts(&records, "harness.failed");
+    assert_eq!(failed.len(), 1, "{records:?}");
+    assert!(
+        failed[0].starts_with(
+            "Reflection change abandoned: same diagnostic message after fix:\nbehavior validation failed:\n  error[E0008] apply: selection data[\"label\"]=\"doorbell\" does not match live event value \"knock\"; read identifiers from input at runtime."
+        ),
+        "{failed:?}"
+    );
+    let inventory = json_log(&records, "inventory");
+    assert_eq!(inventory[0]["status"], "DRAFT", "{inventory}");
+    assert_eq!(inventory[0]["status_reason"], "validation", "{inventory}");
+    assert_eq!(json_log(&records, "episodes"), stored(&unapplied_episode()));
 }
 
 /// A revision is bounded by inactivity (decision D101): the builder's

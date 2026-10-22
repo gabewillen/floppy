@@ -77,7 +77,7 @@ BEHAVIOR = """<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datam
   </state>
   <final id="answered">
     <donedata>
-      <content expr="({turn: turn, handled: true, selected: [{event: 'bot.ability.communication.respond', data: {text: 'Hello!'}, reason: 'a knock'}]})"/>
+      <content expr="({turn: turn, handled: true, selected: [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Hello!'}, reason: 'a knock'}]})"/>
     </donedata>
   </final>
 </scxml>"""

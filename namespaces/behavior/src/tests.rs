@@ -470,3 +470,184 @@ fn a_failed_assignment_or_host_failure_is_reported() {
         Err(Failure::Host("fatal"))
     );
 }
+
+/// The attributes of a `<behavior:verify_apply>` over the expressions
+/// `done`, `turn`, `input`, `targets` and `error`.
+fn apply_attributes() -> Vec<Attribute> {
+    ["done", "turn", "input", "targets", "error"]
+        .into_iter()
+        .map(|name| attr(name, name))
+        .chain([attr("location", "apply")])
+        .collect()
+}
+
+/// Every message `<behavior:verify_apply>` writes for a turn behavior's run
+/// on the live turn (`testdata/verify_apply.json`), and none for a run that
+/// selects on it.
+#[test]
+fn verify_apply_writes_its_e0008_messages() {
+    for case in cases(include_str!("testdata/verify_apply.json")) {
+        let values = [
+            ("done", case["done"].clone()),
+            ("turn", case["turn"].clone()),
+            ("input", case["input"].clone()),
+            ("targets", case["targets"].clone()),
+            ("error", case["error"].clone()),
+        ];
+        let assigned = run("verify_apply", &apply_attributes(), &values).expect("the case runs");
+        assert_eq!(assigned["apply"], case["messages"], "{}", case["name"]);
+    }
+    let without_error: Vec<Attribute> = apply_attributes()
+        .into_iter()
+        .filter(|attribute| attribute.local_name != "error")
+        .collect();
+    let assigned = run(
+        "verify_apply",
+        &without_error,
+        &[
+            ("done", Json::Null),
+            ("turn", json!(1)),
+            ("input", json!({})),
+            ("targets", json!([])),
+        ],
+    )
+    .expect("the element runs without error");
+    assert_eq!(
+        assigned["apply"],
+        json!([
+            "turn behavior reached no top-level final state on the live turn's input within the turn's bound: it receives no events, so it decides with eventless transitions and ends at once."
+        ])
+    );
+}
+
+#[test]
+fn malformed_verify_apply_raises_error_execution_and_assigns_nothing() {
+    let good = good_apply_values();
+    let with = |name: &str, value: Json| -> Vec<(&str, Json)> {
+        good.iter()
+            .map(|(key, old)| {
+                (
+                    *key,
+                    if *key == name {
+                        value.clone()
+                    } else {
+                        old.clone()
+                    },
+                )
+            })
+            .collect()
+    };
+    for (name, value, detail) in [
+        (
+            "input",
+            json!([]),
+            "behavior:verify_apply input is not an object",
+        ),
+        (
+            "input",
+            json!("knock"),
+            "behavior:verify_apply input is not an object",
+        ),
+        (
+            "turn",
+            json!("1"),
+            "behavior:verify_apply turn is not a number",
+        ),
+        (
+            "targets",
+            json!([1]),
+            "behavior:verify_apply targets is not an array of strings",
+        ),
+        (
+            "targets",
+            json!({}),
+            "behavior:verify_apply targets is not an array of strings",
+        ),
+        (
+            "error",
+            json!(5),
+            "behavior:verify_apply error is not a string or null",
+        ),
+    ] {
+        assert_eq!(
+            run("verify_apply", &apply_attributes(), &with(name, value)),
+            Err(detail),
+            "{name}"
+        );
+    }
+    assert_eq!(
+        run("verify_apply", &apply_attributes(), &good[1..]),
+        Err("behavior:verify_apply done did not evaluate")
+    );
+}
+
+/// The values every malformed `<behavior:verify_apply>` below is given.
+fn good_apply_values() -> [(&'static str, Json); 5] {
+    [
+        ("done", Json::Null),
+        ("turn", json!(1)),
+        ("input", json!({"label": "knock"})),
+        ("targets", json!(["communication"])),
+        ("error", Json::Null),
+    ]
+}
+
+#[test]
+fn a_malformed_verify_apply_element_raises_error_execution_and_assigns_nothing() {
+    let good = good_apply_values();
+    for (missing, detail) in [
+        ("location", "behavior:verify_apply requires a location"),
+        ("done", "behavior:verify_apply requires done"),
+        ("turn", "behavior:verify_apply requires a turn"),
+        ("input", "behavior:verify_apply requires an input"),
+        ("targets", "behavior:verify_apply requires targets"),
+    ] {
+        let attributes: Vec<Attribute> = apply_attributes()
+            .into_iter()
+            .filter(|attribute| attribute.local_name != missing)
+            .collect();
+        assert_eq!(run("verify_apply", &attributes, &good), Err(detail));
+    }
+    let mut attributes = apply_attributes();
+    attributes.push(attr("ticks", "ticks"));
+    assert_eq!(
+        run("verify_apply", &attributes, &good),
+        Err(
+            "behavior:verify_apply takes only the location, done, turn, input, targets and error attributes"
+        )
+    );
+    let mut attributes = apply_attributes();
+    attributes.push(attr("turn", "turn"));
+    assert_eq!(
+        run("verify_apply", &attributes, &good),
+        Err("behavior:verify_apply repeats an attribute")
+    );
+    let mut attributes = apply_attributes();
+    attributes[0] = attr("done", " ");
+    assert_eq!(
+        run("verify_apply", &attributes, &good),
+        Err("behavior:verify_apply has an empty attribute")
+    );
+    let mut host = FakeHost {
+        values: good
+            .iter()
+            .map(|(name, value)| ((*name).to_owned(), data(value)))
+            .collect(),
+        ..FakeHost::default()
+    };
+    assert_eq!(
+        execution(execute(
+            "verify_apply",
+            &apply_attributes(),
+            &[Content::Start, Content::End],
+            &mut host
+        )),
+        "behavior:verify_apply holds no content"
+    );
+    host.fail_assign = true;
+    assert_eq!(
+        execution(execute("verify_apply", &apply_attributes(), &[], &mut host)),
+        "behavior:verify_apply could not assign the messages"
+    );
+    assert!(host.assigned.is_empty());
+}

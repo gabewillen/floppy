@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- builder-9: with a live turn, a turn behavior that selects on its input is built after its run on that turn. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="builder" type="scxml" src="../../../builder.scx"/>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <onentry>
+      <send event="builder.request" target="#_builder"><content expr='{"spec": "a pinger: answer a ping with pong and finish", "turn_after_bound_ms": 1000, "apply": {"turn": 2, "input": {"label": "knock", "focus": "door"}, "targets": ["communication"]}}'/></send>
+    </onentry>
+    <transition event="done.invoke.builder" cond="_event.data.scxml.indexOf('greeter') &gt;= 0 &amp;&amp; _event.data.report.simulation.length === 2 &amp;&amp; _event.data.report.simulation[1].name === 'live turn' &amp;&amp; _event.data.report.simulation[1].passed === true &amp;&amp; _event.data.tests.length === 1" target="step1"/>
+  </state>
+  <state id="step1">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

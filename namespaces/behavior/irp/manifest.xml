@@ -3,7 +3,7 @@
      numbered statement of namespaces/behavior/README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/namespaces/behavior/irp/sources">
   <assert id="behavior-1" specnum="1" specid="#behavior-1">
-    <![CDATA[Each element (instances_from_behavior_results, replace_behavior_clauses, lifetime_errors, verify_tick) takes exactly its declared attributes, the required ones present and none empty, and no content, and the namespace has no other element: a malformed element raises error.execution and assigns nothing (its schema, package/behavior.xsd, rejects it before any run under scx validate).]]>
+    <![CDATA[Each element (instances_from_behavior_results, replace_behavior_clauses, lifetime_errors, verify_tick, verify_apply) takes exactly its declared attributes, the required ones present and none empty, and no content, and the namespace has no other element: a malformed element raises error.execution and assigns nothing (its schema, package/behavior.xsd, rejects it before any run under scx validate).]]>
     <test id="200" conformance="mandatory" manual="false">
       <start uri="200/test200.txml"/>
     </test>
@@ -15,6 +15,9 @@
     </test>
     <test id="203" conformance="mandatory" manual="false">
       <start uri="203/test203.txml"/>
+    </test>
+    <test id="254" conformance="mandatory" manual="false">
+      <start uri="254/test254.txml"/>
     </test>
   </assert>
   <assert id="behavior-2" specnum="2" specid="#behavior-2">
@@ -69,6 +72,21 @@
     </test>
     <test id="243" conformance="mandatory" manual="false">
       <start uri="243/test243.txml"/>
+    </test>
+  </assert>
+  <assert id="behavior-6" specnum="6" specid="#behavior-6">
+    <![CDATA[<behavior:verify_apply> writes E0008 messages for a turn behavior's run on the live turn (the original's for nothing selected, its binding message adapted to input, and floppy's for the run, the donedata contract and the targets): none when its donedata is {turn, handled, selected} with the live turn, handled true, and at least one selection, each with an event, a target among targets, and data agreeing with input's scalar members; else why (an error, or no donedata, first); an input that is not an object or targets that are not strings raise error.execution and assign nothing.]]>
+    <test id="250" conformance="mandatory" manual="false">
+      <start uri="250/test250.txml"/>
+    </test>
+    <test id="251" conformance="mandatory" manual="false">
+      <start uri="251/test251.txml"/>
+    </test>
+    <test id="252" conformance="mandatory" manual="false">
+      <start uri="252/test252.txml"/>
+    </test>
+    <test id="253" conformance="mandatory" manual="false">
+      <start uri="253/test253.txml"/>
     </test>
   </assert>
 </assertions>

@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/bots/builder/irp/sources">
   <assert id="builder-1" specnum="1" specid="#builder-1">
-    <![CDATA[It waits in `intake` for `builder.request` `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?}`; data its schema refuses is refused at the sender (its send raises `error.execution` there) and the builder keeps waiting; a request whose spec is only whitespace ends in the final state `failed` with `{reason: "invalid-request", diagnostics: [{kind: "request", code: "invalid-request"}]}`, which the invoker receives as `done.invoke.<id>`.]]>
+    <![CDATA[It waits in `intake` for `builder.request` `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?}`; data its schema refuses is refused at the sender (its send raises `error.execution` there) and the builder keeps waiting; a request whose spec is only whitespace ends in the final state `failed` with `{reason: "invalid-request", diagnostics: [{kind: "request", code: "invalid-request"}]}`, which the invoker receives as `done.invoke.<id>`.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -84,6 +84,15 @@
     </test>
     <test id="172" conformance="mandatory" manual="false">
       <start uri="172/test172.scxml"/>
+    </test>
+  </assert>
+  <assert id="builder-9" specnum="9" specid="#builder-9">
+    <![CDATA[With the request's `apply` `{turn, input, targets}`, a draft that sends no `bot.behavior.tick` also runs once with the params `turn` and `input` (the simulation result `live turn`) and must end within min(`turn_after_bound_ms`, 2000) ms in a top-level final state whose donedata is `{turn, handled: true, selected}` with the live turn and selections naming targets among `targets` with data agreeing with `input`, else an `apply` diagnostic `E0008` (`<behavior:verify_apply>`, decision D131).]]>
+    <test id="180" conformance="mandatory" manual="false">
+      <start uri="180/test180.scxml"/>
+    </test>
+    <test id="181" conformance="mandatory" manual="false">
+      <start uri="181/test181.scxml"/>
     </test>
   </assert>
 </assertions>

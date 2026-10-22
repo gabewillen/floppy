@@ -136,7 +136,7 @@ expected_imports() {
         # memory elements (<memory:to_json>, <memory:contents>), the
         # behavior elements (<behavior:instances_from_behavior_results>,
         # <behavior:replace_behavior_clauses>, <behavior:lifetime_errors>,
-        # <behavior:verify_tick>) and the autonomy element
+        # <behavior:verify_tick>, <behavior:verify_apply>) and the autonomy element
         # (<autonomy:behavior_input_payload>): the same.
         floppy_migration|floppy_conversation|floppy_processing|floppy_intuition|floppy_cognition|floppy_identity|floppy_memory|floppy_behavior|floppy_autonomy)
             printf '%s\n' \
