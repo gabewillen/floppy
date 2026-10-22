@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- cognition-4: a low-confidence intuition's respond is sent first; the output is reasoning's ignore. -->
+<!-- cognition-4: a low-confidence decision layer's respond is sent first; the output is that respond, then reasoning's ignore. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="cognition" type="scxml" src="../../../cognition.scx">
@@ -19,7 +19,7 @@
     <transition event="bot.ability.communication.respond" cond="_event.data.text === 'hi'" target="step2"/>
   </state>
   <state id="step2">
-    <transition event="bot.ability.cognition.output" cond="_event.data.turn === 1 &amp;&amp; _event.data.output.length === 1 &amp;&amp; _event.data.output[0].event === &quot;bot.ability.cognition.ignore&quot; &amp;&amp; _event.data.output[0].reason === 'nothing to say'" target="step3"/>
+    <transition event="bot.ability.cognition.output" cond="_event.data.turn === 1 &amp;&amp; _event.data.output.length === 2 &amp;&amp; _event.data.output[0].event === &quot;bot.ability.communication.respond&quot; &amp;&amp; _event.data.output[1].event === &quot;bot.ability.cognition.ignore&quot; &amp;&amp; _event.data.output[1].reason === 'nothing to say'" target="step3"/>
   </state>
   <state id="step3">
     <transition target="pass"/>
