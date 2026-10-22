@@ -30,7 +30,7 @@
     </test>
   </assert>
   <assert id="cognition-4" specnum="4" specid="#cognition-4">
-    <![CDATA[A decision layer that escalates for low confidence sends its environment actions (its selections) before the turn goes on to reasoning; the output is reasoning's selections, which reasoning sends after them, a repeat of an environment action included.]]>
+    <![CDATA[A decision layer that escalates for low confidence sends its environment actions (its selections) before the turn goes on to reasoning; the output is those actions (the turn's acted) followed by reasoning's selections, which reasoning sends after them, a repeat of an environment action included.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>

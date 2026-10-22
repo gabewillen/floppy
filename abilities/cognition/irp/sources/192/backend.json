@@ -9,11 +9,12 @@
         "answers": {
           "selection": {
             "type": "choice",
-            "choice": "__reasoning__",
+            "choice": "__intuition__",
             "confidence": 0.8,
             "probabilities": {
-              "bot.ability.cognition.ignore": 0.2,
-              "__reasoning__": 0.8
+              "bot.ability.cognition.ignore": 0.1,
+              "__intuition__": 0.8,
+              "__reasoning__": 0.1
             }
           }
         },

@@ -74,7 +74,9 @@ def decided(probabilities, choice, extra=None):
 
 DECIDE_IGNORE = decided({IGNORE: 0.8, "__reasoning__": 0.2}, IGNORE)
 DECIDE_ABSTAIN = decided({IGNORE: 0.2, "__reasoning__": 0.8}, "__reasoning__")
-# A stimulus carrying respond's parts, the evidence intuition grounds respond in.
+# The pass to the chat tier, offered when the cognition composes one (its hand_ons).
+DECIDE_TO_INTUITION = decided({IGNORE: 0.1, "__intuition__": 0.8, "__reasoning__": 0.1}, "__intuition__")
+# A stimulus carrying respond's parts, the evidence the decision layer grounds respond in.
 HI = {"parts": [{"words": "hi"}]}
 HI_LABEL = json.dumps(HI["parts"], separators=(",", ":"))
 # Respond 0.34 (its parts grounded in the stimulus), the one selection: 34 is under the warmup floor 35.
@@ -110,7 +112,7 @@ REASONED = (f"_event.data.output.length === 1 && _event.data.output[0].event ===
 S.statement(1, "On start, and on every return to `idle`, it sends `bot.ability.offers` `{ability: \"cognition\", choices}` to its parent: its one choice, `bot.ability.cognition.ignore`, its schema made model-facing (`$schema`, `title` and `examples` dropped).")
 S.statement(2, "A `bot.ability.cognition.input` `{turn, stimulus, focus?, focus_candidates?, choices?}` runs one turn of the cascade: autonomy (without a database it leaves the turn unhandled), then the decision layer, whose confident decision handles the turn: `bot.ability.cognition.output` `{turn, output}`, the output the decision layer's selections, which it has sent to their targets.")
 S.statement(3, "When the decision layer leaves the turn unhandled (its decision abstains), reasoning (the generate service, schema `dispatch`) handles it, and the output is reasoning's selections; with a database (the `<param>` `database`) autonomy and reasoning use the memory and the turn is answered the same way.")
-S.statement(4, "A decision layer that escalates for low confidence sends its environment actions (its selections) before the turn goes on to reasoning; the output is reasoning's selections, which reasoning sends after them, a repeat of an environment action included.")
+S.statement(4, "A decision layer that escalates for low confidence sends its environment actions (its selections) before the turn goes on to reasoning; the output is those actions (the turn's acted) followed by reasoning's selections, which reasoning sends after them, a repeat of an environment action included.")
 S.statement(5, "A decision layer that fails (`the decision failed (status)`, or no decision within `decision_timeout_ms`) does not fail the turn: the cognition logs `cognition.cascaded` and reasoning answers it (the reference's D-R-36). A reasoning stage that fails answers the turn with `bot.ability.failed` `{message, turn, input: {focus, focus_candidates}}`, the message the stage's reason (`the reasoning failed (status)`, or `Selection rejected: schema-mismatch` once a refused selection is not repaired), then hands the failure back to its parent as a `bot.ability.cognition.input` whose stimulus is `bot.ability.cognition.step.failed` `{message: \"Cognition's reasoning step failed, so the turn failed: <reason>\", stage: \"reasoning\", turn}`.")
 S.statement(6, "A step that makes no progress for `child_operation_timeout_ms` (from its start for autonomy and the decision layer; for reasoning from its streamed reply's first `generate.progress`, each later one starting it over), or runs `child_operation_ceiling_ms` in all (the `<param>` `bounds` overriding either, decision D101, and its `reflex_timeout_ms`, `intuition_timeout_ms` or `reasoning_timeout_ms` bounding one tier), fails only its turn: `bot.ability.failed` `{message: \"Cognition's <stage> step took longer than <seconds> seconds, so the turn failed.\", turn, input}`, then the failure handed back to its parent as a `bot.ability.cognition.input` whose stimulus is `bot.ability.cognition.step.timed_out` `{message, stage, timeout_seconds, turn}`; the cognition is idle again (it offers). A turn whose stimulus is a handed-back failure hands nothing back when it fails too.")
 S.statement(7, "`bot.ability.cognition.cancel` `{turn}` for the turn in hand cancels the stage and is acknowledged with `bot.ability.cognition.cancelled` `{turn}`, and the cognition is idle again (it offers); in `idle` a cancel is acknowledged at once; a cancel for another turn is not taken and the turn goes on.")
@@ -151,15 +153,16 @@ S.case(121, 3, "with a database, the turn goes through autonomy's and reasoning'
        [READY, send(INPUT, turn(1)), output(1, REASONED)],
        params=[SLOW, DB], backend=[DECIDE_ABSTAIN, REASONED_IGNORE, chat([])], clock="logical", ignore=[OFFERS])
 
-S.case(130, 4, "a low-confidence intuition's respond is sent first; the output is reasoning's ignore.",
+S.case(130, 4, "a low-confidence decision layer's respond is sent first; the output is that respond, then reasoning's ignore.",
        [READY, send(INPUT, turn(1, HI, choices=(IGNORE, RESPOND))), SAID_HI,
-        output(1, f"_event.data.output.length === 1"
-                  f" && _event.data.output[0].event === {js(IGNORE)} && _event.data.output[0].reason === 'nothing to say'")],
+        output(1, f"_event.data.output.length === 2 && _event.data.output[0].event === {js(RESPOND)}"
+                  f" && _event.data.output[1].event === {js(IGNORE)} && _event.data.output[1].reason === 'nothing to say'")],
        params=[SLOW], backend=[DECIDE_LOW, REASONED_IGNORE], clock="logical", ignore=[OFFERS])
-S.case(131, 4, "reasoning's repeat of the low-confidence intuition's respond is sent again, after it.",
+S.case(131, 4, "reasoning's repeat of the low-confidence decision layer's respond is sent again, after it.",
        [READY, send(INPUT, turn(1, HI, choices=(IGNORE, RESPOND))), SAID_HI, SAID_HI,
-        output(1, f"_event.data.output.length === 1 && _event.data.output[0].event === {js(RESPOND)}"
-                  " && _event.data.output[0].data.parts[0].words === 'hi' && _event.data.output[0].target === 'session'")],
+        output(1, f"_event.data.output.length === 2 && _event.data.output[0].event === {js(RESPOND)}"
+                  f" && _event.data.output[1].event === {js(RESPOND)}"
+                  " && _event.data.output[1].data.parts[0].words === 'hi' && _event.data.output[1].target === 'session'")],
        params=[SLOW], backend=[DECIDE_LOW, REASONED_REPEAT], clock="logical", ignore=[OFFERS])
 
 S.case(140, 5, "a failed decision cascades the turn to reasoning, which answers it.",
@@ -210,16 +213,16 @@ INTUITED_HANDOFF = chat([{"event": RESPOND, "data": HI, "reason": "hold on", "ta
                          {"event": HANDOFF, "data": {}, "reason": "this needs thought", "target": "session.cognition"}])
 S.case(190, 10, "an intuition tier handles the turn the decision layer left unhandled, without reasoning.",
        [READY, send(INPUT, turn(1)), output(1, REASONED)],
-       params=[SLOW, INTUITION], backend=[DECIDE_ABSTAIN, REASONED_IGNORE], clock="logical", ignore=[OFFERS])
+       params=[SLOW, INTUITION], backend=[DECIDE_TO_INTUITION, REASONED_IGNORE], clock="logical", ignore=[OFFERS])
 S.case(191, 10, "an intuition that selects the handoff sends its respond first; the output is it, then reasoning's ignore.",
        [READY, send(INPUT, turn(1, choices=(IGNORE, RESPOND))), SAID_HI,
         output(1, f"_event.data.output.length === 2 && _event.data.output[0].event === {js(RESPOND)}"
                   f" && _event.data.output[1].event === {js(IGNORE)}")],
-       params=[SLOW, INTUITION], backend=[DECIDE_ABSTAIN, INTUITED_HANDOFF, REASONED_IGNORE], clock="logical",
+       params=[SLOW, INTUITION], backend=[DECIDE_TO_INTUITION, INTUITED_HANDOFF, REASONED_IGNORE], clock="logical",
        ignore=[OFFERS])
 S.case(192, 10, "a failed intuition cascades the turn to reasoning, which answers it.",
        [READY, send(INPUT, turn(1)), output(1, REASONED)],
-       params=[SLOW, INTUITION], backend=[DECIDE_ABSTAIN, chat(status=500), REASONED_IGNORE], clock="logical",
+       params=[SLOW, INTUITION], backend=[DECIDE_TO_INTUITION, chat(status=500), REASONED_IGNORE], clock="logical",
        ignore=[OFFERS])
 
 _case(200, 11, "the cognition asks the identity for the bot's name after its offers, again after a turn, and no more once told.",
