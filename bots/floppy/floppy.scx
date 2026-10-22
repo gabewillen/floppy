@@ -90,9 +90,12 @@
   Environment: environment.sound and environment.visual from the
   environment, while active, are first recorded in the short-term
   register (the original's _fan_out_input: bot.ability.memory.stm.record
-  {stimulus_name, payload}, the payload the stimulus data's bounded scalar
-  projection, <memory:stm_projection>; a one-way message, so registration
-  never blocks admitting the stimulus), then go to
+  {stimulus_name, payload, source?}, the payload the stimulus data's
+  bounded scalar projection, <memory:stm_projection>, and source a
+  sound's own source, which floppy carries in the sound for the original's
+  envelope source; floppy has no envelope id or target to record; a
+  one-way message, so registration never blocks admitting the stimulus),
+  then go to
   each input ability (input, the original's Bot input: the invoke ids
   of the abilities that perceive raw stimuli; the identity and the
   listening), in
@@ -418,8 +421,7 @@
       <transition event="environment.sound" event:schema="../../abilities/schemas/environment.sound.json">
         <memory:stm_projection location="stm_payload" data="_event.data"/>
         <send event="bot.ability.memory.stm.record" target="#_stm">
-          <param name="stimulus_name" expr="'environment.sound'"/>
-          <param name="payload" expr="stm_payload"/>
+          <content expr="stmRecord('environment.sound', _event)"/>
         </send>
         <foreach array="input" item="ability">
           <send event="environment.sound" targetexpr="abilityTarget(ability)">
@@ -432,8 +434,7 @@
       <transition event="environment.visual" event:schema="schemas/environment.visual.json">
         <memory:stm_projection location="stm_payload" data="_event.data"/>
         <send event="bot.ability.memory.stm.record" target="#_stm">
-          <param name="stimulus_name" expr="'environment.visual'"/>
-          <param name="payload" expr="stm_payload"/>
+          <content expr="stmRecord('environment.visual', _event)"/>
         </send>
         <foreach array="input" item="ability">
           <send event="environment.visual" targetexpr="abilityTarget(ability)">

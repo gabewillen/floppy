@@ -89,6 +89,18 @@ function isFocusCandidate(_event) {
   return focus_candidates.indexOf(_event.data.device) >= 0 && devices.indexOf(_event.data.device) >= 0;
 }
 
+// The short-term register's record of an admitted stimulus (the original's
+// event_record): its name, its data's bounded projection (stm_payload), and
+// the source a sound names (floppy carries the original's envelope source
+// in the sound); floppy has no envelope id or target.
+function stmRecord(name, _event) {
+  const record = {stimulus_name: name, payload: stm_payload};
+  if (typeof _event.data.source === 'string' && _event.data.source !== '') {
+    record.source = _event.data.source;
+  }
+  return record;
+}
+
 // processing
 
 function nextTurn() {
