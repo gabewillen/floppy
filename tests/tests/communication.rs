@@ -98,6 +98,10 @@ fn layout(speaking: &Speaking, edits: &[(&str, &[(&str, &str)])]) -> PathBuf {
     let dir = unique_scratch("communication");
     copy_dir(&workspace().join("bots/floppy"), &dir.join("bots/floppy"));
     copy_dir(
+        &workspace().join("bots/floppy/firmware"),
+        &dir.join("bots/floppy/firmware"),
+    );
+    copy_dir(
         &workspace().join("bots/floppy/schemas"),
         &dir.join("bots/floppy/schemas"),
     );
