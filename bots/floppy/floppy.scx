@@ -172,7 +172,9 @@
 
   Time bounds (decision D101): the bounds param may set the cognition's
   child_operation_timeout_ms and child_operation_ceiling_ms (a stage's
-  inactivity bound and its backstop) and reflection's revising_timeout_ms
+  inactivity bound and its backstop), its per-tier reflex_timeout_ms,
+  intuition_timeout_ms and reasoning_timeout_ms (one tier's step bound,
+  the reference's _tier_timeouts) and reflection's revising_timeout_ms
   and revising_ceiling_ms (likewise for a revision through the builder),
   [floppy fields]; the body passes those it was given to the cognition as
   <param name="bounds">, and each one absent is the ability's default
