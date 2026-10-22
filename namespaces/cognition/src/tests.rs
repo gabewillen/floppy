@@ -774,3 +774,51 @@ fn content_values_of_the_wrong_kind_raise_error_execution() {
         Err(Failure::Host("fatal"))
     );
 }
+
+#[test]
+fn a_device_on_an_object_renders_on_as_its_own_attribute() {
+    let mut input = recalling("hi", &[], &[]);
+    input["environment"] = json!({
+        "id": "session",
+        "self": {"state": "processing", "held_percepts": 0, "owned_devices": {
+            "lamp": {"ref": "lamp", "id": "session.lamp", "state": "on", "on": "desk",
+                     "attributes": {"brightness": 40}},
+            "fan": {"ref": "fan", "id": "session.fan", "state": "off", "attributes": {}},
+        }},
+    });
+    let prompt = prompt(&input);
+    assert!(
+        prompt.contains(r#"<device ref="lamp" id="session.lamp" state="on" on="desk">"#),
+        "{prompt}"
+    );
+    assert!(
+        prompt.contains(r#"<device ref="fan" id="session.fan" state="off" />"#),
+        "{prompt}"
+    );
+    assert!(
+        prompt.contains("<held_percepts>0</held_percepts>"),
+        "{prompt}"
+    );
+}
+
+#[test]
+fn the_firmware_renders_as_a_device_does_before_the_owned_devices() {
+    let mut input = recalling("hi", &[], &[]);
+    input["environment"] = json!({
+        "id": "session",
+        "self": {"state": "processing", "owned_devices": {
+            "lamp": {"ref": "lamp", "id": "session.lamp", "state": "on", "attributes": {}},
+        }, "firmware": {"ref": "firmware", "id": "session.floppy.firmware", "state": "idle",
+                        "attributes": {"minutes": 0}}},
+    });
+    let prompt = prompt(&input);
+    let firmware = prompt
+        .find(r#"<firmware ref="firmware" id="session.floppy.firmware" state="idle">"#)
+        .unwrap_or_else(|| panic!("{prompt}"));
+    let devices = prompt
+        .find("<owned_devices>")
+        .unwrap_or_else(|| panic!("{prompt}"));
+    assert!(firmware < devices, "{prompt}");
+    assert!(prompt.contains("<minutes>0</minutes>"), "{prompt}");
+    assert!(!prompt.contains("<firmware>"), "{prompt}");
+}
