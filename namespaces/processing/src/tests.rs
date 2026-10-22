@@ -131,21 +131,22 @@ fn assigned_json(host: &FakeHost, location: &str) -> Json {
 fn verbose_offers() -> Json {
     json!([{
         "event": "bot.ability.communication.respond",
-        "description": "Say text.",
+        "description": "Say a reply.",
         "target": "communication",
         "schema": {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "title": "bot.ability.communication.respond",
-            "description": "Say text.",
-            "examples": [{"text": "hi"}],
+            "description": "Say a reply.",
+            "examples": [{"parts": [{"words": "hi"}]}],
             "type": "object",
             "properties": {
-                "text": {"type": "string", "title": "Text", "description": "What to say.", "examples": ["hi"]},
+                "parts": {"type": "array", "title": "Parts", "description": "What to say.",
+                          "items": {"type": "object", "properties": {"words": {"type": "string", "title": "Words", "examples": ["hi"]}}}},
                 "title": {"type": "string", "default": {"title": "kept"}},
             },
             "$defs": {"examples": {"enum": [{"title": "kept"}], "title": "dropped"}},
             "anyOf": [{"title": "dropped", "required": ["title"]}],
-            "required": ["text"],
+            "required": ["parts"],
             "additionalProperties": false,
         },
     }])
@@ -163,18 +164,19 @@ fn model_facing_schema_drops_schema_title_and_examples_and_keeps_property_names(
         assigned_json(&host, "offers"),
         json!([{
             "event": "bot.ability.communication.respond",
-            "description": "Say text.",
+            "description": "Say a reply.",
             "target": "communication",
             "schema": {
-                "description": "Say text.",
+                "description": "Say a reply.",
                 "type": "object",
                 "properties": {
-                    "text": {"type": "string", "description": "What to say."},
+                    "parts": {"type": "array", "description": "What to say.",
+                              "items": {"type": "object", "properties": {"words": {"type": "string"}}}},
                     "title": {"type": "string", "default": {"title": "kept"}},
                 },
                 "$defs": {"examples": {"enum": [{"title": "kept"}]}},
                 "anyOf": [{"required": ["title"]}],
-                "required": ["text"],
+                "required": ["parts"],
                 "additionalProperties": false,
             },
         }])
@@ -208,8 +210,8 @@ fn model_facing_schema_over_the_bound_drops_descriptions_before_it_drops_the_cho
     let bare: Json = serde_json::from_str(&bare).unwrap();
     assert_eq!(bare[0]["target"], json!("communication"));
     assert_eq!(
-        bare[0]["schema"]["properties"]["text"],
-        json!({"type": "string"})
+        bare[0]["schema"]["properties"]["parts"],
+        json!({"type": "array", "items": {"type": "object", "properties": {"words": {"type": "string"}}}})
     );
     // A property named description is a name, not a keyword: it stays.
     let named = json!([{"event": "e", "schema": {"properties": {"description": {"type": "string", "description": "x"}}}}]);
@@ -437,9 +439,9 @@ fn clear_choice() -> Json {
 fn respond_offer() -> Json {
     json!({
         "event": "bot.ability.communication.respond",
-        "description": "Say text.",
-        "schema": {"title": "respond", "type": "object", "description": "Say text.",
-                   "properties": {"text": {"type": "string", "examples": ["hi"]}}},
+        "description": "Say a reply.",
+        "schema": {"title": "respond", "type": "object", "description": "Say a reply.",
+                   "properties": {"parts": {"type": "array", "examples": [[{"words": "hi"}]]}}},
     })
 }
 
@@ -486,8 +488,8 @@ fn collect_offered_events_tags_each_choice_with_its_offering_session_in_name_ord
     let choices = json!([
         {"event": "bot.clear_focus", "schema": {"type": "object"}, "target": "session.floppy"},
         {"event": "bot.ability.cognition.ignore", "schema": {"type": "object"}, "target": "session.floppy.cognition"},
-        {"event": "bot.ability.communication.respond", "description": "Say text.", "target": "session.floppy.communication",
-         "schema": {"type": "object", "description": "Say text.", "properties": {"text": {"type": "string"}}}},
+        {"event": "bot.ability.communication.respond", "description": "Say a reply.", "target": "session.floppy.communication",
+         "schema": {"type": "object", "description": "Say a reply.", "properties": {"parts": {"type": "array"}}}},
         {"event": "bot.ability.cognition.ignore", "schema": {"type": "object"}, "target": "session.floppy.communication"},
     ]);
     assert_eq!(assigned_any(&host, "choices"), choices);
@@ -614,8 +616,8 @@ fn send_builds_the_originals_dispatch_tool_schema_of_the_choices() {
         "choices",
         json!([
             {"event": "bot.clear_focus", "schema": {"$schema": "x", "title": "Clear", "description": "Clear the focus.", "examples": [{"why": "done"}], "type": "object", "properties": {"why": {"type": "string"}}}},
-            {"event": "bot.ability.communication.respond", "description": "Say text.", "target": "communication",
-             "schema": {"type": "object", "additionalProperties": true, "properties": {"text": {"type": "string"}}, "required": ["text"]}},
+            {"event": "bot.ability.communication.respond", "description": "Say a reply.", "target": "communication",
+             "schema": {"type": "object", "additionalProperties": true, "properties": {"parts": {"type": "array"}}, "required": ["parts"]}},
             {"event": "bot.ability.cognition.ignore", "target": "cognition", "schema": "not an object"},
             {"event": "bot.ability.cognition.ignore", "target": "communication", "description": "later", "schema": {}},
             {"event": "bot.ability.cognition.ignore", "target": "cognition", "schema": {}},
@@ -661,7 +663,7 @@ fn send_builds_the_originals_dispatch_tool_schema_of_the_choices() {
                     "description": "bot.ability.communication.respond",
                     "properties": {
                         "event": {"type": "string", "enum": ["bot.ability.communication.respond"]},
-                        "data": {"type": "object", "additionalProperties": true, "properties": {"text": {"type": "string"}}, "required": ["text"]},
+                        "data": {"type": "object", "additionalProperties": true, "properties": {"parts": {"type": "array"}}, "required": ["parts"]},
                         "reason": reason,
                         "target": {"type": "string", "enum": ["communication"], "description": "Actor that receives this event. Fixed for this turn because only one actor enables it in the live topology."},
                     },

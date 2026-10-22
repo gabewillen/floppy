@@ -10,8 +10,12 @@ CLEAR = "bot.clear_focus"
 DB = ("database", "'/memory/floppy.sqlite'")
 
 OBJECT = {"type": "object", "properties": {}, "additionalProperties": False}
-TEXT = {"type": "object", "properties": {"text": {"type": "string", "minLength": 1}},
-        "required": ["text"], "additionalProperties": False}
+# Respond's data is its parts, each with optional words (the reply schema's shape).
+PARTS = {"type": "object", "properties": {"parts": {
+             "type": "array", "minItems": 1, "maxItems": 64,
+             "items": {"type": "object", "properties": {"words": {"type": "string", "minLength": 1}},
+                       "additionalProperties": False}}},
+         "required": ["parts"], "additionalProperties": False}
 DEVICE = {"type": "object", "properties": {"device": {"type": "string", "minLength": 1}},
           "required": ["device"], "additionalProperties": False}
 # The harness (the run's root session, "session") offers respond and the
@@ -22,7 +26,7 @@ HARNESS = "session"
 OWN = "session.reasoning"
 CHOICES = [
     {"event": IGNORE, "schema": OBJECT, "description": "Ignore the stimulus.", "target": OWN},
-    {"event": RESPOND, "schema": TEXT, "description": "Say something.", "target": HARNESS},
+    {"event": RESPOND, "schema": PARTS, "description": "Say something.", "target": HARNESS},
     {"event": FOCUS, "schema": DEVICE, "description": "Look at a device.", "target": HARNESS},
     {"event": CLEAR, "schema": OBJECT, "description": "Stop looking at the device.", "target": HARNESS},
 ]
@@ -54,10 +58,10 @@ def failed_starting(prefix):
                         f" && _event.data.reason.indexOf({js(prefix)}) === 0 && _event.data.reason.length > {len(prefix)}")
 
 
-SAY = {"event": RESPOND, "data": {"text": "Hi! I am floppy."}, "reason": "greet", "target": HARNESS}
+SAY = {"event": RESPOND, "data": {"parts": [{"words": "Hi! I am floppy."}]}, "reason": "greet", "target": HARNESS}
 SKIP = {"event": IGNORE, "data": {}, "reason": "nothing to say", "target": OWN}
 # The harness takes the respond the stage sends it.
-SAID = expect(RESPOND, "_event.data.text === 'Hi! I am floppy.'")
+SAID = expect(RESPOND, "_event.data.parts.length === 1 && _event.data.parts[0].words === 'Hi! I am floppy.'")
 
 
 S.statement(1, "It runs one turn (the `<param>`s turn, stimulus, focus, focus_candidates, choices, model and database) and ends: its `<donedata>`, received as `done.invoke.reasoning`, is `{turn, handled: true, selected}` or `{turn, handled: false, failed: true, reason}`, turn the given turn.")
@@ -94,7 +98,7 @@ S.case(110, 2, "no choices fail the turn without a model call (the backend would
 S.case(120, 3, "a selection of an offered event is returned with its data, reason and target.",
        [SAID, expect(DONE, "_event.data.handled === true && _event.data.selected.length === 1"
                      " && _event.data.selected[0].event === 'bot.ability.communication.respond'"
-                     " && _event.data.selected[0].data.text === 'Hi! I am floppy.'"
+                     " && _event.data.selected[0].data.parts[0].words === 'Hi! I am floppy.'"
                      " && _event.data.selected[0].reason === 'greet'"
                      " && _event.data.selected[0].target === 'session'")],
        params=turn(), backend=selection(SAY))
@@ -148,7 +152,7 @@ S.case(151, 6, "a selection whose target no session of the run answers fails the
 
 S.case(160, 7, "with a fresh database the turn recalls and reasons, handled.",
        [SAID, expect(DONE, "_event.data.turn === 1 && _event.data.handled === true && _event.data.selected.length === 1"
-                     " && _event.data.selected[0].data.text === 'Hi! I am floppy.'")],
+                     " && _event.data.selected[0].data.parts[0].words === 'Hi! I am floppy.'")],
        params=turn(extra=[DB]), backend=selection(SAY))
 S.case(161, 7, "with a database and no choices, the recall still runs and the turn fails for its choices.",
        [failed("the reasoning has no choices to select from")],

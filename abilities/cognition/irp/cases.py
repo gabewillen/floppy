@@ -33,14 +33,24 @@ def offered(event):
     return schema
 
 
-def turn(n, text="hello", choices=(IGNORE,)):
+# Respond's schema reduced to its parts' words: the whole schema, written into a case's one
+# <content expr>, nests past the ECMAScript data model's expression bound (LIMIT003).
+RESPOND_PARTS = {"type": "object", "properties": {"parts": {
+                     "type": "array", "minItems": 1, "maxItems": 64,
+                     "items": {"type": "object", "properties": {"words": {"type": "string", "minLength": 1}},
+                               "additionalProperties": False}}},
+                 "required": ["parts"], "additionalProperties": False}
+
+
+def turn(n, data=None, choices=(IGNORE,)):
     # Tagged with their offering sessions' ids: the cognition's own ignore,
     # and respond offered by the harness (the run's root, "session").
     targets = {IGNORE: "session.cognition", RESPOND: "session"}
+    schemas = {IGNORE: offered(IGNORE), RESPOND: RESPOND_PARTS}
     return js({"turn": n,
-               "stimulus": {"event": "bot.input", "data": {"text": text}, "source": "conversation"},
+               "stimulus": {"event": "bot.input", "data": data or {"text": "hello"}, "source": "conversation"},
                "focus": None, "focus_candidates": [],
-               "choices": [{"event": e, "schema": offered(e), "target": targets[e]} for e in choices]})
+               "choices": [{"event": e, "schema": schemas[e], "target": targets[e]} for e in choices]})
 
 
 def completion(content):
@@ -62,12 +72,16 @@ def decided(probabilities, choice, extra=None):
 
 DECIDE_IGNORE = decided({IGNORE: 0.8, "__unhandled__": 0.2}, IGNORE)
 DECIDE_ABSTAIN = decided({IGNORE: 0.2, "__unhandled__": 0.8}, "__unhandled__")
-# Ignore 0.34 and respond 0.33 (its text grounded in the stimulus): the least, 33, is under the warmup floor 35.
+# A stimulus carrying respond's parts, the evidence intuition grounds respond in.
+HI = {"parts": [{"words": "hi"}]}
+HI_LABEL = json.dumps(HI["parts"], separators=(",", ":"))
+# Ignore 0.34 and respond 0.33 (its parts grounded in the stimulus): the least, 33, is under the warmup floor 35.
 DECIDE_LOW = decided({IGNORE: 0.34, RESPOND: 0.33, "__unhandled__": 0.33}, IGNORE,
-                     {f"{RESPOND}::text": {"type": "choice", "choice": "hi", "confidence": 1.0, "probabilities": {"hi": 1.0}}})
+                     {f"{RESPOND}::parts": {"type": "choice", "choice": HI_LABEL, "confidence": 1.0,
+                                            "probabilities": {HI_LABEL: 1.0}}})
 REASONED_IGNORE = chat([{"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "session.cognition"}])
-REASONED_REPEAT = chat([{"event": RESPOND, "data": {"text": "hi"}, "reason": "answer", "target": "session"}])
-SAID_HI = expect(RESPOND, "_event.data.text === 'hi'")
+REASONED_REPEAT = chat([{"event": RESPOND, "data": HI, "reason": "answer", "target": "session"}])
+SAID_HI = expect(RESPOND, "_event.data.parts.length === 1 && _event.data.parts[0].words === 'hi'")
 OFF_CHOICE = chat([{"event": "bot.focus_device", "data": {"device": "lamp"}, "reason": "look"}])
 
 
@@ -115,14 +129,14 @@ S.case(121, 3, "with a database, the turn goes through autonomy's and reasoning'
        params=[SLOW, DB], backend=[DECIDE_ABSTAIN, REASONED_IGNORE, chat([])], clock="logical", ignore=[OFFERS])
 
 S.case(130, 4, "a low-confidence intuition's respond is sent first; the output is reasoning's ignore.",
-       [READY, send(INPUT, turn(1, text="hi", choices=(IGNORE, RESPOND))), SAID_HI,
+       [READY, send(INPUT, turn(1, HI, choices=(IGNORE, RESPOND))), SAID_HI,
         output(1, f"_event.data.output.length === 1"
                   f" && _event.data.output[0].event === {js(IGNORE)} && _event.data.output[0].reason === 'nothing to say'")],
        params=[SLOW], backend=[DECIDE_LOW, REASONED_IGNORE], clock="logical", ignore=[OFFERS])
 S.case(131, 4, "reasoning's repeat of the low-confidence intuition's respond is sent again, after it.",
-       [READY, send(INPUT, turn(1, text="hi", choices=(IGNORE, RESPOND))), SAID_HI, SAID_HI,
+       [READY, send(INPUT, turn(1, HI, choices=(IGNORE, RESPOND))), SAID_HI, SAID_HI,
         output(1, f"_event.data.output.length === 1 && _event.data.output[0].event === {js(RESPOND)}"
-                  " && _event.data.output[0].data.text === 'hi' && _event.data.output[0].target === 'session'")],
+                  " && _event.data.output[0].data.parts[0].words === 'hi' && _event.data.output[0].target === 'session'")],
        params=[SLOW], backend=[DECIDE_LOW, REASONED_REPEAT], clock="logical", ignore=[OFFERS])
 
 S.case(140, 5, "a failed decision fails the turn.",

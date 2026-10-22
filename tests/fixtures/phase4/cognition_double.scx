@@ -30,11 +30,13 @@
   and is not sent (the body sends those to itself):
 
   * reply: answers the turn with one bot.ability.communication.respond
-    selection (the communication offers it);
-  * blank: selects bot.ability.communication.respond with blank text;
+    selection of one part, {parts: [{words}]} (the communication offers it);
+  * blank: selects bot.ability.communication.respond whose one part's
+    words are blank (the schema admits them; the communication refuses
+    them);
   * twice: selects bot.ability.communication.respond twice;
   * then_blank: selects bot.ability.communication.respond, then again with
-    blank text (the second waits for the first);
+    blank words (the second waits for the first);
   * adopt: selects bot.ability.identity.adopt for the observation's data;
   * admit: selects bot.ability.communication.input (no choice offers it), the
     speech's words after the first from source "caller" (as the original's
@@ -116,22 +118,22 @@
     <state id="working">
       <onentry>
         <if cond="action === 'reply'">
-          <assign location="out" expr="[{event: 'bot.ability.communication.respond', data: {text: 'reply ' + turn}}]"/>
+          <assign location="out" expr="[{event: 'bot.ability.communication.respond', data: {parts: [{words: 'reply ' + turn}]}}]"/>
         </if>
         <if cond="action === 'blank'">
-          <assign location="out" expr="[{event: 'bot.ability.communication.respond', data: {text: '  '}}]"/>
+          <assign location="out" expr="[{event: 'bot.ability.communication.respond', data: {parts: [{words: '  '}]}}]"/>
         </if>
         <if cond="action === 'twice'">
-          <assign location="out" expr="[{event: 'bot.ability.communication.respond', data: {text: 'first ' + turn}}, {event: 'bot.ability.communication.respond', data: {text: 'second ' + turn}}]"/>
+          <assign location="out" expr="[{event: 'bot.ability.communication.respond', data: {parts: [{words: 'first ' + turn}]}}, {event: 'bot.ability.communication.respond', data: {parts: [{words: 'second ' + turn}]}}]"/>
         </if>
         <if cond="action === 'then_blank'">
-          <assign location="out" expr="[{event: 'bot.ability.communication.respond', data: {text: 'first ' + turn}}, {event: 'bot.ability.communication.respond', data: {text: '   '}}]"/>
+          <assign location="out" expr="[{event: 'bot.ability.communication.respond', data: {parts: [{words: 'first ' + turn}]}}, {event: 'bot.ability.communication.respond', data: {parts: [{words: '   '}]}}]"/>
         </if>
         <if cond="action === 'adopt'">
           <assign location="out" expr="[{event: 'bot.ability.identity.adopt', data: {name: observed}, reason: 'asked'}]"/>
         </if>
         <if cond="action === 'addressed'">
-          <assign location="out" expr="[{event: 'bot.ability.communication.respond', data: {text: 'I am ' + observed}}]"/>
+          <assign location="out" expr="[{event: 'bot.ability.communication.respond', data: {parts: [{words: 'I am ' + observed}]}}]"/>
         </if>
         <if cond="action === 'admit'">
           <assign location="out" expr="[{event: 'bot.ability.communication.input', data: {source_ids: ['caller'], target_ids: [], content: observed.split(' ').slice(1).join(' '), content_type: 'text/plain', sample_rate_hz: stimulus.data.sample_rate_hz, channels: stimulus.data.channels}}]"/>
@@ -155,9 +157,9 @@
         <if cond="action === 'stale'">
           <send event="bot.ability.cognition.output" target="#_parent">
             <param name="turn" expr="turn + 100"/>
-            <param name="output" expr="[{event: 'bot.ability.communication.respond', data: {text: 'stale'}}]"/>
+            <param name="output" expr="[{event: 'bot.ability.communication.respond', data: {parts: [{words: 'stale'}]}}]"/>
           </send>
-          <assign location="out" expr="[{event: 'bot.ability.communication.respond', data: {text: 'fresh ' + turn}}]"/>
+          <assign location="out" expr="[{event: 'bot.ability.communication.respond', data: {parts: [{words: 'fresh ' + turn}]}}]"/>
         </if>
         <if cond="out !== null">
           <assign location="out" expr="out.map(function (s) { var c = choices.filter(function (c) { return c.event === s.event; })[0]; return c === undefined ? s : Object.assign({}, s, {target: c.target}); })"/>

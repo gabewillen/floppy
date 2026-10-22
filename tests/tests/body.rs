@@ -368,7 +368,7 @@ fn a_turn_completes_with_the_cognitions_output() {
     activated(&mut run);
     run.event("bot.input", &input("reply", "hello"));
     let records = run.until(WAIT, label_is("bot.processing.completed"));
-    let output = r#"[{"data":{"text":"reply 1"},"event":"bot.ability.communication.respond","target":"session.floppy.communication"}]"#;
+    let output = r#"[{"data":{"parts":[{"words":"reply 1"}]},"event":"bot.ability.communication.respond","target":"session.floppy.communication"}]"#;
     assert_eq!(
         only(
             &records,
@@ -422,7 +422,7 @@ fn a_reply_for_another_turn_is_ignored() {
             ),
             (
                 "floppy.output",
-                r#"{"turn":1,"output":[{"data":{"text":"fresh 1"},"event":"bot.ability.communication.respond","target":"session.floppy.communication"}]}"#
+                r#"{"turn":1,"output":[{"data":{"parts":[{"words":"fresh 1"}]},"event":"bot.ability.communication.respond","target":"session.floppy.communication"}]}"#
             ),
         ])
     );
@@ -580,7 +580,8 @@ fn without_a_decision_backend_the_real_cognitions_turn_fails_unconfigured() {
 }
 
 /// An offered schema as the body compacts it: `$schema`, `title` and
-/// `examples` dropped everywhere but in property names.
+/// `examples` dropped everywhere but in property names, and a whole number
+/// written as the ECMAScript data model writes it (`1.0` is `1`).
 fn compacted(schema: &Json) -> Json {
     match schema {
         Json::Array(items) => Json::Array(items.iter().map(compacted).collect()),
@@ -603,6 +604,11 @@ fn compacted(schema: &Json) -> Json {
                 })
                 .collect(),
         ),
+        Json::Number(number) => number
+            .to_string()
+            .strip_suffix(".0")
+            .and_then(|whole| whole.parse::<i64>().ok())
+            .map_or_else(|| schema.clone(), Json::from),
         value => value.clone(),
     }
 }
