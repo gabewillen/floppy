@@ -6,7 +6,7 @@ CHAT = "/chat/completions"
 IGNORE = "bot.ability.cognition.ignore"
 RESPOND = "bot.ability.communication.respond"
 FOCUS = "bot.focus_device"
-CLEAR = "bot.clear_focus"
+LAMP = "lamp.on"
 DB = ("database", "'/memory/floppy.sqlite'")
 
 OBJECT = {"type": "object", "properties": {}, "additionalProperties": False}
@@ -24,7 +24,7 @@ CHOICES = [
     {"event": IGNORE, "schema": OBJECT, "description": "Ignore the stimulus.", "target": OWN},
     {"event": RESPOND, "schema": TEXT, "description": "Say something.", "target": HARNESS},
     {"event": FOCUS, "schema": DEVICE, "description": "Look at a device.", "target": HARNESS},
-    {"event": CLEAR, "schema": OBJECT, "description": "Stop looking at the device.", "target": HARNESS},
+    {"event": LAMP, "schema": OBJECT, "description": "Turn the lamp on.", "target": HARNESS},
 ]
 STIMULUS = {"event": "bot.input", "data": {"observation": {"event": "text", "data": "say hi"}}, "source": "gabe"}
 
@@ -136,17 +136,17 @@ S.case(140, 5, "a stimulus with over 4096 collection items fails the turn withou
        params=[p for p in turn() if p[0] != "stimulus"]
        + [("stimulus", "({event: 'bot.input', source: 'gabe', data: {items: Array.from({length: 4097}, (_, i) => i)}})")],
        backend=selection(SAY))
-S.case(150, 6, "a focus_device and a clear_focus are sent to their target, in order, before the turn ends.",
-       [expect(FOCUS, "_event.data.device === 'lamp'"), expect(CLEAR),
+S.case(150, 6, "a focus_device and a device action are sent to their target, in order, before the turn ends.",
+       [expect(FOCUS, "_event.data.device === 'lamp'"), expect(LAMP),
         expect(DONE, "_event.data.handled === true && _event.data.selected.length === 2"
                      " && _event.data.selected[0].event === 'bot.focus_device'"
-                     " && _event.data.selected[1].event === 'bot.clear_focus'")],
+                     " && _event.data.selected[1].event === 'lamp.on'")],
        params=turn(), backend=selection({"event": FOCUS, "data": {"device": "lamp"}, "reason": "look", "target": HARNESS},
-                                        {"event": CLEAR, "data": {}, "reason": "stop", "target": HARNESS}))
+                                        {"event": LAMP, "data": {}, "reason": "light", "target": HARNESS}))
 S.case(152, 6, "a selection without data is sent with {}, as the original dispatches it.",
-       [expect(CLEAR, "JSON.stringify(_event.data) === '{}'"),
+       [expect(LAMP, "JSON.stringify(_event.data) === '{}'"),
         expect(DONE, "_event.data.handled === true && _event.data.selected.length === 1")],
-       params=turn(), backend=selection({"event": CLEAR, "reason": "stop", "target": HARNESS}))
+       params=turn(), backend=selection({"event": LAMP, "reason": "light", "target": HARNESS}))
 S.case(151, 6, "a selection whose target no session of the run answers fails the turn.",
        [failed("the reasoning could not run (error.communication)")],
        params=turn(choices=[{**CHOICES[1], "target": "session.nowhere"}]),

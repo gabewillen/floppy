@@ -20,6 +20,10 @@
 //! to the cognition, whose double a persona test rewrites to log it as
 //! `double.persona` (and to select a revision for the persona).
 //!
+//! The short-term register's wiring through the body (a child's turn
+//! relayed to it, its recent turns read before each turn and relayed to
+//! the cognition) is tested here too, with a rewritten double.
+//!
 //! The body gives the identity its database, in a directory each run is
 //! granted (`support::memory_grant`), so an adopted name outlives the run.
 //!
@@ -59,6 +63,10 @@ fn copy_dir(from: &Path, to: &Path) {
 fn layout(name: Option<&str>) -> PathBuf {
     let dir = unique_scratch("identity");
     copy_dir(&workspace().join("bots/floppy"), &dir.join("bots/floppy"));
+    copy_dir(
+        &workspace().join("bots/floppy/firmware"),
+        &dir.join("bots/floppy/firmware"),
+    );
     copy_dir(
         &workspace().join("bots/floppy/schemas"),
         &dir.join("bots/floppy/schemas"),
@@ -390,6 +398,56 @@ fn the_cognition_is_told_the_bots_name_and_each_adoption() {
     let records = run.until(WAIT, label_is("double.named"));
     assert_eq!(texts(&records, "double.named"), strings(&[r#""Floppy""#]));
     close(run, "the_cognition_is_told_the_bots_name_and_each_adoption");
+}
+
+/// The short-term register through the body: a child's
+/// `bot.ability.memory.stm.turn` is relayed to the register, and before a
+/// turn the body reads the register's recent turns and relays them to the
+/// cognition ahead of the turn's input. The double is rewritten to write one
+/// heard turn on start and log each relayed read as `double.recent` (the
+/// turns' texts).
+#[test]
+fn the_cognition_is_told_the_recent_turns_before_each_turn() {
+    let body = layout(None);
+    let double = body
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .expect("the layout's root")
+        .join("abilities/cognition/cognition.scx");
+    let text = std::fs::read_to_string(&double).expect("the double is readable");
+    let alive = r#"<state id="alive" initial="idle">"#;
+    assert!(text.contains(alive), "the double's alive state");
+    std::fs::write(
+        &double,
+        text.replacen(
+            alive,
+            &format!(
+                r##"{alive}
+    <onentry>
+      <send event="bot.ability.memory.stm.turn" target="#_parent">
+        <content expr="({{id: 't1', direction: 'heard', speakers: [], text: 'Hi there, I am Maya.', cut: false, conversation: 'listening'}})"/>
+      </send>
+    </onentry>
+    <transition event="bot.ability.memory.stm.recent_turns.output">
+      <log label="double.recent" expr="JSON.stringify(_event.data.turns.map(function (t) {{ return t.text; }}))"/>
+    </transition>"##
+            ),
+            1,
+        ),
+    )
+    .expect("the double copy is writable");
+    let (mut run, _) = started(&body);
+    run.event("bot.input", &input("ignore", "nothing"));
+    let records = run.until(WAIT, label_is("double.choices"));
+    assert_eq!(
+        texts(&records, "double.recent"),
+        strings(&[r#"["Hi there, I am Maya."]"#])
+    );
+    close(
+        run,
+        "the_cognition_is_told_the_recent_turns_before_each_turn",
+    );
 }
 
 /// The body's default traits (`<data id="traits">` in `bots/floppy/floppy.scx`).

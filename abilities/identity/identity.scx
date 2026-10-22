@@ -20,8 +20,10 @@
   (abilities/memory/memory.scx) to select the adopted names (query_tags
   self_name, subject_ref self, oldest first, at most 50, the original
   identity/name.py) and sends bot.ability.identity.recalled {name} to
-  #_internal with the last one that decodes as a name fact (a damaged row
-  is skipped, so it never costs the bot the name adopted before it), else
+  #_internal with the last one that decodes as the original's Name ({text,
+  kind?}, kind "fact" when absent, no other key, text of 1 to 64
+  characters; a damaged row is skipped, so it never costs the bot the name
+  adopted before it), else
   with the name the session started with ({text, kind: "fact"}, or null). A memory that does not answer
   yet is a peer still coming up, not an empty one (the original's asking
   and waiting): an attempt that fails (logged as identity.recall.failed,

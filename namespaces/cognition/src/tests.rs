@@ -192,6 +192,39 @@ fn attention_takes_no_device_from_the_stimulus_source() {
 }
 
 #[test]
+fn attention_biases_a_perceived_batch_percept_by_percept() {
+    let percept = |device: &str| json!({"stimulus": input(&json!({"target_device": device})), "source": null, "participants": []});
+    let perceived = |percepts: Json| json!({"event": "bot.perceived", "data": {"percepts": percepts}, "source": "session.floppy"});
+    // The focus first, then each percept's device in arrival order, once.
+    assert_eq!(
+        bias(
+            &perceived(json!([
+                percept("fan"),
+                percept("door"),
+                percept("lamp"),
+                percept("fan")
+            ])),
+            &json!("lamp")
+        ),
+        assigned(&json!("lamp"), &json!(["lamp", "fan"]))
+    );
+    assert_eq!(
+        bias(
+            &perceived(json!([percept("fan"), percept("lamp")])),
+            &Json::Null
+        ),
+        assigned(&Json::Null, &json!(["fan", "lamp"]))
+    );
+    // A percept that is not a device's input names no device.
+    let product = json!({"stimulus": {"event": "bot.ability.conversation.output",
+                         "data": {"target_device": "lamp"}}, "source": null});
+    assert_eq!(
+        bias(&perceived(json!([product, percept("fan")])), &Json::Null),
+        assigned(&Json::Null, &json!(["fan"]))
+    );
+}
+
+#[test]
 fn attention_without_focuslocation_writes_the_candidates_only() {
     let mut host = attention_host(&input(&json!({})), &json!("lamp"));
     let attributes: Vec<Attribute> = attention_attributes()
@@ -934,4 +967,52 @@ fn without_a_stimulus_the_content_has_no_stimulus_block() {
         !prompt.contains("stimulus:") && !prompt.contains("none_type"),
         "{prompt}"
     );
+}
+
+#[test]
+fn a_device_on_an_object_renders_on_as_its_own_attribute() {
+    let mut input = recalling("hi", &[], &[]);
+    input["environment"] = json!({
+        "id": "session",
+        "self": {"state": "processing", "held_percepts": 0, "owned_devices": {
+            "lamp": {"ref": "lamp", "id": "session.lamp", "state": "on", "on": "desk",
+                     "attributes": {"brightness": 40}},
+            "fan": {"ref": "fan", "id": "session.fan", "state": "off", "attributes": {}},
+        }},
+    });
+    let prompt = prompt(&input);
+    assert!(
+        prompt.contains(r#"<device ref="lamp" id="session.lamp" state="on" on="desk">"#),
+        "{prompt}"
+    );
+    assert!(
+        prompt.contains(r#"<device ref="fan" id="session.fan" state="off" />"#),
+        "{prompt}"
+    );
+    assert!(
+        prompt.contains("<held_percepts>0</held_percepts>"),
+        "{prompt}"
+    );
+}
+
+#[test]
+fn the_firmware_renders_as_a_device_does_before_the_owned_devices() {
+    let mut input = recalling("hi", &[], &[]);
+    input["environment"] = json!({
+        "id": "session",
+        "self": {"state": "processing", "owned_devices": {
+            "lamp": {"ref": "lamp", "id": "session.lamp", "state": "on", "attributes": {}},
+        }, "firmware": {"ref": "firmware", "id": "session.floppy.firmware", "state": "idle",
+                        "attributes": {"minutes": 0}}},
+    });
+    let prompt = prompt(&input);
+    let firmware = prompt
+        .find(r#"<firmware ref="firmware" id="session.floppy.firmware" state="idle">"#)
+        .unwrap_or_else(|| panic!("{prompt}"));
+    let devices = prompt
+        .find("<owned_devices>")
+        .unwrap_or_else(|| panic!("{prompt}"));
+    assert!(firmware < devices, "{prompt}");
+    assert!(prompt.contains("<minutes>0</minutes>"), "{prompt}");
+    assert!(!prompt.contains("<firmware>"), "{prompt}");
 }

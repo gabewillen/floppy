@@ -97,6 +97,7 @@ fn scratch_bot() -> PathBuf {
     for sub in [
         "bots/floppy",
         "bots/floppy/schemas",
+        "bots/floppy/firmware",
         "bots/builder",
         "bots/builder/schemas",
     ] {
@@ -297,6 +298,7 @@ fn with_name(name: &str) -> PathBuf {
     for sub in [
         "bots/floppy",
         "bots/floppy/schemas",
+        "bots/floppy/firmware",
         "bots/builder",
         "bots/builder/schemas",
     ] {
@@ -387,7 +389,8 @@ fn transcript(records: &[Json]) -> String {
         "bot.ability.routines.reconcile.failed",
         "floppy.output",
         "floppy.say",
-        "floppy.deferred",
+        "floppy.held",
+        "floppy.released",
         "floppy.degraded",
         "bot.processing.completed",
         "bot.processing.failed",

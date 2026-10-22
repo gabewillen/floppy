@@ -96,12 +96,12 @@
               "source",
               "target"
             ],
-            "title": "ParticipantRole",
-            "type": "string",
             "examples": [
               "source",
               "target"
-            ]
+            ],
+            "title": "Role",
+            "type": "string"
           },
           "own": {
             "default": false,
@@ -159,7 +159,6 @@
                 "ref",
                 "similarity"
               ],
-              "title": "Resemblance",
               "type": "object"
             },
             "maxItems": 3,

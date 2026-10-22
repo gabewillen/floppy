@@ -23,7 +23,7 @@ other, and [docs/decisions.md](docs/decisions.md) records the decisions that sha
 | `namespaces/cognition/` | the original's cognition module (a Wasm component; synchronous executable content: `cognition:attention_bias_for_turn`, `cognition:model_facing_content`; [cognition](namespaces/cognition/README.md)) |
 | `namespaces/conversation/` | the original's conversation module and its turn detector (a Wasm component; synchronous executable content: `conversation:message_for_turn`, `conversation:relationship_for_input`, `conversation:complete_turn`, `conversation:on_end`, ...; [conversation](namespaces/conversation/README.md)) |
 | `namespaces/identity/` | the original's identity module (a Wasm component; synchronous executable content: `identity:hears_name`, `identity:sorted_identities`; [identity](namespaces/identity/README.md)) |
-| `namespaces/memory/` | the original's memory module (a Wasm component; synchronous executable content: `memory:to_json`, `memory:contents`; [memory](namespaces/memory/README.md)) |
+| `namespaces/memory/` | the original's memory module (a Wasm component; synchronous executable content: `memory:to_json`, `memory:contents`, `memory:cut_at_word`, `memory:stm_projection`; [memory](namespaces/memory/README.md)) |
 | `namespaces/behavior/` | the original's behavior package (a Wasm component; synchronous executable content: `behavior:instances_from_behavior_results`, `behavior:replace_behavior_clauses`, `behavior:lifetime_errors`, `behavior:verify_tick`; [behavior](namespaces/behavior/README.md)) |
 | `namespaces/autonomy/` | the original's autonomy module (a Wasm component; synchronous executable content: `autonomy:behavior_input_payload`; [autonomy](namespaces/autonomy/README.md)) |
 | `namespaces/migration/` | Alembic's revision walk as an extension namespace (a Wasm component; synchronous executable content: `migration:plan`) |
@@ -110,12 +110,14 @@ ability grants both, as the quick start does. Before its statements, the
 Memory ability brings the database to the head revision through the
 migration ability
 ([`abilities/migration/migration.scx`](abilities/migration/migration.scx),
-Alembic's `command.upgrade` with `<migration:plan>`), with the original's
-revisions `0001` and `0002` in the engine's dialect
+Alembic's `command.upgrade` with `<migration:plan>`), with floppy's
+revisions `0001`, `0002` and `0003` in the engine's dialect
 ([`abilities/memory/sqlite/`](abilities/memory/sqlite/),
 [`abilities/memory/postgresql/`](abilities/memory/postgresql/)), and records
-the version in Alembic's `alembic_version`, so the original database is used in
-place. The bot ships with SQLite (the body's `database` `<data>`); Postgres
+the version in Alembic's `alembic_version`, so every floppy database upgrades
+in place. `0003_stm_turns` is the original's `0002_stm_turns`; the original
+rewrote its `0001` in place, so a database the original's current Alembic
+wrote is refused (D165, proposed). The bot ships with SQLite (the body's `database` `<data>`); Postgres
 support is tested on Postgres 16.
 
 ## Defaults
@@ -192,7 +194,9 @@ them). Both directions therefore call the Gemini API, so
 | `bots/builder/builder.scx` | `max_tests` | `8` | the test scripts one draft may carry |
 | `bots/builder/builder.scx` | `sim_test_cap_ms` | `120000` | each test script's simulation run |
 | `bots/floppy/floppy.scx` | `activation_timeout_ms` | `30000` | activation until every ability offers (the original's 30 s attachment timeout) |
+| `bots/floppy/floppy.scx` | `firmware_timeout_ms` | `30000` | the firmware's start until its first offers, once every ability is ready (the original's attachment bound; decision D160) |
 | `bots/floppy/floppy.scx` | `processing_timeout_ms` | `300000` | one turn (the original's 5 min processing timeout) |
+| `bots/floppy/floppy.scx` | `reading_turns_timeout_ms` | `1000` | reading the short-term register's recent turns before each turn; the turn starts without them after it (floppy's) |
 | `abilities/cognition/cognition.scx` | `child_operation_timeout_ms` | `30000` | each cascade stage without progress (the original's 30 s): autonomy's and the decision layer's from their start, reasoning's once its reply streams (the first progress arms it, each later one re-arms it); live streamed replies had at most 6.2 s between chunks (decision D101; the bot's `bounds` param's `child_operation_timeout_ms` overrides it) |
 | `abilities/cognition/cognition.scx` | `child_operation_ceiling_ms` | `240000` | each cascade stage in all, the backstop and the only bound of a reasoning reply that is not streamed, inside the body's `processing_timeout_ms` with the stages before reasoning (decision D101; the bot's `bounds` param's `child_operation_ceiling_ms` overrides it) |
 | `abilities/cognition/cognition.scx` | `decision_timeout_ms` | `20000` | the decision layer's own bound on its decision, passed to it as its `decision_timeout_ms` param; a decision not made in time cascades the turn to reasoning (the reference's D-R-36); the bot's `bounds` param's `reflex_timeout_ms` is the reflex step's bound, which fails the turn |
