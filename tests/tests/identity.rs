@@ -3,7 +3,7 @@
 //!
 //! Each test lays out a scratch copy of the repository's shape (the body
 //! under `bots/floppy/`, the communication, conversation, speaking,
-//! identity, memory and every schema under `abilities/`) with
+//! identity, persona, memory and every schema under `abilities/`) with
 //! `tests/fixtures/phase4/cognition_double.scx` as `abilities/cognition/cognition.scx`
 //! (no model; an addressed turn answers "I am <name>", a `bot.input`
 //! observation `adopt` selects `bot.ability.identity.adopt` for its data).
@@ -12,6 +12,13 @@
 //!
 //! The identity logs `identity.name`, `identity.heard`, `identity.offers`
 //! and `identity.adopt.failed`.
+//!
+//! The persona (`abilities/persona/persona.scx`), the bot's other sense of
+//! itself, is tested here too: it logs `persona.description` and
+//! `persona.offers`, and the body relays its `bot.ability.persona.output`
+//! to the cognition, whose double a persona test rewrites to log it as
+//! `double.persona` (and to select a revision for the persona).
+//!
 //! The body gives the identity its database, in a directory each run is
 //! granted (`support::memory_grant`), so an adopted name outlives the run.
 //!
@@ -61,6 +68,7 @@ fn layout(name: Option<&str>) -> PathBuf {
         "speaking",
         "identity",
         "memory",
+        "persona",
         "speech_decoding",
     ] {
         support::copy_ability(name, &dir.join("abilities"));
@@ -358,13 +366,13 @@ fn the_cognition_is_told_the_bots_name_and_each_adoption() {
         text.replacen(
             alive,
             &format!(
-                r#"{alive}
+                r##"{alive}
     <onentry>
       <send event="bot.ability.identity.ask" target="#_parent"><content expr="({{}})"/></send>
     </onentry>
     <transition event="bot.ability.identity.named">
       <log label="double.named" expr="JSON.stringify(_event.data.name)"/>
-    </transition>"#
+    </transition>"##
             ),
             1,
         ),
@@ -380,4 +388,156 @@ fn the_cognition_is_told_the_bots_name_and_each_adoption() {
     let records = run.until(WAIT, label_is("double.named"));
     assert_eq!(texts(&records, "double.named"), strings(&[r#""Floppy""#]));
     close(run, "the_cognition_is_told_the_bots_name_and_each_adoption");
+}
+
+/// The body's default traits (`<data id="traits">` in `bots/floppy/floppy.scx`).
+const TRAITS: [&str; 4] = ["warm", "patient", "curious", "honest"];
+
+/// The revision the rewritten double selects.
+const REVISED_TEXT: &str = "I like to ask questions.";
+const REVISED_REASON: &str = "I noticed I keep asking them.";
+
+/// Rewrites the layout's cognition double to log each
+/// `bot.ability.persona.output` the body relays as `double.persona` (its
+/// data as JSON) and, with `revise`, to select a revision for the persona
+/// when it is told the bot has no description yet: it sends
+/// `bot.ability.persona.revise` to the persona's session (decision D110:
+/// `<body _sessionid>.persona`, its own with `cognition` replaced), as
+/// reflection dispatches its selection to the session that offers it.
+fn persona_double(body: &Path, revise: bool) {
+    let double = body
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .expect("the layout's root")
+        .join("abilities/cognition/cognition.scx");
+    let text = std::fs::read_to_string(&double).expect("the double is readable");
+    let alive = r#"<state id="alive" initial="idle">"#;
+    assert!(text.contains(alive), "the double's alive state");
+    std::fs::write(
+        &double,
+        text.replacen(
+            alive,
+            &format!(
+                r#"{alive}
+    <transition event="bot.ability.persona.output">
+      <log label="double.persona" expr="JSON.stringify(_event.data)"/>
+      <if cond="{revise}">
+        <if cond="_event.data.description === null">
+          <send event="bot.ability.persona.revise" targetexpr="'#_scxml_' + _sessionid.replace(/cognition$/, 'persona')">
+            <content expr="({{text: '{REVISED_TEXT}', reason: '{REVISED_REASON}'}})"/>
+          </send>
+        </if>
+      </if>
+    </transition>"#
+            ),
+            1,
+        ),
+    )
+    .expect("the double copy is writable");
+}
+
+/// `bot.ability.persona.output` with the body's traits and `description`.
+fn told(description: Option<&str>) -> Json {
+    let description = description.map_or(
+        Json::Null,
+        |text| json!({"text": text, "reason": REVISED_REASON, "traits": TRAITS, "kind": "fact"}),
+    );
+    json!({"traits": TRAITS, "description": description})
+}
+
+/// The `double.persona` records among `records`, parsed.
+fn persona_told(records: &[Json]) -> Vec<Json> {
+    texts(records, "double.persona")
+        .iter()
+        .map(|text| serde_json::from_str(text).expect("the double logs JSON"))
+        .collect()
+}
+
+/// Waits, if it has not come yet, for the `double.persona` the persona
+/// tells on waking (before or after the activation); returns every record.
+fn woken(run: &Run, mut records: Vec<Json>) -> Vec<Json> {
+    if texts(&records, "double.persona").is_empty() {
+        records.extend(run.until(WAIT, label_is("double.persona")));
+    }
+    records
+}
+
+/// The persona wakes with the owner's traits and no description, tells the
+/// cognition so through the body, and is ready with its revise offer,
+/// which the body keeps out of the turn's choices (in the original only
+/// reflection may select a revision).
+#[test]
+fn the_persona_tells_the_cognition_its_traits_and_no_description() {
+    let body = layout(None);
+    persona_double(&body, false);
+    let (mut run, records) = started(&body);
+    let records = woken(&run, records);
+    assert_eq!(
+        texts(&records, "persona.description"),
+        strings(&["recalled null"])
+    );
+    assert_eq!(persona_told(&records), vec![told(None)]);
+    assert_eq!(
+        texts(&records, "persona.offers")
+            .iter()
+            .map(|text| support::choice_names(text))
+            .collect::<Vec<_>>(),
+        strings(&["bot.ability.persona.revise"])
+    );
+    run.event("bot.input", &input("ignore", "hello"));
+    let records = run.until(WAIT, label_is("double.choices"));
+    let choices = texts(&records, "double.choices");
+    assert_eq!(choices.len(), 1, "{records:?}");
+    assert!(
+        !support::choice_names(&choices[0]).contains("bot.ability.persona.revise"),
+        "{choices:?}"
+    );
+    close(
+        run,
+        "the_persona_tells_the_cognition_its_traits_and_no_description",
+    );
+}
+
+/// A revision the bot selects is written down before it is the bot's,
+/// told to the cognition with the traits it was written under, and
+/// recalled by the next run, which tells it on waking.
+#[test]
+fn a_revised_description_is_told_and_recalled_by_the_next_run() {
+    let body = layout(None);
+    persona_double(&body, true);
+    let grant = support::memory_grant();
+    let (run, records) = started_with(&body, &grant);
+    let mut records = woken(&run, records);
+    if persona_told(&records).len() < 2 {
+        records.extend(run.until(WAIT, |record| {
+            record["type"] == "log"
+                && record["label"] == "double.persona"
+                && record["text"]
+                    .as_str()
+                    .is_some_and(|text| text.contains(REVISED_TEXT))
+        }));
+    }
+    assert_eq!(
+        persona_told(&records),
+        vec![told(None), told(Some(REVISED_TEXT))]
+    );
+    assert_eq!(
+        texts(&records, "persona.description"),
+        strings(&["recalled null", &format!("revised {REVISED_TEXT:?}")])
+    );
+    assert!(texts(&records, "persona.revise.failed").is_empty());
+    drop(run.close(WAIT));
+    // The next run wakes up with the description it wrote last.
+    let (run, records) = started_with(&body, &grant);
+    let records = woken(&run, records);
+    assert_eq!(
+        texts(&records, "persona.description"),
+        strings(&[&format!("recalled {REVISED_TEXT:?}")])
+    );
+    assert_eq!(persona_told(&records), vec![told(Some(REVISED_TEXT))]);
+    close(
+        run,
+        "a_revised_description_is_told_and_recalled_by_the_next_run",
+    );
 }

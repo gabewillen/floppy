@@ -49,6 +49,7 @@ fn layout(data: &[(&str, &str)]) -> PathBuf {
         "speaking",
         "identity",
         "memory",
+        "persona",
     ] {
         support::copy_ability(name, &abilities);
     }
