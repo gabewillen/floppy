@@ -39,7 +39,7 @@
     </test>
   </assert>
   <assert id="cognition-5" specnum="5" specid="#cognition-5">
-    <![CDATA[A decision layer that fails (`the decision failed (status)`, or no decision within `decision_timeout_ms`) does not fail the turn: the cognition logs `cognition.cascaded` and reasoning answers it (the reference's D-R-36). A reasoning stage that fails answers the turn with `bot.ability.failed` `{message, turn, input: {focus, focus_candidates}}`, the message the stage's reason (`the reasoning failed (status)`, or `Selection rejected: schema-mismatch` once a refused selection is not repaired), then hands the failure back to its parent as a `bot.ability.cognition.input` whose stimulus is `bot.ability.cognition.step.failed` `{message: "Cognition's reasoning step failed, so the turn failed: <reason>", stage: "reasoning", turn}`.]]>
+    <![CDATA[A decision layer that fails (`the decision failed (status)`, or no decision within `decision_timeout_ms`) does not fail the turn: the cognition logs `cognition.cascaded` and reasoning answers it (the reference's D-R-36). A reasoning stage that fails answers the turn with `bot.ability.failed` `{message, turn, input: {focus, focus_candidates}}`, the message the stage's reason (`the reasoning failed (status)`, or `Selection rejected: <message>` once a refused selection is not repaired, the dispatch tool's rejection message, decision D126), then hands the failure back to its parent as a `bot.ability.cognition.input` whose stimulus is `bot.ability.cognition.step.failed` `{message: "Cognition's reasoning step failed, so the turn failed: <reason>", stage: "reasoning", turn}`.]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>
