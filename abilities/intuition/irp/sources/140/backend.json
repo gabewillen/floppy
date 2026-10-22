@@ -13,7 +13,7 @@
             "confidence": 0.9,
             "probabilities": {
               "tool.go": 0.9,
-              "__unhandled__": 0.1
+              "__reasoning__": 0.1
             }
           }
         },

@@ -209,6 +209,19 @@ function cascadedLog(reason) {
   return ({stage: tier(), reason: reason});
 }
 
+// The later tiers the decision layer's pass may hand the turn to (the
+// reference's hand_ons): the chat tier when composed, then reasoning.
+function handOns() {
+  return intuition_model === null ? ['reasoning'] : ['intuition', 'reasoning'];
+}
+
+// The decision model's bytes a token from the decision layer's donedata,
+// else the one in hand.
+function decisionBytesPerTokenAfter(_event) {
+  var learned = _event.data.bytes_per_token;
+  return typeof learned === 'number' && learned > 0 ? learned : decision_bytes_per_token;
+}
+
 // The tier the decision layer's pass chose (its donedata's hand_to), else null.
 function handTo(_event) {
   return typeof _event.data.hand_to === 'string' ? _event.data.hand_to : null;

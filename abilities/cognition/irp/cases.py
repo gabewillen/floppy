@@ -62,10 +62,10 @@ def decided(probabilities, choice, extra=None):
     return {"path": DECIDE, "status": 200, "body": {"model": "fake", "answers": answers, "usage": {"input_tokens": 1, "output_tokens": 1}}}
 
 
-DECIDE_IGNORE = decided({IGNORE: 0.8, "__unhandled__": 0.2}, IGNORE)
-DECIDE_ABSTAIN = decided({IGNORE: 0.2, "__unhandled__": 0.8}, "__unhandled__")
-# Ignore 0.34 and respond 0.33 (its text grounded in the stimulus): the least, 33, is under the warmup floor 35.
-DECIDE_LOW = decided({IGNORE: 0.34, RESPOND: 0.33, "__unhandled__": 0.33}, IGNORE,
+DECIDE_IGNORE = decided({IGNORE: 0.8, "__reasoning__": 0.2}, IGNORE)
+DECIDE_ABSTAIN = decided({IGNORE: 0.2, "__reasoning__": 0.8}, "__reasoning__")
+# Respond 0.34 (its text grounded in the stimulus), the one selection: 34 is under the warmup floor 35.
+DECIDE_LOW = decided({RESPOND: 0.34, IGNORE: 0.33, "__reasoning__": 0.33}, RESPOND,
                      {f"{RESPOND}::text": {"type": "choice", "choice": "hi", "confidence": 1.0, "probabilities": {"hi": 1.0}}})
 REASONED_IGNORE = chat([{"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "session.cognition"}])
 REASONED_REPEAT = chat([{"event": RESPOND, "data": {"text": "hi"}, "reason": "answer", "target": "session"}])

@@ -55,7 +55,11 @@
   reference _takes_decision, D-R-30). Intuition takes it when composed,
   unless the decision layer's pass chose reasoning (its donedata's
   hand_to, R-23) or the turn perceives a handed-back failure of intuition
-  (the reference _takes_intuition).
+  (the reference _takes_intuition). The decision layer is told the tiers
+  its pass may name (its hand_ons param: intuition when composed, then
+  reasoning), the bounds' max_context_tokens, and the decision model's
+  bytes_per_token, which its donedata teaches and this document keeps
+  across turns as it keeps reasoning's.
 
   Failures: a decision layer or an intuition that fails (its failed
   donedata, or error.communication.<stage>) hands the same turn on to the
@@ -79,10 +83,9 @@
   Dispatch: each stage sends its own selections, as the original's stages
   dispatch theirs (cognition.types.dispatch_selected_events): a decision
   layer that escalates for low confidence sends its environment actions
-  before the turn goes on to reasoning (the original _environment_actions);
-  a stage that names what it sent in its donedata's acted (the chat
-  intuition tier's handoff, decision D144; the decision layer's does not
-  yet) passes it on with the turn. The turn's acted is what earlier
+  before the turn goes on to reasoning (the original _environment_actions),
+  and names them in its donedata's acted, as the chat intuition tier names
+  what it sent before its handoff (decision D144). The turn's acted is what earlier
   stages dispatched before they passed it on (the reference ActedData);
   the turn's output, and the reflection's cognition_output, is the acted
   followed by the handling stage's selections (the original's cognition
@@ -246,8 +249,9 @@
          the request bytes a token, 3 until a reply's usage teaches it
          fewer, kept here across turns and passed to each reasoning. -->
     <data id="bytes_per_token" expr="3"/>
-    <!-- The same for the intuition tier's model. -->
+    <!-- The same for the intuition tier's model and the decision layer's. -->
     <data id="intuition_bytes_per_token" expr="3"/>
+    <data id="decision_bytes_per_token" expr="3"/>
     <!-- The tier the decision layer's pass chose for the turn (its
          donedata's hand_to; null: the next composed one). -->
     <data id="hand_to" expr="null"/>
@@ -446,17 +450,22 @@
         <param name="environment" expr="environment"/>
         <param name="confidence_tuner" expr="confidence_tuner"/>
         <param name="decision_timeout_ms" expr="decision_timeout_ms"/>
+        <param name="hand_ons" expr="handOns()"/>
+        <param name="max_context_tokens" expr="contextTokens()"/>
+        <param name="bytes_per_token" expr="decision_bytes_per_token"/>
       </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="../schemas/bot.ability.cognition.cancel.json"
                   cond="isCurrentTurn(_event)" target="cancelling_decision"/>
       <transition event="done.invoke.decision" cond="isHandled(_event)" target="completing">
         <assign location="confidence_tuner" expr="decisionTuner(_event)"/>
+        <assign location="decision_bytes_per_token" expr="decisionBytesPerTokenAfter(_event)"/>
         <log label="cognition.tuner" expr="tunerLog()"/>
         <log label="cognition.stage" expr="stageLog('decision handled', _event)"/>
         <assign location="selected" expr="handledOutput(_event)"/>
       </transition>
       <transition event="done.invoke.decision" cond="isUnhandled(_event)" target="after_decision">
         <assign location="confidence_tuner" expr="decisionTuner(_event)"/>
+        <assign location="decision_bytes_per_token" expr="decisionBytesPerTokenAfter(_event)"/>
         <log label="cognition.tuner" expr="tunerLog()"/>
         <log label="cognition.stage" expr="stageLog('decision unhandled', _event)"/>
         <assign location="hand_to" expr="handTo(_event)"/>
@@ -466,6 +475,7 @@
       <!-- A failing decision layer hands the same turn on (D-R-36). -->
       <transition event="done.invoke.decision" cond="matchesStageOutput(_event)" target="after_decision">
         <assign location="confidence_tuner" expr="decisionTuner(_event)"/>
+        <assign location="decision_bytes_per_token" expr="decisionBytesPerTokenAfter(_event)"/>
         <log label="cognition.tuner" expr="tunerLog()"/>
         <log label="cognition.cascaded" expr="cascadedLog(stageFailure(_event))"/>
         <assign location="acted_percepts" expr="perceptsAfter(_event)"/>

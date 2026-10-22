@@ -68,11 +68,16 @@ const COGNITION: &str = "session.floppy.cognition";
 enum Decision {
     /// Chooses ignore (0.8).
     Ignore,
-    /// Chooses the pass criterion `__unhandled__` (0.8): reasoning handles
-    /// the turn.
+    /// Chooses the pass to reasoning `__reasoning__` (0.8): reasoning
+    /// handles the turn.
     Abstain,
+    /// Chooses the pass to intuition `__intuition__` (0.8): the chat tier
+    /// takes the turn when the bot composes one.
+    ToIntuition,
     /// Chooses ignore with 0.34 (each other label 0.33).
     Low,
+    /// Chooses respond with 0.34 (each other label 0.33).
+    LowRespond,
     /// Answers 500.
     Fail,
     /// Never answers.
@@ -84,7 +89,9 @@ impl Decision {
         match self {
             Self::Ignore => "ignore",
             Self::Abstain => "abstain",
+            Self::ToIntuition => "tointuition",
             Self::Low => "low",
+            Self::LowRespond => "lowrespond",
             Self::Fail => "dfail",
             Self::Hang => "dhang",
         }
@@ -242,8 +249,10 @@ fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
     }
     match target {
         "/ignore/v1/systemone" => ok(decided(body, IGNORE, 0.8)?),
-        "/abstain/v1/systemone" => ok(decided(body, "__unhandled__", 0.8)?),
+        "/abstain/v1/systemone" => ok(decided(body, "__reasoning__", 0.8)?),
+        "/tointuition/v1/systemone" => ok(decided(body, "__intuition__", 0.8)?),
         "/low/v1/systemone" => ok(decided_with(body, IGNORE, 0.34, Some(0.33))?),
+        "/lowrespond/v1/systemone" => ok(decided_with(body, RESPOND, 0.34, Some(0.33))?),
         "/gignore/v1/chat/completions" => selection(json!([
             {"event": IGNORE, "data": {}, "reason": "nothing to say"}
         ])),
@@ -688,7 +697,7 @@ fn the_decision_layer_handles_an_ignore_without_reasoning() {
     // The decision offered the turn's choices it could fill (respond's
     // text and adopt's name have no grounded value); reasoning asked no
     // model.
-    assert_eq!(selection_labels(&mock), strings(&["__unhandled__", IGNORE]));
+    assert_eq!(selection_labels(&mock), strings(&["__reasoning__", IGNORE]));
     assert!(reasoning_requests(&mock).is_empty());
     let finished = close(
         run,
@@ -1484,13 +1493,40 @@ fn offers_handoff(request: &Received) -> bool {
     request.body["tools"].to_string().contains(HANDOFF)
 }
 
+/// The decision layer's pass names the tier it hands the turn to (its
+/// `hand_to`, R-23): with the chat tier composed it is offered both passes,
+/// and passing to reasoning skips intuition.
+#[test]
+fn a_pass_to_reasoning_skips_the_intuition_tier() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Ignore, &[]);
+    let mut run = start_activated(&bot, &with_intuition());
+    say(&mut run, "hello");
+    let records = run.until(WAIT, turn_ended);
+    assert_eq!(
+        texts(&records, "cognition.stage"),
+        strings(&[
+            "autonomy unhandled (no-behaviors)",
+            "decision unhandled (empty_product)",
+            "reasoning handled"
+        ]),
+        "{records:?}"
+    );
+    assert!(intuition_requests(&mock).is_empty());
+    let decisions = mock.received("/systemone");
+    let criteria = &decisions[0].body["questions"]["selection"]["criteria"];
+    assert!(criteria.get("__intuition__").is_some(), "{criteria}");
+    assert!(criteria.get("__reasoning__").is_some(), "{criteria}");
+    drop(run.close(WAIT));
+}
+
 /// The intuition tier (decision D144): a bot that composes one answers in
 /// words on its chat model, without thinking first, before reasoning is
 /// ever asked; it is offered the deliberative handoff, the body never is.
 #[test]
 fn intuition_answers_in_words_without_reasoning() {
     let mock = Mock::start();
-    let bot = layout(&mock, Decision::Abstain, Generation::Respond, &[]);
+    let bot = layout(&mock, Decision::ToIntuition, Generation::Respond, &[]);
     let mut run = start_activated(&bot, &with_intuition());
     say(&mut run, "hello");
     let records = run.until(WAIT, turn_ended);
@@ -1523,7 +1559,7 @@ fn intuition_answers_in_words_without_reasoning() {
 #[test]
 fn intuition_hands_the_turn_to_reasoning_after_what_it_said() {
     let mock = Mock::start();
-    let bot = layout(&mock, Decision::Abstain, Generation::HandOff, &[]);
+    let bot = layout(&mock, Decision::ToIntuition, Generation::HandOff, &[]);
     let mut run = start_activated(&bot, &with_intuition());
     say(&mut run, "hello");
     let records = run.until(WAIT, turn_ended);
@@ -1567,7 +1603,12 @@ fn intuition_hands_the_turn_to_reasoning_after_what_it_said() {
 #[test]
 fn a_failing_intuition_cascades_to_reasoning() {
     let mock = Mock::start();
-    let bot = layout(&mock, Decision::Abstain, Generation::IntuitionFails, &[]);
+    let bot = layout(
+        &mock,
+        Decision::ToIntuition,
+        Generation::IntuitionFails,
+        &[],
+    );
     let mut run = start_activated(&bot, &with_intuition());
     say(&mut run, "hello");
     let records = run.until(WAIT, turn_ended);
@@ -1674,11 +1715,10 @@ fn offered_schema(event: &str) -> Json {
 }
 
 /// The original's `low_confidence` keeps the environment actions: the decision layer gets
-/// every groundable event with its own confidence (ignore 0.34, respond
-/// 0.33 with the stimulus's text), observes their least, 33, and escalates
-/// under the floor 35 with respond (ignore is no environment action); the
-/// cognition routes respond first, then reasoning's selection. Reasoning's
-/// prompt is the original's model-facing XML of its `ProcessorInput`.
+/// the chosen event with its confidence (respond 0.34 with the stimulus's
+/// text), observes it, 34, and escalates under the floor 35, sending
+/// respond before reasoning runs. Reasoning's prompt is the original's
+/// model-facing content of its `InputData`.
 /// Runs one `hi` turn, offering ignore and respond, through the cognition
 /// harness of `bot` (which offers respond itself) and returns its records
 /// up to the harness's output.
@@ -1725,13 +1765,11 @@ fn low_confidence_turn(bot: &Bot) -> (Run, Vec<Json>) {
 #[test]
 fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
     let mock = Mock::start();
-    let bot = layout(&mock, Decision::Low, Generation::Ignore, &[]);
+    let bot = layout(&mock, Decision::LowRespond, Generation::Ignore, &[]);
     let (run, records) = low_confidence_turn(&bot);
     assert_eq!(
         texts(&records, "intuition"),
-        strings(&[&format!(
-            "turn 1: {IGNORE} {RESPOND} (confidence 33, escalate true)"
-        )])
+        strings(&[&format!("turn 1: {RESPOND} (confidence 34, escalate true)")])
     );
     assert_eq!(
         texts(&records, "cognition.stage"),
@@ -1742,7 +1780,8 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
         ])
     );
     // The escalating decision layer sent its environment action (respond's
-    // grounded "hi") before reasoning ran; the output is reasoning's.
+    // grounded "hi") before reasoning ran; the output is that acted, then
+    // reasoning's (the reference ActedData).
     assert_eq!(
         texts(&records, "harness.sent"),
         strings(&[r#"{"text":"hi"}"#])
@@ -1750,16 +1789,17 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
     assert_eq!(
         json_text(&records, "harness.output"),
         json!({"turn": 1, "output": [
+            {"event": RESPOND, "data": {"text": "hi"}, "target": "session"},
             {"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "session.cognition"},
         ]})
     );
-    // The TypeSafe state is the original's turn document, and respond's text is
-    // grounded in the stimulus's value.
+    // The TypeSafe state is the stimulus's model-facing text (the reference
+    // D-R-50), and respond's text is grounded in the stimulus's value.
     let decisions = mock.received("/systemone");
     assert_eq!(decisions.len(), 1);
     assert_eq!(
         decisions[0].body["state"],
-        json!({"turn": {"envelope": {"name": "bot.input"}, "data": {"text": "hi"}}})
+        json!({"turn": "<dict stimulus:event=\"bot.input\" stimulus:source=\"conversation\">\n  <content>\n    <entry key=\"text\" value=\"hi\" />\n  </content>\n</dict>"})
     );
     assert_eq!(
         decisions[0].body["questions"][format!("{RESPOND}::text")]["criteria"],
@@ -1772,9 +1812,11 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
         .and_then(|messages| messages.iter().find(|message| message["role"] == "user"))
         .and_then(|message| message["content"].as_str())
         .expect("a user message");
+    // Reasoning is told what the decision layer already did, as a fact of
+    // the turn's situation (the reference's ActedData), before the stimulus.
     assert_eq!(
         user,
-        "<dict stimulus:event=\"bot.input\" stimulus:source=\"conversation\">\n  <content>\n    <entry key=\"text\" value=\"hi\" />\n  </content>\n</dict>"
+        "<cognition:acted>\n  <percepts count=\"1\">\n    <item>0</item>\n  </percepts>\n  <acts count=\"1\">\n    <cognition:event target=\"session\" event=\"bot.ability.communication.respond\">\n      <data>\n        <entry key=\"text\" value=\"hi\" />\n      </data>\n    </cognition:event>\n  </acts>\n</cognition:acted>\n<dict stimulus:event=\"bot.input\" stimulus:source=\"conversation\">\n  <content>\n    <entry key=\"text\" value=\"hi\" />\n  </content>\n</dict>"
     );
     close(
         run,
@@ -1791,7 +1833,7 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
 #[test]
 fn reasoning_sends_its_selections_after_the_environment_actions() {
     let mock = Mock::start();
-    let bot = layout(&mock, Decision::Low, Generation::Repeat, &[]);
+    let bot = layout(&mock, Decision::LowRespond, Generation::Repeat, &[]);
     let (run, records) = low_confidence_turn(&bot);
     assert_eq!(
         texts(&records, "cognition.stage"),
