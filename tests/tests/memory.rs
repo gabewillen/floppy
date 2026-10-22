@@ -241,28 +241,61 @@ fn statements_the_service_refuses_fail_as_invalid_input() {
     );
 }
 
+/// One output record whose results are `results` (JSON text).
+fn output(results: &str) -> Vec<(String, String)> {
+    vec![("output".to_owned(), format!(r#"{{"results":{results}}}"#))]
+}
+
 #[test]
 fn an_operation_over_its_timeout_fails_as_timeout() {
-    // The original's operation timeout, set as the invoker's <param>, on
-    // the wall clock (the logical clock does not move while a service
-    // works), over a statement that runs for seconds, so the timer always
-    // wins.
-    let slow = "[{sql: 'WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x &lt; 50000000) SELECT count(*) FROM c'}]";
-    let document = harness(None, slow);
-    let statements = format!(r#"<param name="statements" expr="{slow}"/>"#);
+    // The original's operation timeout, set as the invoker's <param>. A
+    // service answers within the host call that starts it, so the timer
+    // can only win over an operation that waits: here a migration that
+    // never answers.
+    let dir = unique_scratch("memory-ability");
+    support::copy_ability("memory", &dir);
+    support::write(
+        &dir.join("migration"),
+        "migration.scx",
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="waiting">
+  <datamodel>
+    <data id="database"/>
+    <data id="revisions"/>
+  </datamodel>
+  <state id="waiting"/>
+</scxml>"#,
+    );
+    let statements = r#"<param name="statements" expr="[{sql: 'SELECT 1'}]"/>"#;
+    let document = harness(None, "[{sql: 'SELECT 1'}]");
     assert!(
-        document.contains(&statements),
+        document.contains(statements),
         "the harness passes statements"
     );
-    let finished = run_on(
-        &unique_scratch("memory"),
+    let path = support::write(
+        &dir,
+        "harness.scx",
         &document.replacen(
-            &statements,
+            statements,
             &format!(r#"{statements}<param name="operation_timeout_ms" expr="200"/>"#),
             1,
         ),
-        "wall",
     );
+    let mut run = Run::start(
+        &[
+            "--dir".to_owned(),
+            format!(
+                "{}={}::/memory",
+                support::service_uri("sql"),
+                unique_scratch("memory").display()
+            ),
+            "--clock".to_owned(),
+            "wall".to_owned(),
+            path.display().to_string(),
+        ],
+        &[],
+    );
+    run.end_input();
+    let finished = run.finish(Duration::from_secs(300));
     assert_eq!(
         logs(&finished.records),
         support::labelled(&[
@@ -272,11 +305,6 @@ fn an_operation_over_its_timeout_fails_as_timeout() {
         "{}",
         finished.stderr
     );
-}
-
-/// One output record whose results are `results` (JSON text).
-fn output(results: &str) -> Vec<(String, String)> {
-    vec![("output".to_owned(), format!(r#"{{"results":{results}}}"#))]
 }
 
 #[test]
