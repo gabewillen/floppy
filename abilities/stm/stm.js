@@ -2,19 +2,11 @@
 // <script src="stm.js">, so every function here is a global of the
 // document's data model, callable from its cond and expr attributes.
 
-// The clock (the original's _utc_text)
+// The clock
 
-// Microsecond UTC ISO text, as Python's isoformat writes it (no fraction
-// when it is zero), so lexicographic order is chronological order.
+// ISO 8601 UTC text, so lexicographic order is chronological order.
 function utcText(ms) {
-  const iso = new Date(ms).toISOString();
-  const millis = iso.slice(20, 23);
-  return iso.slice(0, 19) + (millis === '000' ? '' : '.' + millis + '000') + '+00:00';
-}
-
-// A stored time as pydantic serializes a UTC datetime (Turn.at).
-function serializedTime(text) {
-  return text.replace(/\+00:00$/, 'Z');
+  return new Date(ms).toISOString();
 }
 
 function delay(ms) {
@@ -177,7 +169,7 @@ function storedTurn(v) {
       !Array.isArray(speakers) || speakers.length > 8 || !speakers.every(isSpeaker)) {
     return null;
   }
-  return {id: v[0], at: serializedTime(v[1]), direction: v[2], speakers: speakers, text: v[4],
+  return {id: v[0], at: v[1], direction: v[2], speakers: speakers, text: v[4],
     cut: v[5] === 1 || v[5] === true, conversation: v[6]};
 }
 
