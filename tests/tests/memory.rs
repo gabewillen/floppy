@@ -456,6 +456,12 @@ fn every_recall_reads_the_most_recent_window_oldest_first() {
             serde_json::json!(["self_name", "self"]),
             "self_name",
         ),
+        (
+            "abilities/persona/persona.scx",
+            "description_select",
+            serde_json::json!(["self_persona", "self"]),
+            "self_persona",
+        ),
     ];
     for (path, id, parameters, tag) in recalls {
         // 52 rows in one statement (one created_at for all but the first,

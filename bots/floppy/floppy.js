@@ -137,6 +137,26 @@ function isFocusCandidate(_event) {
   return focus_candidates.indexOf(_event.data.device) >= 0 && devices.indexOf(_event.data.device) >= 0;
 }
 
+// The short-term register's reads: one more asked, one answered, and
+// whether the answer arriving is to the last read asked.
+function turnReadAsked() {
+  return turn_reads + 1;
+}
+
+function turnReadAnswered() {
+  return Math.max(0, turn_reads - 1);
+}
+
+function isLastTurnRead() {
+  return turn_reads === 1;
+}
+
+// The register's answer to a read it could not serve (stm.scx's failure
+// message for the request), which answers that read.
+function isTurnReadFailure(_event) {
+  return _event.data.message.indexOf('short-term memory bot.ability.memory.stm.recent_turns failed') === 0;
+}
+
 // The short-term register's record of an admitted stimulus (the original's
 // event_record): its name, its data's bounded projection (stm_payload), and
 // the source a sound names (floppy carries the original's envelope source

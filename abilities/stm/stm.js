@@ -156,13 +156,34 @@ function storedSpeakers(text) {
   }
 }
 
-// The newest turns, read back oldest first.
+// A non-empty string.
+function isText(value) {
+  return typeof value === 'string' && value.length > 0;
+}
+
+// One stored speaker as the original's Participant would take it: a ref of
+// 1 to 200 characters and a known role (own and resembles as stored).
+function isSpeaker(speaker) {
+  return speaker !== null && typeof speaker === 'object' && isText(speaker.ref) &&
+    Array.from(speaker.ref).length <= 200 && (speaker.role === 'source' || speaker.role === 'target');
+}
+
+// One stored row as the original's Turn, or null when it does not decode as
+// one (a damaged row is skipped, so it never costs the read the turns
+// around it).
+function storedTurn(v) {
+  const speakers = storedSpeakers(v[3]);
+  if (!isText(v[0]) || !isText(v[1]) || (v[2] !== 'heard' && v[2] !== 'said') || !isText(v[4]) || !isText(v[6]) ||
+      !Array.isArray(speakers) || speakers.length > 8 || !speakers.every(isSpeaker)) {
+    return null;
+  }
+  return {id: v[0], at: serializedTime(v[1]), direction: v[2], speakers: speakers, text: v[4],
+    cut: v[5] === 1 || v[5] === true, conversation: v[6]};
+}
+
+// The newest turns that decode, read back oldest first.
 function recentTurns(_event) {
-  return _event.data.results[0].rows.map((row) => {
-    const v = row.values;
-    return {id: v[0], at: serializedTime(v[1]), direction: v[2], speakers: storedSpeakers(v[3]), text: v[4],
-      cut: v[5] === 1 || v[5] === true, conversation: v[6]};
-  }).reverse();
+  return _event.data.results[0].rows.map((row) => storedTurn(row.values)).filter((turn) => turn !== null).reverse();
 }
 
 // Failures

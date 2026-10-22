@@ -74,7 +74,9 @@
   (bot.ability.memory.stm.recent_turns {}) and relays the answer,
   bot.ability.memory.stm.recent_turns.output, to the cognition ahead of
   the turn's input; after reading_turns_timeout_ms (1 s) the turn starts
-  without it, and a later answer is dropped. The cognition cannot ask
+  without it, and a later answer is dropped (the body counts the reads
+  not answered yet, turn_reads, since the register answers in order and
+  no answer names its read). The cognition cannot ask
   through the body: the request's descriptor matches the answer's name
   too, and scxml.rs judges an arriving event by every matching
   transition's schema, so a body taking both would refuse the answer.
@@ -290,6 +292,9 @@
     <data id="firmware_snapshot" expr="null"/>
     <data id="processing_timeout_ms" expr="300000"/>
     <data id="reading_turns_timeout_ms" expr="1000"/>
+    <!-- The register's reads not answered yet (each run's register is
+         new). -->
+    <data id="turn_reads" expr="0"/>
     <!-- The devices the bot holds, which the environment gives as a
          <param> (decision D105): reference to the device session's
          _sessionid, its address; devices are their references, set on
@@ -355,6 +360,7 @@
       <assign location="waiting" expr="expectedAbilities()"/>
       <assign location="devices" expr="heldDevices()"/>
       <assign location="held" expr="[]"/>
+      <assign location="turn_reads" expr="0"/>
     </onentry>
     <onexit>
       <!-- The original _clear_focus on every reboot and deactivate. -->
@@ -414,7 +420,9 @@
     </transition>
     <!-- An answer after its turn started is late: the cognition has the
          turn's input already. -->
-    <transition event="bot.ability.memory.stm.recent_turns.output" event:schema="../../abilities/schemas/bot.ability.memory.stm.recent_turns.output.json"/>
+    <transition event="bot.ability.memory.stm.recent_turns.output" event:schema="../../abilities/schemas/bot.ability.memory.stm.recent_turns.output.json">
+      <assign location="turn_reads" expr="turnReadAnswered()"/>
+    </transition>
     <!-- Nothing asks for the register's stimuli yet. -->
     <transition event="bot.ability.memory.stm.recent.output" event:schema="../../abilities/schemas/bot.ability.memory.stm.recent.output.json"/>
     <!-- What the bot knows of itself (the persona tells it on waking, while
@@ -430,6 +438,9 @@
          bot is activating, or the cognition's for another turn) goes to
          the environment. -->
     <transition event="bot.ability.failed" event:schema="../../abilities/schemas/bot.ability.failed.json">
+      <if cond="isTurnReadFailure(_event)">
+        <assign location="turn_reads" expr="turnReadAnswered()"/>
+      </if>
       <send event="bot.ability.failed" target="#_parent">
         <content expr="_event.data"/>
       </send>
@@ -725,15 +736,23 @@
                had. -->
           <state id="reading_turns">
             <onentry>
-              <send event="bot.ability.memory.stm.recent_turns" target="#_stm">
-                <content expr="emptyData()"/>
-              </send>
-              <send id="reading-turns-after" event="reading_turns.after" delayexpr="delay(reading_turns_timeout_ms)"/>
+              <if cond="choicesFit()">
+                <send event="bot.ability.memory.stm.recent_turns" target="#_stm">
+                  <content expr="emptyData()"/>
+                </send>
+                <assign location="turn_reads" expr="turnReadAsked()"/>
+                <send id="reading-turns-after" event="reading_turns.after" delayexpr="delay(reading_turns_timeout_ms)"/>
+              </if>
             </onentry>
             <onexit>
               <cancel sendid="reading-turns-after"/>
             </onexit>
-            <transition event="bot.ability.memory.stm.recent_turns.output" event:schema="../../abilities/schemas/bot.ability.memory.stm.recent_turns.output.json" target="deciding">
+            <!-- The register answers in order, so the answer to this turn's
+                 read is the one that leaves no read unanswered; an earlier
+                 turn's late answer is dropped. -->
+            <transition event="bot.ability.memory.stm.recent_turns.output" event:schema="../../abilities/schemas/bot.ability.memory.stm.recent_turns.output.json"
+                        cond="isLastTurnRead()" target="deciding">
+              <assign location="turn_reads" expr="turnReadAnswered()"/>
               <send event="bot.ability.memory.stm.recent_turns.output" target="#_cognition">
                 <content expr="_event.data"/>
               </send>

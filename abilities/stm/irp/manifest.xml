@@ -36,12 +36,15 @@
     </test>
   </assert>
   <assert id="stm-5" specnum="5" specid="#stm-5">
-    <![CDATA[`bot.ability.memory.stm.turn` `{id, direction, speakers, text, cut, conversation}` is written with no reply, and `bot.ability.memory.stm.recent_turns` `{limit?, within?}` answers `bot.ability.memory.stm.recent_turns.output` `{turns}`: the newest turns, at most `limit`, oldest first, each `{id, at, direction, speakers, text, cut, conversation}` with `at` UTC (Z).]]>
+    <![CDATA[`bot.ability.memory.stm.turn` `{id, direction, speakers, text, cut, conversation}` is written with no reply, and `bot.ability.memory.stm.recent_turns` `{limit?, within?}` answers `bot.ability.memory.stm.recent_turns.output` `{turns}`: the newest turns, at most `limit`, oldest first, each `{id, at, direction, speakers, text, cut, conversation}` with `at` UTC (Z); a stored turn that does not decode as one is skipped.]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>
     <test id="141" conformance="mandatory" manual="false">
       <start uri="141/test141.scxml"/>
+    </test>
+    <test id="142" conformance="mandatory" manual="false">
+      <start uri="142/test142.scxml"/>
     </test>
   </assert>
   <assert id="stm-6" specnum="6" specid="#stm-6">

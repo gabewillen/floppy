@@ -73,7 +73,7 @@
     after the floor, and answers
     bot.ability.memory.stm.recent_turns.output {turns} oldest first (the
     original's Turn: id, at, direction, speakers, text, cut,
-    conversation). The window is turn_window_ms, or within (milliseconds,
+    conversation; a stored row that does not decode as one is skipped). The window is turn_window_ms, or within (milliseconds,
     the original's timedelta) when that is shorter; the floor is now less the window,
     moved down to a whole step of half the window since the Unix epoch, so
     a turn is read for at least the window and at most one and a half.

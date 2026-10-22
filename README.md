@@ -23,7 +23,7 @@ other, and [docs/decisions.md](docs/decisions.md) records the decisions that sha
 | `namespaces/cognition/` | the original's cognition module (a Wasm component; synchronous executable content: `cognition:attention_bias_for_turn`, `cognition:model_facing_content`; [cognition](namespaces/cognition/README.md)) |
 | `namespaces/conversation/` | the original's conversation module and its turn detector (a Wasm component; synchronous executable content: `conversation:message_for_turn`, `conversation:relationship_for_input`, `conversation:complete_turn`, `conversation:on_end`, ...; [conversation](namespaces/conversation/README.md)) |
 | `namespaces/identity/` | the original's identity module (a Wasm component; synchronous executable content: `identity:hears_name`, `identity:sorted_identities`; [identity](namespaces/identity/README.md)) |
-| `namespaces/memory/` | the original's memory module (a Wasm component; synchronous executable content: `memory:to_json`, `memory:contents`; [memory](namespaces/memory/README.md)) |
+| `namespaces/memory/` | the original's memory module (a Wasm component; synchronous executable content: `memory:to_json`, `memory:contents`, `memory:cut_at_word`, `memory:stm_projection`; [memory](namespaces/memory/README.md)) |
 | `namespaces/behavior/` | the original's behavior package (a Wasm component; synchronous executable content: `behavior:instances_from_behavior_results`, `behavior:replace_behavior_clauses`, `behavior:lifetime_errors`, `behavior:verify_tick`; [behavior](namespaces/behavior/README.md)) |
 | `namespaces/autonomy/` | the original's autonomy module (a Wasm component; synchronous executable content: `autonomy:behavior_input_payload`; [autonomy](namespaces/autonomy/README.md)) |
 | `namespaces/migration/` | Alembic's revision walk as an extension namespace (a Wasm component; synchronous executable content: `migration:plan`) |
@@ -110,12 +110,14 @@ ability grants both, as the quick start does. Before its statements, the
 Memory ability brings the database to the head revision through the
 migration ability
 ([`abilities/migration/migration.scx`](abilities/migration/migration.scx),
-Alembic's `command.upgrade` with `<migration:plan>`), with the original's
-revisions `0001` and `0002` in the engine's dialect
+Alembic's `command.upgrade` with `<migration:plan>`), with floppy's
+revisions `0001`, `0002` and `0003` in the engine's dialect
 ([`abilities/memory/sqlite/`](abilities/memory/sqlite/),
 [`abilities/memory/postgresql/`](abilities/memory/postgresql/)), and records
-the version in Alembic's `alembic_version`, so the original database is used in
-place. The bot ships with SQLite (the body's `database` `<data>`); Postgres
+the version in Alembic's `alembic_version`, so every floppy database upgrades
+in place. `0003_stm_turns` is the original's `0002_stm_turns`; the original
+rewrote its `0001` in place, so a database the original's current Alembic
+wrote is refused (D165, proposed). The bot ships with SQLite (the body's `database` `<data>`); Postgres
 support is tested on Postgres 16.
 
 ## Defaults
