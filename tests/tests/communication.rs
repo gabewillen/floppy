@@ -61,13 +61,17 @@ const DEAF_SPEAKING: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
 
 /// A parent of the communication alone (`abilities/harness.scx`): it
 /// sends each `harness.<id>` as a `bot.ability.communication.respond`
-/// whose sendid is `<id>` (an SCXML `<send id>` is literal), forwards
-/// outside `bot.ability.communication.input`, and logs what the
-/// communication answers (`harness.<event>`, its JSON).
+/// whose sendid is `<id>` (an SCXML `<send id>` is literal), and
+/// `harness.stop` as `bot.ability.communication.stop`, forwards outside
+/// `bot.ability.communication.input`, and logs what the communication
+/// answers (`harness.<event>`, its JSON) and each efference copy's duration
+/// (`harness.efference`). It is the environment speaking's sound goes into.
 const COMMUNICATION_HARNESS: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="harness" initial="run">
   <state id="run">
-    <invoke id="communication" type="scxml" src="communication/communication.scx"/>
+    <invoke id="communication" type="scxml" src="communication/communication.scx">
+      <param name="environment" expr="_sessionid"/>
+    </invoke>
     <transition event="bot.ability.offers" cond="_event.invokeid === 'communication'">
       <log label="harness.offers" expr="_event.data.ability"/>
     </transition>
@@ -76,6 +80,15 @@ const COMMUNICATION_HARNESS: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
     </transition>
     <transition event="bot.ability.cognition.input" cond="_event.invokeid === 'communication'">
       <log label="harness.product" expr="_event.data.stimulus.data.messages.length"/>
+    </transition>
+    <transition event="bot.ability.speaking.efference" cond="_event.invokeid === 'communication'">
+      <log label="harness.efference" expr="_event.data.duration"/>
+    </transition>
+    <transition event="environment.sound">
+      <log label="harness.sound" expr="_event.data.audio"/>
+    </transition>
+    <transition event="harness.stop" cond="_event.invokeid === undefined">
+      <send event="bot.ability.communication.stop" target="#_communication"><content expr="({})"/></send>
     </transition>
     <transition event="bot.ability.communication.input" cond="_event.invokeid === undefined">
       <send event="bot.ability.communication.input" target="#_communication">
@@ -111,6 +124,18 @@ fn communication_alone(edits: &[(&str, &str)]) -> PathBuf {
     rewrite(&abilities.join("communication/communication.scx"), edits);
     let harness = abilities.join("harness.scx");
     std::fs::write(&harness, COMMUNICATION_HARNESS).expect("the harness is writable");
+    harness
+}
+
+/// Lays out the communication under [`COMMUNICATION_HARNESS`] with the
+/// repository's speaking (its speech service the double) and the `<data>`
+/// `edits` of the communication and of speaking; returns the harness.
+fn communication_speaking(edits: &[(&str, &str)], speaking: &[(&str, &str)]) -> PathBuf {
+    let harness = communication_alone(edits);
+    let abilities = harness.parent().expect("the harness is in abilities/");
+    support::copy_ability("speaking", abilities);
+    support::double_speech(abilities, "'encode'");
+    rewrite(&abilities.join("speaking/speaking.scx"), speaking);
     harness
 }
 
@@ -230,6 +255,23 @@ fn until_all(run: &Run, labels: &[&str]) -> Vec<Json> {
     })
 }
 
+/// Whether `record` is the listening's log of the efference copy of
+/// nothing left (`duration` 0).
+fn is_silent_copy(record: &Json) -> bool {
+    label_is("input.efference")(record)
+        && record["text"]
+            .as_str()
+            .is_some_and(|text| text.contains(r#""duration":0,"#))
+}
+
+/// Adds records until the copy of nothing left is among them: it can reach
+/// the listening after speaking's answer reaches the body.
+fn until_silent_copy(run: &Run, records: &mut Vec<Json>) {
+    if !records.iter().any(is_silent_copy) {
+        records.extend(run.until(WAIT, is_silent_copy));
+    }
+}
+
 /// Starts the room with the laid-out body as its bot, which activates on
 /// joining.
 fn started(body: &Path) -> Run {
@@ -278,7 +320,7 @@ fn a_routed_response_is_said_and_recorded_in_the_conversation() {
     assert_eq!(
         texts(&records, "bot.ability.speaking.output"),
         strings(&[
-            r#"{"channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"text":"reply 1"}"#
+            r#"{"channels":1,"media_type":"audio/pcm","outcome":"completed","sample_rate_hz":24000,"spoken":"reply 1","text":"reply 1","unspoken":"","voice_id":null}"#
         ])
     );
     // The outbound message joins the exchange only: no product, no new
@@ -286,8 +328,8 @@ fn a_routed_response_is_said_and_recorded_in_the_conversation() {
     assert_eq!(texts(&records, "conversation"), strings(&["outbound 0"]));
     assert_eq!(texts(&records, "communication.exchange"), strings(&["1"]));
     assert!(texts(&records, "communication.product").is_empty());
-    // Back in active, the communication offers again (its first offers
-    // came before the activation).
+    // While the response is said it offers stop as well; back in active it
+    // offers again (its first offers came before the activation).
     let finished = close(
         run,
         "a_routed_response_is_said_and_recorded_in_the_conversation",
@@ -299,7 +341,10 @@ fn a_routed_response_is_said_and_recorded_in_the_conversation() {
             .iter()
             .map(|text| support::choice_names(text))
             .collect::<Vec<_>>(),
-        strings(&["bot.ability.communication.respond"]),
+        strings(&[
+            "bot.ability.communication.respond bot.ability.communication.stop",
+            "bot.ability.communication.respond"
+        ]),
         "{all:?}"
     );
     assert_eq!(
@@ -588,6 +633,63 @@ const SPEAKING_HARNESS: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
 /// One utterance at a time: another copy of the one in hand, or of one
 /// already said, is dropped, and past the bound of held utterances a new
 /// one is refused (decision D175).
+/// A stop while a response is said (the original's `stop`, offered only
+/// while responding) stops speaking: the copy of nothing left closes the
+/// listening's window, and the response ends `stopped` with what was
+/// played. With 2 s pieces, the 4 s reply is stopped after its first piece:
+/// half its audio, so half its words.
+#[test]
+fn a_stop_ends_the_response_with_what_was_played() {
+    let harness = communication_speaking(&[], &[("lookahead_ms", "4000")]);
+    let mut run = Run::start(&[harness.display().to_string()], &[]);
+    let mut all = run.until(WAIT, label_is("harness.offers"));
+    // 40 characters: the double measures 4 s.
+    let text = "alpha bravo charlie delta echo foxtrot!!";
+    run.event("harness.r1", &json!({"parts": [{"words": text}]}));
+    all.extend(run.until(WAIT, |record| {
+        label_is("harness.efference")(record) && record["text"] == "2"
+    }));
+    run.event("harness.stop", &json!({}));
+    all.extend(run.until(WAIT, label_is("harness.answer")));
+    assert_eq!(texts(&all, "harness.efference"), strings(&["4", "2", "0"]));
+    assert_eq!(texts(&all, "communication.stop"), strings(&["1"]));
+    assert_eq!(
+        texts(&all, "harness.answer"),
+        strings(&[
+            r#"bot.ability.speaking.output {"channels":1,"media_type":"audio/pcm","outcome":"stopped","sample_rate_hz":24000,"spoken":"alpha bravo charlie","text":"alpha bravo charlie delta echo foxtrot!!","unspoken":" delta echo foxtrot!!","voice_id":null}"#
+        ])
+    );
+    close(run, "a_stop_ends_the_response_with_what_was_played");
+}
+
+/// Speaking's progress re-arms the response's hop timer (the original's
+/// `waiting`, re-entered on progress): a 4 s reply played in 0.5 s pieces
+/// is said whole under a 1.5 s hop.
+#[test]
+fn speaking_progress_keeps_a_long_response_from_timing_out() {
+    let harness = communication_speaking(&[("response_timeout_ms", "1500")], &[]);
+    let mut run = Run::start(&[harness.display().to_string()], &[]);
+    let mut all = run.until(WAIT, label_is("harness.offers"));
+    let text = "alpha bravo charlie delta echo foxtrot!!";
+    run.event("harness.r1", &json!({"parts": [{"words": text}]}));
+    all.extend(run.until(WAIT, label_is("harness.answer")));
+    assert!(
+        texts(&all, "communication.hop.timed_out").is_empty(),
+        "{all:?}"
+    );
+    assert_eq!(texts(&all, "harness.efference").len(), 9);
+    assert_eq!(
+        texts(&all, "harness.answer"),
+        strings(&[
+            r#"bot.ability.speaking.output {"channels":1,"media_type":"audio/pcm","outcome":"completed","sample_rate_hz":24000,"spoken":"alpha bravo charlie delta echo foxtrot!!","text":"alpha bravo charlie delta echo foxtrot!!","unspoken":"","voice_id":null}"#
+        ])
+    );
+    close(
+        run,
+        "speaking_progress_keeps_a_long_response_from_timing_out",
+    );
+}
+
 #[test]
 fn speaking_never_reopens_a_finished_utterance_and_bounds_the_ones_it_holds() {
     let dir = unique_scratch("speaking-alone");
@@ -1006,12 +1108,17 @@ fn a_spoken_response_reaches_listening_as_its_efference_copy_before_its_sound() 
     with_listening(&body);
     let mut run = started(&body);
     run.event("bot.input", &input("reply"));
-    let records = until_all(&run, &["input.sound", "bot.ability.speaking.output"]);
-    // "reply 1" is 7 characters: the double measures 0.7 s.
+    let mut records = until_all(&run, &["input.sound", "bot.ability.speaking.output"]);
+    until_silent_copy(&run, &mut records);
+    // "reply 1" is 7 characters: the double measures 0.7 s, played as two
+    // pieces (0.5 s and 0.2 s), each report followed by a copy of what is
+    // still to come.
     assert_eq!(
         texts(&records, "input.efference"),
         strings(&[
-            r#"{"channels":1,"duration":0.7,"media_type":"audio/pcm","mouth":"speaking","sample_rate_hz":24000}"#
+            r#"{"channels":1,"duration":0.7,"media_type":"audio/pcm","mouth":"speaking","sample_rate_hz":24000}"#,
+            r#"{"channels":1,"duration":0.2,"media_type":"audio/pcm","mouth":"speaking","sample_rate_hz":24000}"#,
+            r#"{"channels":1,"duration":0,"media_type":"audio/pcm","mouth":"speaking","sample_rate_hz":24000}"#
         ])
     );
     assert_eq!(
@@ -1025,7 +1132,15 @@ fn a_spoken_response_reaches_listening_as_its_efference_copy_before_its_sound() 
         .map(|(label, _)| label)
         .filter(|label| ["input.efference", "input.sound"].contains(&label.as_str()))
         .collect();
-    assert_eq!(order, strings(&["input.efference", "input.sound"]));
+    assert_eq!(
+        order,
+        strings(&[
+            "input.efference",
+            "input.sound",
+            "input.efference",
+            "input.efference"
+        ])
+    );
     close(
         run,
         "a_spoken_response_reaches_listening_as_its_efference_copy_before_its_sound",
@@ -1049,7 +1164,7 @@ fn unmeasured_speech_sends_no_efference_copy_and_takes_speakings_format() {
     assert_eq!(
         texts(&records, "bot.ability.speaking.output"),
         strings(&[
-            r#"{"channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"text":"reply 1"}"#
+            r#"{"channels":1,"media_type":"audio/pcm","outcome":"completed","sample_rate_hz":24000,"spoken":"reply 1","text":"reply 1","unspoken":"","voice_id":null}"#
         ])
     );
     close(
@@ -1216,12 +1331,15 @@ fn spoken_through_the_speech_service(
 fn a_response_is_spoken_through_the_speech_service() {
     let (mut run, requests, media) = spoken_through_the_speech_service(Duration::ZERO);
     run.event("bot.input", &input("reply"));
-    let records = until_all(&run, &["input.sound", "bot.ability.speaking.output"]);
-    // 4800 bytes of 24 kHz mono 16-bit PCM: a tenth of a second, measured.
+    let mut records = until_all(&run, &["input.sound", "bot.ability.speaking.output"]);
+    until_silent_copy(&run, &mut records);
+    // 4800 bytes of 24 kHz mono 16-bit PCM: a tenth of a second, measured,
+    // and played as one piece.
     assert_eq!(
         texts(&records, "input.efference"),
         strings(&[
-            r#"{"channels":1,"duration":0.1,"media_type":"audio/pcm","mouth":"speaking","sample_rate_hz":24000}"#
+            r#"{"channels":1,"duration":0.1,"media_type":"audio/pcm","mouth":"speaking","sample_rate_hz":24000}"#,
+            r#"{"channels":1,"duration":0,"media_type":"audio/pcm","mouth":"speaking","sample_rate_hz":24000}"#
         ])
     );
     // The sound's source is the copy's mouth: the listening's sensitivity
@@ -1270,7 +1388,7 @@ fn a_reply_whose_synthesis_takes_seconds_is_spoken_with_the_default_bounds() {
     assert_eq!(
         texts(&records, "bot.ability.speaking.output"),
         strings(&[
-            r#"{"channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"text":"reply 1"}"#
+            r#"{"channels":1,"media_type":"audio/pcm","outcome":"completed","sample_rate_hz":24000,"spoken":"reply 1","text":"reply 1","unspoken":"","voice_id":null}"#
         ])
     );
     assert_eq!(requests.lock().expect("the request log").len(), 1);

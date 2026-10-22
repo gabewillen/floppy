@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.communication.stop",
+  "additionalProperties": false,
+  "description": "Stop the response being spoken now. What has already been heard stays said; the rest of the response is not said. Offered only while a response is being spoken, and it takes no arguments.",
+  "properties": {},
+  "type": "object",
+  "examples": [
+    {}
+  ]
+}

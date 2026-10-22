@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.speaking.stop",
+  "additionalProperties": false,
+  "description": "Stop the utterance whose id this event carries: whatever the mouth has not played yet is dropped, and the utterance ends stopped with what was already heard as spoken.",
+  "properties": {},
+  "type": "object",
+  "examples": [
+    {}
+  ]
+}

@@ -172,7 +172,9 @@ Last updated: 2026-10-22.
   `<conversation:turn_participants>` (D119). Gap 6
   (`bot.ability.speaking.stop`) waits on decision 6 and gap 11: the
   original's stop is built on `c88b6cd`'s streamed utterance and its
-  `OutputData` (`voice_id`, `spoken`, `unspoken`).
+  `OutputData` (`voice_id`, `spoken`, `unspoken`). **Amended by D179 (2026-10-22):** the stop,
+  progress and `spoken`/`unspoken`/`outcome` are ported on unstreamed
+  audio, `voice_id` null until decision 6.
 - **The behavior and autonomy namespaces, and no bot namespace (2026-10-18,
   D116, [plan](plans/original-domains.md) step 4, the last):**
   `namespaces/behavior` (`<behavior:instances_from_behavior_results>`,
