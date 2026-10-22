@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "bot.ability.reasoning.input",
   "additionalProperties": false,
-  "description": "Invoke deliberate reasoning for the current turn. The host supplies the deliberative frame; do not include stimulus text, tools, or schemas in data. Use an empty object as data.",
+  "description": "Hand this turn to deliberate reasoning: it thinks before it answers, takes longer, and holds the capacities listed in <held> as well as the events offered here. Other events selected with it run first. The host supplies the deliberative frame; do not include stimulus text, tools, or schemas in data. Use an empty object as data.",
   "properties": {},
   "type": "object",
   "examples": [

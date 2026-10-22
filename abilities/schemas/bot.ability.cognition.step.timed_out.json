@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.cognition.step.timed_out",
+  "description": "A step of the bot's cognition took longer than its step timeout, so the turn it was taking failed.\n\nThe bot perceives this as a turn of its own: which step it was in, how long that step was allowed, and which turn failed for which stimulus. Only the step was stopped; nothing was rebooted and every ability kept its state.",
+  "properties": {
+    "message": {
+      "description": "Human-readable failure message for the ability operation.",
+      "examples": [
+        "Provider request failed."
+      ],
+      "title": "Message",
+      "type": "string"
+    },
+    "stage": {
+      "description": "The stage of cognition that outlasted its timeout: reflex (a behavior running, or the decision model choosing on what no behavior handled), intuition (the fast words) or reasoning (the deliberate thinking).",
+      "enum": [
+        "reflex",
+        "intuition",
+        "reasoning"
+      ],
+      "examples": [
+        "reasoning"
+      ],
+      "title": "Stage",
+      "type": "string"
+    },
+    "timeout_seconds": {
+      "description": "How long the step was allowed, in seconds, before the turn failed.",
+      "examples": [
+        120.0
+      ],
+      "exclusiveMinimum": 0,
+      "title": "Timeout Seconds",
+      "type": "number"
+    },
+    "turn": {
+      "description": "The body's processing turn that failed, counted from 1; the original's turn_id [floppy field].",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "stimulus": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Name of the stimulus the failed turn was taken up for, when it has one.",
+      "examples": [
+        "bot.input"
+      ],
+      "title": "Stimulus"
+    }
+  },
+  "required": [
+    "message",
+    "stage",
+    "timeout_seconds",
+    "turn"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "message": "Cognition's reasoning step took longer than 120 seconds, so the turn failed.",
+      "stage": "reasoning",
+      "timeout_seconds": 120.0,
+      "turn": 3,
+      "stimulus": "bot.input"
+    }
+  ]
+}
