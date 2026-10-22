@@ -10,11 +10,11 @@
           "selection": {
             "type": "choice",
             "choice": "bot.say",
-            "confidence": 0.9,
+            "confidence": 0.7,
             "probabilities": {
-              "bot.say": 0.9,
-              "bot.ability.cognition.ignore": 0.05,
-              "__unhandled__": 0.05
+              "bot.say": 0.7,
+              "bot.ability.cognition.ignore": 0.2,
+              "__reasoning__": 0.1
             }
           }
         },

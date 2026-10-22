@@ -9,11 +9,11 @@
         "answers": {
           "selection": {
             "type": "choice",
-            "choice": "__unhandled__",
+            "choice": "__reasoning__",
             "confidence": 0.8,
             "probabilities": {
               "bot.say": 0.2,
-              "__unhandled__": 0.8
+              "__reasoning__": 0.8
             }
           }
         },

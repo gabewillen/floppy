@@ -14,7 +14,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.intuition" cond="_event.data.turn === 12 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === &quot;the decision failed (malformed)&quot; &amp;&amp; typeof _event.data.confidence_tuner === 'object' &amp;&amp; _event.data.failed === true &amp;&amp; true" target="step1"/>
+    <transition event="done.invoke.intuition" cond="_event.data.turn === 12 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === &quot;the decision failed (malformed)&quot; &amp;&amp; typeof _event.data.confidence_tuner === 'object' &amp;&amp; Array.isArray(_event.data.acted) &amp;&amp; typeof _event.data.bytes_per_token === 'number' &amp;&amp; _event.data.failed === true &amp;&amp; true" target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

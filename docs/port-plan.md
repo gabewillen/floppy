@@ -195,8 +195,9 @@ D33 to D43.
   D113).
 - **Choices as data.** On each `processing` entry the body collects the
   turn's choices with `<processing:collect_offered_events>` (its own
-  `bot.focus_device`, pinned to the turn's focus candidates, and
-  `bot.clear_focus`, plus each ability's latest offers and the focused
+  `bot.focus_device`, pinned to the turn's focus candidates (the
+  original's `178094a` removes `bot.clear_focus`: focus stays on a device
+  until the bot focuses another), plus each ability's latest offers and the focused
   device's events, each tagged with its offerer's session id as
   `target`), holds them to 32 KiB, and sends them as
   `bot.ability.cognition.input.choices` [floppy field]. Each stage that

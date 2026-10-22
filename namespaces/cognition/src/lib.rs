@@ -40,6 +40,10 @@
 //!   prefers: the environment stamps a device's input with it, decision
 //!   D105), else `null`. It is appended to the candidates when it is not
 //!   `null`, is one of `devices`, and is not a candidate already.
+//! * A `bot.perceived` batch (the body's percepts taken together) is biased
+//!   percept by percept, as the original's is: each percept's `stimulus`,
+//!   in arrival order, appends its device as above. No percept outranks
+//!   another.
 //!
 //! `focuslocation` (optional) receives the focus, then `location`
 //! (required) receives the candidates, a JSON array. Values compare as JSON
@@ -66,8 +70,10 @@
 //!   object, anything else renders nothing), the original's
 //!   `Environment.model_snapshot` layout: `<environment id>` holding `<self
 //!   state>` with the bot's own attributes as children and
-//!   `<owned_devices>` with one `<device ref id state>` per held device,
-//!   its attributes as children.
+//!   `<owned_devices>` with one `<device ref id state on?>` per held
+//!   device, its attributes as children (`on`, the object it sits on, only
+//!   when it is a string), after `<firmware ref id state>` when `self` has
+//!   a `firmware` object (the bot's firmware, shown as a device is).
 //!
 //! A field renders as the original's `_fill_field` renders a value that is
 //! not a model: `null` is skipped, a scalar is an attribute (a number as
@@ -457,16 +463,40 @@ pub fn attention_bias(
     } else {
         Json::Null
     };
-    let mut reference = Json::Null;
+    for arrived in arrivals(stimulus) {
+        let reference = input_device(arrived);
+        if !reference.is_null() && devices.contains(&reference) && !candidates.contains(&reference)
+        {
+            candidates.push(reference);
+        }
+    }
+    (focus, candidates)
+}
+
+/// The stimuli a turn perceived, in arrival order: each percept's stimulus
+/// of a `bot.perceived` batch (one that is no object arrives as nothing),
+/// else the stimulus itself.
+fn arrivals(stimulus: &Map<String, Json>) -> Vec<&Map<String, Json>> {
+    if stimulus.get("event").and_then(Json::as_str) == Some("bot.perceived")
+        && let Some(Json::Array(percepts)) =
+            stimulus.get("data").and_then(|data| data.get("percepts"))
+    {
+        return percepts
+            .iter()
+            .filter_map(|percept| percept.get("stimulus").and_then(Json::as_object))
+            .collect();
+    }
+    vec![stimulus]
+}
+
+/// A `bot.input` stimulus's `target_device`, else `null`.
+fn input_device(stimulus: &Map<String, Json>) -> Json {
     if stimulus.get("event").and_then(Json::as_str) == Some("bot.input")
         && let Some(Json::Object(data)) = stimulus.get("data")
     {
-        reference = data.get("target_device").cloned().unwrap_or(Json::Null);
+        return data.get("target_device").cloned().unwrap_or(Json::Null);
     }
-    if !reference.is_null() && devices.contains(&reference) && !candidates.contains(&reference) {
-        candidates.push(reference);
-    }
-    (focus, candidates)
+    Json::Null
 }
 
 /// Executes `<cognition:model_facing_content>`.
@@ -1298,37 +1328,55 @@ fn environment_element(value: &Json, budget: &mut Budget) -> Result<Option<Eleme
     let others: Map<String, Json> = own
         .map(|own| {
             own.iter()
-                .filter(|(key, _)| key.as_str() != "state" && key.as_str() != "owned_devices")
+                .filter(|(key, _)| !["state", "firmware", "owned_devices"].contains(&key.as_str()))
                 .map(|(key, value)| (key.clone(), value.clone()))
                 .collect()
         })
         .unwrap_or_default();
     snapshot_attributes(&mut own_element, &others, budget)?;
+    // The firmware is shown exactly as a device is (the original's
+    // `_render_firmware`), under the reference `firmware`.
+    if let Some(firmware) = members(own_field("firmware")) {
+        let firmware = actor_element("firmware", firmware, budget)?;
+        own_element.children.push(firmware);
+    }
     let owned = members(own_field("owned_devices"));
     let mut devices = budget.element("owned_devices")?;
     budget.collection(owned.map_or(0, Map::len))?;
+    let empty = Map::new();
     for device in owned.into_iter().flat_map(Map::values) {
-        let device = device.as_object();
-        let device_field = |key: &str| device.and_then(|device| device.get(key));
-        let mut device_element = budget.element("device")?;
-        for key in ["ref", "id", "state"] {
-            budget.attribute(
-                &mut device_element,
-                key,
-                ecmascript_string(device_field(key)),
-            )?;
-        }
-        let empty = Map::new();
-        snapshot_attributes(
-            &mut device_element,
-            members(device_field("attributes")).unwrap_or(&empty),
-            budget,
-        )?;
-        devices.children.push(device_element);
+        let device = actor_element("device", device.as_object().unwrap_or(&empty), budget)?;
+        devices.children.push(device);
     }
     own_element.children.push(devices);
     element.children.push(own_element);
     Ok(Some(element))
+}
+
+/// One actor element, a device or the firmware (the original's
+/// `_render_actor_element`): `<tag ref id state on?>` with its attributes
+/// as children.
+fn actor_element(
+    tag: &str,
+    actor: &Map<String, Json>,
+    budget: &mut Budget,
+) -> Result<Element, &'static str> {
+    let mut element = budget.element(tag)?;
+    for key in ["ref", "id", "state"] {
+        budget.attribute(&mut element, key, ecmascript_string(actor.get(key)))?;
+    }
+    // Where the actor is, not what it shows (the original lifts a
+    // snapshot's `on` onto the element).
+    if let Some(Json::String(on)) = actor.get("on") {
+        budget.attribute(&mut element, "on", on.clone())?;
+    }
+    let empty = Map::new();
+    snapshot_attributes(
+        &mut element,
+        members(actor.get("attributes")).unwrap_or(&empty),
+        budget,
+    )?;
+    Ok(element)
 }
 
 /// A snapshot's attributes as child elements, as the original renders
