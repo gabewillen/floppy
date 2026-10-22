@@ -18,8 +18,7 @@
 //!   `event:schemaexpr`.
 //! * `EVENT003`: the schema is not UTF-8 JSON.
 //! * `EVENT004`: a referenced schema file is not available (it names no
-//!   relative path below the document's directory, or its bytes were not
-//!   supplied).
+//!   relative path, or its bytes were not supplied).
 //! * `EVENT005`: the fragment is not a JSON Pointer, or names no value.
 //! * `EVENT006`: the schema violates its dialect's metaschema or does not
 //!   compile.
@@ -597,7 +596,7 @@ fn unavailable(
     )
     .with_category(DiagnosticCategory::Semantic)
     .with_primary_message(problem.to_owned())
-    .with_note("a schema reference names a JSON file by a path relative to the document, at or below its directory; the compiler reads it at compile time and embeds the schema in the Machine IR, so nothing is read or fetched while a document runs")
+    .with_note("a schema reference names a JSON file by a relative URI path resolved against the document's base URI (`..` segments included); the compiler reads it at compile time and embeds the schema in the Machine IR, so nothing is read or fetched while a document runs")
     .with_help("create the file, correct the path, or write the schema inline")
 }
 
@@ -708,7 +707,7 @@ mod tests {
                 &["EVENT004"],
             ),
             (
-                r#"<transition event="e" event:schema="../order.json"/>"#,
+                r#"<transition event="e" event:schema="/order.json"/>"#,
                 &["EVENT004"],
             ),
             (

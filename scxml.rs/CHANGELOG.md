@@ -652,6 +652,17 @@ hard cutover.
 
 ### Changed
 
+- An `event:schema` reference resolves against the document's base URI as
+  every other relative URI does (`<script src>`, `<invoke src>`; RFC 3986
+  §5): its `.` and `..` segments resolve, so `../schemas/order.json` names
+  a file outside the document's directory. `validate`, `compile`,
+  `snapshot run`, and `run` read a `file:` document's files from its
+  `file:` URL and fetch an `https:` child's from its URL; a reference with
+  a scheme, an absolute path, a query, a backslash, or an empty segment,
+  or a file that cannot be read, is still `EVENT004`. The `event`
+  namespace IRP's test 433 now proves a `..` reference resolves (it was a
+  rejection), and a namespace case's schema dependencies are keyed by
+  their relative path from its start document's directory.
 - The Wasmtime session host compiles each document its embedder serves
   (an `<invoke src>` document) once per run, on a fuel budget of its own
   (`DEFAULT_FUEL`), instead of on the budget of the command that first
@@ -1464,7 +1475,7 @@ hard cutover.
 - Extension components run only under the Wasmtime session
   host; the browser host answers executable-content extensions from the
   page's `executeExtension` callback.
-- `event:schema` references only files relative to the document: no
+- `event:schema` references only files by a relative URI: no
   repository-namespace resource or other absolute URI. Of the child
   documents the Wasmtime host compiles when invoked, only an `<invoke src>`
   document whose embedder supplies them gets schema files (the CLI: every

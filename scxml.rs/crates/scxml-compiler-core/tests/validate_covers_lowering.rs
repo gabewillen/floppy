@@ -489,7 +489,7 @@ fn table() -> Vec<Entry> {
             vec![
                 (
                     state(&format!(
-                        r#"<transition xmlns:event="{EVENT}" event="e" event:schema="../order.json"/>"#
+                        r#"<transition xmlns:event="{EVENT}" event="e" event:schema="/order.json"/>"#
                     )),
                     "EVENT004",
                 ),

@@ -35,19 +35,25 @@ fn values_are_inline_json_or_references() {
 }
 
 #[test]
-fn only_relative_paths_below_the_document_name_files() {
-    assert_eq!(resource_problem("order.json"), None);
-    assert_eq!(resource_problem("schemas/order.json"), None);
+fn only_relative_paths_name_files() {
+    for good in [
+        "order.json",
+        "schemas/order.json",
+        "../order.json",
+        "../../schemas/order.json",
+        "a/../order.json",
+        "./order.json",
+    ] {
+        assert_eq!(resource_problem(good), None, "{good}");
+    }
     for bad in [
         "",
         "/etc/order.json",
         "https://example.com/order.json",
         "https://github.com/o/r/namespaces/x@v1/order.json",
         "file:order.json",
-        "../order.json",
-        "a/../order.json",
-        "./order.json",
         "a//b.json",
+        "schemas/",
         "a\\b.json",
         "a.json?x=1",
     ] {

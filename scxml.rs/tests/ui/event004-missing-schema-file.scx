@@ -3,7 +3,7 @@
        version="1.0" datamodel="ecmascript" initial="idle">
   <state id="idle">
     <transition event="order" target="done" event:schema="event-schemas/missing.json"/>
-    <transition event="refund" target="done" event:schema="../order.json"/>
+    <transition event="refund" target="done" event:schema="/order.json"/>
   </state>
   <final id="done"/>
 </scxml>

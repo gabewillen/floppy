@@ -46,14 +46,14 @@ scx conformance run --corpus namespaces/event/irp/prepared/xpath \
 ```
 
 The `generate_irp_baselines` example regenerates the baselines with every
-other suite's. The current baselines (manifest SHA-256 `52480f387d2f160d6f8d71e39957879ec33cc7aa3a397d7a892bbb3e19042250`,
+other suite's. The current baselines (manifest SHA-256 `1651fc1a929746acaee97fdfe5821711070421cedd7e2a5ea451e9997b6f8fbf`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
 the canonical release of docs/conformance.md, empty filter identity) measure:
 
 | Data model | Passed / Applicable | Rejections | Not Passing | Corpus digest | Producer report digest | Artifact SHA-256 |
 | --- | ---: | ---: | ---: | --- | --- | --- |
-| ECMAScript | 31 / 31 | 17 | 0 | `455523a0e66ea84c40c48847a76abfa67be153464a75b2f40c0d215a8b19dd90` | `ccc55626562e6daef167e47f54531e5647921b9a7bb0d9a65fc948e1a9056a98` | `f0d549ccaa69dfc5db588886d10956b7f5dd465a34d04ab755c48ace8d44d05b` |
-| XPath | 31 / 31 | 17 | 0 | `4dfa00406c0aaa9bbaddadc18db12bc155b6d82dad1e26970795aa8c0658f04b` | `4ece16e32adc06b5e8e42869b3357c8ec0a5d7c605221069e5fd7bcdc220d16b` | `c72aada3f9488a931a1a3d6e5f5e29e237b1cca37b08bde346e3cf100584fd41` |
+| ECMAScript | 31 / 31 | 16 | 0 | `14f2e7b643902c2a1ecec6792a6f6c2114ad457ca59db8daa1b6d99e0811f464` | `dc4981dd2acf244dcec3efa827c1869f9f898f4dbf7e73612697b8a357644d3f` | `5443dbe3728c943a186506b6300e548b5ab5a688d186b4cb52407cca3ce4b719` |
+| XPath | 31 / 31 | 16 | 0 | `61a6243340c5699cfc62bd982740a125d33591eab5cf5ea95645fe3eed2ba920` | `02b9f8b48ed0ee7a6811cb5d6cc1e27228563e85489433f6271bd75440cce60f` | `193bf55ad7ba553dd841031eeebc89c2264c879002ef3d7fe4db0f1a2bccd1e6` |
 
 The report identity lists no extension component. `crates/scxml-conformance/tests/checked_in_namespace_irp.rs` checks
 the suite and its baselines statically, and `irp_components.rs` reproduces
