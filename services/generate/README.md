@@ -53,7 +53,11 @@ A call's arguments are read as the original reads them: arguments sent as
 a JSON string of the object are decoded once more, and so is each string
 where the tool's schema takes only an array or an object (through `$ref`,
 and the first `anyOf` branch that admits the decoded value); such a string
-that is not JSON, or holds neither, fails `not-json`.
+that is not JSON, or holds neither, fails `not-json`. A chain of `$ref`s
+with no property or item between them is followed at most 64 deep (a
+schema that refers to itself ends there), and on wasm builds arguments
+that take more than 65536 schemas to decode (each `$ref`, `anyOf` branch,
+property and item counting one) fail `not-json`.
 
 ## Images
 

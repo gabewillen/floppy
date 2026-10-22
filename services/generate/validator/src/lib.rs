@@ -19,10 +19,11 @@
 //!   `reasoning_effort` that is not one of [`REASONING_EFFORTS`] (a
 //!   machine-applicable fix to the one strictly closest within two edits), a
 //!   `tool_choice` that is not one of [`TOOL_CHOICES`] (with the same fix),
-//!   a `stream` that is not `true` or `false`, a `temperature`,
-//!   `max_completion_tokens` or `thinking_token_budget` that is a string or
-//!   a boolean, a `schemaname` outside `[A-Za-z0-9_-]{1,64}`, or
-//!   an empty `model`, `prompt`, or `system`.
+//!   a `stream` that is not `true` or `false`, a `temperature` that is not
+//!   a number from 0 to 2, a `max_completion_tokens` or
+//!   `thinking_token_budget` that is not a whole number from 1 to 1048576,
+//!   a `schemaname` outside `[A-Za-z0-9_-]{1,64}`, or an empty `model`,
+//!   `prompt`, or `system`.
 //! * `schema_mismatch` (warning): a transition that can take the
 //!   invocation's events (in the invoking state, an ancestor, or a
 //!   descendant) handles `generate.failed` or `generate.result` with a
@@ -30,7 +31,8 @@
 //!   closed failure code, a refused call's `rejection`, or a `{"content",
 //!   "tool_calls", "request_bytes", "usage"}` reply: a text reply without a
 //!   `schema` parameter, a tool call with one, and no call with a
-//!   `tool_choice`, which may be `auto`); the help names the schema of what
+//!   `tool_choice` that may be `auto`, any but a literal `required`); the
+//!   help names the schema of what
 //!   it returns.
 //!
 //! The decisions are the portable [`check`] over a plain [`Document`],
@@ -88,6 +90,10 @@ pub const RESULT_EVENT: &str = "generate.result";
 pub const FAILED_EVENT: &str = "generate.failed";
 /// Upper bound on the bytes of a schema name.
 const MAX_SCHEMA_NAME_BYTES: usize = 64;
+/// Upper bound on `temperature`.
+const MAX_TEMPERATURE: f64 = 2.0;
+/// Upper bound on `max_completion_tokens` and `thinking_token_budget`.
+const MAX_COMPLETION_TOKENS: u32 = 1_048_576;
 
 const SCXML: &str = "http://www.w3.org/2005/07/scxml";
 
@@ -256,11 +262,12 @@ fn distance(left: &str, right: &str) -> usize {
 }
 
 /// A literal ECMAScript value of an `expr`: a quoted string without escapes,
-/// or `true` or `false`.
-#[derive(Debug, Eq, PartialEq)]
+/// `true` or `false`, or a decimal number (negated or not).
+#[derive(Debug, PartialEq)]
 enum Literal<'a> {
     String(&'a str),
     Bool,
+    Number(f64),
     Other,
 }
 
@@ -276,8 +283,19 @@ fn literal(expr: &str) -> Literal<'_> {
             return Literal::String(inner);
         }
     }
+    let digits = expr.strip_prefix('-').unwrap_or(expr);
     match expr {
         "true" | "false" => Literal::Bool,
+        _ if digits.starts_with(|first: char| first.is_ascii_digit() || first == '.')
+            && digits.bytes().all(|byte| {
+                byte.is_ascii_digit() || matches!(byte, b'.' | b'e' | b'E' | b'+' | b'-')
+            }) =>
+        {
+            expr.parse::<f64>()
+                .ok()
+                .filter(|number| number.is_finite())
+                .map_or(Literal::Other, Literal::Number)
+        }
         _ => Literal::Other,
     }
 }
@@ -287,8 +305,8 @@ fn literal(expr: &str) -> Literal<'_> {
 struct Given {
     /// It gives `schema`: the reply holds a tool call.
     schema: bool,
-    /// It gives `tool_choice`, which may be `auto`: the reply may hold no
-    /// call.
+    /// It gives a `tool_choice` that may be `auto` (any but a literal
+    /// `required`): the reply may hold no call.
     tool_choice: bool,
 }
 
@@ -299,6 +317,7 @@ fn parameters(document: &Document, invoke: &Element, findings: &mut Vec<Finding>
         .as_deref()
         .is_none_or(|datamodel| datamodel == "ecmascript");
     let mut seen: Vec<&str> = Vec::new();
+    let mut required_choice = false;
     for param in children(document, invoke).filter(|child| child.is("param")) {
         let Some(name) = param.attribute("name") else {
             continue;
@@ -306,6 +325,8 @@ fn parameters(document: &Document, invoke: &Element, findings: &mut Vec<Finding>
         named(&mut seen, &name.value, name.span, Some(name), findings);
         if ecmascript && let Some(expr) = param.attribute("expr") {
             value(&name.value, expr, findings);
+            required_choice |=
+                name.value == "tool_choice" && literal(&expr.value) == Literal::String("required");
         }
     }
     if let Some(namelist) = invoke.attribute("namelist") {
@@ -345,7 +366,7 @@ fn parameters(document: &Document, invoke: &Element, findings: &mut Vec<Finding>
     }
     Given {
         schema: has("schema"),
-        tool_choice: has("tool_choice"),
+        tool_choice: has("tool_choice") && !required_choice,
     }
 }
 
@@ -441,7 +462,7 @@ fn value(name: &str, expr: &Attribute, findings: &mut Vec<Finding>) {
                 }),
             ));
         }
-        ("tool_choice", Literal::Bool) => findings.push(invalid(
+        ("tool_choice", Literal::Bool | Literal::Number(_)) => findings.push(invalid(
             "tool_choice must be a string".to_owned(),
             format!("use one of {}", TOOL_CHOICES.join(", ")),
             None,
@@ -454,6 +475,15 @@ fn value(name: &str, expr: &Attribute, findings: &mut Vec<Finding>) {
             "write the number without quotes".to_owned(),
             None,
         )),
+        (_, Literal::Number(number)) => {
+            if let Some(bound) = out_of_bounds(name, number) {
+                findings.push(invalid(
+                    format!("{name} must be {bound}"),
+                    format!("write {bound}"),
+                    None,
+                ));
+            }
+        }
         ("stream", Literal::String(_)) => findings.push(invalid(
             "stream must be a boolean".to_owned(),
             "write `true` or `false`".to_owned(),
@@ -480,6 +510,24 @@ fn value(name: &str, expr: &Attribute, findings: &mut Vec<Finding>) {
             ));
         }
         _ => {}
+    }
+}
+
+/// The bound a literal `number` of the parameter `name` is outside, as the
+/// service checks it; `None` within it, or for a parameter that takes no
+/// number (its other checks report that).
+fn out_of_bounds(name: &str, number: f64) -> Option<String> {
+    match name {
+        "temperature" if !(0.0..=MAX_TEMPERATURE).contains(&number) => {
+            Some(format!("a number from 0 to {MAX_TEMPERATURE}"))
+        }
+        "max_completion_tokens" | "thinking_token_budget"
+            if number.fract() != 0.0
+                || !(1.0..=f64::from(MAX_COMPLETION_TOKENS)).contains(&number) =>
+        {
+            Some(format!("a whole number from 1 to {MAX_COMPLETION_TOKENS}"))
+        }
+        _ => None,
     }
 }
 

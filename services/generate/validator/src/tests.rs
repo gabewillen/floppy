@@ -3,8 +3,9 @@ use scxml_syntax::{Node, SourceId, SourceText, parse_xml};
 use scxml_types::DataValue;
 
 use super::{
-    Attribute, Document, Element, FAILED_EVENT, FAILURE_CODES, Finding, PARAMETERS,
-    REASONING_EFFORTS, RESULT_EVENT, SERVICE_URI, Severity, TOOL_CHOICES, Transition, check,
+    Attribute, Document, Element, FAILED_EVENT, FAILURE_CODES, Finding, MAX_COMPLETION_TOKENS,
+    MAX_TEMPERATURE, PARAMETERS, REASONING_EFFORTS, RESULT_EVENT, SERVICE_URI, Severity,
+    TOOL_CHOICES, Transition, check,
 };
 
 const EVENT: &str = "https://github.com/stateforward/scxml.rs/namespaces/event";
@@ -213,6 +214,28 @@ fn the_tool_choice_and_the_sampling_parameters_are_checked() {
         r#"{MODEL}{PROMPT}<param name="temperature" expr="'0'"/><param name="thinking_token_budget" expr="true"/>"#
     )));
     assert_eq!(codes(&found), ["invalid_value", "invalid_value"]);
+    // A literal number is checked against the service's bounds, and a tool
+    // choice is never one.
+    for (name, number) in [
+        ("temperature", "3"),
+        ("temperature", "-0.5"),
+        ("max_completion_tokens", "0"),
+        ("max_completion_tokens", "1.5"),
+        ("thinking_token_budget", "2000000"),
+    ] {
+        let (_, found) = findings(&invoke(&format!(
+            r#"{MODEL}{PROMPT}<param name="{name}" expr="{number}"/>"#
+        )));
+        assert_eq!(codes(&found), ["invalid_value"], "{name} {number}");
+    }
+    let (_, found) = findings(&invoke(&format!(
+        r#"{MODEL}{PROMPT}{SCHEMA}<param name="tool_choice" expr="1"/>"#
+    )));
+    assert_eq!(codes(&found), ["invalid_value"]);
+    let bounds = invoke(&format!(
+        r#"{MODEL}{PROMPT}<param name="temperature" expr="2"/><param name="max_completion_tokens" expr="1048576"/><param name="thinking_token_budget" expr="1e3"/>"#
+    ));
+    assert!(findings(&bounds).1.is_empty());
     // Under a tool choice that may be `auto` the reply may hold no call.
     let calls_only = r#"{"type":"object","properties":{"tool_calls":{"type":"array","minItems":1}},"required":["tool_calls"]}"#;
     let body = format!(
@@ -222,6 +245,14 @@ fn the_tool_choice_and_the_sampling_parameters_are_checked() {
         ))
     );
     assert_eq!(codes(&findings(&body).1), ["schema_mismatch"]);
+    // Under a literal `required` it always holds one.
+    let body = format!(
+        r#"{}<transition event="generate.result" event:schema='{calls_only}'/>"#,
+        invoke(&format!(
+            r#"{MODEL}{PROMPT}{SCHEMA}<param name="tool_choice" expr="'required'"/>"#
+        ))
+    );
+    assert!(findings(&body).1.is_empty());
 }
 
 #[test]
@@ -300,6 +331,11 @@ fn the_contract_is_the_service_s_own() {
     );
     assert_eq!(SERVICE_URI, floppy_service_generate::SERVICE_URI);
     assert_eq!(TOOL_CHOICES, floppy_service_generate::TOOL_CHOICES);
+    assert_eq!(
+        MAX_COMPLETION_TOKENS,
+        floppy_service_generate::MAX_COMPLETION_TOKENS
+    );
+    assert!((MAX_TEMPERATURE - floppy_service_generate::MAX_TEMPERATURE).abs() < f64::EPSILON);
     assert_eq!(RESULT_EVENT, floppy_service_generate::RESULT_EVENT);
     assert_eq!(FAILED_EVENT, floppy_service_generate::FAILED_EVENT);
     let codes: Vec<&str> = [

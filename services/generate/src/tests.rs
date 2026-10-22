@@ -617,6 +617,85 @@ fn string_encoded_arguments_are_decoded_once() {
     );
 }
 
+/// The `$ref` bound counts only a chain of `$ref`s with no value between
+/// them, so every item of a long dispatch is decoded through its branches'
+/// `$ref`s, and a schema that refers to itself with no value between ends.
+#[test]
+fn a_ref_bound_counts_a_chain_with_no_value_between() {
+    let schema = serde_json::json!({
+        "type": "object",
+        "$defs": {"wait": {
+            "type": "object", "required": ["event", "data"], "additionalProperties": false,
+            "properties": {"event": {"const": "bot.wait"}, "data": {
+                "type": "object", "required": ["seconds"], "additionalProperties": false,
+                "properties": {"seconds": {"type": "integer"}},
+            }},
+        }, "say": {"$ref": "#/$defs/speak"}, "speak": {
+            "type": "object", "required": ["event"],
+            "properties": {"event": {"const": "bot.say"}},
+        }},
+        "properties": {
+            "events": {"type": "array", "items": {"anyOf": [{"$ref": "#/$defs/say"}, {"$ref": "#/$defs/wait"}]}},
+        },
+        "required": ["events"],
+    })
+    .to_string();
+    let generation = parse(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        ("schema", text(&schema)),
+        ("schemaname", text("dispatch")),
+    ])
+    .expect("valid");
+    let items = 2 * MAX_DECODED_REFS;
+    let sent: Vec<Json> = (0..items)
+        .map(|_| serde_json::json!({"event": "bot.wait", "data": "{\"seconds\": 2}"}))
+        .collect();
+    let decoded: Vec<Json> = (0..items)
+        .map(|_| serde_json::json!({"event": "bot.wait", "data": {"seconds": 2}}))
+        .collect();
+    assert_eq!(
+        outcome(
+            &generation,
+            0,
+            ok(tool_completion(
+                "dispatch",
+                &serde_json::json!({"events": sent}).to_string()
+            ))
+        ),
+        calls_result(
+            "",
+            &[("call-1", "dispatch", serde_json::json!({"events": decoded}))]
+        )
+    );
+    // A `$ref` to itself ends at the bound: its string is kept, and the
+    // check takes it.
+    let looped = parse(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        (
+            "schema",
+            text(
+                &serde_json::json!({
+                    "type": "object",
+                    "$defs": {"loop": {"anyOf": [{"$ref": "#/$defs/loop"}, {"type": "string"}]}},
+                    "properties": {"note": {"$ref": "#/$defs/loop"}},
+                })
+                .to_string(),
+            ),
+        ),
+        ("schemaname", text("note")),
+    ])
+    .expect("valid");
+    assert_eq!(
+        outcome(&looped, 0, ok(tool_completion("note", r#"{"note":"[1]"}"#))),
+        calls_result(
+            "",
+            &[("call-1", "note", serde_json::json!({"note": "[1]"}))]
+        )
+    );
+}
+
 #[test]
 fn a_schema_is_the_one_tool_and_a_call_is_required() {
     let generation = parse(&[

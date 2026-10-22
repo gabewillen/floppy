@@ -266,8 +266,10 @@
 //!
 //! The conversation's text bytes ([`MAX_CONVERSATION_BYTES`]), its message
 //! count ([`MAX_MESSAGES`]), its content parts ([`MAX_PARTS`]), its images'
-//! bytes ([`MAX_IMAGE_BYTES`]), and the model name ([`MAX_MODEL_BYTES`]) are bounded on
-//! wasm builds only ([`scxml_types::wasm_bound`]); the schema is bounded by
+//! bytes ([`MAX_IMAGE_BYTES`]), the model name ([`MAX_MODEL_BYTES`]), and
+//! the schemas a call's arguments are decoded against
+//! ([`MAX_DECODING_STEPS`]) are bounded on wasm builds only
+//! ([`scxml_types::wasm_bound`]); the schema is bounded by
 //! `scxml-event-schema`, and the reply by the host's response-body bound.
 //!
 //! # Telemetry
@@ -1868,13 +1870,14 @@ fn admitted_arguments(call: &ToolCall, tool: &ResponseSchema) -> Result<Json, Fa
     let mut decoder = Decoder {
         root: &tool.parameters,
         checker: None,
-        refs: 0,
+        steps: 0,
     };
-    let args = decoder
-        .decoded(args, &tool.parameters, "", "")
-        .map_err(|(location, message)| {
-            Failure::not_json(&format!("{}: {message}", place(&location)))
-        })?;
+    let args =
+        decoder
+            .decoded(args, &tool.parameters, "", "", 0)
+            .map_err(|(location, message)| {
+                Failure::not_json(&format!("{}: {message}", place(&location)))
+            })?;
     let data = json_data(&args).map_err(|_| {
         Failure::not_json("the arguments hold a number outside the data model's range")
     })?;
@@ -1904,9 +1907,16 @@ fn place(location: &str) -> &str {
     }
 }
 
-/// The most `$ref`s [`Decoder`] follows for one call: a schema that refers
-/// to itself with no value between ends there.
+/// The most `$ref`s [`Decoder`] follows one after another with no value
+/// between them (an object's property or an array's item is a value): a
+/// schema that refers to itself with no value between ends there.
 const MAX_DECODED_REFS: usize = 64;
+
+/// The most schemas [`Decoder`] decodes a call's arguments against (each
+/// `$ref`, `anyOf` branch, property and item counts one); more fails the
+/// call `not-json`. An `anyOf` of recursive branches can otherwise take
+/// work exponential in the arguments' depth.
+pub const MAX_DECODING_STEPS: usize = wasm_bound(64 * 1024);
 
 /// `token` escaped as a JSON pointer token (RFC 6901: `~0`, `~1`).
 fn pointer_token(token: &str) -> String {
@@ -1923,49 +1933,57 @@ struct Decoder<'a> {
     /// The parameters compiled for checking an `anyOf` branch, once one is
     /// needed.
     checker: Option<Checker>,
-    /// The `$ref`s followed so far.
-    refs: usize,
+    /// The schemas decoded against so far, at most [`MAX_DECODING_STEPS`].
+    steps: usize,
 }
 
 impl Decoder<'_> {
     /// `value` with its strings decoded as `schema` (at the schema pointer
-    /// `at`, for the instance pointer `instance`) says: a `$ref` (a local
-    /// JSON pointer) is followed; of an `anyOf`'s branches the first whose
-    /// decoding its branch admits wins, and with none the value is kept for
-    /// the check to refuse; a string where `type` takes an array or an
-    /// object and not a string is decoded once, and an object's declared
-    /// properties and an array's items are decoded as their schemas say.
+    /// `at`, for the instance pointer `instance`, reached through `refs`
+    /// `$ref`s since the last value) says: a `$ref` (a local JSON pointer)
+    /// is followed; of an `anyOf`'s branches the first whose decoding its
+    /// branch admits wins, and with none the value is kept for the check to
+    /// refuse; a string where `type` takes an array or an object and not a
+    /// string is decoded once, and an object's declared properties and an
+    /// array's items are decoded as their schemas say.
     ///
     /// # Errors
     ///
     /// The instance pointer and why, for a string that is not JSON or that
-    /// holds neither an array nor an object.
+    /// holds neither an array nor an object, and for arguments that take
+    /// more than [`MAX_DECODING_STEPS`].
     fn decoded(
         &mut self,
         value: Json,
         schema: &Json,
         at: &str,
         instance: &str,
+        refs: usize,
     ) -> Result<Json, (String, String)> {
+        self.steps = self.steps.saturating_add(1);
+        if self.exhausted() {
+            return Err((
+                instance.to_owned(),
+                format!("the arguments take more than {MAX_DECODING_STEPS} decoding steps"),
+            ));
+        }
         let Json::Object(keywords) = schema else {
             return Ok(value);
         };
         if let Some(Json::String(reference)) = keywords.get("$ref")
             && let Some(pointer) = reference.strip_prefix('#')
             && let Some(target) = self.root.pointer(pointer)
-            && self.refs < MAX_DECODED_REFS
+            && refs < MAX_DECODED_REFS
         {
-            self.refs += 1;
-            return self.decoded(value, target, pointer, instance);
+            return self.decoded(value, target, pointer, instance, refs + 1);
         }
         if let Some(Json::Array(branches)) = keywords.get("anyOf") {
             for (index, branch) in branches.iter().enumerate() {
                 let branch_at = format!("{at}/anyOf/{index}");
-                let Ok(decoded) = self.decoded(value.clone(), branch, &branch_at, instance) else {
-                    continue;
-                };
-                if self.admits(&branch_at, &decoded) {
-                    return Ok(decoded);
+                match self.decoded(value.clone(), branch, &branch_at, instance, refs) {
+                    Ok(decoded) if self.admits(&branch_at, &decoded) => return Ok(decoded),
+                    Err(error) if self.exhausted() => return Err(error),
+                    _ => {}
                 }
             }
             return Ok(value);
@@ -2009,6 +2027,7 @@ impl Decoder<'_> {
                                 property,
                                 &format!("{at}/properties/{token}"),
                                 &format!("{instance}/{token}"),
+                                0,
                             )?,
                             None => member,
                         };
@@ -2027,6 +2046,7 @@ impl Decoder<'_> {
                             item,
                             &format!("{at}/items"),
                             &format!("{instance}/{index}"),
+                            0,
                         )
                     })
                     .collect::<Result<Vec<_>, _>>()
@@ -2035,6 +2055,11 @@ impl Decoder<'_> {
             },
             value => Ok(value),
         }
+    }
+
+    /// Whether the arguments took more than [`MAX_DECODING_STEPS`].
+    fn exhausted(&self) -> bool {
+        exceeds_wasm_bound(self.steps, MAX_DECODING_STEPS)
     }
 
     /// Whether the sub-schema at the schema pointer `at` admits `value`.
