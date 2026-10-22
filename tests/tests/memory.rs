@@ -247,7 +247,7 @@ fn an_operation_over_its_timeout_fails_as_timeout() {
     // the wall clock (the logical clock does not move while a service
     // works), over a statement that runs for seconds, so the timer always
     // wins.
-    let slow = "[{sql: 'WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 50000000) SELECT count(*) FROM c'}]";
+    let slow = "[{sql: 'WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x &lt; 50000000) SELECT count(*) FROM c'}]";
     let document = harness(None, slow);
     let statements = format!(r#"<param name="statements" expr="{slow}"/>"#);
     assert!(

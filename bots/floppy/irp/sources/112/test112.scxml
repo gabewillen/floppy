@@ -4,6 +4,7 @@
 <state id="harness" initial="boot">
   <invoke id="floppy" type="scxml" src="../../../floppy.scx">
     <param name="environment" expr="_sessionid"/>
+    <param name="database" expr="null"/>
     <param name="expected" expr='["cognition", "communication", "identity", "listening", "stm", "persona", "ghost"]'/>
     <param name="activation_timeout_ms" expr="100"/>
   </invoke>
