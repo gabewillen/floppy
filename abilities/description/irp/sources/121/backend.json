@@ -12,7 +12,7 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": " \n\t\u001c\u0085\u2003 "
+              "content": " \n\t\u3000\r\u2003 "
             }
           }
         ]

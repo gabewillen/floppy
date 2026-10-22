@@ -12,7 +12,7 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "\u001c\u0085\ufeffA white square fills the frame. Nothing else is in view.\u001f\u3000"
+              "content": "\t\ufeffA white square fills the frame. Nothing else is in view.\r\u3000"
             }
           }
         ]

@@ -20,11 +20,9 @@ function isGenerateTextResult(_event) {
   return typeof Object(_event.data).content === 'string';
 }
 
-// The reply, stripped as the original's str.strip() does (its white space is
-// not ECMAScript's trim() set).
+// The reply, trimmed.
 function saidText(_event) {
-  return _event.data.content.replace(/^[\t-\r\x1c-\x20\x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+/, '')
-    .replace(/[\t-\r\x1c-\x20\x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$/, '');
+  return _event.data.content.trim();
 }
 
 function generatorFailedMessage(_event) {

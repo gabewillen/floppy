@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- description-3: a reply of only white space, Python's included, is no description. -->
+<!-- description-3: a reply of only white space is no description. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="description" type="scxml" src="../../../description.scx">

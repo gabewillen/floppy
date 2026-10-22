@@ -24,7 +24,7 @@ function generatorFailedMessage(_event) {
   return typeof Object(_event.data).code === 'string' ? 'Object detection generator failed: ' + _event.data.code + '.' : 'Object detection generator failed.';
 }
 
-// replied: the original's GenerativeDetector.classify.
+// replied: the original's GenerativeDetector.
 
 // {objects, skipped} (the valid items, at most max_objects, most confident
 // first, and how many were not a DetectedObject), or {message} (the
@@ -34,12 +34,12 @@ function detectedReply() {
   if (size > max_reply_bytes) {
     return {message: 'the reply of ' + size + ' bytes exceeds max_reply_bytes (' + max_reply_bytes + ')'};
   }
-  var answer = pythonStrip(reply);
+  var answer = reply.trim();
   if (answer.startsWith('```')) {
     // A model may fence its JSON as markdown: read what is inside the fence.
     var newline = answer.indexOf('\n');
     var inside = newline < 0 ? '' : answer.slice(newline + 1);
-    answer = pythonStrip(inside.endsWith('```') ? inside.slice(0, -3) : inside);
+    answer = (inside.endsWith('```') ? inside.slice(0, -3) : inside).trim();
   }
   var items = null;
   try {
@@ -76,7 +76,7 @@ function mismatchedMessage() {
   return 'Object detection produced output that does not match its output schema.';
 }
 
-// The reply's size in UTF-8 bytes (the original's len(reply.content.encode())).
+// The reply's size in UTF-8 bytes.
 function utf8Bytes(text) {
   var bytes = 0;
   for (var character of text) {
@@ -86,43 +86,19 @@ function utf8Bytes(text) {
   return bytes;
 }
 
-// Python's str.strip(): its white space is not ECMAScript's trim() set.
-function pythonStrip(text) {
-  return text.replace(/^[\t-\r\x1c-\x20\x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+/, '')
-    .replace(/[\t-\r\x1c-\x20\x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$/, '');
-}
-
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-// Exactly these keys (the original's extra="forbid", every field required).
+// Exactly these keys: no other key, none missing.
 function hasExactly(record, keys) {
   var own = Object.keys(record);
   return own.length === keys.length && keys.every(function (key) { return own.indexOf(key) >= 0; });
 }
 
-// pydantic's lax float: a number, a boolean (0 or 1), or a string that reads as
-// a decimal number once its surrounding white space (Unicode's) is removed and
-// its underscores are dropped (single ones, neither first nor last); NaN for
-// anything else (an infinity or NaN string included), which no bound admits.
-function laxFloat(value) {
-  if (typeof value === 'number') {
-    return value;
-  }
-  if (typeof value === 'boolean') {
-    return value ? 1 : 0;
-  }
-  if (typeof value !== 'string') {
-    return NaN;
-  }
-  var text = value.replace(/^[\t-\r \x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+/, '')
-    .replace(/[\t-\r \x85\xa0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$/, '');
-  if (/^_|_$|__/.test(text)) {
-    return NaN;
-  }
-  text = text.replace(/_/g, '');
-  return /^[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/.test(text) ? Number(text) : NaN;
+// A JSON number in [low, high] (a boolean or a numeric string is not one).
+function isNumberIn(value, low, high) {
+  return typeof value === 'number' && value >= low && value <= high;
 }
 
 // The original's geometry.Box, or null: x and y in 0..1, width and height in
@@ -131,14 +107,14 @@ function detectedBox(value) {
   if (!isRecord(value) || !hasExactly(value, ['x', 'y', 'width', 'height'])) {
     return null;
   }
-  var x = laxFloat(value.x);
-  var y = laxFloat(value.y);
-  var width = laxFloat(value.width);
-  var height = laxFloat(value.height);
-  if (!(x >= 0 && x <= 1 && y >= 0 && y <= 1 && width > 0 && width <= 1 && height > 0 && height <= 1)) {
+  var x = value.x;
+  var y = value.y;
+  var width = value.width;
+  var height = value.height;
+  if (!(isNumberIn(x, 0, 1) && isNumberIn(y, 0, 1) && isNumberIn(width, 0, 1) && isNumberIn(height, 0, 1))) {
     return null;
   }
-  if (x + width > 1 + 1e-6 || y + height > 1 + 1e-6) {
+  if (width === 0 || height === 0 || x + width > 1 + 1e-6 || y + height > 1 + 1e-6) {
     return null;
   }
   return {x: x, y: y, width: width, height: height};
@@ -157,8 +133,8 @@ function detectedObject(item) {
   if (length < 1 || length > 100) {
     return null;
   }
-  var confidence = item.confidence === null ? null : laxFloat(item.confidence);
-  if (confidence !== null && !(confidence >= 0 && confidence <= 1)) {
+  var confidence = item.confidence;
+  if (confidence !== null && !isNumberIn(confidence, 0, 1)) {
     return null;
   }
   var box = detectedBox(item.box);
