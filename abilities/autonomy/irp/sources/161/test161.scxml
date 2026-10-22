@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- autonomy-6: a batch only partly handled is unhandled, and carries what the seed did as acted. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="autonomy" type="scxml" src="../../../autonomy.scx">
+    <param name="turn" expr="10"/>
+    <param name="input" expr='{"focus": null, "focus_candidates": []}'/>
+    <param name="stimulus" expr='{"event": "bot.perceived", "data": {"percepts": [{"stimulus": {"event": "bot.input", "data": {"observation": {"event": "text", "data": "hello"}}, "source": "listening"}, "source": "listening", "participants": []}, {"stimulus": {"event": "bot.ability.listening.speech.output", "data": {"content": "what is the weather like?", "content_type": "text/plain", "voice_detection": {"segments": [{"start_seconds": 0.0, "end_seconds": 0.4, "confidence": 0.9}]}, "media_type": "audio/pcm", "sample_rate_hz": 48000, "channels": 1, "source_ids": ["caller"]}, "source": "listening"}, "source": "listening", "participants": []}]}, "source": "session.floppy"}'/>
+    <param name="database" expr="null"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="done.invoke.autonomy" cond="_event.data.turn === 10 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === &quot;unhandled&quot; &amp;&amp; JSON.stringify(_event.data.candidates) === &quot;[\&quot;SpeechHeard\&quot;]&quot; &amp;&amp; _event.data.selected === undefined &amp;&amp; JSON.stringify(_event.data.acted.percepts) === '[1]' &amp;&amp; _event.data.acted.selected.length === 1 &amp;&amp; _event.data.acted.selected[0].event === 'bot.ability.communication.input'" target="step1"/>
+  </state>
+  <state id="step1">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

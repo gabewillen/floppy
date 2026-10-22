@@ -570,9 +570,11 @@ fn a_held_devices_input_grounds_the_turns_focus() {
     records.extend(completed(&run));
     let finished = run.close(WAIT);
     records.extend(finished.records);
+    // The reflex floor (unfocused, the lamp's input turns the bot to the
+    // lamp), then the cognition's selection.
     assert_eq!(
         texts_of(&records, "session.floppy", "floppy.focus"),
-        ["lamp"]
+        ["lamp", "lamp"]
     );
     assert_eq!(texts_of(&records, "session.lamp", "lamp.on"), ["100"]);
     let turns = texts_of(&records, "session", "bot.processing.completed");
@@ -603,22 +605,27 @@ fn a_focused_devices_choices_are_read_from_its_snapshot_and_a_selection_reaches_
         .map(|text| support::choice_names(text))
         .collect();
     assert_eq!(choices.len(), 3, "{choices:?}");
-    // Unfocused: no device choice. Focused on the lamp while it is off:
-    // lamp.on and not lamp.off; then on: lamp.off and not lamp.on.
-    assert!(!choices[0].contains("lamp."), "{choices:?}");
-    assert!(
-        choices[1].contains("lamp.on@session.lamp") && !choices[1].contains("lamp.off"),
-        "{choices:?}"
-    );
+    // Unfocused, the lamp's input turns the bot to the lamp (the
+    // original's reflex floor), so its events are that very turn's
+    // choices. Focused on the lamp while it is off: lamp.on and not
+    // lamp.off; then on: lamp.off and not lamp.on.
+    for off in &choices[..2] {
+        assert!(
+            off.contains("lamp.on@session.lamp") && !off.contains("lamp.off"),
+            "{choices:?}"
+        );
+    }
     assert!(
         choices[2].contains("lamp.off@session.lamp") && !choices[2].contains("lamp.on"),
         "{choices:?}"
     );
     // The cognition sent the focus to the body and the action to the
     // lamp, at their session ids.
+    // The reflex floor (unfocused, the lamp's input turns the bot to the
+    // lamp), then the cognition's selection.
     assert_eq!(
         texts_of(&records, "session.floppy", "floppy.focus"),
-        ["lamp"]
+        ["lamp", "lamp"]
     );
     assert_eq!(texts_of(&records, "session.lamp", "lamp.on"), ["40"]);
 }
@@ -723,9 +730,11 @@ fn a_device_action_the_device_refuses_is_an_error_in_the_sender() {
     records.extend(completed(&run));
     let finished = run.close(WAIT);
     records.extend(finished.records);
+    // The reflex floor (unfocused, the lamp's input turns the bot to the
+    // lamp), then the cognition's selection.
     assert_eq!(
         texts_of(&records, "session.floppy", "floppy.focus"),
-        ["lamp"]
+        ["lamp", "lamp"]
     );
     assert!(
         texts_of(&records, "session.lamp", "lamp.on").is_empty(),

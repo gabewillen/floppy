@@ -83,16 +83,32 @@
   bot.ability.listening.failed is logged.
 
   Turns: bot.input, or an ability's bot.ability.cognition.input handoff
-  (the original grants any ability product the turn, blind to its content), in
-  unfocused or focused starts a processing turn; the stimulus is the
-  envelope {event, data, source} assigned for bot.input (its source null:
-  it reaches the body from outside its session, the environment or the
-  host), or the handoff's stimulus as given, with the participants its
-  producer stamped (none for bot.input: a device report names no one; the
-  original's f6c4e08 copies them forward unchanged). The body counts the turn, computes the
+  (the original grants any ability product the turn, blind to its content),
+  is held as a percept {stimulus, source, participants} in arrival order
+  (held, the original's _held): the stimulus is the envelope {event, data,
+  source} assigned for bot.input (its source null: it reaches the body from
+  outside its session, the environment or the host), or the handoff's
+  stimulus as given, with the participants its producer stamped (the
+  original's f6c4e08 copies them forward unchanged; a bot.input's own
+  participants, none when the device knows no one). In unfocused or
+  focused the percept starts a processing turn at once (unfocused, a
+  bot.input from a held device first focuses that device, the original's
+  reflex floor, so its events are the turn's choices); during a turn
+  (processing, cancelling_processing) it waits. Each turn takes the
+  longest arrival-order prefix of what is held, at least one percept and
+  at most 8, 65536 bytes of serialized stimuli and 32 participants in
+  their union (takePercepts): one percept is the turn's stimulus as
+  itself, and more are perceived together as {event: "bot.perceived",
+  data: {percepts}} (schemas/bot.perceived.json), the turn's participants
+  their order-preserving union. A turn ends in turn_ended, which starts
+  the next turn at once while anything is held (an unfocused body first
+  focuses the first held percept's device), and otherwise returns to
+  focused or unfocused. Leaving active releases what is still held,
+  logged as floppy.released {count, reason} (deactivated, rebooted,
+  degraded, or stopped) and never replayed. The body counts the turn, computes the
   turn's attention bias with <cognition:attention_bias_for_turn> (focus, focus_candidates:
-  the original's attention_bias_for_turn from device identity only), assembles the turn's choices (below), sends bot.ability.cognition.input
-  {turn, stimulus, focus, focus_candidates, participants, choices} to the cognition, and
+  the original's attention_bias_for_turn from device identity only, percept by percept), assembles the turn's choices (below), sends bot.ability.cognition.input
+  {turn, stimulus, focus, focus_candidates, participants, choices, environment} to the cognition, and
   arms bot.processing.timed_out
   (processing_timeout_ms) for the turn. Replies count only when they carry
   the current turn. A timeout sends
@@ -100,16 +116,15 @@
   bounded by processing_timeout_ms clamped to 100..5000 ms (the original's
   cancel wait): the acknowledgement
   fails the turn (bot.processing.failed); no acknowledgement degrades the
-  bot. Stimuli that arrive during a turn are held by <event:defer/>
-  (scxml.rs namespaces/event) and start the next turns, in order, one per
-  return to unfocused or focused, before any later event.
+  bot.
 
   Choices (the original's per-turn dispatch inventory,
   collect_offered_events): on processing entry the body reads its own
   choices with <decision:choice location="body_choices"
-  events="bot.focus_device bot.clear_focus"> (the transitions on active:
-  bot.focus_device when the turn has focus candidates, bot.clear_focus when
-  a device is focused), <decision:pin> pins bot.focus_device's device to an
+  events="bot.focus_device"> (the transition on active: bot.focus_device
+  when the turn has focus candidates; the original's 178094a removes
+  bot.clear_focus, so focus stays on a device until the bot focuses
+  another), <decision:pin> pins bot.focus_device's device to an
   enum of the turn's focus_candidates, and
   <processing:collect_offered_events> tags every choice with the session id
   of the session that offers it (the target a stage sends it to): the
@@ -128,10 +143,9 @@
   Dispatch: the cognition's stages send their own selections, each to the
   session its target names (#_scxml_ + target, decision D104), as the
   original's stages dispatch theirs (cognition.types.dispatch_selected_events):
-  a selection of the body's own bot.focus_device or bot.clear_focus reaches
-  the body during the turn and is taken by active's transitions, whose
-  conds are the original's guards (_ability_selected_configured_focus_device,
-  and a clear only while a device is focused). The schemas the generate
+  a selection of the body's own bot.focus_device reaches the body during
+  the turn and is taken by active's transition, whose cond is the
+  original's guard (_ability_selected_configured_focus_device). The schemas the generate
   service and the decision service check a selection against (the focus
   device's enum pinned to the turn's candidates, each target an enum of
   the offering sessions) refuse what the original's attention policy
@@ -236,6 +250,12 @@
     <data id="listening_abilities" expr="['listening']"/>
     <!-- Turns. -->
     <data id="turn" expr="0"/>
+    <!-- What reached the body while it was busy, in arrival order, for the
+         next turn to perceive (the original's _held): each {stimulus,
+         source, participants}; and the turn's take of it (takePercepts:
+         {count, stimulus, participants}). -->
+    <data id="held" expr="[]"/>
+    <data id="take" expr="null"/>
     <data id="focused_device" expr="null"/>
     <data id="stimulus" expr="null"/>
     <!-- Who took part in the turn's stimulus, as its producer stamped them
@@ -334,6 +354,15 @@
     </state>
 
     <state id="active" initial="unfocused">
+      <!-- What is still held when the body leaves active is released,
+           counted and logged, never replayed (the original's
+           _release_held). -->
+      <onexit>
+        <if cond="holdsPercepts()">
+          <log label="floppy.released" expr="releasedLog(_event)"/>
+        </if>
+        <assign location="held" expr="[]"/>
+      </onexit>
       <!-- An ability that ends while the bot is active leaves it degraded. -->
       <transition event="done.invoke.cognition done.invoke.communication done.invoke.identity done.invoke.listening" target="degraded">
         <assign location="degraded_reason" expr="abilityEndedReason(_event)"/>
@@ -404,10 +433,11 @@
           <content expr="_event.data"/>
         </send>
       </transition>
-      <!-- The body's own choices (the original: focus on active, clear only while
-           a device is focused), offered on processing entry and taken as a
-           stage sends them (one that no longer applies, a second clear in
-           one turn, is ignored, as the original's guard ignores it). -->
+      <!-- The body's own choice (the original: focus on active), offered on
+           processing entry and taken as a stage sends it (one that no
+           longer applies is ignored, as the original's guard ignores it).
+           Nothing the bot selects clears the focus: it stays on a device
+           until the bot focuses another (the original's R-9, 178094a). -->
       <transition event="bot.focus_device" event:schema="schemas/bot.focus_device.json"
                   cond="focusDeviceEnabled()">
         <if cond="isFocusCandidate(_event)">
@@ -415,47 +445,50 @@
           <log label="floppy.focus" expr="focused_device"/>
         </if>
       </transition>
-      <transition event="bot.clear_focus" event:schema="schemas/bot.clear_focus.json"
-                  cond="hasFocusedDevice()">
-        <assign location="focused_device" expr="null"/>
-        <log label="floppy.focus" expr="'none'"/>
-      </transition>
 
+      <!-- Before anything has been focused (nothing clears the focus). -->
       <state id="unfocused">
         <onentry>
           <assign location="focused_device" expr="null"/>
         </onentry>
+        <!-- The original's reflex floor (_focus_event_target): an
+             unoccupied body turns to the device an input came from, on
+             its identity alone, so that device's events are this turn's
+             choices. A handoff comes from an ability, never a device, so
+             it turns to nothing. -->
         <transition event="bot.input" event:schema="schemas/bot.input.json" target="processing">
-          <assign location="stimulus" expr="({})"/>
-          <assign location="stimulus.event" expr="_event.name"/>
-          <assign location="stimulus.data" expr="_event.data"/>
-          <assign location="stimulus.source" expr="null"/>
-          <assign location="participants" expr="[]"/>
+          <assign location="held" expr="heldWithInput(_event)"/>
+          <assign location="focused_device" expr="inputDevice(_event)"/>
+          <if cond="hasFocusedDevice()">
+            <log label="floppy.focus" expr="focused_device"/>
+          </if>
         </transition>
         <transition event="bot.ability.cognition.input" event:schema="../../abilities/schemas/bot.ability.cognition.input.json" target="processing">
-          <assign location="stimulus" expr="_event.data.stimulus"/>
-          <assign location="participants" expr="handoffParticipants(_event)"/>
+          <assign location="held" expr="heldWithHandoff(_event)"/>
         </transition>
       </state>
 
+      <!-- Attention committed: an input gets its turn without moving the
+           focus. -->
       <state id="focused">
         <transition event="bot.input" event:schema="schemas/bot.input.json" target="processing">
-          <assign location="stimulus" expr="({})"/>
-          <assign location="stimulus.event" expr="_event.name"/>
-          <assign location="stimulus.data" expr="_event.data"/>
-          <assign location="stimulus.source" expr="null"/>
-          <assign location="participants" expr="[]"/>
+          <assign location="held" expr="heldWithInput(_event)"/>
         </transition>
         <transition event="bot.ability.cognition.input" event:schema="../../abilities/schemas/bot.ability.cognition.input.json" target="processing">
-          <assign location="stimulus" expr="_event.data.stimulus"/>
-          <assign location="participants" expr="handoffParticipants(_event)"/>
+          <assign location="held" expr="heldWithHandoff(_event)"/>
         </transition>
       </state>
 
-      <!-- One turn of the cognition. -->
+      <!-- One turn of the cognition: it takes what is held (the original's
+           _dispatch_bot_processing, at least one percept) and perceives
+           it. -->
       <state id="processing">
         <onentry>
           <assign location="turn" expr="nextTurn()"/>
+          <assign location="take" expr="takePercepts()"/>
+          <assign location="held" expr="heldAfterTake()"/>
+          <assign location="stimulus" expr="take.stimulus"/>
+          <assign location="participants" expr="take.participants"/>
           <cognition:attention_bias_for_turn location="focus_candidates" focuslocation="focus"
                                              stimulus="stimulus" devices="devices" focus="focused_device"/>
           <assign location="device_snapshots" expr="({})"/>
@@ -471,7 +504,7 @@
           </foreach>
         </onentry>
         <onentry>
-          <decision:choice location="body_choices" events="bot.focus_device bot.clear_focus"/>
+          <decision:choice location="body_choices" events="bot.focus_device"/>
           <decision:pin location="body_choices" event="bot.focus_device" property="device" values="focus_candidates"/>
           <!-- bound: 32 KiB, the failure message below names it. -->
           <processing:collect_offered_events location="choices" choices="body_choices" offers="offers"
@@ -491,7 +524,7 @@
           <cancel sendid="processing-timer"/>
         </onexit>
         <!-- The choices do not fit: the turn fails before the cognition. -->
-        <transition cond="choices_over" target="returning">
+        <transition cond="choices_over" target="turn_ended">
           <send event="bot.processing.failed" target="#_parent">
             <content expr="choicesOverFailure()"/>
           </send>
@@ -500,7 +533,7 @@
              body sends itself those that name no target (the trusted
              seed's). -->
         <transition event="bot.ability.cognition.output" event:schema="../../abilities/schemas/bot.ability.cognition.output.json"
-                    cond="isCurrentTurn(_event)" target="returning">
+                    cond="isCurrentTurn(_event)" target="turn_ended">
           <log label="floppy.output" expr="botOutput(_event)"/>
           <assign location="selections" expr="_event.data.output"/>
           <send event="bot.processing.completed" target="#_parent">
@@ -515,7 +548,7 @@
           </foreach>
         </transition>
         <transition event="bot.ability.failed" event:schema="../../abilities/schemas/bot.ability.failed.json"
-                    cond="isCurrentTurn(_event)" target="returning">
+                    cond="isCurrentTurn(_event)" target="turn_ended">
           <send event="bot.processing.failed" target="#_parent">
             <content expr="cognitionFailure(_event)"/>
           </send>
@@ -529,13 +562,14 @@
             <param name="turn" expr="turn"/>
           </send>
         </transition>
+        <!-- What arrives during the turn is held for the next one. -->
         <transition event="bot.input" event:schema="schemas/bot.input.json">
-          <event:defer/>
-          <log label="floppy.deferred" expr="_event.name"/>
+          <assign location="held" expr="heldWithInput(_event)"/>
+          <log label="floppy.held" expr="held.length"/>
         </transition>
         <transition event="bot.ability.cognition.input" event:schema="../../abilities/schemas/bot.ability.cognition.input.json">
-          <event:defer/>
-          <log label="floppy.deferred" expr="_event.name"/>
+          <assign location="held" expr="heldWithHandoff(_event)"/>
+          <log label="floppy.held" expr="held.length"/>
         </transition>
       </state>
 
@@ -552,13 +586,13 @@
           <cancel sendid="cancel-timer"/>
         </onexit>
         <transition event="bot.ability.cognition.cancelled" event:schema="../../abilities/schemas/bot.ability.cognition.cancelled.json"
-                    cond="isCurrentTurn(_event)" target="returning">
+                    cond="isCurrentTurn(_event)" target="turn_ended">
           <send event="bot.processing.failed" target="#_parent">
             <content expr="cancelledFailure()"/>
           </send>
         </transition>
         <transition event="bot.ability.processing.cancelled" event:schema="../../abilities/schemas/bot.ability.processing.cancelled.json"
-                    cond="isCurrentTurn(_event)" target="returning">
+                    cond="isCurrentTurn(_event)" target="turn_ended">
           <send event="bot.processing.failed" target="#_parent">
             <content expr="cancelledFailure()"/>
           </send>
@@ -577,18 +611,30 @@
           </send>
           <assign location="degraded_reason" expr="cancelUnacknowledgedReason()"/>
         </transition>
+        <!-- What arrives during the turn is held for the next one. -->
         <transition event="bot.input" event:schema="schemas/bot.input.json">
-          <event:defer/>
-          <log label="floppy.deferred" expr="_event.name"/>
+          <assign location="held" expr="heldWithInput(_event)"/>
+          <log label="floppy.held" expr="held.length"/>
         </transition>
         <transition event="bot.ability.cognition.input" event:schema="../../abilities/schemas/bot.ability.cognition.input.json">
-          <event:defer/>
-          <log label="floppy.deferred" expr="_event.name"/>
+          <assign location="held" expr="heldWithHandoff(_event)"/>
+          <log label="floppy.held" expr="held.length"/>
         </transition>
       </state>
 
-      <!-- Back to attention: focused when a device is focused. -->
-      <state id="returning">
+      <!-- Every turn ends here (the original's turn_ended choice). Something
+           held starts the next turn at once, which perceives it with
+           whatever else is held; an unfocused body first turns to the
+           device of what arrived first (the reflex floor). Otherwise the
+           body idles where its attention is. -->
+      <state id="turn_ended">
+        <transition cond="holdsPerceptsWithFocus()" target="processing"/>
+        <transition cond="holdsPercepts()" target="processing">
+          <assign location="focused_device" expr="firstHeldDevice()"/>
+          <if cond="hasFocusedDevice()">
+            <log label="floppy.focus" expr="focused_device"/>
+          </if>
+        </transition>
         <transition cond="hasFocusedDevice()" target="focused"/>
         <transition target="unfocused"/>
       </state>

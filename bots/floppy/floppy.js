@@ -79,6 +79,11 @@ function hasFocusedDevice() {
   return focused_device !== null;
 }
 
+// The held device a bot.input came from (its target_device), else null.
+function inputDevice(_event) {
+  return devices.indexOf(_event.data.target_device) >= 0 ? _event.data.target_device : null;
+}
+
 // Whether bot.focus_device applies: the turn has focus candidates.
 function focusDeviceEnabled() {
   return focus_candidates.length > 0;
@@ -87,6 +92,122 @@ function focusDeviceEnabled() {
 // Whether the routed bot.focus_device names a candidate device.
 function isFocusCandidate(_event) {
   return focus_candidates.indexOf(_event.data.device) >= 0 && devices.indexOf(_event.data.device) >= 0;
+}
+
+// Percepts (the original's _hold_percept and _dispatch_bot_processing)
+
+// held with a bot.input as its percept: the envelope, no source (it reaches
+// the body from outside its session), the participants its device stamped.
+function heldWithInput(_event) {
+  var stimulus = {event: _event.name, data: _event.data, source: null};
+  return held.concat([{stimulus: stimulus, source: null, participants: _event.data.participants || []}]);
+}
+
+// held with a handoff's stimulus as its percept, as its producer gave it.
+function heldWithHandoff(_event) {
+  var stimulus = _event.data.stimulus;
+  var source = typeof stimulus.source === 'string' ? stimulus.source : null;
+  return held.concat([{stimulus: stimulus, source: source, participants: _event.data.participants || []}]);
+}
+
+function holdsPercepts() {
+  return held.length > 0;
+}
+
+function holdsPerceptsWithFocus() {
+  return held.length > 0 && focused_device !== null;
+}
+
+// The held device the first held percept came from (the reflex floor), else
+// null: a bot.input's target_device; a handoff comes from no device.
+function firstHeldDevice() {
+  var stimulus = held[0].stimulus;
+  return stimulus.event === 'bot.input' && devices.indexOf(stimulus.data.target_device) >= 0 ? stimulus.data.target_device : null;
+}
+
+// The UTF-8 length of text.
+function utf8Length(text) {
+  var length = 0;
+  for (var i = 0; i < text.length; i++) {
+    var code = text.charCodeAt(i);
+    if (code < 0x80) {
+      length += 1;
+    } else if (code < 0x800) {
+      length += 2;
+    } else if (code >= 0xd800 && code < 0xdc00 && i + 1 < text.length) {
+      length += 4;
+      i++;
+    } else {
+      length += 3;
+    }
+  }
+  return length;
+}
+
+// participants with each of more that it does not hold yet, in order.
+function joinedParticipants(participants, more) {
+  var joined = participants.slice();
+  var keys = joined.map(function (participant) { return JSON.stringify(participant); });
+  more.forEach(function (participant) {
+    var key = JSON.stringify(participant);
+    if (keys.indexOf(key) < 0) {
+      keys.push(key);
+      joined.push(participant);
+    }
+  });
+  return joined;
+}
+
+// The turn's take of held: its longest arrival-order prefix, at least one
+// percept, within 8 percepts, 65536 bytes of serialized stimuli and 32
+// participants in their union (the original's MAX_PERCEPTS,
+// _MAX_PERCEIVED_BYTES and _MAX_PERCEIVED_PARTICIPANTS). One percept is
+// the turn's stimulus as itself; more are perceived together as
+// bot.perceived, with the union as the turn's participants. Pure: the
+// state changes are the <assign>s that read it.
+function takePercepts() {
+  var taken = [];
+  var bytes = 0;
+  var union = [];
+  for (var i = 0; i < held.length && taken.length < 8; i++) {
+    var size = utf8Length(JSON.stringify(held[i].stimulus));
+    var joined = joinedParticipants(union, held[i].participants);
+    if (taken.length > 0 && (bytes + size > 65536 || joined.length > 32)) {
+      break;
+    }
+    taken.push(held[i]);
+    bytes += size;
+    union = joined;
+  }
+  if (taken.length === 1) {
+    return {count: 1, stimulus: taken[0].stimulus, participants: taken[0].participants};
+  }
+  var perceived = {event: 'bot.perceived', data: {percepts: taken}, source: _sessionid};
+  return {count: taken.length, stimulus: perceived, participants: union};
+}
+
+// held without the turn's take.
+function heldAfterTake() {
+  return held.slice(take.count);
+}
+
+// Why the body left active, from the event that took it out (the original's
+// _release_held).
+function releaseReason(_event) {
+  if (_event.name === 'bot.deactivate') {
+    return 'deactivated';
+  }
+  if (_event.name === 'bot.reboot') {
+    return 'rebooted';
+  }
+  if (_event.name === 'bot.processing.cancel.timed_out' || _event.name.indexOf('done.invoke.') === 0) {
+    return 'degraded';
+  }
+  return 'stopped';
+}
+
+function releasedLog(_event) {
+  return JSON.stringify({count: held.length, reason: releaseReason(_event)});
 }
 
 // processing
@@ -103,16 +224,12 @@ function cognitionInput() {
   return {turn: turn, stimulus: stimulus, focus: focus, focus_candidates: focus_candidates, participants: participants, choices: choices, environment: environmentField()};
 }
 
-// The participants a handoff's producer stamped (none when it names none).
-function handoffParticipants(_event) {
-  return _event.data.participants || [];
-}
-
 // The turn's environment from the bot's perspective (decision D106), in
 // the original's layout: the environment's id, then the bot itself, its
-// state and its own attributes (owned_devices), each held device that was
-// read this turn under its reference with its id, state and attributes (a
-// device that is not running is left out).
+// state and its own attributes (owned_devices, each held device that was
+// read this turn under its reference with its id, state and attributes, a
+// device that is not running left out; held_percepts, how many percepts
+// wait for a later turn).
 function environmentField() {
   var owned = {};
   devices.forEach(function (reference) {
@@ -121,7 +238,7 @@ function environmentField() {
       owned[reference] = {ref: reference, id: snapshot.id, state: snapshot.state, attributes: snapshot.attributes};
     }
   });
-  return {id: environment, self: {state: 'processing', owned_devices: owned}};
+  return {id: environment, self: {state: 'processing', owned_devices: owned, held_percepts: held.length}};
 }
 
 function choicesOverFailure() {

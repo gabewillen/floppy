@@ -40,6 +40,10 @@
 //!   prefers: the environment stamps a device's input with it, decision
 //!   D105), else `null`. It is appended to the candidates when it is not
 //!   `null`, is one of `devices`, and is not a candidate already.
+//! * A `bot.perceived` batch (the body's percepts taken together) is biased
+//!   percept by percept, as the original's is: each percept's `stimulus`,
+//!   in arrival order, appends its device as above. No percept outranks
+//!   another.
 //!
 //! `focuslocation` (optional) receives the focus, then `location`
 //! (required) receives the candidates, a JSON array. Values compare as JSON
@@ -457,16 +461,40 @@ pub fn attention_bias(
     } else {
         Json::Null
     };
-    let mut reference = Json::Null;
+    for arrived in arrivals(stimulus) {
+        let reference = input_device(arrived);
+        if !reference.is_null() && devices.contains(&reference) && !candidates.contains(&reference)
+        {
+            candidates.push(reference);
+        }
+    }
+    (focus, candidates)
+}
+
+/// The stimuli a turn perceived, in arrival order: each percept's stimulus
+/// of a `bot.perceived` batch (one that is no object arrives as nothing),
+/// else the stimulus itself.
+fn arrivals(stimulus: &Map<String, Json>) -> Vec<&Map<String, Json>> {
+    if stimulus.get("event").and_then(Json::as_str) == Some("bot.perceived")
+        && let Some(Json::Array(percepts)) =
+            stimulus.get("data").and_then(|data| data.get("percepts"))
+    {
+        return percepts
+            .iter()
+            .filter_map(|percept| percept.get("stimulus").and_then(Json::as_object))
+            .collect();
+    }
+    vec![stimulus]
+}
+
+/// A `bot.input` stimulus's `target_device`, else `null`.
+fn input_device(stimulus: &Map<String, Json>) -> Json {
     if stimulus.get("event").and_then(Json::as_str) == Some("bot.input")
         && let Some(Json::Object(data)) = stimulus.get("data")
     {
-        reference = data.get("target_device").cloned().unwrap_or(Json::Null);
+        return data.get("target_device").cloned().unwrap_or(Json::Null);
     }
-    if !reference.is_null() && devices.contains(&reference) && !candidates.contains(&reference) {
-        candidates.push(reference);
-    }
-    (focus, candidates)
+    Json::Null
 }
 
 /// Executes `<cognition:model_facing_content>`.

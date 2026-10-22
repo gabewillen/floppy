@@ -81,8 +81,8 @@ const DIALECT: &str = "https://json-schema.org/draft/2020-12/schema";
 const BODY_EVENTS: [&str; 13] = [
     "bot.deactivate",
     "bot.input",
+    "bot.perceived",
     "bot.focus_device",
-    "bot.clear_focus",
     "bot.activated",
     "bot.activating.failed",
     "bot.deactivated",
@@ -355,6 +355,48 @@ fn every_schema_is_2020_12_compiles_and_is_titled_by_its_file_name() {
             );
         }
     }
+}
+
+/// Whether `node` is a schema of the original's `Participant`: an object
+/// schema whose properties are its `ref` and `role`.
+fn is_participant(node: &Json) -> bool {
+    node.get("properties")
+        .and_then(Json::as_object)
+        .is_some_and(|properties| properties.contains_key("ref") && properties.contains_key("role"))
+}
+
+#[test]
+fn every_participant_is_the_originals_one_participant() {
+    // scxml.rs bundles no schema from another file (a `$ref` that is not a
+    // fragment is refused, `ReferenceReason::External`), so each schema
+    // that carries participants inlines the original's Participant, and
+    // every one is the same: its ref, role, own and resembles.
+    let mut participants: Vec<(String, Json)> = Vec::new();
+    for (event, schema) in all_schemas() {
+        walk(&schema, &mut |node| {
+            if is_participant(node) {
+                participants.push((event.clone(), node.clone()));
+            }
+        });
+    }
+    let (_, first) = participants
+        .iter()
+        .find(|(event, _)| event == "bot.input")
+        .expect("bot.input carries participants");
+    let properties: BTreeSet<&str> = first["properties"]
+        .as_object()
+        .expect("properties")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(
+        properties,
+        BTreeSet::from(["ref", "role", "own", "resembles"])
+    );
+    for (event, participant) in &participants {
+        assert_eq!(participant, first, "{event} inlines the one Participant");
+    }
+    assert!(participants.len() > 1, "{participants:?}");
 }
 
 #[test]

@@ -192,6 +192,39 @@ fn attention_takes_no_device_from_the_stimulus_source() {
 }
 
 #[test]
+fn attention_biases_a_perceived_batch_percept_by_percept() {
+    let percept = |device: &str| json!({"stimulus": input(&json!({"target_device": device})), "source": null, "participants": []});
+    let perceived = |percepts: Json| json!({"event": "bot.perceived", "data": {"percepts": percepts}, "source": "session.floppy"});
+    // The focus first, then each percept's device in arrival order, once.
+    assert_eq!(
+        bias(
+            &perceived(json!([
+                percept("fan"),
+                percept("door"),
+                percept("lamp"),
+                percept("fan")
+            ])),
+            &json!("lamp")
+        ),
+        assigned(&json!("lamp"), &json!(["lamp", "fan"]))
+    );
+    assert_eq!(
+        bias(
+            &perceived(json!([percept("fan"), percept("lamp")])),
+            &Json::Null
+        ),
+        assigned(&Json::Null, &json!(["fan", "lamp"]))
+    );
+    // A percept that is not a device's input names no device.
+    let product = json!({"stimulus": {"event": "bot.ability.conversation.output",
+                         "data": {"target_device": "lamp"}}, "source": null});
+    assert_eq!(
+        bias(&perceived(json!([product, percept("fan")])), &Json::Null),
+        assigned(&Json::Null, &json!(["fan"]))
+    );
+}
+
+#[test]
 fn attention_without_focuslocation_writes_the_candidates_only() {
     let mut host = attention_host(&input(&json!({})), &json!("lamp"));
     let attributes: Vec<Attribute> = attention_attributes()

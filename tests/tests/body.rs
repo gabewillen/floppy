@@ -430,7 +430,7 @@ fn a_reply_for_another_turn_is_ignored() {
 }
 
 #[test]
-fn inputs_during_a_turn_wait_and_run_in_order() {
+fn inputs_during_a_turn_are_held_and_perceived_together_by_the_next() {
     let body = layout(
         &Cognition::Double("'ready'"),
         &[("processing_timeout_ms", "1500")],
@@ -446,38 +446,180 @@ fn inputs_during_a_turn_wait_and_run_in_order() {
             && record["label"] == "floppy.output"
             && record["text"]
                 .as_str()
-                .is_some_and(|t| t.contains("reply 3"))
+                .is_some_and(|t| t.contains("reply 2"))
     });
     assert_eq!(
         only(
             &records,
             &[
-                "floppy.deferred",
+                "floppy.held",
                 "bot.processing.timed_out",
                 "bot.processing.failed",
                 "double.input"
             ]
         ),
-        // Each state that holds an input logs it: processing holds both,
-        // cancelling_processing holds them again, and processing holds the
-        // third again while the second runs. The environment logs the
-        // events the body sends it after the body's step.
+        // processing holds both (its count after each); the turn's end
+        // starts turn 2 at once, which perceives them together, in
+        // arrival order. The environment logs the events the body sends
+        // it after the body's step.
         pairs(&[
-            ("floppy.deferred", "bot.input"),
-            ("floppy.deferred", "bot.input"),
-            ("floppy.deferred", "bot.input"),
-            ("floppy.deferred", "bot.input"),
+            ("floppy.held", "1"),
+            ("floppy.held", "2"),
             ("bot.processing.timed_out", r#"{"turn":1}"#),
-            ("floppy.deferred", "bot.input"),
             (
                 "bot.processing.failed",
                 r#"{"message":"Bot processing timed out after 1.5 seconds.","turn":1}"#
             ),
-            ("double.input", r#"2 reply "second""#),
-            ("double.input", r#"3 reply "third""#),
+            ("double.input", r#"2 perceived ["second","third"]"#),
         ])
     );
-    close(run, "inputs_during_a_turn_wait_and_run_in_order");
+    close(
+        run,
+        "inputs_during_a_turn_are_held_and_perceived_together_by_the_next",
+    );
+}
+
+/// A `bot.input` whose device stamped `participants`.
+fn input_from(action: &str, data: &str, participants: &[&str]) -> Json {
+    let participants: Vec<Json> = participants
+        .iter()
+        .map(|reference| json!({"ref": reference, "role": "source"}))
+        .collect();
+    json!({"observation": {"event": action, "data": data}, "participants": participants})
+}
+
+#[test]
+fn a_backlog_splits_into_turns_of_at_most_eight_percepts() {
+    let body = layout(
+        &Cognition::Double("'ready'"),
+        &[("processing_timeout_ms", "1500")],
+    );
+    let mut run = start(&body);
+    activated(&mut run);
+    run.event("bot.input", &input("hang", "first"));
+    run.until(WAIT, label_is("double.input"));
+    // Ten percepts while turn 1 hangs: turn 2 takes the first eight
+    // (MAX_PERCEPTS), turn 3 the other two; the participants of a turn
+    // are its percepts' union, in order, once each.
+    for n in 1..=10 {
+        let person = format!("person-{}", n % 3);
+        run.event(
+            "bot.input",
+            &input_from("reply", &format!("p{n}"), &[&person, "caller"]),
+        );
+    }
+    let records = run.until(WAIT, |record| {
+        record["type"] == "log"
+            && record["label"] == "floppy.output"
+            && record["text"]
+                .as_str()
+                .is_some_and(|t| t.contains("reply 3"))
+    });
+    assert_eq!(
+        only(&records, &["double.input", "double.participants"]),
+        pairs(&[
+            (
+                "double.input",
+                r#"2 perceived ["p1","p2","p3","p4","p5","p6","p7","p8"]"#
+            ),
+            (
+                "double.participants",
+                r#"[{"ref":"person-1","role":"source"},{"ref":"caller","role":"source"},{"ref":"person-2","role":"source"},{"ref":"person-0","role":"source"}]"#
+            ),
+            ("double.input", r#"3 perceived ["p9","p10"]"#),
+            (
+                "double.participants",
+                r#"[{"ref":"person-0","role":"source"},{"ref":"caller","role":"source"},{"ref":"person-1","role":"source"}]"#
+            ),
+        ])
+    );
+    // Turn 2's environment counts the two percepts still held.
+    let environments: Vec<Json> = logs(&records)
+        .into_iter()
+        .filter(|(label, _)| label == "double.environment")
+        .map(|(_, text)| serde_json::from_str(&text).expect("JSON"))
+        .collect();
+    let held: Vec<&Json> = environments
+        .iter()
+        .map(|environment| &environment["self"]["held_percepts"])
+        .collect();
+    assert_eq!(held, [&json!(2), &json!(0)]);
+    close(run, "a_backlog_splits_into_turns_of_at_most_eight_percepts");
+}
+
+#[test]
+fn a_turn_takes_at_most_thirty_two_participants() {
+    let body = layout(
+        &Cognition::Double("'ready'"),
+        &[("processing_timeout_ms", "1500")],
+    );
+    let mut run = start(&body);
+    activated(&mut run);
+    run.event("bot.input", &input("hang", "first"));
+    run.until(WAIT, label_is("double.input"));
+    // 15, 15 and 15 distinct participants: the first two percepts' union
+    // is 30, and the third would make it 45, so it waits for turn 3.
+    for n in 0..3 {
+        let people: Vec<String> = (0..15).map(|k| format!("p{n}-{k}")).collect();
+        let people: Vec<&str> = people.iter().map(String::as_str).collect();
+        run.event(
+            "bot.input",
+            &input_from("reply", &format!("batch {n}"), &people),
+        );
+    }
+    let records = run.until(WAIT, |record| {
+        record["type"] == "log"
+            && record["label"] == "floppy.output"
+            && record["text"]
+                .as_str()
+                .is_some_and(|t| t.contains("reply 3"))
+    });
+    assert_eq!(
+        only(&records, &["double.input"]),
+        pairs(&[
+            ("double.input", r#"2 perceived ["batch 0","batch 1"]"#),
+            ("double.input", r#"3 reply "batch 2""#),
+        ])
+    );
+    let participants: Vec<usize> = logs(&records)
+        .into_iter()
+        .filter(|(label, _)| label == "double.participants")
+        .map(|(_, text)| {
+            serde_json::from_str::<Vec<Json>>(&text)
+                .expect("JSON")
+                .len()
+        })
+        .collect();
+    assert_eq!(participants, [30, 15]);
+    close(run, "a_turn_takes_at_most_thirty_two_participants");
+}
+
+#[test]
+fn what_is_held_when_the_bot_leaves_active_is_released() {
+    let body = layout(&Cognition::Double("'ready'"), &[]);
+    let mut run = start(&body);
+    activated(&mut run);
+    run.event("bot.input", &input("hang", "first"));
+    run.until(WAIT, label_is("double.input"));
+    run.event("bot.input", &input("reply", "second"));
+    run.event("bot.input", &input("reply", "third"));
+    run.until(WAIT, |record| {
+        label_is("floppy.held")(record) && record["text"] == "2"
+    });
+    run.event("bot.deactivate", &json!({}));
+    let records = run.until(WAIT, label_is("done.invoke"));
+    assert_eq!(
+        only(
+            &records,
+            &["floppy.released", "bot.deactivated", "double.input"]
+        ),
+        pairs(&[
+            ("floppy.released", r#"{"count":2,"reason":"deactivated"}"#),
+            ("bot.deactivated", "{}"),
+        ]),
+        "held percepts are released, never replayed"
+    );
+    close(run, "what_is_held_when_the_bot_leaves_active_is_released");
 }
 
 #[test]
@@ -625,20 +767,6 @@ fn focus_choice(candidates: &[&str]) -> Json {
     json!({"event": "bot.focus_device", "schema": schema, "description": description, "target": BODY})
 }
 
-fn clear_choice() -> Json {
-    let schema: Json = serde_json::from_str(
-        &std::fs::read_to_string(workspace().join("bots/floppy/schemas/bot.clear_focus.json"))
-            .expect("the schema is readable"),
-    )
-    .expect("the schema is JSON");
-    let description = schema["description"]
-        .as_str()
-        .and_then(|text| text.lines().next())
-        .expect("a description")
-        .to_owned();
-    json!({"event": "bot.clear_focus", "schema": compacted(&schema), "description": description, "target": BODY})
-}
-
 /// The body's session id, which tags its own choices.
 const BODY: &str = "session.floppy";
 
@@ -722,9 +850,10 @@ fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
     );
     let mut run = Run::start(&[room.display().to_string()], &[]);
     activated(&mut run);
-    // Unfocused, the input names the lamp: the only candidate. The body
-    // offers bot.focus_device pinned to it (no clear_focus: nothing is
-    // focused), then the double's offer, compacted and tagged.
+    // Unfocused, the input names the lamp: the body turns to it (the
+    // original's reflex floor), its only candidate. The body offers
+    // bot.focus_device pinned to it, then the double's offer, compacted
+    // and tagged.
     run.event("bot.input", &device_input("focus", "lamp", "lamp"));
     let mut records = run.until(WAIT, label_is("floppy.focus"));
     // The environment logs the turn's outcome after the body's step.
@@ -733,25 +862,20 @@ fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
     let choices = json!([focus_choice(&["lamp"]), ignore_choice(), respond, adopt]);
     assert_eq!(last_json(&records, "double.choices"), choices);
     assert_eq!(last_json(&records, "floppy.choices"), choices);
+    // The reflex, then the double's selection.
     assert_eq!(
         only(&records, &["floppy.focus"]),
-        pairs(&[("floppy.focus", "lamp")])
+        pairs(&[("floppy.focus", "lamp"), ("floppy.focus", "lamp")])
     );
-    // Focused on the lamp, an input for the lamp again: clear_focus is
-    // offered now. A focus on the fan, outside the turn's candidates (which
+    // Focused on the lamp, an input for the lamp again: the same choices
+    // (nothing clears the focus). A focus on the fan, outside the turn's candidates (which
     // the generate service's pinned enum would refuse), is not taken: the
     // body's guard is the original's _ability_selected_configured_focus_device.
     run.event("bot.input", &device_input("focus", "fan", "lamp"));
     let records = run.until(WAIT, label_is("bot.processing.completed"));
     assert_eq!(
         last_json(&records, "double.choices"),
-        json!([
-            focus_choice(&["lamp"]),
-            clear_choice(),
-            ignore_choice(),
-            respond,
-            adopt
-        ])
+        json!([focus_choice(&["lamp"]), ignore_choice(), respond, adopt])
     );
     assert_eq!(
         only(&records, &["bot.processing.failed", "floppy.focus"]),
