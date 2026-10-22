@@ -267,3 +267,10 @@ function bytesPerTokenAfter(_event) {
   var learned = _event.data.bytes_per_token;
   return typeof learned === 'number' && learned > 0 ? learned : bytes_per_token;
 }
+
+// alive
+
+// The persona's description (absent: none written yet).
+function personaDescription(_event) {
+  return _event.data.description === undefined ? null : _event.data.description;
+}

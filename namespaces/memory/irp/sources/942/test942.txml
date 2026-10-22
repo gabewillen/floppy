@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<!-- memory-5: a bare bounded scalar lands under value; a long string, null or an array projects to nothing. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory">
+<datamodel>
+  <data id="a" expr="null"/>
+  <data id="b" expr="null"/>
+  <data id="c" expr="null"/>
+  <data id="e" expr="null"/>
+  <data id="long" expr="'x'.repeat(41)"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <memory:stm_projection location="a" data="7"/>
+    <memory:stm_projection location="b" data="long"/>
+    <memory:stm_projection location="c" data="null"/>
+    <memory:stm_projection location="e" data="[1, 2]"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="a.value === 7 &amp;&amp; Object.keys(b).length === 0 &amp;&amp; Object.keys(c).length === 0 &amp;&amp; Object.keys(e).length === 0" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

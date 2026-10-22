@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- stm-4: a reinforced record is read first and outlives a newer one at eviction. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<datamodel>
+  <data id="stm_id" expr="null"/>
+</datamodel>
+<state id="harness" initial="boot">
+  <invoke id="stm" type="scxml" src="../../../stm.scx">
+    <param name="database" expr="'/memory/floppy.sqlite'"/>
+    <param name="capacity" expr="2"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'stm' &amp;&amp; _event.data.choices.length === 0" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.memory.stm.record" target="#_stm"><content expr='{"stimulus_name": "a", "payload": {}}'/></send>
+      <send event="bot.ability.memory.stm.recent" target="#_stm"><content expr="{}"/></send>
+    </onentry>
+    <transition event="bot.ability.memory.stm.recent.output" cond='JSON.stringify(_event.data.entries.map((e) =&gt; e.stimulus_name)) === "[\"a\"]"' target="step2"><assign location="stm_id" expr="_event.data.entries[0].stm_id"/></transition>
+  </state>
+  <state id="step2">
+    <onentry>
+      <send event="harness.waited" delay="50ms"/>
+    </onentry>
+    <transition event="harness.waited" target="step3"/>
+  </state>
+  <state id="step3">
+    <onentry>
+      <send event="bot.ability.memory.stm.record" target="#_stm"><content expr='{"stimulus_name": "b", "payload": {}}'/></send>
+      <send event="harness.waited" delay="50ms"/>
+    </onentry>
+    <transition event="harness.waited" target="step4"/>
+  </state>
+  <state id="step4">
+    <onentry>
+      <send event="bot.ability.memory.stm.reinforce" target="#_stm"><content expr="({stm_ids: [stm_id]})"/></send>
+      <send event="harness.waited" delay="50ms"/>
+    </onentry>
+    <transition event="harness.waited" target="step5"/>
+  </state>
+  <state id="step5">
+    <onentry>
+      <send event="bot.ability.memory.stm.record" target="#_stm"><content expr='{"stimulus_name": "c", "payload": {}}'/></send>
+      <send event="bot.ability.memory.stm.recent" target="#_stm"><content expr="{}"/></send>
+    </onentry>
+    <transition event="bot.ability.memory.stm.recent.output" cond="JSON.stringify(_event.data.entries.map((e) =&gt; e.stimulus_name)) === &quot;[\&quot;c\&quot;,\&quot;a\&quot;]&quot; &amp;&amp; typeof _event.data.entries[1].last_accessed_at === 'string'" target="step6"/>
+  </state>
+  <state id="step6">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

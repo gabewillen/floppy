@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- memory-5: an object keeps at most 16 fields, the first in its order. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory">
+<datamodel>
+  <data id="p" expr="null"/>
+  <data id="d" expr="({z0: [], z1: 0, z2: 0, z3: 0, z4: 0, z5: 0, z6: 0, z7: 0, z8: 0, z9: 0, za: 0, zb: 0, zc: 0, zd: 0, ze: 0, zf: 0, zg: 0, zh: 0})"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <memory:stm_projection location="p" data="d"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="Object.keys(p).length === 16 &amp;&amp; !('z0' in p) &amp;&amp; ('zg' in p) &amp;&amp; !('zh' in p)" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

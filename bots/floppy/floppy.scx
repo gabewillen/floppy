@@ -15,7 +15,8 @@
 
   Joining (decision D107): the environment's <invoke> is the original's
   attach. Its <param>s are the activation settings (model,
-  intuition_model, bounds, database, environment: the environment's id), and the body starts in
+  intuition_model, bounds, traits, database, environment: the environment's
+  id), and the body starts in
   live and activates at once; nothing sends bot.activate. inactive is a
   top-level final state: a failed activation and bot.deactivate end the
   session there, which is its leave; rejoining is the environment invoking
@@ -24,8 +25,12 @@
   Abilities: live holds <invoke id="cognition">, <invoke
   id="communication"> (abilities/communication/communication.scx, which holds the
   conversation and speaking), <invoke id="identity">
-  (abilities/identity/identity.scx, the bot's name) and <invoke id="listening">
-  (abilities/listening/listening.scx, the ear); leaving live cancels every ability (SCXML
+  (abilities/identity/identity.scx, the bot's name), <invoke id="listening">
+  (abilities/listening/listening.scx, the ear), <invoke id="stm">
+  (abilities/stm/stm.scx, the short-term register, the original's
+  bot.register) and <invoke id="persona"> (abilities/persona/persona.scx,
+  the owner's traits and the bot's own description of itself); leaving
+  live cancels every ability (SCXML
   6.4), which replaces the original's cleanup states: an SCXML invoke cancel is
   synchronous, so there is nothing for the original's 5 min deactivation
   timeout or its reboot preserve/reset cleanup to wait on, and every
@@ -63,6 +68,37 @@
   when the text names the bot, as the cognition hands over a routine's
   bot.behavior.tick (its routines).
 
+  Short-term memory: the body relays a child's bot.ability.memory.stm.turn
+  to the register (no child writes turns yet: listening's heard speech
+  and the conversation's said messages are the listening and
+  communication workstreams' to add), reads the register's recent turns
+  (bot.ability.memory.stm.recent_turns {}) on entering each turn, and
+  relays the register's bot.ability.memory.stm.recent_turns.output to the
+  cognition. The cognition cannot ask through the body: the request's
+  descriptor matches the answer's name too, and scxml.rs judges an
+  arriving event by every matching transition's schema, so a body taking
+  both would refuse the answer.
+  Nothing in floppy reads the register's stimuli yet (the original's
+  Learning is not ported), so a bot.ability.memory.stm.recent.output is
+  taken and dropped.
+
+  Self: the body relays the cognition's bot.ability.identity.ask to the
+  identity and the identity's bot.ability.identity.named (its answer, and
+  the name after each adoption) to the cognition, so the cognition can
+  tell its own name from a visitor's. It relays the persona's
+  bot.ability.persona.output {traits, description} (on waking and after
+  each revision written down) to the cognition, which keeps what it was
+  last told (the original's Cognition._know_persona).
+
+  Persona (the original's bot.traits, which give a bot a persona): the
+  body passes its traits (the activation setting traits, a <param> the
+  environment may set; the original's companion example's owner traits by
+  default, since the original composes a persona only from traits and
+  floppy's body always has one) and its database to the persona. The
+  persona's offer (bot.ability.persona.revise) is its readiness but is
+  kept out of the turn's choices (turnOffers()): in the original only
+  reflection, composed with the same persona, may select a revision.
+
   Speaking: the communication relays speaking's efference copy,
   bot.ability.speaking.efference (sent on to each Listening ability in
   listening, the original's Speaking listening peers); right after it, the
@@ -72,7 +108,14 @@
   back to the body as any sound there does (the bot hears itself).
 
   Environment: environment.sound and environment.visual from the
-  environment, while active, go to
+  environment, while active, are first recorded in the short-term
+  register (the original's _fan_out_input: bot.ability.memory.stm.record
+  {stimulus_name, payload, source?}, the payload the stimulus data's
+  bounded scalar projection, <memory:stm_projection>, and source a
+  sound's own source, which floppy carries in the sound for the original's
+  envelope source; floppy has no envelope id or target to record; a
+  one-way message, so registration never blocks admitting the stimulus),
+  then go to
   each input ability (input, the original's Bot input: the invoke ids
   of the abilities that perceive raw stimuli; the identity and the
   listening), in
@@ -114,7 +157,7 @@
   <processing:collect_offered_events> tags every choice with the session id
   of the session that offers it (the target a stage sends it to): the
   body's own with its _sessionid, each ability's latest bot.ability.offers
-  choices with the ability's session id (<_sessionid>.<invoke id>, decision
+  choices (but the persona's) with the ability's session id (<_sessionid>.<invoke id>, decision
   D110), and, while a device is focused, the events its live session
   accepts, read this turn with <device:snapshot> (decision D109), each
   {event, schema: {type: object}} with the device's id (the device's own
@@ -184,9 +227,11 @@
 
   Memory (the original's sqlite_memory): the body passes its database (a file in
   the directory the run grants the sql service at /memory, scx run's
-  dir option) to the cognition, the communication and the identity as
-  <param name="database">; reasoning recalls the cognitive episodes
-  reflection stores, the identity its adopted names, and the conversation its
+  dir option) to the cognition, the communication, the identity and the
+  short-term register and the persona as <param name="database">;
+  reasoning recalls the cognitive episodes reflection stores, the identity
+  its adopted names, the persona the descriptions the bot wrote of itself,
+  and the conversation its
   relationship memories (abilities/memory/memory.scx over services/sql, one
   SQLite transaction per invocation). A run without the grant is refused
   before it starts.
@@ -195,6 +240,7 @@
        xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:device="https://github.com/stateforward/floppy/namespaces/device"
+       xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory"
        xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="floppy" initial="live">
@@ -215,6 +261,11 @@
     <!-- The environment's id (its root's _sessionid, decision D106), which
          the environment gives as a <param>. -->
     <data id="environment" expr="null"/>
+    <!-- The owner's traits (the original's bot.traits: one to 24, each at
+         most 200 characters), which the environment's <invoke> may set as
+         a <param>; by default the original's companion example's
+         DEFAULT_TRAITS. -->
+    <data id="traits" expr="['warm', 'patient', 'curious', 'honest']"/>
     <data id="activation_timeout_ms" expr="30000"/>
     <data id="processing_timeout_ms" expr="300000"/>
     <!-- The devices the bot holds, which the environment gives as a
@@ -231,13 +282,16 @@
     <!-- Lifecycle: each entry into live is one run; the abilities expected
          and the offers each has sent this run. -->
     <data id="live_run" expr="0"/>
-    <data id="expected" expr="['cognition', 'communication', 'identity', 'listening']"/>
+    <data id="expected" expr="['cognition', 'communication', 'identity', 'listening', 'stm', 'persona']"/>
     <data id="offers" expr="({})"/>
     <data id="waiting" expr="[]"/>
     <!-- The input abilities each environment.* stimulus fans out to
          (the original's Bot input, as invoke ids), and the one being sent to. -->
     <data id="input" expr="['identity', 'listening']"/>
     <data id="ability" expr="null"/>
+    <!-- The admitted stimulus's bounded scalar projection, for the
+         short-term register (<memory:stm_projection>). -->
+    <data id="stm_payload" expr="({})"/>
     <!-- The Listening abilities that receive speaking's efference copy
          (the original's Speaking listening peers, as invoke ids). -->
     <data id="listening_abilities" expr="['listening']"/>
@@ -287,6 +341,13 @@
       <param name="database" expr="database"/>
     </invoke>
     <invoke id="listening" type="scxml" src="../../abilities/listening/listening.scx"/>
+    <invoke id="stm" type="scxml" src="../../abilities/stm/stm.scx">
+      <param name="database" expr="database"/>
+    </invoke>
+    <invoke id="persona" type="scxml" src="../../abilities/persona/persona.scx">
+      <param name="database" expr="database"/>
+      <param name="traits" expr="traits"/>
+    </invoke>
 
     <!-- Each ability's latest offers; the first of a run is its readiness. -->
     <transition event="bot.ability.offers" event:schema="../../abilities/schemas/bot.ability.offers.json">
@@ -294,6 +355,44 @@
       <if cond="isWaiting(_event)">
         <assign location="waiting" expr="waitingWithout(_event)"/>
       </if>
+    </transition>
+    <!-- The cognition asks the identity for the bot's own name, and the
+         identity's answer (also sent after each adoption) goes back to
+         the cognition (the original's AskEvent and NamedEvent), from the
+         start of each run: the cognition may ask while the bot is
+         activating, and the identity answers once it knows. -->
+    <transition event="bot.ability.identity.ask" event:schema="../../abilities/schemas/bot.ability.identity.ask.json">
+      <send event="bot.ability.identity.ask" target="#_identity">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <transition event="bot.ability.identity.named" event:schema="../../abilities/schemas/bot.ability.identity.named.json">
+      <send event="bot.ability.identity.named" target="#_cognition">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <!-- The short-term register (the original's bot.register, reached by
+         message only): the turns its producers write, and the answer to
+         the body's read of them, for the cognition. -->
+    <transition event="bot.ability.memory.stm.turn" event:schema="../../abilities/schemas/bot.ability.memory.stm.turn.json">
+      <send event="bot.ability.memory.stm.turn" target="#_stm">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <transition event="bot.ability.memory.stm.recent_turns.output" event:schema="../../abilities/schemas/bot.ability.memory.stm.recent_turns.output.json">
+      <send event="bot.ability.memory.stm.recent_turns.output" target="#_cognition">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <!-- Nothing asks for the register's stimuli yet. -->
+    <transition event="bot.ability.memory.stm.recent.output" event:schema="../../abilities/schemas/bot.ability.memory.stm.recent.output.json"/>
+    <!-- What the bot knows of itself (the persona tells it on waking, while
+         the bot may still be activating, and after each revision) goes to
+         the cognition. -->
+    <transition event="bot.ability.persona.output" event:schema="../../abilities/schemas/bot.ability.persona.output.json">
+      <send event="bot.ability.persona.output" target="#_cognition">
+        <content expr="_event.data"/>
+      </send>
     </transition>
     <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json" target="deactivating"/>
     <!-- A reboot (the cognition asks for one): re-enter live. -->
@@ -343,7 +442,7 @@
 
     <state id="active" initial="unfocused">
       <!-- An ability that ends while the bot is active leaves it degraded. -->
-      <transition event="done.invoke.cognition done.invoke.communication done.invoke.identity done.invoke.listening" target="degraded">
+      <transition event="done.invoke.cognition done.invoke.communication done.invoke.identity done.invoke.listening done.invoke.stm done.invoke.persona" target="degraded">
         <assign location="degraded_reason" expr="abilityEndedReason(_event)"/>
       </transition>
       <!-- Communication input from outside goes to the communication, whose
@@ -358,16 +457,26 @@
         </send>
       </transition>
       <!-- A sound the environment delivers (the bot's own speech
-           included): a stimulus for every input ability. -->
+           included): recorded in the short-term register, then a
+           stimulus for every input ability. -->
       <transition event="environment.sound" event:schema="../../abilities/schemas/environment.sound.json">
+        <memory:stm_projection location="stm_payload" data="_event.data"/>
+        <send event="bot.ability.memory.stm.record" target="#_stm">
+          <content expr="stmRecord('environment.sound', _event)"/>
+        </send>
         <foreach array="input" item="ability">
           <send event="environment.sound" targetexpr="abilityTarget(ability)">
             <content expr="_event.data"/>
           </send>
         </foreach>
       </transition>
-      <!-- A visual stimulus goes to every input ability. -->
+      <!-- A visual stimulus is recorded in the short-term register, then
+           goes to every input ability. -->
       <transition event="environment.visual" event:schema="schemas/environment.visual.json">
+        <memory:stm_projection location="stm_payload" data="_event.data"/>
+        <send event="bot.ability.memory.stm.record" target="#_stm">
+          <content expr="stmRecord('environment.visual', _event)"/>
+        </send>
         <foreach array="input" item="ability">
           <send event="environment.visual" targetexpr="abilityTarget(ability)">
             <content expr="_event.data"/>
@@ -464,6 +573,10 @@
       <state id="processing">
         <onentry>
           <assign location="turn" expr="nextTurn()"/>
+          <!-- The turns heard and said lately, for the cognition. -->
+          <send event="bot.ability.memory.stm.recent_turns" target="#_stm">
+            <content expr="emptyData()"/>
+          </send>
           <cognition:attention_bias_for_turn location="focus_candidates" focuslocation="focus"
                                              stimulus="stimulus" devices="devices" focus="focused_device"/>
           <assign location="device_snapshots" expr="({})"/>
@@ -482,7 +595,7 @@
           <decision:choice location="body_choices" events="bot.focus_device bot.clear_focus"/>
           <decision:pin location="body_choices" event="bot.focus_device" property="device" values="focus_candidates"/>
           <!-- bound: 32 KiB, the failure message below names it. -->
-          <processing:collect_offered_events location="choices" choices="body_choices" offers="offers"
+          <processing:collect_offered_events location="choices" choices="body_choices" offers="turnOffers()"
                                              devices="device_snapshots" focus="focused_device"
                                              bound="32768" overlocation="choices_over" sizelocation="choices_size"/>
           <log label="floppy.choices" expr="choices"/>

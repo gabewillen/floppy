@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- stm-6: the fifth turn over a capacity of four sheds the older half: the newest two stay. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="stm" type="scxml" src="../../../stm.scx">
+    <param name="database" expr="'/memory/floppy.sqlite'"/>
+    <param name="turn_capacity" expr="4"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'stm' &amp;&amp; _event.data.choices.length === 0" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.memory.stm.turn" target="#_stm"><content expr='{"id": "t1", "direction": "heard", "speakers": [], "text": "turn 1", "cut": false, "conversation": "listening"}'/></send>
+      <send event="bot.ability.memory.stm.turn" target="#_stm"><content expr='{"id": "t2", "direction": "heard", "speakers": [], "text": "turn 2", "cut": false, "conversation": "listening"}'/></send>
+      <send event="bot.ability.memory.stm.turn" target="#_stm"><content expr='{"id": "t3", "direction": "heard", "speakers": [], "text": "turn 3", "cut": false, "conversation": "listening"}'/></send>
+      <send event="bot.ability.memory.stm.turn" target="#_stm"><content expr='{"id": "t4", "direction": "heard", "speakers": [], "text": "turn 4", "cut": false, "conversation": "listening"}'/></send>
+      <send event="bot.ability.memory.stm.turn" target="#_stm"><content expr='{"id": "t5", "direction": "heard", "speakers": [], "text": "turn 5", "cut": false, "conversation": "listening"}'/></send>
+      <send event="bot.ability.memory.stm.recent_turns" target="#_stm"><content expr="{}"/></send>
+    </onentry>
+    <transition event="bot.ability.memory.stm.recent_turns.output" cond='JSON.stringify(_event.data.turns.map((t) =&gt; t.text)) === "[\"turn 4\",\"turn 5\"]"' target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

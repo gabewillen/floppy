@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.identity.ask",
+  "additionalProperties": false,
+  "description": "Ask the bot's Identity which name the bot answers to. Identity answers the asker (the event's source) with NamedEvent under the same id once it knows: after recalling the name on waking, and after any adoption in progress settles. Not model-callable: the bot's cognition asks.",
+  "examples": [
+    {}
+  ],
+  "properties": {},
+  "type": "object"
+}

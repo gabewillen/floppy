@@ -942,6 +942,49 @@
       ],
       "title": "FailureData",
       "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "description": "A memory request failed; kind says how the requester should respond.",
+      "examples": [
+        {
+          "message": "unit 3f2a is no longer leased",
+          "kind": "stale_lease"
+        }
+      ],
+      "properties": {
+        "message": {
+          "description": "Human-readable failure message for the ability operation.",
+          "examples": [
+            "Provider request failed."
+          ],
+          "title": "Message",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Closed failure kind; the same value is reported on spans and metrics.",
+          "enum": [
+            "invalid_input",
+            "unavailable",
+            "store_failed",
+            "stale_lease",
+            "timeout",
+            "conflict",
+            "not_found"
+          ],
+          "examples": [
+            "store_failed"
+          ],
+          "title": "FailureKind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message",
+        "kind"
+      ],
+      "title": "FailureData",
+      "type": "object"
     }
   ],
   "description": "FailureData signal produced when an ability operation cannot complete."

@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.memory.stm.turn",
+  "additionalProperties": false,
+  "description": "A turn of a conversation to remember: what the bot heard or said, who said it, and the words, bounded and cut at a whole word.",
+  "examples": [
+    {
+      "conversation": "conversation-1",
+      "cut": false,
+      "direction": "heard",
+      "id": "turn-1",
+      "speakers": [
+        {
+          "ref": "voice:3f2a9c",
+          "role": "source"
+        }
+      ],
+      "text": "Hi there, I'm Maya."
+    }
+  ],
+  "properties": {
+    "id": {
+      "description": "Id of the turn: for a heard turn the id of the speech event Listening handed on, for a said turn the provenance id of the event that committed the message, so a reader can tell the turn that is its own stimulus from the turns before it.",
+      "examples": [
+        "turn-1"
+      ],
+      "minLength": 1,
+      "title": "Id",
+      "type": "string"
+    },
+    "direction": {
+      "description": "'heard' for a message someone sent the bot, 'said' for a message the bot sent.",
+      "enum": [
+        "heard",
+        "said"
+      ],
+      "examples": [
+        "heard",
+        "said"
+      ],
+      "title": "Direction",
+      "type": "string"
+    },
+    "speakers": {
+      "default": [],
+      "description": "Who said it, as their producers stamped them: the heard speech's source participants for a heard turn, the participants stamped on the bot's own message (its own voice) for a said turn. Empty when no producer stamped anyone, as for a voice nobody identified.",
+      "examples": [
+        [
+          {
+            "ref": "voice:3f2a9c",
+            "role": "source"
+          }
+        ],
+        [
+          {
+            "own": true,
+            "ref": "voice:tts:warm",
+            "role": "source"
+          }
+        ]
+      ],
+      "items": {
+        "additionalProperties": false,
+        "description": "Someone who took part in a stimulus: an opaque, producer-stable identity reference and the role it played (source: who produced it; target: who it was addressed to).",
+        "examples": [
+          {
+            "ref": "+15555550100",
+            "role": "source"
+          },
+          {
+            "ref": "person-42",
+            "role": "target"
+          },
+          {
+            "own": true,
+            "ref": "voice:3f2a9c",
+            "role": "source"
+          }
+        ],
+        "properties": {
+          "ref": {
+            "description": "Opaque, producer-stable identity such as a phone number, an app person id, or a chat handle. Never a display name chosen by the bot.",
+            "examples": [
+              "+15555550100",
+              "person-42",
+              "caller"
+            ],
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Ref",
+            "type": "string"
+          },
+          "role": {
+            "description": "source: who produced the stimulus (speaker, sender). target: who it was addressed to.",
+            "enum": [
+              "source",
+              "target"
+            ],
+            "title": "ParticipantRole",
+            "type": "string",
+            "examples": [
+              "source",
+              "target"
+            ]
+          },
+          "own": {
+            "default": false,
+            "description": "True when the producer knows this participant is the bot itself, for example the bot's own voice heard back or the voice it spoke with. Stamped only by that producer; never inferred.",
+            "examples": [
+              false,
+              true
+            ],
+            "title": "Own",
+            "type": "boolean"
+          },
+          "resembles": {
+            "default": [],
+            "description": "For an identity its producer made just now (nobody it knew): the known identities it resembles, best first, at most 3. Stamped only by that producer; never a link.",
+            "examples": [
+              [
+                {
+                  "ref": "voice:7b1e04",
+                  "similarity": 0.42
+                }
+              ]
+            ],
+            "items": {
+              "additionalProperties": false,
+              "description": "A known identity this new one resembles: its ref and how similar the two are (-1..1). Perception data only: it links nothing, and it is never a print.",
+              "examples": [
+                {
+                  "ref": "voice:7b1e04",
+                  "similarity": 0.42
+                }
+              ],
+              "properties": {
+                "ref": {
+                  "description": "The ref of the known identity, as its producer stamps it.",
+                  "examples": [
+                    "voice:7b1e04"
+                  ],
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "title": "Ref",
+                  "type": "string"
+                },
+                "similarity": {
+                  "description": "How similar the two are, -1..1; higher is more alike.",
+                  "examples": [
+                    0.42
+                  ],
+                  "maximum": 1.0,
+                  "minimum": -1.0,
+                  "title": "Similarity",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "ref",
+                "similarity"
+              ],
+              "title": "Resemblance",
+              "type": "object"
+            },
+            "maxItems": 3,
+            "title": "Resembles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ref",
+          "role"
+        ],
+        "title": "Participant",
+        "type": "object"
+      },
+      "maxItems": 8,
+      "title": "Speakers",
+      "type": "array"
+    },
+    "text": {
+      "description": "The words of the turn, at most 2048 UTF-8 bytes, cut at a whole word.",
+      "examples": [
+        "Hi there, I'm Maya."
+      ],
+      "minLength": 1,
+      "title": "Text",
+      "type": "string"
+    },
+    "cut": {
+      "default": false,
+      "description": "True when the words were longer than the bound and ``text`` holds only their beginning.",
+      "examples": [
+        false
+      ],
+      "title": "Cut",
+      "type": "boolean"
+    },
+    "conversation": {
+      "description": "Id of the ability that recorded the turn: the Listening that heard it, or the Conversation that committed what the bot said.",
+      "examples": [
+        "conversation-1"
+      ],
+      "minLength": 1,
+      "title": "Conversation",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "direction",
+    "text",
+    "conversation"
+  ],
+  "type": "object"
+}

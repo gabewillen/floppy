@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.memory.stm.recent",
+  "additionalProperties": false,
+  "description": "Short-term memory read: entries inside the recency window ordered by the effective clock max(created_at, last_accessed_at), newest first, optionally for one stimulus.",
+  "examples": [
+    {
+      "limit": 16,
+      "stimulus_name": "environment.sound"
+    },
+    {
+      "limit": 64
+    }
+  ],
+  "properties": {
+    "stimulus_name": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Only entries recorded for this stimulus event name; every stimulus when omitted.",
+      "examples": [
+        "environment.sound"
+      ],
+      "title": "Stimulus Name"
+    },
+    "limit": {
+      "default": 64,
+      "description": "Maximum number of entries to return.",
+      "examples": [
+        16
+      ],
+      "maximum": 256,
+      "minimum": 1,
+      "title": "Limit",
+      "type": "integer"
+    }
+  },
+  "type": "object"
+}
