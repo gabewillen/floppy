@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "decision.abstain",
-  "description": "The decision service took no event: nothing was offered, or the backend chose the pass criterion.",
+  "description": "The decision service took no event: nothing was offered, or the backend chose the pass criterion. This is the abstain of kind choice, which the builder asks; a predicate's pass also carries hand_to (decision D150).",
   "type": "object",
   "properties": {
     "reason": {
