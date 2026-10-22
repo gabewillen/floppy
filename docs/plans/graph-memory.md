@@ -8,7 +8,7 @@ identity). Nothing here is built until they are answered.
 ## What the original has
 
 Measured against the original's `main` at `0e77029`
-(`src/mosfet/abilities/memory/`, `embedding/`):
+(its memory and embedding abilities):
 
 - `memory.py` (1352 lines): the Memory ability grows from one statement
   transaction into a long-lived server of `bot.ability.memory.remember`,
