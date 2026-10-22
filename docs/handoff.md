@@ -7,10 +7,26 @@ history lives in [decisions.md](decisions.md) (numbered decisions),
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
-Last updated: 2026-10-21.
+Last updated: 2026-10-22.
 
 ## Current state (2026-10-09) — resume here
 
+- **Body and room parity (2026-10-22, D155 to D160):** `bot.clear_focus`
+  is gone (focus stays until the bot focuses another device; the reflex
+  floor keeps it). A busy body holds what arrives (`floppy.held`), and the
+  next turn takes at most 8 percepts, 64 KiB and 32 participants: one
+  percept as itself, more as one `bot.perceived {percepts}`; what is still
+  held when the bot leaves active is released (`floppy.released`), never
+  replayed. `bot.input` carries `participants`, and every schema inlines
+  the original's one `Participant` (`contracts.rs` checks they are equal;
+  scxml.rs refuses a cross-file `$ref`). The room supervises each bot in
+  its own `supervising.<bot>` region with the original's restart budget
+  and backoff, and a device may sit on an object (`on`, rendered on its
+  `<device>`). The body starts a firmware after its abilities
+  (`firmware_src`, default `bots/floppy/firmware/firmware.scx`, which offers
+  nothing); an owner's firmware is offered, read each turn and rendered as
+  `<firmware ref id state>`. A test that lays the body out must copy
+  `firmware/` beside it, as `body.rs` does.
 - **One schema file per event (2026-10-21, D125):** scxml.rs
   `5bc75e72` resolves an `event:schema` reference against its
   document's base URI like any relative URI, `..` included, so the twin
