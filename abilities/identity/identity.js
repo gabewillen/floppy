@@ -8,6 +8,10 @@ function hasNoDatabase() {
   return database === null;
 }
 
+function delay(ms) {
+  return ms + 'ms';
+}
+
 // recalling
 
 // The name the session started with, as a fact, or null.

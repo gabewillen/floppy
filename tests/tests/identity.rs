@@ -335,3 +335,49 @@ fn postgres_an_adopted_name_is_recalled_by_the_next_run() {
     assert!(texts(&records, "memory").is_empty(), "{records:?}");
     drop(run.close(WAIT));
 }
+
+/// The cognition asks for the bot's own name (the original's `AskEvent`)
+/// as it starts, while the bot is activating; the body relays the ask to
+/// the identity, which answers once it has recalled, and relays every
+/// `bot.ability.identity.named` (each adoption's too) back. The double is
+/// rewritten to ask on start and log each answer as `double.named`.
+#[test]
+fn the_cognition_is_told_the_bots_name_and_each_adoption() {
+    let body = layout(None);
+    let double = body
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .expect("the layout's root")
+        .join("abilities/cognition/cognition.scx");
+    let text = std::fs::read_to_string(&double).expect("the double is readable");
+    let alive = r#"<state id="alive" initial="idle">"#;
+    assert!(text.contains(alive), "the double's alive state");
+    std::fs::write(
+        &double,
+        text.replacen(
+            alive,
+            &format!(
+                r#"{alive}
+    <onentry>
+      <send event="bot.ability.identity.ask" target="#_parent"><content expr="({{}})"/></send>
+    </onentry>
+    <transition event="bot.ability.identity.named">
+      <log label="double.named" expr="JSON.stringify(_event.data.name)"/>
+    </transition>"#
+            ),
+            1,
+        ),
+    )
+    .expect("the double copy is writable");
+    // The answer may come before or after the activation.
+    let (mut run, mut records) = started(&body);
+    if texts(&records, "double.named").is_empty() {
+        records.extend(run.until(WAIT, label_is("double.named")));
+    }
+    assert_eq!(texts(&records, "double.named"), strings(&["null"]));
+    run.event("bot.input", &input("adopt", "Floppy"));
+    let records = run.until(WAIT, label_is("double.named"));
+    assert_eq!(texts(&records, "double.named"), strings(&[r#""Floppy""#]));
+    close(run, "the_cognition_is_told_the_bots_name_and_each_adoption");
+}

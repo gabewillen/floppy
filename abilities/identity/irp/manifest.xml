@@ -12,12 +12,15 @@
     </test>
   </assert>
   <assert id="identity-2" specnum="2" specid="#identity-2">
-    <![CDATA[With a database it recalls the last adopted name from memory, else the name it was started with, and is ready with the same offer; a recall that fails answers `bot.ability.failed` `{message: "Identity could not recall a name from memory: ..."}` and then recalls the name it was started with.]]>
+    <![CDATA[With a database it recalls the last adopted name from memory, else the name it was started with, and is ready with the same offer; a recall attempt that fails or does not answer within `recall_attempt_timeout_ms` is asked again after `recall_retry_delay_ms`, and when the bring-up budget (`bring_up_timeout_ms`) runs out first it answers `bot.ability.failed` `{message: "Identity could not recall a name: memory did not answer within the bring-up budget."}` and then recalls the name it was started with.]]>
     <test id="110" conformance="mandatory" manual="false">
       <start uri="110/test110.scxml"/>
     </test>
     <test id="111" conformance="mandatory" manual="false">
       <start uri="111/test111.scxml"/>
+    </test>
+    <test id="112" conformance="mandatory" manual="false">
+      <start uri="112/test112.scxml"/>
     </test>
   </assert>
   <assert id="identity-3" specnum="3" specid="#identity-3">
@@ -90,6 +93,21 @@
     </test>
     <test id="172" conformance="mandatory" manual="false">
       <start uri="172/test172.scxml"/>
+    </test>
+  </assert>
+  <assert id="identity-9" specnum="9" specid="#identity-9">
+    <![CDATA[`bot.ability.identity.ask` `{}` while knowing is answered with `bot.ability.identity.named` `{name}` to the parent, the name it answers to or null; an ask that arrives while recalling or adopting is deferred and answered once it knows; and every adoption sends `bot.ability.identity.named` with the adopted name once it is taken.]]>
+    <test id="180" conformance="mandatory" manual="false">
+      <start uri="180/test180.scxml"/>
+    </test>
+    <test id="181" conformance="mandatory" manual="false">
+      <start uri="181/test181.scxml"/>
+    </test>
+    <test id="182" conformance="mandatory" manual="false">
+      <start uri="182/test182.scxml"/>
+    </test>
+    <test id="183" conformance="mandatory" manual="false">
+      <start uri="183/test183.scxml"/>
     </test>
   </assert>
 </assertions>

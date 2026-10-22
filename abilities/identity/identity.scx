@@ -21,11 +21,26 @@
   self_name, subject_ref self, oldest first, at most 50, the original
   identity/name.py) and sends bot.ability.identity.recalled {name} to
   #_internal with the last one, else with the name the session started
-  with ({text, kind: "fact"}, or null). A recall that fails sends
-  bot.ability.failed {message: "Identity could not recall a name from
-  memory: ..."} to the parent and then recalls the session's name, as
-  the original does. Without a database it logs <log label="memory"
-  expr="'absent'"> and recalls the session's name.
+  with ({text, kind: "fact"}, or null). A memory that does not answer
+  yet is a peer still coming up, not an empty one (the original's asking
+  and waiting): an attempt that fails (logged as identity.recall.failed,
+  "Identity could not recall a name from memory: ...") or does not answer
+  within recall_attempt_timeout_ms (1 s) is asked again after
+  recall_retry_delay_ms (100 ms). When the bring-up budget
+  (bring_up_timeout_ms, the <param>, 30 s by default) runs out first, it
+  sends bot.ability.failed {message: "Identity could not recall a name:
+  memory did not answer within the bring-up budget."} to the parent and
+  recalls the session's name, as the original's _give_up_recalling does.
+  Without a database it logs <log label="memory" expr="'absent'"> and
+  recalls the session's name.
+
+  Asking (the original's AskEvent and NamedEvent, identity/name.py):
+  bot.ability.identity.ask {} while knowing is answered with
+  bot.ability.identity.named {name} (the name the bot answers to, or null)
+  to the parent; the body relays the cognition's ask here and the answer
+  back to the cognition. An ask that arrives while recalling or adopting
+  is deferred, so it is never answered "none" too early. Every adoption
+  also sends named to the parent once the name is taken.
 
   Recognition (the original recognition.SpeechNameRecognizer): identity is one
   of the body's input abilities, so each environment.sound reaches it;
@@ -68,14 +83,15 @@
   Without a database it logs <log label="memory" expr="'absent'"> and
   sends adopted.
 
-  Deferral (the original's defer): communication input, sounds and adopt events
-  that arrive while recalling or adopting, and input and sounds that
+  Deferral (the original's defer): communication input, sounds, adopt and
+  ask events that arrive while recalling or adopting, and input and sounds that
   arrive while recognizing, are held by <event:defer/> (scxml.rs
   namespaces/event) and come back, in order, once the configuration
   changes, so knowing (or listening, after recognizing) takes each by the
   same transitions as on arrival.
 
   Logs: identity.name (each name taken, recalled or adopted),
+  identity.recall.failed (each recall attempt that failed),
   identity.heard (whether a relayed text addressed the bot), and
   identity.offers.
 
@@ -116,6 +132,13 @@
     <data id="name_select" expr="'SELECT content FROM (SELECT content, created_at, memory_id FROM bot_memory WHERE query_tags = ?1 AND subject_ref = ?2 AND content_format = \'application/json\' ORDER BY created_at DESC, memory_id DESC LIMIT 50) AS recent ORDER BY created_at, memory_id'"/>
     <data id="name_insert" expr="'INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT substr(\'00000000000000000000000000000000\', 1, 32 - length(n)) || n FROM (SELECT CAST(COUNT(*) + 1 AS TEXT) AS n FROM bot_memory) AS c), ?1, NULL, ?2, ?3, ?4, ?5, ?6, ?7, ?8)'"/>
     <data id="recalled_name" expr="null"/>
+    <!-- Recall's time bounds (the original identity.py): one attempt, the
+         pause before the next, and the bring-up budget (the original's
+         attachment timeout, 30 s, as the body's activation_timeout_ms),
+         which an invoker may set as a <param>. -->
+    <data id="recall_attempt_timeout_ms" expr="1000"/>
+    <data id="recall_retry_delay_ms" expr="100"/>
+    <data id="bring_up_timeout_ms" expr="30000"/>
     <data id="name_parameters" expr="[]"/>
   </datamodel>
   <script src="identity.js"/>
@@ -138,20 +161,55 @@
         </send>
       </onentry>
     </state>
-    <state id="recalling_memory">
-      <invoke id="recall" type="scxml" src="../memory/memory.scx">
-        <param name="database" expr="database"/>
-        <param name="statements" expr="nameSelectStatements()"/>
-      </invoke>
-      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json">
-        <assign location="recalled_name" expr="recalledNameFromMemory(_event)"/>
-        <send event="bot.ability.identity.recalled" target="#_internal">
-          <param name="name" expr="recalled_name"/>
-        </send>
-      </transition>
-      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json">
+    <!-- A memory that does not answer yet is not an empty one (the
+         original's asking and waiting): an attempt that fails or takes
+         longer than recall_attempt_timeout_ms is asked again after
+         recall_retry_delay_ms, until the bring-up budget runs out. -->
+    <state id="recalling_memory" initial="asking">
+      <onentry>
+        <send id="recalling-memory-after" event="recalling_memory.after" delayexpr="delay(bring_up_timeout_ms)"/>
+      </onentry>
+      <onexit>
+        <cancel sendid="recalling-memory-after"/>
+      </onexit>
+      <state id="asking">
+        <onentry>
+          <send id="asking-after" event="asking.after" delayexpr="delay(recall_attempt_timeout_ms)"/>
+        </onentry>
+        <onexit>
+          <cancel sendid="asking-after"/>
+        </onexit>
+        <invoke id="recall" type="scxml" src="../memory/memory.scx">
+          <param name="database" expr="database"/>
+          <param name="statements" expr="nameSelectStatements()"/>
+        </invoke>
+        <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json">
+          <assign location="recalled_name" expr="recalledNameFromMemory(_event)"/>
+          <send event="bot.ability.identity.recalled" target="#_internal">
+            <param name="name" expr="recalled_name"/>
+          </send>
+        </transition>
+        <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="waiting">
+          <log label="identity.recall.failed" expr="recallFailedMessage(_event)"/>
+        </transition>
+        <transition event="asking.after" target="waiting">
+          <log label="identity.recall.failed" expr="'Identity could not recall a name from memory: memory did not answer in time.'"/>
+        </transition>
+      </state>
+      <state id="waiting">
+        <onentry>
+          <send id="waiting-after" event="waiting.after" delayexpr="delay(recall_retry_delay_ms)"/>
+        </onentry>
+        <onexit>
+          <cancel sendid="waiting-after"/>
+        </onexit>
+        <transition event="waiting.after" target="asking"/>
+      </state>
+      <!-- The bring-up budget ran out with memory still not answering:
+           wake with the session's name, and say so. -->
+      <transition event="recalling_memory.after">
         <send event="bot.ability.failed" target="#_parent">
-          <param name="message" expr="recallFailedMessage(_event)"/>
+          <param name="message" expr="'Identity could not recall a name: memory did not answer within the bring-up budget.'"/>
         </send>
         <send event="bot.ability.identity.recalled" target="#_internal">
           <param name="name" expr="recalled_name"/>
@@ -165,6 +223,11 @@
       <event:defer/>
     </transition>
     <transition event="bot.ability.identity.adopt" event:schema="../schemas/bot.ability.identity.adopt.json">
+      <event:defer/>
+    </transition>
+    <!-- An ask waits for the name the bot woke up with, so it is never
+         answered "none" too early. -->
+    <transition event="bot.ability.identity.ask" event:schema="../schemas/bot.ability.identity.ask.json">
       <event:defer/>
     </transition>
     <transition event="bot.ability.identity.recalled" event:schema="../schemas/bot.ability.identity.recalled.json" target="knowing">
@@ -192,6 +255,13 @@
          given a name mid-sentence. -->
     <transition event="bot.ability.identity.adopt" event:schema="../schemas/bot.ability.identity.adopt.json" target="adopting">
       <assign location="adopting_name" expr="_event.data.name"/>
+    </transition>
+    <!-- Tell the asker the name the bot answers to, or that it has none
+         yet: a reply to the parent, never a broadcast. -->
+    <transition event="bot.ability.identity.ask" event:schema="../schemas/bot.ability.identity.ask.json">
+      <send event="bot.ability.identity.named" target="#_parent">
+        <param name="name" expr="name"/>
+      </send>
     </transition>
 
     <state id="listening">
@@ -296,6 +366,9 @@
     <transition event="bot.ability.identity.adopted" event:schema="../schemas/bot.ability.identity.adopted.json" target="knowing">
       <assign location="name" expr="_event.data.name.text"/>
       <log label="identity.name" expr="adoptedNameLog()"/>
+      <send event="bot.ability.identity.named" target="#_parent">
+        <param name="name" expr="name"/>
+      </send>
     </transition>
     <transition event="bot.ability.identity.adopt.failed" event:schema="../schemas/bot.ability.identity.adopt.failed.json" target="knowing">
       <log label="identity.adopt.failed" expr="_event.data.message"/>
@@ -311,6 +384,9 @@
       <event:defer/>
     </transition>
     <transition event="bot.ability.identity.adopt" event:schema="../schemas/bot.ability.identity.adopt.json">
+      <event:defer/>
+    </transition>
+    <transition event="bot.ability.identity.ask" event:schema="../schemas/bot.ability.identity.ask.json">
       <event:defer/>
     </transition>
   </state>
