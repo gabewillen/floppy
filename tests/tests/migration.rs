@@ -44,11 +44,12 @@ fn harness_on(database: &str, engine: &str, dialect: &str, target: &str, inspect
   <datamodel>
     <data id="revision_0001" src="memory/{dialect}/0001_initial_memory_schema.json"/>
     <data id="revision_0002" src="memory/{dialect}/0002_behavior_lifetime.json"/>
+    <data id="revision_0003" src="memory/{dialect}/0003_stm_turns.json"/>
   </datamodel>
   <state id="migrating">
     <invoke id="migration" type="scxml" src="migration/migration.scx">
       <param name="database" expr="'{database}'"/>
-      <param name="revisions" expr="[revision_0001, revision_0002]"/>
+      <param name="revisions" expr="[revision_0001, revision_0002, revision_0003]"/>
       <param name="target" expr="{target}"/>
     </invoke>
     <transition event="bot.ability.migration.output" target="inspecting">
@@ -122,15 +123,23 @@ fn upgrade_and_downgrade_walk_the_revisions_and_keep_alembic_version() {
     assert_eq!(
         migrate(&directory, "'head'", SCHEMA),
         pairs(&[
-            ("output", r#"{"from":null,"to":"0002"}"#),
-            ("inspect", r#"[[["0002"]],[[4]],[[1]]]"#),
+            ("output", r#"{"from":null,"to":"0003"}"#),
+            ("inspect", r#"[[["0003"]],[[5]],[[1]]]"#),
         ])
     );
     // At head already: nothing is applied.
     assert_eq!(
         migrate(&directory, "'head'", SCHEMA),
         pairs(&[
-            ("output", r#"{"from":"0002","to":"0002"}"#),
+            ("output", r#"{"from":"0003","to":"0003"}"#),
+            ("inspect", r#"[[["0003"]],[[5]],[[1]]]"#),
+        ])
+    );
+    // 0003's downgrade drops bot_stm_turn (decision D165).
+    assert_eq!(
+        migrate(&directory, "'-1'", SCHEMA),
+        pairs(&[
+            ("output", r#"{"from":"0003","to":"0002"}"#),
             ("inspect", r#"[[["0002"]],[[4]],[[1]]]"#),
         ])
     );
@@ -172,7 +181,7 @@ fn a_database_at_an_older_revision_is_upgraded_in_place() {
             "[{sql: 'SELECT name, lifetime FROM bot_behavior'}]"
         ),
         pairs(&[
-            ("output", r#"{"from":"0001","to":"0002"}"#),
+            ("output", r#"{"from":"0001","to":"0003"}"#),
             ("inspect", r#"[[["greet","turn"]]]"#),
         ])
     );
@@ -185,11 +194,45 @@ fn an_unknown_target_fails_and_commits_nothing() {
         migrate(
             &directory,
             "'0009'",
-            "[{sql: 'SELECT count(*) FROM alembic_version'}, {sql: 'SELECT count(*) FROM sqlite_master WHERE name LIKE \\'bot_%\\''}]"
+            "[{sql: 'SELECT count(*) FROM sqlite_master WHERE name = \\'alembic_version\\''}, {sql: 'SELECT count(*) FROM sqlite_master WHERE name LIKE \\'bot_%\\''}]"
         ),
         pairs(&[
             ("failed", "Migration could not plan from null to 0009"),
             ("inspect", "[[[0]],[[0]]]"),
+        ])
+    );
+}
+
+#[test]
+fn an_unversioned_database_with_memory_tables_is_refused_untouched() {
+    // The original's store.py migrate: memory tables but no alembic_version
+    // match no revision; the refusal writes nothing (no version table).
+    let directory = unique_scratch("migration");
+    // At base already, nothing is written; the inspection then makes one
+    // of the history's tables and one of its own.
+    assert_eq!(
+        migrate(
+            &directory,
+            "'base'",
+            "[{sql: 'CREATE TABLE bot_stm_turn (seq INTEGER)'}, {sql: 'CREATE TABLE other (x)'}]"
+        ),
+        pairs(&[
+            ("output", r#"{"from":null,"to":null}"#),
+            ("inspect", "[[],[]]"),
+        ])
+    );
+    assert_eq!(
+        migrate(
+            &directory,
+            "'head'",
+            "[{sql: 'SELECT group_concat(name) FROM (SELECT name FROM sqlite_master WHERE type = \\'table\\' ORDER BY name)'}]"
+        ),
+        pairs(&[
+            (
+                "failed",
+                "Unversioned memory database already holds ['bot_stm_turn']; not migrating it."
+            ),
+            ("inspect", r#"[[["bot_stm_turn,other"]]]"#),
         ])
     );
 }
@@ -213,7 +256,14 @@ fn postgres_upgrade_and_downgrade_walk_the_revisions_and_keep_alembic_version() 
     assert_eq!(
         migrate("'head'"),
         pairs(&[
-            ("output", r#"{"from":null,"to":"0002"}"#),
+            ("output", r#"{"from":null,"to":"0003"}"#),
+            ("inspect", r#"[[["0003"]],[[5]],[[1]]]"#),
+        ])
+    );
+    assert_eq!(
+        migrate("'-1'"),
+        pairs(&[
+            ("output", r#"{"from":"0003","to":"0002"}"#),
             ("inspect", r#"[[["0002"]],[[4]],[[1]]]"#),
         ])
     );

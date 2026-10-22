@@ -6,9 +6,9 @@
     "kind": "namespace-irp",
     "source": "namespaces/conversation/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "87fdadded2d7717cd1e5985757b2fa3b3566ccd99796c98345d7f620d3dd6676",
-    "source_digest": "995dfb4923189898cf20df1eb8cbce843d6ef0c1e4231dd1eb754f6eb5920c29",
-    "manifest_digest": "5cf6a657074ff9b7ef457c5f894acb3403aa7dd9fbbf7ab4796b086fd87547da",
+    "corpus_digest": "c809e00942995a0232582b63b901c4159d53563ccb6ae9e6e7cbcf968500187d",
+    "source_digest": "fb5ba209f7b75d276ae7ac1f02609417115130cfa6c1589936ef88886b182f21",
+    "manifest_digest": "d76bb9d773be777d54859d3111b6122c036619de9509da8b465eed6fa15306d7",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
@@ -68,29 +68,29 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "70486529ab93f211c34990280ae57306be4b8ddb40cd61004d3a97312d912dd4",
+  "identity_digest": "42d75c05c6fa60b3df47e21c270eae5ca1379b478f6cb89a025398c728dec6eb",
   "summary": {
     "total_selected": 30,
     "applicable_selected": 30,
-    "passed": 30,
-    "failed": 0,
+    "passed": 29,
+    "failed": 1,
     "unsupported": 0,
     "invalid": 0,
     "harness_error": 0,
     "skipped": 0,
     "not_applicable": 0,
-    "not_passing": 0,
+    "not_passing": 1,
     "passed_under_erratum": 0,
     "mandatory": {
       "applicable_selected": 30,
-      "passed": 30,
-      "failed": 0,
+      "passed": 29,
+      "failed": 1,
       "unsupported": 0,
       "invalid": 0,
       "harness_error": 0,
       "skipped": 0,
       "not_applicable": 0,
-      "not_passing": 0,
+      "not_passing": 1,
       "passed_under_erratum": 0
     },
     "optional": {
@@ -120,14 +120,14 @@
       },
       "#conversation-2": {
         "applicable_selected": 4,
-        "passed": 4,
-        "failed": 0,
+        "passed": 3,
+        "failed": 1,
         "unsupported": 0,
         "invalid": 0,
         "harness_error": 0,
         "skipped": 0,
         "not_applicable": 0,
-        "not_passing": 0,
+        "not_passing": 1,
         "passed_under_erratum": 0
       },
       "#conversation-3": {
@@ -218,14 +218,14 @@
     "by_datamodel": {
       "ecmascript": {
         "applicable_selected": 30,
-        "passed": 30,
-        "failed": 0,
+        "passed": 29,
+        "failed": 1,
         "unsupported": 0,
         "invalid": 0,
         "harness_error": 0,
         "skipped": 0,
         "not_applicable": 0,
-        "not_passing": 0,
+        "not_passing": 1,
         "passed_under_erratum": 0
       }
     }
@@ -439,8 +439,10 @@
       "datamodel": "ecmascript",
       "conformance": "mandatory",
       "manual": false,
-      "stage": "complete",
-      "disposition": "passed",
+      "stage": "oracle",
+      "disposition": "failed",
+      "reason_code": "outcome-fail",
+      "reason": "official Outcome log reported fail",
       "diagnostics": [
         {
           "code": "LINT010",
@@ -449,11 +451,11 @@
         }
       ],
       "configuration": [
-        "pass"
+        "fail"
       ],
       "terminal_status": "finished",
-      "commands": 3,
-      "fuel_consumed": 3,
+      "commands": 2,
+      "fuel_consumed": 2,
       "oracle": "outcome-log"
     },
     {

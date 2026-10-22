@@ -1,60 +1,135 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   floppy's Cognition ability (the reference abilities/cognition/cognition.py): the
-  autonomy -> intuition -> reasoning cascade, with cancellation, hop
-  timeouts and reboot requests. The body (bots/floppy/floppy.scx) invokes it
+  reflex (autonomy, then the decision layer) -> intuition -> reasoning
+  cascade, with
+  cancellation and step timeouts. The body (bots/floppy/floppy.scx) invokes it
   as its child "cognition" and sends it one bot.ability.cognition.input per
   processing turn; it answers that turn with exactly one of
   bot.ability.cognition.output {turn, output} or bot.ability.failed
-  {message, turn, input}, acknowledges bot.ability.cognition.cancel {turn}
-  with bot.ability.cognition.cancelled {turn}, and asks the body for
-  bot.reboot {reason} when a stage does not answer in time.
+  {message, turn, input}, and acknowledges bot.ability.cognition.cancel {turn}
+  with bot.ability.cognition.cancelled {turn}.
 
-    idle -input-> processing { running_autonomy -> running_intuition ->
-                               running_reasoning,
+    idle -input-> processing { running_autonomy, after_autonomy,
+                               running_decision, after_decision,
+                               running_intuition, running_reasoning,
                                completing, failing,
-                               cancelling { autonomy, intuition, reasoning,
-                                            acknowledging } } -> idle
-    processing -hop timeout-> rebooting (bot.reboot to the body, which
-      re-enters live and so restarts this ability)
+                               cancelling { autonomy, decision, intuition,
+                                            reasoning, acknowledging } }
+                               -> idle
 
   Stages: each stage is an SCXML child invoked per turn inside its substate
   (abilities/autonomy/autonomy.scx, abilities/intuition/intuition.scx,
   abilities/reasoning/reasoning.scx, in sibling directories) with the turn as <param>s; it answers through its top-level
   final state's <donedata>, received here as done.invoke.<stage> (the
   invoke ids are the stage names; the substates are running_<stage>):
-  {turn, handled, selected?, reason?, confidence_tuner?, failed?}. Leaving a stage's
+  {turn, handled, selected?, acted?, reason?, confidence_tuner?, failed?}. Leaving a stage's
   substate cancels it (SCXML 6.4), which replaces the original's stage cancel
   tokens. Handled ends the turn with the stage's selections as the output;
-  unhandled goes on to the next stage (autonomy always does without
-  a database: it gets the stimulus and the database, and runs the learned
-  behaviors the stimulus triggers);
-  failed (or an error.* from the stage) answers bot.ability.failed. The
-  intuition's confidence tuner state (the original's ConfidenceTuner) is
+  unhandled goes on to the next stage. Reflex is the original's one stage
+  of two layers: the bot's behaviors (autonomy: it gets the stimulus and the
+  database, runs the learned behaviors the stimulus triggers, and always
+  passes the turn on without a database), then the decision layer (the
+  decision service over what they left unhandled,
+  abilities/intuition/intuition.scx, the invoke "decision"). The decision
+  layer's confidence tuner state (the original's ConfidenceTuner) is
   passed in by <param> and kept from the donedata.
 
-  Dispatch: each stage sends its own selections, as the original's stages
-  dispatch theirs (cognition.types.dispatch_selected_events): an
-  intuition that escalates for low confidence (or a deliberate handoff)
-  sends its environment actions before the turn goes on to reasoning (the
-  original _environment_actions). The turn's output, and the reflection's
-  cognition_output, is the handling stage's selections (the original's
-  cognition output is its terminal stage's).
+  Intuition (the reference's chat tier, decision D144): when the body
+  gives an intuition_model (null composes none, as the reference's bot
+  composes intuition only when given one), abilities/reasoning/reasoning.scx
+  is invoked again as the stage "intuition" (its <param> tier) on that
+  model, and offered the deliberative handoff,
+  bot.ability.reasoning.input: this ability's own offer (its transitions,
+  which only log, are what <decision:choice> reads into handoff), tagged
+  with this session as its target and added to the turn's choices for
+  intuition only, never offered to the body. Intuition selecting it sends
+  its other selections and hands the turn on to reasoning with them as
+  acted (cognition.stage "intuition unhandled (handoff)"). Its context fit
+  learns its own bytes_per_token.
 
-  Hop timeouts (decision D101): each stage substate arms two
-  bot.ability.cognition.child.hop.timed_out timers and cancels both on
-  exit: one of inactivity (child_operation_timeout_ms, the original's
-  child_operation_timeout) and a backstop (child_operation_ceiling_ms)
-  for the stage as a whole. Autonomy and the intuition make no streamed
-  call, so their inactivity timer is armed on entry; reasoning's is armed
-  by the first generate.progress it sends on while its streamed reply
-  arrives and re-armed by each one after, so a slow model that keeps
-  answering is never cut off, and a reply that is not streamed (the run's
-  FLOPPY_STREAM is not true) is bounded by the backstop alone. Both are <param>s
-  the body passes from its bounds param. The transition takes only the timers
-  of the stage in hand (_event.sendid, SCXML 5.10.1). A timeout goes to
-  rebooting, which sends bot.reboot {reason:
-  "cognition_child_teardown_failed"} to the body.
+  The order (the reference's starting, after_behaviors and after_reflex
+  choices): after_autonomy and after_decision are eventless. The decision
+  layer takes the turn unless the turn perceives a handed-back failure of
+  reflex or intuition, which only a later stage can perceive (the
+  reference _takes_decision, D-R-30). Intuition takes it when composed,
+  unless the decision layer's pass chose reasoning (its donedata's
+  hand_to, R-23) or the turn perceives a handed-back failure of intuition
+  (the reference _takes_intuition). The decision layer is told the tiers
+  its pass may name (its hand_ons param: intuition when composed, then
+  reasoning), the bounds' max_context_tokens, and the decision model's
+  bytes_per_token, which its donedata teaches and this document keeps
+  across turns as it keeps reasoning's.
+
+  Failures: a decision layer or an intuition that fails (its failed
+  donedata, or error.communication.<stage>) hands the same turn on to the
+  next stage, logged as cognition.cascaded {stage: "reflex" or
+  "intuition", reason} (the reference _cascade_decision_failure and
+  _cascade_intuition_failure, D-R-36). Autonomy or reasoning failing fails the
+  turn: failing answers bot.ability.failed, and hands the failure back
+  to the body as a perceived bot.ability.cognition.step.failed (below).
+
+  Self and recent turns (the reference's SelfData and recall_recent,
+  through the body, which relays them): until the identity has told the
+  bot's name (bot.ability.identity.named), every entry into idle sends
+  bot.ability.identity.ask {} to the parent (the reference _ask_name);
+  the name, the persona's traits and description
+  (bot.ability.persona.output) and the short-term register's recent
+  turns (bot.ability.memory.stm.recent_turns.output, which the body reads
+  as each turn starts) are kept, and intuition and reasoning are given
+  the self (its name only once told) and the recent turns for their
+  prompts.
+
+  Dispatch: each stage sends its own selections, as the original's stages
+  dispatch theirs (cognition.types.dispatch_selected_events): a decision
+  layer that escalates for low confidence sends its environment actions
+  before the turn goes on to reasoning (the original _environment_actions),
+  and names them in its donedata's acted, as the chat intuition tier names
+  what it sent before its handoff (decision D144). The turn's acted is what earlier
+  stages dispatched before they passed it on (the reference ActedData);
+  the turn's output, and the reflection's cognition_output, is the acted
+  followed by the handling stage's selections (the original's cognition
+  output is its terminal stage's, with what was acted first). Reasoning
+  is told it (its <param> acted) and renders it in its prompt's situation
+  as a fact of the turn, never as an instruction (the reference's
+  _build_processing_input).
+
+  Step timeouts (decision D101, the reference's step timeout): each stage
+  substate arms two bot.ability.cognition.child.hop.timed_out timers and
+  cancels both on exit: one of inactivity (child_operation_timeout_ms, the
+  original's child_operation_timeout) and a backstop
+  (child_operation_ceiling_ms) for the stage as a whole. A tier's own
+  bound (the reference _tier_timeouts: bounds.reflex_timeout_ms for
+  autonomy and the decision layer, bounds.intuition_timeout_ms for
+  intuition, bounds.reasoning_timeout_ms for reasoning [floppy fields])
+  replaces both when the body gives it. Autonomy and the decision layer
+  make no streamed call, so their inactivity timer is armed on entry;
+  intuition's and reasoning's is armed by the first generate.progress it
+  sends on while its streamed reply arrives and re-armed by each one
+  after, so a slow model that keeps answering is never cut off, and a
+  reply that is not streamed (the run's FLOPPY_STREAM is not true) is
+  bounded by the backstop alone. The bounds are <param>s the body passes
+  from its bounds param. The transition takes only the timers of the
+  stage in hand (_event.sendid, SCXML 5.10.1). A step that times out fails
+  only its turn (the reference _fail_timed_out_step): leaving the stage's
+  substate stops it at once, so nothing reboots and every ability keeps
+  its state; failing answers bot.ability.failed with the reference's
+  message ("Cognition's reflex step took longer than 30 seconds, so the
+  turn failed.") and hands the failure back as a perceived
+  bot.ability.cognition.step.timed_out.
+
+  Hand-back (the reference _hand_back_failure): failing sends the body,
+  after bot.ability.failed, bot.ability.cognition.input {stimulus,
+  participants} observing the failed step: {event:
+  "bot.ability.cognition.step.failed" or
+  "bot.ability.cognition.step.timed_out", data: {message, stage,
+  timeout_seconds (timed out only), turn, stimulus}, source:
+  "cognition"} (abilities/schemas/ describes each data), a new turn the
+  bot decides on, with the failed turn's participants. stage is the
+  reference's tier: reflex (autonomy or the decision layer), intuition or
+  reasoning. Bounded: a turn that perceives a handed-back failure itself
+  hands nothing back, so a step that keeps failing cannot keep waking the
+  bot.
 
   Cancel: bot.ability.cognition.cancel for the turn in hand moves to
   cancelling/<stage>; leaving the stage's substate already cancelled it, so
@@ -79,7 +154,7 @@
   database path and the model by <param>; with no database (null) it
   logs that its memory is absent and answers at once. A bot.reboot from
   it goes to rebooting, which forwards it to the body (the original
-  _forward_reflection_reboot).
+  _forward_reflection_reboot); it is the only reboot this ability asks for.
 
   Routines: the root is a parallel of the turns, the reflection region and
   a routines region that invokes abilities/routines/routines.scx as the
@@ -101,7 +176,7 @@
 
   Choices: each turn's input carries the body's collected choices (its own
   and every ability's offers, each tagged with the session id of its
-  offerer); they go to intuition (the decision service's enabled transitions) and
+  offerer); they go to the decision layer (the decision service's enabled transitions) and
   reasoning (its dispatch tool; autonomy's learned behaviors name their
   targets themselves), and each stage sends its selections to their
   targets. A send a stage cannot make (an autonomy candidate's)
@@ -117,10 +192,11 @@
   done.invoke conds also check its turn and shape.
 
   Bindings: the bot, decision and processing namespace packages; the stages bind their own
-  services (intuition: decision with TYPESAFE_API_KEY and
+  services (the decision layer: decision with TYPESAFE_API_KEY and
   TYPESAFE_BASE_URL; reasoning: generate with FLOPPY_API_KEY and
   FLOPPY_BASE_URL). The model is the body's (a <param> of the body's
-  invoke), else the default below, and goes to reasoning.
+  invoke), else the default below, and goes to reasoning; the
+  intuition_model goes to intuition.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
@@ -129,50 +205,110 @@
        version="1.0" datamodel="ecmascript" name="cognition" initial="alive">
   <datamodel>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <!-- The chat tier's model (decision D144): null composes no intuition
+         tier, as the reference's bot composes one only when given. -->
+    <data id="intuition_model" expr="null"/>
     <!-- The memory database file, for autonomy, reasoning, reflection and routines (null: no memory). -->
     <data id="database" expr="null"/>
     <!-- A stage's inactivity bound and its backstop (decision D101). -->
     <data id="child_operation_timeout_ms" expr="30000"/>
     <data id="child_operation_ceiling_ms" expr="240000"/>
-    <!-- The bounds the body's bounds param overrides (its <param>): these two
-         and reflection's revising_timeout_ms and revising_ceiling_ms. -->
+    <!-- The decision layer's own bound on its decision (floppy's; the
+         reference's has none). A decision not made in time cascades; the
+         reflex tier's step bound (bounds.reflex_timeout_ms), when shorter,
+         fails the turn first (decision D140). -->
+    <data id="decision_timeout_ms" expr="20000"/>
+    <!-- The bounds the body's bounds param overrides (its <param>): these
+         two, each tier's own (reflex_timeout_ms, intuition_timeout_ms,
+         reasoning_timeout_ms), and
+         reflection's revising_timeout_ms and revising_ceiling_ms. -->
     <data id="bounds" expr="({})"/>
     <!-- The turn in hand. -->
     <data id="turn" expr="0"/>
     <data id="stimulus" expr="null"/>
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
+    <data id="participants" expr="[]"/>
     <data id="choices" expr="[]"/>
     <!-- The bot's environment this turn (decision D106), for reasoning's
-         prompt and the intuition's instructions. -->
+         prompt and the decision layer's instructions. -->
     <data id="environment" expr="null"/>
-    <!-- The intuition's confidence tuner (the original's ConfidenceTuner). -->
+    <!-- The decision layer's confidence tuner (the original's ConfidenceTuner). -->
     <data id="confidence_tuner" expr="({mean: 70, var: 100, n: 0})"/>
     <!-- The stage in hand: its name, hop timers, and answer. -->
     <data id="stage" expr="null"/>
     <data id="hop_timer" expr="null"/>
     <data id="ceiling_timer" expr="null"/>
+    <!-- What earlier stages dispatched before they passed the turn on (the
+         reference ActedData's acts), and the turn's output. -->
+    <data id="acted" expr="[]"/>
+    <!-- The percepts the acted were for, when a stage named them (null:
+         the turn's one stimulus). -->
+    <data id="acted_percepts" expr="null"/>
+    <!-- Reasoning's context fit (the reference's ContextFit, decision D143):
+         the request bytes a token, 3 until a reply's usage teaches it
+         fewer, kept here across turns and passed to each reasoning. -->
+    <data id="bytes_per_token" expr="3"/>
+    <!-- The same for the intuition tier's model and the decision layer's. -->
+    <data id="intuition_bytes_per_token" expr="3"/>
+    <data id="decision_bytes_per_token" expr="3"/>
+    <!-- The tier the decision layer's pass chose for the turn (its
+         donedata's hand_to; null: the next composed one). -->
+    <data id="hand_to" expr="null"/>
     <data id="selected" expr="[]"/>
+    <!-- The failed step: its message, and the stimulus handed back. -->
     <data id="failure" expr="null"/>
+    <data id="step" expr="null"/>
     <data id="reboot_reason" expr="null"/>
     <!-- A routine tick's stimulus envelope, for the handoff. -->
     <data id="tick" expr="null"/>
     <!-- The offers. -->
     <data id="offering" expr="false"/>
     <data id="offered" expr="[]"/>
+    <!-- The deliberative handoff, offered to the intuition tier only. -->
+    <data id="handoff" expr="[]"/>
     <data id="offers_over" expr="false"/>
+    <!-- What the bot knows of itself: its name, as the identity tells it
+         (bot.ability.identity.named, relayed by the body; null until it
+         has taken one), and its owner's traits and its own description,
+         as the persona tells them (bot.ability.persona.output). -->
+    <data id="self" expr="({name: null, traits: [], description: null})"/>
+    <!-- Whether the identity has told the name yet (until then it is asked
+         on every return to idle, the reference _ask_name). -->
+    <data id="name_told" expr="false"/>
+    <!-- The short-term register's recent turns, heard and said, as it last
+         answered (bot.ability.memory.stm.recent_turns.output). -->
+    <data id="recent_turns" expr="[]"/>
   </datamodel>
   <script src="cognition.js"/>
 
   <parallel id="alive">
+  <!-- The identity's answer to an ask, and the name after each adoption
+       (the original's NamedEvent). -->
+  <transition event="bot.ability.identity.named" event:schema="../schemas/bot.ability.identity.named.json">
+    <assign location="self.name" expr="_event.data.name"/>
+    <assign location="name_told" expr="true"/>
+  </transition>
+  <!-- The persona's traits and description, on waking and after each
+       revision (the original's persona OutputEvent). -->
+  <transition event="bot.ability.persona.output" event:schema="../schemas/bot.ability.persona.output.json">
+    <assign location="self.traits" expr="_event.data.traits"/>
+    <assign location="self.description" expr="personaDescription(_event)"/>
+  </transition>
+  <!-- The short-term register's answer to a recent_turns read. -->
+  <transition event="bot.ability.memory.stm.recent_turns.output" event:schema="../schemas/bot.ability.memory.stm.recent_turns.output.json">
+    <assign location="recent_turns" expr="_event.data.turns"/>
+  </transition>
   <state id="turns" initial="idle">
   <!-- Waits for the body's turn. -->
   <state id="idle">
     <onentry>
       <assign location="offering" expr="true"/>
       <decision:choice location="offered" events="bot.ability.cognition.ignore"/>
+      <decision:choice location="handoff" events="bot.ability.reasoning.input"/>
       <assign location="offering" expr="false"/>
       <processing:model_facing_schema location="offered" bound="32768" overlocation="offers_over"/>
+      <processing:model_facing_schema location="handoff"/>
       <if cond="offers_over">
         <log label="cognition.offers.dropped" expr="'the offers are over 32768 bytes'"/>
       </if>
@@ -181,6 +317,13 @@
         <param name="ability" expr="'cognition'"/>
         <param name="choices" expr="offered"/>
       </send>
+      <!-- Not yet told its name: ask the identity, through the body, on
+           every return to idle until it answers (the reference _ask_name). -->
+      <if cond="!name_told">
+        <send event="bot.ability.identity.ask" target="#_parent">
+          <content expr="({})"/>
+        </send>
+      </if>
     </onentry>
     <transition event="bot.ability.cognition.input" event:schema="../schemas/bot.ability.cognition.input.json"
                 target="processing">
@@ -188,6 +331,7 @@
       <assign location="stimulus" expr="_event.data.stimulus"/>
       <assign location="focus" expr="inputFocus(_event)"/>
       <assign location="focus_candidates" expr="inputFocusCandidates(_event)"/>
+      <assign location="participants" expr="inputParticipants(_event)"/>
       <assign location="choices" expr="inputChoices(_event)"/>
       <assign location="environment" expr="inputEnvironment(_event)"/>
     </transition>
@@ -200,23 +344,39 @@
     <transition event="bot.ability.cognition.ignore" event:schema="../schemas/bot.ability.cognition.ignore.json">
       <log label="cognition.ignore" expr="'idle'"/>
     </transition>
+    <!-- The deliberative handoff is this ability's call surface (the
+         reference _accept_handoff): the intuition tier never sends it. -->
+    <transition event="bot.ability.reasoning.input" event:schema="../schemas/bot.ability.reasoning.input.json">
+      <log label="cognition.handoff" expr="'idle'"/>
+    </transition>
   </state>
 
   <!-- One turn of the cascade. -->
   <state id="processing" initial="running_autonomy">
     <onentry>
+      <assign location="acted" expr="[]"/>
+      <assign location="acted_percepts" expr="null"/>
+      <assign location="hand_to" expr="null"/>
       <assign location="selected" expr="[]"/>
       <assign location="failure" expr="null"/>
+      <assign location="step" expr="null"/>
       <log label="cognition" expr="processingLog()"/>
     </onentry>
     <transition event="bot.ability.cognition.ignore" event:schema="../schemas/bot.ability.cognition.ignore.json">
       <log label="cognition.ignore" expr="turnLog()"/>
     </transition>
-    <!-- A stage that does not answer in time: ask the body for a reboot. -->
+    <transition event="bot.ability.reasoning.input" event:schema="../schemas/bot.ability.reasoning.input.json">
+      <log label="cognition.handoff" expr="turnLog()"/>
+    </transition>
+    <!-- A step that does not answer in time fails only its turn: leaving
+         its substate stops it (the reference _fail_timed_out_step). The
+         transition is internal, so processing's onentry does not run again
+         and reset the failure. -->
     <transition event="bot.ability.cognition.child.hop.timed_out" event:schema="../schemas/bot.ability.cognition.child.hop.timed_out.json"
-                cond="isChildHopTimeout(_event)" target="rebooting">
+                cond="isChildHopTimeout(_event)" type="internal" target="failing">
       <log label="cognition.hop.timed_out" expr="hopTimeoutLog(_event)"/>
-      <assign location="reboot_reason" expr="'cognition_child_teardown_failed'"/>
+      <assign location="step" expr="timedOutStep(_event)"/>
+      <assign location="failure" expr="step.data.message"/>
     </transition>
 
     <state id="running_autonomy">
@@ -243,22 +403,33 @@
                   cond="isCurrentTurn(_event)" target="cancelling_autonomy"/>
       <transition event="done.invoke.autonomy" cond="isHandled(_event)" target="completing">
         <log label="cognition.stage" expr="'autonomy handled'"/>
-        <assign location="selected" expr="_event.data.selected"/>
+        <assign location="selected" expr="handledOutput(_event)"/>
       </transition>
-      <transition event="done.invoke.autonomy" cond="isUnhandled(_event)" target="running_intuition">
+      <transition event="done.invoke.autonomy" cond="isUnhandled(_event)" target="after_autonomy">
         <log label="cognition.stage" expr="stageLog('autonomy unhandled', _event)"/>
+        <assign location="acted_percepts" expr="perceptsAfter(_event)"/>
+        <assign location="acted" expr="actedAfter(_event)"/>
       </transition>
       <transition event="done.invoke.autonomy" cond="matchesStageOutput(_event)" target="failing">
         <assign location="failure" expr="stageFailure(_event)"/>
+        <assign location="step" expr="failedStep(failure)"/>
       </transition>
       <transition event="error.communication.autonomy" target="failing">
         <assign location="failure" expr="stageRunFailure('autonomy', _event)"/>
+        <assign location="step" expr="failedStep(failure)"/>
       </transition>
     </state>
 
-    <state id="running_intuition">
+    <!-- The decision layer takes the turn unless it perceives a handed-back
+         failure of reflex (the reference _takes_decision). -->
+    <state id="after_autonomy">
+      <transition cond="takesDecision()" target="running_decision"/>
+      <transition target="after_decision"/>
+    </state>
+
+    <state id="running_decision">
       <onentry>
-        <assign location="stage" expr="'intuition'"/>
+        <assign location="stage" expr="'decision'"/>
         <send idlocation="hop_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="hopDelay()">
           <param name="turn" expr="turn"/>
         </send>
@@ -270,7 +441,7 @@
         <cancel sendidexpr="hop_timer"/>
         <cancel sendidexpr="ceiling_timer"/>
       </onexit>
-      <invoke id="intuition" type="scxml" src="../intuition/intuition.scx">
+      <invoke id="decision" type="scxml" src="../intuition/intuition.scx">
         <param name="turn" expr="turn"/>
         <param name="stimulus" expr="stimulus"/>
         <param name="focus" expr="focus"/>
@@ -278,27 +449,112 @@
         <param name="choices" expr="choices"/>
         <param name="environment" expr="environment"/>
         <param name="confidence_tuner" expr="confidence_tuner"/>
+        <param name="decision_timeout_ms" expr="decision_timeout_ms"/>
+        <param name="hand_ons" expr="handOns()"/>
+        <param name="max_context_tokens" expr="contextTokens()"/>
+        <param name="bytes_per_token" expr="decision_bytes_per_token"/>
+      </invoke>
+      <transition event="bot.ability.cognition.cancel" event:schema="../schemas/bot.ability.cognition.cancel.json"
+                  cond="isCurrentTurn(_event)" target="cancelling_decision"/>
+      <transition event="done.invoke.decision" cond="isHandled(_event)" target="completing">
+        <assign location="confidence_tuner" expr="decisionTuner(_event)"/>
+        <assign location="decision_bytes_per_token" expr="decisionBytesPerTokenAfter(_event)"/>
+        <log label="cognition.tuner" expr="tunerLog()"/>
+        <log label="cognition.stage" expr="stageLog('decision handled', _event)"/>
+        <assign location="selected" expr="handledOutput(_event)"/>
+      </transition>
+      <transition event="done.invoke.decision" cond="isUnhandled(_event)" target="after_decision">
+        <assign location="confidence_tuner" expr="decisionTuner(_event)"/>
+        <assign location="decision_bytes_per_token" expr="decisionBytesPerTokenAfter(_event)"/>
+        <log label="cognition.tuner" expr="tunerLog()"/>
+        <log label="cognition.stage" expr="stageLog('decision unhandled', _event)"/>
+        <assign location="hand_to" expr="handTo(_event)"/>
+        <assign location="acted_percepts" expr="perceptsAfter(_event)"/>
+        <assign location="acted" expr="actedAfter(_event)"/>
+      </transition>
+      <!-- A failing decision layer hands the same turn on (D-R-36). -->
+      <transition event="done.invoke.decision" cond="matchesStageOutput(_event)" target="after_decision">
+        <assign location="confidence_tuner" expr="decisionTuner(_event)"/>
+        <assign location="decision_bytes_per_token" expr="decisionBytesPerTokenAfter(_event)"/>
+        <log label="cognition.tuner" expr="tunerLog()"/>
+        <log label="cognition.cascaded" expr="cascadedLog(stageFailure(_event))"/>
+        <assign location="acted_percepts" expr="perceptsAfter(_event)"/>
+        <assign location="acted" expr="actedAfter(_event)"/>
+      </transition>
+      <transition event="error.communication.decision" target="after_decision">
+        <log label="cognition.cascaded" expr="cascadedLog(stageRunFailure('decision', _event))"/>
+      </transition>
+    </state>
+
+    <!-- The intuition tier takes the turn when the bot composes one, the
+         decision layer's pass did not choose reasoning, and the turn
+         perceives no handed-back failure of intuition (the reference
+         _takes_intuition). -->
+    <state id="after_decision">
+      <transition cond="takesIntuition()" target="running_intuition"/>
+      <transition target="running_reasoning"/>
+    </state>
+
+    <!-- The chat tier (decision D144): reasoning's chart as intuition, on
+         its own model, offered the deliberative handoff. -->
+    <state id="running_intuition">
+      <onentry>
+        <assign location="stage" expr="'intuition'"/>
+        <!-- Its inactivity bound starts with its streamed reply, as
+             reasoning's does (decision D101). -->
+        <assign location="hop_timer" expr="'unarmed'"/>
+        <send idlocation="ceiling_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="ceilingDelay()">
+          <param name="turn" expr="turn"/>
+        </send>
+      </onentry>
+      <onexit>
+        <cancel sendidexpr="hop_timer"/>
+        <cancel sendidexpr="ceiling_timer"/>
+      </onexit>
+      <invoke id="intuition" type="scxml" src="../reasoning/reasoning.scx">
+        <param name="tier" expr="'intuition'"/>
+        <param name="turn" expr="turn"/>
+        <param name="stimulus" expr="stimulus"/>
+        <param name="focus" expr="focus"/>
+        <param name="focus_candidates" expr="focus_candidates"/>
+        <param name="choices" expr="intuitionChoices()"/>
+        <param name="environment" expr="environment"/>
+        <param name="acted" expr="actedFact()"/>
+        <param name="self" expr="selfFact()"/>
+        <param name="recent" expr="recent_turns"/>
+        <param name="max_context_tokens" expr="contextTokens()"/>
+        <param name="completion_reserve_tokens" expr="reserveTokens()"/>
+        <param name="bytes_per_token" expr="intuition_bytes_per_token"/>
+        <param name="model" expr="intuition_model"/>
+        <param name="database" expr="database"/>
       </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="../schemas/bot.ability.cognition.cancel.json"
                   cond="isCurrentTurn(_event)" target="cancelling_intuition"/>
+      <transition event="generate.progress">
+        <cancel sendidexpr="hop_timer"/>
+        <send idlocation="hop_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="hopDelay()">
+          <param name="turn" expr="turn"/>
+        </send>
+      </transition>
       <transition event="done.invoke.intuition" cond="isHandled(_event)" target="completing">
-        <assign location="confidence_tuner" expr="intuitionTuner(_event)"/>
-        <log label="cognition.tuner" expr="tunerLog()"/>
-        <log label="cognition.stage" expr="stageLog('intuition handled', _event)"/>
-        <assign location="selected" expr="_event.data.selected"/>
+        <log label="cognition.stage" expr="'intuition handled'"/>
+        <assign location="intuition_bytes_per_token" expr="intuitionBytesPerTokenAfter(_event)"/>
+        <assign location="selected" expr="handledOutput(_event)"/>
       </transition>
+      <!-- It selected the handoff: the turn goes on to reasoning, carrying
+           what it sent first. -->
       <transition event="done.invoke.intuition" cond="isUnhandled(_event)" target="running_reasoning">
-        <assign location="confidence_tuner" expr="intuitionTuner(_event)"/>
-        <log label="cognition.tuner" expr="tunerLog()"/>
         <log label="cognition.stage" expr="stageLog('intuition unhandled', _event)"/>
+        <assign location="intuition_bytes_per_token" expr="intuitionBytesPerTokenAfter(_event)"/>
+        <assign location="acted" expr="actedAfter(_event)"/>
       </transition>
-      <transition event="done.invoke.intuition" cond="matchesStageOutput(_event)" target="failing">
-        <assign location="confidence_tuner" expr="intuitionTuner(_event)"/>
-        <log label="cognition.tuner" expr="tunerLog()"/>
-        <assign location="failure" expr="intuitionFailure(_event)"/>
+      <!-- A failing intuition hands the same turn on (D-R-36). -->
+      <transition event="done.invoke.intuition" cond="matchesStageOutput(_event)" target="running_reasoning">
+        <log label="cognition.cascaded" expr="cascadedLog(stageFailure(_event))"/>
+        <assign location="intuition_bytes_per_token" expr="intuitionBytesPerTokenAfter(_event)"/>
       </transition>
-      <transition event="error.communication.intuition" target="failing">
-        <assign location="failure" expr="stageRunFailure('intuition', _event)"/>
+      <transition event="error.communication.intuition" target="running_reasoning">
+        <log label="cognition.cascaded" expr="cascadedLog(stageRunFailure('intuition', _event))"/>
       </transition>
     </state>
 
@@ -324,6 +580,12 @@
         <param name="focus_candidates" expr="focus_candidates"/>
         <param name="choices" expr="choices"/>
         <param name="environment" expr="environment"/>
+        <param name="acted" expr="actedFact()"/>
+        <param name="self" expr="selfFact()"/>
+        <param name="recent" expr="recent_turns"/>
+        <param name="max_context_tokens" expr="contextTokens()"/>
+        <param name="completion_reserve_tokens" expr="reserveTokens()"/>
+        <param name="bytes_per_token" expr="bytes_per_token"/>
         <param name="model" expr="model"/>
         <param name="database" expr="database"/>
       </invoke>
@@ -339,13 +601,17 @@
       </transition>
       <transition event="done.invoke.reasoning" cond="isHandled(_event)" target="completing">
         <log label="cognition.stage" expr="'reasoning handled'"/>
-        <assign location="selected" expr="_event.data.selected"/>
+        <assign location="bytes_per_token" expr="bytesPerTokenAfter(_event)"/>
+        <assign location="selected" expr="handledOutput(_event)"/>
       </transition>
       <transition event="done.invoke.reasoning" cond="matchesStageOutput(_event)" target="failing">
+        <assign location="bytes_per_token" expr="bytesPerTokenAfter(_event)"/>
         <assign location="failure" expr="stageFailure(_event)"/>
+        <assign location="step" expr="failedStep(failure)"/>
       </transition>
       <transition event="error.communication.reasoning" target="failing">
         <assign location="failure" expr="stageRunFailure('reasoning', _event)"/>
+        <assign location="step" expr="failedStep(failure)"/>
       </transition>
     </state>
 
@@ -364,6 +630,8 @@
       </onentry>
       <transition target="idle"/>
     </state>
+    <!-- The turn failed: answer it, then hand the failed step back to be
+         perceived, unless the turn was itself perceiving one. -->
     <state id="failing">
       <onentry>
         <log label="cognition.failed" expr="failure"/>
@@ -372,14 +640,26 @@
           <param name="turn" expr="turn"/>
           <param name="input" expr="processingInput()"/>
         </send>
+        <if cond="perceivesFailure()">
+          <log label="cognition.handed_back" expr="'bounded'"/>
+        <else/>
+          <send event="bot.ability.cognition.input" target="#_parent">
+            <param name="stimulus" expr="step"/>
+            <param name="participants" expr="participants"/>
+          </send>
+        </if>
       </onentry>
       <transition target="idle"/>
     </state>
 
     <!-- Cancelled: leaving the stage's substate cancelled the stage. -->
-    <state id="cancelling" initial="cancelling_intuition">
+    <state id="cancelling" initial="cancelling_decision">
       <state id="cancelling_autonomy">
         <onentry><log label="cognition.cancelled" expr="'autonomy'"/></onentry>
+        <transition target="acknowledging"/>
+      </state>
+      <state id="cancelling_decision">
+        <onentry><log label="cognition.cancelled" expr="'decision'"/></onentry>
         <transition target="acknowledging"/>
       </state>
       <state id="cancelling_intuition">

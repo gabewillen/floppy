@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- stm-2: a record is read back with its projection and envelope; absent envelope fields are null. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="stm" type="scxml" src="../../../stm.scx">
+    <param name="database" expr="'/memory/floppy.sqlite'"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'stm' &amp;&amp; _event.data.choices.length === 0" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.memory.stm.record" target="#_stm"><content expr='{"stimulus_name": "environment.sound", "payload": {"kind": "knock", "count": 2}, "event_id": "e1", "source": "device-a"}'/></send>
+      <send event="bot.ability.memory.stm.recent" target="#_stm"><content expr="{}"/></send>
+    </onentry>
+    <transition event="bot.ability.memory.stm.recent.output" cond="_event.data.entries.length === 1 &amp;&amp; _event.data.entries[0].stimulus_name === 'environment.sound' &amp;&amp; _event.data.entries[0].payload.kind === 'knock' &amp;&amp; _event.data.entries[0].payload.count === 2 &amp;&amp; _event.data.entries[0].event_id === 'e1' &amp;&amp; _event.data.entries[0].source === 'device-a' &amp;&amp; _event.data.entries[0].target === null &amp;&amp; _event.data.entries[0].last_accessed_at === null &amp;&amp; /\+00:00$/.test(_event.data.entries[0].created_at)" target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

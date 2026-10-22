@@ -9,12 +9,12 @@
         "answers": {
           "selection": {
             "type": "choice",
-            "choice": "bot.ability.cognition.ignore",
+            "choice": "bot.ability.communication.respond",
             "confidence": 0.34,
             "probabilities": {
-              "bot.ability.cognition.ignore": 0.34,
-              "bot.ability.communication.respond": 0.33,
-              "__unhandled__": 0.33
+              "bot.ability.communication.respond": 0.34,
+              "bot.ability.cognition.ignore": 0.33,
+              "__reasoning__": 0.33
             }
           },
           "bot.ability.communication.respond::parts": {

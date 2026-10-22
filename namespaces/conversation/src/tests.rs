@@ -277,8 +277,8 @@ fn missing_references_and_content_are_null_and_a_non_string_id_is_null() {
 
 #[test]
 fn a_messages_participants_are_kept_and_malformed_ones_are_execution_errors() {
-    let participants =
-        json!([{"ref": "alice", "role": "source"}, {"ref": "bot", "role": "target", "own": true}]);
+    let participants = json!([{"ref": "alice", "role": "source"}, {"ref": "bot", "role": "target", "own": true},
+               {"ref": "voice:1", "role": "source", "resembles": [{"ref": "voice:7b1e04", "similarity": 0.42}]}]);
     let message = commit_of(
         "outbound",
         &json!({"source_ids": [], "target_ids": [], "content_type": "text/plain", "participants": participants}),
@@ -301,6 +301,9 @@ fn a_messages_participants_are_kept_and_malformed_ones_are_execution_errors() {
         json!([{"ref": "x".repeat(201), "role": "source"}]),
         json!([{"ref": "alice", "role": "source", "own": "yes"}]),
         json!([{"ref": "alice", "role": "source", "name": "Alice"}]),
+        json!([{"ref": "alice", "role": "source", "resembles": [{"ref": "bob", "similarity": 2}]}]),
+        json!([{"ref": "alice", "role": "source", "resembles": [{"ref": "", "similarity": 0}]}]),
+        json!([{"ref": "alice", "role": "source", "resembles": [{"ref": "a", "similarity": 0}, {"ref": "b", "similarity": 0}, {"ref": "c", "similarity": 0}, {"ref": "d", "similarity": 0}]}]),
         Json::Array(many),
     ] {
         let mut host = host(
@@ -314,7 +317,7 @@ fn a_messages_participants_are_kept_and_malformed_ones_are_execution_errors() {
                 &[],
                 &mut host
             )),
-            "conversation message participants are not at most 32 {ref, role, own?}",
+            "conversation message participants are not at most 32 {ref, role, own?, resembles?}",
             "{participants}"
         );
         assert!(host.assigned.is_empty());

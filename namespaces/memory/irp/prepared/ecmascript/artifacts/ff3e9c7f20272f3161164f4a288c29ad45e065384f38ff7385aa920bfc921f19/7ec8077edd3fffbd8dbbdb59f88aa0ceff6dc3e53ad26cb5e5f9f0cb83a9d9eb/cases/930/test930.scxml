@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- memory-4: words within 2048 UTF-8 bytes are kept as they are, not cut. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="t" expr="null"/>
+  <data id="w" expr="'Hi there, I\'m Maya.  '"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <memory:cut_at_word location="t" words="w"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="t.text === w &amp;&amp; t.cut === false" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

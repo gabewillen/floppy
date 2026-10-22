@@ -6,7 +6,7 @@ CHAT = "/chat/completions"
 IGNORE = "bot.ability.cognition.ignore"
 RESPOND = "bot.ability.communication.respond"
 FOCUS = "bot.focus_device"
-CLEAR = "bot.clear_focus"
+LAMP = "lamp.on"
 DB = ("database", "'/memory/floppy.sqlite'")
 
 OBJECT = {"type": "object", "properties": {}, "additionalProperties": False}
@@ -28,7 +28,7 @@ CHOICES = [
     {"event": IGNORE, "schema": OBJECT, "description": "Ignore the stimulus.", "target": OWN},
     {"event": RESPOND, "schema": PARTS, "description": "Say something.", "target": HARNESS},
     {"event": FOCUS, "schema": DEVICE, "description": "Look at a device.", "target": HARNESS},
-    {"event": CLEAR, "schema": OBJECT, "description": "Stop looking at the device.", "target": HARNESS},
+    {"event": LAMP, "schema": OBJECT, "description": "Turn the lamp on.", "target": HARNESS},
 ]
 STIMULUS = {"event": "bot.input", "data": {"observation": {"event": "text", "data": "say hi"}}, "source": "gabe"}
 
@@ -67,12 +67,14 @@ SAID = expect(RESPOND, "_event.data.parts.length === 1 && _event.data.parts[0].w
 S.statement(1, "It runs one turn (the `<param>`s turn, stimulus, focus, focus_candidates, choices, model and database) and ends: its `<donedata>`, received as `done.invoke.reasoning`, is `{turn, handled: true, selected}` or `{turn, handled: false, failed: true, reason}`, turn the given turn.")
 S.statement(2, "With no choices it fails the turn without a model call: reason `the reasoning has no choices to select from`.")
 S.statement(3, "With choices it makes one generate call offering the original's dispatch tool, which allows only the offered events (with their targets); the events of its dispatch calls, in order, are returned as the model gave them with `handled: true`, each `{event, data, reason, target}`, `bot.ability.cognition.ignore` selections included; an empty selection is handled with nothing selected.")
-S.statement(4, "A generate call that fails fails the turn with reason `the reasoning failed (<code>)`, the generate service's failure code: `status` for an error status, `schema-mismatch` for a selection outside the choices, `truncated` for a reply cut short, `malformed` for an answer that is no chat completion.")
+S.statement(4, "A generate call that fails fails the turn with reason `the reasoning failed (<code>)`, the generate service's failure code: `status` for an error status, `truncated` for a reply cut short, `malformed` for an answer that is no chat completion. A selection the dispatch tool refuses (`schema-mismatch`, or `not-json`) is repaired first (decision D142): the call is made again with the rejection as the prompt's feedback, at most twice, and the same rejection twice running, or one once the repairs are spent, fails the turn with reason `Selection rejected: <message>` (the rejection's message, else its code).")
 S.statement(5, "A prompt over the original's projection budgets (262144 encoded bytes, 4096 nodes, 4096 collection items, 65536 characters per scalar) fails the turn without a model call, its reason the original's message (for example `prompt projection collection item budget exceeded`).")
 S.statement(6, "Each selection is sent, in order, to the session its target names (`#_scxml_` + target) before the turn ends, its data `{}` when it has none (the original's `dispatch_selected_events`); a send that fails fails the turn with reason `the reasoning could not run (<error>)`.")
 S.statement(7, "With a database it recalls prior episodes and standing directives before the model call and writes nothing (reflection stores the turn's episode, decision D97), and the turn is handled as without one; a memory that fails fails the turn with reason `Reasoning memory recall failed: ...` without a model call.")
 
 S.statement(8, "Its model call streams its reply when the run's `FLOPPY_STREAM` is `true`, and each `generate.progress` the generate service returns while the reply arrives is sent on to the parent unchanged, so the cognition can bound the stage by inactivity (decision D101).")
+
+S.statement(9, "As the intuition tier (the `<param>` tier `intuition`, decision D144) it may select the deliberative handoff, `bot.ability.reasoning.input`, among its choices: the handoff is never sent, the other selections are sent in order, and it ends `{turn, handled: false, reason: \"handoff\", acted}`, acted what was sent; a selection without the handoff is handled as reasoning's is, and its failures name the tier (`the intuition failed (<code>)`).")
 
 # Every other case drops the streamed reply's progress (statement 8).
 _case = S.case
@@ -115,13 +117,17 @@ S.case(122, 3, "an empty selection is handled with nothing selected.",
 S.case(130, 4, "a model that answers 500 fails the turn as status.",
        [failed("the reasoning failed (status)")],
        params=turn(), backend=[{"path": CHAT, "status": 500, "body": {"error": {"message": "boom"}}}])
-S.case(131, 4, "a selection of an event outside the choices fails the turn as schema-mismatch.",
-       [failed("the reasoning failed (schema-mismatch)")],
-       params=turn(), backend=selection({"event": "bot.ability.identity.adopt", "data": {"name": "Pip"}, "reason": "x",
-                                         "target": HARNESS}))
-S.case(132, 4, "a selection of an offered event on a target that does not offer it fails as schema-mismatch.",
-       [failed("the reasoning failed (schema-mismatch)")],
-       params=turn(), backend=selection({**SAY, "target": OWN}))
+OFF_EVENT = {"event": "bot.ability.identity.adopt", "data": {"name": "Pip"}, "reason": "x", "target": HARNESS}
+S.case(131, 4, "a selection of an event outside the choices is repaired once, and the same rejection again fails the turn.",
+       [failed("Selection rejected: schema-mismatch")],
+       params=turn(), backend=selection(OFF_EVENT) + selection(OFF_EVENT))
+S.case(132, 4, "a selection of an offered event on a target that does not offer it is repaired once, then fails the same way.",
+       [failed("Selection rejected: schema-mismatch")],
+       params=turn(), backend=selection({**SAY, "target": OWN}) + selection({**SAY, "target": OWN}))
+S.case(135, 4, "a rejected selection repaired by the next call is handled: the repair's selection is sent and returned.",
+       [SAID, expect(DONE, "_event.data.handled === true && _event.data.selected.length === 1"
+                     " && _event.data.selected[0].event === 'bot.ability.communication.respond'")],
+       params=turn(), backend=selection(OFF_EVENT) + selection(SAY))
 S.case(133, 4, "a reply cut short fails the turn as truncated.",
        [failed("the reasoning failed (truncated)")],
        params=turn(), backend=[{"path": CHAT, "status": 200, "body": completion("{\"events\": [", "length")}])
@@ -134,17 +140,17 @@ S.case(140, 5, "a stimulus with over 4096 collection items fails the turn withou
        params=[p for p in turn() if p[0] != "stimulus"]
        + [("stimulus", "({event: 'bot.input', source: 'gabe', data: {items: Array.from({length: 4097}, (_, i) => i)}})")],
        backend=selection(SAY))
-S.case(150, 6, "a focus_device and a clear_focus are sent to their target, in order, before the turn ends.",
-       [expect(FOCUS, "_event.data.device === 'lamp'"), expect(CLEAR),
+S.case(150, 6, "a focus_device and a device action are sent to their target, in order, before the turn ends.",
+       [expect(FOCUS, "_event.data.device === 'lamp'"), expect(LAMP),
         expect(DONE, "_event.data.handled === true && _event.data.selected.length === 2"
                      " && _event.data.selected[0].event === 'bot.focus_device'"
-                     " && _event.data.selected[1].event === 'bot.clear_focus'")],
+                     " && _event.data.selected[1].event === 'lamp.on'")],
        params=turn(), backend=selection({"event": FOCUS, "data": {"device": "lamp"}, "reason": "look", "target": HARNESS},
-                                        {"event": CLEAR, "data": {}, "reason": "stop", "target": HARNESS}))
+                                        {"event": LAMP, "data": {}, "reason": "light", "target": HARNESS}))
 S.case(152, 6, "a selection without data is sent with {}, as the original dispatches it.",
-       [expect(CLEAR, "JSON.stringify(_event.data) === '{}'"),
+       [expect(LAMP, "JSON.stringify(_event.data) === '{}'"),
         expect(DONE, "_event.data.handled === true && _event.data.selected.length === 1")],
-       params=turn(), backend=selection({"event": CLEAR, "reason": "stop", "target": HARNESS}))
+       params=turn(), backend=selection({"event": LAMP, "reason": "light", "target": HARNESS}))
 S.case(151, 6, "a selection whose target no session of the run answers fails the turn.",
        [failed("the reasoning could not run (error.communication)")],
        params=turn(choices=[{**CHOICES[1], "target": "session.nowhere"}]),
@@ -165,3 +171,23 @@ _case(170, 8, "a streamed reply's progress reaches the parent before the turn en
       [expect("generate.progress", "_event.data.received > 0"), SAID,
        expect(DONE, "_event.data.turn === 1 && _event.data.handled === true && _event.data.selected.length === 1")],
       params=turn(), backend=selection(SAY), stream=True, ignore=("generate.progress",))
+
+HANDOFF = "bot.ability.reasoning.input"
+# The cognition offers the handoff to intuition as its own (here, the
+# stage's own session stands in for it, as for the ignore).
+HAND_ON = {"event": HANDOFF, "data": {}, "reason": "this needs thought", "target": OWN}
+INTUITION_CHOICES = CHOICES + [{"event": HANDOFF, "schema": OBJECT, "description": "Hand this turn to reasoning.",
+                                "target": OWN}]
+INTUITION = ("tier", "'intuition'")
+S.case(180, 9, "intuition selecting the handoff sends its other selections and hands the turn on with them as acted.",
+       [SAID, expect(DONE, "_event.data.turn === 1 && _event.data.handled === false && _event.data.reason === 'handoff'"
+                     " && _event.data.failed === undefined && _event.data.acted.length === 1"
+                     " && _event.data.acted[0].event === 'bot.ability.communication.respond'")],
+       params=turn(choices=INTUITION_CHOICES, extra=[INTUITION]), backend=selection(SAY, HAND_ON))
+S.case(181, 9, "intuition selecting no handoff handles the turn with its selections.",
+       [SAID, expect(DONE, "_event.data.handled === true && _event.data.selected.length === 1")],
+       params=turn(choices=INTUITION_CHOICES, extra=[INTUITION]), backend=selection(SAY))
+S.case(182, 9, "an intuition whose model answers 500 fails as the intuition.",
+       [failed("the intuition failed (status)")],
+       params=turn(choices=INTUITION_CHOICES, extra=[INTUITION]),
+       backend=[{"path": CHAT, "status": 500, "body": {"error": {"message": "boom"}}}])

@@ -192,6 +192,39 @@ fn attention_takes_no_device_from_the_stimulus_source() {
 }
 
 #[test]
+fn attention_biases_a_perceived_batch_percept_by_percept() {
+    let percept = |device: &str| json!({"stimulus": input(&json!({"target_device": device})), "source": null, "participants": []});
+    let perceived = |percepts: Json| json!({"event": "bot.perceived", "data": {"percepts": percepts}, "source": "session.floppy"});
+    // The focus first, then each percept's device in arrival order, once.
+    assert_eq!(
+        bias(
+            &perceived(json!([
+                percept("fan"),
+                percept("door"),
+                percept("lamp"),
+                percept("fan")
+            ])),
+            &json!("lamp")
+        ),
+        assigned(&json!("lamp"), &json!(["lamp", "fan"]))
+    );
+    assert_eq!(
+        bias(
+            &perceived(json!([percept("fan"), percept("lamp")])),
+            &Json::Null
+        ),
+        assigned(&Json::Null, &json!(["fan", "lamp"]))
+    );
+    // A percept that is not a device's input names no device.
+    let product = json!({"stimulus": {"event": "bot.ability.conversation.output",
+                         "data": {"target_device": "lamp"}}, "source": null});
+    assert_eq!(
+        bias(&perceived(json!([product, percept("fan")])), &Json::Null),
+        assigned(&Json::Null, &json!(["fan"]))
+    );
+}
+
+#[test]
 fn attention_without_focuslocation_writes_the_candidates_only() {
     let mut host = attention_host(&input(&json!({})), &json!("lamp"));
     let attributes: Vec<Attribute> = attention_attributes()
@@ -285,72 +318,93 @@ fn malformed_attention_elements_or_values_raise_error_execution() {
 
 const CONTENT: &str = "model_facing_content";
 
-/// The inputs of the projection checks, and what the JavaScript this
-/// element replaced (`promptProjection()` of `abilities/reasoning/
-/// reasoning.js`) rendered for each, the inputs' keys sorted as the data
-/// model hands them over.
+/// The inputs of the projection checks, and what the element writes for
+/// each: the system channel (`null` for none) and the content. Each case
+/// without an environment or recalled episodes and directives (floppy's
+/// own) is what the reference's `processing.InputData.model_facing_content`
+/// renders for the same turn, checked against it when it was written.
 const INPUTS: &str = include_str!("testdata/model_facing_content.inputs.json");
 const EXPECTED: &str = include_str!("testdata/model_facing_content.expected.json");
 
+/// Every input attribute, each named after its input field (the
+/// instructions as `system_text`).
+const INPUT_ATTRIBUTES: [&str; 10] = [
+    "stimulus",
+    "self",
+    "recent",
+    "environment",
+    "acted",
+    "prior_episodes",
+    "standing_directives",
+    "feedback",
+    "instructions",
+    "schema",
+];
+
 fn content_attributes() -> Vec<Attribute> {
-    vec![
+    let mut attributes = vec![
         attr("location", "prompt"),
         attr("failurelocation", "prompt_failure"),
-        attr("stimulus", "stimulus"),
-        attr("prior_episodes", "prior_episodes"),
-        attr("standing_directives", "standing_directives"),
-        attr("environment", "environment"),
-        attr("instructions", "system"),
-        attr("schema", "schema"),
-    ]
+        attr("systemlocation", "system"),
+    ];
+    attributes.extend(INPUT_ATTRIBUTES.map(|name| attr(name, name)));
+    attributes
 }
 
 /// A host holding one input's fields under the attribute names above.
 fn content_host(input: &Json) -> FakeHost {
-    let field = |key: &str| data(&input[key]);
     FakeHost {
-        values: BTreeMap::from([
-            ("stimulus".to_owned(), field("stimulus")),
-            ("prior_episodes".to_owned(), field("prior_episodes")),
-            (
-                "standing_directives".to_owned(),
-                field("standing_directives"),
-            ),
-            ("environment".to_owned(), field("environment")),
-            ("system".to_owned(), field("instructions")),
-            ("schema".to_owned(), field("schema")),
-        ]),
+        values: INPUT_ATTRIBUTES
+            .iter()
+            .map(|name| ((*name).to_owned(), data(&input[*name])))
+            .collect(),
         ..FakeHost::default()
     }
 }
 
-/// What the element assigns for `input`: (failure, prompt).
-fn projected(input: &Json) -> (Data, Data) {
+/// What the element assigns for `input` with `attributes`, by location.
+fn assigned_with(input: &Json, attributes: &[Attribute]) -> BTreeMap<String, Data> {
     let mut host = content_host(input);
     assert_eq!(
-        execute(CONTENT, &content_attributes(), &[], &mut host),
+        execute(CONTENT, attributes, &[], &mut host),
         Ok(Executed::Handled)
     );
-    match host.assigned.as_slice() {
-        [(failure_location, failure), (location, prompt)]
-            if failure_location == "prompt_failure" && location == "prompt" =>
-        {
-            (failure.clone(), prompt.clone())
-        }
-        other => panic!("expected the failure then the prompt, got {other:?}"),
-    }
+    let locations: Vec<&str> = host
+        .assigned
+        .iter()
+        .map(|(location, _)| location.as_str())
+        .collect();
+    let order: Vec<&str> = ["prompt_failure", "system", "fit", "prompt"]
+        .into_iter()
+        .filter(|location| locations.contains(location))
+        .collect();
+    assert_eq!(locations, order, "failure, system, fit, then the content");
+    host.assigned.into_iter().collect()
+}
+
+/// What the element assigns for `input`: (failure, system, prompt).
+fn projected(input: &Json) -> (Data, Data, Data) {
+    let mut assigned = assigned_with(input, &content_attributes());
+    let mut take = |location: &str| assigned.remove(location).expect("assigned");
+    (take("prompt_failure"), take("system"), take("prompt"))
+}
+
+fn text(value: &Json) -> Data {
+    value
+        .as_str()
+        .map_or(Data::Null, |text| Data::String(text.to_owned()))
 }
 
 #[test]
-fn the_projection_renders_what_the_javascript_it_replaced_rendered() {
+fn the_projection_renders_what_the_reference_renders() {
     let inputs: Map<String, Json> = serde_json::from_str(INPUTS).expect("the inputs parse");
     let expected: Map<String, Json> = serde_json::from_str(EXPECTED).expect("the outputs parse");
     assert_eq!(inputs.len(), expected.len());
     for (name, input) in &inputs {
-        let prompt = expected[name].as_str().expect("a prompt").to_owned();
+        let want = &expected[name];
         assert_eq!(
             projected(input),
-            (Data::Null, Data::String(prompt)),
+            (Data::Null, text(&want["system"]), text(&want["content"])),
             "{name}"
         );
     }
@@ -367,7 +421,7 @@ fn stimulus_with(data: &Json) -> Json {
 
 fn failed(input: &Json) -> String {
     match projected(input) {
-        (Data::String(message), Data::Null) => message,
+        (Data::String(message), Data::Null, Data::Null) => message,
         other => panic!("expected a failure, got {other:?}"),
     }
 }
@@ -403,6 +457,12 @@ fn a_projection_over_a_budget_fails_with_the_originals_message() {
         failed(&instructions),
         "prompt projection scalar length budget exceeded"
     );
+    let mut feedback = stimulus_with(&json!({}));
+    feedback["feedback"] = json!("f".repeat(65_537));
+    assert_eq!(
+        failed(&feedback),
+        "prompt projection scalar length budget exceeded"
+    );
     let mut reserved = stimulus_with(&json!({}));
     reserved["instructions"] = json!("z".repeat(65_000));
     reserved["schema"] = json!({"pad": "q".repeat(200_000)});
@@ -424,9 +484,19 @@ fn recalling(text: &str, episodes: &[Json], directives: &[Json]) -> Json {
 
 fn prompt(input: &Json) -> String {
     match projected(input) {
-        (Data::Null, Data::String(prompt)) => prompt,
+        (Data::Null, _, Data::String(prompt)) => prompt,
         other => panic!("expected a prompt, got {other:?}"),
     }
+}
+
+/// `count` heard turns of `size` bytes of words each, numbered.
+fn turns(count: usize, size: usize) -> Vec<Json> {
+    (0..count)
+        .map(|index| {
+            json!({"at": "2026-07-07T12:00:00Z", "direction": "heard",
+                   "text": format!("turn-{index}-{}", "w".repeat(size))})
+        })
+        .collect()
 }
 
 #[test]
@@ -456,6 +526,27 @@ fn recalled_episodes_over_the_budget_are_trimmed_to_the_newest_not_failed() {
 }
 
 #[test]
+fn recent_turns_claim_the_budget_first_and_keep_the_newest_uncounted() {
+    let mut input = recalling("now", &[], &[json!({"text": "d".repeat(50_000)})]);
+    input["recent"] = Json::Array(turns(8, 40_000));
+    let rendered = prompt(&input);
+    assert!(rendered.len() <= MAX_PROJECTION_BYTES);
+    let kept: Vec<usize> = (0..8)
+        .filter(|index| rendered.contains(&format!("turn-{index}-")))
+        .collect();
+    assert_eq!(kept, ((8 - kept.len())..8).collect::<Vec<_>>());
+    assert!(!kept.is_empty() && kept.len() < 8, "{kept:?}");
+    assert!(rendered.starts_with(&format!(
+        "<cognition:recalled>\n  <recent omitted=\"{}\">\n    <memory:turn ",
+        8 - kept.len()
+    )));
+    // The stable part took what the directive needed: the varying part is
+    // left with its frame and the directive omitted, or left out.
+    assert!(!rendered.contains(&"d".repeat(100)));
+    assert!(rendered.ends_with("<dict stimulus:event=\"bot.input\" stimulus:source=\"gabe\">\n  <content>\n    <entry key=\"text\" value=\"now\" />\n  </content>\n</dict>"));
+}
+
+#[test]
 fn recalled_items_trim_to_what_the_instructions_and_the_tool_leave() {
     let directives: Vec<Json> = (0..40)
         .map(|index| json!({"text": format!("memory-{index}-{}", "m".repeat(5_000))}))
@@ -482,7 +573,7 @@ fn recalled_items_that_fit_render_without_an_omitted_marker() {
         &[json!({"stimulus_name": "a"})],
         &[json!({"text": "b"}), json!({"text": "c"})],
     ));
-    assert!(rendered.contains("<prior_episodes count=\"1\">"));
+    assert!(rendered.starts_with("<cognition:recalled>\n  <prior_episodes count=\"1\">"));
     assert!(rendered.contains("<standing_directives count=\"2\">"));
     assert!(!rendered.contains("omitted="));
 }
@@ -510,6 +601,17 @@ fn every_recalled_item_left_out_leaves_the_field_empty_with_its_count() {
 }
 
 #[test]
+fn a_recalled_part_whose_frame_does_not_fit_is_left_out() {
+    let mut input = recalling("now", &[], &[json!({"text": "small"})]);
+    input["instructions"] = json!("i".repeat(60_000));
+    let stimulus = prompt(&recalling("now", &[], &[])).len();
+    // Room for the stimulus and its newline, not for the recalled frame.
+    let pad = MAX_PROJECTION_BYTES - 60_000 - stimulus - 1 - "{\"pad\":\"\"}".len();
+    input["schema"] = json!({"pad": "q".repeat(pad)});
+    assert_eq!(prompt(&input).len(), stimulus);
+}
+
+#[test]
 fn recalled_items_never_hide_a_stimulus_that_alone_overflows() {
     let mut input = recalling(&"s".repeat(20_000), &[], &[json!({"text": "small"})]);
     input["instructions"] = json!("i".repeat(60_000));
@@ -533,11 +635,13 @@ fn trimmed_projections_fit_every_budget_they_admit() {
     let (mut fitted, mut overflowed) = (0, false);
     for pad in (MAX_PROJECTION_BYTES - 3_000..MAX_PROJECTION_BYTES - 150).step_by(7) {
         let mut input = recalling("now", &episodes, &directives);
+        input["recent"] = Json::Array(turns(3, 200));
         input["instructions"] = json!("i".repeat(60_000));
+        input["feedback"] = json!("repair");
         input["schema"] = json!({"pad": "q".repeat(pad - 60_000 - 10)});
         let tool = input["schema"].to_string().len();
         match projected(&input) {
-            (Data::Null, Data::String(rendered)) => {
+            (Data::Null, _, Data::String(rendered)) => {
                 assert!(!overflowed, "{pad}");
                 fitted += 1;
                 assert!(
@@ -547,7 +651,7 @@ fn trimmed_projections_fit_every_budget_they_admit() {
             }
             // Too few bytes left for the stimulus alone (the budgets
             // shrink as the pad grows).
-            (Data::String(message), Data::Null) => {
+            (Data::String(message), Data::Null, Data::Null) => {
                 overflowed = true;
                 assert_eq!(message, "prompt projection encoded byte budget exceeded");
             }
@@ -555,6 +659,58 @@ fn trimmed_projections_fit_every_budget_they_admit() {
         }
     }
     assert!(fitted > 300, "{fitted}");
+}
+
+/// What the element writes to its fit and content locations for `input`
+/// fitted to `budget` bytes.
+fn fitted(input: &Json, budget: f64) -> (Data, String) {
+    let mut attributes = content_attributes();
+    attributes.push(attr("fitlocation", "fit"));
+    attributes.push(attr("budget", "budget"));
+    let mut host = content_host(input);
+    host.values
+        .insert("budget".to_owned(), data(&json!(budget)));
+    execute(CONTENT, &attributes, &[], &mut host).expect("handled");
+    let mut assigned: BTreeMap<String, Data> = host.assigned.into_iter().collect();
+    match (assigned.remove("fit"), assigned.remove("prompt")) {
+        (Some(fit), Some(Data::String(prompt))) => (fit, prompt),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn a_fitted_budget_sends_whole_cuts_recalled_memory_or_overflows() {
+    let mut input = recalling("now", &[], &[]);
+    input["recent"] = Json::Array(turns(10, 1_000));
+    input["instructions"] = json!("sys");
+    input["schema"] = json!({"a": 1});
+    let whole = prompt(&input);
+    let beside = "sys".len() + "{\"a\":1}".len();
+    #[expect(clippy::cast_precision_loss, reason = "small test sizes")]
+    let bytes = |size: usize| (size + beside) as f64;
+    assert_eq!(
+        fitted(&input, bytes(whole.len())),
+        (Data::String("fit".into()), whole.clone())
+    );
+    let (fit, cut) = fitted(&input, bytes(whole.len() - 1) + 0.9);
+    assert_eq!(fit, Data::String("cut".into()));
+    assert!(cut.len() < whole.len() && cut.contains("turn-9-") && !cut.contains("turn-0-"));
+    assert!(cut.contains("<recent omitted=\"1\">"));
+    let stimulus = prompt(&recalling("now", &[], &[]));
+    assert_eq!(
+        fitted(&input, bytes(stimulus.len() - 1)),
+        (Data::String("overflow".into()), stimulus)
+    );
+    assert_eq!(
+        fitted(&input, -5.0),
+        (
+            Data::String("overflow".into()),
+            prompt(&recalling("now", &[], &[]))
+        )
+    );
+    let mut attributes = content_attributes();
+    attributes.push(attr("fitlocation", "fit"));
+    assert_eq!(assigned_with(&input, &attributes)["fit"], Data::Null);
 }
 
 #[test]
@@ -574,23 +730,54 @@ fn without_failurelocation_a_budget_is_error_execution() {
 
 #[test]
 fn the_optional_inputs_may_be_left_out() {
-    let mut host = content_host(&stimulus_with(&json!("hi")));
-    let attributes: Vec<Attribute> = content_attributes()
-        .into_iter()
-        .filter(|attribute| {
-            !["failurelocation", "environment", "instructions", "schema"]
-                .contains(&attribute.local_name.as_str())
-        })
-        .collect();
+    let mut input = stimulus_with(&json!("hi"));
+    input["instructions"] = Json::Null;
+    let mut host = content_host(&input);
+    let attributes = [attr("location", "prompt"), attr("stimulus", "stimulus")];
     execute(CONTENT, &attributes, &[], &mut host).expect("handled");
-    let prompt = "<cognition:processor_input>\n  <host_input>\n    <processing:input>\n      \
-                  <input content=\"hi\" stimulus:event=\"bot.input\" stimulus:source=\"gabe\" />\n    \
-                  </processing:input>\n  </host_input>\n  <prior_episodes count=\"0\" />\n  \
-                  <standing_directives count=\"0\" />\n</cognition:processor_input>";
+    let prompt = "<str stimulus:event=\"bot.input\" stimulus:source=\"gabe\">hi</str>";
     assert_eq!(
         host.assigned,
         [("prompt".to_owned(), Data::String(prompt.to_owned()))]
     );
+    for name in [
+        "self",
+        "recent",
+        "acted",
+        "feedback",
+        "instructions",
+        "environment",
+    ] {
+        let mut host = content_host(&input);
+        host.values.insert(name.to_owned(), Data::Null);
+        assert_eq!(
+            projected_from(&mut host),
+            (Data::Null, Data::Null, Data::String(prompt.to_owned())),
+            "{name}"
+        );
+    }
+}
+
+/// What the element assigns from `host`: (failure, system, prompt).
+fn projected_from(host: &mut FakeHost) -> (Data, Data, Data) {
+    execute(CONTENT, &content_attributes(), &[], host).expect("handled");
+    let mut assigned: BTreeMap<String, Data> = host.assigned.drain(..).collect();
+    let mut take = |location: &str| assigned.remove(location).expect("assigned");
+    (take("prompt_failure"), take("system"), take("prompt"))
+}
+
+#[test]
+fn an_acted_fact_over_its_bound_is_kept_as_its_bare_element() {
+    let mut input = stimulus_with(&json!({}));
+    input["instructions"] = Json::Null;
+    input["acted"] = json!([{"target": "t", "event": "e", "data": {"text": "a".repeat(20_000)}}]);
+    assert!(prompt(&input).starts_with("<cognition:acted omitted=\"size\" />\n<dict "));
+    input["acted"] = json!({"percepts": [0, 2], "acts": [{"target": "t", "event": "e"}]});
+    assert!(prompt(&input).starts_with(
+        "<cognition:acted>\n  <percepts count=\"2\">\n    <item>0</item>\n    <item>2</item>\n  </percepts>"
+    ));
+    input["acted"] = json!([]);
+    assert!(prompt(&input).starts_with("<dict "));
 }
 
 #[test]
@@ -636,24 +823,12 @@ fn malformed_content_elements_or_values_raise_error_execution() {
             "cognition:model_facing_content requires a location",
         ),
         (
-            without("stimulus"),
-            "cognition:model_facing_content requires a stimulus",
-        ),
-        (
-            without("prior_episodes"),
-            "cognition:model_facing_content requires prior_episodes",
-        ),
-        (
-            without("standing_directives"),
-            "cognition:model_facing_content requires standing_directives",
-        ),
-        (
             repeated,
             "cognition:model_facing_content repeats an attribute",
         ),
         (
             unknown,
-            "cognition:model_facing_content takes only the location, failurelocation, stimulus, prior_episodes, standing_directives, environment, instructions and schema attributes",
+            "cognition:model_facing_content takes only the location, failurelocation, systemlocation, fitlocation, stimulus, self, recent, environment, acted, prior_episodes, standing_directives, feedback, instructions, schema and budget attributes",
         ),
         (
             empty,
@@ -694,31 +869,52 @@ fn content_values_of_the_wrong_kind_raise_error_execution() {
             "cognition:model_facing_content stimulus has no event",
         ),
         (
+            "recent",
+            data(&json!({})),
+            "cognition:model_facing_content recent is not an array",
+        ),
+        (
             "prior_episodes",
             data(&json!({})),
             "cognition:model_facing_content prior_episodes is not an array",
         ),
         (
             "standing_directives",
-            Data::Null,
+            data(&json!("x")),
             "cognition:model_facing_content standing_directives is not an array",
         ),
         (
-            "system",
+            "instructions",
             data(&json!(1)),
             "cognition:model_facing_content instructions is not a string",
+        ),
+        (
+            "feedback",
+            data(&json!([])),
+            "cognition:model_facing_content feedback is not a string",
         ),
         (
             "environment",
             Data::Undefined,
             "cognition:model_facing_content environment is not a JSON value",
         ),
+        (
+            "self",
+            Data::Undefined,
+            "cognition:model_facing_content self is not a JSON value",
+        ),
+        (
+            "acted",
+            Data::Undefined,
+            "cognition:model_facing_content acted is not a JSON value",
+        ),
     ] {
         let mut host = content_host(&input);
         host.values.insert(name.to_owned(), value);
         assert_eq!(
             execution(execute(CONTENT, &content_attributes(), &[], &mut host)),
-            detail
+            detail,
+            "{name}"
         );
         assert!(host.assigned.is_empty());
     }
@@ -728,6 +924,14 @@ fn content_values_of_the_wrong_kind_raise_error_execution() {
         execution(execute(CONTENT, &content_attributes(), &[], &mut host)),
         "cognition:model_facing_content schema did not evaluate"
     );
+    let mut attributes = content_attributes();
+    attributes.push(attr("budget", "budget"));
+    let mut host = content_host(&input);
+    host.values.insert("budget".to_owned(), data(&json!("10")));
+    assert_eq!(
+        execution(execute(CONTENT, &attributes, &[], &mut host)),
+        "cognition:model_facing_content budget is not a number"
+    );
     let mut host = content_host(&input);
     host.fail_assign = true;
     assert_eq!(
@@ -735,9 +939,80 @@ fn content_values_of_the_wrong_kind_raise_error_execution() {
         "cognition:model_facing_content could not assign failurelocation"
     );
     let mut attributes = content_attributes();
-    attributes[2] = attr("stimulus", "fatal");
+    attributes[3] = attr("stimulus", "fatal");
     assert_eq!(
         execute(CONTENT, &attributes, &[], &mut content_host(&input)),
         Err(Failure::Host("fatal"))
     );
+}
+
+#[test]
+fn without_a_stimulus_the_content_has_no_stimulus_block() {
+    let mut input = stimulus_with(&json!({}));
+    input["instructions"] = Json::Null;
+    input["acted"] = json!([{"target": "t", "event": "e"}]);
+    input["feedback"] = json!("fix it");
+    let attributes: Vec<Attribute> = content_attributes()
+        .into_iter()
+        .filter(|attribute| attribute.local_name != "stimulus")
+        .collect();
+    let mut assigned = assigned_with(&input, &attributes);
+    let prompt = assigned.remove("prompt").expect("assigned");
+    let Data::String(prompt) = prompt else {
+        panic!("the content is a string: {prompt:?}");
+    };
+    assert!(prompt.starts_with("<cognition:acted>"), "{prompt}");
+    assert!(prompt.ends_with("</cognition:acted>\nfix it"), "{prompt}");
+    assert!(
+        !prompt.contains("stimulus:") && !prompt.contains("none_type"),
+        "{prompt}"
+    );
+}
+
+#[test]
+fn a_device_on_an_object_renders_on_as_its_own_attribute() {
+    let mut input = recalling("hi", &[], &[]);
+    input["environment"] = json!({
+        "id": "session",
+        "self": {"state": "processing", "held_percepts": 0, "owned_devices": {
+            "lamp": {"ref": "lamp", "id": "session.lamp", "state": "on", "on": "desk",
+                     "attributes": {"brightness": 40}},
+            "fan": {"ref": "fan", "id": "session.fan", "state": "off", "attributes": {}},
+        }},
+    });
+    let prompt = prompt(&input);
+    assert!(
+        prompt.contains(r#"<device ref="lamp" id="session.lamp" state="on" on="desk">"#),
+        "{prompt}"
+    );
+    assert!(
+        prompt.contains(r#"<device ref="fan" id="session.fan" state="off" />"#),
+        "{prompt}"
+    );
+    assert!(
+        prompt.contains("<held_percepts>0</held_percepts>"),
+        "{prompt}"
+    );
+}
+
+#[test]
+fn the_firmware_renders_as_a_device_does_before_the_owned_devices() {
+    let mut input = recalling("hi", &[], &[]);
+    input["environment"] = json!({
+        "id": "session",
+        "self": {"state": "processing", "owned_devices": {
+            "lamp": {"ref": "lamp", "id": "session.lamp", "state": "on", "attributes": {}},
+        }, "firmware": {"ref": "firmware", "id": "session.floppy.firmware", "state": "idle",
+                        "attributes": {"minutes": 0}}},
+    });
+    let prompt = prompt(&input);
+    let firmware = prompt
+        .find(r#"<firmware ref="firmware" id="session.floppy.firmware" state="idle">"#)
+        .unwrap_or_else(|| panic!("{prompt}"));
+    let devices = prompt
+        .find("<owned_devices>")
+        .unwrap_or_else(|| panic!("{prompt}"));
+    assert!(firmware < devices, "{prompt}");
+    assert!(prompt.contains("<minutes>0</minutes>"), "{prompt}");
+    assert!(!prompt.contains("<firmware>"), "{prompt}");
 }

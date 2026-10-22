@@ -8,11 +8,26 @@ function memoryTimeoutDelay() {
   return memory_timeout_ms + 'ms';
 }
 
+// percept
+
+// The turn's percepts: a bot.perceived batch's stimuli in arrival order,
+// else the stimulus itself (the reference _Agenda's slots).
+function perceptsOf(stimulus) {
+  if (stimulus.event === 'bot.perceived') {
+    return stimulus.data.percepts.map(function (percept) { return percept.stimulus; });
+  }
+  return [stimulus];
+}
+
+function currentPercept() {
+  return percepts[position];
+}
+
 // matching
 
-// The stimulus triggers the SpeechHeard seed.
+// The percept triggers the SpeechHeard seed.
 function triggersSpeechHeard() {
-  return stimulus.event === 'bot.ability.listening.speech.output';
+  return view.event === 'bot.ability.listening.speech.output';
 }
 
 // seeding
@@ -47,10 +62,6 @@ function hasNoMemory() {
   return database === null;
 }
 
-function hasNoMemoryAndNoCandidates() {
-  return database === null && tried.length === 0;
-}
-
 function noMemoryLog() {
   return 'turn ' + turn + ': no memory';
 }
@@ -59,7 +70,7 @@ function noMemoryLog() {
 
 // the reference _behavior_select_input.
 function behaviorSelectStatements() {
-  return [{sql: select_sql, parameters: [stimulus.event]}];
+  return [{sql: select_sql, parameters: [view.event]}];
 }
 
 function behaviorsFromMemoryOutput(event) {
@@ -77,15 +88,11 @@ function loadTimedOutReason() {
 // matched
 
 function matchedLog() {
-  return 'turn ' + turn + ': ' + rows.length + ' matched for ' + stimulus.event;
+  return 'turn ' + turn + ': ' + rows.length + ' matched for ' + view.event;
 }
 
 function hasNoMatch() {
   return rows.length === 0;
-}
-
-function hasNoMatchAndNoCandidates() {
-  return rows.length === 0 && tried.length === 0;
 }
 
 // running
@@ -111,18 +118,52 @@ function runFailedLog(event) {
   return rows[0].values[0] + ' (' + event.name + ')';
 }
 
+// percept_handled
+
+function handledWithPercept() {
+  return handled.concat([position]);
+}
+
+function selectedWithAnswer() {
+  return selected.concat(answer);
+}
+
+// next_percept
+
+function hasNextPercept() {
+  return position + 1 < percepts.length;
+}
+
+function nextPosition() {
+  return position + 1;
+}
+
+function everyPerceptHandled() {
+  return handled.length === percepts.length;
+}
+
+function hasNoCandidates() {
+  return tried.length === 0;
+}
+
 // done, unhandled, answered, failed
 
 function noBehaviorsOutput() {
   return {turn: turn, handled: false, candidates: [], reason: 'no-behaviors'};
 }
 
+// Unhandled, with what the behaviors that handled some percepts did
+// (acted, the reference's ActedData) when any did.
 function unhandledOutput() {
-  return {turn: turn, handled: false, candidates: tried, reason: 'unhandled'};
+  var output = {turn: turn, handled: false, candidates: tried, reason: 'unhandled'};
+  if (handled.length > 0) {
+    output.acted = {percepts: handled, acts: selected};
+  }
+  return output;
 }
 
 function answeredOutput() {
-  return {turn: turn, handled: true, selected: answer, candidates: tried, reason: 'behavior'};
+  return {turn: turn, handled: true, selected: selected, candidates: tried, reason: 'behavior'};
 }
 
 function failedOutput() {

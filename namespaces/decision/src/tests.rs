@@ -715,8 +715,8 @@ fn focus_choice() -> Json {
     })
 }
 
-fn clear_choice() -> Json {
-    json!({"event": "bot.clear_focus", "schema": {"type": "object"}})
+fn deactivate_choice() -> Json {
+    json!({"event": "bot.deactivate", "schema": {"type": "object"}})
 }
 
 fn pin_attributes(values: &str) -> Vec<Attribute> {
@@ -731,7 +731,7 @@ fn pin_attributes(values: &str) -> Vec<Attribute> {
 #[test]
 fn pin_sets_the_property_enum_of_the_named_event_only() {
     let mut host = with_values(&[
-        ("own", json!([focus_choice(), clear_choice()])),
+        ("own", json!([focus_choice(), deactivate_choice()])),
         ("candidates", json!(["lamp", "fan"])),
     ]);
     assert_eq!(
@@ -740,7 +740,10 @@ fn pin_sets_the_property_enum_of_the_named_event_only() {
     );
     let mut pinned = focus_choice();
     pinned["schema"]["properties"]["device"]["enum"] = json!(["lamp", "fan"]);
-    assert_eq!(assigned_any(&host, "own"), json!([pinned, clear_choice()]));
+    assert_eq!(
+        assigned_any(&host, "own"),
+        json!([pinned, deactivate_choice()])
+    );
     assert!(
         matches!(assigned(&host, "own"), Data::JsonArray(text) if scxml_event_schema::is_canonical_json(&text))
     );
@@ -749,14 +752,14 @@ fn pin_sets_the_property_enum_of_the_named_event_only() {
 #[test]
 fn pin_with_no_values_removes_the_event() {
     let mut host = with_values(&[
-        ("own", json!([focus_choice(), clear_choice()])),
+        ("own", json!([focus_choice(), deactivate_choice()])),
         ("candidates", json!([])),
     ]);
     assert_eq!(
         execute("pin", &pin_attributes("candidates"), &[], &mut host),
         Ok(Executed::Handled)
     );
-    assert_eq!(assigned_any(&host, "own"), json!([clear_choice()]));
+    assert_eq!(assigned_any(&host, "own"), json!([deactivate_choice()]));
 }
 
 #[test]

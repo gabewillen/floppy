@@ -44,7 +44,8 @@
 //! and `target_ids` (arrays of identities), `content_type` (a non-empty
 //! string) and optionally `content` (any value; absent is `null`) and
 //! `participants` (at most [`MAX_PARTICIPANTS`] `{ref, role}`, each with an
-//! optional boolean `own`; absent or `null` is none); its other members are
+//! optional boolean `own` and an optional `resembles`, at most
+//! [`MAX_RESEMBLANCES`] `{ref, similarity}`; absent or `null` is none); its other members are
 //! not committed. `provenance`
 //! (optional) evaluates to an object (`null` or `undefined` is none) whose
 //! `id`, `session_ref` and `turn_ref` the provenance takes. `location`
@@ -552,7 +553,7 @@ pub fn committed_message<E>(
     let participants = match message.get("participants") {
         None | Some(Json::Null) => Vec::new(),
         Some(participants) => message_participants(participants).ok_or(Failure::Execution(
-            "conversation message participants are not at most 32 {ref, role, own?}",
+            "conversation message participants are not at most 32 {ref, role, own?, resembles?}",
         ))?,
     };
     let context_ref = relationship_context_ref(&source_ids, &target_ids);
@@ -587,7 +588,7 @@ pub fn committed_message<E>(
 
 /// A message's participants (the original's `Message.participants`): at
 /// most [`MAX_PARTICIPANTS`], each `{ref, role}` with an optional boolean
-/// `own`, its ref non-empty and at most [`MAX_PARTICIPANT_REF_CHARACTERS`]
+/// `own` and an optional `resembles` ([`is_resembles`]), its ref non-empty and at most [`MAX_PARTICIPANT_REF_CHARACTERS`]
 /// characters, its role `source` or `target`; `None` otherwise.
 fn message_participants(participants: &Json) -> Option<Vec<Json>> {
     let participants = participants.as_array()?;
@@ -601,17 +602,48 @@ fn message_participants(participants: &Json) -> Option<Vec<Json>> {
             let reference = members.get("ref")?.as_str()?;
             let role = members.get("role")?.as_str()?;
             let own = match members.get("own") {
-                None => 2,
-                Some(Json::Bool(_)) => 3,
+                None => 0,
+                Some(Json::Bool(_)) => 1,
                 Some(_) => return None,
             };
-            (members.len() == own
+            let resembles = match members.get("resembles") {
+                None => 0,
+                Some(resembles) if is_resembles(resembles) => 1,
+                Some(_) => return None,
+            };
+            (members.len() == 2 + own + resembles
                 && !reference.is_empty()
                 && reference.chars().count() <= MAX_PARTICIPANT_REF_CHARACTERS
                 && matches!(role, "source" | "target"))
             .then(|| participant.clone())
         })
         .collect()
+}
+
+/// A participant's `resembles` (the original's `Resemblance` list): at
+/// most [`MAX_RESEMBLANCES`] `{ref, similarity}`, each ref non-empty and at
+/// most [`MAX_PARTICIPANT_REF_CHARACTERS`] characters and each similarity
+/// a number from -1 to 1.
+fn is_resembles(resembles: &Json) -> bool {
+    resembles.as_array().is_some_and(|resembles| {
+        resembles.len() <= MAX_RESEMBLANCES
+            && resembles.iter().all(|resemblance| {
+                resemblance.as_object().is_some_and(|members| {
+                    members.len() == 2
+                        && members
+                            .get("ref")
+                            .and_then(Json::as_str)
+                            .is_some_and(|reference| {
+                                !reference.is_empty()
+                                    && reference.chars().count() <= MAX_PARTICIPANT_REF_CHARACTERS
+                            })
+                        && members
+                            .get("similarity")
+                            .and_then(Json::as_f64)
+                            .is_some_and(|similarity| (-1.0..=1.0).contains(&similarity))
+                })
+            })
+    })
 }
 
 /// An identity: a string, or an array of numbers (an embedding).
@@ -1727,7 +1759,7 @@ fn complete_turn<H: ConversationHost>(
         )? {
             Data::Null | Data::Undefined | Data::Absent => Json::Null,
             value => json_of(&value).ok_or(Failure::Execution(
-                "conversation:complete_turn participants are not at most 32 {ref, role, own?}",
+                "conversation:complete_turn participants are not at most 32 {ref, role, own?, resembles?}",
             ))?,
         },
     };
@@ -2178,6 +2210,10 @@ pub const MAX_PARTICIPANTS: usize = 32;
 /// The longest participant ref, in characters (the original's
 /// `_MAX_PARTICIPANT_REF_LENGTH`).
 pub const MAX_PARTICIPANT_REF_CHARACTERS: usize = 200;
+
+/// The most identities a participant resembles (the original's
+/// `Participant.resembles`, `max_length=3`).
+pub const MAX_RESEMBLANCES: usize = 3;
 
 /// `<conversation:turn_participants>`'s detail for an input of the wrong
 /// kind.

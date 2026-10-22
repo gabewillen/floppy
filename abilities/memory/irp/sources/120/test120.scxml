@@ -11,7 +11,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.failed" cond="typeof _event.data.message === 'string' &amp;&amp; _event.data.message.indexOf('no such table: nowhere') &gt;= 0" target="step1"/>
+    <transition event="bot.ability.failed" cond="typeof _event.data.message === 'string' &amp;&amp; _event.data.message.indexOf('no such table: nowhere') &gt;= 0 &amp;&amp; _event.data.kind === 'store_failed'" target="step1"/>
   </state>
   <state id="step1">
     <transition event="done.invoke.memory" target="step2"/>

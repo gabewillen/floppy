@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- persona-4: a text over 2000 characters is refused where it is sent. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="persona" type="scxml" src="../../../persona.scx">
+    <param name="traits" expr='["curious", "  patient with children "]'/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.persona.output" cond='JSON.stringify(_event.data.traits) === "[\"curious\",\"patient with children\"]" &amp;&amp; _event.data.description === null' target="step1"/>
+  </state>
+  <state id="step1">
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'persona' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === 'bot.ability.persona.revise' &amp;&amp; _event.data.choices[0].target === undefined &amp;&amp; _event.data.choices[0].schema.required.join() === 'text,reason' &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[0].schema['$schema'] === undefined &amp;&amp; _event.data.choices[0].schema.properties.text.maxLength === 2000 &amp;&amp; _event.data.choices[0].schema.properties.reason.maxLength === 500 &amp;&amp; typeof _event.data.choices[0].description === 'string'" target="step2"/>
+  </state>
+  <state id="step2">
+    <onentry>
+      <send event="bot.ability.persona.revise" target="#_persona"><content expr="({text: 'a'.repeat(2001), reason: 'long'})"/></send>
+    </onentry>
+    <transition event="error.execution" target="step3"/>
+  </state>
+  <state id="step3">
+    <onentry>
+      <send event="harness.waited" delay="300ms"/>
+    </onentry>
+    <transition event="harness.waited" target="step4"/>
+  </state>
+  <state id="step4">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

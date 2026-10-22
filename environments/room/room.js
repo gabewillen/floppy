@@ -38,6 +38,85 @@ function without(id) {
   return participants.filter(function (participant) { return participant !== id; });
 }
 
+// Membership: participants with the one that (re)joined, once.
+
+function joined(id) {
+  return participants.indexOf(id) >= 0 ? participants.slice() : participants.concat([id]);
+}
+
+// Supervision (decision D158, the original's runtime Supervisor).
+
+// The leave of _event's participant, for its supervisor: restart when it
+// failed (failed: an error.communication), left degraded (its donedata
+// has a reason), or left after its activation failed.
+function leftData(_event, failed) {
+  var id = _event.invokeid || null;
+  var degraded = Object(_event.data).reason !== undefined;
+  return {participant: id, restart: failed || degraded || activation_failed[id] === true};
+}
+
+// The bot that activated, from _event.invokeid (decision D108).
+function activatedData(_event) {
+  return {participant: _event.invokeid || null};
+}
+
+// The participant a supervision event is for.
+function isFor(_event, id) {
+  return _event.data.participant === id;
+}
+
+function isRestartable(_event, id) {
+  return _event.data.participant === id && _event.data.restart === true;
+}
+
+function attemptsOf(id) {
+  return attempts[id] === undefined ? 0 : attempts[id];
+}
+
+// Another attempt fits the budget of consecutive failed attempts.
+function isWithinBudget(id) {
+  return attemptsOf(id) + 1 < supervision.max_restarts;
+}
+
+function nextAttempt(id) {
+  return attemptsOf(id) + 1;
+}
+
+// The doubling backoff of the current run of failed attempts, capped.
+function backoffMs(id) {
+  var delay = supervision.backoff_initial_ms;
+  for (var i = 1; i < attemptsOf(id); i++) {
+    if (delay >= supervision.backoff_max_ms / 2) {
+      return supervision.backoff_max_ms;
+    }
+    delay *= 2;
+  }
+  return Math.min(delay, supervision.backoff_max_ms);
+}
+
+function backoffDelay(id) {
+  return backoffMs(id) + 'ms';
+}
+
+function stableDelay() {
+  return supervision.stable_after_ms + 'ms';
+}
+
+function restartedJson(id) {
+  return JSON.stringify({participant: id, attempt: attemptsOf(id), delay_ms: backoffMs(id)});
+}
+
+function exhaustedJson(id) {
+  return JSON.stringify({participant: id, attempts: attemptsOf(id) + 1});
+}
+
+// activation_failed with _event's bot marked.
+function activationFailedOf(_event) {
+  var failed = Object.assign({}, activation_failed);
+  failed[_event.invokeid] = true;
+  return failed;
+}
+
 // Host input: the participants a communication input's target_ids names,
 // or every bot when it names none (the original: ambient input).
 
@@ -60,6 +139,21 @@ function ownedDevices(bot) {
   var owned = {};
   holdings[bot].forEach(function (device) { owned[device] = _sessionid + '.' + device; });
   return owned;
+}
+
+// Objects (decision D159): each device bot holds that sits on a known
+// object (its placement's on), as reference to the object's id. A
+// placement whose on names no object of objects is not carried.
+
+function placedOn(bot) {
+  var placed = {};
+  holdings[bot].forEach(function (device) {
+    var placement = placements[device];
+    if (placement !== undefined && objects.indexOf(placement.on) >= 0) {
+      placed[device] = placement.on;
+    }
+  });
+  return placed;
 }
 
 // A device's bot.input goes to the bots that hold it; the host's (no

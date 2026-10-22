@@ -32,10 +32,12 @@ Listening, and recorded in the conversation), and the
 [listening](../../abilities/listening/listening.scx), its input ability
 (the original's Listening, phase 6: see Sound below). Each turn the body
 collects the choices (its own `bot.focus_device`, pinned to the turn's
-focus candidates, and `bot.clear_focus` while a device is focused, plus
+focus candidates, plus
 each ability's latest `bot.ability.offers` and the focused device's
 events, each tagged with the session id of its offerer as `target`, made
-model-facing and held to 32 KiB, `<processing:collect_offered_events>`).
+model-facing and held to 32 KiB, `<processing:collect_offered_events>`);
+nothing the bot selects clears the focus: it stays on a device until the
+bot focuses another (the original's R-9).
 As in the original, each stage of the cognition sends its own selections,
 each to the session its target names (`#_scxml_` + target); the schemas
 the services check a selection against (the pinned focus device, each
@@ -182,7 +184,9 @@ records, which are not the original events, are labelled `floppy.*`:
 `floppy.output` is the turn's selected events, speaking logs the words as
 `floppy.say`, `floppy.choices` is each turn's choices (JSON, each tagged
 with its offering session's id as `target`), `floppy.focus` each focus
-change, `floppy.deferred` each input deferred during a turn,
+change, `floppy.held` how many percepts are held after each arrival
+during a turn, `floppy.released` what was still held when the bot left
+active (`{count, reason}`),
 `floppy.degraded` the reason the bot degraded, `floppy.stale` a reply to
 an earlier turn, `floppy.diagnostic` why activation failed, and
 `floppy.rejected` an event the body refused.
