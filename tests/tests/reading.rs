@@ -13,8 +13,9 @@
 //! The image decoder is the generate service with an image part, which a
 //! parallel slice adds; until it lands, the copy of reading invokes
 //! `generate_double.scx` in its place (the same `<param>`s, one of
-//! generate's events back). The double logs the `model` and `messages` it
-//! was given (`double.model`, `double.messages`).
+//! generate's events back). The double logs the `model`, `messages`,
+//! `temperature` and `max_completion_tokens` it was given (`double.model`,
+//! `double.messages`, `double.sampling`).
 
 #![allow(
     missing_docs,
@@ -79,11 +80,14 @@ fn double(generate: &Generate) -> String {
   <datamodel>
     <data id="model" expr="null"/>
     <data id="messages" expr="null"/>
+    <data id="temperature" expr="null"/>
+    <data id="max_completion_tokens" expr="null"/>
   </datamodel>
   <state id="generating">
     <onentry>
       <log label="double.model" expr="model"/>
       <log label="double.messages" expr="JSON.stringify(messages)"/>
+      <log label="double.sampling" expr="JSON.stringify([temperature, max_completion_tokens])"/>
       {onentry}
     </onentry>
     {transitions}
@@ -236,6 +240,8 @@ fn an_image_is_read_by_the_vision_model() {
             r#"[{"content":[{"content":"Read all visible text in this image. Return only the text.","kind":"text"},{"content":"media/receipt.png","kind":"image"}],"role":"user"}]"#
         ])
     );
+    // The original's image decoder settings: temperature 0, 512 tokens.
+    assert_eq!(texts(&finished, "double.sampling"), strings(&["[0,512]"]));
     assert_eq!(
         texts(&finished, "vision.classification"),
         strings(&["image"])

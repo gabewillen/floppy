@@ -96,7 +96,7 @@ function isUnconfigured(_event) {
 }
 
 function unconfiguredDiagnostics() {
-  return [{kind: 'generate', code: 'unconfigured', message: 'the generate service has no backend: the run holds no FLOPPY_BASE_URL or no FLOPPY_API_KEY (both are required; set them in the --env-file)'}];
+  return [{kind: 'generate', code: 'unconfigured', message: 'the generate service has no backend: the run holds no FLOPPY_BASE_URL (set it in the --env-file; FLOPPY_API_KEY is needed only by a keyed backend)'}];
 }
 
 // stage is design or author; product is the plan or draft it generates.

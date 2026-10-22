@@ -565,8 +565,9 @@ Last updated: 2026-10-22.
 - Live tests: `FLOPPY_LIVE_ENV_FILE` (colon-separated env files) and
   `FLOPPY_LIVE_MODEL`.
 - Model endpoint (decision D31): the `generate` service has no default
-  backend; every run needs `FLOPPY_BASE_URL` and `FLOPPY_API_KEY`, and
-  without either the builder ends at once in `failed` (`unconfigured`).
+  backend; every run needs `FLOPPY_BASE_URL`, and without it the builder
+  ends at once in `failed` (`unconfigured`); `FLOPPY_API_KEY` is needed
+  only by a keyed backend (a run without it sends no key header, D127).
   floppy's gitignored `.env` sets them to the user's two DGX Sparks:
   - **direct vLLM:** `FLOPPY_BASE_URL=http://192.168.2.89:8000/v1`, model
     `Qwen/Qwen3.8-Flash-Next` (the builder's default), `FLOPPY_API_KEY` (a

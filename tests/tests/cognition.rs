@@ -1913,15 +1913,19 @@ fn a_selection_outside_the_choices_never_becomes_output() {
     let records = until_turn_ended(&run, 1);
     // The generate service holds the reply to the choices' schema first;
     // reasoning asks again once with the rejection as feedback, and the
-    // same rejection twice running fails the turn (decision D142).
+    // same rejection twice running fails the turn (decision D142), keyed by
+    // where the selection first fails and told by its message (D126).
     assert_eq!(texts(&records, "reasoning.repair").len(), 1);
     assert_eq!(
         json_text(&records, "reasoning.repair"),
-        json!({"attempt": 1, "key": "schema-mismatch"})
+        json!({"attempt": 1, "key": "schema-mismatch:/events/0/event"})
     );
     assert_eq!(
         json_text(&records, "bot.processing.failed"),
-        json!({"message": "Selection rejected: schema-mismatch", "turn": 1})
+        json!({
+            "message": "Selection rejected: /events/0/event: value must be one of \"bot.ability.cognition.ignore\", \"bot.ability.communication.respond\", \"bot.ability.identity.adopt\"",
+            "turn": 1
+        })
     );
     assert!(texts(&records, "floppy.output").is_empty());
     let records = until_turn_ended(&run, 2);

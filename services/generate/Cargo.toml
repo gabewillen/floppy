@@ -17,6 +17,10 @@ crate-type = ["cdylib", "rlib"]
 # the tool call's arguments: `resolve` (metaschema, no external references) and
 # `CompiledSchema` (boon, nothing ever loaded).
 scxml-event-schema.workspace = true
+# Where a call's arguments first fail its tool's parameters (the rejection's
+# key and message), and whether a sub-schema admits a value: the same boon
+# the compiled schema checks with, nothing ever loaded.
+boon.workspace = true
 scxml-types.workspace = true
 serde_json.workspace = true
 # The WASI 0.3 async ABI: `invoke` is an `async func`.

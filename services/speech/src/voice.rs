@@ -716,16 +716,16 @@ fn model_json(model: &str) -> String {
     serde_json::to_string(model).unwrap_or_else(|_| "\"\"".to_owned())
 }
 
-fn json_post(base_url: u32, api_key: u32, path: &str, body: Vec<u8>) -> Request {
+fn json_post(base_url: u32, api_key: Option<u32>, path: &str, body: Vec<u8>) -> Request {
     Request {
         url: vec![Part::Reference(base_url), Part::Literal(path.into())],
-        headers: vec![
-            bearer(api_key),
-            (
+        headers: bearer(api_key)
+            .into_iter()
+            .chain([(
                 "content-type".into(),
                 vec![Part::Literal("application/json".into())],
-            ),
-        ],
+            )])
+            .collect(),
         body,
     }
 }
@@ -733,7 +733,12 @@ fn json_post(base_url: u32, api_key: u32, path: &str, body: Vec<u8>) -> Request 
 /// The voice detection request: `POST {base}/vad` with the canonical JSON
 /// body `{"audio": [samples], "model"}`.
 #[must_use]
-pub fn detection_request(base_url: u32, api_key: u32, model: &str, samples: &[f32]) -> Request {
+pub fn detection_request(
+    base_url: u32,
+    api_key: Option<u32>,
+    model: &str,
+    samples: &[f32],
+) -> Request {
     let mut body = String::with_capacity(samples.len() * 10 + 64);
     body.push_str("{\"audio\":[");
     for (index, sample) in samples.iter().enumerate() {
@@ -758,7 +763,7 @@ pub fn detection_request(base_url: u32, api_key: u32, model: &str, samples: &[f3
 #[must_use]
 pub fn diarization_request(
     base_url: u32,
-    api_key: u32,
+    api_key: Option<u32>,
     model: &str,
     name: &str,
     wav: &[u8],
@@ -786,19 +791,21 @@ pub fn diarization_request(
             Part::Reference(base_url),
             Part::Literal(DIARIZATION_PATH.into()),
         ],
-        headers: vec![
-            bearer(api_key),
-            (
-                "content-type".into(),
-                vec![Part::Literal(format!(
-                    "multipart/form-data; boundary={boundary}"
-                ))],
-            ),
-            (
-                "accept".into(),
-                vec![Part::Literal("application/json".into())],
-            ),
-        ],
+        headers: bearer(api_key)
+            .into_iter()
+            .chain([
+                (
+                    "content-type".into(),
+                    vec![Part::Literal(format!(
+                        "multipart/form-data; boundary={boundary}"
+                    ))],
+                ),
+                (
+                    "accept".into(),
+                    vec![Part::Literal("application/json".into())],
+                ),
+            ])
+            .collect(),
         body,
     }
 }
@@ -826,7 +833,7 @@ pub fn base64(bytes: &[u8]) -> String {
 /// The voice embedding request: `POST {base}/voice/embed` with the canonical
 /// JSON body `{"audio": <base64 WAV>, "model"}`.
 #[must_use]
-pub fn embedding_request(base_url: u32, api_key: u32, model: &str, wav: &[u8]) -> Request {
+pub fn embedding_request(base_url: u32, api_key: Option<u32>, model: &str, wav: &[u8]) -> Request {
     let body = canonical_json(&json!({"audio": base64(wav), "model": model}));
     json_post(base_url, api_key, EMBED_PATH, body.into_bytes())
 }
