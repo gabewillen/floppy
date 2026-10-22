@@ -7,7 +7,7 @@
     {
       "turns": [
         {
-          "at": "2026-07-07T12:00:00.123456Z",
+          "at": "2026-07-07T12:00:00.123Z",
           "conversation": "conversation-1",
           "cut": false,
           "direction": "heard",
@@ -31,7 +31,7 @@
         "description": "A remembered turn: what the bot heard or said, who said it, the words, and when.",
         "examples": [
           {
-            "at": "2026-07-07T12:00:00.123456Z",
+            "at": "2026-07-07T12:00:00.123Z",
             "conversation": "conversation-1",
             "cut": false,
             "direction": "heard",
@@ -234,7 +234,7 @@
           "at": {
             "description": "When the register wrote the turn, timezone-aware UTC.",
             "examples": [
-              "2026-07-07T12:00:00.123456Z"
+              "2026-07-07T12:00:00.123Z"
             ],
             "format": "date-time",
             "title": "At",

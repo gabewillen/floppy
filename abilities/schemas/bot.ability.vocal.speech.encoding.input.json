@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "bot.ability.vocal.speech.encoding.input",
   "additionalProperties": false,
-  "description": "A request to encode a reply as verbal speech (the original's SpeechEncoding input, its parts as a stream of Piece deltas; floppy carries the whole parts).",
+  "description": "A request to encode a reply as verbal speech: the reply's whole parts (decision D178).",
   "properties": {
     "parts": {
       "description": "The reply's parts, encoded in order: their words, joined exactly as written, are said, and a part's expression.pause is said as silence [floppy field].",

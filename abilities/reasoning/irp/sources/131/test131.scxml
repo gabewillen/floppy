@@ -15,7 +15,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.reasoning" cond='_event.data.turn === 1 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.failed === true &amp;&amp; _event.data.reason === "Selection rejected: schema-mismatch"' target="step1"/>
+    <transition event="done.invoke.reasoning" cond='_event.data.turn === 1 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.failed === true &amp;&amp; _event.data.reason === "Selection rejected: /events/0/event: value must be one of \"bot.ability.cognition.ignore\", \"bot.ability.communication.respond\", \"bot.focus_device\", \"lamp.on\""' target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

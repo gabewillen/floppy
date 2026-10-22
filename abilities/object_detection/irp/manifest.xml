@@ -42,7 +42,7 @@
     </test>
   </assert>
   <assert id="object_detection-4" specnum="4" specid="#object_detection-4">
-    <![CDATA[Each reply item is validated on its own as the original's DetectedObject, with pydantic's lax numbers (a boolean or a numeric string reads as its number): `label` a string of 1..100 characters, `confidence` 0..1 or `null` (required), `box` the original's geometry.Box (`x`, `y` in 0..1, `width`, `height` in (0, 1], `x + width` and `y + height` at most 1 + 1e-6), and no other keys; an item that is not one is skipped, never failing the detection.]]>
+    <![CDATA[Each reply item is validated on its own as the original's DetectedObject, its numbers JSON numbers (a boolean or a numeric string is refused): `label` a string of 1..100 characters, `confidence` 0..1 or `null` (required), `box` the original's geometry.Box (`x`, `y` in 0..1, `width`, `height` in (0, 1], `x + width` and `y + height` at most 1 + 1e-6), and no other keys; an item that is not one is skipped, never failing the detection.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>

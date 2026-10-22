@@ -15,7 +15,7 @@
     </test>
   </assert>
   <assert id="description-2" specnum="2" specid="#description-2">
-    <![CDATA[It asks the generate service once, with one user message (the original's DESCRIBE_INSTRUCTIONS as a text part and the image's reference as an image part, the image read from the granted media directory), and answers its parent `bot.ability.vision.description.output` `{description}`, the reply stripped of white space as the original's `str.strip()` strips it; then it ends (`done.invoke.<id>` follows the answer).]]>
+    <![CDATA[It asks the generate service once, with one user message (the original's DESCRIBE_INSTRUCTIONS as a text part and the image's reference as an image part, the image read from the granted media directory), and answers its parent `bot.ability.vision.description.output` `{description}`, the reply trimmed of white space; then it ends (`done.invoke.<id>` follows the answer).]]>
     <test id="110" conformance="mandatory" manual="false">
       <start uri="110/test110.scxml"/>
     </test>
