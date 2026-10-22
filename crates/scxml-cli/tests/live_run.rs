@@ -321,11 +321,11 @@ fn invoke_src_loads_relative_file_and_absolute_uris_and_lists_them() {
     }
 }
 
-/// An `<invoke src>` child's `event:schema` files are read relative to the
-/// child's own directory (a literal child's before the session, a `srcexpr`
-/// child's when its `<invoke>` runs) and reach its compile, so it runs; a
-/// file outside its directory is never read (`EVENT004` rejects the child),
-/// so its `<invoke>` raises `error.execution`.
+/// An `<invoke src>` child's `event:schema` files are read against the
+/// child's own base URI (a literal child's before the session, a `srcexpr`
+/// child's when its `<invoke>` runs), `..` segments included, and reach its
+/// compile, so it runs; a file that does not exist is not read (`EVENT004`
+/// rejects the child), so its `<invoke>` raises `error.execution`.
 #[test]
 fn a_literal_invoke_src_child_compiles_with_its_own_event_schema_files() {
     let directory = scratch("invoke-src-event-schemas");
@@ -335,7 +335,7 @@ fn a_literal_invoke_src_child_compiles_with_its_own_event_schema_files() {
         r#"{"$defs": {"Go": {"type": "object"}}}"#,
     )
     .expect("the schema is writable");
-    fs::write(directory.join("go.json"), "{}").expect("the root-relative schema is writable");
+    fs::write(directory.join("go.json"), "{}").expect("the parent directory's schema is writable");
     let child = |reference: &str| {
         format!(
             r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" version="1.0" datamodel="ecmascript"><state id="c0"><transition event="go" event:schema="{reference}" target="f"/><transition cond="true" target="f"/></state><final id="f"/></scxml>"#
@@ -348,6 +348,11 @@ fn a_literal_invoke_src_child_compiles_with_its_own_event_schema_files() {
     .expect("the child is writable");
     fs::write(directory.join("children/outside.scx"), child("../go.json"))
         .expect("the child is writable");
+    fs::write(
+        directory.join("children/missing.scx"),
+        child("../missing.json"),
+    )
+    .expect("the child is writable");
     let body = |invoke: &str| {
         format!(
             r#"<state id="s0">{invoke}<transition event="done.invoke" target="done"/><transition event="error.execution" target="failed"/></state><final id="done"><donedata><content expr="'done'"/></donedata></final><final id="failed"><donedata><content expr="'failed'"/></donedata></final>"#
@@ -357,6 +362,10 @@ fn a_literal_invoke_src_child_compiles_with_its_own_event_schema_files() {
         (r#"<invoke type="scxml" src="children/child.scx"/>"#, "done"),
         (
             r#"<invoke type="scxml" src="children/outside.scx"/>"#,
+            "done",
+        ),
+        (
+            r#"<invoke type="scxml" src="children/missing.scx"/>"#,
             "failed",
         ),
         (
@@ -365,6 +374,10 @@ fn a_literal_invoke_src_child_compiles_with_its_own_event_schema_files() {
         ),
         (
             r#"<invoke type="scxml" srcexpr="'children/outside.scx'"/>"#,
+            "done",
+        ),
+        (
+            r#"<invoke type="scxml" srcexpr="'children/missing.scx'"/>"#,
             "failed",
         ),
     ] {

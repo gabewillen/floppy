@@ -374,10 +374,10 @@ where
         scripts: Vec::new(),
         script_resolution: scxml_compiler_core::ScriptResolution::Runtime,
         // A namespace case's `event:schema` files are its declared,
-        // integrity-checked dependencies at or below its start document's
-        // directory, keyed relative to that directory, as the document
-        // names them (the CLI reads them relative to the document the same
-        // way); the W3C corpus has none.
+        // integrity-checked dependencies, keyed by their path relative to
+        // its start document's directory (`..` segments included), as the
+        // document names them (the CLI resolves them against the
+        // document's base URI the same way); the W3C corpus has none.
         event_schemas: if corpus_kind == CorpusKind::NamespaceIrp {
             namespace_event_schemas(case)
         } else {
@@ -674,16 +674,29 @@ fn namespace_event_schemas(case: &LoadedCase) -> std::collections::BTreeMap<Stri
     case.dependency_sources
         .iter()
         .filter(|(uri, _)| case.manifest.dependency_source_artifacts.contains_key(uri))
-        .filter_map(|(uri, bytes)| {
-            let relative = if directory.is_empty() {
-                Some(uri.as_str())
-            } else {
-                uri.strip_prefix(directory)
-                    .and_then(|rest| rest.strip_prefix('/'))
-            };
-            relative.map(|relative| (relative.to_owned(), bytes.clone()))
-        })
+        .map(|(uri, bytes)| (relative_reference(directory, uri), bytes.clone()))
         .collect()
+}
+
+/// The relative URI path that names `uri` (a corpus path) from the
+/// directory `directory` (a corpus path, `""` for the corpus root): one
+/// `..` segment per directory segment they do not share, then the rest of
+/// `uri`.
+fn relative_reference(directory: &str, uri: &str) -> String {
+    let from = directory.split('/').filter(|segment| !segment.is_empty());
+    let mut to = uri.split('/').peekable();
+    let mut ups = 0;
+    for segment in from {
+        if ups == 0 && to.peek() == Some(&segment) {
+            to.next();
+        } else {
+            ups += 1;
+        }
+    }
+    std::iter::repeat_n("..", ups)
+        .chain(to)
+        .collect::<Vec<_>>()
+        .join("/")
 }
 
 /// What every case of one suite run shares.
@@ -780,6 +793,22 @@ mod tests {
         HttpRequest, HttpResponse, LogRecord,
     };
     use crate::report::TerminalStatus;
+
+    /// A dependency is keyed by the relative reference that names it from
+    /// the start document's directory, `..` segments included.
+    #[test]
+    fn dependencies_are_keyed_relative_to_the_start_directory() {
+        assert_eq!(
+            relative_reference("431", "431/schemas/order.json"),
+            "schemas/order.json"
+        );
+        assert_eq!(
+            relative_reference("433/machine", "433/schemas/order.json"),
+            "../schemas/order.json"
+        );
+        assert_eq!(relative_reference("a/b", "c/d.json"), "../../c/d.json");
+        assert_eq!(relative_reference("", "a/d.json"), "a/d.json");
+    }
 
     /// The audit's edited official case 355: the transition out of `s0` logs
     /// `Outcome` `pass` and enters the non-final state `s1`, where the

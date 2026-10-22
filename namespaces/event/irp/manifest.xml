@@ -59,8 +59,8 @@
       <reject code="EVENT004"/>
     </test>
     <test id="433" conformance="mandatory" manual="false">
-      <start uri="433/test433.txml"/>
-      <reject code="EVENT004"/>
+      <start uri="433/machine/test433.txml"/>
+      <dep uri="433/schemas/order.json"/>
     </test>
     <test id="434" conformance="mandatory" manual="false">
       <start uri="434/test434.txml"/>

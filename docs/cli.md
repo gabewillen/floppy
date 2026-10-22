@@ -133,9 +133,11 @@ cargo run -p scxml-cli -- compile machine.scx \
 
 `validate`, `compile`, `snapshot run`, and `run` read every JSON Schema file
 an `event:schema` attribute references
-([namespaces/event](../namespaces/event/README.md)) relative to the
-document's directory, with no flag; a file they cannot read, or a reference
-that is not a relative path at or below that directory, is `EVENT004`.
+([namespaces/event](../namespaces/event/README.md)) with no flag, each
+resolved against the document's base URI as a `<script src>` is (its `file:`
+URL; `..` segments resolve, so a file may be outside the document's
+directory); a file they cannot read, or a reference that is not a relative
+path, is `EVENT004`.
 `snapshot run` and `run` load the files of every `<invoke src>` document
 the same way, resolved against that child's own base URI (read from its
 directory for a `file:` child, fetched for an `https:` one), and the host

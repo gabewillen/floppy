@@ -183,8 +183,11 @@ pub fn source(value: &str) -> Source<'_> {
 
 /// Why a reference's resource part cannot name a file relative to the
 /// document, or `None` when it can: a non-empty relative path with no scheme,
-/// authority, query, backslash, absolute path, or `.`/`..` segment.
-/// Repository-namespace resources and other absolute URIs are not supported.
+/// authority, query, backslash, absolute path, or empty segment. Its `.` and
+/// `..` segments resolve against the document's base URI as in any relative
+/// URI (RFC 3986 §5), so it may name a file outside the document's
+/// directory. Repository-namespace resources and other absolute URIs are not
+/// supported.
 #[must_use]
 pub fn resource_problem(resource: &str) -> Option<&'static str> {
     if resource.is_empty() {
@@ -214,13 +217,8 @@ pub fn resource_problem(resource: &str) -> Option<&'static str> {
     if resource.contains('\\') {
         return Some("a URI path separates segments with `/`, not `\\`");
     }
-    if resource
-        .split('/')
-        .any(|segment| segment == ".." || segment == "." || segment.is_empty())
-    {
-        return Some(
-            "the path has an empty, `.`, or `..` segment: a schema file must be named directly, at or below the document's directory",
-        );
+    if resource.split('/').any(str::is_empty) {
+        return Some("the path has an empty segment: a schema file must be named by its path");
     }
     None
 }
