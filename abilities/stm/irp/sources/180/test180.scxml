@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- stm-9: what is sent while it is opening waits, and a read sees every write sent before it. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="stm" type="scxml" src="../../../stm.scx">
+    <param name="database" expr="'/memory/floppy.sqlite'"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <onentry>
+      <send event="bot.ability.memory.stm.record" target="#_stm"><content expr='{"stimulus_name": "environment.sound", "payload": {}}'/></send>
+      <send event="bot.ability.memory.stm.turn" target="#_stm"><content expr='{"id": "t1", "direction": "heard", "speakers": [], "text": "early", "cut": false, "conversation": "listening"}'/></send>
+      <send event="bot.ability.memory.stm.recent" target="#_stm"><content expr="{}"/></send>
+      <send event="bot.ability.memory.stm.recent_turns" target="#_stm"><content expr="{}"/></send>
+    </onentry>
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'stm' &amp;&amp; _event.data.choices.length === 0" target="step1"/>
+  </state>
+  <state id="step1">
+    <transition event="bot.ability.memory.stm.recent.output" cond='JSON.stringify(_event.data.entries.map((e) =&gt; e.stimulus_name)) === "[\"environment.sound\"]"' target="step2"/>
+  </state>
+  <state id="step2">
+    <transition event="bot.ability.memory.stm.recent_turns.output" cond='JSON.stringify(_event.data.turns.map((t) =&gt; t.text)) === "[\"early\"]"' target="step3"/>
+  </state>
+  <state id="step3">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

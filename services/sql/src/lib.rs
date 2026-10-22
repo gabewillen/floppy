@@ -47,9 +47,11 @@
 //!
 //! # The transaction
 //!
-//! The service opens the file (read-write, created when missing) and runs
-//! the statements in order inside one `BEGIN IMMEDIATE` transaction
-//! ([`apply`]) and commits. A statement that returns columns yields its
+//! The service opens the file (read-write, created when missing; a lock
+//! another connection holds is waited for up to [`BUSY_TIMEOUT`], 5 s, the
+//! original's `busy_timeout`, before the transaction fails with
+//! `SQLITE_BUSY`) and runs the statements in order inside one
+//! `BEGIN IMMEDIATE` transaction ([`apply`]) and commits. A statement that returns columns yields its
 //! rows; any other yields the rows it changed. A statement that would end
 //! or widen the transaction (`BEGIN`, `COMMIT`, `ROLLBACK`, `ATTACH`,
 //! `DETACH`) is refused before it runs and fails it. On any failure nothing
@@ -204,6 +206,10 @@ pub const MAX_ROWS: usize = wasm_bound(1024);
 pub const MAX_RESULT_BYTES: usize = wasm_bound(88 * 1024);
 /// Upper bound on a failure message's bytes.
 const MAX_MESSAGE_BYTES: usize = 512;
+/// How long a transaction waits for another connection's lock before it
+/// fails with `SQLITE_BUSY` (the original's engine.py `busy_timeout`), so
+/// concurrent memory invocations queue instead of failing.
+pub const BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// One bind value.
 #[derive(Clone, Debug, PartialEq)]
@@ -681,14 +687,17 @@ fn execute_statements(data: &Data) -> Result<Vec<Statement>, &'static str> {
     }
 }
 
-/// Opens `database` read-write, creating it when missing.
+/// Opens `database` read-write, creating it when missing, waiting up to
+/// [`BUSY_TIMEOUT`] for another connection's lock.
 fn connect(database: &str) -> Result<Connection, Failed> {
-    Ok(Connection::open_with_flags(
+    let connection = Connection::open_with_flags(
         database,
         OpenFlags::SQLITE_OPEN_READ_WRITE
             | OpenFlags::SQLITE_OPEN_CREATE
             | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )?)
+    )?;
+    connection.busy_timeout(BUSY_TIMEOUT)?;
+    Ok(connection)
 }
 
 /// Runs each statement in the open transaction and builds the results.

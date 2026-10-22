@@ -211,7 +211,7 @@ before any dispatch:
 | Check | The original | Proposed SCXML |
 | --- | --- | --- |
 | Remove the ignore | `without_ignore_selections`: the ignore "is not a body/device dispatch target (cognition only)" | Tag `bot.ability.cognition.ignore` with the sending stage's own session id, so the stage sends it to itself and takes it with a targetless transition that logs it. Sent like every other selection, it reaches the one session that takes it. Nothing is filtered and no cond is needed. |
-| Focus legality | `attention_selection_error`: `focus_device` outside the candidates; `clear_focus` for another target or with no focus | `focus_device` is offered only while there are candidates (`focusDeviceEnabled`), and its `device` enum is pinned to them (E7), so scxml.rs's send check refuses any other device (D41). `clear_focus` is offered only by the bot and only while it holds a focus (`clearFocusEnabled`). The body's transition cond `isFocusCandidate` is the original's guard, `_ability_selected_configured_focus_device`. |
+| Focus legality | `attention_selection_error`: `focus_device` outside the candidates (the original's `178094a` removes `clear_focus`) | `focus_device` is offered only while there are candidates (`focusDeviceEnabled`), and its `device` enum is pinned to them (E7), so scxml.rs's send check refuses any other device (D41). The body's transition cond `isFocusCandidate` is the original's guard, `_ability_selected_configured_focus_device`. |
 
 What changes from the original: a refused focus becomes generate's
 `schema-mismatch`, raised when the pinned `device` enum fails, instead of the
@@ -247,7 +247,7 @@ what each address reaches:
 | Sender and tag | `'#_' + s.target` or `#_internal` reaches | Needed |
 | --- | --- | --- |
 | The body, an ability tag (`communication`) | `#_communication`, the body's own invoked child (invoke ids equal the ability keys) | correct |
-| The body, an untagged body event (`bot.focus_device`, `bot.clear_focus`, decision-6 writes the document's own choices untagged) | `#_internal`, the body itself | correct |
+| The body, an untagged body event (`bot.focus_device`, decision-6 writes the document's own choices untagged) | `#_internal`, the body itself | correct |
 | The body, a device tag (the device's reference, J31's `turnOffers`) | `#_<reference>`, but the bot does not invoke devices; the environment does (D105). The device lives at `#_scxml_` + `owned_devices[reference]` (`deviceTarget`, D110) | wrong: `error.communication` |
 | A stage (reasoning inside cognition), an ability tag | `#_communication` names *the stage's own* child (SCXML 6.4: `#_<invokeid>` is a session this session invoked), not the body's ability | wrong |
 | A stage, an untagged body event | `#_internal`, the stage itself, not the body | wrong |
@@ -403,7 +403,7 @@ the closest to the original found, each for the maintainer to review:
 6. **An event several sessions offer reaches none from intuition.** The decision service names a target only for a single offerer (`_single_enabler`); with none, `'#_scxml_' + undefined` fails the send inside intuition's last transition and is lost (the stage still answers handled). The original fails such a selection in `_resolve_target`.
 7. **`<processing:selection_confidence>` reads a number in (0, 1] as a probability.** The original also scales only floats in (0, 1]; the data model cannot tell the integer 1 from 1.0, so 1 is read as certainty (100), as intuition's JavaScript did.
 8. **The `choices` <param> of autonomy and the candidates runner is gone.** It only fed `<decision:route>`; the turn behavior contract now asks a behavior to name each selection's `target` as this turn's `cognition_output` does (session ids are stable: the root is always `session`).
-9. **The body's `bot.focus_device` guard is the turn's candidates at any time.** It used to apply only while routing (`offering`/`routing_selections`); a stage's send arrives during `processing`, so the guard is `focus_candidates.length > 0` and `bot.clear_focus`'s is a focused device, with the `offering` flag gone.
+9. **The body's `bot.focus_device` guard is the turn's candidates at any time.** It used to apply only while routing (`offering`/`routing_selections`); a stage's send arrives during `processing`, so the guard is `focus_candidates.length > 0`, with the `offering` flag gone (`bot.clear_focus` and its guard are gone with the original's `178094a`).
 10. **The turn's output is the handling stage's selections.** Intuition's environment actions are sent by intuition and no longer carried in the output (`bot.processing.completed`, reflection's `cognition_output`, the stored episode), as the original's cognition output is its terminal stage's.
 11. **Logged choices are whole JSON.** `<log expr="choices"/>` (Q12) logs the choices with their schemas, not names; the tests read them with `support::choice_names`.
 12. **Session-id targets degrade the local model (live, 2026-10-18).** With the dispatch tool's `target`s as session ids, `Qwen/Qwen3.8-Flash-Next` put `bot.focus_device`'s `device` beside `event` instead of in `data` in `live_choices`; the same request with the original's actor keys, or with no `target` on that branch, was filled correctly (docs/live-proof.md). Offering actor keys and sending to their sessions would reopen Q3.

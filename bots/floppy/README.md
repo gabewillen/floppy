@@ -32,10 +32,12 @@ Listening, and recorded in the conversation), and the
 [listening](../../abilities/listening/listening.scx), its input ability
 (the original's Listening, phase 6: see Sound below). Each turn the body
 collects the choices (its own `bot.focus_device`, pinned to the turn's
-focus candidates, and `bot.clear_focus` while a device is focused, plus
+focus candidates, plus
 each ability's latest `bot.ability.offers` and the focused device's
 events, each tagged with the session id of its offerer as `target`, made
-model-facing and held to 32 KiB, `<processing:collect_offered_events>`).
+model-facing and held to 32 KiB, `<processing:collect_offered_events>`);
+nothing the bot selects clears the focus: it stays on a device until the
+bot focuses another (the original's R-9).
 As in the original, each stage of the cognition sends its own selections,
 each to the session its target names (`#_scxml_` + target); the schemas
 the services check a selection against (the pinned focus device, each
@@ -181,15 +183,15 @@ to it as well as to the input abilities: it holds the newest view of each
 since the last view of that source it handed on (the `vision` service,
 `byte_identity` by default), and hands a first view, or one that changed by
 at least 0.1, to the body as `bot.ability.cognition.input` whose stimulus
-is `bot.ability.seeing.sight` `{cause, views, participants}`, which starts
-a turn; its offer `bot.ability.seeing.look` is among the turn's choices, and
+is `bot.ability.seeing.sight` `{cause, views, participants}`, which is
+held and perceived like any handoff (D156); its offer `bot.ability.seeing.look` is among the turn's choices, and
 a selected look hands on every fresh view. `image` is a reference to a file
 in the directory the run grants the vision service (`media/frame.png` is
 `frame.png` there). Object detection and description (its `detect` and
 `describe` data) are off by default. Off, the body still invokes seeing,
 but sends it no stimulus, does not take its offers and ignores its ending,
-while activating as while active (decision D189), so the bot behaves as
-before.
+while activating, while the firmware starts and while active (decision
+D189), so the bot behaves as before.
 
 Each event the body emits goes to its environment, which writes it as a
 `log` record labelled with its name, its text the event's data as JSON:
@@ -210,7 +212,9 @@ records, which are not the original events, are labelled `floppy.*`:
 `floppy.output` is the turn's selected events, speaking logs the words as
 `floppy.say`, `floppy.choices` is each turn's choices (JSON, each tagged
 with its offering session's id as `target`), `floppy.focus` each focus
-change, `floppy.deferred` each input deferred during a turn,
+change, `floppy.held` how many percepts are held after each arrival
+during a turn, `floppy.released` what was still held when the bot left
+active (`{count, reason}`),
 `floppy.degraded` the reason the bot degraded, `floppy.stale` a reply to
 an earlier turn, `floppy.diagnostic` why activation failed, and
 `floppy.rejected` an event the body refused.

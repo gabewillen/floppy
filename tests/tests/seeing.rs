@@ -21,7 +21,9 @@
 //! unless its `mode` is `'silent'`, and the first `environment.visual` it
 //! is sent ends it (it logs `double.end`), so the body gets
 //! `done.invoke.seeing` once it is active; with `mode` `'ending'` it ends
-//! right after offering, while the body activates.
+//! right after offering, while the body activates. One test names a
+//! firmware (`firmware_src`) that ends the double before it starts, so
+//! seeing ends while the body waits for the firmware.
 //!
 //! Seeing's own suite (`abilities/seeing/irp`, run by `document_irp.rs`)
 //! covers what seeing does with what it is sent; this covers what the body
@@ -95,6 +97,11 @@ fn layout(seeing: &Seeing, data: &[(&str, &str)]) -> PathBuf {
         body_dir.join("floppy.js"),
     )
     .expect("the body's script is copyable");
+    // The firmware of a bot with none (decision D160).
+    copy_dir(
+        &workspace().join("bots/floppy/firmware"),
+        &body_dir.join("firmware"),
+    );
     let abilities = dir.join("abilities");
     for name in [
         "communication",
@@ -102,6 +109,8 @@ fn layout(seeing: &Seeing, data: &[(&str, &str)]) -> PathBuf {
         "speaking",
         "identity",
         "memory",
+        "stm",
+        "persona",
         "seeing",
     ] {
         support::copy_ability(name, &abilities);
@@ -366,6 +375,72 @@ fn with_seeing_off_its_ending_while_activating_is_ignored() {
         order,
         vec!["double.end", "bot.activated"],
         "seeing ended while the bot activated"
+    );
+    assert!(
+        texts(&finished.all, "bot.activating.failed").is_empty(),
+        "{:?}",
+        finished.all
+    );
+    assert_eq!(
+        texts(&finished.all, "double.input"),
+        vec![r#"1 ignore "after""#]
+    );
+}
+
+/// A firmware for the firmware-starting test: on start it sends seeing,
+/// its sibling (`<body>.seeing`, decision D110), a visual, which ends the
+/// seeing double, and offers nothing 2 s later, so seeing ends while the
+/// body waits for it in `firmware_starting`.
+const ENDING_FIRMWARE: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="starting">
+  <state id="starting">
+    <onentry>
+      <send event="environment.visual" targetexpr="'#_scxml_' + _sessionid.slice(0, -'firmware'.length) + 'seeing'">
+        <content expr="({image: 'media/frame.png', media_type: 'image/png', source: 'camera-1'})"/>
+      </send>
+      <send event="started" delay="2s"/>
+    </onentry>
+    <transition event="started" target="running">
+      <send event="bot.ability.offers" target="#_parent">
+        <param name="ability" expr="'firmware'"/>
+        <param name="choices" expr="[]"/>
+      </send>
+    </transition>
+  </state>
+  <state id="running">
+    <transition event="*"/>
+  </state>
+</scxml>
+"##;
+
+#[test]
+fn with_seeing_off_its_ending_while_the_firmware_starts_is_ignored() {
+    // The abilities are ready (the double offers and waits); the firmware
+    // then ends the double and starts only after it ended: the activation
+    // does not fail.
+    let body = layout(
+        &Seeing::Double("'ready'"),
+        &[("firmware_src", "'seeing_firmware.scx'")],
+    );
+    support::write(
+        body.parent().expect("the body's directory"),
+        "seeing_firmware.scx",
+        ENDING_FIRMWARE,
+    );
+    let mut run = start(&body, &[]);
+    run.until(WAIT, label_is("bot.activated"));
+    run.event("bot.input", &input("ignore", "after"));
+    run.until(WAIT, label_is("bot.processing.completed"));
+    let finished = run.close(WAIT);
+    let order: Vec<String> = logs(&finished.all)
+        .into_iter()
+        .filter(|(label, _)| label == "double.end" || label == "bot.activated")
+        .map(|(label, _)| label)
+        .collect();
+    assert_eq!(
+        order,
+        vec!["double.end", "bot.activated"],
+        "seeing ended while the firmware started"
     );
     assert!(
         texts(&finished.all, "bot.activating.failed").is_empty(),
