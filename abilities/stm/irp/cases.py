@@ -71,7 +71,7 @@ S.case(110, 2, "a record is read back with its projection and envelope; absent e
                               " && _event.data.entries[0].payload.kind === 'knock' && _event.data.entries[0].payload.count === 2"
                               " && _event.data.entries[0].event_id === 'e1' && _event.data.entries[0].source === 'device-a'"
                               " && _event.data.entries[0].target === null && _event.data.entries[0].last_accessed_at === null"
-                              " && /\\+00:00$/.test(_event.data.entries[0].created_at)")],
+                              " && /Z$/.test(_event.data.entries[0].created_at)")],
        params=[DB], clock="wall")
 S.case(111, 2, "records are read newest first, optionally for one stimulus, at most limit.",
        [READY, record("environment.sound"), record("environment.visual"), record("environment.sound", {"n": 3}),
