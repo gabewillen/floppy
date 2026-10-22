@@ -710,12 +710,69 @@ pub fn copy_tree(from: &Path, to: &Path) {
     }
 }
 
-/// The bot invoke of `environments/room/room.scx`, which [`environment`]
+/// The supervised bot region of `environments/room/room.scx`, which [`environment`]
 /// replaces.
-const ROOM_BOT: &str = r#"    <invoke id="floppy" type="scxml" src="../../bots/floppy/floppy.scx">
-      <param name="environment" expr="_sessionid"/>
-      <param name="owned_devices" expr="ownedDevices('floppy')"/>
-    </invoke>"#;
+const ROOM_BOT: &str = r#"    <!-- The bot floppy, supervised. -->
+    <state id="supervising.floppy" initial="running.floppy">
+      <state id="running.floppy" initial="starting.floppy">
+        <onentry>
+          <assign location="participants" expr="joined('floppy')"/>
+        </onentry>
+        <onexit>
+          <cancel sendid="stable.floppy"/>
+        </onexit>
+        <invoke id="floppy" type="scxml" src="../../bots/floppy/floppy.scx">
+          <param name="environment" expr="_sessionid"/>
+          <param name="owned_devices" expr="ownedDevices('floppy')"/>
+          <param name="placed_on" expr="placedOn('floppy')"/>
+        </invoke>
+        <!-- Stable after stable_after_ms from its first bot.activated (the
+             original arms it once, in running, which it enters on
+             activation); a reboot's activation does not re-arm it. -->
+        <state id="starting.floppy">
+          <transition event="room.activated" cond="isFor(_event, 'floppy')" target="serving.floppy"/>
+        </state>
+        <state id="serving.floppy">
+          <onentry>
+            <send id="stable.floppy" event="room.stable" delayexpr="stableDelay()">
+              <param name="participant" expr="'floppy'"/>
+            </send>
+          </onentry>
+        </state>
+        <transition event="room.stable" cond="isFor(_event, 'floppy')">
+          <assign location="attempts.floppy" expr="0"/>
+        </transition>
+        <transition event="room.left" cond="isRestartable(_event, 'floppy')" target="recovering.floppy"/>
+        <transition event="room.left" cond="isFor(_event, 'floppy')" target="left.floppy"/>
+      </state>
+      <state id="recovering.floppy">
+        <transition cond="isWithinBudget('floppy')" target="backoff.floppy">
+          <assign location="attempts.floppy" expr="nextAttempt('floppy')"/>
+        </transition>
+        <transition target="exhausted.floppy">
+          <log label="room.exhausted" expr="exhaustedJson('floppy')"/>
+        </transition>
+      </state>
+      <state id="backoff.floppy">
+        <onentry>
+          <send id="restart.floppy" event="room.restart" delayexpr="backoffDelay('floppy')">
+            <param name="participant" expr="'floppy'"/>
+          </send>
+        </onentry>
+        <onexit>
+          <cancel sendid="restart.floppy"/>
+        </onexit>
+        <!-- A stop while it waits: it is not restarted (the original's
+             backoff goes to stopped). -->
+        <transition event="bot.deactivate" event:schema="../../bots/floppy/schemas/bot.deactivate.json" target="left.floppy"/>
+        <transition event="room.restart" cond="isFor(_event, 'floppy')" target="running.floppy">
+          <log label="room.restarted" expr="restartedJson('floppy')"/>
+          <assign location="activation_failed.floppy" expr="false"/>
+        </transition>
+      </state>
+      <final id="exhausted.floppy"/>
+      <final id="left.floppy"/>
+    </state>"#;
 
 /// Where `environments/room/room.scx` sets its participants on entry.
 const ROOM_PARTICIPANTS: &str = r#"<assign location="participants" expr="['floppy']"/>"#;
@@ -772,7 +829,7 @@ pub fn environment_with_devices(
     );
     let mut extra = String::new();
     for (name, expr) in params {
-        extra.push_str("\n      <param name=\"");
+        extra.push_str("\n          <param name=\"");
         extra.push_str(name);
         extra.push_str("\" expr=\"");
         extra.push_str(expr);
@@ -783,10 +840,17 @@ pub fn environment_with_devices(
         .map(|id| format!(r#"    <invoke id="{id}" type="scxml" src="{id}/{id}.scx"/>"#))
         .collect();
     invokes.extend(bots.iter().map(|id| {
+        // The bot's supervised region: its invoke id, its state and send
+        // ids (`<state>.floppy`), and the ids its expressions name.
         ROOM_BOT
             .replace(r#"id="floppy""#, &format!(r#"id="{id}""#))
-            .replace("ownedDevices('floppy')", &format!("ownedDevices('{id}')"))
-            .replace("\n    </invoke>", &format!("{extra}\n    </invoke>"))
+            .replace(".floppy\"", &format!(".{id}\""))
+            .replace("'floppy'", &format!("'{id}'"))
+            .replace("The bot floppy,", &format!("The bot {id},"))
+            .replace(
+                "\n        </invoke>",
+                &format!("{extra}\n        </invoke>"),
+            )
     }));
     let ids: Vec<String> = devices
         .iter()

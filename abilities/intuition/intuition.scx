@@ -1,88 +1,106 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Intuition stage (the reference abilities/cognition/intuition with the
-  TypeSafe processor): the fast System 1 pick, made by the decision service
+  floppy's Intuition stage (the reference abilities/cognition/decision, its
+  decision layer, with the decision processor; the reference's
+  abilities/cognition/intuition is the later tier that answers in words, the
+  hand_ons tier intuition): the fast System 1 pick, made by the decision service
   (never by a free-text model) over the turn's choices, with the original's
   self-tuning confidence gate. The cognition (abilities/cognition/cognition.scx)
   invokes it once per turn after autonomy left the turn unhandled.
 
     deciding (an invoked decision service) -> done
 
-  Processor (the original providers/typesafe Processor.process, the decision
+  Processor (the reference providers/decision Processor.process, the decision
   service's kind predicate): the turn's choices, the <param> choices (the
   body's assembled snapshot choices: its own enabled event:schema
   transitions and each ability's latest offers, tagged with the offering
   ability as target; the reference collect_offered_events), go to the
-  decision service with the stimulus, which never offers the deliberate
-  handoff bot.ability.reasoning.input and makes the state document {turn:
-  {envelope: {name}, data}} (the original _stimulus_document) with the
-  stimulus data as evidence. It asks one batch over them plus its pass criterion __unhandled__, filling
-  each event's required data from the stimulus data's value, else the
-  schema's enum; an event it cannot fill is not offered, so a reply that
-  needs free text goes on to reasoning (user answer, 2026-10-08). When the
-  pass criterion wins (declined) or nothing could be filled (no-candidates)
-  the product is empty: the turn escalates with the original's reason
-  empty_product and the tuner observes nothing. Otherwise the service
-  returns every groundable event, each with its data and its own
-  probability (decision.selected): the original's selections with their
-  per-event confidences.
+  decision service, which never offers the deliberate handoff
+  bot.ability.reasoning.input. Its state is {turn: T}, T the model-facing
+  text of the stimulus alone (<cognition:model_facing_content>, the
+  reference D-R-50: what reasoning reads, never the raw envelope); the
+  stimulus goes too, but only to ground each event's required data from its
+  data's value, else the schema's enum; an event it cannot fill is not
+  offered, so a reply that needs free text goes on to a later tier (user
+  answer, 2026-10-08). The service adds one pass criterion per tier of
+  hand_ons (the <param>; reasoning alone until the cognition composes a
+  chat tier, R-23). When a pass wins (declined) or nothing could be filled
+  (no-candidates) the product is empty: the turn escalates with the
+  original's reason empty_product, a pass naming its tier as hand_to, and
+  the tuner observes nothing. Otherwise the service returns only the chosen
+  event, with its data and its probability as its confidence
+  (decision.selected, the reference D-R-28).
+
+  Context fit (the reference ContextFit, D-R-36 and D-R-45): with a
+  max_context_tokens <param>, the service cuts the decision's instructions
+  to fit floor(max_context_tokens * bytes_per_token) bytes of request; its
+  done data reports the request's bytes and the tokens the backend counted,
+  and the stage keeps the fewest bytes a token any answer showed in
+  bytes_per_token (a <param>, 3 to start), which goes back in <donedata> for
+  the cognition to keep across turns.
 
   Confidence (the original's ConfidenceTuner, 0-100 scale): the tuner state
   {mean, var, n}, the confidence_tuner datum, comes in as a <param> and
   goes back in <donedata>, so it lives in the cognition across turns. The
-  turn's confidence is the minimum of its selections' confidences, each its
-  probability normalized to a whole 0-100 number
-  (<processing:selection_confidence>, the original's selection_confidence
-  and normalize_confidence). <intuition:observe> observes it first (a null
-  confidence is not observed), then <intuition:escalate> writes whether it
-  is below the updated threshold (the original's defaults: the floor 35
-  during the warmup of 8 observations, then max(floor / 2, mean - k_sigma *
-  std); EMA alpha 0.08, variance floor 100), and the turn escalates when it
-  is (the original's _tune_confidence, observe then should_escalate).
+  turn's confidence is its selection's probability normalized to a whole
+  0-100 number (<processing:selection_confidence>, the original's
+  selection_confidence and normalize_confidence). <intuition:observe>
+  observes it first (a null confidence is not observed), then
+  <intuition:escalate> writes whether it is below the updated threshold
+  (the original's defaults: the floor 35 during the warmup of 8
+  observations, then max(floor / 2, mean - k_sigma * std); EMA alpha 0.08,
+  variance floor 100), and the turn escalates when it is (the original's
+  _tune_confidence, observe then should_escalate).
 
   Classification (the original _classify_activity, its confidence_gate off, the
-  default): a confident product is handled, every selection {event, data,
+  default): a confident product is handled, its selection {event, data,
   target} (escalation reason none). A low-confidence product
   (low_confidence), or one holding bot.ability.reasoning.input
-  (deliberative_input), is unhandled and escalates to reasoning. The
-  decision timer is deciding.after (floppy's own bound; the original's
-  intuition has none).
+  (deliberative_input), is unhandled and escalates. The decision timer is
+  deciding.after (decision_timeout_ms, a <param> the cognition sets from
+  its bounds; the original's intuition has none).
 
   Dispatch (the original _dispatch_selections_activity,
-  cognition.types.dispatch_selected_events): either way the stage sends
-  every selection, before it answers, to its target, the session that
-  offers it (the decision service names each selection's only offerer, the
-  original's _single_enabler): an escalating product's are the original's
-  environment actions, which it dispatches before reasoning runs; the
-  ignore goes to the cognition, which only logs it, and the deliberate
-  handoff is never offered. The decision service has checked each
+  cognition.types.dispatch_selected_events): the stage sends, before it
+  answers, what it acted on to its target, the session that offers it (the
+  decision service names a selection's only offerer, the original's
+  _single_enabler): a handled product's selection, the ignore included
+  (it goes to the cognition, which only logs it), and of an escalating
+  product only the environment actions, never the ignore or the deliberate
+  handoff (the reference without_ignore_selections), which the original
+  dispatches before the next tier runs. What it sent is acted in every
+  <donedata> ([] when nothing), so the cognition knows it as a fact of the
+  turn (the reference ActedData). The decision service has checked the
   selection's data against its event's schema (the pinned focus device
-  among them), so nothing is refused at the send; the original's
-  re-ask with a rejection as feedback (routing_rejection) has nothing to
-  retry.
+  among them), so nothing is refused at the send; the original's re-ask
+  with a rejection as feedback (routing_rejection) has nothing to retry.
 
   Output: <donedata>, received by the cognition as done.invoke.intuition:
 
-    {turn, handled: true, selected: [{event, data, target}], reason: "none", confidence_tuner}
-    {turn, handled: false, reason, confidence_tuner}  (escalate to reasoning)
-    {turn, handled: false, failed: true, reason, confidence_tuner}
+    {turn, handled: true, selected: [{event, data, target}], acted, reason: "none", confidence_tuner, bytes_per_token}
+    {turn, handled: false, reason, hand_to?, acted, confidence_tuner, bytes_per_token}  (escalate)
+    {turn, handled: false, failed: true, reason, acted, confidence_tuner, bytes_per_token}
 
-  A decision.failed, error.*, or no answer within decision_timeout_ms fails
-  the stage (the cognition answers the turn with bot.ability.failed); the
-  cognition's hop timeout bounds the whole stage too.
+  The stage answers once the service has ended (done.invoke.decision, whose
+  data teaches bytes_per_token) after its one event. A decision.failed,
+  error.*, or no answer within decision_timeout_ms fails the stage (the
+  cognition answers the turn with bot.ability.failed); the cognition's hop
+  timeout bounds the whole stage too.
 
-  Bindings: the intuition and processing namespace packages and the
-  decision service package, resolved from their repository URIs; env scopes TYPESAFE_API_KEY and TYPESAFE_BASE_URL to the
-  service's <invoke> (without a key it answers decision.failed
-  unconfigured). An invoked service's events are not checked against
-  event:schema (scxml.rs checks only events between SCXML sessions): the
-  decision service validates every selection's data against the choices'
-  schema for it before returning it, and its own events are shape-checked
-  by cond (Object(...) reads a non-object as {}).
+  Bindings: the intuition, processing and cognition namespace packages and
+  the decision service package, resolved from their repository URIs; env
+  scopes TYPESAFE_API_KEY and TYPESAFE_BASE_URL to the service's <invoke>
+  (without either it answers decision.failed unconfigured; a base URL
+  without a key is asked keyless). An invoked service's events are not
+  checked against event:schema (scxml.rs checks only events between SCXML
+  sessions): the decision service validates the selection's data against
+  the choices' schema for it before returning it, and its own events are
+  shape-checked by cond (Object(...) reads a non-object as {}).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition"
        xmlns:intuition="https://github.com/stateforward/floppy/namespaces/intuition"
        xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
        version="1.0" datamodel="ecmascript" name="intuition" initial="deciding">
@@ -93,19 +111,27 @@
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
     <data id="choices" expr="[]"/>
-    <!-- The bot's environment (decision D106), in the decision's
-         instructions. -->
+    <!-- The bot's environment (decision D106): the decision's situation once
+         the cognition's situation renderer gives it one (D150). -->
     <data id="environment" expr="null"/>
     <data id="confidence_tuner" expr="({mean: 70, var: 100, n: 0})"/>
     <data id="decision_timeout_ms" expr="20000"/>
-    <data id="instructions" expr="'You decide what a small companion robot does with one stimulus it observed. Choose the offered event the robot should take for it. Abstain when none of them fits, so slower reasoning handles it.'"/>
-    <!-- The decision in flight. -->
+    <!-- The later tiers a pass may hand the turn to (R-23). -->
+    <data id="hand_ons" expr="['reasoning']"/>
+    <!-- The decision model's context fit (null sends every request
+         whole) and the bytes a token learned so far. -->
+    <data id="max_context_tokens" expr="null"/>
+    <data id="bytes_per_token" expr="3"/>
+    <!-- The decision in flight: the stimulus's model-facing text. -->
+    <data id="stimulus_content" expr="null"/>
     <data id="confidence" expr="null"/>
     <data id="escalate" expr="false"/>
     <data id="decision_timer" expr="null"/>
     <data id="result" expr="null"/>
     <data id="failed_code" expr="null"/>
-    <!-- The selection being sent (the <foreach> item). -->
+    <!-- What the stage sent, and the selection being sent (the <foreach>
+         item). -->
+    <data id="acted" expr="[]"/>
     <data id="s" expr="null"/>
   </datamodel>
   <script src="intuition.js"/>
@@ -113,6 +139,8 @@
   <state id="deciding">
     <onentry>
       <send idlocation="decision_timer" event="deciding.after" delayexpr="decisionTimeoutDelay()"/>
+      <cognition:model_facing_content location="stimulus_content" stimulus="stimulus"
+                                      prior_episodes="[]" standing_directives="[]"/>
     </onentry>
     <onexit>
       <cancel sendidexpr="decision_timer"/>
@@ -121,14 +149,17 @@
             env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL">
       <param name="kind" expr="'predicate'"/>
       <param name="choices" expr="choices"/>
+      <param name="state" expr="decisionState()"/>
       <param name="stimulus" expr="stimulus"/>
-      <param name="instructions" expr="decisionInstructions()"/>
+      <param name="hand_ons" expr="hand_ons"/>
+      <param name="max_context_tokens" expr="max_context_tokens"/>
+      <param name="bytes_per_token" expr="bytes_per_token"/>
     </invoke>
 
-    <!-- The decision service's own events. Every groundable event, each
-         with its own confidence: observe their minimum, then escalate
-         when it is below the updated threshold. -->
-    <transition event="decision.selected" cond="hasSelections(_event)" target="done">
+    <!-- The decision service's own events: the stage answers once the
+         service has ended. The chosen event, with its confidence: observe
+         it, then escalate when it is below the updated threshold. -->
+    <transition event="decision.selected" cond="hasSelections(_event)">
       <processing:selection_confidence location="confidence" selections="_event.data.selections"/>
       <intuition:observe location="confidence_tuner" confidence="confidence"/>
       <intuition:escalate location="escalate" confidence="confidence" tuner="confidence_tuner"/>
@@ -140,28 +171,39 @@
       <else/>
         <assign location="result" expr="selectionResult(_event)"/>
       </if>
-      <foreach array="_event.data.selections" item="s">
+      <assign location="acted" expr="actedSelections(_event)"/>
+      <assign location="result.acted" expr="acted"/>
+      <foreach array="acted" item="s">
         <send eventexpr="s.event" targetexpr="'#_scxml_' + s.target">
           <content expr="selectionData(s)"/>
         </send>
       </foreach>
     </transition>
-    <transition event="decision.abstain" cond="isAbstainReason(_event)" target="done">
+    <transition event="decision.abstain" cond="isAbstainReason(_event)">
       <log label="intuition" expr="abstainedLog(_event)"/>
-      <assign location="result" expr="abstainedResult()"/>
+      <assign location="result" expr="abstainedResult(_event)"/>
     </transition>
-    <transition event="decision.failed" target="done">
+    <transition event="decision.failed">
       <assign location="failed_code" expr="failedCode(_event)"/>
       <assign location="result" expr="decisionFailedResult()"/>
     </transition>
-    <transition event="deciding.after" target="done">
-      <assign location="result" expr="timedOutResult()"/>
-    </transition>
-    <transition event="error.*" target="done">
-      <assign location="result" expr="couldNotRunResult(_event)"/>
+    <!-- The service's done data: the request's bytes and the tokens the
+         backend counted teach the bytes a token. -->
+    <transition event="done.invoke.decision" cond="hasResult()" target="done">
+      <assign location="bytes_per_token" expr="learnedBytesPerToken(_event)"/>
+      <assign location="result.bytes_per_token" expr="bytes_per_token"/>
     </transition>
     <!-- The service ended without an answer: the timer decides. -->
     <transition event="done.invoke.decision"/>
+    <transition event="deciding.after" cond="hasResult()" target="done"/>
+    <transition event="deciding.after" target="done">
+      <assign location="result" expr="timedOutResult()"/>
+    </transition>
+    <!-- Once the decision has answered, an error is not the decision's. -->
+    <transition event="error.*" cond="hasResult()"/>
+    <transition event="error.*" target="done">
+      <assign location="result" expr="couldNotRunResult(_event)"/>
+    </transition>
   </state>
 
   <final id="done">

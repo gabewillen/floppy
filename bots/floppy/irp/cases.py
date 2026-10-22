@@ -83,7 +83,7 @@ S.statement(3, "`bot.deactivate` leaves `live` and ends the session in `inactive
 S.statement(4, "`bot.reboot` `{reason}` re-enters `live`, and the body passes it on to its parent: the abilities are invoked again and the bot waits for their offers again (and sends `bot.activated` again) before it takes input; the turn count goes on.")
 S.statement(5, "In `unfocused` or `focused`, `bot.input` or a `bot.ability.cognition.input` `{stimulus}` handoff starts a `processing` turn, counted from 1; the cognition's `bot.ability.cognition.output` or `bot.ability.failed` for the current turn ends it (back to attention) with `bot.processing.completed` or `bot.processing.failed` to the parent, and one for another turn is dropped.")
 S.statement(6, "`bot.processing.timed_out` for the current turn moves to `cancelling_processing` and is passed on to the parent; the acknowledgement (`bot.ability.cognition.cancelled` or `bot.ability.processing.cancelled` for the turn) ends the turn with `bot.processing.failed`; `bot.processing.cancel.timed_out` for it degrades the bot: it sends `bot.processing.cancel.timed_out`, `bot.processing.failed` and `bot.degraded` `{stage: \"processing_cancel\"}`, and the session ends in the final state `degraded` with `{reason: \"turn <n>: the cognition did not acknowledge its cancel\"}`. A timer for another turn is not taken.")
-S.statement(7, "An input that arrives during a turn waits and starts the next turn when the bot returns to attention.")
+S.statement(7, "An input that arrives during a turn is held, and the turn's end (`turn_ended`) starts the next turn at once with what is held: one percept is that turn's stimulus as itself, several are perceived together as `bot.perceived`.")
 S.statement(8, "An ability that ends while the bot is active (`done.invoke.<id>`) degrades it: the session ends in `degraded` with `{reason: \"the ability <id> ended while active\"}`.")
 
 case(100, 1, "activated by every ability's offers, the bot takes a turn: probe(1) degrades it at turn 1.",
@@ -142,7 +142,7 @@ case(152, 6, "a processing timer for another turn is not taken: the turn ends by
      ACTIVE + [bot_input(), turn_event("bot.processing.timed_out", 2), turn_event("bot.processing.cancel.timed_out", 1),
                turn_event("bot.ability.failed", 1, message="late"), for_turn("bot.processing.failed", 1)] + probe(2))
 
-case(160, 7, "an input during a turn waits and becomes turn 2 when the turn ends.",
+case(160, 7, "an input during a turn is held and becomes turn 2 when the turn ends.",
      ACTIVE + [bot_input("first"), bot_input("second"), turn_event("bot.ability.failed", 1, message="done"),
                turn_event("bot.processing.timed_out", 2), turn_event("bot.processing.cancel.timed_out", 2),
                for_turn("bot.processing.failed", 1)] + degraded(2))

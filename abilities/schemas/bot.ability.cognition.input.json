@@ -123,7 +123,7 @@
       "type": "array"
     },
     "environment": {
-      "description": "The bot's environment this turn, from its own perspective and in the original's layout, which the cognition passes to reasoning (its prompt renders it as the environment block) and intuition (in its decision instructions): the environment's id, and the bot itself, its state and its own attributes, owned_devices holding each held device it could read this turn under its reference (its reference, session id, state and data model) [floppy field].",
+      "description": "The bot's environment this turn, from its own perspective and in the original's layout, which the cognition passes to reasoning (its prompt renders it as the environment block) and intuition (in its decision instructions): the environment's id, and the bot itself, its state and its own attributes, owned_devices holding each held device it could read this turn under its reference (its reference, session id, state and data model, and the object it sits on), and firmware, the bot's firmware read the same way when its owner wrote one [floppy field].",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -146,6 +146,32 @@
             "state": {
               "type": "string",
               "minLength": 1
+            },
+            "firmware": {
+              "description": "The bot's firmware (the original's Firmware), read this turn, when its owner wrote one: rendered as <firmware ref id state>, as a device is.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "ref",
+                "id",
+                "state",
+                "attributes"
+              ],
+              "properties": {
+                "ref": {
+                  "const": "firmware"
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "state": {
+                  "type": "string"
+                },
+                "attributes": {
+                  "type": "object"
+                }
+              }
             },
             "owned_devices": {
               "type": "object",
@@ -172,6 +198,11 @@
                   },
                   "attributes": {
                     "type": "object"
+                  },
+                  "on": {
+                    "description": "The id of the object the device sits on (the original's Placement.on: a desk, a table, a shelf), when it rests on one.",
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_-]{0,62}$"
                   }
                 }
               }
@@ -206,6 +237,11 @@
           {
             "ref": "person-42",
             "role": "target"
+          },
+          {
+            "own": true,
+            "ref": "voice:3f2a9c",
+            "role": "source"
           }
         ],
         "properties": {
@@ -233,6 +269,68 @@
             ],
             "title": "Role",
             "type": "string"
+          },
+          "own": {
+            "default": false,
+            "description": "True when the producer knows this participant is the bot itself, for example the bot's own voice heard back or the voice it spoke with. Stamped only by that producer; never inferred.",
+            "examples": [
+              false,
+              true
+            ],
+            "title": "Own",
+            "type": "boolean"
+          },
+          "resembles": {
+            "default": [],
+            "description": "For an identity its producer made just now (nobody it knew): the known identities it resembles, best first, at most 3. Stamped only by that producer; never a link.",
+            "examples": [
+              [
+                {
+                  "ref": "voice:7b1e04",
+                  "similarity": 0.42
+                }
+              ]
+            ],
+            "items": {
+              "additionalProperties": false,
+              "description": "A known identity this new one resembles: its ref and how similar the two are (-1..1). Perception data only: it links nothing, and it is never a print.",
+              "examples": [
+                {
+                  "ref": "voice:7b1e04",
+                  "similarity": 0.42
+                }
+              ],
+              "properties": {
+                "ref": {
+                  "description": "The ref of the known identity, as its producer stamps it.",
+                  "examples": [
+                    "voice:7b1e04"
+                  ],
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "title": "Ref",
+                  "type": "string"
+                },
+                "similarity": {
+                  "description": "How similar the two are, -1..1; higher is more alike.",
+                  "examples": [
+                    0.42
+                  ],
+                  "maximum": 1.0,
+                  "minimum": -1.0,
+                  "title": "Similarity",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "ref",
+                "similarity"
+              ],
+              "type": "object"
+            },
+            "maxItems": 3,
+            "title": "Resembles",
+            "type": "array"
           }
         },
         "required": [

@@ -55,8 +55,9 @@ struct Received {
 }
 
 /// The mock's answer to one `system_one` request: the selection gives the
-/// event `target` names (`/ship`, `/cancel`, `/hold`, `/abstain` for the
-/// reserved label) 0.8 and shares 0.2 among the rest; every other question
+/// event `target` names (`/ship`, `/cancel`, `/hold`, `/abstain` for a
+/// choice's pass criterion, `/reasoning` for a predicate's pass to
+/// reasoning) 0.8 and shares 0.2 among the rest; every other question
 /// gives its first label (in the body's canonical order) 1.0. `/stray`
 /// answers a label the selection does not offer.
 fn answer(target: &str, body: &[u8]) -> Option<String> {
@@ -65,6 +66,7 @@ fn answer(target: &str, body: &[u8]) -> Option<String> {
         "/cancel/v1/systemone" => "order.cancel",
         "/hold/v1/systemone" => "order.hold",
         "/abstain/v1/systemone" => "__unhandled__",
+        "/reasoning/v1/systemone" => "__reasoning__",
         "/stray/v1/systemone" => "order.refund",
         "/labels/v1/systemone" => "complaint",
         _ => return None,
@@ -447,47 +449,106 @@ fn choice_fires_another_transition_when_the_backend_prefers_it() {
     );
 }
 
-/// `predicate` (the original's `TypeSafe` processor): every groundable event comes
-/// back in one `decision.selected`, each with its data and its own
-/// probability in the selection, and nothing is fired.
-#[test]
-fn predicate_returns_every_groundable_event_with_its_own_probability() {
-    let mock = Mock::start();
-    let env_path = env_file("predicate", &format!("{}/ship", mock.origin), &BOTH);
-    let document = document(
+/// A predicate order machine: the decision service's events and its done
+/// data are logged, and the machine ends when the service does.
+fn predicate_document(params: &str) -> String {
+    document(&format!(
         r#"<param name="kind" expr="'predicate'"/>
-      <param name="state" expr="order"/>"#,
-    )
+      <param name="state" expr="order"/>
+      {params}"#
+    ))
     .replace(
         r#"<transition event="decision.abstain" target="abstained">"#,
-        r#"<transition event="decision.selected" target="abstained">
+        r#"<transition event="decision.selected">
       <log label="data" expr="JSON.stringify(_event.data)"/>
     </transition>
-    <transition event="decision.abstain" target="abstained">"#,
+    <transition event="done.invoke.decide" target="abstained">
+      <log label="done" expr="JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="decision.abstain">"#,
+    )
+}
+
+/// `predicate` (the reference decision processor): only the chosen event
+/// comes back in `decision.selected`, with its data and its probability in
+/// the selection (D-R-28), and nothing is fired; the service's done data
+/// reports the request's bytes and the backend's usage.
+#[test]
+fn predicate_returns_only_the_chosen_event_with_its_probability() {
+    let mock = Mock::start();
+    let env_path = env_file("predicate", &format!("{}/ship", mock.origin), &BOTH);
+    let finished = open(
+        &args(&env_path),
+        &predicate_document(""),
+        &[],
+        Duration::from_secs(60),
     );
-    let finished = open(&args(&env_path), &document, &[], Duration::from_secs(60));
     // The mock gives order.ship 0.8 and shares 0.2 among the other three
     // labels; each member question answers its first label.
     let records = logs(&finished.records);
-    let (label, text) = records.first().expect("a data log");
-    assert_eq!(label, "data", "{records:?}");
-    let data: Json = serde_json::from_str(text).expect("JSON");
-    let selections = data["selections"].as_array().expect("selections");
-    let events: Vec<&str> = selections
-        .iter()
-        .map(|selection| selection["event"].as_str().expect("an event"))
-        .collect();
-    assert_eq!(events, ["order.ship", "order.cancel", "order.hold"]);
+    let [(label, text), (done, done_text), (last, outcome)] = records.as_slice() else {
+        panic!("a data log, the done data and the final state: {records:?}");
+    };
     assert_eq!(
-        selections[0]["data"],
-        json!({"carrier": "fedex", "sku": "A-1"})
+        (
+            label.as_str(),
+            done.as_str(),
+            last.as_str(),
+            outcome.as_str()
+        ),
+        ("data", "done", "final", "abstained")
     );
-    assert_eq!(selections[1]["data"], json!({"reason": "customer"}));
-    assert_eq!(selections[2]["data"], json!({}));
-    assert_eq!(selections[0]["confidence"], json!(0.8));
-    let other = selections[1]["confidence"].as_f64().expect("a number");
-    assert!((other - 0.2 / 3.0).abs() < 1e-12, "{data}");
-    assert_eq!(mock.received().len(), 1);
+    let data: Json = serde_json::from_str(text).expect("JSON");
+    assert_eq!(
+        data,
+        json!({"selections": [
+            {"event": "order.ship", "data": {"carrier": "fedex", "sku": "A-1"}, "confidence": 0.8},
+        ]})
+    );
+    let received = mock.received();
+    assert_eq!(received.len(), 1);
+    let body: Json = serde_json::from_slice(&received[0].body).expect("the body is JSON");
+    assert_eq!(
+        body["questions"]["selection"]["criteria"]["__reasoning__"],
+        json!("None of these fits: it needs thought, so think it through first, with reasoning."),
+        "a predicate passes to reasoning by default"
+    );
+    let done: Json = serde_json::from_str(done_text).expect("JSON");
+    assert_eq!(
+        done,
+        json!({
+            "request_bytes": received[0].body.len(),
+            "usage": {"input_tokens": 10, "output_tokens": 1},
+        })
+    );
+}
+
+/// A predicate's pass names the tier it hands the turn to.
+#[test]
+fn a_predicate_pass_hands_the_turn_to_its_tier() {
+    let mock = Mock::start();
+    let env_path = env_file("reasoning", &format!("{}/reasoning", mock.origin), &BOTH);
+    let finished = open(
+        &args(&env_path),
+        &predicate_document(r#"<param name="hand_ons" expr="['intuition', 'reasoning']"/>"#),
+        &[],
+        Duration::from_secs(60),
+    );
+    let records = logs(&finished.records);
+    assert_eq!(
+        records.first(),
+        Some(&(
+            "data".to_owned(),
+            r#"{"confidence":0.8,"hand_to":"reasoning","reason":"declined"}"#.to_owned()
+        )),
+        "{records:?}"
+    );
+    let received = mock.received();
+    let body: Json = serde_json::from_slice(&received[0].body).expect("the body is JSON");
+    assert_eq!(
+        body["questions"]["selection"]["criteria"]["__intuition__"],
+        json!("None of these fits: answer it in words now, with intuition.")
+    );
 }
 
 #[test]
@@ -515,14 +576,33 @@ fn an_answer_outside_the_choices_returns_decision_failed_and_no_event() {
 }
 
 #[test]
-fn without_a_granted_key_nothing_is_sent() {
-    let (records, mock) = run("ship", "nokey", &["TYPESAFE_BASE_URL"]);
+fn without_a_held_key_a_held_base_url_is_asked_keyless() {
+    let (records, mock) = run("ship", "keyless", &["TYPESAFE_BASE_URL"]);
+    assert_eq!(
+        logs(&records),
+        labelled(&[
+            ("data", r#"{"carrier":"fedex","sku":"A-1"}"#),
+            ("final", "shipped"),
+        ]),
+        "{records:?}"
+    );
+    let received = mock.received();
+    assert_eq!(received.len(), 1, "exactly one request");
+    assert_eq!(
+        received[0].authorization, None,
+        "no authorization header without a key"
+    );
+}
+
+#[test]
+fn without_a_key_or_a_base_url_nothing_is_sent() {
+    let (records, mock) = run("ship", "unconfigured", &[]);
     assert_eq!(
         logs(&records),
         labelled(&[("code", "unconfigured"), ("final", "failed")]),
         "{records:?}"
     );
-    assert!(mock.received().is_empty(), "no request without a key");
+    assert!(mock.received().is_empty(), "no request");
 }
 
 #[test]

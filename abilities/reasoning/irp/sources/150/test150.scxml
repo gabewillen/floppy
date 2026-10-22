@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- reasoning-6: a focus_device and a clear_focus are sent to their target, in order, before the turn ends. -->
+<!-- reasoning-6: a focus_device and a device action are sent to their target, in order, before the turn ends. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="reasoning" type="scxml" src="../../../reasoning.scx">
@@ -7,7 +7,7 @@
     <param name="stimulus" expr='{"event": "bot.input", "data": {"observation": {"event": "text", "data": "say hi"}}, "source": "gabe"}'/>
     <param name="focus" expr="null"/>
     <param name="focus_candidates" expr="[]"/>
-    <param name="choices" expr='[{"event": "bot.ability.cognition.ignore", "schema": {"type": "object", "properties": {}, "additionalProperties": false}, "description": "Ignore the stimulus.", "target": "session.reasoning"}, {"event": "bot.ability.communication.respond", "schema": {"type": "object", "properties": {"text": {"type": "string", "minLength": 1}}, "required": ["text"], "additionalProperties": false}, "description": "Say something.", "target": "session"}, {"event": "bot.focus_device", "schema": {"type": "object", "properties": {"device": {"type": "string", "minLength": 1}}, "required": ["device"], "additionalProperties": false}, "description": "Look at a device.", "target": "session"}, {"event": "bot.clear_focus", "schema": {"type": "object", "properties": {}, "additionalProperties": false}, "description": "Stop looking at the device.", "target": "session"}]'/>
+    <param name="choices" expr='[{"event": "bot.ability.cognition.ignore", "schema": {"type": "object", "properties": {}, "additionalProperties": false}, "description": "Ignore the stimulus.", "target": "session.reasoning"}, {"event": "bot.ability.communication.respond", "schema": {"type": "object", "properties": {"text": {"type": "string", "minLength": 1}}, "required": ["text"], "additionalProperties": false}, "description": "Say something.", "target": "session"}, {"event": "bot.focus_device", "schema": {"type": "object", "properties": {"device": {"type": "string", "minLength": 1}}, "required": ["device"], "additionalProperties": false}, "description": "Look at a device.", "target": "session"}, {"event": "lamp.on", "schema": {"type": "object", "properties": {}, "additionalProperties": false}, "description": "Turn the lamp on.", "target": "session"}]'/>
     <param name="model" expr="'mock-model'"/>
   </invoke>
   <state id="boot">
@@ -18,10 +18,10 @@
     <transition event="bot.focus_device" cond="_event.data.device === 'lamp'" target="step1"/>
   </state>
   <state id="step1">
-    <transition event="bot.clear_focus" target="step2"/>
+    <transition event="lamp.on" target="step2"/>
   </state>
   <state id="step2">
-    <transition event="done.invoke.reasoning" cond="_event.data.handled === true &amp;&amp; _event.data.selected.length === 2 &amp;&amp; _event.data.selected[0].event === 'bot.focus_device' &amp;&amp; _event.data.selected[1].event === 'bot.clear_focus'" target="step3"/>
+    <transition event="done.invoke.reasoning" cond="_event.data.handled === true &amp;&amp; _event.data.selected.length === 2 &amp;&amp; _event.data.selected[0].event === 'bot.focus_device' &amp;&amp; _event.data.selected[1].event === 'lamp.on'" target="step3"/>
   </state>
   <state id="step3">
     <transition target="pass"/>

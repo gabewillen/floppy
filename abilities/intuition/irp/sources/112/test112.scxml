@@ -18,7 +18,7 @@
     <transition event="bot.say" target="step1"/>
   </state>
   <state id="step1">
-    <transition event="done.invoke.intuition" cond="_event.data.turn === 1 &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.reason === &quot;none&quot; &amp;&amp; typeof _event.data.confidence_tuner === 'object' &amp;&amp; JSON.stringify(_event.data.selected) === &quot;[{\&quot;data\&quot;:{},\&quot;event\&quot;:\&quot;bot.say\&quot;,\&quot;target\&quot;:\&quot;session\&quot;}]&quot; &amp;&amp; _event.data.confidence_tuner.n === 21" target="step2"/>
+    <transition event="done.invoke.intuition" cond="_event.data.turn === 1 &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.reason === &quot;none&quot; &amp;&amp; typeof _event.data.confidence_tuner === 'object' &amp;&amp; Array.isArray(_event.data.acted) &amp;&amp; typeof _event.data.bytes_per_token === 'number' &amp;&amp; JSON.stringify(_event.data.selected) === &quot;[{\&quot;data\&quot;:{},\&quot;event\&quot;:\&quot;bot.say\&quot;,\&quot;target\&quot;:\&quot;session\&quot;}]&quot; &amp;&amp; _event.data.confidence_tuner.n === 21" target="step2"/>
   </state>
   <state id="step2">
     <transition target="pass"/>
