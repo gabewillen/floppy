@@ -1,0 +1,119 @@
+[
+ {
+  "data": "{\"kind\": \"knock\", \"source\": \"device-a\"}",
+  "projection": {
+   "kind": "knock",
+   "source": "device-a"
+  }
+ },
+ {
+  "data": "{\"audio\": \"media/hey.wav\", \"media_type\": \"audio/wav\", \"sample_rate_hz\": 16000, \"channels\": 1}",
+  "projection": {
+   "audio": "media/hey.wav",
+   "media_type": "audio/wav",
+   "sample_rate_hz": 16000,
+   "channels": 1
+  }
+ },
+ {
+  "data": "{\"long\": \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\", \"edge\": \"yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\", \"accented\": \"éééééééééééééééééééééééééééééééééééééééé\", \"nested\": {\"a\": 1}, \"list\": [1], \"none\": null, \"\": \"empty\"}",
+  "projection": {
+   "edge": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+   "accented": "éééééééééééééééééééééééééééééééééééééééé"
+  }
+ },
+ {
+  "data": "{\"flag\": true, \"ratio\": 0.5, \"count\": -3}",
+  "projection": {
+   "flag": true,
+   "ratio": 0.5,
+   "count": -3
+  }
+ },
+ {
+  "data": "{\"f00\": 0, \"f01\": 1, \"f02\": 2, \"f03\": 3, \"f04\": 4, \"f05\": 5, \"f06\": 6, \"f07\": 7, \"f08\": 8, \"f09\": 9, \"f10\": 10, \"f11\": 11, \"f12\": 12, \"f13\": 13, \"f14\": 14, \"f15\": 15, \"f16\": 16, \"f17\": 17, \"f18\": 18, \"f19\": 19}",
+  "projection": {
+   "f00": 0,
+   "f01": 1,
+   "f02": 2,
+   "f03": 3,
+   "f04": 4,
+   "f05": 5,
+   "f06": 6,
+   "f07": 7,
+   "f08": 8,
+   "f09": 9,
+   "f10": 10,
+   "f11": 11,
+   "f12": 12,
+   "f13": 13,
+   "f14": 14,
+   "f15": 15
+  }
+ },
+ {
+  "data": "{\"drop0\": [0], \"drop1\": [1], \"drop2\": [2], \"drop3\": [3], \"drop4\": [4], \"k0\": 0, \"k1\": 1, \"k2\": 2, \"k3\": 3, \"k4\": 4, \"k5\": 5, \"k6\": 6, \"k7\": 7, \"k8\": 8, \"k9\": 9, \"k10\": 10, \"k11\": 11, \"k12\": 12, \"k13\": 13, \"k14\": 14, \"k15\": 15, \"k16\": 16, \"k17\": 17}",
+  "projection": {
+   "k0": 0,
+   "k1": 1,
+   "k2": 2,
+   "k3": 3,
+   "k4": 4,
+   "k5": 5,
+   "k6": 6,
+   "k7": 7,
+   "k8": 8,
+   "k9": 9,
+   "k10": 10,
+   "k11": 11,
+   "k12": 12,
+   "k13": 13,
+   "k14": 14,
+   "k15": 15
+  }
+ },
+ {
+  "data": "{\"z\": 1, \"a\": 2, \"m\": \"x\"}",
+  "projection": {
+   "z": 1,
+   "a": 2,
+   "m": "x"
+  }
+ },
+ {
+  "data": "\"a short string\"",
+  "projection": {
+   "value": "a short string"
+  }
+ },
+ {
+  "data": "\"yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\"",
+  "projection": {}
+ },
+ {
+  "data": "7",
+  "projection": {
+   "value": 7
+  }
+ },
+ {
+  "data": "2.5",
+  "projection": {
+   "value": 2.5
+  }
+ },
+ {
+  "data": "true",
+  "projection": {
+   "value": true
+  }
+ },
+ {
+  "data": "null",
+  "projection": {}
+ },
+ {
+  "data": "[1, 2]",
+  "projection": {}
+ }
+]

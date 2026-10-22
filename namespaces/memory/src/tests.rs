@@ -301,3 +301,192 @@ fn a_failed_assignment_or_host_failure_is_reported() {
         Err(Failure::Host("fatal"))
     );
 }
+
+/// What `<memory:cut_at_word>` assigns for `words`.
+fn cut(words: &Data) -> Result<Json, &'static str> {
+    let mut host = FakeHost {
+        values: BTreeMap::from([("words".to_owned(), words.clone())]),
+        ..FakeHost::default()
+    };
+    match execute(
+        "cut_at_word",
+        &[attr("location", "turn"), attr("words", "words")],
+        &[],
+        &mut host,
+    ) {
+        Ok(Executed::Handled) => match host.assigned.as_slice() {
+            [(location, Data::JsonObject(text))] if location == "turn" => {
+                Ok(serde_json::from_str(text).expect("the cut words are JSON"))
+            }
+            other => panic!("unexpected assignment {other:?}"),
+        },
+        Err(Failure::Execution(detail)) => Err(detail),
+        other => panic!("unexpected {other:?}"),
+    }
+}
+
+/// What `<memory:stm_projection>` assigns for `data`.
+fn projected(data: &Data) -> Result<Json, &'static str> {
+    let mut host = FakeHost {
+        values: BTreeMap::from([("data".to_owned(), data.clone())]),
+        ..FakeHost::default()
+    };
+    match execute(
+        "stm_projection",
+        &[attr("location", "payload"), attr("data", "data")],
+        &[],
+        &mut host,
+    ) {
+        Ok(Executed::Handled) => match host.assigned.as_slice() {
+            [(location, Data::JsonObject(text))] if location == "payload" => {
+                Ok(serde_json::from_str(text).expect("the projection is JSON"))
+            }
+            other => panic!("unexpected assignment {other:?}"),
+        },
+        Err(Failure::Execution(detail)) => Err(detail),
+        other => panic!("unexpected {other:?}"),
+    }
+}
+
+/// The original's own `_cut_at_word` (`testdata/cut_at_word.json`, written by
+/// running it on each case's words): the same text and the same `cut`.
+#[test]
+fn cut_at_word_cuts_as_the_original_cuts() {
+    let cases: Json = serde_json::from_str(include_str!("testdata/cut_at_word.json"))
+        .expect("the cases are JSON");
+    for case in cases.as_array().expect("an array of cases") {
+        let words = case["words"].as_str().expect("the words are a string");
+        let turn = cut(&Data::String(words.to_owned())).expect("the words are cut");
+        assert_eq!(turn["text"], case["text"], "{words:?}");
+        assert_eq!(turn["cut"], case["cut"], "{words:?}");
+        let text = turn["text"].as_str().expect("the text is a string");
+        assert!(text.len() <= MAX_TURN_TEXT_BYTES);
+    }
+}
+
+#[test]
+fn malformed_cut_at_word_raises_error_execution_and_assigns_nothing() {
+    assert_eq!(
+        cut(&Data::Null),
+        Err("memory:cut_at_word words are not a string")
+    );
+    assert_eq!(
+        cut(&data(&json!(["a"]))),
+        Err("memory:cut_at_word words are not a string")
+    );
+    let mut host = FakeHost::default();
+    assert_eq!(
+        execution(execute(
+            "cut_at_word",
+            &[attr("location", "turn")],
+            &[],
+            &mut host
+        )),
+        "memory:cut_at_word requires words"
+    );
+    assert_eq!(
+        execution(execute(
+            "cut_at_word",
+            &[
+                attr("location", "turn"),
+                attr("words", "words"),
+                attr("bytes", "8")
+            ],
+            &[],
+            &mut host
+        )),
+        "memory:cut_at_word takes only the location and words attributes"
+    );
+    assert_eq!(
+        execution(execute(
+            "cut_at_word",
+            &[attr("location", "turn"), attr("words", "words")],
+            &[Content::Start, Content::End],
+            &mut host
+        )),
+        "memory:cut_at_word holds no content"
+    );
+    assert_eq!(
+        execution(execute(
+            "cut_at_word",
+            &[attr("location", "turn"), attr("words", "nowhere")],
+            &[],
+            &mut host
+        )),
+        "memory:cut_at_word words did not evaluate"
+    );
+    assert!(host.assigned.is_empty());
+}
+
+/// The original's own `_payload_projection` (`testdata/stm_projection.json`,
+/// written by running it on each case's data, kept as JSON text so an
+/// object's fields keep their order).
+#[test]
+fn stm_projection_projects_as_the_original_projects() {
+    let cases: Json = serde_json::from_str(include_str!("testdata/stm_projection.json"))
+        .expect("the cases are JSON");
+    for case in cases.as_array().expect("an array of cases") {
+        let text = case["data"].as_str().expect("the data is JSON text");
+        let value: Json = serde_json::from_str(text).expect("the data parses");
+        let input = match value {
+            Json::Object(_) => Data::JsonObject(text.to_owned()),
+            other => data(&other),
+        };
+        assert_eq!(projected(&input), Ok(case["projection"].clone()), "{text}");
+    }
+}
+
+#[test]
+fn stm_projection_keeps_the_first_fields_in_their_order() {
+    let fields: Vec<String> = (0..20).rev().map(|i| format!("\"k{i:02}\":{i}")).collect();
+    let projection = projected(&Data::JsonObject(format!("{{{}}}", fields.join(","))))
+        .expect("the object is projected");
+    assert_eq!(
+        projection.as_object().expect("an object").len(),
+        MAX_PROJECTION_FIELDS
+    );
+    assert!(projection.get("k19").is_some() && projection.get("k04").is_some());
+    assert!(projection.get("k03").is_none());
+    assert_eq!(
+        projected(&Data::JsonObject(r#"{"a":1,"a":"x"}"#.to_owned())),
+        Ok(json!({"a": "x"}))
+    );
+    assert_eq!(projected(&Data::Undefined), Ok(json!({})));
+}
+
+#[test]
+fn malformed_stm_projection_raises_error_execution_and_assigns_nothing() {
+    assert_eq!(
+        projected(&Data::JsonObject("[1]".to_owned())),
+        Err("memory:stm_projection data is not a JSON object")
+    );
+    let mut host = FakeHost::default();
+    assert_eq!(
+        execution(execute(
+            "stm_projection",
+            &[attr("data", "data")],
+            &[],
+            &mut host
+        )),
+        "memory:stm_projection requires a location"
+    );
+    assert_eq!(
+        execution(execute(
+            "stm_projection",
+            &[attr("location", "p"), attr("data", "")],
+            &[],
+            &mut host
+        )),
+        "memory:stm_projection has an empty attribute"
+    );
+    assert_eq!(
+        execution(execute(
+            "stm_projection",
+            &[attr("location", "p"), attr("data", "nowhere")],
+            &[],
+            &mut host
+        )),
+        "memory:stm_projection data did not evaluate"
+    );
+    assert!(host.assigned.is_empty());
+}

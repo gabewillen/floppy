@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.memory.stm.record",
+  "additionalProperties": false,
+  "description": "Short-term memory record. stimulus_name is the admitted event name; payload carries only bounded identifier-like scalar projections of the stimulus data.",
+  "examples": [
+    {
+      "event_id": "turn-1",
+      "payload": {
+        "kind": "knock",
+        "source": "device-a"
+      },
+      "source": "device-a",
+      "stimulus_name": "environment.sound"
+    }
+  ],
+  "properties": {
+    "stimulus_name": {
+      "description": "Name of the admitted stimulus event (e.g. environment.sound).",
+      "examples": [
+        "environment.sound"
+      ],
+      "minLength": 1,
+      "title": "Stimulus Name",
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "maxLength": 40,
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      },
+      "description": "Bounded scalar projection of the stimulus data: top-level identifier-like fields only. Media bytes, long strings, and nested structures are omitted.",
+      "examples": [
+        {
+          "kind": "knock"
+        }
+      ],
+      "propertyNames": {
+        "minLength": 1
+      },
+      "title": "Payload",
+      "type": "object"
+    },
+    "event_id": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Envelope id of the stimulus event.",
+      "title": "Event Id"
+    },
+    "source": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Envelope source address of the stimulus event.",
+      "title": "Source"
+    },
+    "target": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Envelope target address of the stimulus event.",
+      "title": "Target"
+    }
+  },
+  "required": [
+    "stimulus_name"
+  ],
+  "type": "object"
+}

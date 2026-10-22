@@ -243,7 +243,8 @@ D33 to D43.
   answers itself at once through `#_internal` with
   the original's event and logs `<log label="memory" expr="'absent'">`. Either
   way the step ends with the original's event (`bot.ability.reasoning.recalled`,
-  `.retained`, `bot.ability.identity.recalled`, `.adopted`), so the
+  `.retained`, `bot.ability.identity.recalled`, `.adopted`,
+  `bot.ability.persona.recalled`, `.revised`), so the
   topology does not change (decision D44).
 - **Speaking.** Phase 4 spoke in text mode (decision D38); phase 6
   speaks audio (decision D59, [Phase 6 conventions](#phase-6-conventions)),
@@ -290,6 +291,7 @@ D33 to D43.
 | `speaking.py` Speaking | `abilities/speaking/speaking.scx` (`idle` → `encoding` → `playing` → `recording`, decision D59) | ability `.scx` child |
 | `vocal/speech/encoding.py` SpeechEncoding | `abilities/vocal/vocal.scx`, speaking's child, invoking `services/speech` `encode` | ability `.scx` child and service |
 | `identity/identity.py` Identity, `identity/recognition.py` SpeechNameRecognizer | `abilities/identity/identity.scx`, one of the body's input abilities: each `environment.sound` is decoded by `abilities/speech_decoding/speech_decoding.scx` and the transcript matched by `<identity:hears_name>`; text input is matched too (D43); adoption and recall through `abilities/memory/memory.scx` (decisions D43, D44) | ability `.scx` child |
+| `persona/persona.py` Persona, `persona/trait.py` Traits, `persona/description.py` Description | `abilities/persona/persona.scx`, the body's child: the owner's traits are its `traits` `<param>`, the self-written description is recalled and revised as a self-fact through `abilities/memory/memory.scx`, and `bot.ability.persona.output` goes to the body on waking and after each revision (parity gap 8) | ability `.scx` child |
 | Reflection, Routines | `abilities/reflection/reflection.scx` (revising through `bots/builder/builder.scx`), `abilities/routines/routines.scx` over the chain `abilities/routines_runner/routines_runner.scx`; long-lived children of every cognition (D80) | ability `.scx` child |
 | Behaviors (Starlark) | builder-built `.scx` documents | generated `.scx` |
 | Memory and its providers | `abilities/memory/memory.scx` over `services/sql` (SQLite, phase 3) or `services/pgsql` (Postgres, phase 7), migrated by `abilities/migration/migration.scx` with `<migration:plan>` | ability `.scx` child + service |
@@ -300,7 +302,8 @@ D33 to D43.
 | `vision` VisualClassification, `reading` Reading | `abilities/vision/vision.scx` (reading's child), `abilities/reading/reading.scx` (image decoding through `services/generate`); nothing invokes reading, as in the original | ability `.scx` child and service |
 | `conversation/turn_detector` TurnDetector | `abilities/turn_detector/turn_detector.scx`, which the conversation invokes once per source of each input (its `turn_exchange`; decisions D76 to D79, [conventions](#turn-detector-conventions)) | ability `.scx` child |
 | Conversation's voice-centroid participant matching, devices | not ported: each embedding source is its own participant (D79), and devices are out of scope | open |
-| `learning` Learning; memory's ShortTermMemory, LongTermMemory, MemoryConsolidation, AssociativeMemory, MemoryClassification, MemoryGeneration; the body's short-term stimulus register (`stm_memory`); `language/text` TextGeneration | not ported: none is composed by the original's Bot by default (Learning and the memory variants are optional, the body's `stm_memory` defaults to none, and TextGeneration serves only host turns). floppy's memory is the base Memory; its schema still creates `bot_stm_memory` | open |
+| `memory/stm.py` StmMemory, the body's short-term register (`bot.register`) of admitted stimuli and of heard and said turns | `abilities/stm/stm.scx`, the body's long-lived child `stm` over the memory ability (`bot_stm_memory`, `bot_stm_turn`); the body builds each admitted stimulus's record with `<memory:stm_projection>`, and a turn's producer cuts its words with `<memory:cut_at_word>` (no child writes turns yet) | ability `.scx` child |
+| `learning` Learning; memory's ShortTermMemory, LongTermMemory, MemoryConsolidation, AssociativeMemory, MemoryClassification, MemoryGeneration; `language/text` TextGeneration | not ported: none is composed by the original's Bot by default (Learning and the memory variants are optional, and TextGeneration serves only host turns). floppy's memory is the base Memory | open |
 | payload validators | `event:schema` on the receiving transition plus a short correlation cond | `event:schema` |
 
 ### Builder output

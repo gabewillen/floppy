@@ -14,15 +14,18 @@
     <onentry>
       <send event="bot.ability.identity.adopt" target="#_identity"><content expr='{"name": "Floppy", "reason": "asked"}'/></send>
     </onentry>
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'identity' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === 'bot.ability.identity.adopt' &amp;&amp; _event.data.choices[0].target === undefined &amp;&amp; _event.data.choices[0].schema.required[0] === 'name' &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[0].schema['$schema'] === undefined &amp;&amp; _event.data.choices[0].schema.properties.reason.examples === undefined &amp;&amp; typeof _event.data.choices[0].description === 'string'" target="step2"/>
+    <transition event="bot.ability.identity.named" cond="_event.data.name === 'Floppy'" target="step2"/>
   </state>
   <state id="step2">
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'identity' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === 'bot.ability.identity.adopt' &amp;&amp; _event.data.choices[0].target === undefined &amp;&amp; _event.data.choices[0].schema.required[0] === 'name' &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[0].schema['$schema'] === undefined &amp;&amp; _event.data.choices[0].schema.properties.reason.examples === undefined &amp;&amp; typeof _event.data.choices[0].description === 'string'" target="step3"/>
+  </state>
+  <state id="step3">
     <onentry>
       <send event="bot.ability.communication.input" target="#_identity"><content expr='{"source_ids": ["gabe"], "target_ids": ["floppy"], "content": "hi floppy", "content_type": "text/plain"}'/></send>
     </onentry>
-    <transition event="bot.ability.cognition.input" cond="_event.data.stimulus.event === 'bot.ability.identity.addressed' &amp;&amp; _event.data.stimulus.data.name === &quot;Floppy&quot; &amp;&amp; _event.data.stimulus.source === 'identity'" target="step3"/>
+    <transition event="bot.ability.cognition.input" cond="_event.data.stimulus.event === 'bot.ability.identity.addressed' &amp;&amp; _event.data.stimulus.data.name === &quot;Floppy&quot; &amp;&amp; _event.data.stimulus.source === 'identity'" target="step4"/>
   </state>
-  <state id="step3">
+  <state id="step4">
     <transition target="pass"/>
   </state>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
