@@ -114,14 +114,26 @@ function isResponseHopTimeout(_event) {
   return _event.sendid === hop_timer && _event.data.operation === operation;
 }
 
-// Another copy of the response in hand.
-// A respond for a finished response, or another copy of the one in hand.
+// A respond for a finished response, or another copy of the one in hand
+// or of one held.
 function isLateResponse(_event) {
-  return isClosedResponse(_event) || isCurrentResponse(_event);
+  return isClosedResponse(_event) || isCurrentResponse(_event) || isHeldResponse(_event);
 }
 
+// Another copy of the response in hand.
 function isCurrentResponse(_event) {
   return !!_event.sendid && _event.sendid === response_id;
+}
+
+// Another copy of a held response: the first copy is kept, where the
+// original replaces it with the newer one.
+function isHeldResponse(_event) {
+  return !!_event.sendid && held_ids.indexOf(_event.sendid) >= 0;
+}
+
+// The held ids with this respond's, when its sender named one.
+function heldIds(_event) {
+  return _event.sendid ? held_ids.concat([_event.sendid]) : held_ids;
 }
 
 function canHold() {

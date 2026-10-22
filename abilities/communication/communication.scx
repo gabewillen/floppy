@@ -51,8 +51,8 @@
   back, in order, on the return to active. A response's id is its
   respond's sendid (none when the sender named none); leaving responding
   retires it into the last closed_responses_bound (16) finished ids, and a
-  respond for a finished id, or another copy of the one in hand, is
-  dropped and logged (communication.late). Other responses that arrive
+  respond for a finished id, or another copy of the one in hand or of a
+  held one (held_ids), is dropped and logged (communication.late). Other responses that arrive
   while one is in hand are held by <event:defer/>, up to
   held_responses_bound (16); past that one is refused with
   bot.ability.communication.failed (the original's _hold_response). Held
@@ -123,6 +123,7 @@
     <data id="closed_responses" expr="[]"/>
     <data id="held_responses_bound" expr="16"/>
     <data id="held" expr="0"/>
+    <data id="held_ids" expr="[]"/>
     <data id="failure" expr="null"/>
     <!-- The offers. -->
     <data id="offering" expr="false"/>
@@ -292,6 +293,7 @@
         <assign location="closed_responses" expr="closedResponses()"/>
         <assign location="response_id" expr="null"/>
         <assign location="held" expr="0"/>
+        <assign location="held_ids" expr="[]"/>
       </onexit>
       <transition event="bot.ability.speaking.output" event:schema="../schemas/bot.ability.speaking.output.json" target="active">
         <send event="bot.ability.speaking.output" target="#_parent">
@@ -311,7 +313,8 @@
         </send>
       </transition>
       <!-- A late copy of a finished response, or another copy of this one,
-           is dropped; another response is held, up to held_responses. -->
+           is dropped, as is another copy of a held one; another response is
+           held, up to held_responses_bound. -->
       <transition event="bot.ability.communication.respond" event:schema="../schemas/bot.ability.communication.respond.json"
                   cond="isLateResponse(_event)">
         <log label="communication.late" expr="_event.sendid"/>
@@ -320,6 +323,7 @@
                   cond="canHold()">
         <event:defer/>
         <assign location="held" expr="held + 1"/>
+        <assign location="held_ids" expr="heldIds(_event)"/>
         <log label="communication.deferred" expr="_event.name"/>
       </transition>
       <transition event="bot.ability.communication.respond" event:schema="../schemas/bot.ability.communication.respond.json">

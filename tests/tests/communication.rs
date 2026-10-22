@@ -852,10 +852,8 @@ fn the_conversation_commits_each_message_into_its_exchange() {
     // texts are committed joined, each distinct text once (D79).
     assert_eq!(first["content"], json!("hello"));
     assert_eq!(first["provenance"]["turn_ref"], json!("input-1:turn:alice"));
-    assert_eq!(
-        second["provenance"]["turn_ref"],
-        json!("input-2:turn:alice")
-    );
+    let second_turn = &second["provenance"]["turn_ref"];
+    assert_eq!(second_turn, &json!("input-2:turn:alice"));
     assert_eq!(third["content"], json!({"b": 1, "a": [true, null]}));
     assert_eq!(third["provenance"]["turn_ref"], json!("input-3:turn:bob"));
     // An append's provenance keeps its id, source and target.

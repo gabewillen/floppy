@@ -65,7 +65,8 @@
   Utterances: an utterance's id is its input's sendid (none when the
   sender named none). Leaving speaking retires it into the last
   finished_utterances_bound (16) ids, and an input for a finished id, or
-  another copy of the one in hand, is dropped and logged (speaking.late).
+  another copy of the one in hand or of a held one (held_ids), is dropped
+  and logged (speaking.late).
   Input for another utterance that arrives while one is in hand is held by
   <event:defer/> (scxml.rs namespaces/event), up to held_utterances_bound
   (16), and past that is refused with bot.ability.failed (the original's
@@ -120,6 +121,7 @@
     <data id="finished_utterances" expr="[]"/>
     <data id="held_utterances_bound" expr="16"/>
     <data id="held" expr="0"/>
+    <data id="held_ids" expr="[]"/>
   </datamodel>
   <script src="speaking.js"/>
 
@@ -157,10 +159,12 @@
       <assign location="finished_utterances" expr="finishedUtterances()"/>
       <assign location="utterance_id" expr="null"/>
       <assign location="held" expr="0"/>
+      <assign location="held_ids" expr="[]"/>
     </onexit>
-    <!-- A late copy of a finished utterance, or another copy of this one,
-         is dropped; another utterance waits its turn (the original's _hold),
-         up to held_utterances_bound, and past that is refused. -->
+    <!-- A late copy of a finished utterance, or another copy of this one or
+         of a held one, is dropped; another utterance waits its turn (the
+         original's _hold), up to held_utterances_bound, and past that is
+         refused. -->
     <transition event="bot.ability.speaking.input" event:schema="../schemas/bot.ability.speaking.input.json"
                 cond="isLateUtterance(_event)">
       <log label="speaking.late" expr="_event.sendid"/>
@@ -169,6 +173,7 @@
                 cond="canHold()">
       <event:defer/>
       <assign location="held" expr="held + 1"/>
+      <assign location="held_ids" expr="heldIds(_event)"/>
       <log label="speaking.deferred" expr="_event.name"/>
     </transition>
     <transition event="bot.ability.speaking.input" event:schema="../schemas/bot.ability.speaking.input.json">

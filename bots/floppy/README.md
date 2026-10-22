@@ -21,7 +21,7 @@ stores the turn's one episode) and [routines](../../abilities/routines/routines.
 (the ACTIVE persistent behaviors, whose ticks become turns) running beside
 the turns, and the [communication](../../abilities/communication/communication.scx),
 which holds the [conversation](../../abilities/conversation/conversation.scx) (the
-committed text history, one relationship per participant set; each input
+current exchange of committed messages, one relationship per participant set; each input
 is one turn per source, assembled by a [turn detector](../../abilities/turn_detector/turn_detector.scx);
 it recalls and remembers a relationship's memories, and matching an
 embedding source to an earlier participant's voice is not ported) and
@@ -45,7 +45,7 @@ cognition, which only logs it. A selected
 `bot.ability.communication.respond` is said through speaking and recorded
 in the conversation. Input addressed to the bot as
 `bot.ability.communication.input` is admitted into the conversation, whose
-updated history is the next turn's stimulus; so is a turn's selected
+updated exchange is the next turn's stimulus; so is a turn's selected
 `bot.ability.communication.input` (the original's SpeechHeard seed admits heard
 speech this way), which names no target, so the body sends it to itself. The full Contract, Topology, Bindings, and Proof sections come
 with the phase's saved live examples.

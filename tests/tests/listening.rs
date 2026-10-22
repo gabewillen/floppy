@@ -887,6 +887,120 @@ fn an_opening_voice_nobody_identifies_in_time_is_heard_unidentified() {
     }
 }
 
+/// Diarized segments nobody identifies in time are each handed off with
+/// no source and no embedding (the original's `_identify_nobody`).
+#[test]
+fn diarized_segments_nobody_identifies_in_time_are_heard_unidentified() {
+    let harness = layout(&[(
+        "interpretation/interpretation.scx",
+        &[
+            ("speech_decoder", "false"),
+            ("diarizer", "true"),
+            ("voice_classifier", "true"),
+            ("stage_timeout_ms", "10000"),
+            ("recognize_timeout_ms", "500"),
+        ],
+    )]);
+    let (mut run, backend) = started(
+        &harness,
+        "diarized_segments_nobody_identifies_in_time_are_heard_unidentified",
+        &[
+            ("hang.wav", spoken_wav("hang")),
+            ("silence.wav", silent_wav()),
+        ],
+    );
+    let voiced = sound("hang.wav", &json!({}));
+    utter(&mut run, &voiced, &sound("silence.wav", &json!({})));
+    run.until(WAIT, label_is("harness.speech"));
+    let finished = close(
+        run,
+        "diarized_segments_nobody_identifies_in_time_are_heard_unidentified",
+    );
+    assert_eq!(backend.received_at("/voice/embed").len(), 1);
+    assert_eq!(
+        texts(&finished.all, "interpretation.unidentified"),
+        vec!["1 segment(s) unidentified after 10500 ms"]
+    );
+    assert!(texts(&finished.all, "harness.failed").is_empty());
+    assert_eq!(
+        json_texts(&finished.all, "harness.speech"),
+        vec![segment(0, "hang", &voiced, None)]
+    );
+}
+
+/// A voice identification that stands in for the real one and answers no
+/// embedding: the real one answers one per segment or fails, so only a
+/// child that answers `embeddings: []` reaches this branch.
+const NO_EMBEDDING_IDENTIFICATION: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="voice_identification" initial="applied">
+  <datamodel>
+    <data id="segments" expr="null"/>
+    <data id="audio" expr="null"/>
+    <data id="sample_rate_hz" expr="null"/>
+    <data id="channels" expr="null"/>
+    <data id="start_seconds" expr="null"/>
+    <data id="end_seconds" expr="null"/>
+    <data id="output" expr="null"/>
+  </datamodel>
+  <final id="applied">
+    <donedata>
+      <content expr="({segments: [], embeddings: []})"/>
+    </donedata>
+  </final>
+</scxml>
+"#;
+
+/// An opening voice identified with no embedding opens the window with
+/// nobody identified, and no stage fails (the original's
+/// `_identify_nobody`).
+#[test]
+fn an_opening_voice_with_no_embedding_is_heard_unidentified() {
+    let harness = layout(&[(
+        "interpretation/interpretation.scx",
+        &[("speech_decoder", "false"), ("voice_classifier", "true")],
+    )]);
+    std::fs::write(
+        harness
+            .parent()
+            .expect("the harness has a directory")
+            .join("voice_identification/voice_identification.scx"),
+        NO_EMBEDDING_IDENTIFICATION,
+    )
+    .expect("the stand-in is writable");
+    let (mut run, backend) = started(
+        &harness,
+        "an_opening_voice_with_no_embedding_is_heard_unidentified",
+        &[("hi.wav", spoken_wav("hi")), ("silence.wav", silent_wav())],
+    );
+    utter(
+        &mut run,
+        &sound("hi.wav", &json!({})),
+        &sound("silence.wav", &json!({})),
+    );
+    run.until(WAIT, |record| {
+        label_is("harness.speech")(record)
+            && record["text"]
+                .as_str()
+                .is_some_and(|t| t.contains("floppy-sound-2"))
+    });
+    let finished = close(
+        run,
+        "an_opening_voice_with_no_embedding_is_heard_unidentified",
+    );
+    assert!(backend.received_at("/voice/embed").is_empty());
+    assert_eq!(
+        texts(&finished.all, "interpretation.unidentified"),
+        vec!["no embedding for the opening voice"]
+    );
+    assert!(texts(&finished.all, "harness.failed").is_empty());
+    let speech = json_texts(&finished.all, "harness.speech");
+    assert_eq!(speech.len(), 2, "{speech:?}");
+    for product in &speech {
+        assert_eq!(product["source_ids"], json!([]), "{product}");
+        assert_eq!(product["voice_embedding"], Json::Null, "{product}");
+    }
+}
+
 #[test]
 fn a_negative_product_threshold_degrades_the_listening() {
     let harness = layout(&[(

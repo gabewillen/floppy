@@ -34,14 +34,26 @@ function utteranceId(_event) {
 
 // speaking
 
-// Another copy of the utterance in hand.
-// An input for a finished utterance, or another copy of the one in hand.
+// An input for a finished utterance, or another copy of the one in hand
+// or of one held.
 function isLateUtterance(_event) {
-  return isFinishedUtterance(_event) || isCurrentUtterance(_event);
+  return isFinishedUtterance(_event) || isCurrentUtterance(_event) || isHeldUtterance(_event);
 }
 
+// Another copy of the utterance in hand.
 function isCurrentUtterance(_event) {
   return !!_event.sendid && _event.sendid === utterance_id;
+}
+
+// Another copy of a held utterance: the first copy is kept, where the
+// original replaces it with the newer one.
+function isHeldUtterance(_event) {
+  return !!_event.sendid && held_ids.indexOf(_event.sendid) >= 0;
+}
+
+// The held ids with this input's, when its sender named one.
+function heldIds(_event) {
+  return _event.sendid ? held_ids.concat([_event.sendid]) : held_ids;
 }
 
 function canHold() {

@@ -96,7 +96,10 @@
     </test>
   </assert>
   <assert id="communication-11" specnum="11" specid="#communication-11">
-    <![CDATA[A response's id is its respond's sendid (none when the sender names none). A finished response's id is kept among the last `closed_responses_bound` (16) finished ids, and a respond with a finished id, or another copy of the response in hand, is dropped (logged `communication.late`): nothing is said or answered for it (the original's `_is_late_response`).]]>
+    <![CDATA[A response's id is its respond's sendid (none when the sender names none). A finished response's id is kept among the last `closed_responses_bound` (16) finished ids, and a respond with a finished id, or another copy of the response in hand or of a held one, is dropped (logged `communication.late`): nothing is said or answered for it (the original's `_is_late_response`), and a re-sent held id takes no second slot toward `held_responses_bound` (the first copy is kept, where the original keeps the newer).]]>
+    <test id="202" conformance="mandatory" manual="false">
+      <start uri="202/test202.scxml"/>
+    </test>
     <test id="200" conformance="mandatory" manual="false">
       <start uri="200/test200.scxml"/>
     </test>

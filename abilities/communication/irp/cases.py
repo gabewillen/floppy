@@ -120,7 +120,7 @@ S.statement(7, "A speaking failure answers `bot.ability.communication.failed` `{
 S.statement(8, "A response is bounded by `response_timeout_ms` (36000 by default, a `<param>`: speaking's 30 s encoding bound plus the original's 6 s): when it passes before speaking answers, the body gets `bot.ability.communication.failed` `{message: \"Speaking response timed out.\"}` and the communication is active again; speaking's late answer is not forwarded. `encoding_timeout_ms` (30000 by default, a `<param>`; decision D98) is passed to speaking as its encoding bound.")
 S.statement(9, "Responses that arrive while a response is in hand, and input that arrives before it is active, are deferred and taken, in order, once it is active.")
 S.statement(10, "`bot.ability.communication.activate` `{}` is taken only in inactive: in active it does nothing.")
-S.statement(11, "A response's id is its respond's sendid (none when the sender names none). A finished response's id is kept among the last `closed_responses_bound` (16) finished ids, and a respond with a finished id, or another copy of the response in hand, is dropped (logged `communication.late`): nothing is said or answered for it (the original's `_is_late_response`).")
+S.statement(11, "A response's id is its respond's sendid (none when the sender names none). A finished response's id is kept among the last `closed_responses_bound` (16) finished ids, and a respond with a finished id, or another copy of the response in hand or of a held one, is dropped (logged `communication.late`): nothing is said or answered for it (the original's `_is_late_response`), and a re-sent held id takes no second slot toward `held_responses_bound` (the first copy is kept, where the original keeps the newer).")
 S.statement(12, "At most `held_responses_bound` (16, a `<param>`) responses are held while one is in hand; past that a respond is refused with `bot.ability.communication.failed` `{message: \"Communication is holding too many responses; this one is refused.\"}` (the original's `_hold_response`), and the held ones are still said, in order.")
 
 # The cases that say a response wait on the real speech service; its first
@@ -222,6 +222,10 @@ S.case(180, 9, "a response that arrives while one is in hand is said after it.",
        [READY, send(RESPOND, respond("first")), send(RESPOND, respond("second")),
         *spoken(1, "first"), READY, *spoken(2, "second"), READY],
        params=SPEECH_BOUNDS, backend=[AUDIO], clock="wall")
+S.case(202, 11, "another copy of a held response is dropped and takes no slot: at held_responses_bound 1 nothing is refused.",
+       [READY, respond_as("r-1", "first"), respond_as("r-2", "second"), respond_as("r-2", "second"),
+        *spoken(1, "first"), READY, *spoken(2, "second"), READY],
+       params=SPEECH_BOUNDS + [("held_responses_bound", "1")], backend=[AUDIO], clock="wall")
 S.case(181, 9, "input sent before the communication is active is taken once it is.",
        [send(INPUT, said("early")), READY,
         expect(HANDOFF, "_event.data.stimulus.data.messages[0].content === 'early'")],

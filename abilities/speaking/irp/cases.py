@@ -106,7 +106,7 @@ S.statement(5, "An utterance that says nothing (its words, joined, blank; a part
 S.statement(6, "A vocal failure (its `bot.ability.failed`) answers the parent with `bot.ability.failed` `{message}` carrying the vocal's message, and back to `idle`, where the next input is spoken.")
 S.statement(7, "Encoding is bounded by `encoding_timeout_ms` (30 s by default, decision D98; the original's 5 s is shorter than Gemini's unstreamed synthesis of a sentence): its timer answers `bot.ability.failed` `{message: \"Speech encoding timed out.\"}` and returns to `idle`.")
 S.statement(8, "Input for another utterance that arrives outside `idle` is held (`<event:defer/>`), up to `held_utterances_bound` (16, a `<param>`), and taken, in order, on the return to `idle`; past that bound it is refused with `bot.ability.failed` `{message: \"Speaking is holding too many utterances; this one is refused.\"}` (the original's `_hold`).")
-S.statement(9, "An utterance's id is its input's sendid (none when the sender names none). A finished utterance's id is kept among the last `finished_utterances_bound` (16) finished ids, and an input with a finished id, or another copy of the utterance in hand, is dropped (logged `speaking.late`): nothing is said or answered for it (the original's `_is_new_input`).")
+S.statement(9, "An utterance's id is its input's sendid (none when the sender names none). A finished utterance's id is kept among the last `finished_utterances_bound` (16) finished ids, and an input with a finished id, or another copy of the utterance in hand or of a held one, is dropped (logged `speaking.late`): nothing is said or answered for it (the original's `_is_new_input`), and a re-sent held id takes no second slot toward `held_utterances_bound` (the first copy is kept, where the original keeps the newer).")
 
 S.case(100, 1, "the speaking offers nothing on start.", [READY])
 S.case(101, 1, "the speaking offers again after an utterance.",
@@ -172,3 +172,7 @@ S.case(181, 9, "another copy of the utterance in hand is dropped, not held.",
        [READY, say_as("u-1", "first"), say_as("u-1", "first"), say_as("u-2", "second")]
        + spoken("first", 1) + spoken("second", 2),
        params=PATIENT, backend=[PCM])
+S.case(182, 9, "another copy of a held utterance is dropped and takes no slot: at held_utterances_bound 1 nothing is refused.",
+       [READY, say_as("u-1", "first"), say_as("u-2", "second"), say_as("u-2", "second")]
+       + spoken("first", 1) + spoken("second", 2),
+       params=PATIENT + [("held_utterances_bound", "1")], backend=[PCM])
