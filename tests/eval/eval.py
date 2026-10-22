@@ -8,7 +8,7 @@ Usage: python3 tests/eval/eval.py COMMAND [options]
   run      run scenarios (tests/eval/scenarios/*.json) through the bot,
            score them and have the judges grade them
   grade    score and judge a run directory again (a run made elsewhere)
-  climb    hill-climb prompt <data> (prompts.DEFAULT_TARGETS, or --target):
+  climb    hill-climb prompt <data> (prompts.DEFAULT_IDS, or --target):
            an LLM proposes a rewrite from the failures, the eval scores it,
            and the best is kept
   expand   have an LLM write held-out variations of the scenarios (new
@@ -43,17 +43,17 @@ ROOT = prompts.ROOT
 SCENARIOS = os.path.join(ROOT, "tests", "eval", "scenarios")
 OUT = os.path.join(ROOT, "target", "floppy-eval")
 
-# What each default target decides, for the proposer.
+# What each default prompt (by <data> id) decides, for the proposer.
 USAGE = {
-    "abilities/reflection/reflection.scx#select_instructions": (
+    "select_instructions": (
         "reflection's select call after every turn: it chooses at most one of bot.behavior.create, change or break "
         "(or nothing) from the turn, prior episodes and the behavior inventory. If it selects nothing, nothing is learned."
     ),
-    "abilities/reflection/reflection.scx#change_instructions": (
+    "change_instructions": (
         "the spec reflection gives the builder bot for a create or change: the builder writes the behavior's SCXML "
         "from it, validates it and simulates it; a draft that fails repeatedly is abandoned (no-progress)."
     ),
-    "bots/builder/builder.scx#author_system": (
+    "author_system": (
         "the builder's author stage system prompt: it writes one complete SCXML document from the plan and spec; "
         "validation diagnostics such as XML001, XSD errors, no-document, script-not-loaded and truncated mean the "
         "draft was rejected."
@@ -291,7 +291,7 @@ def failure_evidence(graded, limit=120):
 
 def cmd_climb(args):
     scenarios = load_scenarios(args.scenario, args.scenarios_dir)
-    targets = args.target or list(prompts.DEFAULT_TARGETS)
+    targets = args.target or prompts.default_targets()
     for target in targets:
         prompts.read(target)
         if not prompts.roundtrips(target):
@@ -325,7 +325,7 @@ def cmd_climb(args):
         for index in range(args.candidates):
             backend = proposers[index % len(proposers)]
             try:
-                text, rationale, model = judges.propose(backend, target, current, USAGE.get(target, "a prompt <data> of " + target), evidence, tried)
+                text, rationale, model = judges.propose(backend, target, current, USAGE.get(prompts.split(target)[1], "a prompt <data> of " + target), evidence, tried)
             except RuntimeError as error:
                 log(f"  proposer {backend.name}: {error}")
                 continue
@@ -438,8 +438,9 @@ def cmd_expand(args):
 
 
 def cmd_targets(_args):
+    defaults = prompts.default_targets()
     for target in prompts.discover():
-        print(f"{target}  ({len(prompts.read(target))} chars){'  default' if target in prompts.DEFAULT_TARGETS else ''}")
+        print(f"{target}  ({len(prompts.read(target))} chars){'  default' if target in defaults else ''}")
 
 
 def main(argv=None):
@@ -468,7 +469,7 @@ def main(argv=None):
     p.set_defaults(func=cmd_grade)
     p = sub.add_parser("climb")
     common(p)
-    p.add_argument("--target", action="append", help="<path>#<data id> (repeatable; default prompts.DEFAULT_TARGETS)")
+    p.add_argument("--target", action="append", help="<path>#<data id> (repeatable; default prompts.DEFAULT_IDS wherever declared)")
     p.add_argument("--generations", type=int, default=6)
     p.add_argument("--candidates", type=int, default=2, help="proposals per generation (alternating proposers)")
     p.add_argument("--proposers", default="codex,gemini")

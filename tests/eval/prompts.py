@@ -16,14 +16,13 @@ import re
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
-# The prompts the climb may change, when no --target names others: the
-# ones that decide what floppy learns (reflection's selection and change
-# instructions and contracts) and how the builder writes it.
-DEFAULT_TARGETS = (
-    "abilities/reflection/reflection.scx#select_instructions",
-    "abilities/reflection/reflection.scx#change_instructions",
-    "bots/builder/builder.scx#author_system",
-)
+# The prompts the climb may change, when no --target names others, by
+# <data> id: the ones that decide what floppy learns (reflection's selection
+# and change instructions) and how the builder writes it. Each is found in
+# whichever document of the bot declares it (`default_targets`), so a
+# prompt that moves to another document stays a default.
+DEFAULT_IDS = ("select_instructions", "change_instructions", "author_system")
+
 
 # Any <data> whose id names a prompt, for `eval.py targets`.
 PROMPT_ID = re.compile(r"(instructions|system|contract)$")
@@ -128,6 +127,18 @@ def discover():
                     if PROMPT_ID.search(data_id):
                         found.append(rel + "#" + data_id)
     return sorted(found)
+
+
+def default_targets():
+    """The targets of DEFAULT_IDS, each where the workspace declares it."""
+    found = discover()
+    targets = []
+    for data_id in DEFAULT_IDS:
+        matches = [target for target in found if split(target)[1] == data_id]
+        if len(matches) != 1:
+            raise ValueError(f"{data_id}: expected one document to declare it, found {matches}")
+        targets.extend(matches)
+    return targets
 
 
 def overlay(prompts, directory):

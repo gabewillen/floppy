@@ -102,7 +102,7 @@ only the step summary `score.summary` builds from the bot's logs.
 
 `eval.py climb` changes prompt `<data>` of the bot's documents, by default
 the three that decide what floppy learns and whether it is built
-(`prompts.DEFAULT_TARGETS`):
+(`prompts.DEFAULT_IDS`, each found in whichever document declares it, so a prompt that moves to another document stays a target):
 
 - `abilities/reflection/reflection.scx#select_instructions` (whether a turn
   selects a create, change or break at all),
