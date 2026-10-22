@@ -161,10 +161,19 @@
     <data id="offering" expr="false"/>
     <data id="offered" expr="[]"/>
     <data id="offers_over" expr="false"/>
+    <!-- What the bot knows of itself: its name, as the identity tells it
+         (bot.ability.identity.named, relayed by the body; null until it
+         has taken one). -->
+    <data id="self" expr="({name: null})"/>
   </datamodel>
   <script src="cognition.js"/>
 
   <parallel id="alive">
+  <!-- The identity's answer to an ask, and the name after each adoption
+       (the original's NamedEvent). -->
+  <transition event="bot.ability.identity.named" event:schema="../schemas/bot.ability.identity.named.json">
+    <assign location="self.name" expr="_event.data.name"/>
+  </transition>
   <state id="turns" initial="idle">
   <!-- Waits for the body's turn. -->
   <state id="idle">
