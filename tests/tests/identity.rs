@@ -61,6 +61,7 @@ fn layout(name: Option<&str>) -> PathBuf {
         "speaking",
         "identity",
         "memory",
+        "seeing",
         "speech_decoding",
     ] {
         support::copy_ability(name, &dir.join("abilities"));

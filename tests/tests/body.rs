@@ -110,6 +110,7 @@ fn layout(cognition: &Cognition, data: &[(&str, &str)]) -> PathBuf {
         "speaking",
         "identity",
         "memory",
+        "seeing",
     ] {
         support::copy_ability(name, &abilities);
     }

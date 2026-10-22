@@ -24,8 +24,9 @@
   Abilities: live holds <invoke id="cognition">, <invoke
   id="communication"> (abilities/communication/communication.scx, which holds the
   conversation and speaking), <invoke id="identity">
-  (abilities/identity/identity.scx, the bot's name) and <invoke id="listening">
-  (abilities/listening/listening.scx, the ear); leaving live cancels every ability (SCXML
+  (abilities/identity/identity.scx, the bot's name), <invoke id="listening">
+  (abilities/listening/listening.scx, the ear) and <invoke id="seeing">
+  (abilities/seeing/seeing.scx, the eye; see Seeing below); leaving live cancels every ability (SCXML
   6.4), which replaces the original's cleanup states: an SCXML invoke cancel is
   synchronous, so there is nothing for the original's 5 min deactivation
   timeout or its reboot preserve/reset cleanup to wait on, and every
@@ -81,6 +82,16 @@
   speech or labelled non-speech over as bot.ability.cognition.input, which
   starts a turn like any handoff. The listening's
   bot.ability.listening.failed is logged.
+
+  Seeing: the seeing_enabled <data> switch (false by default; the
+  environment may pass it as a <param>, decision D107) decides whether the
+  eye perceives. On, seeing is an expected ability (the body waits for its
+  offers), each environment.visual goes to it after the input abilities,
+  its offer (bot.ability.seeing.look) is among the turn's choices, its
+  sight comes back as bot.ability.cognition.input {stimulus:
+  bot.ability.seeing.sight}, which starts a turn like any handoff, and its
+  ending degrades the bot. Off, seeing still runs but is sent no stimulus
+  and its offers are not taken, so the bot behaves as without it.
 
   Turns: bot.input, or an ability's bot.ability.cognition.input handoff
   (the original grants any ability product the turn, blind to its content), in
@@ -230,6 +241,9 @@
     <!-- The input abilities each environment.* stimulus fans out to
          (the original's Bot input, as invoke ids), and the one being sent to. -->
     <data id="input" expr="['identity', 'listening']"/>
+    <!-- Whether the eye perceives (decision D189): on, seeing is expected,
+         takes every environment.visual and offers its look. -->
+    <data id="seeing_enabled" expr="false"/>
     <data id="ability" expr="null"/>
     <!-- The Listening abilities that receive speaking's efference copy
          (the original's Speaking listening peers, as invoke ids). -->
@@ -279,10 +293,13 @@
       <param name="database" expr="database"/>
     </invoke>
     <invoke id="listening" type="scxml" src="../../abilities/listening/listening.scx"/>
+    <invoke id="seeing" type="scxml" src="../../abilities/seeing/seeing.scx"/>
 
     <!-- Each ability's latest offers; the first of a run is its readiness. -->
     <transition event="bot.ability.offers" event:schema="../../abilities/schemas/bot.ability.offers.json">
-      <assign location="offers[_event.data.ability]" expr="_event.data.choices"/>
+      <if cond="isTakenOffer(_event)">
+        <assign location="offers[_event.data.ability]" expr="_event.data.choices"/>
+      </if>
       <if cond="isWaiting(_event)">
         <assign location="waiting" expr="waitingWithout(_event)"/>
       </if>
@@ -338,6 +355,9 @@
       <transition event="done.invoke.cognition done.invoke.communication done.invoke.identity done.invoke.listening" target="degraded">
         <assign location="degraded_reason" expr="abilityEndedReason(_event)"/>
       </transition>
+      <transition event="done.invoke.seeing" cond="seeing_enabled" target="degraded">
+        <assign location="degraded_reason" expr="abilityEndedReason(_event)"/>
+      </transition>
       <!-- Communication input from outside goes to the communication, whose
            conversation answers with a product (a turn's stimulus, below),
            and to the identity, which answers when it names the bot. -->
@@ -358,9 +378,10 @@
           </send>
         </foreach>
       </transition>
-      <!-- A visual stimulus goes to every input ability. -->
-      <transition event="environment.visual" event:schema="schemas/environment.visual.json">
-        <foreach array="input" item="ability">
+      <!-- A visual stimulus goes to every input ability, and to seeing
+           when it is on. -->
+      <transition event="environment.visual" event:schema="../../abilities/schemas/environment.visual.json">
+        <foreach array="visualInput()" item="ability">
           <send event="environment.visual" targetexpr="abilityTarget(ability)">
             <content expr="_event.data"/>
           </send>
