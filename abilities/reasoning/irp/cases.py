@@ -115,10 +115,10 @@ S.case(130, 4, "a model that answers 500 fails the turn as status.",
        params=turn(), backend=[{"path": CHAT, "status": 500, "body": {"error": {"message": "boom"}}}])
 OFF_EVENT = {"event": "bot.ability.identity.adopt", "data": {"name": "Pip"}, "reason": "x", "target": HARNESS}
 S.case(131, 4, "a selection of an event outside the choices is repaired once, and the same rejection again fails the turn.",
-       [failed("Selection rejected: schema-mismatch")],
+       [failed("Selection rejected: /events/0/event: value must be one of \"bot.ability.cognition.ignore\", \"bot.ability.communication.respond\", \"bot.focus_device\", \"lamp.on\"")],
        params=turn(), backend=selection(OFF_EVENT) + selection(OFF_EVENT))
 S.case(132, 4, "a selection of an offered event on a target that does not offer it is repaired once, then fails the same way.",
-       [failed("Selection rejected: schema-mismatch")],
+       [failed("Selection rejected: /events/0: anyOf failed")],
        params=turn(), backend=selection({**SAY, "target": OWN}) + selection({**SAY, "target": OWN}))
 S.case(135, 4, "a rejected selection repaired by the next call is handled: the repair's selection is sent and returned.",
        [SAID, expect(DONE, "_event.data.handled === true && _event.data.selected.length === 1"

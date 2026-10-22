@@ -781,24 +781,23 @@ fn an_acted_fact_over_its_bound_is_kept_as_its_bare_element() {
 }
 
 #[test]
-fn python_and_ecmascript_numbers_are_written_as_each_writes_them() {
-    for (value, python, ecmascript) in [
-        (0.0, "0", "0"),
-        (-0.0, "0", "0"),
-        (3.0, "3", "3"),
-        (-12.0, "-12", "-12"),
-        (1.5, "1.5", "1.5"),
-        (0.0005, "0.0005", "0.0005"),
-        (0.000_01, "1e-05", "0.00001"),
-        (1e-7, "1e-07", "1e-7"),
-        (1.25e-10, "1.25e-10", "1.25e-10"),
-        (1e16, "10000000000000000", "10000000000000000"),
-        (1e21, "1e+21", "1e+21"),
-        (1.5e22, "1.5e+22", "1.5e+22"),
-        (-2.5e-8, "-2.5e-08", "-2.5e-8"),
+fn numbers_are_written_as_json_writes_them() {
+    for (value, text) in [
+        (0.0, "0"),
+        (-0.0, "0"),
+        (3.0, "3"),
+        (-12.0, "-12"),
+        (1.5, "1.5"),
+        (0.0005, "0.0005"),
+        (0.000_01, "0.00001"),
+        (1e-7, "1e-7"),
+        (1.25e-10, "1.25e-10"),
+        (1e16, "10000000000000000"),
+        (1e21, "1e+21"),
+        (1.5e22, "1.5e+22"),
+        (-2.5e-8, "-2.5e-8"),
     ] {
-        assert_eq!(python_number(value), python, "{value}");
-        assert_eq!(ecmascript_number(value), ecmascript, "{value}");
+        assert_eq!(ecmascript_number(value), text, "{value}");
     }
 }
 
