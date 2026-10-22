@@ -383,6 +383,7 @@ dependencies = [
 name = "floppy-service-generate"
 version = "0.1.0"
 dependencies = [
+ "boon",
  "scxml-event-schema",
  "scxml-types",
  "scxml-validator-core",

@@ -85,7 +85,7 @@ fn reply(content: &str) -> Vec<u8> {
 /// The answer of a stream without a schema.
 fn reply_text_of(body: &[u8]) -> Result<String, FailureCode> {
     stream_reply(body)
-        .and_then(|reply| reply.answer(None))
+        .and_then(|reply| reply.answer(None).map_err(|failure| failure.code))
         .map(|answer| answer["content"].as_str().unwrap_or_default().to_owned())
 }
 
@@ -203,7 +203,7 @@ fn a_streamed_generation_asks_for_server_sent_events() {
     let request = build_request(2, 1, None, &generation);
     assert_eq!(
         String::from_utf8(request.body).expect("UTF-8"),
-        r#"{"messages":[{"content":"p","role":"user"}],"model":"m","reasoning_effort":"low","stream":true}"#
+        r#"{"messages":[{"content":"p","role":"user"}],"model":"m","reasoning_effort":"low","stream":true,"stream_options":{"include_usage":true}}"#
     );
     assert_eq!(
         request.headers[2],
@@ -215,18 +215,97 @@ fn a_streamed_generation_asks_for_server_sent_events() {
     // Its reply is the stream's text, and a backend that answers one
     // completion anyway is read as one (decision D101).
     assert_eq!(
-        outcome(&generation, ok(reply("hello there"))),
+        outcome(&generation, 0, ok(reply("hello there"))),
         Returned {
             name: RESULT_EVENT,
-            data: r#"{"content":"hello there","tool_calls":[]}"#.into()
+            data: r#"{"content":"hello there","request_bytes":0,"tool_calls":[]}"#.into()
         }
     );
     assert_eq!(
-        outcome(&generation, ok(completion("hi", "stop"))),
+        outcome(&generation, 0, ok(completion("hi", "stop"))),
         Returned {
             name: RESULT_EVENT,
-            data: r#"{"content":"hi","tool_calls":[]}"#.into()
+            data: r#"{"content":"hi","request_bytes":0,"tool_calls":[]}"#.into()
         }
+    );
+}
+
+/// A request's bytes are its body's as the original counts them
+/// (`OutputData.request_bytes`): everything but the streaming members.
+#[test]
+fn a_requests_bytes_are_its_body_without_the_streaming_members() {
+    let plain = parse(&[("model", text("m")), ("prompt", text("héllo"))]).expect("valid");
+    let request = build_request(2, 1, None, &plain);
+    assert_eq!(request.request_bytes, request.body.len());
+    let streamed = parse(&[
+        ("model", text("m")),
+        ("prompt", text("héllo")),
+        ("stream", Data::Bool(true)),
+    ])
+    .expect("valid");
+    let streamed = build_request(2, 1, None, &streamed);
+    assert_eq!(streamed.request_bytes, request.body.len());
+    assert!(streamed.body.len() > streamed.request_bytes);
+    // The run's stream slot adds its member to the body as it is sent,
+    // never to the count.
+    assert_eq!(
+        build_request(2, 1, Some(3), &plain).request_bytes,
+        request.body.len()
+    );
+    // The result carries the bytes it is given.
+    assert_eq!(
+        outcome(&plain, request.request_bytes, ok(completion("hi", "stop"))).data,
+        format!(
+            r#"{{"content":"hi","request_bytes":{},"tool_calls":[]}}"#,
+            request.request_bytes
+        )
+    );
+}
+
+/// The usage a reply's backend reports is the result's `usage`, as the
+/// original's `Usage` reads it: the completion's, or the last stream chunk
+/// that carries one; a count left out is absent, and no count is no usage.
+#[test]
+fn a_replys_usage_is_the_results_usage() {
+    let generation = parse(&[("model", text("m")), ("prompt", text("p"))]).expect("valid");
+    let mut counted: Json = serde_json::from_slice(&completion("hi", "stop")).expect("JSON");
+    counted["usage"] = serde_json::json!({
+        "prompt_tokens": 7, "completion_tokens": 5, "total_tokens": 12,
+        "completion_tokens_details": { "reasoning_tokens": 3 },
+    });
+    assert_eq!(
+        outcome(&generation, 9, ok(counted.to_string().into_bytes())).data,
+        r#"{"content":"hi","request_bytes":9,"tool_calls":[],"usage":{"input_tokens":7,"output_tokens":5,"reasoning_tokens":3,"total_tokens":12}}"#
+    );
+    // A count that is not a whole number is left out; no count, no usage.
+    counted["usage"] =
+        serde_json::json!({ "prompt_tokens": 7, "completion_tokens": -1, "total_tokens": "12" });
+    assert_eq!(
+        outcome(&generation, 9, ok(counted.to_string().into_bytes())).data,
+        r#"{"content":"hi","request_bytes":9,"tool_calls":[],"usage":{"input_tokens":7}}"#
+    );
+    counted["usage"] = serde_json::json!({ "completion_tokens_details": null });
+    assert_eq!(
+        outcome(&generation, 9, ok(counted.to_string().into_bytes())).data,
+        r#"{"content":"hi","request_bytes":9,"tool_calls":[]}"#
+    );
+    // A stream's usage arrives on a last chunk without choices
+    // (`include_usage`); a `null` usage on the others leaves it.
+    let mut first = chunk(&serde_json::json!({ "content": "hi" }), Some("stop"));
+    first["usage"] = Json::Null;
+    let body = stream(&[
+        first,
+        serde_json::json!({ "choices": [], "usage": { "prompt_tokens": 4, "completion_tokens": 1, "total_tokens": 5 } }),
+    ]);
+    assert_eq!(
+        outcome(&generation, 9, ok(body)).data,
+        r#"{"content":"hi","request_bytes":9,"tool_calls":[],"usage":{"input_tokens":4,"output_tokens":1,"total_tokens":5}}"#
+    );
+    // A failure carries neither.
+    counted["choices"][0]["finish_reason"] = "length".into();
+    assert_eq!(
+        outcome(&generation, 9, ok(counted.to_string().into_bytes())),
+        Returned::failed(FailureCode::Truncated)
     );
 }
 
@@ -294,7 +373,7 @@ fn max_completion_tokens_is_sent_and_bounded() {
         );
     }
     assert_eq!(
-        outcome(&generation, ok(completion("cut", "length"))),
+        outcome(&generation, 0, ok(completion("cut", "length"))),
         Returned::failed(FailureCode::Truncated)
     );
 }
@@ -643,18 +722,18 @@ fn malformed_parameters_reject_the_start() {
 fn a_text_reply_becomes_the_result_event() {
     let generation = parse(&[("model", text("m")), ("prompt", text("p"))]).expect("valid");
     assert_eq!(
-        outcome(&generation, ok(completion("hello there", "stop"))),
+        outcome(&generation, 0, ok(completion("hello there", "stop"))),
         Returned {
             name: RESULT_EVENT,
-            data: r#"{"content":"hello there","tool_calls":[]}"#.into()
+            data: r#"{"content":"hello there","request_bytes":0,"tool_calls":[]}"#.into()
         }
     );
     // A streamed reply is read as one (the backend decides, decision D101).
     assert_eq!(
-        outcome(&generation, ok(reply("hello there"))),
+        outcome(&generation, 0, ok(reply("hello there"))),
         Returned {
             name: RESULT_EVENT,
-            data: r#"{"content":"hello there","tool_calls":[]}"#.into()
+            data: r#"{"content":"hello there","request_bytes":0,"tool_calls":[]}"#.into()
         }
     );
 }
@@ -669,9 +748,20 @@ fn calls_result(content: &str, calls: &[(&str, &str, Json)]) -> Returned {
     Returned {
         name: RESULT_EVENT,
         data: scxml_event_schema::canonical_json(
-            &serde_json::json!({ "content": content, "tool_calls": calls }),
+            &serde_json::json!({ "content": content, "request_bytes": 0, "tool_calls": calls }),
         ),
     }
+}
+
+/// [`FAILED_EVENT`] with `code` and the rejection `{key, message}`.
+fn rejected(code: FailureCode, key: &str, message: &str) -> Returned {
+    Returned::failure(&Failure {
+        code,
+        rejection: Some(Rejection {
+            key: key.to_owned(),
+            message: message.to_owned(),
+        }),
+    })
 }
 
 #[test]
@@ -694,13 +784,18 @@ fn a_tool_reply_returns_every_call_its_schema_admits() {
     assert_eq!(
         outcome(
             &generation,
+            0,
             ok(tool_completion(DEFAULT_SCHEMA_NAME, arguments))
         ),
         answered
     );
     // A streamed call's argument fragments are joined in order.
     assert_eq!(
-        outcome(&generation, ok(tool_reply(DEFAULT_SCHEMA_NAME, arguments))),
+        outcome(
+            &generation,
+            0,
+            ok(tool_reply(DEFAULT_SCHEMA_NAME, arguments))
+        ),
         answered
     );
     // Every call is checked against the one function it was offered before
@@ -710,38 +805,84 @@ fn a_tool_reply_returns_every_call_its_schema_admits() {
     assert_eq!(
         outcome(
             &generation,
+            0,
             ok(tool_completion(DEFAULT_SCHEMA_NAME, r#"{"answer":"yes"}"#))
         ),
-        Returned::failed(FailureCode::SchemaMismatch)
+        rejected(
+            FailureCode::SchemaMismatch,
+            "schema-mismatch:",
+            "(root): missing properties 'score'"
+        )
     );
     assert_eq!(
         outcome(
             &generation,
+            0,
             ok(tool_reply(DEFAULT_SCHEMA_NAME, r#"{"answer":"yes"}"#))
         ),
-        Returned::failed(FailureCode::SchemaMismatch)
+        rejected(
+            FailureCode::SchemaMismatch,
+            "schema-mismatch:",
+            "(root): missing properties 'score'"
+        )
+    );
+    let other = rejected(
+        FailureCode::SchemaMismatch,
+        "schema-mismatch:name",
+        "the call names a function the request did not offer: expected 'result', got 'other'",
     );
     assert_eq!(
-        outcome(&generation, ok(tool_reply("other", arguments))),
-        Returned::failed(FailureCode::SchemaMismatch)
+        outcome(&generation, 0, ok(tool_reply("other", arguments))),
+        other
     );
     assert_eq!(
-        outcome(&generation, ok(tool_completion("other", arguments))),
-        Returned::failed(FailureCode::SchemaMismatch)
+        outcome(&generation, 0, ok(tool_completion("other", arguments))),
+        other
     );
-    for arguments in ["not json", "", "[]"] {
+}
+
+/// Arguments that are not a JSON object are not JSON, with the decode
+/// error's position and never the text.
+#[test]
+fn a_calls_arguments_that_are_not_a_json_object_are_not_json() {
+    let generation = parse(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        ("schema", text(SCHEMA)),
+    ])
+    .expect("valid");
+    for (arguments, message) in [
+        (
+            "not json",
+            "the arguments are not JSON: expected ident at line 1 column 2",
+        ),
+        (
+            "",
+            "the arguments are not JSON: EOF while parsing a value at line 1 column 0",
+        ),
+        ("[]", "the arguments are an array, not a JSON object"),
+    ] {
         assert_eq!(
             outcome(
                 &generation,
+                0,
                 ok(tool_completion(DEFAULT_SCHEMA_NAME, arguments))
             ),
-            Returned::failed(FailureCode::NotJson),
+            rejected(FailureCode::NotJson, "not-json", message),
             "{arguments}"
         );
     }
     assert_eq!(
-        outcome(&generation, ok(tool_reply(DEFAULT_SCHEMA_NAME, "not json"))),
-        Returned::failed(FailureCode::NotJson)
+        outcome(
+            &generation,
+            0,
+            ok(tool_reply(DEFAULT_SCHEMA_NAME, "not json"))
+        ),
+        rejected(
+            FailureCode::NotJson,
+            "not-json",
+            "the arguments are not JSON: expected ident at line 1 column 2"
+        )
     );
 }
 
@@ -767,26 +908,130 @@ fn a_calls_undeclared_top_level_fields_are_dropped_and_nested_ones_still_fail() 
         &[("call-1", "dispatch", serde_json::json!({"events": [event]}))],
     );
     assert_eq!(
-        outcome(&generation, ok(tool_completion("dispatch", &stray))),
+        outcome(&generation, 0, ok(tool_completion("dispatch", &stray))),
         answered
     );
     assert_eq!(
-        outcome(&generation, ok(tool_reply("dispatch", &stray))),
+        outcome(&generation, 0, ok(tool_reply("dispatch", &stray))),
         answered
     );
     // Inside an event the schema stays strict: an unoffered field, or an
     // event missing its required `data`, is a schema mismatch.
-    for arguments in [
-        r#"{"events":[{"event":"bot.say","data":{"text":"hi"},"lifetime":"persistent"}]}"#,
-        r#"{"events":[{"event":"bot.say","data":{"text":"hi","lifetime":"persistent"}}]}"#,
-        r#"{"events":[{"event":"bot.say","text":"hi"}],"reason":"why"}"#,
+    for (arguments, key, message) in [
+        (
+            r#"{"events":[{"event":"bot.say","data":{"text":"hi"},"lifetime":"persistent"}]}"#,
+            "schema-mismatch:/events/0",
+            "/events/0: additional properties 'lifetime' not allowed",
+        ),
+        (
+            r#"{"events":[{"event":"bot.say","data":{"text":"hi","lifetime":"persistent"}}]}"#,
+            "schema-mismatch:/events/0/data",
+            "/events/0/data: additional properties 'lifetime' not allowed",
+        ),
+        (
+            r#"{"events":[{"event":"bot.say","text":"hi"}],"reason":"why"}"#,
+            "schema-mismatch:/events/0",
+            "/events/0: missing properties 'data'",
+        ),
     ] {
         assert_eq!(
-            outcome(&generation, ok(tool_completion("dispatch", arguments))),
-            Returned::failed(FailureCode::SchemaMismatch),
+            outcome(&generation, 0, ok(tool_completion("dispatch", arguments))),
+            rejected(FailureCode::SchemaMismatch, key, message),
             "{arguments}"
         );
     }
+}
+
+/// A refused call's rejection names where its arguments first fail, as the
+/// original's selection rejection names the event and the failing keys: in
+/// the dispatch tool's `anyOf` of one branch per event, the branch of the
+/// event the call names, and an event no branch offers at its `event`.
+#[test]
+fn a_rejection_names_where_the_arguments_first_fail_and_never_a_value() {
+    let branch = |event: &str, data: &Json| {
+        serde_json::json!({
+            "type": "object", "additionalProperties": false, "required": ["event", "data"],
+            "properties": { "event": { "const": event }, "data": data },
+        })
+    };
+    let say = serde_json::json!({
+        "type": "object", "additionalProperties": false, "required": ["text"],
+        "properties": { "text": { "type": "string", "maxLength": 8 } },
+    });
+    let wait = serde_json::json!({
+        "type": "object", "additionalProperties": false, "required": ["seconds"],
+        "properties": { "seconds": { "type": "integer", "minimum": 1 }, "code": { "type": "string", "pattern": "^[a-z]+$" } },
+    });
+    let schema = serde_json::json!({
+        "type": "object", "required": ["events"],
+        "properties": { "events": { "type": "array", "items": { "anyOf": [branch("bot.say", &say), branch("bot.wait", &wait)] } } },
+    })
+    .to_string();
+    let generation = parse(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        ("schema", text(&schema)),
+        ("schemaname", text("dispatch")),
+    ])
+    .expect("valid");
+    let secret = "a value the model wrote that no rejection repeats";
+    for (arguments, key, message) in [
+        (
+            serde_json::json!({"events": [{"event": "bot.say", "data": {"text": "hi"}}, {"event": "bot.wait", "data": {"seconds": 0}}]}),
+            "schema-mismatch:/events/1/data/seconds",
+            "/events/1/data/seconds: value must be at least 1",
+        ),
+        (
+            serde_json::json!({"events": [{"event": "bot.say", "data": {"text": secret}}]}),
+            "schema-mismatch:/events/0/data/text",
+            "/events/0/data/text: length must be <=8, but got 49",
+        ),
+        (
+            serde_json::json!({"events": [{"event": "bot.wait", "data": {"seconds": 2, "code": secret}}]}),
+            "schema-mismatch:/events/0/data/code",
+            "/events/0/data/code: value does not match the pattern ^[a-z]+$",
+        ),
+        (
+            serde_json::json!({"events": [{"event": "bot.say", "data": {"text": "hi", "reason": secret}}]}),
+            "schema-mismatch:/events/0/data",
+            "/events/0/data: additional properties 'reason' not allowed",
+        ),
+        (
+            serde_json::json!({"events": [{"event": "bot.wait"}]}),
+            "schema-mismatch:/events/0",
+            "/events/0: missing properties 'data'",
+        ),
+        (
+            serde_json::json!({"events": [{"event": "action:speech.say", "data": {"text": secret}}]}),
+            "schema-mismatch:/events/0/event",
+            r#"/events/0/event: value must be one of "bot.say", "bot.wait""#,
+        ),
+        (
+            serde_json::json!({"events": "[]"}),
+            "schema-mismatch:/events",
+            "/events: want array, but got string",
+        ),
+    ] {
+        let returned = outcome(
+            &generation,
+            0,
+            ok(tool_completion("dispatch", &arguments.to_string())),
+        );
+        assert_eq!(
+            returned,
+            rejected(FailureCode::SchemaMismatch, key, message),
+            "{arguments}"
+        );
+        assert!(!returned.data.contains(secret), "{}", returned.data);
+    }
+    // A name the model wrote is cut, and the rejection stays one line.
+    let long = format!("other\n{}", "x".repeat(300));
+    let Returned { data, .. } = outcome(&generation, 0, ok(tool_completion(&long, "{}")));
+    let data: Json = serde_json::from_str(&data).expect("JSON");
+    let message = data["rejection"]["message"].as_str().expect("a message");
+    assert!(message.chars().count() <= MAX_REJECTION_CHARS, "{message}");
+    assert!(!message.contains('\n'), "{message}");
+    assert!(message.contains("got 'other x"), "{message}");
 }
 
 #[test]
@@ -801,11 +1046,11 @@ fn a_tool_reply_needs_a_call_and_keeps_its_calls_in_index_order() {
     // JSON content without a tool call is no reply, streamed or not: the
     // original's "did not include a required tool call".
     assert_eq!(
-        outcome(&generation, ok(completion(arguments, "stop"))),
+        outcome(&generation, 0, ok(completion(arguments, "stop"))),
         Returned::failed(FailureCode::Malformed)
     );
     assert_eq!(
-        outcome(&generation, ok(reply(arguments))),
+        outcome(&generation, 0, ok(reply(arguments))),
         Returned::failed(FailureCode::Malformed)
     );
     // Each fragment goes to the call its index names, and every call is
@@ -818,7 +1063,7 @@ fn a_tool_reply_needs_a_call_and_keeps_its_calls_in_index_order() {
         Some("tool_calls"),
     )]);
     assert_eq!(
-        outcome(&generation, ok(later)),
+        outcome(&generation, 0, ok(later)),
         calls_result(
             "Calling.",
             &[
@@ -838,7 +1083,11 @@ fn a_tool_reply_needs_a_call_and_keeps_its_calls_in_index_order() {
     // Without a schema, a tool call is not the reply's text.
     let plain = parse(&[("model", text("m")), ("prompt", text("p"))]).expect("valid");
     assert_eq!(
-        outcome(&plain, ok(tool_completion(DEFAULT_SCHEMA_NAME, arguments))),
+        outcome(
+            &plain,
+            0,
+            ok(tool_completion(DEFAULT_SCHEMA_NAME, arguments))
+        ),
         Returned::failed(FailureCode::Malformed)
     );
 }
@@ -846,7 +1095,7 @@ fn a_tool_reply_needs_a_call_and_keeps_its_calls_in_index_order() {
 #[test]
 fn every_failure_has_its_closed_code() {
     let generation = parse(&[("model", text("m")), ("prompt", text("p"))]).expect("valid");
-    let failed = |answered| outcome(&generation, answered);
+    let failed = |answered| outcome(&generation, 0, answered);
     assert_eq!(
         failed(Err(TransportFailure::Unavailable)),
         Returned::failed(FailureCode::Transport)
@@ -897,7 +1146,7 @@ fn every_failure_has_its_closed_code() {
         ("stream", Data::Bool(true)),
     ])
     .expect("valid");
-    let failed = |answered| outcome(&streamed, answered);
+    let failed = |answered| outcome(&streamed, 0, answered);
     assert_eq!(
         failed(ok(stream(&[
             chunk(&serde_json::json!({ "content": "cut" }), None),
@@ -1046,17 +1295,27 @@ fn every_failure_code_and_both_events_satisfy_the_builder_event_schemas() {
     let result = compile(include_str!(
         "../../../bots/builder/schemas/generate.result.json"
     ));
+    let rejection = rejected(FailureCode::SchemaMismatch, "schema-mismatch:/a", "/a: m");
+    assert!(failed.admits(&Data::JsonObject(rejection.data)));
+    assert!(failed.admits(&Data::JsonObject(
+        rejected(FailureCode::NotJson, "not-json", "m").data
+    )));
     for data in [
-        r#"{"content":"t","tool_calls":[]}"#,
-        r#"{"content":"","tool_calls":[{"args":{"a":1},"id":"c","name":"dispatch"}]}"#,
+        r#"{"content":"t","request_bytes":0,"tool_calls":[]}"#,
+        r#"{"content":"","request_bytes":12,"tool_calls":[{"args":{"a":1},"id":"c","name":"dispatch"}]}"#,
+        r#"{"content":"t","request_bytes":3,"tool_calls":[],"usage":{"input_tokens":1,"output_tokens":2,"reasoning_tokens":0,"total_tokens":3}}"#,
+        r#"{"content":"t","request_bytes":3,"tool_calls":[],"usage":{"input_tokens":1}}"#,
     ] {
         assert!(result.admits(&Data::JsonObject(data.into())), "{data}");
     }
     for data in [
         "{}",
         r#"{"text":"t"}"#,
-        r#"{"content":"t"}"#,
-        r#"{"content":"","tool_calls":[{"args":[],"id":"c","name":"dispatch"}]}"#,
+        r#"{"content":"t","request_bytes":0}"#,
+        r#"{"content":"t","tool_calls":[]}"#,
+        r#"{"content":"","request_bytes":0,"tool_calls":[{"args":[],"id":"c","name":"dispatch"}]}"#,
+        r#"{"content":"t","request_bytes":-1,"tool_calls":[]}"#,
+        r#"{"content":"t","request_bytes":0,"tool_calls":[],"usage":{"cached_tokens":1}}"#,
     ] {
         assert!(!result.admits(&Data::JsonObject(data.into())), "{data}");
     }
@@ -1199,12 +1458,12 @@ fn a_finish_reason_must_agree_with_the_tool_calls() {
         serde_json::from_slice(&tool_completion(DEFAULT_SCHEMA_NAME, arguments)).expect("JSON");
     stopped["choices"][0]["finish_reason"] = "stop".into();
     assert_eq!(
-        outcome(&generation, ok(stopped.to_string().into_bytes())),
+        outcome(&generation, 0, ok(stopped.to_string().into_bytes())),
         Returned::failed(FailureCode::Malformed),
         "calls without a tool_calls finish reason"
     );
     assert_eq!(
-        outcome(&generation, ok(completion("", "tool_calls"))),
+        outcome(&generation, 0, ok(completion("", "tool_calls"))),
         Returned::failed(FailureCode::Malformed),
         "a tool_calls finish reason without calls"
     );
@@ -1212,7 +1471,7 @@ fn a_finish_reason_must_agree_with_the_tool_calls() {
         serde_json::from_slice(&tool_completion(DEFAULT_SCHEMA_NAME, arguments)).expect("JSON");
     without_id["choices"][0]["message"]["tool_calls"][0]["id"] = "".into();
     assert_eq!(
-        outcome(&generation, ok(without_id.to_string().into_bytes())),
+        outcome(&generation, 0, ok(without_id.to_string().into_bytes())),
         Returned::failed(FailureCode::Malformed),
         "a call without an id"
     );
