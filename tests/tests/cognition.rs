@@ -1189,23 +1189,19 @@ fn reasoning_selects_from_the_turns_choices() {
         .and_then(|messages| messages.last())
         .and_then(|message| message["content"].as_str())
         .expect("the user message");
-    // The original's model_facing_xml of the ProcessorInput: the host input
-    // (stimulus and instructions), prior episodes and standing directives,
-    // no focus.
+    // The reference's model-facing content (decision D141): the situation
+    // (the environment block), then the stimulus as its own root; nothing
+    // recalled yet, and no focus.
     assert!(
-        prompt.starts_with("<cognition:processor_input>\n  <host_input>"),
+        prompt.starts_with("<environment id=\"session\">"),
         "{prompt}"
     );
     assert!(
-        prompt.contains("what is the capital of France?"),
+        prompt.ends_with("</dict>") && prompt.contains("what is the capital of France?"),
         "{prompt}"
     );
     assert!(
-        prompt.contains("<prior_episodes count=\"0\" />"),
-        "{prompt}"
-    );
-    assert!(
-        prompt.contains("<standing_directives count=\"0\" />"),
+        !prompt.contains("prior_episodes") && !prompt.contains("standing_directives"),
         "{prompt}"
     );
     assert!(!prompt.contains("focus"), "{prompt}");
@@ -1363,11 +1359,9 @@ fn reasoned_turns_recalled(database: &str, test: Option<&str>) {
     run.until(WAIT, turn_ended);
     let prompts = prompts(&mock);
     assert_eq!(prompts.len(), 2, "{prompts:?}");
-    assert!(
-        prompts[0].contains("\n  <prior_episodes count=\"0\" />\n"),
-        "{}",
-        prompts[0]
-    );
+    // No episode yet: the prompt recalls nothing (an empty collection
+    // renders nothing, decision D141).
+    assert!(!prompts[0].contains("prior_episodes"), "{}", prompts[0]);
     // The first turn's one episode, a cognition:cognitive_episode (the
     // original episodes.CognitiveEpisode).
     let episode = format!(
@@ -1738,7 +1732,7 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
         .expect("a user message");
     assert_eq!(
         user,
-        "<cognition:processor_input>\n  <host_input>\n    <processing:input>\n      <input stimulus:event=\"bot.input\" stimulus:source=\"conversation\">\n        <content>\n          <entry key=\"text\" value=\"hi\" />\n        </content>\n      </input>\n    </processing:input>\n  </host_input>\n  <prior_episodes count=\"0\" />\n  <standing_directives count=\"0\" />\n</cognition:processor_input>"
+        "<dict stimulus:event=\"bot.input\" stimulus:source=\"conversation\">\n  <content>\n    <entry key=\"text\" value=\"hi\" />\n  </content>\n</dict>"
     );
     close(
         run,
