@@ -82,8 +82,9 @@
 //!    array of the original's `Directive`s: `text`, `kind`, `instruction`
 //!    by default), each optional and with its `count`: floppy's recalled
 //!    memory until associative memory exists (decision D97);
-//! 4. the stimulus (`stimulus`, required) as the root element of its own
-//!    block, tagged as the original's `_payload_tag` tags a payload that is
+//! 4. the stimulus (`stimulus`, optional: left out, no stimulus block, as
+//!    the reference's decision instructions have none) as the root
+//!    element of its own block, tagged as the original's `_payload_tag` tags a payload that is
 //!    not a model (`dict`, `list`, `str`, `int`, `float`, `bool`, or
 //!    `none_type` for no data or a `null` stimulus), a string as its text and
 //!    anything else as its `content` field, stamped `stimulus:event`, then
@@ -564,11 +565,10 @@ fn model_facing_content<H: CognitionHost>(
     let location = location.ok_or(Failure::Execution(
         "cognition:model_facing_content requires a location",
     ))?;
-    let stimulus = stimulus.ok_or(Failure::Execution(
-        "cognition:model_facing_content requires a stimulus",
-    ))?;
     no_content(content, "cognition:model_facing_content holds no content")?;
-    let stimulus = read_stimulus(host, stimulus)?;
+    let stimulus = stimulus
+        .map(|stimulus| read_stimulus(host, stimulus))
+        .transpose()?;
     let known = read_json(host, known, "self")?.unwrap_or(Json::Null);
     let recent = read_list(host, recent, "recent")?;
     let prior_episodes = read_list(host, prior_episodes, "prior_episodes")?;
@@ -581,7 +581,11 @@ fn model_facing_content<H: CognitionHost>(
         read_json(host, schema, "schema")?.map_or(0, |schema| schema.to_string().len());
     let budget = read_budget(host, budget)?;
     let input = TurnInput {
-        stimulus: stimulus.as_ref(),
+        stimulus: match &stimulus {
+            None => Stimulus::Absent,
+            Some(None) => Stimulus::Null,
+            Some(Some(envelope)) => Stimulus::Envelope(envelope),
+        },
         recent: &recent,
         environment: &environment,
         acted: &acted,
@@ -800,13 +804,25 @@ fn read_budget<H: CognitionHost>(
     }
 }
 
+/// The stimulus a projection shows as its own root element.
+#[derive(Clone, Copy, Debug)]
+pub enum Stimulus<'a> {
+    /// No stimulus block (the `stimulus` attribute left out): the content
+    /// is the rest alone, as the reference's decision instructions are.
+    Absent,
+    /// The reference's `None` input: a `<none_type />` root.
+    Null,
+    /// A stimulus envelope `{event, data?, id?, source?, target?}`.
+    Envelope(&'a Map<String, Json>),
+}
+
 /// What `<cognition:model_facing_content>` projects: the original's
 /// processing `InputData`, its `situation` (the environment block, then the
 /// `acted` fact) and `recalled` (`RecalledData`) as floppy's JSON.
 #[derive(Clone, Copy, Debug)]
 pub struct TurnInput<'a> {
-    /// The stimulus envelope, `None` for none.
-    pub stimulus: Option<&'a Map<String, Json>>,
+    /// The stimulus: its root element, or none.
+    pub stimulus: Stimulus<'a>,
     /// The recent turns short-term memory holds, oldest first (the
     /// original's `RecalledData.recent`, `stm.Turn`s).
     pub recent: &'a [Json],
@@ -1007,8 +1023,15 @@ fn content(
         .and_then(|limit| limit.checked_sub(beside))
         .ok_or(BYTE_BUDGET)?;
     let mut stimulus_budget = Budget::default();
-    let mut stimulus = stimulus_element(input.stimulus, &mut stimulus_budget)?.text(0);
-    if stimulus.len() > limit {
+    let stimulus = match input.stimulus {
+        Stimulus::Absent => None,
+        Stimulus::Null => Some(stimulus_element(None, &mut stimulus_budget)?.text(0)),
+        Stimulus::Envelope(envelope) => {
+            Some(stimulus_element(Some(envelope), &mut stimulus_budget)?.text(0))
+        }
+    };
+    let stimulus_bytes = stimulus.as_ref().map_or(0, String::len);
+    if stimulus_bytes > limit {
         return Err(BYTE_BUDGET);
     }
     let mut stable = None;
@@ -1020,7 +1043,7 @@ fn content(
         let available = budget_bytes.map_or(MAX_PROJECTION_BYTES - reserved, |budget| {
             budget.min(MAX_PROJECTION_BYTES - reserved)
         });
-        let mut remaining = available.checked_sub(stimulus.len() + beside);
+        let mut remaining = available.checked_sub(stimulus_bytes + beside);
         // The stable fields render before the situation and claim the
         // budget first; the rest after it.
         for (rendered, fields) in [
@@ -1064,23 +1087,21 @@ fn content(
             }
         }
     }
-    let before: Vec<&str> = [
+    // Each block joins the next with a newline: the stable recalled
+    // memory, the situation, the varying recalled memory, the stimulus,
+    // then the feedback.
+    Ok([
         stable.as_deref(),
         Some(situation.as_str()),
         varying.as_deref(),
+        stimulus.as_deref(),
+        Some(input.feedback),
     ]
     .into_iter()
     .flatten()
     .filter(|block| !block.is_empty())
-    .collect();
-    if !before.is_empty() {
-        stimulus = format!("{}\n{stimulus}", before.join("\n"));
-    }
-    if !input.feedback.is_empty() {
-        stimulus.push('\n');
-        stimulus.push_str(input.feedback);
-    }
-    Ok(stimulus)
+    .collect::<Vec<_>>()
+    .join("\n"))
 }
 
 /// The turn's situation: the environment block, then what earlier stages

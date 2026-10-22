@@ -36,7 +36,7 @@
     </test>
   </assert>
   <assert id="cognition-3" specnum="3" specid="#cognition-3">
-    <![CDATA[<cognition:model_facing_content> writes the reference's model-facing content of a turn (processing InputData.model_facing_content), each block indented as ElementTree writes it and the blocks joined by newlines, most stable first: the recent turns (a cognition:recalled holding an uncounted recent of memory:turn lines), the situation (the environment block, then a cognition:acted of what earlier stages already did), the recalled episodes and directives (a cognition:recalled), the stimulus as the root element of its own block (tagged by its payload's type, stamped stimulus:event, then stimulus:id, stimulus:source and stimulus:target when set), then the feedback; systemlocation receives the instructions then the self block (a persona element), and failurelocation null.]]>
+    <![CDATA[<cognition:model_facing_content> writes the reference's model-facing content of a turn (processing InputData.model_facing_content), each block indented as ElementTree writes it and the blocks joined by newlines, most stable first: the recent turns (a cognition:recalled holding an uncounted recent of memory:turn lines), the situation (the environment block, then a cognition:acted of what earlier stages already did), the recalled episodes and directives (a cognition:recalled), the stimulus, when given, as the root element of its own block (tagged by its payload's type, stamped stimulus:event, then stimulus:id, stimulus:source and stimulus:target when set), then the feedback; systemlocation receives the instructions then the self block (a persona element), and failurelocation null.]]>
     <test id="720" conformance="mandatory" manual="false">
       <start uri="720/test720.txml"/>
     </test>
@@ -48,6 +48,9 @@
     </test>
     <test id="723" conformance="mandatory" manual="false">
       <start uri="723/test723.txml"/>
+    </test>
+    <test id="725" conformance="mandatory" manual="false">
+      <start uri="725/test725.txml"/>
     </test>
   </assert>
   <assert id="cognition-4" specnum="4" specid="#cognition-4">

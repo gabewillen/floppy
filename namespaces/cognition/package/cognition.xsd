@@ -22,7 +22,7 @@
                    the instructions then the self block.
                    fitlocation (optional): receives fit, cut or overflow
                    when a budget is given.
-                   stimulus (required), self, recent, environment, acted,
+                   stimulus, self, recent, environment, acted,
                    prior_episodes, standing_directives, feedback,
                    instructions, schema, budget (optional): expressions.
                    Neither takes another attribute or content.
@@ -45,7 +45,7 @@
       <xs:attribute name="failurelocation" type="xs:string" use="optional"/>
       <xs:attribute name="systemlocation" type="xs:string" use="optional"/>
       <xs:attribute name="fitlocation" type="xs:string" use="optional"/>
-      <xs:attribute name="stimulus" type="xs:string" use="required"/>
+      <xs:attribute name="stimulus" type="xs:string" use="optional"/>
       <xs:attribute name="self" type="xs:string" use="optional"/>
       <xs:attribute name="recent" type="xs:string" use="optional"/>
       <xs:attribute name="environment" type="xs:string" use="optional"/>

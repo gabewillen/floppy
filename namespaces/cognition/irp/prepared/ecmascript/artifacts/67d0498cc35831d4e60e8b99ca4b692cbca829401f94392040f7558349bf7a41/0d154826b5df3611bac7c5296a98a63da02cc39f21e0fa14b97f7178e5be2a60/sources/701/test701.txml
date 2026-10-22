@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- cognition-1: a model-facing content without a stimulus raises error.execution and assigns nothing. -->
+<!-- cognition-1: a model-facing content without a location raises error.execution and assigns nothing. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition">
 <datamodel>
   <data id="p" expr="'untouched'"/>
@@ -7,7 +7,7 @@
 </datamodel>
 <state id="s0">
   <onentry>
-    <cognition:model_facing_content location="p" recent="[]"/>
+    <cognition:model_facing_content failurelocation="p" stimulus="s"/>
     <raise event="executed"/>
   </onentry>
   <transition event="error.execution" cond="p === 'untouched'" conf:targetpass=""/>

@@ -790,10 +790,6 @@ fn malformed_content_elements_or_values_raise_error_execution() {
             "cognition:model_facing_content requires a location",
         ),
         (
-            without("stimulus"),
-            "cognition:model_facing_content requires a stimulus",
-        ),
-        (
             repeated,
             "cognition:model_facing_content repeats an attribute",
         ),
@@ -914,5 +910,28 @@ fn content_values_of_the_wrong_kind_raise_error_execution() {
     assert_eq!(
         execute(CONTENT, &attributes, &[], &mut content_host(&input)),
         Err(Failure::Host("fatal"))
+    );
+}
+
+#[test]
+fn without_a_stimulus_the_content_has_no_stimulus_block() {
+    let mut input = stimulus_with(&json!({}));
+    input["instructions"] = Json::Null;
+    input["acted"] = json!([{"target": "t", "event": "e"}]);
+    input["feedback"] = json!("fix it");
+    let attributes: Vec<Attribute> = content_attributes()
+        .into_iter()
+        .filter(|attribute| attribute.local_name != "stimulus")
+        .collect();
+    let mut assigned = assigned_with(&input, &attributes);
+    let prompt = assigned.remove("prompt").expect("assigned");
+    let Data::String(prompt) = prompt else {
+        panic!("the content is a string: {prompt:?}");
+    };
+    assert!(prompt.starts_with("<cognition:acted>"), "{prompt}");
+    assert!(prompt.ends_with("</cognition:acted>\nfix it"), "{prompt}");
+    assert!(
+        !prompt.contains("stimulus:") && !prompt.contains("none_type"),
+        "{prompt}"
     );
 }
