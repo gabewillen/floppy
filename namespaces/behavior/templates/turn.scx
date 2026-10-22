@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The turn behavior template (docs/decisions.md D132): the one program shape
+  of a learned turn behavior, as the original's behavior program is one
+  Starlark program of fixed shape (behavior/source.py STARLARK_API).
+  <behavior:turn_program> writes it with the behavior's script in place of
+  turn.js; the model writes only that script, which declares applies(input)
+  and selections(input, turn). Its invoker sets turn and input with
+  <param>s; it sends nothing and ends at once in answered, whose donedata is
+  {turn, handled, selected, error}: handled when applies(input) is true and
+  selections returns a non-empty list, which is selected; else handled
+  false. A call that throws ends it unhandled with error the name it
+  called, and a script that does not load (it does not parse, or its top
+  level throws) with error 'script': the error.execution the document's
+  script queues when it is loaded (SCXML 5.8) comes before loading's raise.
+  Each call is its own onentry block, so the raise after it runs even when
+  the call throws, after the error.execution it queues (SCXML 3.8, 5.9).
+  The candidates runner records a run whose error is a string as failed.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="loading">
+  <datamodel>
+    <data id="turn" expr="0"/>
+    <data id="input" expr="null"/>
+    <data id="applied" expr="false"/>
+    <data id="result" expr="[]"/>
+    <data id="error" expr="null"/>
+  </datamodel>
+  <script src="turn.js"/>
+  <state id="loading">
+    <onentry>
+      <raise event="loaded"/>
+    </onentry>
+    <transition event="error.execution" target="answered">
+      <assign location="error" expr="'script'"/>
+    </transition>
+    <transition event="loaded" target="applying"/>
+  </state>
+  <state id="applying">
+    <onentry>
+      <assign location="applied" expr="applies(input)"/>
+    </onentry>
+    <onentry>
+      <raise event="applied"/>
+    </onentry>
+    <transition event="error.execution" target="answered">
+      <assign location="error" expr="'applies'"/>
+    </transition>
+    <transition event="applied" cond="applied === true" target="selecting"/>
+    <transition event="applied" target="answered"/>
+  </state>
+  <state id="selecting">
+    <onentry>
+      <assign location="result" expr="selections(input, turn)"/>
+    </onentry>
+    <onentry>
+      <raise event="selected"/>
+    </onentry>
+    <transition event="error.execution" target="answered">
+      <assign location="error" expr="'selections'"/>
+    </transition>
+    <transition event="selected" target="answered"/>
+  </state>
+  <final id="answered">
+    <donedata>
+      <content expr="({turn: turn, handled: Array.isArray(result) ? result.length > 0 : false, selected: result, error: error})"/>
+    </donedata>
+  </final>
+</scxml>

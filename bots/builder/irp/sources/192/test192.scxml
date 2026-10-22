@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- builder-10: a turn script that answers a test input it must not answer is an apply E0008 diagnostic naming the test. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="builder" type="scxml" src="../../../builder.scx"/>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <onentry>
+      <send event="builder.request" target="#_builder"><content expr='{"spec": "a pinger: answer a ping with pong and finish", "max_attempts": 1, "turn_after_bound_ms": 1000, "apply": {"turn": 2, "input": {"label": "knock", "focus": "door"}, "targets": ["communication"]}, "name": "Knocker", "template": "turn"}'/></send>
+    </onentry>
+    <transition event="done.invoke.builder" cond="_event.data.reason === &quot;attempts-exhausted&quot; &amp;&amp; Array.isArray(_event.data.history) &amp;&amp; _event.data.diagnostics.length === 1 &amp;&amp; _event.data.diagnostics[0].kind === 'apply' &amp;&amp; _event.data.diagnostics[0].code === 'E0008' &amp;&amp; _event.data.diagnostics[0].message === 'test a bell is not answered: the behavior must not answer this input (handled false, selected []), it answered handled true with 1 selection(s).'" target="step1"/>
+  </state>
+  <state id="step1">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

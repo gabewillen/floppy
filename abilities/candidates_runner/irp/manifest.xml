@@ -54,12 +54,15 @@
     </test>
   </assert>
   <assert id="candidates_runner-6" specnum="6" specid="#candidates_runner-6">
-    <![CDATA[A candidate whose source cannot run has its failure persisted, and the rest run.]]>
+    <![CDATA[A candidate whose source cannot run, or whose donedata names an `error` (a string: the turn template's script that did not load or threw, decision D132), has its failure persisted, and the rest run.]]>
     <test id="150" conformance="mandatory" manual="false">
       <start uri="150/test150.scxml"/>
     </test>
     <test id="151" conformance="mandatory" manual="false">
       <start uri="151/test151.scxml"/>
+    </test>
+    <test id="152" conformance="mandatory" manual="false">
+      <start uri="152/test152.scxml"/>
     </test>
   </assert>
   <assert id="candidates_runner-7" specnum="7" specid="#candidates_runner-7">

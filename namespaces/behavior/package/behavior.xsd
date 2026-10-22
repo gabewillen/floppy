@@ -32,8 +32,13 @@
                    location (required): receives the E0008 messages of a
                    turn behavior's run on its live turn (the original's
                    verify_apply, verify._apply_once).
-                   done, turn, input, targets (required), error
-                   (optional): expressions.
+                   done, turn, input, targets (required), handled,
+                   error (optional): expressions.
+  behavior:turn_program
+                   location (required): receives the turn behavior
+                   template's text naming the script (the original's one
+                   program shape, behavior/source.py STARLARK_API).
+                   script (required): an expression.
                    None takes another attribute or content.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -75,7 +80,14 @@
       <xs:attribute name="turn" type="xs:string" use="required"/>
       <xs:attribute name="input" type="xs:string" use="required"/>
       <xs:attribute name="targets" type="xs:string" use="required"/>
+      <xs:attribute name="handled" type="xs:string"/>
       <xs:attribute name="error" type="xs:string"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="turn_program">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="script" type="xs:string" use="required"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>

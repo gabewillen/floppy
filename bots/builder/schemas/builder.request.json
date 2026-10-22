@@ -23,8 +23,10 @@
       },
       "required": ["turn", "input", "targets"],
       "additionalProperties": false
-    }
+    },
+    "template": {"const": "turn", "description": "Build a turn behavior from the turn template: the model writes only its script (decision D132) [floppy field]."}
   },
   "required": ["spec"],
+  "dependentRequired": {"template": ["name", "apply"]},
   "additionalProperties": false
 }

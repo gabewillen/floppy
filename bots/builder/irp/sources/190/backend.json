@@ -1,0 +1,22 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "{\"lifetime\": \"turn\", \"script\": \"function applies(input) {\\n  return input.label === 'knock';\\n}\\nfunction selections(input, turn) {\\n  return [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Who is there?'}}];\\n}\\n\", \"tests\": [{\"name\": \"a bell is not answered\", \"input\": \"{\\\"label\\\": \\\"bell\\\", \\\"focus\\\": \\\"door\\\"}\", \"handled\": false}]}"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

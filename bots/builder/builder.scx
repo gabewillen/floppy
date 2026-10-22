@@ -22,7 +22,7 @@
   too, on the transitions that take them: a service package declares no
   event contract.
 
-  intake -> design (an invoked generate service: topology plan) -> author
+  intake -> routing -> design (an invoked generate service: topology plan) -> author
   (an invoked generate service: the draft as three fields, its SCXML
   structure, its input events' schemas as one JSON object with $defs keyed
   by event, and its ECMAScript, or none, + test scripts) -> writing (the
@@ -49,6 +49,20 @@
   When the decision is unavailable (no key granted, backend failure:
   decision.failed or error.*), times out, or abstains, fallback decides by
   cond: redesign when there is no plan yet, else repair.
+
+  Template mode (the request's template 'turn', decision D132; the
+  original's one program shape, behavior/source.py STARLARK_API): routing
+  skips design (the plan is the template's) and author asks for turn_script
+  {lifetime, script, tests} (turn_author_system, script_schema), a script
+  declaring applies(input) and selections(input, turn) and up to seven test
+  inputs, each with whether it is answered; the chart is the turn behavior
+  template naming <name>.js, written by <behavior:turn_program>, and
+  <name>.json is {"$defs":{}}. simulate runs the live turn first, then each
+  test input the same way, and <behavior:verify_apply> checks each run
+  (handled false: it must not answer). triage offers no redesign. A
+  turn_script whose lifetime is persistent goes on once as a whole
+  document: template mode ends and design plans it. A whole document's
+  author call is bounded by document_max_completion_tokens.
 
   Model calls are invoked services, never executable content: each runs
   while the session keeps processing events, a transition records the
@@ -113,6 +127,10 @@
          max_completion_tokens): a model that reasons on without answering
          stops there, as truncated, and the build goes on (decision D101). -->
     <data id="max_completion_tokens" expr="8192"/>
+    <!-- A whole document's author call's token bound: 8192 truncated whole
+         documents on 2026-10-21 (decision D132); design and a turn script
+         keep max_completion_tokens. -->
+    <data id="document_max_completion_tokens" expr="16384"/>
     <!-- Where the builder reports its progress (a stage entered, a
          generation's reply arriving) as builder.progress: '#_parent' for an
          invoker that bounds the build by inactivity, null for none. -->
@@ -124,6 +142,10 @@
     <!-- The live turn a turn behavior is run on (the request's apply: {turn,
          input, targets}, the reference verify_apply's input), null for none. -->
     <data id="live_turn" expr="null"/>
+    <!-- The request's template ('turn': the model writes only a turn
+         behavior's script, decision D132), else null; a turn script that
+         asks for a persistent routine sets it back to null. -->
+    <data id="template" expr="null"/>
     <data id="decision_timeout_ms" expr="60000"/>
     <!-- The work. -->
     <data id="plan" expr="null"/>
@@ -156,6 +178,10 @@
     <data id="stage_run" expr="0"/>
     <data id="design_system" expr="'You are the design stage of the floppy builder bot. Plan the topology of one SCXML 1.0 state machine that implements the specification and honours every constraint. Use concise lowercase state ids (letters, digits, underscores). Name events with dotted lowercase names. Inputs are events the machine receives from its invoker; outputs are events it sends to its invoker. Model timing with delayed timer events, never with loops. Answer with exactly one call of topology_plan. When diagnostics or a previous plan are given, the previous attempt failed: plan again so that it cannot fail the same way. Answer with the plan only.'"/>
     <data id="author_system" expr="'You are the author stage of the floppy builder bot. Write one complete SCXML 1.0 document that implements the plan and the specification, and answer with exactly one call of scxml_draft that holds it (never a second call, a placeholder or a partial draft); where the constraints and these rules differ, the constraints win. Rules: scxml is the whole document text, from its root element to its end, never escaped, abbreviated, wrapped in CDATA or a code fence, nor a diff of a previous draft; the root element is scxml in the namespace http://www.w3.org/2005/07/scxml with version 1.0 and datamodel ecmascript; give each input event a JSON Schema in schemas, under $defs keyed by the event name, and reference it on the transitions that take it with the schema attribute of the namespace https://github.com/stateforward/scxml.rs/namespaces/event (bound to the prefix event) as NAME.json#/$defs/EVENT, where NAME is the name given and EVENT the event name; every cond and every expr that is more than a literal, an identifier or a dotted path calls a function of script (for example cond=&quot;isPing(input)&quot; and expr=&quot;selections(input)&quot;), so no attribute holds &amp;, &lt;, &gt; or a statement; script is plain ECMAScript: the function declarations those calls name, which read the values they are given and return a value, or empty when nothing calls one; when script is not empty the root holds exactly one script element, its first child after datamodel, with src NAME.js and no content, and the document holds no other script element; a state has an initial attribute or initial element only when it has child states; every transition target is a state id exactly as declared, with no # before it; executable content (assign, send, raise, if, elseif, else, log, foreach, cancel) appears only inside onentry, onexit or transition, if takes cond, foreach takes array and item, send takes one of event and eventexpr and one of target and targetexpr; event descriptors are separated by spaces, never commas; an output is an event the machine sends to its invoker with a send element whose target is #_parent, exactly once per occurrence (announce a state from its own onentry, not also from the transitions into it), and a machine that sends nothing to its invoker has no outputs: its result is the donedata of its final state; the machine starts on its own in its initial state unless the specification names a start event, and decides on its own with eventless transitions (no event attribute, taken as soon as their cond holds), never by waiting for an event nothing sends it; every state is reachable; implement timing with delayed sends (for example delay 3s) and cancel pending timers on exit. Also return tests: one to eight test scripts, each with input events (name, data as JSON object text or the empty string, delay_ms from the start of the test), settle_ms (the total observation time from the start of the test, larger than every delay_ms), expect_events (the output event names the machine must send to #_parent, in order; other outputs may appear between them; never an event sent to another target, and never the donedata, which a test cannot observe), and expect_done (whether the machine reaches a top-level final state within settle_ms; a machine that cycles forever never does). A test invokes the machine with no param, so each data item keeps the value of its own expr, and sends it only the test events, so expect only what the machine does with those values; when the request gives a live turn, the builder itself also runs a machine that never sends bot.behavior.tick once with the params turn and input of that turn, as its invoker will, and requires it to reach a top-level final state at once whose donedata is {turn, handled: true, selected} with at least one selection, each naming one of the targets of that turn and carrying data that agrees with the same-named fields of input, so the tests need not repeat that run. A machine that finishes ends in a final element that is a child of scxml itself; a final inside a state only completes that state. When the task is repair, previous_scxml, previous_schemas, previous_script and previous_tests failed with the given diagnostics, each validate diagnostic rendered with the line and column of previous_scxml it marks: a simulate diagnostic means either the machine or the test expectation is wrong, so fix whichever disagrees with the specification and the constraints, fix every other diagnostic at the place it marks, and keep what already works.'"/>
+    <!-- Template mode (decision D132): the author's system prompt and tool
+         for a turn behavior's script. -->
+    <data id="turn_author_system" expr="'You are the author stage of the floppy builder bot, writing a turn behavior\'s script. The builder runs the script in its fixed turn behavior document: its invoker sets turn and input, the document calls applies(input) and, when that returns true, selections(input, turn), and answers {turn, handled, selected}: handled true with selected the list selections returned when that list is not empty, else handled false with selected an empty list. Write only the script and answer with exactly one call of turn_script (never a second call, a placeholder or a partial script); where the spec speaks of the SCXML program and its documents, you write only this script; a constraint that describes a persistent routine\'s document serves the builder\'s whole-document request that follows lifetime persistent, so you never write it here; and where the constraints and these rules otherwise differ, the constraints win. Rules: script is plain ECMAScript, never escaped, abbreviated, wrapped in a code fence, nor a diff: function declarations, among them function applies(input), which returns true exactly when this turn\'s input is one the behavior answers and false otherwise, and function selections(input, turn), which returns a non-empty list of selections, each an object with event, target and data (and optionally reason) filled from input at run time; both return a value for every input and never throw (test optional fields with typeof before reading them), and neither sends, waits nor keeps state between calls. lifetime is turn for such a script; when the specification calls for something recurring or time-based (a persistent routine on every or at schedules), answer lifetime persistent with script empty and tests empty: the builder then asks for the routine\'s whole document. The builder always runs the behavior on this turn\'s own input, which it must answer, even when this turn\'s stimulus is not one of its triggers; tests are up to seven more inputs it runs it with: each has a name, input (the input object as JSON text) and handled (whether the behavior answers it); include an input it must not answer when the specification says what it does not apply to. When the task is repair, previous_script and previous_tests failed with the given diagnostics: fix what each names and keep what already works.'"/>
+    <data id="script_schema" expr='({"type":"object","description":"The turn behavior&apos;s script (call this function exactly once): its lifetime, its script and its test inputs.","properties":{"lifetime":{"type":"string","enum":["turn","persistent"],"description":"turn: the script answers one matching turn; persistent: a recurring or time-based routine, whose whole document the builder asks for next (script and tests empty)."},"script":{"type":"string","description":"Plain ECMAScript declaring function applies(input) and function selections(input, turn)."},"tests":{"type":"array","maxItems":7,"items":{"type":"object","properties":{"name":{"type":"string"},"input":{"type":"string","description":"The input object as JSON text."},"handled":{"type":"boolean"}},"required":["name","input","handled"],"additionalProperties":false}}},"required":["lifetime","script","tests"],"additionalProperties":false})'/>
     <data id="triage_instructions" expr="'An SCXML draft failed. Choose how the builder continues: repair the draft from its diagnostics when they are local mistakes, redesign the plan when the diagnostics show the topology is wrong or there is no plan, abandon only when the specification cannot be built as a state machine.'"/>
     <data id="plan_schema" expr='({"type":"object","properties":{"name":{"type":"string"},"summary":{"type":"string"},"states":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"kind":{"type":"string","enum":["atomic","compound","parallel","final"]},"parent":{"type":"string"},"purpose":{"type":"string"}},"required":["id","kind","parent","purpose"],"additionalProperties":false}},"events":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"direction":{"type":"string","enum":["input","output","internal"]},"description":{"type":"string"}},"required":["name","direction","description"],"additionalProperties":false}},"transitions":{"type":"array","items":{"type":"object","properties":{"source":{"type":"string"},"event":{"type":"string"},"target":{"type":"string"},"description":{"type":"string"}},"required":["source","event","target","description"],"additionalProperties":false}}},"required":["name","summary","states","events","transitions"],"additionalProperties":false})'/>
     <data id="draft_schema" expr='({"type":"object","description":"The one SCXML draft (call this function exactly once): its document, its input events schemas, its script and its test scripts.","properties":{"scxml":{"type":"string","description":"The whole SCXML document text, from its root element scxml to its end tag: never escaped, abbreviated, wrapped in CDATA or a code fence, nor a diff."},"schemas":{"type":"object","properties":{"$defs":{"type":"object","additionalProperties":{"type":"object"}}},"required":["$defs"],"additionalProperties":false},"script":{"type":"string"},"tests":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"events":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"data":{"type":"string"},"delay_ms":{"type":"integer"}},"required":["name","data","delay_ms"],"additionalProperties":false}},"settle_ms":{"type":"integer"},"expect_events":{"type":"array","description":"The names of the events the machine sends to #_parent, in order; never the donedata.","items":{"type":"string"}},"expect_done":{"type":"boolean"}},"required":["name","events","settle_ms","expect_events","expect_done"],"additionalProperties":false}}},"required":["scxml","schemas","script","tests"],"additionalProperties":false})'/>
@@ -215,7 +241,7 @@
   <state id="intake">
     <transition event="builder.request" event:schema="schemas/builder.request.json"
                 cond="satisfiesBuilderRequest(_event)"
-                target="design">
+                target="routing">
       <assign location="spec" expr="_event.data.spec"/>
       <assign location="constraints" expr="requestConstraints(_event)"/>
       <assign location="name" expr="requestName(_event)"/>
@@ -226,11 +252,21 @@
       <assign location="min_every_ms" expr="requestBound(_event.data.min_every_ms)"/>
       <assign location="turn_after_bound_ms" expr="requestBound(_event.data.turn_after_bound_ms)"/>
       <assign location="live_turn" expr="requestApply(_event)"/>
+      <assign location="template" expr="requestTemplate(_event)"/>
     </transition>
     <transition event="builder.request" target="failed">
       <assign location="failure_reason" expr="'invalid-request'"/>
       <assign location="diagnostics" expr="invalidRequestDiagnostics()"/>
     </transition>
+  </state>
+
+  <!-- A turn script request (decision D132) has its plan, the template's,
+       and goes to author; every other request plans its topology first. -->
+  <state id="routing">
+    <transition cond="isTemplated()" target="author">
+      <assign location="plan" expr="templatePlan()"/>
+    </transition>
+    <transition target="design"/>
   </state>
 
   <!-- Plans the topology (structured output) through the generate service. -->
@@ -313,7 +349,8 @@
     </transition>
   </state>
 
-  <!-- Writes the draft: SCXML, its input event schemas, and test scripts. -->
+  <!-- Writes the draft: SCXML, its input event schemas, and test scripts;
+       in template mode, a turn behavior's script and test inputs. -->
   <state id="author">
     <onentry>
       <assign location="attempt" expr="increment(attempt)"/>
@@ -344,11 +381,11 @@
     <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
             env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL" env:stream="FLOPPY_STREAM">
       <param name="model" expr="model"/>
-      <param name="system" expr="author_system"/>
+      <param name="system" expr="authorSystem()"/>
       <param name="prompt" expr="authorPrompt()"/>
-      <param name="schema" expr="draft_schema"/>
-      <param name="schemaname" expr="'scxml_draft'"/>
-      <param name="max_completion_tokens" expr="max_completion_tokens"/>
+      <param name="schema" expr="authorSchema()"/>
+      <param name="schemaname" expr="authorSchemaName()"/>
+      <param name="max_completion_tokens" expr="authorMaxCompletionTokens()"/>
     </invoke>
     <transition event="generate.progress" event:schema="schemas/generate.progress.json" cond="isFrom(_event, gen_id)">
       <cancel sendidexpr="generate_timer"/>
@@ -364,10 +401,23 @@
     <!-- The two events of this call of the generate service, each recorded
          (gen_id: a late event of an earlier attempt's call is not this one). -->
     <transition event="generate.result" event:schema="schemas/generate.result.json" cond="isFrom(_event, gen_id)">
-      <assign location="draft" expr="namedArgs(_event, 'scxml_draft')"/>
+      <assign location="draft" expr="namedArgs(_event, authorSchemaName())"/>
     </transition>
     <transition event="generate.failed" event:schema="schemas/generate.failed.json" cond="isFrom(_event, gen_id)">
       <assign location="gen_failure" expr="_event.data.code"/>
+    </transition>
+    <!-- A turn script whose author asks for a persistent routine (decision
+         D132): the build goes on once as a whole document, planned first. -->
+    <transition event="done.invoke" cond="isRoutineAsked(_event)" target="design">
+      <assign location="template" expr="null"/>
+      <assign location="plan" expr="null"/>
+      <log label="author" expr="'a persistent routine: planning its whole document'"/>
+    </transition>
+    <!-- A turn script: the template, naming the script, is its chart. -->
+    <transition event="done.invoke" cond="isScriptGenerated(_event)" target="writing">
+      <behavior:turn_program location="scxml_text" script="draftFile('.js')"/>
+      <assign location="draft" expr="templatedDraft()"/>
+      <assign location="fix_passes" expr="0"/>
     </transition>
     <!-- A draft whose scxml holds no SCXML document (empty, a placeholder)
          is told so, with what it held, before anything is written. -->
@@ -581,11 +631,12 @@
       </transition>
     </state>
 
-    <!-- One apply run (the reference verify_apply on a turn behavior, D131): the
-         draft runs once as a fresh invocation with the params turn and input, as
-         the candidates runner runs it, and must finish within the test's settle
-         time, armed once it has started; nothing is sent to it, and sim_check
-         checks its donedata with <behavior:verify_apply>. -->
+    <!-- One apply run (the reference verify_apply on a turn behavior, D131; in
+         template mode also each test input, D132): the draft runs once as a
+         fresh invocation with the params turn and input, as the candidates
+         runner runs it, and must finish within the test's settle time, armed
+         once it has started; nothing is sent to it, and sim_check checks its
+         donedata with <behavior:verify_apply>. -->
     <state id="sim_apply">
       <onentry>
         <if cond="reportsProgress()">
@@ -636,7 +687,8 @@
           <behavior:verify_tick location="apply" ticks="ticks"/>
         <elseif cond="isApplyTest()"/>
           <behavior:verify_apply location="apply" done="child_data" turn="testTurn()"
-              input="testInput()" targets="testTargets()" error="applyError()"/>
+              input="testInput()" targets="testTargets()" handled="testHandled()"
+              error="applyError()"/>
         </if>
         <assign location="sim_results" expr="nextSimResults()"/>
         <assign location="sim_index" expr="increment(sim_index)"/>
@@ -711,7 +763,8 @@
     <transition event="triage.repair" target="design">
       <assign location="decisions" expr="appended(decisions, 'triage.repair')"/>
     </transition>
-    <transition event="triage.redesign" event:schema="schemas/triage.redesign.json" target="design">
+    <!-- A turn script's plan is the template's (decision D132): no redesign. -->
+    <transition event="triage.redesign" cond="isWholeDocument()" event:schema="schemas/triage.redesign.json" target="design">
       <assign location="decisions" expr="appended(decisions, 'triage.redesign')"/>
     </transition>
     <transition event="triage.abandon" event:schema="schemas/triage.abandon.json" target="failed">

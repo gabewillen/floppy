@@ -12,9 +12,10 @@
 //! One deterministic fake Chat Completions backend on 127.0.0.1 answers
 //! by the schema's name, the one tool the request requires a call of: `dispatch` (the select step)
 //! by the route (the first path segment of `FLOPPY_BASE_URL`),
-//! `topology_plan` and `scxml_draft` (the builder) with a plan and a turn
-//! behavior draft, or with drafts that never validate on the `buildfail`
-//! route. The decision backend (the builder's triage) always fails, so the
+//! `turn_script` (the builder's turn template, decision D132) with a turn
+//! behavior's script, or with scripts that never validate on the
+//! `buildfail` route, and `topology_plan` and `scxml_draft` with a plan and
+//! a persistent routine for a change of one. The decision backend (the builder's triage) always fails, so the
 //! builder falls back on its own. Nothing reaches the network; the keys are
 //! fake and reach the run only through an env file.
 //!
@@ -43,7 +44,9 @@ use support::{Run, logs, unique_scratch, workspace};
 const WAIT: Duration = Duration::from_secs(180);
 const FAKE_KEYS: &str = "FLOPPY_API_KEY=floppy-fake\nTYPESAFE_API_KEY=ts-floppy-fake\n";
 
-/// The behavior a create installs: it answers its turn with one response.
+/// A turn behavior stored as one whole document, as the builder wrote one
+/// before the turn template (decision D132): it answers its turn with one
+/// response.
 const BEHAVIOR: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="GreetOnKnock" initial="answering">
   <datamodel>
     <data id="turn" expr="0"/>
@@ -59,63 +62,75 @@ const BEHAVIOR: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version
   </final>
 </scxml>"#;
 
-/// A behavior that answers only a knock, read from its param `input`: run
-/// with no param (its own test) it is unhandled, so only the builder's run
-/// on the live turn (decision D131) can find it handled.
-const GROUNDED: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="GreetOnKnock" initial="answering">
-  <datamodel>
-    <data id="turn" expr="0"/>
-    <data id="input" expr="null"/>
-  </datamodel>
-  <script src="GreetOnKnock.js"/>
-  <state id="answering">
-    <transition cond="knocked(input)" target="answered"/>
-    <transition target="unanswered"/>
-  </state>
-  <final id="answered">
-    <donedata>
-      <content expr="answer(turn, input)"/>
-    </donedata>
-  </final>
-  <final id="unanswered">
-    <donedata>
-      <content expr="({turn: turn, handled: false, selected: []})"/>
-    </donedata>
-  </final>
-</scxml>"#;
+/// The turn behavior's script a create's builder writes into the turn
+/// template (decision D132): it answers a knock with one response.
+const GREET_SCRIPT: &str = "function applies(input) {\n  return input.label === 'knock';\n}\nfunction selections(input, turn) {\n  return [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Hello!'}, reason: 'a knock'}];\n}\n";
 
-/// [`GROUNDED`]'s script.
-const GROUNDED_SCRIPT: &str = "function knocked(input) {\n  return input !== null && input.label === 'knock';\n}\nfunction answer(turn, input) {\n  return {turn: turn, handled: true, selected: [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Hello!', label: input.label}, reason: 'a knock'}]};\n}\n";
+/// A script that answers only a knock and reads its label from `input`,
+/// so it agrees with the live turn (decision D131) only when the builder
+/// ran it on that turn's input.
+fn grounded_script() -> String {
+    GREET_SCRIPT.replace(
+        "data: {text: 'Hello!'}",
+        "data: {text: 'Hello!', label: input.label}",
+    )
+}
 
-/// [`BEHAVIOR`] with the label of the knock it was learned from hardcoded
-/// as another (a prior episode's) value.
-fn hardcoded_behavior() -> String {
-    BEHAVIOR.replace(
+/// [`GREET_SCRIPT`] with the label of the knock it was learned from
+/// hardcoded as another (a prior episode's) value.
+fn hardcoded_script() -> String {
+    GREET_SCRIPT.replace(
         "data: {text: 'Hello!'}",
         "data: {text: 'Hello!', label: 'doorbell'}",
     )
 }
 
-const PLAN: &str = r#"{"name":"GreetOnKnock","summary":"Answer a knock with a greeting.","states":[{"id":"answering","kind":"atomic","parent":"","purpose":"Decide the answer."},{"id":"answered","kind":"final","parent":"","purpose":"Carry the answer."}],"events":[],"transitions":[{"source":"answering","event":"","target":"answered","description":"Answer at once."}]}"#;
+/// The script the `buildfail` route answers: it declares only
+/// `selections`, so it never validates.
+fn rejected_script() -> String {
+    GREET_SCRIPT[GREET_SCRIPT
+        .find("function selections")
+        .expect("selections")..]
+        .to_owned()
+}
 
-/// The builder's draft: `scxml`, no schema and no script, with one test
-/// that drives nothing and expects the behavior to finish.
-fn draft(scxml: &str) -> String {
+/// The builder's `turn_script` answer: a turn behavior's `script`, with no
+/// test inputs (the builder runs it on the live turn).
+fn script_reply(script: &str) -> String {
+    json!({"lifetime": "turn", "script": script, "tests": []}).to_string()
+}
+
+/// The turn behavior template the builder writes, naming `script`.
+fn template_text(script: &str) -> String {
+    std::fs::read_to_string(workspace().join("namespaces/behavior/templates/turn.scx"))
+        .expect("the template is readable")
+        .replacen(r#"src="turn.js""#, &format!(r#"src="{script}""#), 1)
+}
+
+/// An hourly persistent routine whose tick says hello, and one test that
+/// drives nothing and expects no output (the builder forces the first
+/// tick).
+fn routine_draft() -> String {
     json!({
-        "scxml": scxml,
+        "scxml": r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="GreetOnKnock" initial="waiting">
+  <state id="waiting">
+    <onentry><send id="every" event="hourly.every" delay="3600s"/></onentry>
+    <onexit><cancel sendid="every"/></onexit>
+    <transition event="hourly.every" target="waiting">
+      <send event="bot.behavior.tick" target="#_parent">
+        <content expr="({name: 'GreetOnKnock', trigger: 'every', scheduled_at: new Date().toISOString(), fired_at: new Date().toISOString(), output: [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Hello!'}}]})"/>
+      </send>
+    </transition>
+  </state>
+</scxml>"##,
         "schemas": {"$defs": {}},
         "script": "",
-        "tests": [{"name": "answers its turn", "events": [], "settle_ms": 2000, "expect_events": [], "expect_done": true}],
+        "tests": [{"name": "waits", "events": [], "settle_ms": 1000, "expect_events": [], "expect_done": false}],
     })
     .to_string()
 }
 
-/// [`draft`] with `script`.
-fn scripted_draft(scxml: &str, script: &str) -> String {
-    let mut draft: Json = serde_json::from_str(&draft(scxml)).expect("the draft is JSON");
-    draft["script"] = script.into();
-    draft.to_string()
-}
+const PLAN: &str = r#"{"name":"GreetOnKnock","summary":"Answer a knock with a greeting.","states":[{"id":"answering","kind":"atomic","parent":"","purpose":"Decide the answer."},{"id":"answered","kind":"final","parent":"","purpose":"Carry the answer."}],"events":[],"transitions":[{"source":"answering","event":"","target":"answered","description":"Answer at once."}]}"#;
 
 /// A non-streamed Chat Completions answer carrying `content`, as the
 /// generate service asks for one by default.
@@ -217,7 +232,7 @@ fn selection(route: &str) -> Option<Json> {
         "create" | "buildfail" | "genfail" | "slowbuild" | "stallbuild" | "slowplain"
         | "livebound" | "livehardcoded" => Some(create_selection()),
         "break" => Some(break_selection("GreetOnKnock")),
-        "change" => Some(change_selection()),
+        "change" | "changeroutine" => Some(change_selection()),
         "breakunknown" => Some(break_selection("Nobody")),
         "two" => Some(json!([
             break_selection("GreetOnKnock")[0].clone(),
@@ -237,24 +252,18 @@ fn answer(target: &str, body: &Json, attempt: usize) -> Option<String> {
     let schema = body.pointer("/tools/0/function/name")?.as_str()?;
     match schema {
         "dispatch" => dispatch_reply(route, attempt, body).map(|args| completion(&args)),
+        "turn_script" => match route {
+            "buildfail" => Some(completion(&script_reply(&rejected_script()))),
+            "genfail" => None,
+            "livebound" => Some(completion(&script_reply(&grounded_script()))),
+            "livehardcoded" => Some(completion(&script_reply(&hardcoded_script()))),
+            _ => Some(completion(&script_reply(GREET_SCRIPT))),
+        },
+        // A change of a persistent routine is built as a whole document.
         "topology_plan" => Some(completion(PLAN)),
-        "scxml_draft" if route == "buildfail" => Some(completion(&draft(&rejected_behavior()))),
-        "scxml_draft" if route == "genfail" => None,
-        "scxml_draft" if route == "livebound" => {
-            Some(completion(&scripted_draft(GROUNDED, GROUNDED_SCRIPT)))
-        }
-        "scxml_draft" if route == "livehardcoded" => {
-            Some(completion(&draft(&hardcoded_behavior())))
-        }
-        "scxml_draft" => Some(completion(&draft(BEHAVIOR))),
+        "scxml_draft" => Some(completion(&routine_draft())),
         _ => None,
     }
-}
-
-/// The draft the `buildfail` route answers: its transition targets a state
-/// that does not exist, so it never validates.
-fn rejected_behavior() -> String {
-    BEHAVIOR.replace("target=\"answered\"", "target=\"nowhere\"")
 }
 
 #[derive(Clone, Debug)]
@@ -303,8 +312,8 @@ fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
     }
     let target = request_line.split(' ').nth(1).unwrap_or("").to_owned();
     let body: Json = serde_json::from_slice(&body).unwrap_or(Json::Null);
-    // The builder's generations on the slow routes stream slowly but
-    // steadily (seven pieces 1.5 s apart), or stall after their first
+    // The builder's turn script on the slow routes streams slowly but
+    // steadily (seven pieces 1.5 s apart), or stalls after its first
     // piece.
     let schema = body
         .pointer("/tools/0/function/name")
@@ -317,8 +326,7 @@ fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
         ("slowplain", false),
     ] {
         let content = match schema.as_str() {
-            "topology_plan" => PLAN.to_owned(),
-            "scxml_draft" => draft(BEHAVIOR),
+            "turn_script" => script_reply(GREET_SCRIPT),
             _ => continue,
         };
         if target == format!("/{route}/v1/chat/completions") {
@@ -331,7 +339,7 @@ fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
                 &content,
                 7,
                 Duration::from_millis(1_500),
-                stall && schema == "scxml_draft",
+                stall,
             );
             return;
         }
@@ -938,9 +946,11 @@ fn a_create_is_built_and_stored_active_with_grounded_triggers_on(database: &str)
     // The row's source is the path of the documents the builder wrote
     // under the intent's name (decision D121).
     let written = behaviors(&harness);
+    // A create is a turn behavior: the chart is the turn template naming
+    // its script, which is all the model wrote (decision D132).
     assert_eq!(
         std::fs::read_to_string(written.join("GreetOnKnock.scx")).expect("the chart is written"),
-        BEHAVIOR
+        template_text("GreetOnKnock.js")
     );
     assert_eq!(
         std::fs::read_to_string(written.join("GreetOnKnock.json"))
@@ -949,11 +959,12 @@ fn a_create_is_built_and_stored_active_with_grounded_triggers_on(database: &str)
     );
     assert_eq!(
         std::fs::read_to_string(written.join("GreetOnKnock.js")).expect("the script is written"),
-        ""
+        GREET_SCRIPT
     );
     // The builder was asked once, with the intent, the DRAFT stub, and the
-    // turn behavior contract.
-    let drafts = mock.requests("scxml_draft");
+    // turn behavior contract, and planned nothing.
+    assert!(mock.requests("topology_plan").is_empty());
+    let drafts = mock.requests("turn_script");
     assert_eq!(drafts.len(), 1);
     let spec: Json =
         serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
@@ -996,7 +1007,7 @@ fn the_builder_is_told_the_triggers_and_the_input_the_behavior_runs_with() {
         texts(&records, "reflection.inventory"),
         [r#"GreetOnKnock ACTIVE turn ["environment.sound"] (accept)"#]
     );
-    let drafts = mock.requests("scxml_draft");
+    let drafts = mock.requests("turn_script");
     assert_eq!(drafts.len(), 1);
     let prompt: Json =
         serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
@@ -1004,7 +1015,12 @@ fn the_builder_is_told_the_triggers_and_the_input_the_behavior_runs_with() {
         .as_str()
         .expect("the turn behavior contract")
         .to_owned();
-    assert!(contract.starts_with("Write a turn behavior"), "{contract}");
+    // The turn template's contract (decision D132): the model writes only
+    // the script.
+    assert!(
+        contract.starts_with("Write a turn behavior's script"),
+        "{contract}"
+    );
     assert!(
         contract.contains(r#"its triggers ["environment.sound"]"#),
         "{contract}"
@@ -1017,37 +1033,35 @@ fn the_builder_is_told_the_triggers_and_the_input_the_behavior_runs_with() {
     );
     assert!(!contract.contains("and the stimulus"), "{contract}");
     // A conversation's output carries the whole history: the behavior
-    // decides from the message this turn answers, and a turn it does not
-    // apply to is unhandled (decision D96; the 2026-10-12 live run's
-    // behavior answered every later turn because an earlier message
-    // matched).
+    // decides from the message this turn answers (decision D96; the
+    // 2026-10-12 live run's behavior answered every later turn because an
+    // earlier message matched). The template answers a turn it does not
+    // apply to unhandled.
     assert!(
         contract.contains(
-            "parent.data is the message this turn answers and messages is the whole conversation so far"
+            "parent.data is the message this turn answers and messages is the whole conversation so far, earlier turns included, so applies decides from parent.data"
+        ),
+        "{contract}"
+    );
+    // The builder runs it on this turn itself (decision D131), even when
+    // the turn's stimulus is not one of its triggers.
+    assert!(
+        contract.contains(
+            "one of [\"communication\"], exactly as this turn's cognition_output names it"
         ),
         "{contract}"
     );
     assert!(
-        contract.contains("never handled true with an empty list"),
-        "{contract}"
-    );
-    // The builder runs it on this turn itself (decision D131), so its own
-    // tests no longer stand for that run.
-    assert!(
-        contract.contains("The builder runs it once itself"),
-        "{contract}"
-    );
-    assert!(
-        !contract.contains("Its tests drive no input events and expect it to finish."),
+        contract.contains("the builder runs it on this turn's input, which it must answer, even when this turn's stimulus is not one of its triggers"),
         "{contract}"
     );
 }
 
 /// The original's `_check` runs a turn behavior once on the live turn
-/// (`verify_apply`, decision D131): a draft that answers only a knock read
-/// from its param `input` is unhandled under its own test (no param) and
-/// handled on this turn, so its ACTIVE row proves reflection sent the turn
-/// and its input and the builder ran the draft with them.
+/// (`verify_apply`, decision D131): a script that answers only a knock and
+/// reads its label from `input` agrees with this turn only on its input, so
+/// its ACTIVE row proves reflection sent the turn and its input and the
+/// builder ran the script with them.
 #[test]
 fn a_create_passes_only_when_its_draft_selects_on_the_live_input() {
     let mock = Mock::start();
@@ -1064,24 +1078,18 @@ fn a_create_passes_only_when_its_draft_selects_on_the_live_input() {
         texts(&records, "reflection.inventory"),
         [r#"GreetOnKnock ACTIVE turn ["environment.sound"] (accept)"#]
     );
-    let drafts = mock.requests("scxml_draft");
+    let drafts = mock.requests("turn_script");
     assert_eq!(drafts.len(), 1);
-    let prompt: Json =
+    let request: Json =
         serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
-    let contract = prompt["constraints"][0]
-        .as_str()
-        .expect("the turn behavior contract");
-    assert!(
-        contract.contains(r#"whose targets are among ["communication"]"#),
-        "{contract}"
-    );
-    assert!(
-        contract.contains("The builder runs it once itself"),
-        "{contract}"
+    assert_eq!(request["previous_script"], Json::Null, "{request}");
+    assert_eq!(
+        std::fs::read_to_string(behaviors(&harness).join("GreetOnKnock.js")).expect("readable"),
+        grounded_script()
     );
 }
 
-/// A create whose draft hardcodes a value of an earlier turn's input fails
+/// A create whose script hardcodes a value of an earlier turn's input fails
 /// the run on the live turn the same way after its repair, so it is
 /// abandoned as a DRAFT, with the original's binding message adapted to
 /// `input`.
@@ -1106,10 +1114,10 @@ fn a_create_whose_draft_hardcodes_an_input_value_is_abandoned() {
     assert_eq!(json_log(&records, "episodes"), stored(&unapplied_episode()));
 }
 
-/// A revision is bounded by inactivity (decision D101): the builder's
-/// generations stream slowly but steadily (about 9 s each), and each stage
-/// and each progress it reports starts the 8 s bound over, so a build of
-/// some twenty seconds in all is accepted.
+/// A revision is bounded by inactivity (decision D101): the builder's turn
+/// script streams slowly but steadily (about 10.5 s in all), and each stage
+/// and each progress it reports starts the 8 s bound over, so the build is
+/// accepted.
 #[test]
 fn a_build_that_keeps_making_progress_outlasts_the_inactivity_bound() {
     let mock = Mock::start();
@@ -1132,7 +1140,7 @@ fn a_build_that_keeps_making_progress_outlasts_the_inactivity_bound() {
         texts(&records, "reflection.inventory"),
         [r#"GreetOnKnock ACTIVE turn ["environment.sound"] (accept)"#]
     );
-    let generations = [mock.requests("topology_plan"), mock.requests("scxml_draft")].concat();
+    let generations = mock.requests("turn_script");
     assert!(!generations.is_empty());
     assert!(
         generations
@@ -1144,7 +1152,7 @@ fn a_build_that_keeps_making_progress_outlasts_the_inactivity_bound() {
 
 /// A build whose generations are not streamed (the run's `FLOPPY_STREAM`
 /// is unset) reports no generation progress, so the revision's inactivity
-/// bound never arms: each generation of about 10 s outlasts the 8 s bound
+/// bound never arms: the turn script's generation of about 10.5 s outlasts the 8 s bound
 /// and the build is accepted, bounded by the revision's backstop alone
 /// (decision D101).
 #[test]
@@ -1169,7 +1177,8 @@ fn a_build_that_is_not_streamed_is_bounded_by_the_backstop_alone() {
         texts(&records, "reflection.inventory"),
         [r#"GreetOnKnock ACTIVE turn ["environment.sound"] (accept)"#]
     );
-    let drafts = mock.requests("scxml_draft");
+    let drafts = mock.requests("turn_script");
+    assert!(!drafts.is_empty());
     assert!(
         drafts
             .iter()
@@ -1230,7 +1239,7 @@ fn a_failed_build_leaves_a_validation_draft_on(database: &str) {
     assert_eq!(failed.len(), 1, "{records:?}");
     assert!(
         failed[0].starts_with(
-            "Reflection change abandoned: same diagnostic message after fix:\nbehavior validation failed:\n  error[SCXML005] validate: "
+            "Reflection change abandoned: same diagnostic message after fix:\nbehavior validation failed:\n  error[undeclared-function] draft: script does not declare applies"
         ),
         "{failed:?}"
     );
@@ -1244,11 +1253,17 @@ fn a_failed_build_leaves_a_validation_draft_on(database: &str) {
             "triggers": ["environment.sound", "phone.incoming_call"],
         }])
     );
+    // The DRAFT row's path names the rejected draft: the template and the
+    // script the model wrote.
     assert_eq!(
         std::fs::read_to_string(behaviors(&harness).join("GreetOnKnock.scx"))
             .expect("the rejected draft is written"),
-        rejected_behavior(),
-        "the DRAFT row's path names the rejected draft"
+        template_text("GreetOnKnock.js")
+    );
+    assert_eq!(
+        std::fs::read_to_string(behaviors(&harness).join("GreetOnKnock.js"))
+            .expect("the rejected script is written"),
+        rejected_script()
     );
     assert_eq!(json_log(&records, "episodes"), stored(&unapplied_episode()));
 }
@@ -1256,7 +1271,9 @@ fn a_failed_build_leaves_a_validation_draft_on(database: &str) {
 /// A change revises the stored program: reading reads its three documents
 /// back through the files service (decision D121), the builder is given
 /// them as the existing row's `scxml`, `schemas` and `script`, and the
-/// revision is written under the same name, so the row keeps its path.
+/// revision is written under the same name, so the row keeps its path; a
+/// turn behavior stored as a whole document is rebuilt from the turn
+/// template (decision D132).
 #[test]
 fn a_change_reads_the_stored_documents_back_for_the_builder() {
     let mock = Mock::start();
@@ -1279,7 +1296,7 @@ fn a_change_reads_the_stored_documents_back_for_the_builder() {
         ["answered"],
         "{records:?}"
     );
-    let drafts = mock.requests("scxml_draft");
+    let drafts = mock.requests("turn_script");
     assert_eq!(drafts.len(), 1, "{records:?}");
     let prompt: Json =
         serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
@@ -1303,8 +1320,57 @@ fn a_change_reads_the_stored_documents_back_for_the_builder() {
     );
     assert_eq!(
         std::fs::read_to_string(stored_dir.join("GreetOnKnock.scx")).expect("readable"),
-        BEHAVIOR,
+        template_text("GreetOnKnock.js"),
         "the revision is written over the stored chart"
+    );
+}
+
+/// A seed of one ACTIVE persistent routine named `GreetOnKnock` whose
+/// program the builder wrote ([`GREET_PATH`]).
+const SEED_ROUTINE: &str = "[{sql: &quot;INSERT INTO bot_behavior (name, source, description, lifetime, status) VALUES ('GreetOnKnock', '../../behaviors/GreetOnKnock.scx', 'Say hello every hour.', 'persistent', 'ACTIVE')&quot;}]";
+
+/// A change of a persistent routine keeps the whole-document path: the
+/// builder plans it and asks for its whole document (decision D132), and it
+/// stays persistent.
+#[test]
+fn a_change_of_a_persistent_routine_builds_a_whole_document() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "changeroutine", SEED_ROUTINE, SQLITE);
+    let stored_dir = behaviors(&harness);
+    std::fs::create_dir_all(&stored_dir).expect("the behaviors directory is creatable");
+    let stored: Json = serde_json::from_str(&routine_draft()).expect("the routine is JSON");
+    std::fs::write(
+        stored_dir.join("GreetOnKnock.scx"),
+        stored["scxml"].as_str().expect("its scxml"),
+    )
+    .expect("writable");
+    std::fs::write(stored_dir.join("GreetOnKnock.json"), r#"{"$defs":{}}"#).expect("writable");
+    std::fs::write(stored_dir.join("GreetOnKnock.js"), "").expect("writable");
+    let mut run = start(&harness, &env);
+    let records = reflect(&mut run, 1);
+    drop(run.close(WAIT));
+    assert_eq!(
+        texts(&records, "harness.output"),
+        ["answered"],
+        "{records:?}"
+    );
+    assert!(mock.requests("turn_script").is_empty());
+    assert_eq!(mock.requests("topology_plan").len(), 1);
+    let drafts = mock.requests("scxml_draft");
+    assert_eq!(drafts.len(), 1, "{records:?}");
+    let prompt: Json =
+        serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
+    assert!(
+        prompt["constraints"][0]
+            .as_str()
+            .is_some_and(|contract| contract.starts_with("Write a turn behavior: its datamodel")),
+        "{prompt}"
+    );
+    let inventory = texts(&records, "reflection.inventory");
+    assert_eq!(inventory.len(), 1, "{records:?}");
+    assert!(
+        inventory[0].starts_with("GreetOnKnock ACTIVE persistent "),
+        "{inventory:?}"
     );
 }
 

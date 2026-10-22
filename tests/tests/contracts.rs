@@ -1111,6 +1111,21 @@ fn builder_output_references_its_own_documents_and_meets_the_structure_rule() {
     let problems = builder_output_problems(&Parsed::read(&greet));
     assert!(problems.is_empty(), "{problems:#?}");
     validates_clean(&greet).expect("the three documents validate clean");
+    // The turn behavior template (decision D132) is builder output: as
+    // `turn.scx` beside an empty `turn.js` and its schemas, it meets the rule
+    // and validates clean.
+    let template_dir = support::unique_scratch("contracts-turn-template");
+    std::fs::write(template_dir.join("turn.js"), "").expect("writable");
+    std::fs::write(template_dir.join("turn.json"), r#"{"$defs":{}}"#).expect("writable");
+    let template = support::write(
+        &template_dir,
+        "turn.scx",
+        &std::fs::read_to_string(workspace().join("namespaces/behavior/templates/turn.scx"))
+            .expect("the template is readable"),
+    );
+    let problems = builder_output_problems(&Parsed::read(&template));
+    assert!(problems.is_empty(), "{problems:#?}");
+    validates_clean(&template).expect("the turn template validates clean");
     // A schema file of another name, valid in a literal child, breaks
     // builder output.
     let referencing = Parsed::read(&fixture("good/child/child.scx"));

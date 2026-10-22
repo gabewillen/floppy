@@ -20,23 +20,6 @@
     },
     {
       "path": "/v1/chat/completions",
-      "status": 200,
-      "body": {
-        "object": "chat.completion",
-        "choices": [
-          {
-            "index": 0,
-            "finish_reason": "stop",
-            "message": {
-              "role": "assistant",
-              "content": "{\"name\":\"GreetOnKnock\",\"summary\":\"Answer a knock with a greeting.\",\"states\":[{\"id\":\"answering\",\"kind\":\"atomic\",\"parent\":\"\",\"purpose\":\"Decide the answer.\"},{\"id\":\"answered\",\"kind\":\"final\",\"parent\":\"\",\"purpose\":\"Carry the answer.\"}],\"events\":[],\"transitions\":[{\"source\":\"answering\",\"event\":\"\",\"target\":\"answered\",\"description\":\"Answer at once.\"}]}"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "path": "/v1/chat/completions",
       "status": 500,
       "body": {
         "error": {

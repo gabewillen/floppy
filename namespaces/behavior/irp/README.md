@@ -4,8 +4,8 @@ The implementation report plan of the `behavior` namespace, in the format of the
 [W3C SCXML IRP](../../../scxml.rs/tests/conformance/w3c-irp/README.md) and of
 scxml.rs's own namespace suites
 ([scxml.rs/docs/conformance.md](../../../scxml.rs/docs/conformance.md#namespace-suites)):
-6 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
-("Statements"), tested by 23 mandatory documents. It runs through exactly
+7 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
+("Statements"), tested by 27 mandatory documents. It runs through exactly
 the pipeline the W3C IRP runs through (the canonical compiler, the shipped
 Wasm components under the Wasmtime session host, the same oracles and report
 envelope), with the namespace's own extension package and component bound,
@@ -35,12 +35,12 @@ SAXON='java -jar /opt/saxon/saxon-he-12.8.jar' sh scripts/namespace-irp.sh prepa
 sh scripts/namespace-irp.sh baselines behavior
 ```
 
-The current baseline (manifest SHA-256 `7757639294b08633d0421725450591bbda1852344e0996b0a72962ceab27dc0a`,
+The current baseline (manifest SHA-256 `66467b78a7e06cf2ef956a2cb69157ff2bf9d4c2acdd5cf59b495bd1d8536155`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
 measured on Linux x86_64, the host `tests/tests/namespace_irp.rs` compares
-fuel on, when `<behavior:verify_apply>` was added and behavior-6 reworded)
+fuel on, when the turn template gained loading and behavior-6 its unloaded script)
 measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 23 / 23 | 0 | `1e98fcc309019dd5c050c03b3d848c1c8448191ebbd45ea5c7da67c88db3e567` | `92ed79304387ad95e765ec40343689995ab793343b978e730946c34965c93127` |
+| ECMAScript | 27 / 27 | 0 | `2f37d30e9222d2317e396bca482008550f28031db8097c307a10de07f06116d1` | `feb940279e5412f4ad0590e7f1b552258f1066102c627a3ba1a226a4887d8b7e` |

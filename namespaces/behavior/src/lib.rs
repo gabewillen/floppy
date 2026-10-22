@@ -1,7 +1,8 @@
 //! The `behavior` extension namespace:
 //! `<behavior:instances_from_behavior_results>`,
 //! `<behavior:replace_behavior_clauses>`, `<behavior:lifetime_errors>`,
-//! `<behavior:verify_tick>` and `<behavior:verify_apply>` as a
+//! `<behavior:verify_tick>`, `<behavior:verify_apply>` and
+//! `<behavior:turn_program>` as a
 //! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
 //! The original's behavior package (`behavior/storage.py`,
@@ -9,7 +10,8 @@
 //! memory select returns read as behavior instances, the statements that
 //! replace one behavior's row and triggers, the schedule bounds a
 //! behavior's lifetime implies, the check of a persistent routine's
-//! forced tick, and the check of a turn behavior's run on its live turn.
+//! forced tick, the check of a turn behavior's run on its live turn, and
+//! the one program shape of a turn behavior (`behavior/source.py`).
 //! The memory ability applies the statements through the sql service and
 //! the builder simulates the routine; these elements only build and read
 //! values, so they are synchronous executable content.
@@ -25,7 +27,9 @@
 //!     lifetimelocation="lifetime" scheduleslocation="schedules"/>
 //! <behavior:verify_tick location="apply" ticks="ticks"/>
 //! <behavior:verify_apply location="apply" done="child_data" turn="testTurn()"
-//!     input="testInput()" targets="testTargets()" error="applyError()"/>
+//!     input="testInput()" targets="testTargets()" handled="testHandled()"
+//!     error="applyError()"/>
+//! <behavior:turn_program location="scxml_text" script="draftFile('.js')"/>
 //! ```
 //!
 //! Every attribute but the locations is an expression of the document's
@@ -93,7 +97,7 @@
 //! and `fired_at` and its `output` selects at least one event whose data
 //! holds the tick's own values for any of those fields.
 //!
-//! # `<behavior:verify_apply location="L" done="D" turn="T" input="I" targets="G" error="E"?/>`
+//! # `<behavior:verify_apply location="L" done="D" turn="T" input="I" targets="G" handled="H"? error="E"?/>`
 //!
 //! The original's `verify_apply` on a turn behavior (`verify._apply_once`
 //! with `_live_binding_values` and `_selection_binding_errors`): the
@@ -114,6 +118,29 @@
 //! selection) and data whose members agree with the string, number and
 //! boolean members of `input` of the same names (JSON equality, so `true`
 //! is not `1`); else why, an error or no donedata first.
+//!
+//! Two checks serve the turn template (decision D132): a donedata whose
+//! `error` is a string (`script` when the script did not load, else the
+//! name of the script's call that threw) writes only that, after a run
+//! error and before any other check (a turn behavior's donedata reserves
+//! `error`: the candidates runner records a run whose `error` is a string
+//! as failed); and `handled` (optional) evaluates to whether the run must
+//! answer its input (absent: `true`). When it is `false`, none when the run
+//! finished with `handled` false and `selected` an empty list, else what
+//! it answered (or that it did not finish).
+//!
+//! # `<behavior:turn_program location="L" script="S"/>`
+//!
+//! The original's one program shape of a turn behavior
+//! (`behavior/source.py` `STARLARK_API`, decision D132): `location`
+//! (required) receives [`TURN_TEMPLATE`], the text of
+//! `templates/turn.scx`, with its `<script src="turn.js"/>` naming the
+//! file `script` (required) evaluates to instead, a plain `.js` file name
+//! (letters, digits, `_` and `-`, then `.js`). The template's invoker sets
+//! `turn` and `input`; it calls the script's `applies(input)` and, when
+//! that is `true`, `selections(input, turn)`, and ends at once with the
+//! donedata `{turn, handled, selected, error}` (`error` `script` when the
+//! script did not load).
 //!
 //! # Failures
 //!
@@ -274,6 +301,7 @@ pub fn execute<H: BehaviorHost>(
         "lifetime_errors" => lifetime_element(attributes, content, host),
         "verify_tick" => verify_tick_element(attributes, content, host),
         "verify_apply" => verify_apply_element(attributes, content, host),
+        "turn_program" => turn_program_element(attributes, content, host),
         _ => Ok(Executed::NotHandled),
     }
 }
@@ -1272,11 +1300,15 @@ const MAX_APPLY_ERRORS: usize = 20;
 const NO_SELECTION: &str =
     "behavior output must select at least one event for the observed pattern.";
 
-/// A turn behavior that did not finish on the live turn.
-const NO_FINAL: &str = "turn behavior reached no top-level final state on the live turn's input within the turn's bound: it receives no events, so it decides with eventless transitions and ends at once.";
+/// A turn behavior that did not finish on its input.
+const NO_FINAL: &str = "turn behavior reached no top-level final state on this input within the turn's bound: it receives no events, so it decides at once (a document with eventless transitions) and ends.";
 
 /// A turn behavior whose donedata is not the candidates runner's contract.
-const NOT_THE_CONTRACT: &str = "turn behavior donedata must be the object {turn, handled, selected}: handled a boolean and selected a list of selections.";
+const NOT_THE_CONTRACT: &str = "turn behavior donedata must be the object {turn, handled, selected}: handled a boolean and selected a list of selections (a turn script's selections(input, turn) returns that list).";
+
+/// The template's error for a script that did not load.
+const SCRIPT_NOT_LOADED: &str =
+    "the script did not load: it must parse, and its top level must run without throwing.";
 
 /// `<behavior:verify_apply>`'s targets that are not strings.
 const NOT_STRINGS: &str = "behavior:verify_apply targets is not an array of strings";
@@ -1284,17 +1316,25 @@ const NOT_STRINGS: &str = "behavior:verify_apply targets is not an array of stri
 /// `<behavior:verify_apply>`'s error that is not a name.
 const NOT_AN_ERROR: &str = "behavior:verify_apply error is not a string or null";
 
+/// `<behavior:verify_apply>`'s handled that is not a boolean.
+const NOT_A_BOOLEAN: &str = "behavior:verify_apply handled is not a boolean";
+
+/// What an input the behavior must not answer is answered with.
+const UNANSWERED: &str = "the behavior must not answer this input (handled false, selected [])";
+
 /// Executes `<behavior:verify_apply>`.
 fn verify_apply_element<H: BehaviorHost>(
     attributes: &[Attribute],
     content: &[Content],
     host: &mut H,
 ) -> Result<Executed, Failure<H::Error>> {
-    let [location, done, turn, input, targets, error] = attribute_values(
+    let [location, done, turn, input, targets, handled, error] = attribute_values(
         attributes,
-        ["location", "done", "turn", "input", "targets", "error"],
         [
-            "behavior:verify_apply takes only the location, done, turn, input, targets and error attributes",
+            "location", "done", "turn", "input", "targets", "handled", "error",
+        ],
+        [
+            "behavior:verify_apply takes only the location, done, turn, input, targets, handled and error attributes",
             "behavior:verify_apply repeats an attribute",
             "behavior:verify_apply has an empty attribute",
         ],
@@ -1347,6 +1387,13 @@ fn verify_apply_element<H: BehaviorHost>(
             _ => Err(Failure::Execution(NOT_STRINGS)),
         })
         .collect::<Result<Vec<String>, _>>()?;
+    let handled = match handled {
+        None => true,
+        Some(handled) => match evaluate(host, handled, NOT_A_BOOLEAN, NOT_A_BOOLEAN)? {
+            Json::Bool(handled) => handled,
+            _ => return Err(Failure::Execution(NOT_A_BOOLEAN)),
+        },
+    };
     let error = match error {
         None => None,
         Some(error) => match evaluate(host, error, NOT_AN_ERROR, NOT_AN_ERROR)? {
@@ -1356,10 +1403,15 @@ fn verify_apply_element<H: BehaviorHost>(
         },
     };
     let done = (!done.is_null()).then_some(done);
-    let messages = verify_apply(done.as_ref(), &turn, &input, &targets, error.as_deref())
-        .into_iter()
-        .map(Json::String)
-        .collect();
+    let run = Applied {
+        done: done.as_ref(),
+        turn: &turn,
+        input: &input,
+        targets: &targets,
+        handled,
+        error: error.as_deref(),
+    };
+    let messages = verify_apply(&run).into_iter().map(Json::String).collect();
     assign_to(
         host,
         location,
@@ -1369,21 +1421,56 @@ fn verify_apply_element<H: BehaviorHost>(
     Ok(Executed::Handled)
 }
 
+/// One run `<behavior:verify_apply>` checks: its donedata (`None`: it
+/// reached no top-level final state), the turn and input it was invoked
+/// with, the targets its selections may name, whether it must answer the
+/// input, and the error event it ended on.
+#[derive(Clone, Copy, Debug)]
+pub struct Applied<'a> {
+    /// The run's donedata.
+    pub done: Option<&'a Json>,
+    /// The turn param.
+    pub turn: &'a Json,
+    /// The input param.
+    pub input: &'a Map<String, Json>,
+    /// The sessions a selection may name.
+    pub targets: &'a [String],
+    /// Whether the run must answer its input (false: it must not).
+    pub handled: bool,
+    /// The error event the run ended on.
+    pub error: Option<&'a str>,
+}
+
 /// The original's `verify_apply` on a turn behavior with floppy's donedata
-/// contract (the candidates runner's) and target check (decision D104); see
-/// the crate documentation, `<behavior:verify_apply>`.
+/// contract (the candidates runner's) and target check (decision D104), and
+/// the turn template's checks (decision D132); see the crate documentation,
+/// `<behavior:verify_apply>`.
 #[must_use]
-pub fn verify_apply(
-    done: Option<&Json>,
-    turn: &Json,
-    input: &Map<String, Json>,
-    targets: &[String],
-    error: Option<&str>,
-) -> Vec<String> {
+pub fn verify_apply(run: &Applied<'_>) -> Vec<String> {
+    let &Applied {
+        done,
+        turn,
+        input,
+        targets,
+        handled: answers,
+        error,
+    } = run;
     if let Some(error) = error {
         return vec![format!(
-            "turn behavior failed on the live turn's input ({error}) before it reached a top-level final state."
+            "turn behavior failed on this input ({error}) before it reached a top-level final state."
         )];
+    }
+    if let Some(Json::String(threw)) = done.and_then(|done| done.get("error")) {
+        return vec![if threw == "script" {
+            SCRIPT_NOT_LOADED.into()
+        } else {
+            format!(
+                "the script's {threw}() threw on this input: it must return a value for every input."
+            )
+        }];
+    }
+    if !answers {
+        return unanswered_errors(done);
     }
     let Some(done) = done else {
         return vec![NO_FINAL.into()];
@@ -1439,6 +1526,102 @@ pub fn verify_apply(
     ));
     errors.truncate(MAX_APPLY_ERRORS);
     errors
+}
+
+/// A run on an input the behavior must not answer: none when it finished
+/// with handled false and nothing selected, else what it answered.
+fn unanswered_errors(done: Option<&Json>) -> Vec<String> {
+    let Some(done) = done else {
+        return vec![format!(
+            "{UNANSWERED}, it reached no top-level final state."
+        )];
+    };
+    let handled = done.get("handled");
+    let selected = done.get("selected");
+    if handled == Some(&Json::Bool(false))
+        && selected.and_then(Json::as_array).is_some_and(Vec::is_empty)
+    {
+        return Vec::new();
+    }
+    vec![format!(
+        "{UNANSWERED}, it answered handled {} with {} selection(s).",
+        handled.map_or_else(|| "undefined".to_owned(), js_stringify),
+        selected.and_then(Json::as_array).map_or(0, Vec::len)
+    )]
+}
+
+/// The turn behavior template (decision D132; the original's one program
+/// shape, `behavior/source.py` `STARLARK_API`).
+pub const TURN_TEMPLATE: &str = include_str!("../templates/turn.scx");
+
+/// The script reference the template carries, which `turn_program` names
+/// anew.
+const TURN_TEMPLATE_SCRIPT: &str = r#"src="turn.js""#;
+
+/// `<behavior:turn_program>`'s script that is not a plain file name.
+const NOT_A_SCRIPT_NAME: &str = "behavior:turn_program script is not a plain .js file name";
+
+/// The template with its script reference naming `script`, a plain `.js`
+/// file name (letters, digits, `_` and `-` before `.js`, as the builder
+/// names a behavior's files).
+///
+/// # Errors
+///
+/// Any other `script`, with the element's detail.
+pub fn turn_program(script: &str) -> Result<String, &'static str> {
+    let plain = script.strip_suffix(".js").is_some_and(|stem| {
+        !stem.is_empty()
+            && stem
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-'))
+    });
+    if !plain {
+        return Err(NOT_A_SCRIPT_NAME);
+    }
+    Ok(TURN_TEMPLATE.replacen(TURN_TEMPLATE_SCRIPT, &format!(r#"src="{script}""#), 1))
+}
+
+/// Executes `<behavior:turn_program>`.
+fn turn_program_element<H: BehaviorHost>(
+    attributes: &[Attribute],
+    content: &[Content],
+    host: &mut H,
+) -> Result<Executed, Failure<H::Error>> {
+    let [location, script] = attribute_values(
+        attributes,
+        ["location", "script"],
+        [
+            "behavior:turn_program takes only the location and script attributes",
+            "behavior:turn_program repeats an attribute",
+            "behavior:turn_program has an empty attribute",
+        ],
+    )?;
+    let location = location.ok_or(Failure::Execution(
+        "behavior:turn_program requires a location",
+    ))?;
+    let script = script.ok_or(Failure::Execution(
+        "behavior:turn_program requires a script",
+    ))?;
+    no_content(content, "behavior:turn_program holds no content")?;
+    let Json::String(script) = evaluate(
+        host,
+        script,
+        "behavior:turn_program script did not evaluate",
+        "behavior:turn_program script is not a string",
+    )?
+    else {
+        return Err(Failure::Execution(
+            "behavior:turn_program script is not a string",
+        ));
+    };
+    let text = turn_program(&script).map_err(Failure::Execution)?;
+    assign_to(
+        host,
+        location,
+        &Json::String(text),
+        "behavior:turn_program could not assign the document",
+    )?;
+    Ok(Executed::Handled)
 }
 
 /// The original's `_live_binding_values` of a data object: its string,

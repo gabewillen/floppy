@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- reflection-6: a build that never validates abandons the change with the rendered diagnostics, and its draft row stays (a break of it answers). -->
+<!-- reflection-6: a build whose script never declares applies abandons the change with the rendered diagnostics, and its draft row stays (a break of it answers). -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="reflection" type="scxml" src="../../../reflection.scx">
@@ -15,7 +15,7 @@
     <onentry>
       <send event="bot.ability.reflection.input" target="#_reflection"><content expr='{"turn": 1, "cognition_input": {"stimulus": {"event": "environment.sound", "data": {"label": "knock"}}, "focus": "door", "focus_candidates": ["door"]}, "cognition_output": [{"event": "bot.ability.communication.respond", "data": {"text": "Hello!"}, "reason": "a knock", "target": "communication"}]}'/></send>
     </onentry>
-    <transition event="bot.ability.failed" cond='_event.data.message.indexOf("Reflection change abandoned: same diagnostic message after fix:\nbehavior validation failed:\n  error[SCXML005] validate: ") === 0' target="step1"/>
+    <transition event="bot.ability.failed" cond='_event.data.message.indexOf("Reflection change abandoned: same diagnostic message after fix:\nbehavior validation failed:\n  error[undeclared-function] draft: script does not declare applies") === 0' target="step1"/>
   </state>
   <state id="step1">
     <onentry>

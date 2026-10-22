@@ -108,6 +108,24 @@ WAITS = [{"name": "waits", "events": [], "settle_ms": 500, "expect_events": [], 
 BOUNDS = {"min_every_ms": 60000, "turn_after_bound_ms": 1000}
 
 
+# A turn behavior's script (decision D132): it answers a knock, to the
+# session communication, and a test input it must not answer.
+KNOCK_SCRIPT = """function applies(input) {
+  return input.label === 'knock';
+}
+function selections(input, turn) {
+  return [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Who is there?'}}];
+}
+"""
+EVERY_SCRIPT = KNOCK_SCRIPT.replace("input.label === 'knock'", "true")
+BELL = {"name": "a bell is not answered", "input": json.dumps({"label": "bell", "focus": "door"}), "handled": False}
+TEMPLATE = dict(LIVE, name="Knocker", template="turn")
+
+
+def turn_script(text, tests=(), lifetime="turn"):
+    return chat({"lifetime": lifetime, "script": text, "tests": list(tests)})
+
+
 def request(**fields):
     data = {"spec": "a pinger: answer a ping with pong and finish"}
     data.update(fields)
@@ -127,7 +145,7 @@ def built(extra=""):
                         " && _event.data.report.simulation.every(function (r) { return r.passed; })" + (f" && {extra}" if extra else ""))
 
 
-S.statement(1, "It waits in `intake` for `builder.request` `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?}`; data its schema refuses is refused at the sender (its send raises `error.execution` there) and the builder keeps waiting; a request whose spec is only whitespace ends in the final state `failed` with `{reason: \"invalid-request\", diagnostics: [{kind: \"request\", code: \"invalid-request\"}]}`, which the invoker receives as `done.invoke.<id>`.")
+S.statement(1, "It waits in `intake` for `builder.request` `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?, template?}`; data its schema refuses is refused at the sender (its send raises `error.execution` there) and the builder keeps waiting; a request whose spec is only whitespace ends in the final state `failed` with `{reason: \"invalid-request\", diagnostics: [{kind: \"request\", code: \"invalid-request\"}]}`, which the invoker receives as `done.invoke.<id>`.")
 S.statement(2, "A request is planned (`design`, schema `topology_plan`), authored (`author`, schema `scxml_draft`: its `scxml`, `schemas` and `script`), written as `<name>.scx`, `<name>.json` and `<name>.js` through the files service (`writing`; the request's `name`, else the plan's; decision D121), validated (`validate`) and simulated (`simulate`, each test script driving the draft as an invoked child by `srcexpr` on its path); a draft that validates and passes every test ends in the final state `done` with `{scxml, schemas, script, path, tests, report: {attempts, failures, fixes_applied, warnings, plan, decisions, history, simulation}}`, `path` `../../behaviors/<name>.scx`.")
 S.statement(3, "A draft whose validator errors all have machine-applicable fixes is fixed (`apply_fixes`, at most 2 passes per draft) and validated again, without a new attempt: `report.fixes_applied` counts it.")
 S.statement(4, "Every failure goes through `retry_gate`, then `triage`, which asks the decision service to choose among its enabled transitions: `triage.repair` authors the draft again from the same plan (`report.decisions` `[\"triage.repair\"]`), `triage.redesign` plans again, `triage.abandon` ends in `failed` `{reason: \"abandoned\"}`. When the decision is unavailable it falls back (`fallback`): repair when there is a plan, else redesign.")
@@ -137,6 +155,8 @@ S.statement(7, "A generation that fails (`generate.failed`) is a `generate` diag
 S.statement(8, "With the request's lifetime bounds (`min_every_ms`, `turn_after_bound_ms`), a draft that sends `bot.behavior.tick` (a persistent routine) whose schedule is shorter than `min_every_ms` is a `lifetime` diagnostic `E0009`; a routine within the bounds also gets a forced first tick, whose output must select at least one event (else an `apply` diagnostic `E0008`).")
 
 S.statement(9, "With the request's `apply` `{turn, input, targets}`, a draft that sends no `bot.behavior.tick` also runs once with the params `turn` and `input` (the simulation result `live turn`) and must end within min(`turn_after_bound_ms`, 2000) ms in a top-level final state whose donedata is `{turn, handled: true, selected}` with the live turn and selections naming targets among `targets` with data agreeing with `input`, else an `apply` diagnostic `E0008` (`<behavior:verify_apply>`, decision D131).")
+
+S.statement(10, "With the request's `template` `'turn'` (it then requires `name` and `apply`; decision D132) there is no `design`: the plan is the turn behavior template's, `author` asks for `turn_script` `{lifetime, script, tests}`, the chart written is the template naming `<name>.js` (`<behavior:turn_program>`) and `<name>.json` is `{\"$defs\":{}}`; the simulation runs the live turn, then each test input the same way, and a test input whose `handled` is false must not be answered (else an `apply` diagnostic `E0008` naming the test); a `turn_script` whose `lifetime` is `persistent` is planned and authored once as a whole document (`scxml_draft`).")
 
 S.case(100, 1, "a request refused by its schema raises error.execution at the sender; the builder keeps waiting and answers a whitespace spec invalid-request.",
        [send(REQUEST, js({"spec": "x", "colour": "blue"})), expect("error.execution"),
@@ -247,3 +267,21 @@ S.case(181, 9, "with a live turn, a turn behavior whose selection hardcodes an i
         failed("attempts-exhausted", "_event.data.diagnostics.length === 1 && _event.data.diagnostics[0].kind === 'apply' && _event.data.diagnostics[0].code === 'E0008'"
                                      " && _event.data.diagnostics[0].message === 'selection data[\"label\"]=\"doorbell\" does not match live event value \"knock\"; read identifiers from input at runtime.'")],
        backend=[PLAN, draft(greeter("{text: 'Who is there?', label: 'doorbell'}"), tests=DECIDES, schemas=NO_SCHEMAS)], clock="wall")
+S.case(190, 10, "a turn script is built from the template without a plan: the live turn, then its test input, pass.",
+       [send(REQUEST, request(**TEMPLATE)),
+        expect(DONE, "_event.data.scxml.indexOf('<script src=\"Knocker.js\"/>') > 0 && _event.data.script === " + js(KNOCK_SCRIPT)
+                     + " && JSON.stringify(_event.data.schemas) === '{\"$defs\":{}}' && _event.data.path === '../../behaviors/Knocker.scx'"
+                     " && _event.data.report.plan.name === 'Knocker' && _event.data.report.attempts === 1"
+                     " && JSON.stringify(_event.data.report.simulation.map(function (r) { return r.name; })) === '[\"live turn\",\"a bell is not answered\"]'"
+                     " && _event.data.report.simulation.every(function (r) { return r.passed; })")],
+       backend=[turn_script(KNOCK_SCRIPT, [BELL])], clock="wall")
+S.case(191, 10, "a turn script that asks for a persistent routine is planned and built as a whole document.",
+       [send(REQUEST, request(min_every_ms=60000, **TEMPLATE)),
+        expect(DONE, "_event.data.scxml.indexOf('bot.behavior.tick') >= 0 && _event.data.path === '../../behaviors/Knocker.scx'"
+                     " && _event.data.report.plan.name === 'pinger' && _event.data.report.simulation[1].name === 'first tick'")],
+       backend=[turn_script("", lifetime="persistent"), PLAN, draft(routine("3600s", CHIME), tests=WAITS, schemas=NO_SCHEMAS)], clock="wall")
+S.case(192, 10, "a turn script that answers a test input it must not answer is an apply E0008 diagnostic naming the test.",
+       [send(REQUEST, request(max_attempts=1, **TEMPLATE)),
+        failed("attempts-exhausted", "_event.data.diagnostics.length === 1 && _event.data.diagnostics[0].kind === 'apply' && _event.data.diagnostics[0].code === 'E0008'"
+                                     " && _event.data.diagnostics[0].message === 'test a bell is not answered: the behavior must not answer this input (handled false, selected []), it answered handled true with 1 selection(s).'")],
+       backend=[turn_script(EVERY_SCRIPT, [BELL])], clock="wall")

@@ -233,8 +233,15 @@ function changeWriteInputWithIntent() {
 // The original CHANGE_INSTRUCTIONS with the ChangeWriteInput, for the builder,
 // which checks the document it builds against the original check()'s lifetime
 // bounds (min_every, turn_after_bound).
+// A turn behavior is built from the turn template (decision D132).
 function builderRequest() {
-  return ({spec: change_instructions + '\n\n' + JSON.stringify(write), name: intent.name, model: model, min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms, apply: liveTurn()});
+  var request = {spec: change_instructions + '\n\n' + JSON.stringify(write), name: intent.name, model: model, min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms, apply: liveTurn()};
+  return Object.assign(request, usesTurnTemplate() ? {template: 'turn'} : {});
+}
+
+// Every behavior but a persistent routine (a create's DRAFT stub is a turn behavior).
+function usesTurnTemplate() {
+  return existing_behavior.lifetime !== 'persistent';
 }
 
 // The live turn the builder runs a turn behavior on (the reference _check's
@@ -253,12 +260,13 @@ function builderConstraints() {
   return [turnContract(), routineContract()];
 }
 
-// The turn behavior contract with the grounded triggers it is stored under
+// The turn behavior contract (a turn script's, decision D132, or a whole
+// document's) with the grounded triggers it is stored under
 // (autonomy matches them against the stimulus event), the targets this
 // turn's output names, and this turn's input (behavior_input, as autonomy
 // builds it).
 function turnContract() {
-  return turn_contract.replace(/TRIGGERS|TARGETS|INPUT/g, function (m) { return JSON.stringify(m === 'INPUT' ? behavior_input : m === 'TARGETS' ? outputTargets() : triggers); });
+  return (usesTurnTemplate() ? turn_script_contract : turn_contract).replace(/TRIGGERS|TARGETS|INPUT/g, function (m) { return JSON.stringify(m === 'INPUT' ? behavior_input : m === 'TARGETS' ? outputTargets() : triggers); });
 }
 
 // The original schedule.At.next_after for an at schedule {time: 'HH:MM', days,

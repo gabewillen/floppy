@@ -472,9 +472,9 @@ fn a_failed_assignment_or_host_failure_is_reported() {
 }
 
 /// The attributes of a `<behavior:verify_apply>` over the expressions
-/// `done`, `turn`, `input`, `targets` and `error`.
+/// `done`, `turn`, `input`, `targets`, `handled` and `error`.
 fn apply_attributes() -> Vec<Attribute> {
-    ["done", "turn", "input", "targets", "error"]
+    ["done", "turn", "input", "targets", "handled", "error"]
         .into_iter()
         .map(|name| attr(name, name))
         .chain([attr("location", "apply")])
@@ -492,6 +492,10 @@ fn verify_apply_writes_its_e0008_messages() {
             ("turn", case["turn"].clone()),
             ("input", case["input"].clone()),
             ("targets", case["targets"].clone()),
+            (
+                "handled",
+                case.get("handled").cloned().unwrap_or(json!(true)),
+            ),
             ("error", case["error"].clone()),
         ];
         let assigned = run("verify_apply", &apply_attributes(), &values).expect("the case runs");
@@ -499,7 +503,7 @@ fn verify_apply_writes_its_e0008_messages() {
     }
     let without_error: Vec<Attribute> = apply_attributes()
         .into_iter()
-        .filter(|attribute| attribute.local_name != "error")
+        .filter(|attribute| !["handled", "error"].contains(&attribute.local_name.as_str()))
         .collect();
     let assigned = run(
         "verify_apply",
@@ -515,7 +519,7 @@ fn verify_apply_writes_its_e0008_messages() {
     assert_eq!(
         assigned["apply"],
         json!([
-            "turn behavior reached no top-level final state on the live turn's input within the turn's bound: it receives no events, so it decides with eventless transitions and ends at once."
+            "turn behavior reached no top-level final state on this input within the turn's bound: it receives no events, so it decides at once (a document with eventless transitions) and ends."
         ])
     );
 }
@@ -568,6 +572,11 @@ fn malformed_verify_apply_raises_error_execution_and_assigns_nothing() {
             json!(5),
             "behavior:verify_apply error is not a string or null",
         ),
+        (
+            "handled",
+            json!("false"),
+            "behavior:verify_apply handled is not a boolean",
+        ),
     ] {
         assert_eq!(
             run("verify_apply", &apply_attributes(), &with(name, value)),
@@ -582,12 +591,13 @@ fn malformed_verify_apply_raises_error_execution_and_assigns_nothing() {
 }
 
 /// The values every malformed `<behavior:verify_apply>` below is given.
-fn good_apply_values() -> [(&'static str, Json); 5] {
+fn good_apply_values() -> [(&'static str, Json); 6] {
     [
         ("done", Json::Null),
         ("turn", json!(1)),
         ("input", json!({"label": "knock"})),
         ("targets", json!(["communication"])),
+        ("handled", json!(true)),
         ("error", Json::Null),
     ]
 }
@@ -613,7 +623,7 @@ fn a_malformed_verify_apply_element_raises_error_execution_and_assigns_nothing()
     assert_eq!(
         run("verify_apply", &attributes, &good),
         Err(
-            "behavior:verify_apply takes only the location, done, turn, input, targets and error attributes"
+            "behavior:verify_apply takes only the location, done, turn, input, targets, handled and error attributes"
         )
     );
     let mut attributes = apply_attributes();
@@ -648,6 +658,115 @@ fn a_malformed_verify_apply_element_raises_error_execution_and_assigns_nothing()
     assert_eq!(
         execution(execute("verify_apply", &apply_attributes(), &[], &mut host)),
         "behavior:verify_apply could not assign the messages"
+    );
+    assert!(host.assigned.is_empty());
+}
+
+/// The turn template's one script reference.
+const TEMPLATE_SCRIPT: &str = r#"src="turn.js""#;
+
+#[test]
+fn turn_program_writes_the_template_naming_the_script() {
+    assert_eq!(TURN_TEMPLATE.matches(TEMPLATE_SCRIPT).count(), 1);
+    let expected = TURN_TEMPLATE.replacen(TEMPLATE_SCRIPT, r#"src="GreetOnKnock.js""#, 1);
+    assert_eq!(
+        turn_program("GreetOnKnock.js").as_deref(),
+        Ok(expected.as_str())
+    );
+    let assigned = run(
+        "turn_program",
+        &[attr("location", "doc"), attr("script", "name")],
+        &[("name", json!("Greet_On-Knock2.js"))],
+    )
+    .expect("the element runs");
+    assert_eq!(
+        assigned["doc"],
+        json!(TURN_TEMPLATE.replacen(TEMPLATE_SCRIPT, r#"src="Greet_On-Knock2.js""#, 1))
+    );
+    for script in [
+        "", "x", ".js", "../x.js", "a/b.js", "a.b.js", "x\".js", "x.json",
+    ] {
+        assert_eq!(
+            turn_program(script),
+            Err("behavior:turn_program script is not a plain .js file name"),
+            "{script}"
+        );
+    }
+}
+
+#[test]
+fn a_malformed_turn_program_raises_error_execution_and_assigns_nothing() {
+    let good = [("name", json!("x.js"))];
+    for (attributes, values, detail) in [
+        (
+            vec![attr("script", "name")],
+            &good[..],
+            "behavior:turn_program requires a location",
+        ),
+        (
+            vec![attr("location", "doc")],
+            &good[..],
+            "behavior:turn_program requires a script",
+        ),
+        (
+            vec![
+                attr("location", "doc"),
+                attr("script", "name"),
+                attr("ticks", "t"),
+            ],
+            &good[..],
+            "behavior:turn_program takes only the location and script attributes",
+        ),
+        (
+            vec![
+                attr("location", "doc"),
+                attr("script", "name"),
+                attr("script", "name"),
+            ],
+            &good[..],
+            "behavior:turn_program repeats an attribute",
+        ),
+        (
+            vec![attr("location", "doc"), attr("script", " ")],
+            &good[..],
+            "behavior:turn_program has an empty attribute",
+        ),
+        (
+            vec![attr("location", "doc"), attr("script", "missing")],
+            &good[..],
+            "behavior:turn_program script did not evaluate",
+        ),
+        (
+            vec![attr("location", "doc"), attr("script", "name")],
+            &[("name", json!(5))][..],
+            "behavior:turn_program script is not a string",
+        ),
+        (
+            vec![attr("location", "doc"), attr("script", "name")],
+            &[("name", json!("../x.js"))][..],
+            "behavior:turn_program script is not a plain .js file name",
+        ),
+    ] {
+        assert_eq!(run("turn_program", &attributes, values), Err(detail));
+    }
+    let mut host = FakeHost {
+        values: BTreeMap::from([("name".to_owned(), data(&json!("x.js")))]),
+        ..FakeHost::default()
+    };
+    let attributes = [attr("location", "doc"), attr("script", "name")];
+    assert_eq!(
+        execution(execute(
+            "turn_program",
+            &attributes,
+            &[Content::Start, Content::End],
+            &mut host
+        )),
+        "behavior:turn_program holds no content"
+    );
+    host.fail_assign = true;
+    assert_eq!(
+        execution(execute("turn_program", &attributes, &[], &mut host)),
+        "behavior:turn_program could not assign the document"
     );
     assert!(host.assigned.is_empty());
 }

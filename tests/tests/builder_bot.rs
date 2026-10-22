@@ -729,6 +729,82 @@ fn live_reply(path: &str, schema: Option<&str>, authors: usize) -> Option<String
     }
 }
 
+/// The live request asking for the turn template (decision D132).
+fn template_request() -> Json {
+    let mut request = live_request();
+    request["template"] = json!("turn");
+    request
+}
+
+/// The turn behavior template the builder writes, naming `script`.
+fn template_text(script: &str) -> String {
+    std::fs::read_to_string(support::workspace().join("namespaces/behavior/templates/turn.scx"))
+        .expect("the template is readable")
+        .replacen(r#"src="turn.js""#, &format!(r#"src="{script}""#), 1)
+}
+
+/// A `turn_script` reply: its lifetime, its script and its test inputs.
+fn script_reply(lifetime: &str, script: &str, tests: &Json) -> String {
+    json!({"lifetime": lifetime, "script": script, "tests": tests}).to_string()
+}
+
+/// A turn script that answers a knock (reading its label from input), to
+/// the session communication.
+const KNOCK_SCRIPT: &str = "function applies(input) {\n  return input.label === 'knock';\n}\nfunction selections(input, turn) {\n  return [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Who is there?', label: input.label}}];\n}\n";
+
+/// [`KNOCK_SCRIPT`] whose `applies` returns `applies`.
+fn knock_script_applying(applies: &str) -> String {
+    KNOCK_SCRIPT.replace("input.label === 'knock'", applies)
+}
+
+/// The test input a knock script must not answer: a bell.
+fn bell() -> Json {
+    json!([{"name": "a bell is not answered", "input": r#"{"label":"bell","focus":"door","focus_candidates":["door"]}"#, "handled": false}])
+}
+
+/// The `scripts`th `turn_script` reply of a `/script*/v1` route (see [`Mock`]).
+fn script_route_reply(path: &str, scripts: usize) -> String {
+    let route = path
+        .strip_prefix('/')
+        .and_then(|path| path.split('/').next())
+        .unwrap_or_default();
+    let selections_only = &KNOCK_SCRIPT[KNOCK_SCRIPT
+        .find("function selections")
+        .expect("selections")..];
+    match (route, scripts) {
+        ("scriptnoapplies", 1) | ("scriptbroken", _) => {
+            script_reply("turn", selections_only, &json!([]))
+        }
+        ("scriptunparsed", 1) => {
+            script_reply("turn", &format!("{KNOCK_SCRIPT}function (\n"), &json!([]))
+        }
+        ("scriptthrows", 1) => script_reply(
+            "turn",
+            &KNOCK_SCRIPT.replace("label: input.label", "label: input.missing.field"),
+            &json!([]),
+        ),
+        ("scriptoverbroad", 1) => script_reply("turn", &knock_script_applying("true"), &bell()),
+        ("scriptbadinput", _) => script_reply(
+            "turn",
+            KNOCK_SCRIPT,
+            &json!([{"name": "x", "input": "{text: ping}", "handled": false}]),
+        ),
+        ("scriptroutine", _) => script_reply("persistent", "", &json!([])),
+        _ => script_reply("turn", KNOCK_SCRIPT, &bell()),
+    }
+}
+
+/// The mock's answer on a `/script*/v1` route: `turn_script` replies, and
+/// for a routine the plan and its whole document.
+fn script_reply_on(path: &str, schema: Option<&str>, scripts: usize) -> Option<String> {
+    match schema {
+        Some("turn_script") => Some(completion(&script_route_reply(path, scripts))),
+        Some("topology_plan") => Some(completion(PLAN)),
+        Some("scxml_draft") => Some(completion(&routine_draft("3600s", CHIME))),
+        _ => None,
+    }
+}
+
 /// A non-streamed Chat Completions answer carrying `content`, as the
 /// generate service asks for one by default.
 fn completion(content: &str) -> String {
@@ -986,6 +1062,15 @@ impl Received {
 /// `/livenotarget/v1` and `/liveforeign/v1` one whose donedata breaks the
 /// contract that way, `/livebinding/v1` one that hardcodes an input value,
 /// and `/liverepair/v1` that one first, then the one that selects on it.
+/// The `/script*/v1` routes answer `turn_script` for a template request
+/// (decision D132; [`script_route_reply`]): `/scriptok/v1` the knock script
+/// and a bell it must not answer, `/scriptnoapplies/v1`, `/scriptthrows/v1`
+/// and `/scriptoverbroad/v1` first a script without `applies`, one whose
+/// `selections` throws and one that answers every input, then that,
+/// `/scriptunparsed/v1` first a script that does not parse, then that,
+/// `/scriptbroken/v1` only the one without `applies`, `/scriptbadinput/v1`
+/// a test input that is not JSON, and `/scriptroutine/v1` a persistent
+/// lifetime, then the plan and an hourly routine.
 /// Each connection is served on its own thread, so a held
 /// answer delays nothing else. `decision` routes:
 /// `/typesafe` chooses `triage.repair`, `/redesign` `triage.redesign`.
@@ -1063,11 +1148,12 @@ fn serve(mut stream: std::net::TcpStream, log: &Mutex<Vec<Received>>, arrived: &
             .filter(|seen| seen.path == path && seen.schema_name() == Some(schema))
             .count()
     };
-    let (authors, plans) = {
+    let (authors, plans, scripts) = {
         let mut log = log.lock().expect("the log lock");
         log.push(request.clone());
         arrived.notify_all();
         let counts = (count(&log, "scxml_draft"), count(&log, "topology_plan"));
+        let scripts = count(&log, "turn_script");
         if path == "/slow/v1/chat/completions"
             && request.schema_name() == Some("topology_plan")
             && counts.1 == 1
@@ -1082,9 +1168,11 @@ fn serve(mut stream: std::net::TcpStream, log: &Mutex<Vec<Received>>, arrived: &
                     .expect("the log lock"),
             );
         }
-        counts
+        (counts.0, counts.1, scripts)
     };
-    let reply = if path.starts_with("/live") {
+    let reply = if path.starts_with("/script") {
+        script_reply_on(&path, request.schema_name(), scripts)
+    } else if path.starts_with("/live") {
         live_reply(&path, request.schema_name(), authors)
     } else {
         mock_reply(&path, request.schema_name(), authors, plans, &body)
@@ -1372,6 +1460,13 @@ fn assert_repair_requests(received: &[Received]) {
     let authors = chat_requests(received, "scxml_draft");
     assert_eq!(designs.len(), 1);
     assert_eq!(authors.len(), 2);
+    // A whole document's author call has its own token bound (decision D132).
+    assert_eq!(designs[0].body["max_completion_tokens"], 8192);
+    assert!(
+        authors
+            .iter()
+            .all(|request| request.body["max_completion_tokens"] == 16384)
+    );
     assert_eq!(designs[0].user_input()["spec"], SPEC);
     assert_eq!(designs[0].user_input()["previous_plan"], Json::Null);
     let first = authors[0].user_input();
@@ -1742,7 +1837,7 @@ fn assert_live_refused(route: &str, message: &str) {
 fn a_live_turn_that_never_finishes_is_refused() {
     assert_live_refused(
         "livestuck",
-        "turn behavior reached no top-level final state on the live turn's input within the turn's bound: it receives no events, so it decides with eventless transitions and ends at once.",
+        "turn behavior reached no top-level final state on this input within the turn's bound: it receives no events, so it decides at once (a document with eventless transitions) and ends.",
     );
 }
 
@@ -1752,7 +1847,7 @@ fn a_live_turn_that_never_finishes_is_refused() {
 fn a_live_turn_that_fails_is_refused() {
     assert_live_refused(
         "liverunaway",
-        "turn behavior failed on the live turn's input (error.execution) before it reached a top-level final state.",
+        "turn behavior failed on this input (error.execution) before it reached a top-level final state.",
     );
 }
 
@@ -1760,7 +1855,7 @@ fn a_live_turn_that_fails_is_refused() {
 fn a_live_turn_whose_donedata_is_not_the_contract_is_refused() {
     assert_live_refused(
         "liveshape",
-        "turn behavior donedata must be the object {turn, handled, selected}: handled a boolean and selected a list of selections.",
+        "turn behavior donedata must be the object {turn, handled, selected}: handled a boolean and selected a list of selections (a turn script's selections(input, turn) returns that list).",
     );
 }
 
@@ -2621,6 +2716,313 @@ fn a_blank_spec_is_answered_with_builder_failed() {
     assert_eq!(label, "failed");
     assert_eq!(failed["reason"], "invalid-request");
     assert_eq!(failed["diagnostics"][0]["kind"], "request");
+    assert!(mock.received().is_empty(), "nothing is generated");
+}
+
+// ---------------------------------------------------------------------------
+// Template mode (decision D132).
+
+/// A template request skips design: the model writes only the script, the
+/// chart is the template naming `<name>.js`, the schemas are empty, and the
+/// simulation runs the live turn, then the test input, each on its own run.
+#[test]
+fn a_turn_script_is_built_from_the_template_without_a_plan() {
+    let mock = Mock::start();
+    let document = builder_document();
+    let records = run_deciding_in(
+        &document,
+        &mock,
+        "scriptok",
+        "scriptok",
+        "typesafe",
+        &ALL,
+        &template_request(),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    let received = mock.received();
+    assert!(chat_requests(&received, "topology_plan").is_empty());
+    assert!(chat_requests(&received, "scxml_draft").is_empty());
+    let scripts = chat_requests(&received, "turn_script");
+    assert_eq!(scripts.len(), 1);
+    let system = scripts[0]
+        .body
+        .pointer("/messages/0/content")
+        .and_then(Json::as_str)
+        .expect("a system message");
+    assert!(
+        system.starts_with(
+            "You are the author stage of the floppy builder bot, writing a turn behavior's script"
+        ),
+        "{system}"
+    );
+    assert_eq!(scripts[0].body["max_completion_tokens"], 8192);
+    let prompt = scripts[0].user_input();
+    assert_eq!(prompt["task"], "author");
+    assert_eq!(prompt["name"], "Greet");
+    assert_eq!(prompt["previous_script"], Json::Null);
+    let behaviors = behaviors_of(&document);
+    let chart = std::fs::read_to_string(behaviors.join("Greet.scx")).expect("the chart");
+    assert_eq!(chart, template_text("Greet.js"));
+    assert_eq!(done["scxml"], json!(chart));
+    assert_eq!(
+        std::fs::read_to_string(behaviors.join("Greet.json")).expect("the schemas"),
+        r#"{"$defs":{}}"#
+    );
+    assert_eq!(
+        std::fs::read_to_string(behaviors.join("Greet.js")).expect("the script"),
+        KNOCK_SCRIPT
+    );
+    let report = &done["report"];
+    assert_eq!(report["plan"]["name"], "Greet", "{report}");
+    let simulation = report["simulation"].as_array().expect("simulation results");
+    let names: Vec<&Json> = simulation.iter().map(|r| &r["name"]).collect();
+    assert_eq!(
+        names,
+        [&json!("live turn"), &json!("a bell is not answered")],
+        "{report}"
+    );
+    assert!(simulation.iter().all(|r| r["passed"] == true), "{report}");
+    assert_eq!(done["tests"], bell(), "{done}");
+}
+
+/// A script that does not declare `applies` is told so before it is
+/// simulated, and the repair sees the script it wrote.
+#[test]
+fn a_turn_script_without_applies_is_repaired() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "scriptnoapplies",
+        "scriptnoapplies",
+        &ALL,
+        &template_request(),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    assert_eq!(
+        done["report"]["history"][0]["diagnostics"][0],
+        json!({"kind": "draft", "code": "undeclared-function", "message": "script does not declare applies: a turn script declares function applies(input) and function selections(input, turn), which the template calls"}),
+        "{done}"
+    );
+    let received = mock.received();
+    let scripts = chat_requests(&received, "turn_script");
+    assert_eq!(scripts.len(), 2);
+    let repair = scripts[1].user_input();
+    assert_eq!(repair["task"], "repair");
+    assert!(
+        repair["previous_script"]
+            .as_str()
+            .is_some_and(|script| script.starts_with("function selections")),
+        "{repair}"
+    );
+    assert_eq!(repair["previous_tests"], json!([]));
+    assert_eq!(repair["diagnostics"][0]["code"], "undeclared-function");
+}
+
+/// A script whose `selections` throws on the live turn is told which of
+/// its functions threw (the template records it), not only that it failed.
+#[test]
+fn a_turn_script_that_throws_is_told_which_function_threw() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "scriptthrows",
+        "scriptthrows",
+        &ALL,
+        &template_request(),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    assert_eq!(
+        done["report"]["history"][0]["diagnostics"],
+        json!([{"kind": "apply", "code": "E0008", "message": "the script's selections() threw on this input: it must return a value for every input."}]),
+        "{done}"
+    );
+}
+
+/// A script that does not parse fails the live turn's run as one that did
+/// not load, not as a call that threw, and is repaired.
+#[test]
+fn a_turn_script_that_does_not_parse_is_told_it_did_not_load() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "scriptunparsed",
+        "scriptunparsed",
+        &ALL,
+        &template_request(),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    assert_eq!(
+        done["report"]["history"][0]["diagnostics"],
+        json!([{"kind": "apply", "code": "E0008", "message": "the script did not load: it must parse, and its top level must run without throwing."}]),
+        "{done}"
+    );
+}
+
+/// A script that answers an input its test says it must not answer fails
+/// that test, named in its message, and is repaired.
+#[test]
+fn an_input_the_script_must_not_answer_fails_and_is_repaired() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "scriptoverbroad",
+        "scriptoverbroad",
+        &ALL,
+        &template_request(),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    assert_eq!(
+        done["report"]["history"][0]["diagnostics"],
+        json!([{"kind": "apply", "code": "E0008", "message": "test a bell is not answered: the behavior must not answer this input (handled false, selected []), it answered handled true with 1 selection(s)."}]),
+        "{done}"
+    );
+}
+
+#[test]
+fn a_test_input_that_is_not_json_is_told_so() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "scriptbadinput",
+        "scriptbadinput",
+        &ALL,
+        &template_request(),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, failed) = answer(&records);
+    assert_eq!(label, "failed", "{failed}");
+    assert_eq!(failed["reason"], "no-progress", "{failed}");
+    assert_eq!(
+        failed["diagnostics"],
+        json!([{"kind": "draft", "code": "test-input", "message": "test x's input is not the text of a JSON object (it was \"{text: ping}\")"}]),
+        "{failed}"
+    );
+}
+
+/// A turn script whose lifetime is persistent ends template mode once: the
+/// routine is planned (as a first plan) and authored as a whole document,
+/// whose author call has the whole document's token bound.
+#[test]
+fn a_turn_script_asking_for_a_routine_is_built_as_a_whole_document() {
+    let mock = Mock::start();
+    let mut request = template_request();
+    request["min_every_ms"] = json!(60000);
+    let records = run(&mock, "scriptroutine", "scriptroutine", &ALL, &request);
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    let received = mock.received();
+    let order: Vec<&str> = received.iter().filter_map(Received::schema_name).collect();
+    assert_eq!(order, ["turn_script", "topology_plan", "scxml_draft"]);
+    let plans = chat_requests(&received, "topology_plan");
+    assert_eq!(plans[0].user_input()["previous_plan"], Json::Null);
+    assert_eq!(plans[0].body["max_completion_tokens"], 8192);
+    assert_eq!(
+        chat_requests(&received, "scxml_draft")[0].body["max_completion_tokens"],
+        16384
+    );
+    let simulation = done["report"]["simulation"]
+        .as_array()
+        .expect("simulation results");
+    assert!(
+        simulation.iter().any(|r| r["name"] == "first tick"),
+        "{done}"
+    );
+    assert!(
+        done["scxml"]
+            .as_str()
+            .is_some_and(|scxml| scxml.contains("bot.behavior.tick")),
+        "{done}"
+    );
+}
+
+/// A turn script's plan is the template's: triage offers repair and
+/// abandon, never redesign.
+#[test]
+fn a_turn_script_failure_is_offered_repair_and_abandon_only() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "scriptbroken",
+        "scriptbroken",
+        &ALL,
+        &template_request(),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, failed) = answer(&records);
+    assert_eq!(label, "failed", "{failed}");
+    assert_eq!(failed["reason"], "no-progress", "{failed}");
+    let received = mock.received();
+    let decisions: Vec<&Received> = received
+        .iter()
+        .filter(|request| request.path == "/typesafe/v1/systemone")
+        .collect();
+    assert_eq!(decisions.len(), 1);
+    let offered: Vec<&String> = decisions[0]
+        .body
+        .pointer("/questions/selection/criteria")
+        .and_then(Json::as_object)
+        .expect("the selection question")
+        .keys()
+        .collect();
+    assert!(
+        offered.iter().any(|label| *label == "triage.repair"),
+        "{offered:?}"
+    );
+    assert!(
+        offered.iter().any(|label| *label == "triage.abandon"),
+        "{offered:?}"
+    );
+    assert!(
+        !offered.iter().any(|label| *label == "triage.redesign"),
+        "{offered:?}"
+    );
+}
+
+/// The template needs the name and the live turn its build uses, and is
+/// only `turn`: anything else is refused before the builder.
+#[test]
+fn a_template_request_needs_its_name_and_apply() {
+    let mock = Mock::start();
+    let mut nameless = template_request();
+    nameless.as_object_mut().expect("an object").remove("name");
+    let mut unapplied = template_request();
+    unapplied
+        .as_object_mut()
+        .expect("an object")
+        .remove("apply");
+    let mut routine = template_request();
+    routine["template"] = json!("routine");
+    for (case, request) in [
+        ("nameless", nameless),
+        ("unapplied", unapplied),
+        ("routine", routine),
+    ] {
+        let records = run(
+            &mock,
+            &format!("refused-template-{case}"),
+            "scriptok",
+            &ALL,
+            &request,
+        );
+        assert!(
+            records.iter().any(
+                |record| record["type"] == "error" && record["code"] == "machine-invalid-input"
+            ),
+            "{case}: {records:?}"
+        );
+        assert!(!finished(&records), "{case}: {records:?}");
+    }
     assert!(mock.received().is_empty(), "nothing is generated");
 }
 

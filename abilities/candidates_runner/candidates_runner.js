@@ -24,6 +24,16 @@ function isBehaviorHandled(event) {
   return event.data.turn === turn && event.data.handled === true && Array.isArray(event.data.selected) && event.data.selected.length > 0;
 }
 
+// The candidate's run failed: its donedata names the error it ended on (the
+// turn template's error, decision D132; the original's behavior failed_event).
+function isBehaviorFailed(event) {
+  return event.data !== null && typeof event.data === 'object' && typeof event.data.error === 'string';
+}
+
+function candidateThrewLog(event) {
+  return candidateName() + ' (' + event.data.error + ')';
+}
+
 function candidateSilentLog() {
   return candidateName() + ' after ' + silence_ms + ' ms';
 }

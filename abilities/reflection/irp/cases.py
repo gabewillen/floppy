@@ -66,7 +66,26 @@ def brk(name):
             "reason": "harm outweighs practice"}
 
 
-# The builder's answers (the reflection test's): its plan and a turn behavior draft.
+# The builder's answers (the reflection test's): a turn behavior's script,
+# built from the turn template (decision D132), and one that declares only
+# selections, which the builder refuses each time.
+GREET_SCRIPT = """function applies(input) {
+  return input.label === 'knock';
+}
+function selections(input, turn) {
+  return [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Hello!'}, reason: 'a knock'}];
+}
+"""
+UNDECLARED_SCRIPT = GREET_SCRIPT[GREET_SCRIPT.index("function selections"):]
+
+
+def script(text, lifetime="turn"):
+    return chat({"lifetime": lifetime, "script": text, "tests": []})
+
+
+# A turn script that asks for a persistent routine, whose whole document the
+# builder then plans and asks for: its plan and a turn behavior draft.
+ROUTINE = script("", lifetime="persistent")
 BEHAVIOR = """<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="GreetOnKnock" initial="answering">
   <datamodel>
     <data id="turn" expr="0"/>
@@ -81,7 +100,6 @@ BEHAVIOR = """<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datam
     </donedata>
   </final>
 </scxml>"""
-REJECTED = BEHAVIOR.replace('target="answered"', 'target="nowhere"')
 # A turn behavior whose test waits 10 s for it (it never finishes).
 WAITING = BEHAVIOR.replace('<transition target="answered"/>', "")
 PLAN = chat('{"name":"GreetOnKnock","summary":"Answer a knock with a greeting.","states":[{"id":"answering","kind":"atomic","parent":"","purpose":"Decide the answer."},{"id":"answered","kind":"final","parent":"","purpose":"Carry the answer."}],"events":[],"transitions":[{"source":"answering","event":"","target":"answered","description":"Answer at once."}]}')
@@ -104,7 +122,7 @@ S.statement(1, "Without a database (the `<param>` `database` null, its default) 
 S.statement(2, "With a database, `recalling` reads the prior episodes and the behavior inventory in one memory transaction and `processing` asks the generate service (schema `dispatch`, its `events` at most one) to select at most one of `bot.behavior.create`, `bot.behavior.change` or `bot.behavior.break`, each offered by the reflection's own session (a change's and a break's `name` pinned to the inventory's names, and neither offered when the inventory is empty; decision D100); the selection is sent to the reflection's own session, and an empty selection goes to `storing`, which stores the turn's episode and answers `bot.ability.reflection.output`.")
 S.statement(3, "A select call the generate service refuses (`not-json`, or `schema-mismatch` such as more than one selected event, which the dispatch tool does not admit) is asked again with the original's feedback carrying its rejection, at most twice (decision D130); the same rejection as the one being repaired, or a third rejection, fails the select with `bot.ability.failed` `{message: \"Selection rejected: <message>\"}`; any other failed select call fails it with `Reflection select failed (<code>)`; a select call whose streamed reply makes no progress for `select_timeout_ms` (its first `generate.progress` arms it, each later one re-arms it) or that runs `select_ceiling_ms` in all fails it with `Reflection child cancellation timed out.` (decision D101).")
 S.statement(4, "A selected `bot.behavior.break` (`breaking`) marks the named behavior BROKEN with its trimmed reason and keeps the row, then stores the episode and answers `bot.ability.reflection.output`; a break of a name the inventory does not hold is not offered, so a model that selects one is refused twice and fails the select with `Selection rejected: <message>`.")
-S.statement(5, "A selected `bot.behavior.create` (`revising`) stores a DRAFT stub for a new name, invokes the builder bot with a `builder.request`, and on the builder's `done` (`accepting`) replaces the row ACTIVE with the built document's path (its three documents the builder wrote, decision D121), then stores the episode and answers `bot.ability.reflection.output`; a `bot.behavior.change` of a stored name reads its documents back (`reading`) and revises it the same way, and a change of a name the inventory does not hold is not offered, so a model that selects one is refused twice and fails the select with `Selection rejected: <message>`.")
+S.statement(5, "A selected `bot.behavior.create` (`revising`) stores a DRAFT stub for a new name, invokes the builder bot with a `builder.request` (a turn behavior's asks for the turn template, so the model writes only its script; decision D132), and on the builder's `done` (`accepting`) replaces the row ACTIVE with the built document's path (its three documents the builder wrote, decision D121), then stores the episode and answers `bot.ability.reflection.output`; a `bot.behavior.change` of a stored name reads its documents back (`reading`) and revises it the same way, and a change of a name the inventory does not hold is not offered, so a model that selects one is refused twice and fails the select with `Selection rejected: <message>`.")
 S.statement(6, "A builder that fails with the last draft it rejected (`abandoning`) keeps that draft's path in the row as DRAFT and fails the turn with `Reflection change abandoned: same diagnostic message after fix:` and the rendered diagnostics (no-progress); a builder that fails with no draft fails the turn with `Reflection revision failed: <reason>: <first diagnostic>`, the create's DRAFT stub kept.")
 S.statement(7, "`revising` is bounded by `revising_timeout_ms` without progress while a builder generation streams (the builder, invoked with `progress_target` `'#_parent'`, passes on each `generate.progress` of its streamed generations, which arms it, and sends `builder.progress` as it enters a stage, which disarms it) and by `revising_ceiling_ms` in all (the `<param>` `bounds` overriding either, decision D101): when one passes, the revision is cancelled and the turn fails with `Reflection child cancellation timed out.`.")
 S.statement(8, "A memory transaction that fails (here the recall, on a database the run does not grant) fails the turn with `Reflection memory recall failed: <detail>`; after any failure the turn's episode is stored with no behavior (unless storing it is what failed; decision D97) and the reflection is idle again and takes the next input.")
@@ -142,37 +160,37 @@ S.case(130, 4, "a break of a behavior the inventory does not hold is not offered
        params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(brk("Nobody"))], clock="wall")
 S.case(131, 4, "a break of a stored behavior answers the output and keeps the row: a second break of it answers too.",
        [send(INPUT, turn(1)), expect(OUTPUT), send(INPUT, turn(2)), expect(OUTPUT), send(INPUT, turn(3)), expect(OUTPUT)],
-       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE), PLAN, draft(BEHAVIOR), select(brk("GreetOnKnock")), select(brk("GreetOnKnock"))],
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE), script(GREET_SCRIPT), select(brk("GreetOnKnock")), select(brk("GreetOnKnock"))],
        clock="wall")
 
 S.case(140, 5, "a create is built and stored, and the turn answers the output.",
        [send(INPUT, turn(1)), expect(OUTPUT)],
-       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE), PLAN, draft(BEHAVIOR)], clock="wall")
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE), script(GREET_SCRIPT)], clock="wall")
 S.case(141, 5, "a change of a created behavior is built and stored.",
        [send(INPUT, turn(1)), expect(OUTPUT), send(INPUT, turn(2)), expect(OUTPUT)],
-       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE), PLAN, draft(BEHAVIOR), select(change("GreetOnKnock")), PLAN, draft(BEHAVIOR)],
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE), script(GREET_SCRIPT), select(change("GreetOnKnock")), script(GREET_SCRIPT)],
        clock="wall")
 S.case(142, 5, "a change of a behavior the inventory does not hold is not offered: selecting one fails the select.",
        [send(INPUT, turn(1)), failed_prefix("Selection rejected: ")],
        params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(change("Nobody"))], clock="wall")
 
-S.case(150, 6, "a build that never validates abandons the change with the rendered diagnostics, and its draft row stays (a break of it answers).",
+S.case(150, 6, "a build whose script never declares applies abandons the change with the rendered diagnostics, and its draft row stays (a break of it answers).",
        [send(INPUT, turn(1)),
-        failed_prefix("Reflection change abandoned: same diagnostic message after fix:\nbehavior validation failed:\n  error[SCXML005] validate: "),
+        failed_prefix("Reflection change abandoned: same diagnostic message after fix:\nbehavior validation failed:\n  error[undeclared-function] draft: script does not declare applies"),
         send(INPUT, turn(2)), expect(OUTPUT)],
-       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE), PLAN, draft(REJECTED), draft(REJECTED), select(brk("GreetOnKnock"))],
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE), script(UNDECLARED_SCRIPT), script(UNDECLARED_SCRIPT), select(brk("GreetOnKnock"))],
        clock="wall")
 S.case(151, 6, "a build whose every draft generation fails fails the turn with no draft, and the create's stub stays (a break of it answers).",
        [send(INPUT, turn(1)),
         failed_prefix("Reflection revision failed: no-progress: the author generation failed (status)"),
         send(INPUT, turn(2)), expect(OUTPUT)],
-       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE), PLAN, chat(None, status=500), chat(None, status=500), select(brk("GreetOnKnock"))],
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE), chat(None, status=500), chat(None, status=500), select(brk("GreetOnKnock"))],
        clock="wall")
 
-S.case(160, 7, "a revision that outlasts revising_ceiling_ms fails the turn.",
+S.case(160, 7, "a revision that outlasts revising_ceiling_ms (its turn script asks for a routine, whose whole document's test waits 20 s) fails the turn.",
        [send(INPUT, turn(1)), failed("Reflection child cancellation timed out.")],
        params=[DB, SLOW_SELECT, ("revising_ceiling_ms", "2000")],
-       backend=[select(CREATE), PLAN, draft(WAITING, settle=20000, done=False)], clock="wall")
+       backend=[select(CREATE), ROUTINE, PLAN, draft(WAITING, settle=20000, done=False)], clock="wall")
 
 S.case(170, 8, "a recall on a database the run does not grant fails the turn, and the next input is taken.",
        [send(INPUT, turn(1)), failed_prefix("Reflection memory recall failed: "),

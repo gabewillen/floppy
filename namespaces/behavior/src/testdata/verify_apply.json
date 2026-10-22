@@ -56,7 +56,7 @@
    "none": null
   },
   "messages": [
-   "turn behavior failed on the live turn's input (error.execution) before it reached a top-level final state."
+   "turn behavior failed on this input (error.execution) before it reached a top-level final state."
   ],
   "name": "a_run_that_failed",
   "targets": [
@@ -91,7 +91,7 @@
    "none": null
   },
   "messages": [
-   "turn behavior failed on the live turn's input (error.communication) before it reached a top-level final state."
+   "turn behavior failed on this input (error.communication) before it reached a top-level final state."
   ],
   "name": "an_error_comes_before_the_donedata",
   "targets": [
@@ -113,7 +113,7 @@
    "none": null
   },
   "messages": [
-   "turn behavior reached no top-level final state on the live turn's input within the turn's bound: it receives no events, so it decides with eventless transitions and ends at once."
+   "turn behavior reached no top-level final state on this input within the turn's bound: it receives no events, so it decides at once (a document with eventless transitions) and ends."
   ],
   "name": "no_donedata",
   "targets": [
@@ -135,7 +135,7 @@
    "none": null
   },
   "messages": [
-   "turn behavior donedata must be the object {turn, handled, selected}: handled a boolean and selected a list of selections."
+   "turn behavior donedata must be the object {turn, handled, selected}: handled a boolean and selected a list of selections (a turn script's selections(input, turn) returns that list)."
   ],
   "name": "an_empty_donedata",
   "targets": [
@@ -160,7 +160,7 @@
    "none": null
   },
   "messages": [
-   "turn behavior donedata must be the object {turn, handled, selected}: handled a boolean and selected a list of selections."
+   "turn behavior donedata must be the object {turn, handled, selected}: handled a boolean and selected a list of selections (a turn script's selections(input, turn) returns that list)."
   ],
   "name": "a_donedata_without_handled",
   "targets": [
@@ -186,7 +186,7 @@
    "none": null
   },
   "messages": [
-   "turn behavior donedata must be the object {turn, handled, selected}: handled a boolean and selected a list of selections."
+   "turn behavior donedata must be the object {turn, handled, selected}: handled a boolean and selected a list of selections (a turn script's selections(input, turn) returns that list)."
   ],
   "name": "a_donedata_that_is_not_an_object",
   "targets": [
@@ -219,7 +219,7 @@
    "none": null
   },
   "messages": [
-   "turn behavior donedata must be the object {turn, handled, selected}: handled a boolean and selected a list of selections."
+   "turn behavior donedata must be the object {turn, handled, selected}: handled a boolean and selected a list of selections (a turn script's selections(input, turn) returns that list)."
   ],
   "name": "a_selected_that_is_not_a_list",
   "targets": [
@@ -774,6 +774,271 @@
   "name": "at_most_twenty_messages",
   "targets": [
    "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "error": null,
+   "handled": true,
+   "selected": [
+    {
+     "data": {
+      "text": "pong"
+     },
+     "event": "bot.ability.conversation.respond",
+     "target": "conversation"
+    }
+   ],
+   "turn": 3
+  },
+  "error": null,
+  "input": {
+   "focus": "user",
+   "focus_candidates": [
+    "user"
+   ],
+   "text": "pong"
+  },
+  "messages": [],
+  "name": "a_template_run_whose_error_is_null",
+  "targets": [
+   "conversation"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "error": "selections",
+   "handled": false,
+   "selected": [],
+   "turn": 3
+  },
+  "error": null,
+  "input": {
+   "focus": "user",
+   "focus_candidates": [
+    "user"
+   ],
+   "text": "pong"
+  },
+  "messages": [
+   "the script's selections() threw on this input: it must return a value for every input."
+  ],
+  "name": "a_script_that_threw",
+  "targets": [
+   "conversation"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "error": "applies",
+   "handled": false,
+   "selected": [],
+   "turn": 3
+  },
+  "error": "error.execution",
+  "input": {
+   "focus": "user",
+   "focus_candidates": [
+    "user"
+   ],
+   "text": "pong"
+  },
+  "messages": [
+   "turn behavior failed on this input (error.execution) before it reached a top-level final state."
+  ],
+  "name": "a_run_error_comes_before_the_script_error",
+  "targets": [
+   "conversation"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "error": "applies",
+   "handled": false,
+   "selected": [],
+   "turn": 3
+  },
+  "error": null,
+  "handled": false,
+  "input": {
+   "focus": "user",
+   "focus_candidates": [
+    "user"
+   ],
+   "text": "pong"
+  },
+  "messages": [
+   "the script's applies() threw on this input: it must return a value for every input."
+  ],
+  "name": "a_script_error_on_an_input_it_must_not_answer",
+  "targets": [
+   "conversation"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "error": "script",
+   "handled": false,
+   "selected": [],
+   "turn": 3
+  },
+  "error": null,
+  "handled": true,
+  "input": {
+   "focus": "user",
+   "focus_candidates": [
+    "user"
+   ],
+   "text": "pong"
+  },
+  "messages": [
+   "the script did not load: it must parse, and its top level must run without throwing."
+  ],
+  "name": "a_script_that_did_not_load",
+  "targets": [
+   "conversation"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "error": null,
+   "handled": false,
+   "selected": [],
+   "turn": 3
+  },
+  "error": null,
+  "handled": false,
+  "input": {
+   "focus": "user",
+   "focus_candidates": [
+    "user"
+   ],
+   "text": "pong"
+  },
+  "messages": [],
+  "name": "an_input_it_must_not_answer_left_unanswered",
+  "targets": [
+   "conversation"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "error": null,
+   "handled": true,
+   "selected": [
+    {
+     "data": {
+      "text": "pong"
+     },
+     "event": "bot.ability.conversation.respond",
+     "target": "conversation"
+    }
+   ],
+   "turn": 3
+  },
+  "error": null,
+  "handled": false,
+  "input": {
+   "focus": "user",
+   "focus_candidates": [
+    "user"
+   ],
+   "text": "pong"
+  },
+  "messages": [
+   "the behavior must not answer this input (handled false, selected []), it answered handled true with 1 selection(s)."
+  ],
+  "name": "an_input_it_must_not_answer_answered",
+  "targets": [
+   "conversation"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "handled": false,
+   "selected": [
+    {
+     "data": {
+      "text": "pong"
+     },
+     "event": "bot.ability.conversation.respond",
+     "target": "conversation"
+    },
+    {
+     "data": {
+      "text": "pong"
+     },
+     "event": "bot.ability.conversation.respond",
+     "target": "conversation"
+    }
+   ],
+   "turn": 3
+  },
+  "error": null,
+  "handled": false,
+  "input": {
+   "focus": "user",
+   "focus_candidates": [
+    "user"
+   ],
+   "text": "pong"
+  },
+  "messages": [
+   "the behavior must not answer this input (handled false, selected []), it answered handled false with 2 selection(s)."
+  ],
+  "name": "an_input_it_must_not_answer_with_selections_but_unhandled",
+  "targets": [
+   "conversation"
+  ],
+  "turn": 3
+ },
+ {
+  "done": null,
+  "error": null,
+  "handled": false,
+  "input": {
+   "focus": "user",
+   "focus_candidates": [
+    "user"
+   ],
+   "text": "pong"
+  },
+  "messages": [
+   "the behavior must not answer this input (handled false, selected []), it reached no top-level final state."
+  ],
+  "name": "an_input_it_must_not_answer_and_no_donedata",
+  "targets": [
+   "conversation"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "selected": []
+  },
+  "error": null,
+  "handled": false,
+  "input": {
+   "focus": "user",
+   "focus_candidates": [
+    "user"
+   ],
+   "text": "pong"
+  },
+  "messages": [
+   "the behavior must not answer this input (handled false, selected []), it answered handled undefined with 0 selection(s)."
+  ],
+  "name": "an_input_it_must_not_answer_and_a_donedata_without_handled",
+  "targets": [
+   "conversation"
   ],
   "turn": 3
  }

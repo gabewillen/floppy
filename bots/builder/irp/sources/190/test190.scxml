@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- builder-10: a turn script is built from the template without a plan: the live turn, then its test input, pass. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="builder" type="scxml" src="../../../builder.scx"/>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <onentry>
+      <send event="builder.request" target="#_builder"><content expr='{"spec": "a pinger: answer a ping with pong and finish", "turn_after_bound_ms": 1000, "apply": {"turn": 2, "input": {"label": "knock", "focus": "door"}, "targets": ["communication"]}, "name": "Knocker", "template": "turn"}'/></send>
+    </onentry>
+    <transition event="done.invoke.builder" cond="_event.data.scxml.indexOf('&lt;script src=&quot;Knocker.js&quot;/&gt;') &gt; 0 &amp;&amp; _event.data.script === &quot;function applies(input) {\n  return input.label === 'knock';\n}\nfunction selections(input, turn) {\n  return [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Who is there?'}}];\n}\n&quot; &amp;&amp; JSON.stringify(_event.data.schemas) === '{&quot;$defs&quot;:{}}' &amp;&amp; _event.data.path === '../../behaviors/Knocker.scx' &amp;&amp; _event.data.report.plan.name === 'Knocker' &amp;&amp; _event.data.report.attempts === 1 &amp;&amp; JSON.stringify(_event.data.report.simulation.map(function (r) { return r.name; })) === '[&quot;live turn&quot;,&quot;a bell is not answered&quot;]' &amp;&amp; _event.data.report.simulation.every(function (r) { return r.passed; })" target="step1"/>
+  </state>
+  <state id="step1">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>
