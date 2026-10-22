@@ -11,6 +11,12 @@
 //! names `@electric-sql/pglite-socket`'s `dist/scripts/server.js`:
 //! `FLOPPY_PGLITE_SERVER=<path> cargo test -p floppy-tests --test memory
 //! -- --include-ignored`.
+//!
+//! The `stm_` tests run the short-term register (`abilities/stm/stm.scx`,
+//! the original's `StmMemory`) as a harness's child over the same memory
+//! ability: records and their recent read, capacity eviction, heard and
+//! said turns and their recent read, the turns' shedding by halves, both
+//! windows, and a register without a database or with one it cannot open.
 
 #![allow(
     missing_docs,
@@ -217,10 +223,7 @@ fn a_failing_statement_fails_the_memory_and_commits_nothing() {
 
 #[test]
 fn statements_the_service_refuses_fail_as_invalid_input() {
-    let finished = run(
-        &unique_scratch("memory"),
-        &harness(None, "[{sql: ''}]"),
-    );
+    let finished = run(&unique_scratch("memory"), &harness(None, "[{sql: ''}]"));
     assert_eq!(
         logs(&finished.records),
         support::labelled(&[
@@ -237,7 +240,10 @@ fn an_operation_over_its_timeout_fails_as_timeout() {
     // The original's operation timeout, set as the invoker's <param>.
     let document = harness(None, "[{sql: 'SELECT 1'}]");
     let statements = r#"<param name="statements" expr="[{sql: 'SELECT 1'}]"/>"#;
-    assert!(document.contains(statements), "the harness passes statements");
+    assert!(
+        document.contains(statements),
+        "the harness passes statements"
+    );
     let finished = run(
         &unique_scratch("memory"),
         &document.replacen(
@@ -478,4 +484,411 @@ fn every_recall_reads_the_most_recent_window_oldest_first() {
             .collect();
         assert_eq!(recalled, expected, "{path}");
     }
+}
+
+/// A harness that invokes the short-term register with `database` (an
+/// ECMAScript expression) and `params` (more `<param>`s, or none), runs
+/// `stages[0]` once it is ready (`bot.ability.offers`) and `stages[n]` on
+/// `harness.stage<n>` (a delayed `<send>` an earlier stage arms), and logs
+/// each answer: `offers`, `recent` (each entry's stimulus name, payload,
+/// envelope, id length and whether it was reinforced), `turns` (each
+/// turn's id, direction, speakers, text (its length past 40 characters),
+/// cut, conversation and whether its time is UTC) and `failed`, ending
+/// after `answers` reads answered or failed.
+fn stm_harness(database: &str, params: &str, stages: &[String], answers: usize) -> String {
+    let mut staged = String::new();
+    for (n, stage) in stages.iter().enumerate() {
+        let event = if n == 0 {
+            "bot.ability.offers".to_owned()
+        } else {
+            format!("harness.stage{n}")
+        };
+        let offers = if n == 0 {
+            r#"<log label="offers" expr="JSON.stringify(_event.data)"/>"#
+        } else {
+            ""
+        };
+        staged.push_str(&format!(
+            "\n    <transition event=\"{event}\">{offers}{stage}</transition>"
+        ));
+    }
+    format!(
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="running">
+  <datamodel>
+    <data id="answers" expr="0"/>
+  </datamodel>
+  <state id="running">
+    <invoke id="stm" type="scxml" src="stm/stm.scx">
+      <param name="database" expr="{database}"/>{params}
+    </invoke>{staged}
+    <transition event="bot.ability.memory.stm.recent.output">
+      <log label="recent" expr="JSON.stringify(_event.data.entries.map((e) =&gt; [e.stimulus_name, e.payload, e.event_id, e.source, e.target, e.stm_id.length, e.last_accessed_at !== null]))"/>
+      <assign location="answers" expr="answers + 1"/>
+    </transition>
+    <transition event="bot.ability.memory.stm.recent_turns.output">
+      <log label="turns" expr="JSON.stringify(_event.data.turns.map((t) =&gt; [t.id, t.direction, t.speakers, t.text.length &gt; 40 ? t.text.length : t.text, t.cut, t.conversation, /Z$/.test(t.at)]))"/>
+      <assign location="answers" expr="answers + 1"/>
+    </transition>
+    <transition event="bot.ability.failed">
+      <log label="failed" expr="_event.data.message"/>
+      <assign location="answers" expr="answers + 1"/>
+    </transition>
+    <transition cond="answers === {answers}" target="done"/>
+  </state>
+  <final id="done"/>
+</scxml>"#
+    )
+}
+
+/// `<send>` of `bot.ability.memory.stm.<event>` to the register with `data`
+/// (an ECMAScript expression), XML-escaped.
+fn to_stm(event: &str, data: &str) -> String {
+    let data = data
+        .replace('&', "&amp;")
+        .replace('"', "&quot;")
+        .replace('<', "&lt;");
+    format!(
+        r#"<send event="bot.ability.memory.stm.{event}" target="#_stm"><content expr="{data}"/></send>"#
+    )
+}
+
+/// The `<send>` that runs stage `n` after `delay`.
+fn stage_after(n: usize, delay: &str) -> String {
+    format!(r#"<send event="harness.stage{n}" delay="{delay}"/>"#)
+}
+
+/// A turn `id` in `direction` saying `text` (an ECMAScript expression),
+/// recorded by `conversation`, with no speakers.
+fn stm_turn(id: &str, direction: &str, text: &str, conversation: &str) -> String {
+    to_stm(
+        "turn",
+        &format!(
+            "({{id: '{id}', direction: '{direction}', speakers: [], text: {text}, cut: false, conversation: '{conversation}'}})"
+        ),
+    )
+}
+
+/// Runs `document` beside copies of the short-term register and the
+/// memory ability on `clock`, granting the sql service a fresh directory.
+fn run_stm(document: &str, clock: &str) -> Finished {
+    let dir = unique_scratch("stm");
+    support::copy_ability("stm", &dir);
+    support::copy_ability("memory", &dir);
+    let path = support::write(&dir, "harness.scx", document);
+    let mut args = support::memory_grant();
+    args.extend([
+        "--clock".to_owned(),
+        clock.to_owned(),
+        path.display().to_string(),
+    ]);
+    let mut run = Run::start(&args, &[]);
+    run.end_input();
+    run.finish(Duration::from_secs(300))
+}
+
+const STM_READY: (&str, &str) = ("offers", r#"{"ability":"stm","choices":[]}"#);
+const STM_DATABASE: &str = "'/memory/floppy.sqlite'";
+const DEGRADED: &str = "unavailable: StmMemory is degraded.";
+
+#[test]
+fn stm_records_are_read_newest_first_and_evicted_beyond_capacity() {
+    let stage = [
+        to_stm(
+            "record",
+            "({stimulus_name: 'environment.sound', payload: {kind: 'knock'}})",
+        ),
+        to_stm(
+            "record",
+            "({stimulus_name: 'environment.visual', payload: {}})",
+        ),
+        to_stm(
+            "record",
+            "({stimulus_name: 'environment.sound', payload: {kind: 'tap'}})",
+        ),
+        to_stm("recent", "({})"),
+        to_stm("recent", "({stimulus_name: 'environment.visual'})"),
+        to_stm("recent", "({limit: 1})"),
+    ]
+    .concat();
+    let finished = run_stm(
+        &stm_harness(
+            STM_DATABASE,
+            r#"<param name="capacity" expr="2"/>"#,
+            &[stage],
+            3,
+        ),
+        "logical",
+    );
+    assert_eq!(
+        logs(&finished.records),
+        support::labelled(&[
+            STM_READY,
+            (
+                "recent",
+                r#"[["environment.sound",{"kind":"tap"},null,null,null,32,false],["environment.visual",{},null,null,null,32,false]]"#
+            ),
+            (
+                "recent",
+                r#"[["environment.visual",{},null,null,null,32,false]]"#
+            ),
+            (
+                "recent",
+                r#"[["environment.sound",{"kind":"tap"},null,null,null,32,false]]"#
+            ),
+        ]),
+        "{}",
+        finished.stderr
+    );
+}
+
+#[test]
+fn stm_records_keep_their_envelope_and_a_reinforced_one_outlives_a_newer_one() {
+    // The first record is reinforced after the second arrives, so the
+    // third evicts the second.
+    let stages = [
+        [
+            to_stm(
+                "record",
+                "({stimulus_name: 'environment.sound', payload: {kind: 'knock', count: 2}, event_id: 'e1', source: 'device-a', target: 'floppy'})",
+            ),
+            to_stm("recent", "({})"),
+            stage_after(1, "100ms"),
+        ]
+        .concat(),
+        [
+            to_stm(
+                "record",
+                "({stimulus_name: 'environment.visual', payload: {}})",
+            ),
+            stage_after(2, "100ms"),
+        ]
+        .concat(),
+        [
+            to_stm(
+                "reinforce",
+                "({stm_ids: ['00000000000000000000000000000001']})",
+            ),
+            stage_after(3, "100ms"),
+        ]
+        .concat(),
+        [
+            to_stm(
+                "record",
+                "({stimulus_name: 'environment.tick', payload: {n: 1}})",
+            ),
+            to_stm("recent", "({})"),
+        ]
+        .concat(),
+    ];
+    let finished = run_stm(
+        &stm_harness(
+            STM_DATABASE,
+            r#"<param name="capacity" expr="2"/>"#,
+            &stages,
+            2,
+        ),
+        "wall",
+    );
+    assert_eq!(
+        logs(&finished.records),
+        support::labelled(&[
+            STM_READY,
+            (
+                "recent",
+                r#"[["environment.sound",{"count":2,"kind":"knock"},"e1","device-a","floppy",32,false]]"#
+            ),
+            (
+                "recent",
+                r#"[["environment.tick",{"n":1},null,null,null,32,false],["environment.sound",{"count":2,"kind":"knock"},"e1","device-a","floppy",32,true]]"#
+            ),
+        ]),
+        "{}",
+        finished.stderr
+    );
+}
+
+#[test]
+fn stm_turns_heard_and_said_are_read_oldest_first_and_long_words_are_cut() {
+    let stage = [
+        to_stm(
+            "turn",
+            "({id: 't1', direction: 'heard', speakers: [{ref: 'voice:3f2a9c', role: 'source'}], text: 'Hi there, I am Maya.', cut: false, conversation: 'listening'})",
+        ),
+        to_stm(
+            "turn",
+            "({id: 't2', direction: 'said', speakers: [{ref: 'voice:tts:warm', role: 'source', own: true}], text: 'Hello Maya.', cut: false, conversation: 'conversation'})",
+        ),
+        stm_turn(
+            "t3",
+            "heard",
+            "'word '.repeat(409) + 'longword'",
+            "listening",
+        ),
+        to_stm("recent_turns", "({})"),
+        to_stm("recent_turns", "({limit: 1})"),
+    ]
+    .concat();
+    let finished = run_stm(&stm_harness(STM_DATABASE, "", &[stage], 2), "logical");
+    assert_eq!(
+        logs(&finished.records),
+        support::labelled(&[
+            STM_READY,
+            ("stm.turn.recorded", "heard cut=false"),
+            ("stm.turn.recorded", "said cut=false"),
+            ("stm.turn.recorded", "heard cut=true"),
+            (
+                "turns",
+                r#"[["t1","heard",[{"ref":"voice:3f2a9c","role":"source"}],"Hi there, I am Maya.",false,"listening",true],["t2","said",[{"ref":"voice:tts:warm","role":"source","own":true}],"Hello Maya.",false,"conversation",true],["t3","heard",[],2044,true,"listening",true]]"#
+            ),
+            ("turns", r#"[["t3","heard",[],2044,true,"listening",true]]"#),
+        ]),
+        "{}",
+        finished.stderr
+    );
+}
+
+#[test]
+fn stm_turns_beyond_capacity_shed_the_older_half() {
+    let mut stage: Vec<String> = (1..=5)
+        .map(|n| {
+            stm_turn(
+                &format!("t{n}"),
+                "heard",
+                &format!("'turn {n}'"),
+                "listening",
+            )
+        })
+        .collect();
+    stage.push(to_stm("recent_turns", "({})"));
+    let finished = run_stm(
+        &stm_harness(
+            STM_DATABASE,
+            r#"<param name="turn_capacity" expr="4"/>"#,
+            &[stage.concat()],
+            1,
+        ),
+        "logical",
+    );
+    let mut expected = vec![STM_READY];
+    expected.extend([("stm.turn.recorded", "heard cut=false"); 5]);
+    expected.push((
+        "turns",
+        r#"[["t4","heard",[],"turn 4",false,"listening",true],["t5","heard",[],"turn 5",false,"listening",true]]"#,
+    ));
+    assert_eq!(
+        logs(&finished.records),
+        support::labelled(&expected),
+        "{}",
+        finished.stderr
+    );
+}
+
+#[test]
+fn stm_reads_keep_to_their_windows() {
+    // 1 s windows: the records' cutoff is 1 s back and the turns' floor at
+    // most 1.5 s back, so what was written 1.7 s before is not read;
+    // within narrows the turns' window and never widens it.
+    let stages = [
+        [
+            to_stm("record", "({stimulus_name: 'old', payload: {}})"),
+            stm_turn("t1", "heard", "'old'", "listening"),
+            stage_after(1, "1700ms"),
+        ]
+        .concat(),
+        [
+            to_stm("record", "({stimulus_name: 'new', payload: {}})"),
+            stm_turn("t2", "said", "'new'", "conversation"),
+            to_stm("recent", "({})"),
+            to_stm("recent_turns", "({})"),
+            to_stm("recent_turns", "({within: 'PT1H'})"),
+        ]
+        .concat(),
+    ];
+    let finished = run_stm(
+        &stm_harness(
+            STM_DATABASE,
+            r#"<param name="recency_window_ms" expr="1000"/><param name="turn_window_ms" expr="1000"/>"#,
+            &stages,
+            3,
+        ),
+        "wall",
+    );
+    let new_turn = r#"[["t2","said",[],"new",false,"conversation",true]]"#;
+    assert_eq!(
+        logs(&finished.records),
+        support::labelled(&[
+            STM_READY,
+            ("stm.turn.recorded", "heard cut=false"),
+            ("stm.turn.recorded", "said cut=false"),
+            ("recent", r#"[["new",{},null,null,null,32,false]]"#),
+            ("turns", new_turn),
+            ("turns", new_turn),
+        ]),
+        "{}",
+        finished.stderr
+    );
+}
+
+#[test]
+fn stm_without_a_database_holds_nothing_and_one_it_cannot_open_degrades_it() {
+    let sends = [
+        to_stm(
+            "record",
+            "({stimulus_name: 'environment.sound', payload: {}})",
+        ),
+        stm_turn("t1", "heard", "'hi'", "listening"),
+        to_stm("recent", "({})"),
+        to_stm("recent_turns", "({})"),
+    ]
+    .concat();
+    let absent = run_stm(
+        &stm_harness("null", "", std::slice::from_ref(&sends), 2),
+        "logical",
+    );
+    assert_eq!(
+        logs(&absent.records),
+        support::labelled(&[
+            ("memory", "absent"),
+            STM_READY,
+            ("recent", "[]"),
+            ("turns", "[]"),
+        ]),
+        "{}",
+        absent.stderr
+    );
+    // Degraded, it never offers: the harness sends once the register is
+    // running (stage 1, armed on entry), and what arrives while it opens
+    // waits.
+    let document = stm_harness("'/nowhere/floppy.sqlite'", "", &[String::new(), sends], 3)
+        .replacen(
+            r#"<state id="running">"#,
+            &format!(
+                r#"<state id="running"><onentry>{}</onentry>"#,
+                stage_after(1, "1ms")
+            ),
+            1,
+        );
+    let finished = run_stm(&document, "logical");
+    let records = logs(&finished.records);
+    assert!(
+        records
+            .first()
+            .is_some_and(|(label, text)| label == "stm.open.failed"
+                && text.starts_with("short-term memory could not open its database: ")),
+        "{records:?} {}",
+        finished.stderr
+    );
+    assert_eq!(
+        records.get(1..).unwrap_or_default(),
+        support::labelled(&[
+            ("failed", DEGRADED),
+            ("stm.dropped", "degraded"),
+            ("stm.dropped", "degraded"),
+            ("failed", DEGRADED),
+            ("failed", DEGRADED),
+        ])
+        .as_slice(),
+        "{}",
+        finished.stderr
+    );
 }

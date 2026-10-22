@@ -1,0 +1,83 @@
+<?xml version="1.0"?>
+<!-- The stm document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/stm/irp/sources">
+  <assert id="stm-1" specnum="1" specid="#stm-1">
+    <![CDATA[With a database it opens it (migrating it to the head revision through the memory ability) and is ready: it sends `bot.ability.offers` `{ability: "stm", choices: []}` once; without one it is ready the same way, holds nothing (records and turns are dropped) and answers every read empty.]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.scxml"/>
+    </test>
+    <test id="101" conformance="mandatory" manual="false">
+      <start uri="101/test101.scxml"/>
+    </test>
+  </assert>
+  <assert id="stm-2" specnum="2" specid="#stm-2">
+    <![CDATA[`bot.ability.memory.stm.record` `{stimulus_name, payload, event_id?, source?, target?}` is written with no reply, and `bot.ability.memory.stm.recent` `{stimulus_name?, limit?}` answers `bot.ability.memory.stm.recent.output` `{entries}`: the records inside the recency window, newest first, each `{stm_id, stimulus_name, payload, event_id, source, target, created_at, last_accessed_at}`, optionally only one stimulus's, at most `limit`.]]>
+    <test id="110" conformance="mandatory" manual="false">
+      <start uri="110/test110.scxml"/>
+    </test>
+    <test id="111" conformance="mandatory" manual="false">
+      <start uri="111/test111.scxml"/>
+    </test>
+  </assert>
+  <assert id="stm-3" specnum="3" specid="#stm-3">
+    <![CDATA[Each record evicts, in its own transaction, every record beyond `capacity` by the effective clock (last access, else admission), so the register holds the newest `capacity`; a read past `recency_window_ms` finds nothing.]]>
+    <test id="120" conformance="mandatory" manual="false">
+      <start uri="120/test120.scxml"/>
+    </test>
+    <test id="121" conformance="mandatory" manual="false">
+      <start uri="121/test121.scxml"/>
+    </test>
+  </assert>
+  <assert id="stm-4" specnum="4" specid="#stm-4">
+    <![CDATA[`bot.ability.memory.stm.reinforce` `{stm_ids}` stamps those records' `last_accessed_at` (no reply), which moves their effective clock forward for reads and eviction.]]>
+    <test id="130" conformance="mandatory" manual="false">
+      <start uri="130/test130.scxml"/>
+    </test>
+  </assert>
+  <assert id="stm-5" specnum="5" specid="#stm-5">
+    <![CDATA[`bot.ability.memory.stm.turn` `{id, direction, speakers, text, cut, conversation}` is written with no reply, and `bot.ability.memory.stm.recent_turns` `{limit?, within?}` answers `bot.ability.memory.stm.recent_turns.output` `{turns}`: the newest turns, at most `limit`, oldest first, each `{id, at, direction, speakers, text, cut, conversation}` with `at` UTC (Z).]]>
+    <test id="140" conformance="mandatory" manual="false">
+      <start uri="140/test140.scxml"/>
+    </test>
+    <test id="141" conformance="mandatory" manual="false">
+      <start uri="141/test141.scxml"/>
+    </test>
+  </assert>
+  <assert id="stm-6" specnum="6" specid="#stm-6">
+    <![CDATA[A turn that puts the register over `turn_capacity` sheds the older half at once, in the same transaction: the newest `turn_capacity - floor(turn_capacity / 2)` stay.]]>
+    <test id="150" conformance="mandatory" manual="false">
+      <start uri="150/test150.scxml"/>
+    </test>
+  </assert>
+  <assert id="stm-7" specnum="7" specid="#stm-7">
+    <![CDATA[A turn's words longer than 2048 UTF-8 bytes are cut at a whole word and its `cut` is true.]]>
+    <test id="160" conformance="mandatory" manual="false">
+      <start uri="160/test160.scxml"/>
+    </test>
+    <test id="161" conformance="mandatory" manual="false">
+      <start uri="161/test161.scxml"/>
+    </test>
+  </assert>
+  <assert id="stm-8" specnum="8" specid="#stm-8">
+    <![CDATA[The turns' window is `turn_window_ms`, or `within` (an ISO 8601 duration) when that is shorter; its floor moves in whole steps of half the window, so a turn is read for at least the window and at most one and a half windows.]]>
+    <test id="170" conformance="mandatory" manual="false">
+      <start uri="170/test170.scxml"/>
+    </test>
+    <test id="171" conformance="mandatory" manual="false">
+      <start uri="171/test171.scxml"/>
+    </test>
+  </assert>
+  <assert id="stm-9" specnum="9" specid="#stm-9">
+    <![CDATA[Requests and notifications are applied one at a time, in arrival order: what arrives while it is opening or applying waits, so a read sees every write sent before it.]]>
+    <test id="180" conformance="mandatory" manual="false">
+      <start uri="180/test180.scxml"/>
+    </test>
+  </assert>
+  <assert id="stm-10" specnum="10" specid="#stm-10">
+    <![CDATA[A database it cannot open leaves it degraded, without an offer: it sends `bot.ability.failed` `{message: "unavailable: StmMemory is degraded."}`, answers every request the same way, and drops every notification.]]>
+    <test id="190" conformance="mandatory" manual="false">
+      <start uri="190/test190.scxml"/>
+    </test>
+  </assert>
+</assertions>

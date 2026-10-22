@@ -95,7 +95,7 @@ const BODY_EVENTS: [&str; 13] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 75] = [
+const ABILITY_EVENTS: [&str; 82] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -180,6 +180,15 @@ const ABILITY_EVENTS: [&str; 75] = [
     "bot.ability.turn_detector.turn.complete",
     "bot.ability.turn_detector.failed",
     "bot.ability.turn_detector.ready",
+    // The original's short-term register (abilities/memory/stm.py): its
+    // notifications, its requests and their replies.
+    "bot.ability.memory.stm.record",
+    "bot.ability.memory.stm.reinforce",
+    "bot.ability.memory.stm.recent",
+    "bot.ability.memory.stm.recent.output",
+    "bot.ability.memory.stm.turn",
+    "bot.ability.memory.stm.recent_turns",
+    "bot.ability.memory.stm.recent_turns.output",
 ];
 
 /// The correlated events of one processing turn: each requires `turn`.
