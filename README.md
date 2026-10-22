@@ -218,6 +218,11 @@ The cognition always runs reflection and routines beside its turns, as
 The original's bots compose them. The floppy bot's `database` is
 `/memory/floppy.sqlite`, so its runs grant the `sql` service a memory
 directory; without a database reflection and routines log `absent`.
+Its `traits`, which give it its persona, are `['warm', 'patient',
+'curious', 'honest']`, the original's companion example's owner traits
+(the original composes a persona only from traits, and the floppy bot
+always has one); an environment's `<invoke>` may give others as a
+`<param>`, one to 24 traits of at most 200 characters each.
 
 Contributor rules are in [AGENTS.md](AGENTS.md).
 

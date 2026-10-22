@@ -14,7 +14,7 @@
     cancelling_processing -cancel timeout-> degraded (a final sink)
 
   Joining (decision D107): the environment's <invoke> is the original's
-  attach. Its <param>s are the activation settings (model, bounds,
+  attach. Its <param>s are the activation settings (model, bounds, traits,
   database, environment: the environment's id), and the body starts in
   live and activates at once; nothing sends bot.activate. inactive is a
   top-level final state: a failed activation and bot.deactivate end the
@@ -24,8 +24,10 @@
   Abilities: live holds <invoke id="cognition">, <invoke
   id="communication"> (abilities/communication/communication.scx, which holds the
   conversation and speaking), <invoke id="identity">
-  (abilities/identity/identity.scx, the bot's name) and <invoke id="listening">
-  (abilities/listening/listening.scx, the ear); leaving live cancels every ability (SCXML
+  (abilities/identity/identity.scx, the bot's name), <invoke id="listening">
+  (abilities/listening/listening.scx, the ear) and <invoke id="persona">
+  (abilities/persona/persona.scx, the owner's traits and the bot's own
+  description of itself); leaving live cancels every ability (SCXML
   6.4), which replaces the original's cleanup states: an SCXML invoke cancel is
   synchronous, so there is nothing for the original's 5 min deactivation
   timeout or its reboot preserve/reset cleanup to wait on, and every
@@ -66,7 +68,19 @@
   Self: the body relays the cognition's bot.ability.identity.ask to the
   identity and the identity's bot.ability.identity.named (its answer, and
   the name after each adoption) to the cognition, so the cognition can
-  tell its own name from a visitor's.
+  tell its own name from a visitor's. It relays the persona's
+  bot.ability.persona.output {traits, description} (on waking and after
+  each revision written down) to the cognition, which keeps what it was
+  last told (the original's Cognition._know_persona).
+
+  Persona (the original's bot.traits, which give a bot a persona): the
+  body passes its traits (the activation setting traits, a <param> the
+  environment may set; the original's companion example's owner traits by
+  default, since the original composes a persona only from traits and
+  floppy's body always has one) and its database to the persona. The
+  persona's offer (bot.ability.persona.revise) is its readiness but is
+  kept out of the turn's choices (turnOffers()): in the original only
+  reflection, composed with the same persona, may select a revision.
 
   Speaking: the communication relays speaking's efference copy,
   bot.ability.speaking.efference (sent on to each Listening ability in
@@ -119,7 +133,7 @@
   <processing:collect_offered_events> tags every choice with the session id
   of the session that offers it (the target a stage sends it to): the
   body's own with its _sessionid, each ability's latest bot.ability.offers
-  choices with the ability's session id (<_sessionid>.<invoke id>, decision
+  choices (but the persona's) with the ability's session id (<_sessionid>.<invoke id>, decision
   D110), and, while a device is focused, the events its live session
   accepts, read this turn with <device:snapshot> (decision D109), each
   {event, schema: {type: object}} with the device's id (the device's own
@@ -185,9 +199,10 @@
 
   Memory (the original's sqlite_memory): the body passes its database (a file in
   the directory the run grants the sql service at /memory, scx run's
-  dir option) to the cognition, the communication and the identity as
-  <param name="database">; reasoning recalls the cognitive episodes
-  reflection stores, the identity its adopted names, and the conversation its
+  dir option) to the cognition, the communication, the identity and the
+  persona as <param name="database">; reasoning recalls the cognitive
+  episodes reflection stores, the identity its adopted names, the persona
+  the descriptions the bot wrote of itself, and the conversation its
   relationship memories (abilities/memory/memory.scx over services/sql, one
   SQLite transaction per invocation). A run without the grant is refused
   before it starts.
@@ -213,6 +228,11 @@
     <!-- The environment's id (its root's _sessionid, decision D106), which
          the environment gives as a <param>. -->
     <data id="environment" expr="null"/>
+    <!-- The owner's traits (the original's bot.traits: one to 24, each at
+         most 200 characters), which the environment's <invoke> may set as
+         a <param>; by default the original's companion example's
+         DEFAULT_TRAITS. -->
+    <data id="traits" expr="['warm', 'patient', 'curious', 'honest']"/>
     <data id="activation_timeout_ms" expr="30000"/>
     <data id="processing_timeout_ms" expr="300000"/>
     <!-- The devices the bot holds, which the environment gives as a
@@ -229,7 +249,7 @@
     <!-- Lifecycle: each entry into live is one run; the abilities expected
          and the offers each has sent this run. -->
     <data id="live_run" expr="0"/>
-    <data id="expected" expr="['cognition', 'communication', 'identity', 'listening']"/>
+    <data id="expected" expr="['cognition', 'communication', 'identity', 'listening', 'persona']"/>
     <data id="offers" expr="({})"/>
     <data id="waiting" expr="[]"/>
     <!-- The input abilities each environment.* stimulus fans out to
@@ -284,6 +304,10 @@
       <param name="database" expr="database"/>
     </invoke>
     <invoke id="listening" type="scxml" src="../../abilities/listening/listening.scx"/>
+    <invoke id="persona" type="scxml" src="../../abilities/persona/persona.scx">
+      <param name="database" expr="database"/>
+      <param name="traits" expr="traits"/>
+    </invoke>
 
     <!-- Each ability's latest offers; the first of a run is its readiness. -->
     <transition event="bot.ability.offers" event:schema="../../abilities/schemas/bot.ability.offers.json">
@@ -304,6 +328,14 @@
     </transition>
     <transition event="bot.ability.identity.named" event:schema="../../abilities/schemas/bot.ability.identity.named.json">
       <send event="bot.ability.identity.named" target="#_cognition">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <!-- What the bot knows of itself (the persona tells it on waking, while
+         the bot may still be activating, and after each revision) goes to
+         the cognition. -->
+    <transition event="bot.ability.persona.output" event:schema="../../abilities/schemas/bot.ability.persona.output.json">
+      <send event="bot.ability.persona.output" target="#_cognition">
         <content expr="_event.data"/>
       </send>
     </transition>
@@ -355,7 +387,7 @@
 
     <state id="active" initial="unfocused">
       <!-- An ability that ends while the bot is active leaves it degraded. -->
-      <transition event="done.invoke.cognition done.invoke.communication done.invoke.identity done.invoke.listening" target="degraded">
+      <transition event="done.invoke.cognition done.invoke.communication done.invoke.identity done.invoke.listening done.invoke.persona" target="degraded">
         <assign location="degraded_reason" expr="abilityEndedReason(_event)"/>
       </transition>
       <!-- Communication input from outside goes to the communication, whose
@@ -494,7 +526,7 @@
           <decision:choice location="body_choices" events="bot.focus_device bot.clear_focus"/>
           <decision:pin location="body_choices" event="bot.focus_device" property="device" values="focus_candidates"/>
           <!-- bound: 32 KiB, the failure message below names it. -->
-          <processing:collect_offered_events location="choices" choices="body_choices" offers="offers"
+          <processing:collect_offered_events location="choices" choices="body_choices" offers="turnOffers()"
                                              devices="device_snapshots" focus="focused_device"
                                              bound="32768" overlocation="choices_over" sizelocation="choices_size"/>
           <log label="floppy.choices" expr="choices"/>

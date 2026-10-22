@@ -46,6 +46,16 @@ function waitingWithout(_event) {
   return waiting.filter(function (ability) { return ability !== _event.data.ability; });
 }
 
+// The abilities' offers a turn may select from: every ability's but the
+// persona's, whose revision only reflection may select (the original's
+// Cognition, which shows the persona every turn and lets reflection alone
+// revise it).
+function turnOffers() {
+  var turn = Object.assign({}, offers);
+  delete turn.persona;
+  return turn;
+}
+
 // activating
 
 function everyAbilityReady() {
