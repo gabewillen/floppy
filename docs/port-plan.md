@@ -346,10 +346,11 @@ are D52, D57 to D59, D66 and D67
   `FLOPPY_SPEECH_API_KEY`, voice detection, diarization and identification
   `FLOPPY_VOICE_BASE_URL` and `FLOPPY_VOICE_API_KEY` (LocalAI's
   `silero-vad`, `pyannote-diarization` and `voice-detect-wespeaker-resnet34`),
-  image reading `FLOPPY_BASE_URL` and `FLOPPY_API_KEY`. Without them the
-  service answers `bot.ability.failed` ("the backend is not
+  image reading `FLOPPY_BASE_URL` and `FLOPPY_API_KEY`. Without a base
+  URL the service answers `bot.ability.failed` ("the backend is not
   configured") and sends nothing
-  (decisions D31, D57, D66). The models are each document's `model`
+  (decisions D31, D57, D66); without a key it asks a keyless backend with
+  no key header (D127). The models are each document's `model`
   `<data>` ([README Defaults](../README.md#speech-and-voice-models)).
 - **Hearing stages.** Each of the original's hearing leaves is its own `.scx`
   (`abilities/speech_decoding/`, `sound_classification/`,

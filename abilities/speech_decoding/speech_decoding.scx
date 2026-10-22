@@ -24,11 +24,12 @@
 
   Bindings: the speech service package, resolved from its repository URI;
   env scopes FLOPPY_SPEECH_BASE_URL and FLOPPY_SPEECH_API_KEY to the
-  service's <invoke> (no default backend, decision D31: without them the
-  service answers bot.ability.failed). The run grants the service the
-  media directory (scx run's dir option). An invoked service's events are
-  not checked against event:schema (scxml.rs checks only events between
-  SCXML sessions), so their shape is checked by cond.
+  service's <invoke> (no default backend, decision D31: without a base URL
+  the service answers bot.ability.failed, and without a key it asks a
+  keyless backend with no key header, decision D127). The run grants the
+  service the media directory (scx run's dir option). An invoked service's
+  events are not checked against event:schema (scxml.rs checks only events
+  between SCXML sessions), so their shape is checked by cond.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"

@@ -134,14 +134,14 @@ values. No package has a default model endpoint (decision D31).
 | Variable | Read by | Required |
 | --- | --- | --- |
 | `FLOPPY_BASE_URL` | the `generate` service (`env:baseurl`): the builder's design and author stages, the floppy bot's reasoning | yes: without it a generation fails `unconfigured` |
-| `FLOPPY_API_KEY` | the `generate` service (`env:apikey`), as above | yes, as above |
+| `FLOPPY_API_KEY` | the `generate` service (`env:apikey`), as above | for a keyed backend: without it the request carries no key header, for a keyless one (decision D127) |
 | `FLOPPY_STREAM` | the `generate` service (`env:stream`): whether the model endpoint streams; `true` or `false` | no: unset (the default), no call is streamed and each model-bound stage is bounded by its backstop alone; `true` makes reasoning's, reflection's and the builder's calls streamed and bounded by inactivity once they stream (decision D101). The CPA gateway does not stream (it answers a streamed request with keep-alive comments only), the maintainer's vLLM does |
 | `TYPESAFE_BASE_URL` | the `decision` service (`env:baseurl`): the builder's triage, the floppy bot's intuition | no: the service's declared origin, `https://api.typesafe.ai` |
 | `TYPESAFE_API_KEY` | the `decision` service (`env:apikey`), as above | for the floppy bot: without it every turn fails (`unconfigured`); the builder triages with its fallback |
 | `FLOPPY_SPEECH_BASE_URL` | the `speech` service (`env:baseurl`): the floppy bot's speech decoding (listening) and speech encoding (speaking) | yes: without it decoding and speaking fail `unconfigured` |
-| `FLOPPY_SPEECH_API_KEY` | the `speech` service (`env:apikey`), as above | yes, as above |
+| `FLOPPY_SPEECH_API_KEY` | the `speech` service (`env:apikey`), as above | for a keyed backend, as `FLOPPY_API_KEY` |
 | `FLOPPY_VOICE_BASE_URL` | the `speech` service (`env:baseurl`): the floppy bot's voice detection, diarization and voice identification (listening), on LocalAI's voice APIs | yes: without it every sound the bot hears fails voice detection |
-| `FLOPPY_VOICE_API_KEY` | the `speech` service (`env:apikey`), as above | yes, as above |
+| `FLOPPY_VOICE_API_KEY` | the `speech` service (`env:apikey`), as above | for a keyed backend, as `FLOPPY_API_KEY` |
 
 The live tests read `FLOPPY_LIVE_ENV_FILE` (the env files, joined like
 `PATH`) and `FLOPPY_LIVE_MODEL` (default: the model below); the trace tests

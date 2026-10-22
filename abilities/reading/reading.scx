@@ -79,9 +79,10 @@
 
   Bindings: the generate service package, resolved from its repository
   URI; env scopes FLOPPY_API_KEY and FLOPPY_BASE_URL to its <invoke> (no
-  default backend: without either it answers generate.failed
-  unconfigured). model is the vision model the Sparks serve; an invoker
-  may pass another by <param>.
+  default backend: without a base URL it answers generate.failed
+  unconfigured, and without a key it asks a keyless backend with no key
+  header, decision D127). model is the vision model the Sparks serve; an
+  invoker may pass another by <param>.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
