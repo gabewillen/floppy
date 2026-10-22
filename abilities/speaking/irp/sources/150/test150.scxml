@@ -14,7 +14,7 @@
   </state>
   <state id="step1">
     <onentry>
-      <send event="bot.ability.speaking.input" target="#_speaking"><content expr='{"text": "hi"}'/></send>
+      <send event="bot.ability.speaking.input" target="#_speaking"><content expr='{"parts": [{"words": "hi"}]}'/></send>
     </onentry>
     <transition event="bot.ability.failed" cond="_event.data.message === 'Speech encoding failed: the backend answered an error status.'" target="step2"/>
   </state>

@@ -208,7 +208,7 @@ an earlier turn, `floppy.diagnostic` why activation failed, and
   and reboot requests, cancels).
 - `cargo test -p floppy-tests --test communication`: the communication
   path against the cognition double (a sent response said and recorded,
-  conversation input as a turn whose stimulus carries the history,
+  conversation input as a turn whose stimulus carries its exchange,
   a blank response, a response deferred behind one in flight and the hop
   timeout, malformed input, a child that cannot start), and one response
   spoken through the real speech service on a fake backend, its efference

@@ -14,7 +14,7 @@
     <onentry>
       <send event="bot.ability.listening.sensitivity.score" target="#_sensitivity"><content expr='{"stimulus": {"event": "environment.sound", "data": {"audio": "media/a.wav", "received_level_db": -30.5}, "source": "mic"}}'/></send>
     </onentry>
-    <transition event="bot.ability.listening.sensitivity.output" cond="_event.data.perceived_level_db === -30.5 &amp;&amp; _event.data.sound.audio === 'media/a.wav' &amp;&amp; _event.data.parent.source === 'mic' &amp;&amp; _event.data.parent.event === 'environment.sound'" target="step2"/>
+    <transition event="bot.ability.listening.sensitivity.output" cond="_event.data.perceived_level_db === -30.5 &amp;&amp; _event.data.producing === false &amp;&amp; _event.data.sound.audio === 'media/a.wav' &amp;&amp; _event.data.parent.source === 'mic' &amp;&amp; _event.data.parent.event === 'environment.sound'" target="step2"/>
   </state>
   <state id="step2">
     <transition target="pass"/>

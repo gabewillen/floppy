@@ -8,8 +8,8 @@
 </datamodel>
 <state id="s0">
   <onentry>
-    <conversation:complete_turn location="a" event="'e'" input="({source_ids: ['a'], target_ids: [], content: 'media/a.pcm', content_type: 'audio/pcm'})" turns="turns" session_ref="'r'" sequence="0"/>
-    <conversation:complete_turn location="c" event="'e'" input="({source_ids: ['a'], target_ids: [], content: {k: 1}, content_type: 'application/json'})" turns="turns" session_ref="'r'" sequence="0"/>
+    <conversation:complete_turn location="a" event="'e'" input="({source_ids: ['a'], target_ids: [], content: 'media/a.pcm', content_type: 'audio/pcm'})" turns="turns" session_ref="'r'"/>
+    <conversation:complete_turn location="c" event="'e'" input="({source_ids: ['a'], target_ids: [], content: {k: 1}, content_type: 'application/json'})" turns="turns" session_ref="'r'"/>
   </onentry>
   <transition event="error.execution" conf:targetfail=""/>
   <transition cond="a.content === null &amp;&amp; a.content_type === 'audio/pcm' &amp;&amp; c.content.k === 1" conf:targetpass=""/>

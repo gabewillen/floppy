@@ -233,10 +233,10 @@ fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
             {"event": IGNORE, "data": {}, "reason": "nothing to say"}
         ])),
         "/grespond/v1/chat/completions" => selection(json!([
-            {"event": RESPOND, "data": {"text": "Hi! I am floppy."}, "reason": "greet"}
+            {"event": RESPOND, "data": {"parts": [{"words": "Hi! I am floppy."}]}, "reason": "greet"}
         ])),
         "/grepeat/v1/chat/completions" => selection(json!([
-            {"event": RESPOND, "data": {"text": "hi"}, "reason": "answer"}
+            {"event": RESPOND, "data": {"parts": [{"words": "hi"}]}, "reason": "answer"}
         ])),
         "/offchoice/v1/chat/completions" => selection(json!([
             {"event": "bot.focus_device", "data": {"device": "lamp"}, "reason": "look"}
@@ -1189,7 +1189,7 @@ fn a_reasoned_response_is_said_through_the_communication() {
     say(&mut run, "say hi");
     let records = until_all(
         &run,
-        &["communication.history", "bot.ability.speaking.output"],
+        &["communication.exchange", "bot.ability.speaking.output"],
     );
     assert_eq!(
         texts(&records, "cognition.stage"),
@@ -1252,11 +1252,12 @@ fn tell(run: &mut Run, content: &str) {
 }
 
 /// The original renders a conversation's messages (models) into the
-/// prompt: a turn the conversation hands reasoning carries its history, so
-/// the next turn's prompt holds what the user said before and what the bot
-/// said back (decision D99), beside the one episode reflection stored.
+/// prompt: a turn the conversation hands reasoning carries its exchange
+/// (decision D99), which the next inbound message opens anew (D176), so the
+/// next turn's prompt holds the new message, and what was said before
+/// reaches it as the one episode reflection stored.
 #[test]
-fn a_conversation_turn_carries_its_history_to_reasoning() {
+fn a_conversation_turn_carries_its_exchange_to_reasoning() {
     let mock = Mock::start();
     let bot = layout(&mock, Decision::Abstain, Generation::Respond, &[]);
     support::use_database(&bot.body, DATABASE);
@@ -1267,14 +1268,16 @@ fn a_conversation_turn_carries_its_history_to_reasoning() {
     run.until(WAIT, turn_ended);
     let prompts = prompts(&mock);
     assert_eq!(prompts.len(), 2, "{prompts:?}");
-    for said in [
-        "My favorite color is green.",
-        "Hi! I am floppy.",
-        "What is my favorite color?",
-    ] {
+    let said = |text: &str| format!("<entry key=\"content\" value=\"{text}\" />");
+    assert!(
+        prompts[1].contains(&said("What is my favorite color?")),
+        "{}",
+        prompts[1]
+    );
+    for before in ["My favorite color is green.", "Hi! I am floppy."] {
         assert!(
-            prompts[1].contains(&format!("<entry key=\"content\" value=\"{said}\" />")),
-            "{said}: {}",
+            !prompts[1].contains(&said(before)),
+            "{before}: {}",
             prompts[1]
         );
     }
@@ -1286,7 +1289,7 @@ fn a_conversation_turn_carries_its_history_to_reasoning() {
     close(
         run,
         &mock,
-        "a_conversation_turn_carries_its_history_to_reasoning",
+        "a_conversation_turn_carries_its_exchange_to_reasoning",
     );
 }
 
@@ -1453,13 +1456,14 @@ fn offered_schema(event: &str) -> Json {
 
 /// The original's `low_confidence` keeps the environment actions: intuition gets
 /// every groundable event with its own confidence (ignore 0.34, respond
-/// 0.33 with the stimulus's text), observes their least, 33, and escalates
+/// 0.33 with the stimulus's parts), observes their least, 33, and escalates
 /// under the floor 35 with respond (ignore is no environment action); the
 /// cognition routes respond first, then reasoning's selection. Reasoning's
 /// prompt is the original's model-facing XML of its `ProcessorInput`.
-/// Runs one `hi` turn, offering ignore and respond, through the cognition
-/// harness of `bot` (which offers respond itself) and returns its records
-/// up to the harness's output.
+/// Runs one `hi` turn, offering ignore and respond (its stimulus carries
+/// respond's `parts`, the evidence intuition grounds respond in), through
+/// the cognition harness of `bot` (which offers respond itself) and returns
+/// its records up to the harness's output.
 fn low_confidence_turn(bot: &Bot) -> (Run, Vec<Json>) {
     let abilities = bot
         .body
@@ -1487,7 +1491,7 @@ fn low_confidence_turn(bot: &Bot) -> (Run, Vec<Json>) {
         "bot.ability.cognition.input",
         &json!({
             "turn": 1,
-            "stimulus": {"event": "bot.input", "data": {"text": "hi"}, "source": "conversation"},
+            "stimulus": {"event": "bot.input", "data": {"parts": [{"words": "hi"}]}, "source": "conversation"},
             "focus": null,
             "focus_candidates": [],
             "choices": [
@@ -1523,7 +1527,7 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
     // grounded "hi") before reasoning ran; the output is reasoning's.
     assert_eq!(
         texts(&records, "harness.sent"),
-        strings(&[r#"{"text":"hi"}"#])
+        strings(&[r#"{"parts":[{"words":"hi"}]}"#])
     );
     assert_eq!(
         json_text(&records, "harness.output"),
@@ -1531,17 +1535,17 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
             {"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "session.cognition"},
         ]})
     );
-    // The TypeSafe state is the original's turn document, and respond's text is
-    // grounded in the stimulus's value.
+    // The TypeSafe state is the original's turn document, and respond's parts
+    // are grounded in the stimulus's value.
     let decisions = mock.received("/systemone");
     assert_eq!(decisions.len(), 1);
     assert_eq!(
         decisions[0].body["state"],
-        json!({"turn": {"envelope": {"name": "bot.input"}, "data": {"text": "hi"}}})
+        json!({"turn": {"envelope": {"name": "bot.input"}, "data": {"parts": [{"words": "hi"}]}}})
     );
     assert_eq!(
-        decisions[0].body["questions"][format!("{RESPOND}::text")]["criteria"],
-        json!({"hi": format!("Which value fills 'text' for {RESPOND}?")})
+        decisions[0].body["questions"][format!("{RESPOND}::parts")]["criteria"],
+        json!({r#"[{"words":"hi"}]"#: format!("Which value fills 'parts' for {RESPOND}?")})
     );
     let reasoning = reasoning_requests(&mock);
     assert_eq!(reasoning.len(), 1);
@@ -1552,7 +1556,7 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
         .expect("a user message");
     assert_eq!(
         user,
-        "<cognition:processor_input>\n  <host_input>\n    <processing:input>\n      <input stimulus:event=\"bot.input\" stimulus:source=\"conversation\">\n        <content>\n          <entry key=\"text\" value=\"hi\" />\n        </content>\n      </input>\n    </processing:input>\n  </host_input>\n  <prior_episodes count=\"0\" />\n  <standing_directives count=\"0\" />\n</cognition:processor_input>"
+        "<cognition:processor_input>\n  <host_input>\n    <processing:input>\n      <input stimulus:event=\"bot.input\" stimulus:source=\"conversation\">\n        <content>\n          <entry key=\"parts\">\n            <value count=\"1\">\n              <item>\n                <entry key=\"words\" value=\"hi\" />\n              </item>\n            </value>\n          </entry>\n        </content>\n      </input>\n    </processing:input>\n  </host_input>\n  <prior_episodes count=\"0\" />\n  <standing_directives count=\"0\" />\n</cognition:processor_input>"
     );
     close(
         run,
@@ -1581,12 +1585,15 @@ fn reasoning_sends_its_selections_after_the_environment_actions() {
     );
     assert_eq!(
         texts(&records, "harness.sent"),
-        strings(&[r#"{"text":"hi"}"#, r#"{"text":"hi"}"#])
+        strings(&[
+            r#"{"parts":[{"words":"hi"}]}"#,
+            r#"{"parts":[{"words":"hi"}]}"#
+        ])
     );
     assert_eq!(
         json_text(&records, "harness.output"),
         json!({"turn": 1, "output": [
-            {"event": RESPOND, "data": {"text": "hi"}, "reason": "answer", "target": "session"},
+            {"event": RESPOND, "data": {"parts": [{"words": "hi"}]}, "reason": "answer", "target": "session"},
         ]})
     );
     close(

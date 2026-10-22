@@ -2,7 +2,7 @@
 <!-- conversation-4: a participant is added once and dropped on a failed turn. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation">
 <datamodel>
-  <data id="rs" expr="[({session_ref: 'relationship-a', context_ref: 'a', source_ids: ['alice'], target_ids: ['bot'], participants: [], sequences: []})]"/>
+  <data id="rs" expr="[({session_ref: 'relationship-a', context_ref: 'a', source_ids: ['alice'], target_ids: ['bot'], participants: []})]"/>
   <data id="once" expr="null"/>
 </datamodel>
 <state id="s0">

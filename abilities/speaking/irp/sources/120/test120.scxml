@@ -14,7 +14,7 @@
   </state>
   <state id="step1">
     <onentry>
-      <send event="bot.ability.speaking.input" target="#_speaking"><content expr='{"text": "hi"}'/></send>
+      <send event="bot.ability.speaking.input" target="#_speaking"><content expr='{"parts": [{"words": "hi"}]}'/></send>
     </onentry>
     <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 0.1 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step2"/>
   </state>

@@ -20,20 +20,25 @@
   ability in its final state degraded.
 
   Input: bot.ability.communication.input {source_ids, target_ids, content,
-  content_type, ...} in active goes to the conversation as
+  content_type, ...} in active or responding (hearing goes on while a
+  response is said, the original's _hearing) goes to the conversation as
   bot.ability.conversation.routed_input {parent} (the original's routed input to
   the active conversation; parent is the input event as an envelope). The
   conversation hands a text product over as bot.ability.cognition.input
   {stimulus}, which goes on to the body unchanged (the body grants it a
   turn); its bot.ability.conversation.output goes on to the body unchanged
   when its latest message is inbound (a product that is not text; the original
-  _has_conversation_product) and is history only otherwise; and its
+  _has_conversation_product) and is the exchange only otherwise; and its
   bot.ability.conversation.failed {stage, message} goes on to the body
   unchanged (the original forwards these terminals).
 
-  Responding: bot.ability.communication.respond {text} (non-blank) in
-  active numbers the response (preparing_response), sends
-  bot.ability.speaking.input {text} to the speaking child
+  Responding: bot.ability.communication.respond {parts} in active (the
+  original's RespondData: 1 to 64 parts {expression?, words?}, each with
+  words, a sound or a pause, every expression directing a cue, and the
+  words, joined exactly as written, not blank; a respond that breaks one is
+  refused with bot.ability.communication.failed) numbers the response
+  (preparing_response), sends bot.ability.speaking.input {parts} to the
+  speaking child
   (dispatching_response), and waits in responding, bounded by the hop
   timer bot.ability.communication.response.hop.timed_out
   (response_timeout_ms, 36 s: speaking's 30 s encoding bound plus the
@@ -41,12 +46,19 @@
   of the response in hand, _event.sendid). Speaking's output goes on to the
   body as bot.ability.speaking.output. A speaking failure
   (bot.ability.failed) or the hop timeout answers the body with
-  bot.ability.communication.failed {message}. Input that arrives outside
-  active, and responses that arrive while one is in hand, are held by
-  <event:defer/> (scxml.rs namespaces/event) and come back, in order, on
-  the return to active, where they are taken as on arrival (the original defers
-  them); a response in inactive is not taken (the original's inactive has
-  no transition for it).
+  bot.ability.communication.failed {message}. Input that arrives in
+  inactive is held by <event:defer/> (scxml.rs namespaces/event) and comes
+  back, in order, on the return to active. A response's id is its
+  respond's sendid (none when the sender named none); leaving responding
+  retires it into the last closed_responses_bound (16) finished ids, and a
+  respond for a finished id, or another copy of the one in hand, is
+  dropped and logged (communication.late). Other responses that arrive
+  while one is in hand are held by <event:defer/>, up to
+  held_responses_bound (16); past that one is refused with
+  bot.ability.communication.failed (the original's _hold_response). Held
+  responses come back, in order, on the return to active, where they are
+  taken as on arrival; a response in inactive is not taken (the original's
+  inactive has no transition for it).
 
   Speaking's routes: speaking records the words it said as an outbound
   bot.ability.conversation.append, which the communication passes to the
@@ -97,10 +109,20 @@
     <!-- The environment's id (decision D106), where speaking's sound goes. -->
     <data id="environment" expr="null"/>
     <data id="ready" expr="({})"/>
-    <!-- The response in hand: its number, words and hop timer. -->
+    <!-- The response in hand: its number, words, id (its respond's
+         sendid, null when the sender named none) and hop timer. -->
     <data id="operation" expr="0"/>
     <data id="response" expr="null"/>
+    <data id="response_id" expr="null"/>
     <data id="hop_timer" expr="null"/>
+    <!-- The ids of the last closed_responses_bound responses that finished,
+         so a late copy of one never reopens it, and how many other
+         responses are held while one is said (the original's
+         _CLOSED_RESPONSES and _HELD_RESPONSES). -->
+    <data id="closed_responses_bound" expr="16"/>
+    <data id="closed_responses" expr="[]"/>
+    <data id="held_responses_bound" expr="16"/>
+    <data id="held" expr="0"/>
     <data id="failure" expr="null"/>
     <!-- The offers. -->
     <data id="offering" expr="false"/>
@@ -124,15 +146,15 @@
     </transition>
     <!-- Conversation products go on to the body: a text product as its
          stimulus handoff, any other whose latest message is inbound as
-         the output itself; the rest is history. -->
+         the output itself; the rest is the exchange only. -->
     <transition event="bot.ability.cognition.input" event:schema="../schemas/bot.ability.cognition.input.json">
-      <log label="communication.product" expr="productSequence(_event)"/>
+      <log label="communication.product" expr="productTurn(_event)"/>
       <send event="bot.ability.cognition.input" target="#_parent">
         <content expr="_event.data"/>
       </send>
     </transition>
     <transition event="bot.ability.conversation.output" event:schema="../schemas/bot.ability.conversation.output.json">
-      <log label="communication.history" expr="historyLength(_event)"/>
+      <log label="communication.exchange" expr="exchangeLength(_event)"/>
       <if cond="isInboundProduct(_event)">
         <send event="bot.ability.conversation.output" target="#_parent">
           <content expr="_event.data"/>
@@ -179,6 +201,14 @@
         <content expr="_event.data"/>
       </send>
     </transition>
+    <!-- Hearing goes on whatever is being said: input in active or
+         responding goes to the conversation (the original's _hearing, taken
+         in both); inactive holds it. -->
+    <transition event="bot.ability.communication.input" event:schema="../schemas/bot.ability.communication.input.json">
+      <send event="bot.ability.conversation.routed_input" target="#_conversation">
+        <param name="parent" expr="routedParent(_event)"/>
+      </send>
+    </transition>
     <!-- A speaking answer for no response in hand. -->
     <transition event="bot.ability.speaking.output bot.ability.failed">
       <log label="communication.stale" expr="_event.name"/>
@@ -216,18 +246,18 @@
         </send>
       </onentry>
       <transition event="bot.ability.communication.respond" event:schema="../schemas/bot.ability.communication.respond.json"
+                  cond="isClosedResponse(_event)">
+        <log label="communication.late" expr="_event.sendid"/>
+      </transition>
+      <transition event="bot.ability.communication.respond" event:schema="../schemas/bot.ability.communication.respond.json"
                   cond="hasRespond(_event)" target="preparing_response">
-        <assign location="response" expr="_event.data.text"/>
+        <assign location="response" expr="_event.data.parts"/>
+        <assign location="response_id" expr="responseId(_event)"/>
       </transition>
       <transition event="bot.ability.communication.respond" event:schema="../schemas/bot.ability.communication.respond.json">
-        <log label="communication.rejected" expr="'bot.ability.communication.respond needs one non-blank text'"/>
+        <log label="communication.rejected" expr="'bot.ability.communication.respond needs parts that say something'"/>
         <send event="bot.ability.communication.failed" target="#_parent">
-          <param name="message" expr="'Communication response text must be non-blank.'"/>
-        </send>
-      </transition>
-      <transition event="bot.ability.communication.input" event:schema="../schemas/bot.ability.communication.input.json">
-        <send event="bot.ability.conversation.routed_input" target="#_conversation">
-          <param name="parent" expr="routedParent(_event)"/>
+          <param name="message" expr="'A reply must say something: every part needs words, a sound or a pause, and the words must not be blank.'"/>
         </send>
       </transition>
     </state>
@@ -244,7 +274,7 @@
     <state id="dispatching_response">
       <onentry>
         <send event="bot.ability.speaking.input" target="#_speaking">
-          <param name="text" expr="response"/>
+          <param name="parts" expr="response"/>
         </send>
       </onentry>
       <transition target="responding"/>
@@ -259,6 +289,9 @@
       </onentry>
       <onexit>
         <cancel sendidexpr="hop_timer"/>
+        <assign location="closed_responses" expr="closedResponses()"/>
+        <assign location="response_id" expr="null"/>
+        <assign location="held" expr="0"/>
       </onexit>
       <transition event="bot.ability.speaking.output" event:schema="../schemas/bot.ability.speaking.output.json" target="active">
         <send event="bot.ability.speaking.output" target="#_parent">
@@ -277,9 +310,23 @@
           <param name="message" expr="'Speaking response timed out.'"/>
         </send>
       </transition>
-      <transition event="bot.ability.communication.input bot.ability.communication.respond">
+      <!-- A late copy of a finished response, or another copy of this one,
+           is dropped; another response is held, up to held_responses. -->
+      <transition event="bot.ability.communication.respond" event:schema="../schemas/bot.ability.communication.respond.json"
+                  cond="isLateResponse(_event)">
+        <log label="communication.late" expr="_event.sendid"/>
+      </transition>
+      <transition event="bot.ability.communication.respond" event:schema="../schemas/bot.ability.communication.respond.json"
+                  cond="canHold()">
         <event:defer/>
+        <assign location="held" expr="held + 1"/>
         <log label="communication.deferred" expr="_event.name"/>
+      </transition>
+      <transition event="bot.ability.communication.respond" event:schema="../schemas/bot.ability.communication.respond.json">
+        <log label="communication.rejected" expr="heldOverMessage()"/>
+        <send event="bot.ability.communication.failed" target="#_parent">
+          <param name="message" expr="'Communication is holding too many responses; this one is refused.'"/>
+        </send>
       </transition>
     </state>
   </state>

@@ -16,7 +16,7 @@
   </state>
   <state id="step1">
     <onentry>
-      <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal"><content expr='{"text": "Hello there."}'/></send>
+      <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal"><content expr='{"parts": [{"words": "Hello there."}]}'/></send>
     </onentry>
     <transition event="bot.ability.failed" cond="_event.data.message === &quot;Speech encoding failed: the backend's answer is malformed.&quot; &amp;&amp; Object.keys(_event.data).length === 1" target="step2"/>
   </state>

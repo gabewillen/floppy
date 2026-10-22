@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "bot.ability.conversation.output",
   "additionalProperties": false,
-  "description": "Cumulative immutable conversation history emitted after each commit.",
+  "description": "The current exchange, emitted after each commit: the inbound that opened it and what the bot said since. An inbound commit opens a new exchange; the bot's outbound messages join it; the next inbound replaces it. Nothing earlier is carried.",
   "properties": {
     "parent": {
       "anyOf": [
@@ -59,6 +59,7 @@
                       }
                     ]
                   },
+                  "maxItems": 4,
                   "minItems": 1,
                   "title": "Source Ids",
                   "type": "array",
@@ -85,6 +86,7 @@
                       }
                     ]
                   },
+                  "maxItems": 4,
                   "title": "Target Ids",
                   "type": "array",
                   "uniqueItems": true
@@ -215,14 +217,14 @@
         }
       ],
       "default": null,
-      "description": "The exact typed inbound event that caused this history emission, when one exists."
+      "description": "The exact typed inbound event that opened this exchange, when one exists."
     },
     "messages": {
       "default": [],
-      "description": "All committed inbound and outbound messages in causal order.",
+      "description": "The current exchange in causal order: the inbound message that opened it, then the bot's outbound messages committed since. Empty of anything before that inbound.",
       "items": {
         "additionalProperties": false,
-        "description": "One immutable, ordered, model-safe inbound or outbound message.",
+        "description": "One immutable, model-safe inbound or outbound message of the current exchange. A model reads who said it (participants), which way, and what was said (content); provenance and the opaque source_ids and target_ids are correlation: they stay on the typed data and are left out of what a model is shown.",
         "examples": [
           {
             "content": "Hello",
@@ -234,7 +236,6 @@
               "source": "caller",
               "target": "conversation"
             },
-            "sequence": 0,
             "source_ids": [
               "caller"
             ],
@@ -244,12 +245,6 @@
           }
         ],
         "properties": {
-          "sequence": {
-            "description": "Zero-based position in committed conversation history.",
-            "minimum": 0,
-            "title": "Sequence",
-            "type": "integer"
-          },
           "direction": {
             "description": "Whether the message came from a participant or the bot.",
             "enum": [
@@ -274,6 +269,7 @@
                 }
               ]
             },
+            "maxItems": 4,
             "title": "Source Ids",
             "type": "array",
             "uniqueItems": true
@@ -293,6 +289,7 @@
                 }
               ]
             },
+            "maxItems": 4,
             "title": "Target Ids",
             "type": "array",
             "uniqueItems": true
@@ -306,6 +303,84 @@
             "minLength": 1,
             "title": "Content Type",
             "type": "string"
+          },
+          "participants": {
+            "default": [],
+            "description": "Who produced or was addressed by this message, stamped by its producer and never inferred: an inbound message carries the participants stamped on the turn it was built from (who spoke, and to whom), and Speaking stamps the bot's own voice ref on what it said.",
+            "examples": [
+              [],
+              [
+                {
+                  "ref": "voice:tts:warm",
+                  "role": "source"
+                }
+              ]
+            ],
+            "items": {
+              "additionalProperties": false,
+              "description": "Someone who took part in a stimulus: an opaque, producer-stable identity reference and the role it played (source: who produced it; target: who it was addressed to).",
+              "examples": [
+                {
+                  "ref": "+15555550100",
+                  "role": "source"
+                },
+                {
+                  "ref": "person-42",
+                  "role": "target"
+                },
+                {
+                  "ref": "voice:3f2a9c",
+                  "role": "source",
+                  "own": true
+                }
+              ],
+              "properties": {
+                "ref": {
+                  "description": "Opaque, producer-stable identity such as a phone number, an app person id, or a chat handle. Never a display name chosen by the bot.",
+                  "examples": [
+                    "+15555550100",
+                    "person-42",
+                    "caller"
+                  ],
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "title": "Ref",
+                  "type": "string"
+                },
+                "role": {
+                  "description": "source: who produced the stimulus (speaker, sender). target: who it was addressed to.",
+                  "enum": [
+                    "source",
+                    "target"
+                  ],
+                  "examples": [
+                    "source",
+                    "target"
+                  ],
+                  "title": "Role",
+                  "type": "string"
+                },
+                "own": {
+                  "default": false,
+                  "description": "True when the producer knows this participant is the bot itself, for example the bot's own voice heard back or the voice it spoke with. Stamped only by that producer; never inferred.",
+                  "examples": [
+                    false,
+                    true
+                  ],
+                  "title": "Own",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "ref",
+                "role"
+              ],
+              "title": "Participant",
+              "type": "object"
+            },
+            "maxItems": 32,
+            "title": "Participants",
+            "type": "array"
           },
           "provenance": {
             "additionalProperties": false,
@@ -401,7 +476,6 @@
           }
         },
         "required": [
-          "sequence",
           "direction",
           "source_ids",
           "target_ids",
@@ -427,7 +501,6 @@
             "event": "bot.ability.conversation.input",
             "id": "turn-1"
           },
-          "sequence": 0,
           "source_ids": [
             "caller"
           ],

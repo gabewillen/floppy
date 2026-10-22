@@ -16,8 +16,8 @@
   </state>
   <state id="step1">
     <onentry>
-      <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal"><content expr='{"text": "first"}'/></send>
-      <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal"><content expr='{"text": "second"}'/></send>
+      <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal"><content expr='{"parts": [{"words": "first"}]}'/></send>
+      <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal"><content expr='{"parts": [{"words": "second"}]}'/></send>
     </onentry>
     <transition event="bot.ability.vocal.speech.encoding.output" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply.pcm\",\"channels\":1,\"duration\":0.1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000}"' target="step2"/>
   </state>

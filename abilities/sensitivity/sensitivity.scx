@@ -6,9 +6,10 @@
   (abilities/listening/listening.scx) invokes it as its long-lived child
   "sensitivity".
 
-    quiet -bot.ability.speaking.efference-> producing
-    producing -bot.ability.speaking.efference-> producing (re-entered: the
-      window restarts on the new duration)
+    quiet -bot.ability.speaking.efference (duration > 0)-> producing
+    producing -bot.ability.speaking.efference (duration > 0)-> producing
+      (re-entered: the window restarts on the new duration)
+    producing -bot.ability.speaking.efference (duration 0)-> quiet
     producing -playout delay-> quiet
 
   Efference copy: bot.ability.speaking.efference {mouth, duration, ...}
@@ -16,12 +17,16 @@
   mouth is producing and opens the window for exactly duration seconds:
   producing arms producing.after (the original's hsm.after on producing) with
   that delay, and leaving producing cancels it (the original's ballistic after()).
+  Only a copy with sound still to come (duration > 0) opens or re-arms the
+  window; a copy of duration 0 says the mouth has nothing left to play,
+  and closes it (the original's _has_silent_copy; quiet ignores one).
 
   Scoring: bot.ability.listening.sensitivity.score {stimulus} (the original's
   ScoreData: the environment.sound envelope) answers the listening with
   bot.ability.listening.sensitivity.output {sound, parent,
-  perceived_level_db} (the original's OutputData; parent is the stimulus). Every
-  sound comes back; nothing is dropped or edited.
+  perceived_level_db, producing} (the original's OutputData; parent is the
+  stimulus; producing is true for every arrival in producing, whoever made
+  it). Every sound comes back; nothing is dropped or edited.
 
   * quiet, or producing a sound whose stimulus source is not the
     producing mouth (the original _score_unproduced): perceived_level_db is the
@@ -71,11 +76,11 @@
         <assign location="sound" expr="stimulus.data"/>
         <assign location="perceived" expr="receivedLevel(sound)"/>
         <send event="bot.ability.listening.sensitivity.output" target="#_parent">
-          <content expr="scoreOutput(sound, stimulus, perceived)"/>
+          <content expr="scoreOutput(sound, stimulus, perceived, false)"/>
         </send>
       </transition>
       <transition event="bot.ability.speaking.efference" event:schema="../schemas/bot.ability.speaking.efference.json"
-                  target="producing">
+                  cond="hasSoundToCome(_event)" target="producing">
         <assign location="sensitivity_playout_seconds" expr="_event.data.duration"/>
         <assign location="sensitivity_producing_mouth" expr="_event.data.mouth"/>
       </transition>
@@ -108,14 +113,17 @@
           </if>
         </if>
         <send event="bot.ability.listening.sensitivity.output" target="#_parent">
-          <content expr="scoreOutput(sound, stimulus, perceived)"/>
+          <content expr="scoreOutput(sound, stimulus, perceived, true)"/>
         </send>
       </transition>
       <transition event="bot.ability.speaking.efference" event:schema="../schemas/bot.ability.speaking.efference.json"
-                  target="producing">
+                  cond="hasSoundToCome(_event)" target="producing">
         <assign location="sensitivity_playout_seconds" expr="_event.data.duration"/>
         <assign location="sensitivity_producing_mouth" expr="_event.data.mouth"/>
       </transition>
+      <!-- The mouth has nothing left to play: the window closes now. -->
+      <transition event="bot.ability.speaking.efference" event:schema="../schemas/bot.ability.speaking.efference.json"
+                  target="quiet"/>
       <transition event="producing.after" cond="isPlayoutTimer(_event)" target="quiet"/>
     </state>
   </state>

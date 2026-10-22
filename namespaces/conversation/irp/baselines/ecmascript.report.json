@@ -6,28 +6,19 @@
     "kind": "namespace-irp",
     "source": "namespaces/conversation/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "97dfe016cfa59a6e50a20eed7ffb34fd8c87bf366bc95ad6751eea7166192d42",
-    "source_digest": "8ce8c095726346e8b5443073689990a5b92212c61ae6e0fd9d37d576867b49de",
-    "manifest_digest": "00afa3ba1fbabec1c434cbbb4d09913290399fb25958855dcac05d7e15bfe0b2",
+    "corpus_digest": "87fdadded2d7717cd1e5985757b2fa3b3566ccd99796c98345d7f620d3dd6676",
+    "source_digest": "995dfb4923189898cf20df1eb8cbce843d6ef0c1e4231dd1eb754f6eb5920c29",
+    "manifest_digest": "5cf6a657074ff9b7ef457c5f894acb3403aa7dd9fbbf7ab4796b086fd87547da",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
     "transformer": {
-      "name": "saxon-process-sandboxed",
-      "version": "SaxonJ-HE 12.8 from Saxonica",
+      "name": "saxon-process",
+      "version": "SaxonJ-HE 12.8 from Saxonica (SaxonC-HE 12.8 from Saxonica)",
       "command_argv": [
-        "java",
-        "-jar",
-        "saxon-he-12.8.jar",
-        "-a:off",
-        "-p:off",
-        "-dtd:off",
-        "-expand:off",
-        "-ext:off",
-        "-xi:off",
-        "-xsiloc:off"
+        "saxon"
       ],
-      "executable_digest": "c13657d80564f40f10b8ab91b29fdc74080e7d8bb36d6cd06589292755d3476f"
+      "executable_digest": "f9e0b6910725131e0e8fa088d5ad2fca5c262badbedf7e8745dd6f3d0969fbb0"
     },
     "datamodel": "ecmascript",
     "provenance": "baseuri=https://github.com/stateforward/floppy/tree/main/namespaces/conversation/irp/sources"
@@ -41,17 +32,17 @@
   "engine": {
     "name": "scxml-machine",
     "version": "0.2.0",
-    "source_digest": "b3fde869dbf1c6e0b9494fb7013aef41e3436225ac598902afafdf761c9e2dd5"
+    "source_digest": "dff3fc8cedae948050fb2cd1bc417c9ac835b35059f1477dc30d8b4f2e746452"
   },
   "data_model": {
     "name": "scxml-data-model-ecmascript",
     "version": "0.2.0",
-    "source_digest": "e84a0f3d2c9335c246e1e63d11927c9778ca51ce1891cbf024b93660b8d2d969"
+    "source_digest": "b8ca1a4238a8036c4c007d5cc58819b7a813402ddce88076597f178b9fb0f311"
   },
   "runner": {
     "name": "scxml-conformance/wasm",
     "version": "0.2.0",
-    "source_digest": "d7eac1d8e8b8a47312cef5eb06ab22dd43d9c5bd7130a5b9da6cddfcccb8eee3"
+    "source_digest": "3b6be0410f9c49955d4696f74088899323c31109bb66e16a60f8912bb46dcb17"
   },
   "manual_oracle": {
     "name": "scxml-conformance-manual-oracle",
@@ -62,9 +53,9 @@
     {
       "namespace_uri": "https://github.com/stateforward/floppy/namespaces/conversation",
       "package_version": "0.1.0",
-      "manifest_sha256": "bdfc488d483a3fe737a4b4e627cd26e16810da957b8317e2a90cf97b031a2f37",
-      "schema_sha256": "2e0a31ecd7ac61f809e4af012ff770c1172f2c478a61b96d7cd18e9c68574fa8",
-      "component_sha256": "a4cda7162ce99af804f7a63273b652e21e2a876b287d148d68d53d39f2745f64"
+      "manifest_sha256": "2b057961554df399c840aebffc4dbb01be177dee9bdb48c7e30fde98315745f0",
+      "schema_sha256": "f405b51085b455c291b94a1d65d18638b3d882b594e9df68e8c83ef52b24bc6a",
+      "component_sha256": "6b95f77921a208a0d73e59fb4c7b9fad5aaa6da303d70e25583d4927800ee0ba"
     }
   ],
   "ir_version": 5,
@@ -77,11 +68,11 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "4d1fa574469dbd2995909e822c341c3b0b4ef092756ad52e576e0d208491de0b",
+  "identity_digest": "70486529ab93f211c34990280ae57306be4b8ddb40cd61004d3a97312d912dd4",
   "summary": {
-    "total_selected": 28,
-    "applicable_selected": 28,
-    "passed": 28,
+    "total_selected": 30,
+    "applicable_selected": 30,
+    "passed": 30,
     "failed": 0,
     "unsupported": 0,
     "invalid": 0,
@@ -91,8 +82,8 @@
     "not_passing": 0,
     "passed_under_erratum": 0,
     "mandatory": {
-      "applicable_selected": 28,
-      "passed": 28,
+      "applicable_selected": 30,
+      "passed": 30,
       "failed": 0,
       "unsupported": 0,
       "invalid": 0,
@@ -128,8 +119,8 @@
         "passed_under_erratum": 0
       },
       "#conversation-2": {
-        "applicable_selected": 3,
-        "passed": 3,
+        "applicable_selected": 4,
+        "passed": 4,
         "failed": 0,
         "unsupported": 0,
         "invalid": 0,
@@ -176,8 +167,8 @@
         "passed_under_erratum": 0
       },
       "#conversation-6": {
-        "applicable_selected": 2,
-        "passed": 2,
+        "applicable_selected": 3,
+        "passed": 3,
         "failed": 0,
         "unsupported": 0,
         "invalid": 0,
@@ -226,8 +217,8 @@
     },
     "by_datamodel": {
       "ecmascript": {
-        "applicable_selected": 28,
-        "passed": 28,
+        "applicable_selected": 30,
+        "passed": 30,
         "failed": 0,
         "unsupported": 0,
         "invalid": 0,
@@ -438,6 +429,31 @@
       "terminal_status": "finished",
       "commands": 2,
       "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "313",
+      "assertion_id": "conversation-2",
+      "spec_num": "2",
+      "spec_id": "#conversation-2",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 3,
+      "fuel_consumed": 3,
       "oracle": "outcome-log"
     },
     {
@@ -667,6 +683,31 @@
     },
     {
       "id": "351",
+      "assertion_id": "conversation-6",
+      "spec_num": "6",
+      "spec_id": "#conversation-6",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "352",
       "assertion_id": "conversation-6",
       "spec_num": "6",
       "spec_id": "#conversation-6",

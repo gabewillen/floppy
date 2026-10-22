@@ -13,9 +13,10 @@
 //! diarization answer each run of non-zero samples as a span (diarization
 //! names every span `SPEAKER_00`), transcription answers the spelled text,
 //! and the embedding of a segment is `[characters, sum of codes]` of its
-//! text. A transcription whose text starts with `fail` answers 500, and one
-//! starting with `hang` is never answered (the interpretation's stage timer
-//! fails it). Every request is recorded; nothing reaches the network.
+//! text. A transcription whose text starts with `fail` answers 500, and a
+//! transcription or embedding of text starting with `hang` is never
+//! answered (the interpretation's stage timer fails a transcription, and its
+//! identification deadline identifies nobody). Every request is recorded; nothing reaches the network.
 
 use std::io::{BufRead as _, BufReader, Read as _, Write as _};
 use std::net::TcpListener;
@@ -363,6 +364,9 @@ fn answered(
             let text = spelled(&samples_of(&audio).0);
             record["model"] = request["model"].clone();
             record["heard"] = json!(text);
+            if text.starts_with("hang") {
+                return None;
+            }
             let embedding = [
                 text.chars().count(),
                 text.chars().map(|character| character as usize).sum(),

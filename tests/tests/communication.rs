@@ -13,11 +13,11 @@
 //! The speaking child logs `floppy.say`, the conversation each commit
 //! (`conversation`) and what memory recalled (`conversation.memories`),
 //! the communication what it forwards (`communication.product`,
-//! `communication.history`, `communication.deferred`), and the body each
+//! `communication.exchange`, `communication.deferred`), and the body each
 //! event it emits (`bot.ability.speaking.output`,
 //! `bot.ability.communication.failed`).
 //!
-//! `the_conversation_commits_each_message_into_its_history` runs the
+//! `the_conversation_commits_each_message_into_its_exchange` runs the
 //! conversation alone under `tests/fixtures/phase4/conversation_harness.scx`,
 //! which logs each `bot.ability.conversation.output` whole.
 //!
@@ -52,11 +52,66 @@ const DEAF_SPEAKING: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
       </send>
     </onentry>
     <transition event="bot.ability.speaking.input">
-      <log label="deaf.input" expr="_event.data.text"/>
+      <log label="deaf.input" expr="_event.data.parts.map(function (part) { return part.words; }).join('')"/>
     </transition>
   </state>
 </scxml>
 "##;
+
+/// A parent of the communication alone (`abilities/harness.scx`): it
+/// sends each `harness.<id>` as a `bot.ability.communication.respond`
+/// whose sendid is `<id>` (an SCXML `<send id>` is literal), forwards
+/// outside `bot.ability.communication.input`, and logs what the
+/// communication answers (`harness.<event>`, its JSON).
+const COMMUNICATION_HARNESS: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="harness" initial="run">
+  <state id="run">
+    <invoke id="communication" type="scxml" src="communication/communication.scx"/>
+    <transition event="bot.ability.offers" cond="_event.invokeid === 'communication'">
+      <log label="harness.offers" expr="_event.data.ability"/>
+    </transition>
+    <transition event="bot.ability.communication.failed bot.ability.speaking.output" cond="_event.invokeid === 'communication'">
+      <log label="harness.answer" expr="_event.name + ' ' + JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="bot.ability.cognition.input" cond="_event.invokeid === 'communication'">
+      <log label="harness.product" expr="_event.data.stimulus.data.messages.length"/>
+    </transition>
+    <transition event="bot.ability.communication.input" cond="_event.invokeid === undefined">
+      <send event="bot.ability.communication.input" target="#_communication">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <transition event="harness.r1" cond="_event.invokeid === undefined">
+      <send id="r1" event="bot.ability.communication.respond" target="#_communication"><content expr="_event.data"/></send>
+    </transition>
+    <transition event="harness.r2" cond="_event.invokeid === undefined">
+      <send id="r2" event="bot.ability.communication.respond" target="#_communication"><content expr="_event.data"/></send>
+    </transition>
+    <transition event="harness.r3" cond="_event.invokeid === undefined">
+      <send id="r3" event="bot.ability.communication.respond" target="#_communication"><content expr="_event.data"/></send>
+    </transition>
+    <transition event="harness.r4" cond="_event.invokeid === undefined">
+      <send id="r4" event="bot.ability.communication.respond" target="#_communication"><content expr="_event.data"/></send>
+    </transition>
+  </state>
+</scxml>
+"##;
+
+/// Lays out the communication under [`COMMUNICATION_HARNESS`] with a deaf
+/// speaking and its `<data>` `edits`; returns the harness.
+fn communication_alone(edits: &[(&str, &str)]) -> PathBuf {
+    let dir = unique_scratch("communication-alone");
+    let abilities = dir.join("abilities");
+    for name in ["communication", "conversation", "speaking", "memory"] {
+        support::copy_ability(name, &abilities);
+    }
+    std::fs::write(abilities.join("speaking/speaking.scx"), DEAF_SPEAKING)
+        .expect("the deaf speaking is writable");
+    rewrite(&abilities.join("communication/communication.scx"), edits);
+    let harness = abilities.join("harness.scx");
+    std::fs::write(&harness, COMMUNICATION_HARNESS).expect("the harness is writable");
+    harness
+}
 
 /// The speaking child the layout gets.
 enum Speaking {
@@ -197,7 +252,7 @@ fn a_routed_response_is_said_and_recorded_in_the_conversation() {
     run.event("bot.input", &input("reply"));
     let records = until_all(
         &run,
-        &["communication.history", "bot.ability.speaking.output"],
+        &["communication.exchange", "bot.ability.speaking.output"],
     );
     assert_eq!(texts(&records, "floppy.say"), strings(&["reply 1"]));
     // Encoded by the speech service (its double), played out into the
@@ -218,9 +273,10 @@ fn a_routed_response_is_said_and_recorded_in_the_conversation() {
             r#"{"channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"text":"reply 1"}"#
         ])
     );
-    // The outbound message is history only: no product, no new turn.
+    // The outbound message joins the exchange only: no product, no new
+    // turn.
     assert_eq!(texts(&records, "conversation"), strings(&["outbound 0"]));
-    assert_eq!(texts(&records, "communication.history"), strings(&["1"]));
+    assert_eq!(texts(&records, "communication.exchange"), strings(&["1"]));
     assert!(texts(&records, "communication.product").is_empty());
     // Back in active, the communication offers again (its first offers
     // came before the activation).
@@ -245,12 +301,12 @@ fn a_routed_response_is_said_and_recorded_in_the_conversation() {
 }
 
 #[test]
-fn communication_input_is_a_turn_whose_stimulus_carries_the_history() {
+fn communication_input_is_a_turn_whose_stimulus_carries_its_exchange() {
     let body = layout(&Speaking::Real, &[]);
-    let run = history_carrying_turns(&body);
+    let run = exchange_carrying_turns(&body);
     close(
         run,
-        "communication_input_is_a_turn_whose_stimulus_carries_the_history",
+        "communication_input_is_a_turn_whose_stimulus_carries_its_exchange",
     );
 }
 
@@ -258,33 +314,31 @@ fn communication_input_is_a_turn_whose_stimulus_carries_the_history() {
 /// server's, so the conversation recalls and remembers there.
 #[test]
 #[ignore = "needs a PGlite server: FLOPPY_PGLITE_SERVER"]
-fn postgres_communication_input_is_a_turn_whose_stimulus_carries_the_history() {
+fn postgres_communication_input_is_a_turn_whose_stimulus_carries_its_exchange() {
     let server = support::Pglite::start().expect("FLOPPY_PGLITE_SERVER is set");
     let body = layout(&Speaking::Real, &[]);
     support::use_database(&body, &server.database());
-    drop(history_carrying_turns(&body).close(WAIT));
+    drop(exchange_carrying_turns(&body).close(WAIT));
 }
 
-/// [`communication_input_is_a_turn_whose_stimulus_carries_the_history`]
-/// up to its close: two inputs, each a turn that sees the history.
-fn history_carrying_turns(body: &Path) -> Run {
+/// [`communication_input_is_a_turn_whose_stimulus_carries_its_exchange`]
+/// up to its close: two inputs, each a turn that sees its exchange.
+fn exchange_carrying_turns(body: &Path) -> Run {
     let mut run = started(body);
     run.event("bot.ability.communication.input", &said("reply"));
-    let first = run.until(WAIT, label_is("communication.history"));
+    let first = run.until(WAIT, label_is("communication.exchange"));
     run.event("bot.ability.communication.input", &said("reply"));
-    let second = run.until(WAIT, |record| {
-        record["type"] == "log"
-            && record["label"] == "communication.history"
-            && record["text"] == "4"
-    });
+    let second = run.until(WAIT, label_is("communication.exchange"));
     let mut all = first;
     all.extend(second);
     // Each inbound message is a product, so a turn whose stimulus is the
-    // conversation's output: the double sees 1, then 3 messages.
+    // conversation's output, its exchange: an inbound commit opens a new
+    // exchange, so the double sees one message each time.
     assert_eq!(
         texts(&all, "double.input"),
-        strings(&["1 reply 1", "2 reply 3"])
+        strings(&["1 reply 1", "2 reply 1"])
     );
+    assert_eq!(texts(&all, "communication.exchange"), strings(&["2", "2"]));
     // The conversation's handoff stamps the turn's names as participants
     // (the original's turn_participants, f6c4e08), and the body copies them
     // into the turn.
@@ -296,10 +350,10 @@ fn history_carrying_turns(body: &Path) -> Run {
     assert_eq!(
         texts(&all, "conversation"),
         strings(&[
-            r#"inbound 0 from ["gabe"] (1 in its relationship)"#,
+            r#"inbound from ["gabe"] in relationship 0"#,
             "outbound 1",
-            r#"inbound 2 from ["gabe"] (2 in its relationship)"#,
-            "outbound 3",
+            r#"inbound from ["gabe"] in relationship 0"#,
+            "outbound 1",
         ])
     );
     // The body gives the conversation a database: each inbound message
@@ -309,7 +363,10 @@ fn history_carrying_turns(body: &Path) -> Run {
         texts(&all, "conversation.memories"),
         strings(&["recalled 0, remembered 1", "recalled 1, remembered 1"])
     );
-    assert_eq!(texts(&all, "communication.product"), strings(&["0", "2"]));
+    assert_eq!(
+        texts(&all, "communication.product"),
+        strings(&["input-1:turn:gabe", "input-2:turn:gabe"])
+    );
     assert_eq!(texts(&all, "floppy.say"), strings(&["reply 1", "reply 2"]));
     run
 }
@@ -344,7 +401,9 @@ fn a_blank_response_fails_without_speaking() {
     let records = run.until(WAIT, label_is("bot.ability.communication.failed"));
     assert_eq!(
         texts(&records, "bot.ability.communication.failed"),
-        strings(&[r#"{"message":"Communication response text must be non-blank."}"#])
+        strings(&[
+            r#"{"message":"A reply must say something: every part needs words, a sound or a pause, and the words must not be blank."}"#
+        ])
     );
     assert!(texts(&records, "floppy.say").is_empty(), "{records:?}");
     // Still active: the next response is said.
@@ -366,7 +425,9 @@ fn a_blank_response_that_waited_fails_without_speaking() {
     );
     assert_eq!(
         texts(&records, "bot.ability.communication.failed"),
-        strings(&[r#"{"message":"Communication response text must be non-blank."}"#])
+        strings(&[
+            r#"{"message":"A reply must say something: every part needs words, a sound or a pause, and the words must not be blank."}"#
+        ])
     );
     assert_eq!(texts(&records, "floppy.say"), strings(&["first 1"]));
     // Still active: the next response is said.
@@ -410,6 +471,169 @@ fn a_response_waits_for_the_one_in_flight_and_each_hop_times_out() {
     close(
         run,
         "a_response_waits_for_the_one_in_flight_and_each_hop_times_out",
+    );
+}
+
+/// Hearing goes on while a response is said, and every response that
+/// finished stays finished (the original's `_hearing` in `responding`, its
+/// ring of closed response ids, and its bound on held responses).
+#[test]
+fn communication_hears_while_responding_and_never_reopens_a_finished_response() {
+    let harness = communication_alone(&[
+        ("response_timeout_ms", "4000"),
+        ("held_responses_bound", "1"),
+    ]);
+    let mut run = Run::start(&[harness.display().to_string()], &[]);
+    let mut all = run.until(WAIT, label_is("harness.offers"));
+    run.event("harness.r1", &json!({"parts": [{"words": "one"}]}));
+    all.extend(run.until(WAIT, label_is("deaf.input")));
+    // Heard while r1 is being said: the conversation commits it and its
+    // product reaches the parent before r1's hop times out.
+    run.event("bot.ability.communication.input", &said("hello"));
+    all.extend(run.until(WAIT, label_is("harness.product")));
+    all.extend(run.until(WAIT, label_is("harness.answer")));
+    // A late copy of r1 is dropped.
+    run.event("harness.r1", &json!({"parts": [{"words": "one again"}]}));
+    all.extend(run.until(WAIT, label_is("communication.late")));
+    // r2 in hand: another copy of it is dropped, r3 is held, and r4 is
+    // past the bound of one held response.
+    run.event("harness.r2", &json!({"parts": [{"words": "two"}]}));
+    all.extend(run.until(WAIT, |record| {
+        label_is("deaf.input")(record) && record["text"] == "two"
+    }));
+    run.event("harness.r2", &json!({"parts": [{"words": "two again"}]}));
+    all.extend(run.until(WAIT, |record| {
+        label_is("communication.late")(record) && record["text"] == "r2"
+    }));
+    run.event("harness.r3", &json!({"parts": [{"words": "three"}]}));
+    all.extend(run.until(WAIT, label_is("communication.deferred")));
+    run.event("harness.r4", &json!({"parts": [{"words": "four"}]}));
+    all.extend(run.until(WAIT, label_is("harness.answer")));
+    // r2 times out, and the held r3 is said.
+    all.extend(run.until(WAIT, |record| {
+        label_is("deaf.input")(record) && record["text"] == "three"
+    }));
+    all.extend(run.until(WAIT, |record| {
+        label_is("communication.hop.timed_out")(record)
+            && record["text"] == "response 3 after 4000 ms"
+    }));
+    let finished = run.close(WAIT);
+    trace::assert_trace(
+        "communication_hears_while_responding_and_never_reopens_a_finished_response",
+        &finished.all,
+        &[],
+    );
+    all.extend(finished.records);
+    assert_eq!(texts(&all, "deaf.input"), strings(&["one", "two", "three"]));
+    assert_eq!(
+        texts(&all, "conversation"),
+        strings(&[r#"inbound from ["gabe"] in relationship 0"#])
+    );
+    let labels: Vec<String> = logs(&all)
+        .into_iter()
+        .map(|(label, _)| label)
+        .filter(|label| label == "conversation" || label == "communication.hop.timed_out")
+        .collect();
+    assert_eq!(
+        labels.first().map(String::as_str),
+        Some("conversation"),
+        "heard before the first response timed out: {labels:?}"
+    );
+    assert_eq!(texts(&all, "communication.late"), strings(&["r1", "r2"]));
+    assert_eq!(
+        texts(&all, "harness.answer"),
+        strings(&[
+            r#"bot.ability.communication.failed {"message":"Speaking response timed out."}"#,
+            r#"bot.ability.communication.failed {"message":"Communication is holding too many responses; this one is refused."}"#,
+            r#"bot.ability.communication.failed {"message":"Speaking response timed out."}"#,
+            r#"bot.ability.communication.failed {"message":"Speaking response timed out."}"#,
+        ])
+    );
+}
+
+/// A parent of the speaking alone (`abilities/harness.scx`): it sends each
+/// `harness.<id>` as a `bot.ability.speaking.input` whose sendid is `<id>`
+/// and logs what the speaking answers (`harness.answer`).
+const SPEAKING_HARNESS: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="harness" initial="run">
+  <state id="run">
+    <invoke id="speaking" type="scxml" src="speaking/speaking.scx"/>
+    <transition event="bot.ability.offers" cond="_event.invokeid === 'speaking'">
+      <log label="harness.offers" expr="_event.data.ability"/>
+    </transition>
+    <transition event="bot.ability.failed bot.ability.speaking.output" cond="_event.invokeid === 'speaking'">
+      <log label="harness.answer" expr="_event.name + ' ' + JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="harness.u1" cond="_event.invokeid === undefined">
+      <send id="u1" event="bot.ability.speaking.input" target="#_speaking"><content expr="_event.data"/></send>
+    </transition>
+    <transition event="harness.u2" cond="_event.invokeid === undefined">
+      <send id="u2" event="bot.ability.speaking.input" target="#_speaking"><content expr="_event.data"/></send>
+    </transition>
+    <transition event="harness.u3" cond="_event.invokeid === undefined">
+      <send id="u3" event="bot.ability.speaking.input" target="#_speaking"><content expr="_event.data"/></send>
+    </transition>
+  </state>
+</scxml>
+"##;
+
+/// One utterance at a time: another copy of the one in hand, or of one
+/// already said, is dropped, and past the bound of held utterances a new
+/// one is refused (the original's `_FINISHED_UTTERANCES` and
+/// `_HELD_UTTERANCES`).
+#[test]
+fn speaking_never_reopens_a_finished_utterance_and_bounds_the_ones_it_holds() {
+    let dir = unique_scratch("speaking-alone");
+    let abilities = dir.join("abilities");
+    let speaking = support::copy_ability("speaking", &abilities);
+    support::double_speech(&abilities, "'silent'");
+    rewrite(
+        &speaking,
+        &[
+            ("encoding_timeout_ms", "2000"),
+            ("held_utterances_bound", "1"),
+        ],
+    );
+    let harness = abilities.join("harness.scx");
+    std::fs::write(&harness, SPEAKING_HARNESS).expect("the harness is writable");
+    let mut run = Run::start(&[harness.display().to_string()], &[]);
+    let mut all = run.until(WAIT, label_is("harness.offers"));
+    run.event("harness.u1", &json!({"parts": [{"words": "one"}]}));
+    all.extend(run.until(WAIT, label_is("speech.encode")));
+    run.event("harness.u1", &json!({"parts": [{"words": "one again"}]}));
+    all.extend(run.until(WAIT, label_is("speaking.late")));
+    run.event("harness.u2", &json!({"parts": [{"words": "two"}]}));
+    all.extend(run.until(WAIT, label_is("speaking.deferred")));
+    run.event("harness.u3", &json!({"parts": [{"words": "three"}]}));
+    all.extend(run.until(WAIT, label_is("harness.answer")));
+    // u1's encoding times out; the held u2 is encoded and times out too.
+    all.extend(run.until(WAIT, |record| {
+        label_is("speaking.timed_out")(record) && record["text"] == "encoding 2 after 2000 ms"
+    }));
+    run.event("harness.u1", &json!({"parts": [{"words": "one late"}]}));
+    all.extend(run.until(WAIT, label_is("speaking.late")));
+    let finished = run.close(WAIT);
+    trace::assert_trace(
+        "speaking_never_reopens_a_finished_utterance_and_bounds_the_ones_it_holds",
+        &finished.all,
+        &[],
+    );
+    all.extend(finished.records);
+    assert_eq!(
+        texts(&all, "speech.encode"),
+        strings(&[
+            "encode one -> media/speaking-1.pcm",
+            "encode two -> media/speaking-2.pcm",
+        ])
+    );
+    assert_eq!(texts(&all, "speaking.late"), strings(&["u1", "u1"]));
+    assert_eq!(
+        texts(&all, "harness.answer"),
+        strings(&[
+            r#"bot.ability.failed {"message":"Speaking is holding too many utterances; this one is refused."}"#,
+            r#"bot.ability.failed {"message":"Speech encoding timed out."}"#,
+            r#"bot.ability.failed {"message":"Speech encoding timed out."}"#,
+        ])
     );
 }
 
@@ -461,14 +685,14 @@ fn conversation_event(name: &str, data: &Json) -> (String, Json) {
 }
 
 /// The relationships' references in
-/// [`the_conversation_commits_each_message_into_its_history`]: the original's
+/// [`the_conversation_commits_each_message_into_its_exchange`]: the original's
 /// `relationship_context_ref`, the same in either direction.
 const FIRST: &str = r#"relationship-{"identity_groups":[["a\"b","bot"],["alice","zed",[0.447213595499958,0.894427190999916]]]}"#;
 const AMBIENT: &str = r#"relationship-{"identity_groups":[[],["alice"]]}"#;
 const THIRD: &str =
     r#"relationship-{"identity_groups":[["bob",[0.847998304005088,0.52999894000318]],["bot"]]}"#;
 
-/// The events of [`the_conversation_commits_each_message_into_its_history`]:
+/// The events of [`the_conversation_commits_each_message_into_its_exchange`]:
 /// unsorted string and embedding identities, an escaped quote, audio in
 /// mixed case (dropped), structured content (kept), outbound references,
 /// the same provenance id from another source (committed) and from the
@@ -476,7 +700,7 @@ const THIRD: &str =
 /// content or id, the first participants again, then in the other
 /// direction, another targetless source (the ambient relationship), and
 /// input addressed to an ambient participant.
-fn conversation_history_events() -> [(String, Json); 11] {
+fn conversation_exchange_events() -> [(String, Json); 11] {
     let input = "bot.ability.conversation.input";
     let append = "bot.ability.conversation.append";
     [
@@ -494,19 +718,19 @@ fn conversation_history_events() -> [(String, Json); 11] {
         ),
         conversation_event(
             append,
-            &json!({"message": {"sequence": 0, "direction": "outbound", "source_ids": ["bot"], "target_ids": ["zed", "alice"], "content": "hi", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "r-1", "session_ref": "s1", "turn_ref": "t1", "source": "q"}}}),
+            &json!({"message": {"direction": "outbound", "source_ids": ["bot"], "target_ids": ["zed", "alice"], "content": "hi", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "r-1", "session_ref": "s1", "turn_ref": "t1", "source": "q"}}}),
         ),
         conversation_event(
             append,
-            &json!({"message": {"sequence": 0, "direction": "outbound", "source_ids": ["bot"], "target_ids": [], "content": "again", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "r-1"}}}),
+            &json!({"message": {"direction": "outbound", "source_ids": ["bot"], "target_ids": [], "content": "again", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "r-1"}}}),
         ),
         conversation_event(
             append,
-            &json!({"message": {"sequence": 0, "direction": "outbound", "source_ids": ["bot"], "target_ids": [], "content": "once", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "r-1", "source": "q"}}}),
+            &json!({"message": {"direction": "outbound", "source_ids": ["bot"], "target_ids": [], "content": "once", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "r-1", "source": "q"}}}),
         ),
         conversation_event(
             append,
-            &json!({"message": {"sequence": 0, "direction": "outbound", "source_ids": [], "target_ids": [], "content_type": "text/plain", "provenance": {"event": append, "id": null}}}),
+            &json!({"message": {"direction": "outbound", "source_ids": [], "target_ids": [], "content_type": "text/plain", "provenance": {"event": append, "id": null}}}),
         ),
         conversation_event(
             input,
@@ -527,7 +751,7 @@ fn conversation_history_events() -> [(String, Json); 11] {
     ]
 }
 
-/// The snapshot after [`the_conversation_commits_each_message_into_its_history`]:
+/// The snapshot after [`the_conversation_commits_each_message_into_its_exchange`]:
 /// each relationship's participants, by relationship and then identity.
 fn assert_snapshot(all: &[Json], first: &str, ambient: &str, third: &str) {
     let snapshot: Json =
@@ -543,7 +767,7 @@ fn assert_snapshot(all: &[Json], first: &str, ambient: &str, third: &str) {
 }
 
 #[test]
-fn the_conversation_commits_each_message_into_its_history() {
+fn the_conversation_commits_each_message_into_its_exchange() {
     let dir = unique_scratch("conversation");
     support::copy_ability("conversation", &dir.join("abilities"));
     let harness = dir.join("abilities/harness.scx");
@@ -552,7 +776,7 @@ fn the_conversation_commits_each_message_into_its_history() {
         &harness,
     )
     .expect("the harness is copyable");
-    let events = conversation_history_events();
+    let events = conversation_exchange_events();
     let mut run = Run::start(&[harness.display().to_string()], &[]);
     let mut all = Vec::new();
     for (name, data) in &events {
@@ -580,76 +804,79 @@ fn the_conversation_commits_each_message_into_its_history() {
     assert_eq!(
         texts(&all, "conversation"),
         strings(&[
-            r#"inbound 0 from ["alice","zed","<biometric:VoiceEmbedding>"] (1 in its relationship)"#,
-            r#"inbound 1 from ["alice"] (1 in its relationship)"#,
-            r#"inbound 2 from ["bob","<biometric:VoiceEmbedding>"] (1 in its relationship)"#,
-            "outbound 3",
-            "outbound 4",
+            r#"inbound from ["alice","zed","<biometric:VoiceEmbedding>"] in relationship 0"#,
+            r#"inbound from ["alice"] in relationship 1"#,
+            r#"inbound from ["bob","<biometric:VoiceEmbedding>"] in relationship 2"#,
+            "outbound 1",
+            "outbound 2",
             "outbound r-1 already committed",
-            "outbound 5",
-            r#"inbound 6 from ["alice","zed","<biometric:VoiceEmbedding>"] (2 in its relationship)"#,
-            r#"inbound 7 from ["a\"b","bot"] (3 in its relationship)"#,
-            r#"inbound 8 from ["bob"] (2 in its relationship)"#,
-            r#"inbound 9 from ["carol"] (3 in its relationship)"#,
+            "outbound 3",
+            r#"inbound from ["alice","zed","<biometric:VoiceEmbedding>"] in relationship 0"#,
+            r#"inbound from ["a\"b","bot"] in relationship 0"#,
+            r#"inbound from ["bob"] in relationship 1"#,
+            r#"inbound from ["carol"] in relationship 1"#,
         ])
     );
     assert_snapshot(&all, FIRST, AMBIENT, THIRD);
     let finished = run.close(WAIT);
-    let outputs = texts(&finished.all, "harness.output");
+    let outputs: Vec<Json> = texts(&finished.all, "harness.output")
+        .iter()
+        .map(|text| serde_json::from_str(text).expect("the output is JSON"))
+        .collect();
     assert_eq!(outputs.len(), 11, "{outputs:?}");
-    let last: Json = serde_json::from_str(&outputs[10]).expect("the output is JSON");
-    let messages = &last["messages"];
-    for (sequence, session_ref) in [
+    // Each inbound commit opens a new exchange of that one message; each
+    // append adds to the exchange in hand.
+    for (output, session_ref) in [
         (0, FIRST),
         (1, AMBIENT),
         (2, THIRD),
-        (6, FIRST),
         (7, FIRST),
-        (8, AMBIENT),
+        (8, FIRST),
         (9, AMBIENT),
+        (10, AMBIENT),
     ] {
+        let messages = &outputs[output]["messages"];
+        assert_eq!(messages.as_array().map(Vec::len), Some(1), "{output}");
         assert_eq!(
-            messages[sequence]["provenance"]["session_ref"],
+            messages[0]["provenance"]["session_ref"],
             json!(session_ref),
-            "{sequence}"
+            "{output}"
         );
     }
-    assert_eq!(messages[1]["content"], Json::Null);
+    let first = &outputs[0]["messages"][0];
+    let second = &outputs[1]["messages"][0];
+    let third = &outputs[2]["messages"][0];
+    assert_eq!(second["content"], Json::Null);
     // Each source's turn (the original's identity order: names, then
     // embeddings) is exchanged with its turn detector, and the turns'
     // texts are committed joined, each distinct text once (D79).
-    assert_eq!(messages[0]["content"], json!("hello"));
+    assert_eq!(first["content"], json!("hello"));
+    assert_eq!(first["provenance"]["turn_ref"], json!("input-1:turn:alice"));
     assert_eq!(
-        messages[0]["provenance"]["turn_ref"],
-        json!("input-1:turn:alice")
-    );
-    assert_eq!(
-        messages[1]["provenance"]["turn_ref"],
+        second["provenance"]["turn_ref"],
         json!("input-2:turn:alice")
     );
-    assert_eq!(messages[2]["content"], json!({"b": 1, "a": [true, null]}));
-    assert_eq!(
-        messages[2]["provenance"]["turn_ref"],
-        json!("input-3:turn:bob")
-    );
+    assert_eq!(third["content"], json!({"b": 1, "a": [true, null]}));
+    assert_eq!(third["provenance"]["turn_ref"], json!("input-3:turn:bob"));
     // An append's provenance keeps its id, source and target.
+    let appended = &outputs[4]["messages"];
+    assert_eq!(appended.as_array().map(Vec::len), Some(3));
     assert_eq!(
         (
-            &messages[3]["provenance"]["source"],
-            &messages[4]["provenance"]["source"]
+            &appended[1]["provenance"]["source"],
+            &appended[2]["provenance"]["source"]
         ),
         (&json!("q"), &Json::Null)
     );
-    assert_eq!(messages[6]["content"], json!("again"));
+    assert_eq!(outputs[7]["messages"][0]["content"], json!("again"));
     assert_eq!(
-        messages[7]["provenance"]["turn_ref"],
+        outputs[8]["messages"][0]["provenance"]["turn_ref"],
         json!("input-5:turn:a\"b")
     );
-    // The duplicate is answered with the history it did not change.
-    let duplicate: Json = serde_json::from_str(&outputs[5]).expect("the output is JSON");
-    assert_eq!(duplicate["messages"].as_array().map(Vec::len), Some(5));
+    // The duplicate is answered with the exchange it did not change.
+    assert_eq!(outputs[5]["messages"].as_array().map(Vec::len), Some(3));
     trace::assert_trace(
-        "the_conversation_commits_each_message_into_its_history",
+        "the_conversation_commits_each_message_into_its_exchange",
         &finished.all,
         &[],
     );
@@ -738,7 +965,6 @@ fn a_turn_its_detector_cannot_close_fails_the_input_and_commits_nothing() {
     assert_eq!(outputs.len(), 1, "{outputs:?}");
     let output: Json = serde_json::from_str(&outputs[0]).expect("the output is JSON");
     assert_eq!(output["messages"].as_array().map(Vec::len), Some(1));
-    assert_eq!(output["messages"][0]["sequence"], json!(0));
     assert_eq!(output["messages"][0]["content"], json!("hi"));
     assert_eq!(
         output["messages"][0]["provenance"]["turn_ref"],

@@ -14,12 +14,12 @@
       "type": "string"
     },
     "duration": {
-      "description": "Seconds of sound this command commits to, measured from the encoded audio rather than estimated. This is how long the consequences of the command are expected to last; sound arriving after it is no longer a consequence of this command.",
+      "description": "Seconds of playout still commanded and not yet played, measured from now from the audio actually commanded rather than estimated. Sound arriving after it is no longer a consequence of the command; zero means the mouth has nothing left to say.",
       "examples": [
         3.6,
-        0.4
+        0.0
       ],
-      "exclusiveMinimum": 0.0,
+      "minimum": 0.0,
       "title": "Duration",
       "type": "number"
     },

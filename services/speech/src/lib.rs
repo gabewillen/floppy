@@ -57,13 +57,15 @@
 //!   `content-type`, `application/octet-stream` without it, or as Gemini's
 //!   `mime_type`, `audio/wav` without it), and `provider` (optional,
 //!   exactly `gemini`: the original's `gemini` provider).
-//! * encode: `text` (required, a non-empty string), `voice` (required,
+//! * encode: `parts` (required, the reply to say, a JSON array of 1 to
+//!   [`MAX_PARTS`] parts; see "Parts"), `voice` (required,
 //!   `[A-Za-z0-9_.-]{1,128}`), `output` (required, a reference to the file
 //!   the audio is written to, created or replaced), `media_type` (optional,
 //!   one of [`FORMATS`], `audio/mpeg` without it, the default of both
-//!   backends), and `provider` (optional, `elevenlabs` or `gemini`: the
-//!   original's provider of that name instead of the `OpenAI`-compatible
-//!   API; Gemini encodes only `audio/pcm` and `audio/wav`).
+//!   backends; a reply with a pause needs `audio/pcm` or `audio/wav`), and
+//!   `provider` (optional, `elevenlabs` or `gemini`: the original's provider
+//!   of that name instead of the `OpenAI`-compatible API; Gemini encodes
+//!   only `audio/pcm` and `audio/wav`).
 //!
 //! A parameter whose value is `null` is not given. Any other parameter, a
 //! parameter given twice, one the operation does
@@ -76,18 +78,46 @@
 //! reads, sends, and writes nothing and answers [`FAILED_EVENT`]
 //! ([`FailureCode::Unconfigured`]).
 //!
+//! # Parts
+//!
+//! An encoding's `parts` are the original's structured reply (its
+//! `vocal.speech.Part`s): each part is an object with only the optional
+//! members `expression` and `words` (`null` is absent). `words` is a
+//! string of 1 to [`MAX_WORDS_CHARS`] characters, not blank, holding none
+//! of `* < > [ ] { } ( )`; `expression` is an object whose members are
+//! among the original's `Expression` fields ([`EXPRESSION_FIELDS`]), of
+//! which the service reads only `pause` (`short` or `long`) and `sound` (a
+//! string). Each part has words, a pause, or a sound, and at least one part
+//! has words.
+//!
+//! The service applies no expression cue but a pause, as the original's
+//! `ElevenLabs` and Gemini encoders apply none: a sound and every other cue
+//! are ignored. Walking the parts in order, a part with a pause opens a new
+//! [`Stretch`], the pause before its words; the words within a stretch are
+//! joined verbatim with nothing added (the original's `said`).
+//!
 //! # The requests
 //!
 //! * decode: `POST {base}/audio/transcriptions` with
 //!   `authorization: Bearer <apikey>` and a `multipart/form-data` body of
 //!   `model`, `response_format` (`json`), and `file` (the audio's bytes,
 //!   named by the reference's last segment) ([`decoding_request`]).
-//! * encode: `POST {base}/audio/speech` with `authorization: Bearer
-//!   <apikey>` and the canonical JSON body `{"input", "model",
-//!   "response_format", "voice"}` ([`encoding_request`]); with `provider`
-//!   `elevenlabs`, `POST {base}/text-to-speech/{voice}?output_format=F` with
+//! * encode: one request per stretch whose words are not blank, one at a
+//!   time in order, saying the stretch's words: `POST {base}/audio/speech`
+//!   with `authorization: Bearer <apikey>` and the canonical JSON body
+//!   `{"input", "model", "response_format", "voice"}`
+//!   ([`encoding_request`]); with `provider` `elevenlabs`,
+//!   `POST {base}/text-to-speech/{voice}?output_format=F` with
 //!   `xi-api-key: <apikey>` and the body `{"model_id", "text"}` (its
-//!   `text-to-speech` API; `F` from [`FORMATS`]).
+//!   `text-to-speech` API; `F` from [`FORMATS`]). A reply without a pause
+//!   is one request, and its answer is written as it is. With a pause, the
+//!   answers are joined as signed 16-bit little-endian PCM (raw `pcm` at
+//!   [`PCM_SAMPLE_RATE_HZ`] mono, a WAV answer at its own rate and
+//!   channels, which every stretch shares, Gemini's PCM), each pause is its
+//!   silence at its place ([`Pause::frames`], the original's
+//!   `Format.silence`), and the PCM is written raw for `audio/pcm` or in a
+//!   WAV container for `audio/wav`. The first failed answer ends the
+//!   invocation, and nothing is written.
 //! * with `provider` `gemini`, either direction: `POST {base}/interactions`
 //!   with `x-goog-api-key: <apikey>` ([`gemini`] documents the bodies).
 //!
@@ -120,12 +150,15 @@
 //! # Bounds
 //!
 //! The audio a decoding reads ([`MAX_AUDIO_BYTES`], inside the host's
-//! request-body bound), the text an encoding sends ([`MAX_TEXT_BYTES`]),
-//! the text a decoding returns ([`MAX_DECODED_TEXT_BYTES`], under the
+//! request-body bound), the words an encoding sends (all its parts' words
+//! joined, [`MAX_TEXT_BYTES`]), the PCM a reply with pauses joins
+//! ([`MAX_ASSEMBLED_BYTES`]), the text a decoding returns ([`MAX_DECODED_TEXT_BYTES`], under the
 //! session's event bound), a reference ([`MAX_REFERENCE_BYTES`]), and the
 //! model name ([`MAX_MODEL_BYTES`]) are bounded on wasm builds only
-//! ([`scxml_types::wasm_bound`]); the encoded audio is bounded by the host's
-//! response-body bound.
+//! ([`scxml_types::wasm_bound`]); the encoded audio of each request is
+//! bounded by the host's response-body bound. The parts ([`MAX_PARTS`])
+//! and each part's words ([`MAX_WORDS_CHARS`]) are bounded on every build,
+//! as the original's `Part` is.
 //!
 //! # Telemetry
 //!
@@ -133,7 +166,7 @@
 //! facade (operation `start`: its closed outcome, `ok`, `rejected`, or
 //! `failed`, and one closed signal event), and one closed signal event
 //! (operation `send`) when it returns its event. No attribute carries the
-//! text, the audio, a reference, the model, the voice, or a URL, so the
+//! words, the text, the audio, a reference, the model, the voice, or a URL, so the
 //! cardinality is the product of the closed enums.
 
 #![cfg_attr(not(target_arch = "wasm32"), forbid(unsafe_code))]
@@ -196,8 +229,35 @@ pub const MAX_AUDIO_BYTES: usize = wasm_bound(4 * 1024 * 1024 - 16 * 1024);
 /// request-body bound, which a Gemini decoding's base64 audio reaches
 /// before [`MAX_AUDIO_BYTES`] does.
 pub const MAX_REQUEST_BYTES: usize = wasm_bound(4 * 1024 * 1024);
-/// Upper bound on the text an encoding sends (wasm builds only).
+/// Upper bound on the words an encoding sends, all its parts' words joined
+/// (wasm builds only).
 pub const MAX_TEXT_BYTES: usize = wasm_bound(16 * 1024);
+/// Upper bound on the PCM a reply with pauses joins, its silences included
+/// (wasm builds only).
+pub const MAX_ASSEMBLED_BYTES: usize = wasm_bound(64 * 1024 * 1024);
+/// Upper bound on an encoding's parts.
+pub const MAX_PARTS: usize = 64;
+/// Upper bound on one part's words, in characters (the original's
+/// `Part.words`).
+pub const MAX_WORDS_CHARS: usize = 2000;
+/// The members a part's `expression` may have: the original's `Expression`
+/// fields.
+pub const EXPRESSION_FIELDS: [&str; 11] = [
+    "instructions",
+    "emotion",
+    "style",
+    "intensity",
+    "pace",
+    "pitch",
+    "volume",
+    "emphasis",
+    "pause",
+    "sound",
+    "sound_at",
+];
+/// What a part's words must not hold: the characters of stage directions
+/// and markup, which a voice would read aloud (the original's `_SPOKEN`).
+pub const UNSPOKEN_CHARS: [char; 9] = ['*', '<', '>', '[', ']', '{', '}', '(', ')'];
 /// Upper bound on the text a decoding returns (wasm builds only): under
 /// the session's 96 KiB event bound, leaving room for the envelope.
 pub const MAX_DECODED_TEXT_BYTES: usize = wasm_bound(64 * 1024);
@@ -336,13 +396,56 @@ pub struct Decoding {
     pub provider: Provider,
 }
 
-/// A validated encoding: text to speech.
+/// A silence in a reply, short or long (the original's `Pause`).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Pause {
+    /// `short`: a beat between phrases.
+    Short,
+    /// `long`: a held breath.
+    Long,
+}
+
+impl Pause {
+    /// How long the pause is silent (the original's `_PAUSE_SECONDS`): 0.4
+    /// seconds short, 1 second long.
+    #[must_use]
+    pub const fn seconds(self) -> f64 {
+        match self {
+            Self::Short => 0.4,
+            Self::Long => 1.0,
+        }
+    }
+
+    /// The whole frames of its silence at `sample_rate_hz` (the original's
+    /// `Format.silence`): its seconds times the rate, rounded.
+    #[must_use]
+    pub fn frames(self, sample_rate_hz: u32) -> usize {
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "at most a second of a u32 rate: finite, non-negative, and below 2^32"
+        )]
+        let frames = (self.seconds() * f64::from(sample_rate_hz)).round() as u64;
+        usize::try_from(frames).unwrap_or(usize::MAX)
+    }
+}
+
+/// One stretch of a reply between pauses: one synthesis request.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Stretch {
+    /// The pause that opens it.
+    pub pause: Option<Pause>,
+    /// Its parts' words, joined verbatim; blank words send no request.
+    pub words: String,
+}
+
+/// A validated encoding: a reply to speech.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Encoding {
     /// The model name.
     pub model: String,
-    /// The text to speak.
-    pub text: String,
+    /// The reply's stretches, in order: one unless a part pauses.
+    pub stretches: Vec<Stretch>,
     /// The voice.
     pub voice: String,
     /// Where the audio is written.
@@ -351,6 +454,23 @@ pub struct Encoding {
     pub format: Format,
     /// The backend.
     pub provider: Provider,
+}
+
+impl Encoding {
+    /// The words each request says, in order: those of every stretch whose
+    /// words are not blank.
+    pub fn said(&self) -> impl Iterator<Item = &str> {
+        self.stretches
+            .iter()
+            .map(|stretch| stretch.words.as_str())
+            .filter(|words| !words.trim().is_empty())
+    }
+
+    /// Whether the reply pauses.
+    #[must_use]
+    pub fn pauses(&self) -> bool {
+        self.stretches.iter().any(|stretch| stretch.pause.is_some())
+    }
 }
 
 /// One validated invocation.
@@ -616,7 +736,7 @@ pub fn parse_parameters<'a>(
     let mut model = None;
     let mut audio = None;
     let mut media_type = None;
-    let mut text = None;
+    let mut parts = None;
     let mut voice = None;
     let mut output = None;
     let mut provider = None;
@@ -632,7 +752,7 @@ pub fn parse_parameters<'a>(
             "model" => &mut model,
             "audio" => &mut audio,
             "media_type" => &mut media_type,
-            "text" => &mut text,
+            "parts" => &mut parts,
             "voice" => &mut voice,
             "output" => &mut output,
             "provider" => &mut provider,
@@ -673,8 +793,8 @@ pub fn parse_parameters<'a>(
             _ => None,
         };
         if let Some(parse) = voice_operation {
-            if text.is_some() || voice.is_some() || provider.is_some() {
-                return Err("speech takes text, voice, and provider only to encode");
+            if parts.is_some() || voice.is_some() || provider.is_some() {
+                return Err("speech takes parts, voice, and provider only to encode");
             }
             given.model = model;
             given.audio = audio;
@@ -696,7 +816,7 @@ pub fn parse_parameters<'a>(
     let model = model.ok_or("speech requires a model parameter")?;
     match operation {
         Data::String(name) if name == "decode" => {
-            if text.is_some() || voice.is_some() || output.is_some() {
+            if parts.is_some() || voice.is_some() || output.is_some() {
                 return Err("speech decode takes model, audio, media_type, and provider only");
             }
             decoding(model, audio, media_type, provider).map(Operation::Decode)
@@ -705,7 +825,7 @@ pub fn parse_parameters<'a>(
             if audio.is_some() {
                 return Err("speech encode takes no audio parameter");
             }
-            encoding(model, text, voice, output, media_type, provider).map(Operation::Encode)
+            encoding(model, parts, voice, output, media_type, provider).map(Operation::Encode)
         }
         _ => Err(
             "speech operation must be decode, encode, detect, diarize, identify, normalize, append, or clip",
@@ -742,21 +862,122 @@ fn decoding(
     })
 }
 
+/// What a part's expression directs that the service reads: its pause, and
+/// whether it makes a sound.
+fn expression_cues(expression: &Json) -> Result<(Option<Pause>, bool), &'static str> {
+    const INVALID: &str = "speech parts' expression must be an object of Expression fields";
+    let expression = match expression {
+        Json::Null => return Ok((None, false)),
+        Json::Object(expression) => expression,
+        _ => return Err(INVALID),
+    };
+    if expression
+        .keys()
+        .any(|name| !EXPRESSION_FIELDS.contains(&name.as_str()))
+    {
+        return Err(INVALID);
+    }
+    let pause = match expression.get("pause") {
+        None | Some(Json::Null) => None,
+        Some(Json::String(pause)) if pause == "short" => Some(Pause::Short),
+        Some(Json::String(pause)) if pause == "long" => Some(Pause::Long),
+        Some(_) => return Err("speech parts' pause must be short or long"),
+    };
+    let sound = match expression.get("sound") {
+        None | Some(Json::Null) => false,
+        Some(Json::String(_)) => true,
+        Some(_) => return Err("speech parts' sound must be a string"),
+    };
+    Ok((pause, sound))
+}
+
+/// The stretches of an encoding's `parts` (see the crate documentation,
+/// "Parts").
+fn stretches(parts: &Data) -> Result<Vec<Stretch>, &'static str> {
+    const INVALID: &str = "speech parts must be 1 to 64 parts of {expression?, words?}";
+    let Data::JsonArray(parts) = parts else {
+        return Err(INVALID);
+    };
+    let Ok(Json::Array(parts)) = serde_json::from_str::<Json>(parts) else {
+        return Err(INVALID);
+    };
+    if parts.is_empty() || parts.len() > MAX_PARTS {
+        return Err(INVALID);
+    }
+    let mut stretches = Vec::new();
+    let mut stretch = Stretch {
+        pause: None,
+        words: String::new(),
+    };
+    let mut worded = false;
+    let mut said = 0_usize;
+    for part in &parts {
+        let Json::Object(part) = part else {
+            return Err(INVALID);
+        };
+        if part
+            .keys()
+            .any(|name| name != "expression" && name != "words")
+        {
+            return Err(INVALID);
+        }
+        let (pause, sound) = expression_cues(part.get("expression").unwrap_or(&Json::Null))?;
+        let words = match part.get("words") {
+            None | Some(Json::Null) => None,
+            Some(Json::String(words)) if words.chars().count() > MAX_WORDS_CHARS => {
+                return Err("speech parts' words must be at most 2000 characters");
+            }
+            Some(Json::String(words))
+                if !words.trim().is_empty() && !words.contains(UNSPOKEN_CHARS) =>
+            {
+                Some(words.as_str())
+            }
+            Some(_) => {
+                return Err("speech parts' words must not be blank or hold * < > [ ] { } ( )");
+            }
+        };
+        if words.is_none() && pause.is_none() && !sound {
+            return Err("speech parts must each have words, a pause, or a sound");
+        }
+        if let Some(pause) = pause {
+            // A pause opens a new stretch; the reply's first opens its first.
+            if stretch.pause.is_some() || !stretch.words.is_empty() {
+                stretches.push(std::mem::replace(
+                    &mut stretch,
+                    Stretch {
+                        pause: Some(pause),
+                        words: String::new(),
+                    },
+                ));
+            } else {
+                stretch.pause = Some(pause);
+            }
+        }
+        if let Some(words) = words {
+            worded = true;
+            said = said.saturating_add(words.len());
+            stretch.words.push_str(words);
+        }
+    }
+    if !worded {
+        return Err("speech parts have no words");
+    }
+    if exceeds_wasm_bound(said, MAX_TEXT_BYTES) {
+        return Err("speech parts' words exceed their bound");
+    }
+    stretches.push(stretch);
+    Ok(stretches)
+}
+
 fn encoding(
     model: String,
-    text: Option<&Data>,
+    parts: Option<&Data>,
     voice: Option<&Data>,
     output: Option<&Data>,
     media_type: Option<&Data>,
     provider: Option<&Data>,
 ) -> Result<Encoding, &'static str> {
-    let text = text_parameter(
-        text.ok_or("speech encode requires a text parameter")?,
-        "speech text must be a non-empty string",
-    )?;
-    if exceeds_wasm_bound(text.len(), MAX_TEXT_BYTES) {
-        return Err("speech text exceeds its bound");
-    }
+    let stretches = stretches(parts.ok_or("speech encode requires a parts parameter")?)?;
     let voice = match voice.ok_or("speech encode requires a voice parameter")? {
         Data::String(voice)
             if !voice.is_empty()
@@ -793,9 +1014,14 @@ fn encoding(
             Provider::Gemini => matches!(known.response_format, "pcm" | "wav"),
         })
         .ok_or("speech media_type is not one the backend encodes")?;
+    if stretches.iter().any(|stretch| stretch.pause.is_some())
+        && !matches!(format.response_format, "pcm" | "wav")
+    {
+        return Err("speech pauses need audio/pcm or audio/wav");
+    }
     Ok(Encoding {
         model,
-        text,
+        stretches,
         voice,
         output,
         format,
@@ -938,14 +1164,15 @@ pub fn decoding_request(base_url: u32, api_key: u32, decoding: &Decoding, audio:
     }
 }
 
-/// The speech request: `POST {base}/audio/speech` with a bearer key and the
-/// canonical JSON body `{"input", "model", "response_format", "voice"}`,
-/// or, for `ElevenLabs`, `POST {base}/text-to-speech/{voice}?output_format=F`
-/// with `xi-api-key` and the body `{"model_id", "text"}`.
+/// The speech request of one stretch's `words`: `POST {base}/audio/speech`
+/// with a bearer key and the canonical JSON body `{"input", "model",
+/// "response_format", "voice"}`, or, for `ElevenLabs`,
+/// `POST {base}/text-to-speech/{voice}?output_format=F` with `xi-api-key`
+/// and the body `{"model_id", "text"}`.
 #[must_use]
-pub fn encoding_request(base_url: u32, api_key: u32, encoding: &Encoding) -> Request {
+pub fn encoding_request(base_url: u32, api_key: u32, encoding: &Encoding, words: &str) -> Request {
     if encoding.provider == Provider::Gemini {
-        return gemini::encoding_request(base_url, api_key, encoding);
+        return gemini::encoding_request(base_url, api_key, encoding, words);
     }
     let content_type = (
         "content-type".to_owned(),
@@ -956,7 +1183,7 @@ pub fn encoding_request(base_url: u32, api_key: u32, encoding: &Encoding) -> Req
         (encoding.provider, encoding.format.elevenlabs)
     {
         body.insert("model_id".into(), encoding.model.clone().into());
-        body.insert("text".into(), encoding.text.clone().into());
+        body.insert("text".into(), words.into());
         return Request {
             url: vec![
                 Part::Reference(base_url),
@@ -972,7 +1199,7 @@ pub fn encoding_request(base_url: u32, api_key: u32, encoding: &Encoding) -> Req
             body: canonical_json(&Json::Object(body)).into_bytes(),
         };
     }
-    body.insert("input".into(), encoding.text.clone().into());
+    body.insert("input".into(), words.into());
     body.insert("model".into(), encoding.model.clone().into());
     body.insert(
         "response_format".into(),
@@ -1142,28 +1369,130 @@ pub fn sound(provider: Provider, format: Format, audio: &[u8]) -> Sound {
     }
 }
 
-/// What a settled speech request becomes: the audio written to the
-/// output's file by `write`, then [`ENCODING_OUTPUT_EVENT`], or
-/// [`FAILED_EVENT`] (nothing is written for a failed request).
+/// The audio of a reply without a pause: its one answer as it is, or, from
+/// Gemini, its PCM raw or in a WAV container.
+fn answered_audio(
+    encoding: &Encoding,
+    answered: Result<Response, TransportFailure>,
+) -> Result<Vec<u8>, FailureCode> {
+    let body = answered_body(answered)?;
+    if encoding.provider == Provider::Gemini {
+        let pcm = gemini::audio(&body)?;
+        return Ok(if encoding.format.response_format == "wav" {
+            voice::wav_container(&pcm, PCM_SAMPLE_RATE_HZ, 1)
+        } else {
+            pcm
+        });
+    }
+    if body.is_empty() {
+        return Err(FailureCode::Malformed);
+    }
+    Ok(body)
+}
+
+/// One stretch's answer as signed 16-bit PCM of whole frames: its rate,
+/// channels, and samples.
+fn answered_pcm(
+    encoding: &Encoding,
+    answered: Result<Response, TransportFailure>,
+) -> Result<(u32, u16, Vec<u8>), FailureCode> {
+    let body = answered_body(answered)?;
+    let (rate, channels, pcm) = if encoding.provider == Provider::Gemini {
+        (PCM_SAMPLE_RATE_HZ, 1, gemini::audio(&body)?)
+    } else if encoding.format.response_format == "wav" {
+        voice::wav_16bit(&body).map_err(|_| FailureCode::Malformed)?
+    } else {
+        (PCM_SAMPLE_RATE_HZ, 1, body)
+    };
+    if pcm.is_empty()
+        || rate > voice::MAX_SAMPLE_RATE_HZ
+        || channels > voice::MAX_CHANNELS
+        || !pcm.len().is_multiple_of(2 * usize::from(channels))
+    {
+        return Err(FailureCode::Malformed);
+    }
+    Ok((rate, channels, pcm))
+}
+
+/// The audio of a reply with a pause: the stretches' answers in order as
+/// one PCM, each pause its silence at its place, raw for `audio/pcm` or in
+/// a WAV container for `audio/wav`.
+fn assembled(
+    encoding: &Encoding,
+    answered: impl IntoIterator<Item = Result<Response, TransportFailure>>,
+) -> Result<Vec<u8>, FailureCode> {
+    let mut answered = answered.into_iter();
+    let mut voiced = Vec::with_capacity(encoding.stretches.len());
+    let mut shape = None;
+    for stretch in &encoding.stretches {
+        if stretch.words.trim().is_empty() {
+            voiced.push(None);
+            continue;
+        }
+        let (rate, channels, pcm) =
+            answered_pcm(encoding, answered.next().ok_or(FailureCode::Malformed)?)?;
+        // Every stretch is one voice in one format.
+        if shape
+            .replace((rate, channels))
+            .is_some_and(|known| known != (rate, channels))
+        {
+            return Err(FailureCode::Malformed);
+        }
+        voiced.push(Some(pcm));
+    }
+    let (rate, channels) = shape.ok_or(FailureCode::Malformed)?;
+    let frame = 2 * usize::from(channels);
+    let mut pcm = Vec::new();
+    for (stretch, words) in encoding.stretches.iter().zip(voiced) {
+        let silence = stretch
+            .pause
+            .map_or(Some(0), |pause| pause.frames(rate).checked_mul(frame));
+        let spoken = words.as_ref().map_or(0, Vec::len);
+        let silent = silence
+            .and_then(|silence| pcm.len().checked_add(silence))
+            .filter(|&silent| {
+                silent
+                    .checked_add(spoken)
+                    .is_some_and(|length| !exceeds_wasm_bound(length, MAX_ASSEMBLED_BYTES))
+            })
+            .ok_or(FailureCode::Malformed)?;
+        pcm.resize(silent, 0);
+        if let Some(words) = words {
+            pcm.extend_from_slice(&words);
+        }
+    }
+    Ok(if encoding.format.response_format == "wav" {
+        voice::wav_container(&pcm, rate, channels)
+    } else {
+        pcm
+    })
+}
+
+/// What a reply's settled speech requests become, `answered` their answers
+/// in order (one per stretch whose words are not blank, ending at the first
+/// that failed): the audio written to the output's file by `write`, then
+/// [`ENCODING_OUTPUT_EVENT`], or [`FAILED_EVENT`] with the first failure
+/// (nothing is written).
 #[must_use]
 pub fn encoding_outcome(
     operation: &Operation,
-    answered: Result<Response, TransportFailure>,
+    answered: impl IntoIterator<Item = Result<Response, TransportFailure>>,
     write: impl FnOnce(&str, &[u8]) -> std::io::Result<()>,
 ) -> Returned {
     let Operation::Encode(encoding) = operation else {
         return Returned::failed(operation, FailureCode::Malformed);
     };
-    let audio = match answered_body(answered) {
-        Ok(body) if encoding.provider == Provider::Gemini => match gemini::audio(&body) {
-            Ok(pcm) if encoding.format.response_format == "wav" => {
-                voice::wav_container(&pcm, PCM_SAMPLE_RATE_HZ, 1)
-            }
-            Ok(pcm) => pcm,
-            Err(code) => return Returned::failed(operation, code),
-        },
-        Ok(audio) if !audio.is_empty() => audio,
-        Ok(_) => return Returned::failed(operation, FailureCode::Malformed),
+    let audio = if encoding.pauses() {
+        assembled(encoding, answered)
+    } else {
+        answered
+            .into_iter()
+            .next()
+            .ok_or(FailureCode::Malformed)
+            .and_then(|answered| answered_audio(encoding, answered))
+    };
+    let audio = match audio {
+        Ok(audio) => audio,
         Err(code) => return Returned::failed(operation, code),
     };
     if write(&encoding.output.path, &audio).is_err() {
@@ -1383,8 +1712,26 @@ mod guest {
                 super::decoding_outcome(&operation, answered)
             }
             Operation::Encode(encoding) => {
-                let built = super::encoding_request(base_url, api_key, encoding);
-                let answered = fetch(built).await;
+                // One stretch at a time, in order, until one fails or the
+                // answers together pass what may be assembled.
+                let mut answered = Vec::with_capacity(encoding.stretches.len());
+                let mut held = 0_usize;
+                for words in encoding.said() {
+                    let built = super::encoding_request(base_url, api_key, encoding, words);
+                    let answer = fetch(built).await;
+                    let settled =
+                        matches!(&answer, Ok(response) if (200..300).contains(&response.status));
+                    if let Ok(response) = &answer {
+                        held = held.saturating_add(response.body.len());
+                        if scxml_types::exceeds_wasm_bound(held, super::MAX_ASSEMBLED_BYTES) {
+                            return failed(super::FailureCode::Malformed);
+                        }
+                    }
+                    answered.push(answer);
+                    if !settled {
+                        break;
+                    }
+                }
                 super::encoding_outcome(&operation, answered, super::write_audio)
             }
             _ => return run_voice(&operation, base_url, api_key).await,

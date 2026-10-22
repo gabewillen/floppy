@@ -7,7 +7,7 @@
 </datamodel>
 <state id="s0">
   <onentry>
-    <conversation:message_for_turn location="l" direction="outbound" event="'e'" message="msg" sequence="0"/>
+    <conversation:message_for_turn location="l" direction="outbound" event="'e'" message="msg"/>
   </onentry>
   <transition event="error.execution" conf:targetfail=""/>
   <transition cond="l.content === null &amp;&amp; l.provenance.session_ref === null &amp;&amp; l.provenance.id === null" conf:targetpass=""/>

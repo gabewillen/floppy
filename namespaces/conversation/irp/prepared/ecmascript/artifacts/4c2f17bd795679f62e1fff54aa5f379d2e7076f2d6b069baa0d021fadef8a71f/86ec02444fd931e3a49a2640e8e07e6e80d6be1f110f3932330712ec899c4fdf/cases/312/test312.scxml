@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- conversation-2: an outbound message without a provenance has no session_ref, and absent content is null. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="l" expr="null"/>
+  <data id="msg" expr="({source_ids: [], target_ids: [], content_type: 'text/plain'})"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:message_for_turn location="l" direction="outbound" event="'e'" message="msg"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="l.content === null &amp;&amp; l.provenance.session_ref === null &amp;&amp; l.provenance.id === null" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

@@ -759,6 +759,158 @@ fn without_diarization_the_opening_voice_is_identified_directly() {
     );
 }
 
+/// A parent of the sensitivity alone (`abilities/harness.scx`): it
+/// forwards each external `bot.ability.listening.sensitivity.score` and
+/// `bot.ability.speaking.efference` to it and logs each output
+/// (`harness.scored`, its `producing` and `perceived_level_db`).
+const SENSITIVITY_HARNESS: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="harness" initial="run">
+  <state id="run">
+    <invoke id="sensitivity" type="scxml" src="sensitivity/sensitivity.scx"/>
+    <transition event="bot.ability.offers" cond="_event.invokeid === 'sensitivity'">
+      <log label="harness.ready" expr="_event.data.ability"/>
+    </transition>
+    <transition event="bot.ability.listening.sensitivity.output" cond="_event.invokeid === 'sensitivity'">
+      <log label="harness.scored" expr="_event.data.sound.audio + ' producing ' + _event.data.producing + ' at ' + _event.data.perceived_level_db"/>
+    </transition>
+    <transition event="bot.ability.listening.sensitivity.score bot.ability.speaking.efference" cond="_event.invokeid === undefined">
+      <send eventexpr="_event.name" target="#_sensitivity">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+  </state>
+</scxml>
+"##;
+
+/// Every scored arrival says whether the body was producing, and only a
+/// copy with sound still to come opens the window: a silent copy (duration
+/// 0) closes it, and opens nothing (the original's `producing`,
+/// `_has_efference_copy` and `_has_silent_copy`).
+#[test]
+fn a_scored_sound_says_whether_the_body_was_producing_and_a_silent_copy_closes_the_window() {
+    let dir = unique_scratch("sensitivity").join("abilities");
+    support::copy_ability("sensitivity", &dir);
+    let harness = dir.join("harness.scx");
+    std::fs::write(&harness, SENSITIVITY_HARNESS).expect("the harness is writable");
+    let mut run = Run::start(&[harness.display().to_string()], &[]);
+    run.until(WAIT, label_is("harness.ready"));
+    let score = |run: &mut Run, name: &str, source: Option<&str>| {
+        run.event(
+            "bot.ability.listening.sensitivity.score",
+            &json!({"stimulus": {"event": "environment.sound", "data": {"audio": format!("media/{name}"), "received_level_db": 54}, "source": source}}),
+        );
+        run.until(WAIT, label_is("harness.scored"));
+    };
+    let copy = |run: &mut Run, duration: f64| {
+        run.event(
+            "bot.ability.speaking.efference",
+            &json!({"mouth": "speaking", "duration": duration}),
+        );
+    };
+    score(&mut run, "quiet", None);
+    // A silent copy opens nothing.
+    copy(&mut run, 0.0);
+    score(&mut run, "still-quiet", None);
+    copy(&mut run, 60.0);
+    score(&mut run, "cut-in", None);
+    score(&mut run, "own", Some("speaking"));
+    // The mouth has nothing left to play: the window closes now.
+    copy(&mut run, 0.0);
+    score(&mut run, "closed", None);
+    let finished = run.close(WAIT);
+    trace::assert_trace(
+        "a_scored_sound_says_whether_the_body_was_producing_and_a_silent_copy_closes_the_window",
+        &finished.all,
+        &[],
+    );
+    assert_eq!(
+        texts(&finished.all, "harness.scored"),
+        vec![
+            "media/quiet producing false at 54",
+            "media/still-quiet producing false at 54",
+            "media/cut-in producing true at 54",
+            "media/own producing true at 0",
+            "media/closed producing false at 54",
+        ]
+    );
+}
+
+/// Nobody identified in time: the opening voice's identification
+/// completes with no voice (the original's `_identify_nobody` after
+/// `_identify_delay`), and the window opens and streams its frames with no
+/// source identity instead of failing the listening.
+#[test]
+fn an_opening_voice_nobody_identifies_in_time_is_heard_unidentified() {
+    let harness = layout(&[(
+        "interpretation/interpretation.scx",
+        &[
+            ("speech_decoder", "false"),
+            ("voice_classifier", "true"),
+            ("stage_timeout_ms", "10000"),
+            ("recognize_timeout_ms", "500"),
+        ],
+    )]);
+    let (mut run, backend) = started(
+        &harness,
+        "an_opening_voice_nobody_identifies_in_time_is_heard_unidentified",
+        &[
+            ("hang.wav", spoken_wav("hang")),
+            ("silence.wav", silent_wav()),
+        ],
+    );
+    utter(
+        &mut run,
+        &sound("hang.wav", &json!({})),
+        &sound("silence.wav", &json!({})),
+    );
+    run.until(WAIT, |record| {
+        label_is("harness.speech")(record)
+            && record["text"]
+                .as_str()
+                .is_some_and(|t| t.contains("floppy-sound-2"))
+    });
+    let finished = close(
+        run,
+        "an_opening_voice_nobody_identifies_in_time_is_heard_unidentified",
+    );
+    assert_eq!(backend.received_at("/voice/embed").len(), 1);
+    assert_eq!(
+        texts(&finished.all, "interpretation.unidentified"),
+        vec!["1 segment(s) unidentified after 10500 ms"]
+    );
+    assert!(texts(&finished.all, "harness.failed").is_empty());
+    let speech = json_texts(&finished.all, "harness.speech");
+    assert_eq!(speech.len(), 2, "{speech:?}");
+    for product in &speech {
+        assert_eq!(product["source_ids"], json!([]), "{product}");
+        assert_eq!(product["voice_embedding"], Json::Null, "{product}");
+    }
+}
+
+#[test]
+fn a_negative_product_threshold_degrades_the_listening() {
+    let harness = layout(&[(
+        "interpretation/interpretation.scx",
+        &[("product_threshold_db", "-1")],
+    )]);
+    let backend = Backend::start();
+    let mut args = hearing::granted(
+        "a_negative_product_threshold_degrades_the_listening",
+        &backend,
+        &[],
+    )
+    .args;
+    args.push(harness.display().to_string());
+    let run = Run::start(&args, &[]);
+    run.until(WAIT, label_is("interpretation.degraded"));
+    let finished = close(run, "a_negative_product_threshold_degrades_the_listening");
+    assert_eq!(
+        texts(&finished.all, "interpretation.degraded"),
+        vec!["product_threshold_db must not be negative"]
+    );
+    assert!(texts(&finished.all, "harness.ready").is_empty());
+}
+
 #[test]
 fn voice_identification_with_speech_decoding_degrades_the_listening() {
     let harness = layout(&[(

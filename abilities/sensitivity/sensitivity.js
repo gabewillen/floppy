@@ -10,8 +10,14 @@ function receivedLevel(sound) {
   return sound.received_level_db === undefined ? null : sound.received_level_db;
 }
 
-function scoreOutput(sound, stimulus, perceived) {
-  return ({sound: sound, parent: stimulus, perceived_level_db: perceived});
+function scoreOutput(sound, stimulus, perceived, producing) {
+  return ({sound: sound, parent: stimulus, perceived_level_db: perceived, producing: producing});
+}
+
+// A copy with sound still to come from the mouth (the original
+// _has_efference_copy); one of duration 0 is silent.
+function hasSoundToCome(_event) {
+  return _event.data.duration > 0;
 }
 
 // producing

@@ -720,7 +720,7 @@ const SETTINGS = {
 const svc = (id, kids, as) => N("invoke", { id: as || id, type: GH + "services/" + id }, kids);
 const prm = (name, expr) => N("param", { name, expr });
 const out = event => N("send", { event, target: "#_parent" });
-const commit = dir => N("conversation:message_for_turn", { location: "turn", direction: dir, event: dir === "inbound" ? "request.received" : "reply.sent", message: "_event.data.text", sequence: "seq" });
+const commit = dir => N("conversation:message_for_turn", { location: "turn", direction: dir, event: dir === "inbound" ? "request.received" : "reply.sent", message: "_event.data.text" });
 const RECIPES = {
   helpdesk: {
     name: "helpdesk", event: "request.received", goal: "Sort and answer support requests",

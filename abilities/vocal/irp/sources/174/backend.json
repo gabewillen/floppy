@@ -1,0 +1,9 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/audio/speech",
+      "body": "ID3 not really mp3"
+    }
+  ]
+}

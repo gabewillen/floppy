@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- conversation-12: an embedding is no participant: only the named source is stamped. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="conversation" type="scxml" src="../../../conversation.scx"/>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'conversation' &amp;&amp; _event.data.choices.length === 0" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.conversation.input" target="#_conversation"><content expr='{"source_ids": [[2, 1.25], "alice"], "target_ids": [], "content": "hi", "content_type": "text/plain"}'/></send>
+    </onentry>
+    <transition event="bot.ability.cognition.input" cond='JSON.stringify(_event.data.stimulus.data.messages[_event.data.stimulus.data.messages.length - 1].participants) === "[{\"ref\":\"alice\",\"role\":\"source\"}]" &amp;&amp; JSON.stringify(_event.data.participants) === "[{\"ref\":\"alice\",\"role\":\"source\"}]"' target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

@@ -108,8 +108,9 @@ function memoryFailedMessage(_event) {
 
 // committing
 
-function historyWithMessage() {
-  return history.concat([message]);
+// The exchange with the outbound message in hand.
+function exchangeWithMessage() {
+  return exchange.concat([message]);
 }
 
 // The committed message is text: string content of a text/* type.
@@ -121,7 +122,7 @@ function isTextMessage() {
 // <biometric:VoiceEmbedding>, as the original's capture writes it.
 function inboundCommitLog() {
   var sources = turn_sources.map(function (id) { return Array.isArray(id) ? '<biometric:VoiceEmbedding>' : id; });
-  return 'inbound ' + message.sequence + ' from ' + JSON.stringify(sources) + ' (' + relationship().sequences.length + ' in its relationship)';
+  return 'inbound from ' + JSON.stringify(sources) + ' in relationship ' + relationship_index;
 }
 
 // conversation (append)
@@ -130,13 +131,13 @@ function isOutboundAppend(_event) {
   return _event.data.message.direction === 'outbound';
 }
 
-// An append already committed: the original matches its event's id, source and
-// target against each committed provenance (an append without an id is
-// never one).
+// An append already committed to the exchange: the original matches its
+// event's id, source and target against each provenance in the exchange
+// (an append without an id is never one).
 function isCommittedAppend(_event) {
   var given = _event.data.message.provenance;
   var id = stringOrNull(given.id);
-  return id !== null && id !== '' && history.some(function (committed) {
+  return id !== null && id !== '' && exchange.some(function (committed) {
     return committed.provenance.id === id && committed.provenance.source === stringOrNull(given.source) && committed.provenance.target === stringOrNull(given.target);
   });
 }
@@ -145,8 +146,9 @@ function stringOrNull(value) {
   return typeof value === 'string' ? value : null;
 }
 
+// The outbound message's place in the exchange.
 function outboundCommitLog() {
-  return 'outbound ' + message.sequence;
+  return 'outbound ' + (exchange.length - 1);
 }
 
 function alreadyCommittedLog(_event) {

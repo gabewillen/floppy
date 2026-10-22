@@ -2,7 +2,7 @@
 <!-- conversation-3: an input matches its relationship in either direction. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation">
 <datamodel>
-  <data id="rs" expr="[({session_ref: 'relationship-a', context_ref: 'a', source_ids: ['alice'], target_ids: ['bot'], participants: [], sequences: []})]"/>
+  <data id="rs" expr="[({session_ref: 'relationship-a', context_ref: 'a', source_ids: ['alice'], target_ids: ['bot'], participants: []})]"/>
   <data id="i" expr="null"/>
   <data id="input" expr="({source_ids: ['bot'], target_ids: ['alice']})"/>
 </datamodel>

@@ -2,25 +2,213 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "bot.ability.communication.respond",
   "additionalProperties": false,
-  "description": "A response to communicate aloud. Communication routes the text through its injected Speaking ability; cognition does not select Speaking directly.",
+  "description": "A response to say aloud, as one or more parts. Most replies are one part with no expression. Communication routes it through its injected Speaking ability; cognition does not select Speaking directly.",
   "properties": {
-    "text": {
-      "description": "The complete non-blank text to communicate. It is spoken verbatim by the configured Speaking ability after this action is selected.",
-      "examples": [
-        "I am doing well, thank you."
-      ],
-      "minLength": 1,
-      "title": "Text",
-      "type": "string"
+    "parts": {
+      "description": "The reply, as one or more parts said in order in your own voice. Their words, joined exactly as written, are the reply, and are read aloud literally; how a part is said, and any sound or pause, belongs in its expression, never in its words.",
+      "items": {
+        "additionalProperties": false,
+        "description": "One stretch of your reply and, optionally, how to say it. Split the reply into parts where the way you say it changes, or to put a sound or a pause between words. The words are only what is spoken; a laugh, sigh or other non-verbal sound is expression.sound and a silence is expression.pause, never written into the words, and either may be a part of its own with no words. Every part has words, a sound or a pause.",
+        "properties": {
+          "expression": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "description": "How to say this part, within your own voice. Every field is optional; set only what this part needs. A voice applies what it can and ignores the rest.",
+                "properties": {
+                  "instructions": {
+                    "anyOf": [
+                      {
+                        "maxLength": 300,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Natural-language acting direction for this part.",
+                    "title": "Instructions"
+                  },
+                  "emotion": {
+                    "anyOf": [
+                      {
+                        "maxLength": 64,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "A feeling, as free text. A voice with a closed vocabulary of emotions applies it only on an exact match.",
+                    "title": "Emotion"
+                  },
+                  "style": {
+                    "anyOf": [
+                      {
+                        "maxLength": 64,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "A named style the voice declares; 'whisper' is the canonical name for whispering.",
+                    "title": "Style"
+                  },
+                  "intensity": {
+                    "anyOf": [
+                      {
+                        "maximum": 1.0,
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "How strongly to carry the emotion or style, from 0 to 1.",
+                    "title": "Intensity"
+                  },
+                  "pace": {
+                    "anyOf": [
+                      {
+                        "maximum": 2.0,
+                        "minimum": 0.5,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Speaking rate relative to natural: 1 is natural, 2 twice as fast.",
+                    "title": "Pace"
+                  },
+                  "pitch": {
+                    "anyOf": [
+                      {
+                        "maximum": 12.0,
+                        "minimum": -12.0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Pitch in semitones relative to natural: 0 is natural.",
+                    "title": "Pitch"
+                  },
+                  "volume": {
+                    "anyOf": [
+                      {
+                        "maximum": 2.0,
+                        "minimum": 0.25,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Loudness relative to natural, linear: 1 is natural.",
+                    "title": "Volume"
+                  },
+                  "emphasis": {
+                    "default": false,
+                    "description": "Stress the words of this part.",
+                    "title": "Emphasis",
+                    "type": "boolean"
+                  },
+                  "pause": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "short",
+                          "long"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "A silence, short or long, that opens this part, before its sound and words; a part may be only a pause, with no words. This is the only way to pause: a written pause would be read aloud. Every voice can pause.",
+                    "title": "Pause"
+                  },
+                  "sound": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "laugh",
+                          "giggle",
+                          "chuckle",
+                          "sigh",
+                          "gasp",
+                          "breath",
+                          "cough",
+                          "clear_throat"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "A non-verbal sound (a laugh, sigh, gasp and the like), one per part: made beside this part's words, placed by sound_at, or alone as a part of its own with no words. This is the only way to make one: a written 'sigh' would be read aloud as speech. A voice that cannot make the sound ignores it.",
+                    "title": "Sound"
+                  },
+                  "sound_at": {
+                    "default": "before",
+                    "description": "Whether the sound comes before or after this part's words; meaningful only with a sound.",
+                    "enum": [
+                      "before",
+                      "after"
+                    ],
+                    "title": "Sound At",
+                    "type": "string"
+                  }
+                },
+                "title": "Expression",
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "How to say this part, written before its words; omit it to say the words naturally."
+          },
+          "words": {
+            "default": null,
+            "description": "The words of this part; omit them for a part that is only a sound or a pause. The voice speaks every character exactly as written, so this is speech only: no stage directions, actions, emotes, markup or tags, and none of the characters * < > [ ] { } ( ): a cue such as (chuckle) or (pause) would be read aloud. For a sound (a laugh, chuckle or sigh) use expression.sound; for a pause use expression.pause; for how to say the words use expression. Continue the reply exactly, including any space or punctuation that joins this part to the one before it.",
+            "maxLength": 2000,
+            "minLength": 1,
+            "pattern": "^[^*<>\\[\\]{}()]+$",
+            "title": "Words",
+            "type": "string"
+          }
+        },
+        "title": "Part",
+        "type": "object"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "title": "Parts",
+      "type": "array"
     }
   },
   "required": [
-    "text"
+    "parts"
   ],
-  "type": "object",
-  "examples": [
-    {
-      "text": "I am doing well, thank you."
-    }
-  ]
+  "type": "object"
 }
