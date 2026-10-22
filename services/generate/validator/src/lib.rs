@@ -24,9 +24,10 @@
 //!   invocation's events (in the invoking state, an ancestor, or a
 //!   descendant) handles `generate.failed` or `generate.result` with a
 //!   literal `event:schema` that rejects data the service returns (each
-//!   closed failure code, or a `{"content", "tool_calls"}` reply: a text
-//!   reply without a `schema` parameter, a tool call with one); the help
-//!   names the schema of what it returns.
+//!   closed failure code, a refused call's `rejection`, or a `{"content",
+//!   "tool_calls", "request_bytes", "usage"}` reply: a text reply without a
+//!   `schema` parameter, a tool call with one); the help names the schema of
+//!   what it returns.
 //!
 //! The decisions are the portable [`check`] over a plain [`Document`],
 //! tested natively; the guest maps the WIT types onto it.
@@ -466,28 +467,61 @@ fn contains(document: &Document, ancestor: usize, element: usize) -> bool {
 fn returned(schema_given: bool) -> Vec<(&'static str, Json, Vec<Json>)> {
     let failed = serde_json::json!({
         "type": "object",
-        "properties": {"code": {"enum": FAILURE_CODES}},
+        "properties": {
+            "code": {"enum": FAILURE_CODES},
+            "rejection": {
+                "type": "object",
+                "properties": {"key": {"type": "string"}, "message": {"type": "string"}},
+                "required": ["key", "message"],
+                "additionalProperties": false,
+            },
+        },
         "required": ["code"],
         "additionalProperties": false,
     });
-    let mut events = vec![(
-        FAILED_EVENT,
-        failed,
-        FAILURE_CODES
-            .iter()
-            .map(|code| serde_json::json!({ "code": code }))
-            .collect(),
-    )];
+    // Each code, and a refused call's rejection.
+    let mut failures: Vec<Json> = FAILURE_CODES
+        .iter()
+        .map(|code| serde_json::json!({ "code": code }))
+        .collect();
+    failures.extend([
+        serde_json::json!({
+            "code": "not-json",
+            "rejection": {"key": "not-json", "message": "the arguments are not JSON: EOF while parsing a value at line 1 column 0"},
+        }),
+        serde_json::json!({
+            "code": "schema-mismatch",
+            "rejection": {"key": "schema-mismatch:", "message": "(root): missing properties 'events'"},
+        }),
+    ]);
+    let mut events = vec![(FAILED_EVENT, failed, failures)];
     // The reply is the original's text-generator output: without a schema
-    // its content and no call, with one at least one call.
+    // its content and no call, with one at least one call; its request's
+    // bytes, and its usage when the backend counted tokens.
+    let usage = serde_json::json!({
+        "input_tokens": 12, "output_tokens": 3, "reasoning_tokens": 1, "total_tokens": 15,
+    });
     let samples = if schema_given {
-        vec![serde_json::json!({
-            "content": "",
-            "tool_calls": [{"id": "call-1", "name": "result", "args": {}}],
-        })]
+        vec![
+            serde_json::json!({
+                "content": "",
+                "request_bytes": 120,
+                "tool_calls": [{"id": "call-1", "name": "result", "args": {}}],
+            }),
+            serde_json::json!({
+                "content": "",
+                "request_bytes": 120,
+                "tool_calls": [{"id": "call-1", "name": "result", "args": {}}],
+                "usage": usage,
+            }),
+        ]
     } else {
-        vec![serde_json::json!({ "content": "a reply", "tool_calls": [] })]
+        vec![
+            serde_json::json!({ "content": "a reply", "request_bytes": 60, "tool_calls": [] }),
+            serde_json::json!({ "content": "a reply", "request_bytes": 60, "tool_calls": [], "usage": usage }),
+        ]
     };
+    let count = serde_json::json!({"type": "integer", "minimum": 0});
     events.push((
         RESULT_EVENT,
         serde_json::json!({
@@ -500,8 +534,19 @@ fn returned(schema_given: bool) -> Vec<(&'static str, Json, Vec<Json>)> {
                     "required": ["id", "name", "args"],
                     "additionalProperties": false,
                 }},
+                "request_bytes": count,
+                "usage": {
+                    "type": "object",
+                    "properties": {
+                        "input_tokens": count,
+                        "output_tokens": count,
+                        "reasoning_tokens": count,
+                        "total_tokens": count,
+                    },
+                    "additionalProperties": false,
+                },
             },
-            "required": ["content", "tool_calls"],
+            "required": ["content", "tool_calls", "request_bytes"],
             "additionalProperties": false,
         }),
         samples,

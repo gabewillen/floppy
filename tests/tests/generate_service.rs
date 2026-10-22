@@ -114,9 +114,39 @@ fn tool_call(function: &str, arguments: &str) -> String {
     .to_string()
 }
 
+/// The usage the `/usage` and `/stream` answers report.
+fn usage() -> serde_json::Value {
+    serde_json::json!({
+        "prompt_tokens": 21, "completion_tokens": 6, "total_tokens": 27,
+        "completion_tokens_details": {"reasoning_tokens": 2},
+    })
+}
+
+/// A completion of `content` that reports [`usage`].
+fn counted_completion(content: &str) -> String {
+    let mut answer: serde_json::Value =
+        serde_json::from_str(&completion(content)).expect("the completion is JSON");
+    answer["usage"] = usage();
+    answer.to_string()
+}
+
+/// A server-sent-event stream of `content` whose last chunk, without
+/// choices, reports [`usage`] (as `stream_options.include_usage` asks).
+fn counted_stream(content: &str) -> String {
+    let chunk = serde_json::json!({
+        "object": "chat.completion.chunk",
+        "choices": [{"index": 0, "delta": {"content": content}, "finish_reason": "stop"}],
+        "usage": null,
+    });
+    let counted =
+        serde_json::json!({"object": "chat.completion.chunk", "choices": [], "usage": usage()});
+    format!("data: {chunk}\n\ndata: {counted}\n\ndata: [DONE]\n\n")
+}
+
 /// A deterministic fake Chat Completions backend on 127.0.0.1: the first
 /// path segment picks the scripted answer (`/text`, `/json`, `/mismatch`,
-/// `/fail` answers 500); every request is recorded.
+/// `/invented`, `/usage`, `/stream`, `/fail` answers 500); every request is
+/// recorded.
 struct Mock {
     origin: String,
     received: Arc<Mutex<Vec<Received>>>,
@@ -179,15 +209,26 @@ impl Mock {
                     "/mismatch/v1/chat/completions" => {
                         ("200 OK", tool_call("verdict", r#"{"answer":"yes"}"#))
                     }
+                    "/invented/v1/chat/completions" => (
+                        "200 OK",
+                        tool_call("speak", r#"{"score":41,"answer":"yes"}"#),
+                    ),
+                    "/usage/v1/chat/completions" => ("200 OK", counted_completion("Counted.")),
+                    "/stream/v1/chat/completions" => ("200 OK", counted_stream("Streamed.")),
                     "/fail/v1/chat/completions" => (
                         "500 Internal Server Error",
                         r#"{"error":{"message":"boom"}}"#.to_owned(),
                     ),
                     _ => ("404 Not Found", "{}".to_owned()),
                 };
+                let content_type = if target.starts_with("/stream/") {
+                    "text/event-stream"
+                } else {
+                    "application/json"
+                };
                 let _ = write!(
                     stream,
-                    "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{answer}",
+                    "HTTP/1.1 {status}\r\ncontent-type: {content_type}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{answer}",
                     answer.len()
                 );
             }
@@ -220,6 +261,11 @@ fn env_file_with(test: &str, contents: &str) -> PathBuf {
 /// failure code as `failed`, and the machine finishes in `done` on
 /// `done.invoke`, or in `rejected` on `error.execution` (a rejected start).
 fn document(params: &str, log_expr: &str) -> String {
+    document_with(params, log_expr, "_event.data.code")
+}
+
+/// [`document`], its failure logged by `failed_expr`.
+fn document_with(params: &str, log_expr: &str, failed_expr: &str) -> String {
     format!(
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
@@ -229,7 +275,7 @@ fn document(params: &str, log_expr: &str) -> String {
       {params}
     </invoke>
     <transition event="generate.result"><log label="reply" expr="{log_expr}"/></transition>
-    <transition event="generate.failed"><log label="failed" expr="_event.data.code"/></transition>
+    <transition event="generate.failed"><log label="failed" expr="{failed_expr}"/></transition>
     <transition event="done.invoke.gen" target="done"/>
     <transition event="error.execution" target="rejected"/>
     <transition event="error.communication" target="rejected"/>
@@ -317,16 +363,94 @@ fn a_structured_generation_returns_the_tool_call() {
 #[test]
 fn a_reply_that_mismatches_the_schema_is_never_returned() {
     let mock = Mock::start();
-    let env = env_file("mismatch", &format!("{}/mismatch/v1", mock.origin));
-    let args = args(&env);
-    let finished = open(&args, &document(STRUCTURED_PARAMS, "'unexpected'"));
-    let records = &finished.records;
+    for (route, rejection) in [
+        (
+            "mismatch",
+            serde_json::json!({"key": "schema-mismatch:", "message": "(root): missing properties 'score'"}),
+        ),
+        (
+            "invented",
+            serde_json::json!({
+                "key": "schema-mismatch:name",
+                "message": "the call names a function the request did not offer: expected 'verdict', got 'speak'",
+            }),
+        ),
+    ] {
+        let env = env_file(route, &format!("{}/{route}/v1", mock.origin));
+        let finished = open(
+            &args(&env),
+            &document_with(
+                STRUCTURED_PARAMS,
+                "'unexpected'",
+                "_event.data.code + ' ' + JSON.stringify(_event.data.rejection)",
+            ),
+        );
+        let records = &finished.records;
+        assert_eq!(
+            logs(records),
+            labelled(&[
+                ("failed", format!("schema-mismatch {rejection}").as_str()),
+                ("final", "done")
+            ]),
+            "the result is validated before it is returned, and the rejection says where: {records:?}"
+        );
+    }
+    assert_eq!(mock.received().len(), 2);
+}
+
+/// A result carries what its request cost, as the original's output does:
+/// the request body's bytes (without its streaming members) and the tokens
+/// the backend counted, from the completion or a stream's last chunk, which
+/// the request asks for (`stream_options.include_usage`).
+#[test]
+fn a_result_carries_the_requests_bytes_and_the_backends_usage() {
+    let mock = Mock::start();
+    let cost =
+        "JSON.stringify([_event.data.content, _event.data.request_bytes, _event.data.usage])";
+    let counted = r#"{"input_tokens":21,"output_tokens":6,"reasoning_tokens":2,"total_tokens":27}"#;
+    let env = env_file("usage", &format!("{}/usage/v1", mock.origin));
+    let finished = open(&args(&env), &document(TEXT_PARAMS, cost));
+    let sent = mock.received()[0].body.len();
     assert_eq!(
-        logs(records),
-        labelled(&[("failed", "schema-mismatch"), ("final", "done")]),
-        "the result is validated before it is returned: {records:?}"
+        logs(&finished.records),
+        labelled(&[
+            (
+                "reply",
+                format!(r#"["Counted.",{sent},{counted}]"#).as_str()
+            ),
+            ("final", "done")
+        ]),
+        "{:?}",
+        finished.records
     );
-    assert_eq!(mock.received().len(), 1);
+    let env = env_file("stream", &format!("{}/stream/v1", mock.origin));
+    let finished = open(
+        &args(&env),
+        &document(
+            &format!(r#"{TEXT_PARAMS}<param name="stream" expr="true"/>"#),
+            cost,
+        ),
+    );
+    let received = mock.received();
+    let body: serde_json::Value =
+        serde_json::from_slice(&received[1].body).expect("the body is JSON");
+    assert_eq!(body["stream"], true);
+    assert_eq!(
+        body["stream_options"],
+        serde_json::json!({"include_usage": true})
+    );
+    assert_eq!(
+        logs(&finished.records),
+        labelled(&[
+            (
+                "reply",
+                format!(r#"["Streamed.",{sent},{counted}]"#).as_str()
+            ),
+            ("final", "done")
+        ]),
+        "the same request's bytes, streamed or not: {:?}",
+        finished.records
+    );
 }
 
 #[test]

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "generate.failed",
-  "description": "The generation failed; code names why (closed).",
+  "description": "The generation failed; code names why (closed), and a refused call carries its rejection.",
   "type": "object",
   "properties": {
     "code": {
@@ -16,6 +16,27 @@
         "not-json",
         "schema-mismatch"
       ]
+    },
+    "rejection": {
+      "description": "Why a not-json or schema-mismatch call was refused, as the original's selection rejection: key a stable string (not-json, schema-mismatch:name, or schema-mismatch:<JSON pointer of where the arguments first fail>), message a one-line diagnostic that repeats no argument value; each at most 200 characters.",
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "required": [
+        "key",
+        "message"
+      ],
+      "additionalProperties": false
     }
   },
   "required": [

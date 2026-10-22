@@ -233,13 +233,27 @@ fn transitions_that_reject_what_generate_returns_are_schema_mismatches() {
 
 #[test]
 fn the_builder_bot_schemas_match_what_generate_returns() {
-    let failed = r#"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"code":{"enum":["unconfigured","transport","status","malformed","truncated","filtered","refusal","not-json","schema-mismatch"]}},"required":["code"],"additionalProperties":false}"#;
-    let result = r#"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"content":{"type":"string"},"tool_calls":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"args":{"type":"object"}},"required":["id","name","args"],"additionalProperties":false}}},"required":["content","tool_calls"],"additionalProperties":false}"#;
+    let failed = r#"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"code":{"enum":["unconfigured","transport","status","malformed","truncated","filtered","refusal","not-json","schema-mismatch"]},"rejection":{"type":"object","properties":{"key":{"type":"string","minLength":1,"maxLength":200},"message":{"type":"string","minLength":1,"maxLength":200}},"required":["key","message"],"additionalProperties":false}},"required":["code"],"additionalProperties":false}"#;
+    let result = r#"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"content":{"type":"string"},"request_bytes":{"type":"integer","minimum":0},"tool_calls":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"args":{"type":"object"}},"required":["id","name","args"],"additionalProperties":false}},"usage":{"type":"object","properties":{"input_tokens":{"type":"integer","minimum":0},"output_tokens":{"type":"integer","minimum":0},"reasoning_tokens":{"type":"integer","minimum":0},"total_tokens":{"type":"integer","minimum":0}},"additionalProperties":false}},"required":["content","tool_calls","request_bytes"],"additionalProperties":false}"#;
     let body = format!(
         r#"{}<transition event="generate.result" event:schema='{result}'/><transition event="generate.failed" event:schema='{failed}'/>"#,
         invoke(&format!("{MODEL}{PROMPT}"))
     );
     assert!(findings(&body).1.is_empty());
+    // A closed result schema without the request's bytes and usage, or a
+    // failed one without the rejection, rejects what the service returns.
+    let closed_result = r#"{"type":"object","properties":{"content":{"type":"string"},"tool_calls":{"type":"array"}},"required":["content","tool_calls"],"additionalProperties":false}"#;
+    let closed_failed = r#"{"type":"object","properties":{"code":{"type":"string"}},"required":["code"],"additionalProperties":false}"#;
+    let body = format!(
+        r#"{}<transition event="generate.result" event:schema='{closed_result}'/><transition event="generate.failed" event:schema='{closed_failed}'/>"#,
+        invoke(&format!("{MODEL}{PROMPT}"))
+    );
+    let (_, found) = findings(&body);
+    assert_eq!(codes(&found), ["schema_mismatch", "schema_mismatch"]);
+    assert!(
+        found[0].primary.1.contains("request_bytes") && found[1].primary.1.contains("rejection"),
+        "{found:?}"
+    );
 }
 
 #[test]
