@@ -65,6 +65,17 @@
   turn: failing answers bot.ability.failed, and hands the failure back
   to the body as a perceived bot.ability.cognition.step.failed (below).
 
+  Self and recent turns (the reference's SelfData and recall_recent,
+  through the body, which relays them): until the identity has told the
+  bot's name (bot.ability.identity.named), every entry into idle sends
+  bot.ability.identity.ask {} to the parent (the reference _ask_name);
+  the name, the persona's traits and description
+  (bot.ability.persona.output) and the short-term register's recent
+  turns (bot.ability.memory.stm.recent_turns.output, which the body reads
+  as each turn starts) are kept, and intuition and reasoning are given
+  the self (its name only once told) and the recent turns for their
+  prompts.
+
   Dispatch: each stage sends its own selections, as the original's stages
   dispatch theirs (cognition.types.dispatch_selected_events): a decision
   layer that escalates for low confidence sends its environment actions
@@ -254,6 +265,9 @@
          has taken one), and its owner's traits and its own description,
          as the persona tells them (bot.ability.persona.output). -->
     <data id="self" expr="({name: null, traits: [], description: null})"/>
+    <!-- Whether the identity has told the name yet (until then it is asked
+         on every return to idle, the reference _ask_name). -->
+    <data id="name_told" expr="false"/>
     <!-- The short-term register's recent turns, heard and said, as it last
          answered (bot.ability.memory.stm.recent_turns.output). -->
     <data id="recent_turns" expr="[]"/>
@@ -265,6 +279,7 @@
        (the original's NamedEvent). -->
   <transition event="bot.ability.identity.named" event:schema="../schemas/bot.ability.identity.named.json">
     <assign location="self.name" expr="_event.data.name"/>
+    <assign location="name_told" expr="true"/>
   </transition>
   <!-- The persona's traits and description, on waking and after each
        revision (the original's persona OutputEvent). -->
@@ -294,6 +309,13 @@
         <param name="ability" expr="'cognition'"/>
         <param name="choices" expr="offered"/>
       </send>
+      <!-- Not yet told its name: ask the identity, through the body, on
+           every return to idle until it answers (the reference _ask_name). -->
+      <if cond="!name_told">
+        <send event="bot.ability.identity.ask" target="#_parent">
+          <content expr="({})"/>
+        </send>
+      </if>
     </onentry>
     <transition event="bot.ability.cognition.input" event:schema="../schemas/bot.ability.cognition.input.json"
                 target="processing">
@@ -484,6 +506,8 @@
         <param name="choices" expr="intuitionChoices()"/>
         <param name="environment" expr="environment"/>
         <param name="acted" expr="actedFact()"/>
+        <param name="self" expr="selfFact()"/>
+        <param name="recent" expr="recent_turns"/>
         <param name="max_context_tokens" expr="contextTokens()"/>
         <param name="completion_reserve_tokens" expr="reserveTokens()"/>
         <param name="bytes_per_token" expr="intuition_bytes_per_token"/>
@@ -543,6 +567,8 @@
         <param name="choices" expr="choices"/>
         <param name="environment" expr="environment"/>
         <param name="acted" expr="actedFact()"/>
+        <param name="self" expr="selfFact()"/>
+        <param name="recent" expr="recent_turns"/>
         <param name="max_context_tokens" expr="contextTokens()"/>
         <param name="completion_reserve_tokens" expr="reserveTokens()"/>
         <param name="bytes_per_token" expr="bytes_per_token"/>

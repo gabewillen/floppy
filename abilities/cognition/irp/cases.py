@@ -101,8 +101,22 @@ S.statement(5, "A decision layer that fails (`the decision failed (status)`, or 
 S.statement(6, "A step that makes no progress for `child_operation_timeout_ms` (from its start for autonomy and the decision layer; for reasoning from its streamed reply's first `generate.progress`, each later one starting it over), or runs `child_operation_ceiling_ms` in all (the `<param>` `bounds` overriding either, decision D101, and its `reflex_timeout_ms`, `intuition_timeout_ms` or `reasoning_timeout_ms` bounding one tier), fails only its turn: `bot.ability.failed` `{message: \"Cognition's <stage> step took longer than <seconds> seconds, so the turn failed.\", turn, input}`, then the failure handed back to its parent as a `bot.ability.cognition.input` whose stimulus is `bot.ability.cognition.step.timed_out` `{message, stage, timeout_seconds, turn}`; the cognition is idle again (it offers). A turn whose stimulus is a handed-back failure hands nothing back when it fails too.")
 S.statement(7, "`bot.ability.cognition.cancel` `{turn}` for the turn in hand cancels the stage and is acknowledged with `bot.ability.cognition.cancelled` `{turn}`, and the cognition is idle again (it offers); in `idle` a cancel is acknowledged at once; a cancel for another turn is not taken and the turn goes on.")
 S.statement(8, "`bot.ability.cognition.ignore` (its offer) is taken in `idle` and while processing, and only logged: it sends nothing and does not end a turn.")
+S.statement(11, "Until it is told the bot's name (`bot.ability.identity.named`), every return to `idle` sends `bot.ability.identity.ask` `{}` to its parent after its offers (the reference's `_ask_name`); once told, it asks no more.")
 S.statement(10, "With an `intuition_model` (the `<param>`; none by default composes no intuition tier, decision D144), a turn the decision layer leaves unhandled goes to the intuition tier first, offered the deliberative handoff `bot.ability.reasoning.input` as the cognition's own: its selections handle the turn, or, when they hold the handoff, the others are sent first and the turn goes on to reasoning, whose output follows them. An intuition that fails hands the same turn on to reasoning (`cognition.cascaded`).")
 S.statement(9, "The events it takes are checked against `abilities/schemas/` where they are created: a `bot.ability.cognition.input` without a stimulus is refused at its sender (`error.execution` there) and starts no turn.")
+
+ASK = "bot.ability.identity.ask"
+NAMED = "bot.ability.identity.named"
+
+# Every other case drops the identity ask (statement 11).
+_case = S.case
+
+
+def _case_dropping_ask(*args, ignore=(), **kwargs):
+    return _case(*args, ignore=tuple(ignore) + (ASK,), **kwargs)
+
+
+S.case = _case_dropping_ask
 
 S.case(100, 1, "the cognition offers ignore on start.", [READY])
 S.case(101, 1, "it offers again on the return to idle after a turn.",
@@ -193,3 +207,9 @@ S.case(192, 10, "a failed intuition cascades the turn to reasoning, which answer
        [READY, send(INPUT, turn(1)), output(1, REASONED)],
        params=[SLOW, INTUITION], backend=[DECIDE_ABSTAIN, chat(status=500), REASONED_IGNORE], clock="logical",
        ignore=[OFFERS])
+
+_case(200, 11, "the cognition asks the identity for the bot's name after its offers, again after a turn, and no more once told.",
+      [READY, expect(ASK), send(INPUT, turn(1)), output(1, IGNORED), READY, expect(ASK),
+       send(NAMED, js({"name": "Pip"})), send(INPUT, turn(2)), output(2, IGNORED), READY,
+       send(CANCEL, js({"turn": 3})), expect(CANCELLED, "_event.data.turn === 3")],
+      params=[SLOW], backend=[DECIDE_IGNORE, DECIDE_IGNORE], clock="logical")

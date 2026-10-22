@@ -1402,6 +1402,34 @@ fn an_abstention_escalates_to_reasoning() {
     close(run, &mock, "an_abstention_escalates_to_reasoning");
 }
 
+/// Reasoning's system channel is the bot's self block (decision D141):
+/// the cognition asks the identity for the bot's name until it is told,
+/// and a bot that has taken none says so (the reference's `SelfData`).
+#[test]
+fn reasoning_is_told_the_bots_self() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Respond, &[]);
+    let mut run = start(&bot);
+    say(&mut run, "hello");
+    let records = run.until(WAIT, turn_ended);
+    assert_eq!(
+        texts(&records, "cognition.stage")
+            .last()
+            .map(String::as_str),
+        Some("reasoning handled")
+    );
+    let request = &reasoning_requests(&mock)[0].body;
+    assert_eq!(request["messages"][0]["role"], "system", "{request}");
+    let system = request["messages"][0]["content"]
+        .as_str()
+        .unwrap_or_default();
+    assert!(
+        system.contains("<persona>") && system.contains("<no_name_yet"),
+        "{system}"
+    );
+    close(run, &mock, "reasoning_is_told_the_bots_self");
+}
+
 /// The activation settings of a bot that composes the intuition tier.
 fn with_intuition() -> [(&'static str, &'static str); 1] {
     [("intuition_model", "'chat-model'")]

@@ -270,6 +270,13 @@ function bytesPerTokenAfter(_event) {
 
 // alive
 
+// What the bot knows of itself, as its prompts' self block renders it (the
+// reference SelfData): its name only once the identity told it (null: told
+// it has none yet), then its owner's traits and its own description.
+function selfFact() {
+  return name_told ? self : ({traits: self.traits, description: self.description});
+}
+
 // The persona's description (absent: none written yet).
 function personaDescription(_event) {
   return _event.data.description === undefined ? null : _event.data.description;

@@ -45,7 +45,8 @@
   no static policy, DEFAULT_INSTRUCTIONS "") then the self block of the
   bot's self (the <param> self, what the cognition was told of itself),
   and is left out when both are empty; the user message is laid out most
-  stable first: the recalled prior_episodes (cognition:cognitive_episode)
+  stable first: the recent turns heard and said (the <param> recent, the
+  short-term register's, as <memory:turn> lines, never cut), the recalled prior_episodes (cognition:cognitive_episode)
   and standing_directives (cognition:directive) after the turn's
   situation (the environment block, decision D106, then what earlier
   stages already did on the turn, the <param> acted), then the stimulus as
@@ -120,7 +121,7 @@
   cognition, which passes it to the next turn's reasoning.
 
   Input: the <param>s turn, stimulus, focus, focus_candidates, choices,
-  tier, model, database, environment, self, acted, max_context_tokens,
+  tier, model, database, environment, self, recent, acted, max_context_tokens,
   completion_reserve_tokens and bytes_per_token. Output: <donedata>, received by the cognition as
   done.invoke.reasoning:
 
@@ -168,6 +169,9 @@
          selections), from the cognition's <param>s. -->
     <data id="self" expr="null"/>
     <data id="acted" expr="[]"/>
+    <!-- The recent turns heard and said (the short-term register's, from
+         the cognition), rendered first and never cut. -->
+    <data id="recent" expr="[]"/>
     <!-- The reference reasoning's static policy: none
          (DEFAULT_INSTRUCTIONS ""). -->
     <data id="instructions" expr="''"/>
@@ -293,7 +297,7 @@
       <assign location="budget" expr="fitBudget()"/>
       <log label="reasoning" expr="choices"/>
       <cognition:model_facing_content location="prompt" failurelocation="prompt_failure"
-                                      systemlocation="system" stimulus="stimulus" self="self"
+                                      systemlocation="system" stimulus="stimulus" self="self" recent="recent"
                                       environment="environment" acted="acted" prior_episodes="prior_episodes"
                                       standing_directives="standing_directives" feedback="feedback"
                                       instructions="instructions" schema="schema" budget="budget"
