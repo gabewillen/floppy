@@ -4,7 +4,7 @@ use scxml_types::DataValue;
 
 use super::{
     Attribute, Document, Element, FAILED_EVENT, FAILURE_CODES, Finding, PARAMETERS,
-    REASONING_EFFORTS, RESULT_EVENT, SERVICE_URI, Severity, Transition, check,
+    REASONING_EFFORTS, RESULT_EVENT, SERVICE_URI, Severity, TOOL_CHOICES, Transition, check,
 };
 
 const EVENT: &str = "https://github.com/stateforward/scxml.rs/namespaces/event";
@@ -189,6 +189,42 @@ fn required_repeated_and_dependent_parameters_are_checked() {
 }
 
 #[test]
+fn the_tool_choice_and_the_sampling_parameters_are_checked() {
+    const SCHEMA: &str = r#"<param name="schema" expr="s"/>"#;
+    let clean = invoke(&format!(
+        r#"{MODEL}{PROMPT}{SCHEMA}<param name="tool_choice" expr="'auto'"/><param name="temperature" expr="0"/><param name="max_completion_tokens" expr="512"/><param name="thinking_token_budget" expr="1024"/>"#
+    ));
+    assert!(findings(&clean).1.is_empty());
+    // A typo gets a machine-applicable fix.
+    let (source, found) = findings(&invoke(&format!(
+        r#"{MODEL}{PROMPT}{SCHEMA}<param name="tool_choice" expr="'aut'"/>"#
+    )));
+    assert_eq!(codes(&found), ["invalid_value"]);
+    let repaired = fixed(&source, &found[0]);
+    assert!(repaired.contains(r#"expr="'auto'""#), "{repaired}");
+    assert!(findings_of(&repaired).is_empty());
+    // Only a schema takes a tool choice, and a count or a temperature is a
+    // number.
+    let (_, found) = findings(&invoke(&format!(
+        r#"{MODEL}{PROMPT}<param name="tool_choice" expr="'auto'"/>"#
+    )));
+    assert_eq!(codes(&found), ["missing_param"]);
+    let (_, found) = findings(&invoke(&format!(
+        r#"{MODEL}{PROMPT}<param name="temperature" expr="'0'"/><param name="thinking_token_budget" expr="true"/>"#
+    )));
+    assert_eq!(codes(&found), ["invalid_value", "invalid_value"]);
+    // Under a tool choice that may be `auto` the reply may hold no call.
+    let calls_only = r#"{"type":"object","properties":{"tool_calls":{"type":"array","minItems":1}},"required":["tool_calls"]}"#;
+    let body = format!(
+        r#"{}<transition event="generate.result" event:schema='{calls_only}'/>"#,
+        invoke(&format!(
+            r#"{MODEL}{PROMPT}{SCHEMA}<param name="tool_choice" expr="choice"/>"#
+        ))
+    );
+    assert_eq!(codes(&findings(&body).1), ["schema_mismatch"]);
+}
+
+#[test]
 fn transitions_that_reject_what_generate_returns_are_schema_mismatches() {
     let missing_code = r#"{"type":"object","properties":{"code":{"enum":["transport","status"]}},"required":["code"]}"#;
     let body = format!(
@@ -263,6 +299,7 @@ fn the_contract_is_the_service_s_own() {
         floppy_service_generate::REASONING_EFFORTS
     );
     assert_eq!(SERVICE_URI, floppy_service_generate::SERVICE_URI);
+    assert_eq!(TOOL_CHOICES, floppy_service_generate::TOOL_CHOICES);
     assert_eq!(RESULT_EVENT, floppy_service_generate::RESULT_EVENT);
     assert_eq!(FAILED_EVENT, floppy_service_generate::FAILED_EVENT);
     let codes: Vec<&str> = [

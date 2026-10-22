@@ -38,6 +38,23 @@ model again with the diagnostic and stop when the same key repeats:
 Neither repeats a value of the arguments, and each is one line of at most
 200 characters.
 
+## Tool choice, sampling and thinking
+
+These optional `<param>`s follow the original's provider (decision D128):
+
+| Parameter | Value | Sent as |
+| --- | --- | --- |
+| `tool_choice` | `required` (the default) or `auto`; needs a `schema` | `tool_choice`. Under `auto` a reply with no call is read from its content as one call (`id` `content`) of the tool, its arguments the content's JSON object, checked as any call's; blank content is a result with no call |
+| `temperature` | a number from 0 to 2 | `temperature` |
+| `max_completion_tokens` | a whole number from 1 to 1048576 | `max_completion_tokens` |
+| `thinking_token_budget` | a whole number from 1 to 1048576 | `thinking_token_budget` (vLLM's bound on a reasoning model's thinking) |
+
+A call's arguments are read as the original reads them: arguments sent as
+a JSON string of the object are decoded once more, and so is each string
+where the tool's schema takes only an array or an object (through `$ref`,
+and the first `anyOf` branch that admits the decoded value); such a string
+that is not JSON, or holds neither, fails `not-json`.
+
 ## Images
 
 A `messages` entry's `content` may be an array of the original's reading parts,
@@ -59,13 +76,17 @@ Media moves by reference, never as bytes in a document. `R` is a path-only
 URI reference (no scheme, query, fragment, or `.`/`..` segment) resolved
 against the guest root, so `media/page.png` names `/media/page.png`. The
 service reads it from the directory the run grants and sends it as an
-`image_url` part with a `data:` URL (PNG, JPEG, GIF, or WebP, by its
+`image_url` part with a `data:` URL (PNG, JPEG, or WebP, the original's
+image media types, by its
 signature). The reply is the usual `generate.result` `{"content": T, "tool_calls": [], "request_bytes": B}`.
 
 A reference that names no readable file in a granted directory (a symlink
 out of it included), a file that is not such an image, or images over
 their bound (2 MiB together) reject the start: the `<invoke>` raises
-`error.execution` and nothing is sent.
+`error.execution` and nothing is sent. The original admits an image of up
+to 4 MiB, but the host bounds a request body to 4 MiB, and an image's
+base64 `data:` URL is a third larger than its bytes, so 2 MiB of images in
+all stays the bound, and no image over it is sent.
 
 ## Grants
 

@@ -35,7 +35,9 @@
   with one user message whose content is the original's ImageDecoder prompt
   ("Read all visible text in this image. Return only the text.") as a
   text part ({kind: "text", content}) and the input's reference as an
-  image part ({kind: "image", content}), the original's reading parts, and sends
+  image part ({kind: "image", content}), the original's reading parts, at
+  the original's image decoder settings (temperature 0, at most 512
+  tokens, decision D128), and sends
   bot.ability.reading.image.decoded {text (the reply, trimmed as the original
   does), source_kind: "image", confidence}. The confidence is the
   classification's. EncodingOutput sends
@@ -206,6 +208,8 @@
                 env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
           <param name="model" expr="model"/>
           <param name="messages" expr="imageDecodingMessages()"/>
+          <param name="temperature" expr="0"/>
+          <param name="max_completion_tokens" expr="512"/>
         </invoke>
         <transition event="generate.result" cond="isGenerateTextResult(_event)">
           <send event="bot.ability.reading.image.decoded" target="#_internal">

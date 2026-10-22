@@ -14,11 +14,14 @@
 //!   parameter strictly closest to it within two edits ([`PARAMETERS`]).
 //! * `duplicate_param` (error): a parameter given twice.
 //! * `missing_param` (error): no `model`, or not exactly one of `prompt` and
-//!   `messages`; `schemaname` without `schema`.
+//!   `messages`; `schemaname` or `tool_choice` without `schema`.
 //! * `invalid_value` (error, ECMAScript documents, literal `expr` only): a
 //!   `reasoning_effort` that is not one of [`REASONING_EFFORTS`] (a
 //!   machine-applicable fix to the one strictly closest within two edits), a
-//!   `stream` that is not `true` or `false`, a `schemaname` outside `[A-Za-z0-9_-]{1,64}`, or
+//!   `tool_choice` that is not one of [`TOOL_CHOICES`] (with the same fix),
+//!   a `stream` that is not `true` or `false`, a `temperature`,
+//!   `max_completion_tokens` or `thinking_token_budget` that is a string or
+//!   a boolean, a `schemaname` outside `[A-Za-z0-9_-]{1,64}`, or
 //!   an empty `model`, `prompt`, or `system`.
 //! * `schema_mismatch` (warning): a transition that can take the
 //!   invocation's events (in the invoking state, an ancestor, or a
@@ -26,8 +29,9 @@
 //!   literal `event:schema` that rejects data the service returns (each
 //!   closed failure code, a refused call's `rejection`, or a `{"content",
 //!   "tool_calls", "request_bytes", "usage"}` reply: a text reply without a
-//!   `schema` parameter, a tool call with one); the help names the schema of
-//!   what it returns.
+//!   `schema` parameter, a tool call with one, and no call with a
+//!   `tool_choice`, which may be `auto`); the help names the schema of what
+//!   it returns.
 //!
 //! The decisions are the portable [`check`] over a plain [`Document`],
 //! tested natively; the guest maps the WIT types onto it.
@@ -48,7 +52,7 @@ use serde_json::Value as Json;
 /// The service's exact type URI.
 pub const SERVICE_URI: &str = "https://github.com/stateforward/floppy/services/generate";
 /// The parameters the service takes.
-pub const PARAMETERS: [&str; 9] = [
+pub const PARAMETERS: [&str; 12] = [
     "model",
     "prompt",
     "messages",
@@ -58,7 +62,12 @@ pub const PARAMETERS: [&str; 9] = [
     "reasoning_effort",
     "stream",
     "max_completion_tokens",
+    "tool_choice",
+    "temperature",
+    "thinking_token_budget",
 ];
+/// The `tool_choice` values the service accepts.
+pub const TOOL_CHOICES: [&str; 2] = ["required", "auto"];
 /// The `reasoning_effort` values the service accepts.
 pub const REASONING_EFFORTS: [&str; 6] = ["none", "minimal", "low", "medium", "high", "xhigh"];
 /// The closed failure codes of `generate.failed`.
@@ -195,8 +204,8 @@ pub fn check(document: &Document, targets: &[u32]) -> Vec<Finding> {
         .filter_map(|target| document.elements.get(usize::try_from(*target).ok()?))
         .filter(|element| element.is("invoke"))
     {
-        let schema_given = parameters(document, invoke, &mut findings);
-        schema_mismatches(document, invoke, schema_given, &mut findings);
+        let given = parameters(document, invoke, &mut findings);
+        schema_mismatches(document, invoke, given, &mut findings);
     }
     findings
 }
@@ -273,8 +282,18 @@ fn literal(expr: &str) -> Literal<'_> {
     }
 }
 
-/// Checks the parameters of `invoke`; whether it gives `schema`.
-fn parameters(document: &Document, invoke: &Element, findings: &mut Vec<Finding>) -> bool {
+/// What the parameters of an `<invoke>` say the service may return.
+#[derive(Clone, Copy)]
+struct Given {
+    /// It gives `schema`: the reply holds a tool call.
+    schema: bool,
+    /// It gives `tool_choice`, which may be `auto`: the reply may hold no
+    /// call.
+    tool_choice: bool,
+}
+
+/// Checks the parameters of `invoke`; what it gives.
+fn parameters(document: &Document, invoke: &Element, findings: &mut Vec<Finding>) -> Given {
     let ecmascript = document
         .datamodel
         .as_deref()
@@ -316,13 +335,18 @@ fn parameters(document: &Document, invoke: &Element, findings: &mut Vec<Finding>
             "give either a `prompt` or a `messages` parameter",
         ));
     }
-    if !has("schema") && has("schemaname") {
-        findings.push(missing(
-            "`schemaname` requires a `schema` parameter",
-            "add the `schema` parameter, or remove `schemaname`",
-        ));
+    for name in ["schemaname", "tool_choice"] {
+        if !has("schema") && has(name) {
+            findings.push(missing(
+                &format!("`{name}` requires a `schema` parameter"),
+                &format!("add the `schema` parameter, or remove `{name}`"),
+            ));
+        }
     }
-    has("schema")
+    Given {
+        schema: has("schema"),
+        tool_choice: has("tool_choice"),
+    }
 }
 
 /// Records one parameter `name` (at `span`; `attribute` is its `name`
@@ -402,6 +426,34 @@ fn value(name: &str, expr: &Attribute, findings: &mut Vec<Finding>) {
             format!("use one of {}", REASONING_EFFORTS.join(", ")),
             None,
         )),
+        ("tool_choice", Literal::String(choice)) if !TOOL_CHOICES.contains(&choice) => {
+            let suggestion = closest(choice, &TOOL_CHOICES);
+            findings.push(invalid(
+                format!("`{choice}` is not a tool_choice the generate service accepts"),
+                suggestion.map_or_else(
+                    || format!("use one of {}", TOOL_CHOICES.join(", ")),
+                    |known| format!("did you mean `{known}`?"),
+                ),
+                suggestion.map(|known| Fix {
+                    message: format!("use `{known}`"),
+                    span: expr.span,
+                    replacement: format!("expr=\"'{known}'\""),
+                }),
+            ));
+        }
+        ("tool_choice", Literal::Bool) => findings.push(invalid(
+            "tool_choice must be a string".to_owned(),
+            format!("use one of {}", TOOL_CHOICES.join(", ")),
+            None,
+        )),
+        (
+            "temperature" | "max_completion_tokens" | "thinking_token_budget",
+            Literal::String(_) | Literal::Bool,
+        ) => findings.push(invalid(
+            format!("{name} must be a number"),
+            "write the number without quotes".to_owned(),
+            None,
+        )),
         ("stream", Literal::String(_)) => findings.push(invalid(
             "stream must be a boolean".to_owned(),
             "write `true` or `false`".to_owned(),
@@ -464,7 +516,7 @@ fn contains(document: &Document, ancestor: usize, element: usize) -> bool {
 }
 
 /// What the service returns: `(event, the schema of its data, instances)`.
-fn returned(schema_given: bool) -> Vec<(&'static str, Json, Vec<Json>)> {
+fn returned(given: Given) -> Vec<(&'static str, Json, Vec<Json>)> {
     let failed = serde_json::json!({
         "type": "object",
         "properties": {
@@ -501,7 +553,7 @@ fn returned(schema_given: bool) -> Vec<(&'static str, Json, Vec<Json>)> {
     let usage = serde_json::json!({
         "input_tokens": 12, "output_tokens": 3, "reasoning_tokens": 1, "total_tokens": 15,
     });
-    let samples = if schema_given {
+    let mut samples = if given.schema {
         vec![
             serde_json::json!({
                 "content": "",
@@ -521,6 +573,10 @@ fn returned(schema_given: bool) -> Vec<(&'static str, Json, Vec<Json>)> {
             serde_json::json!({ "content": "a reply", "request_bytes": 60, "tool_calls": [], "usage": usage }),
         ]
     };
+    if given.tool_choice {
+        // Under `auto` blank content selects nothing.
+        samples.push(serde_json::json!({ "content": "", "request_bytes": 120, "tool_calls": [] }));
+    }
     let count = serde_json::json!({"type": "integer", "minimum": 0});
     events.push((
         RESULT_EVENT,
@@ -558,7 +614,7 @@ fn returned(schema_given: bool) -> Vec<(&'static str, Json, Vec<Json>)> {
 fn schema_mismatches(
     document: &Document,
     invoke: &Element,
-    schema_given: bool,
+    given: Given,
     findings: &mut Vec<Finding>,
 ) {
     let Some(state) = invoke
@@ -591,7 +647,7 @@ fn schema_mismatches(
         let Ok(compiled) = CompiledSchema::new(schema) else {
             continue;
         };
-        for (name, returned_schema, instances) in returned(schema_given) {
+        for (name, returned_schema, instances) in returned(given) {
             if !handles(event, name) {
                 continue;
             }

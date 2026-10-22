@@ -378,6 +378,245 @@ fn max_completion_tokens_is_sent_and_bounded() {
     );
 }
 
+/// The original's sampling and token bounds (its image decoder's
+/// `temperature` 0 and 512 tokens; vLLM's `thinking_token_budget`) are sent
+/// as given and bounded.
+#[test]
+fn temperature_and_the_thinking_budget_are_sent_and_bounded() {
+    let generation = parse(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        ("temperature", number(0.0)),
+        ("max_completion_tokens", number(512.0)),
+        ("thinking_token_budget", number(1024.0)),
+    ])
+    .expect("valid");
+    let body: Json =
+        serde_json::from_slice(&build_request(2, Some(1), None, &generation).body).expect("JSON");
+    assert_eq!(body["temperature"], 0.0);
+    assert_eq!(body["max_completion_tokens"], 512);
+    assert_eq!(body["thinking_token_budget"], 1024);
+    let warm = parse(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        ("temperature", number(0.7)),
+    ])
+    .expect("valid");
+    let body: Json =
+        serde_json::from_slice(&build_request(2, Some(1), None, &warm).body).expect("JSON");
+    assert_eq!(body["temperature"], 0.7);
+    assert!(body.get("thinking_token_budget").is_none(), "{body}");
+    for (name, bad) in [
+        ("temperature", number(-0.1)),
+        ("temperature", number(2.5)),
+        ("temperature", text("0")),
+        ("thinking_token_budget", number(0.0)),
+        ("thinking_token_budget", number(1.5)),
+        ("thinking_token_budget", number(2_000_000.0)),
+        ("thinking_token_budget", text("1024")),
+    ] {
+        assert!(
+            parse(&[("model", text("m")), ("prompt", text("p")), (name, bad)]).is_err(),
+            "{name}"
+        );
+    }
+}
+
+/// `tool_choice` `auto` lets the model answer in its content, as the
+/// original's processor allows: a reply with no call is read as one call of
+/// the tool whose arguments are the content, checked as any call's, and
+/// blank content selects nothing; a reply with calls is read as before.
+#[test]
+fn under_auto_a_reply_without_a_call_is_read_from_its_content() {
+    let auto = parse(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        ("schema", text(SCHEMA)),
+        ("schemaname", text("verdict")),
+        ("tool_choice", text("auto")),
+    ])
+    .expect("valid");
+    let body: Json =
+        serde_json::from_slice(&build_request(2, Some(1), None, &auto).body).expect("JSON");
+    assert_eq!(body["tool_choice"], "auto");
+    let arguments = r#"{"score":41,"answer":"yes"}"#;
+    let from_content = Returned {
+        name: RESULT_EVENT,
+        data: scxml_event_schema::canonical_json(&serde_json::json!({
+            "content": arguments,
+            "request_bytes": 0,
+            "tool_calls": [{"id": CONTENT_CALL_ID, "name": "verdict", "args": {"answer": "yes", "score": 41}}],
+        })),
+    };
+    assert_eq!(
+        outcome(&auto, 0, ok(completion(arguments, "stop"))),
+        from_content
+    );
+    assert_eq!(outcome(&auto, 0, ok(reply(arguments))), from_content);
+    assert_eq!(
+        outcome(&auto, 0, ok(completion(" ", "stop"))),
+        Returned {
+            name: RESULT_EVENT,
+            data: r#"{"content":" ","request_bytes":0,"tool_calls":[]}"#.into()
+        }
+    );
+    assert_eq!(
+        outcome(&auto, 0, ok(completion(r#"{"answer":"yes"}"#, "stop"))),
+        rejected(
+            FailureCode::SchemaMismatch,
+            "schema-mismatch:",
+            "(root): missing properties 'score'"
+        )
+    );
+    assert_eq!(
+        outcome(&auto, 0, ok(completion("Yes, 41.", "stop"))),
+        rejected(
+            FailureCode::NotJson,
+            "not-json",
+            "the arguments are not JSON: expected value at line 1 column 1"
+        )
+    );
+    // A call is read as under `required`.
+    assert_eq!(
+        outcome(&auto, 0, ok(tool_completion("verdict", arguments))),
+        calls_result(
+            "",
+            &[(
+                "call-1",
+                "verdict",
+                serde_json::json!({"answer": "yes", "score": 41})
+            )]
+        )
+    );
+    // `required` stays the default, and only a schema takes a tool choice.
+    let required = parse(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        ("schema", text(SCHEMA)),
+    ])
+    .expect("valid");
+    assert_eq!(
+        required.schema.as_ref().map(|tool| tool.tool_choice),
+        Some(TOOL_CHOICE)
+    );
+    assert_eq!(
+        outcome(&required, 0, ok(completion(arguments, "stop"))),
+        Returned::failed(FailureCode::Malformed)
+    );
+    for parameters in [
+        vec![
+            ("model", text("m")),
+            ("prompt", text("p")),
+            ("tool_choice", text("auto")),
+        ],
+        vec![
+            ("model", text("m")),
+            ("prompt", text("p")),
+            ("schema", text(SCHEMA)),
+            ("tool_choice", text("none")),
+        ],
+    ] {
+        assert!(parse(&parameters).is_err(), "{parameters:?}");
+    }
+}
+
+/// Arguments a local model encoded as JSON strings are decoded once, as the
+/// original's text generator and processing decode them: the whole
+/// arguments, and each string where the schema takes only an array or an
+/// object (through `$ref` and the first admitting `anyOf` branch); a string
+/// the schema also takes as a string is kept.
+#[test]
+fn string_encoded_arguments_are_decoded_once() {
+    let schema = serde_json::json!({
+        "type": "object",
+        "$defs": {"say": {
+            "type": "object", "required": ["event", "data"], "additionalProperties": false,
+            "properties": {"event": {"const": "bot.say"}, "data": {
+                "type": "object", "required": ["text"], "additionalProperties": false,
+                "properties": {"text": {"type": "string"}},
+            }},
+        }, "wait": {
+            "type": "object", "required": ["event", "data"], "additionalProperties": false,
+            "properties": {"event": {"const": "bot.wait"}, "data": {
+                "type": "object", "required": ["seconds"], "additionalProperties": false,
+                "properties": {"seconds": {"type": "integer"}},
+            }},
+        }},
+        "properties": {
+            "events": {"type": "array", "items": {"anyOf": [{"$ref": "#/$defs/say"}, {"$ref": "#/$defs/wait"}]}},
+            "note": {"type": ["object", "string"]},
+        },
+        "required": ["events"],
+    })
+    .to_string();
+    let generation = parse(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        ("schema", text(&schema)),
+        ("schemaname", text("dispatch")),
+    ])
+    .expect("valid");
+    let decoded = serde_json::json!({
+        "events": [
+            {"event": "bot.say", "data": {"text": "{\"not\": \"decoded\"}"}},
+            {"event": "bot.wait", "data": {"seconds": 2}},
+        ],
+        "note": "{\"kept\": true}",
+    });
+    let answered = calls_result("", &[("call-1", "dispatch", decoded.clone())]);
+    let events = serde_json::json!([
+        {"event": "bot.say", "data": {"text": "{\"not\": \"decoded\"}"}},
+        {"event": "bot.wait", "data": "{\"seconds\": 2}"},
+    ]);
+    for arguments in [
+        // Each nested level a string.
+        serde_json::json!({"events": events.to_string(), "note": decoded["note"]}).to_string(),
+        // The whole arguments a JSON string of the object.
+        Json::String(decoded.to_string()).to_string(),
+    ] {
+        assert_eq!(
+            outcome(&generation, 0, ok(tool_completion("dispatch", &arguments))),
+            answered,
+            "{arguments}"
+        );
+    }
+    // A string that is not JSON, or holds neither an array nor an object,
+    // where the schema takes only those, is not JSON.
+    for (arguments, message) in [
+        (
+            r#"{"events":"[{\"event\":"}"#,
+            "/events: a string-encoded value is not JSON: EOF while parsing a value at line 1 column 10",
+        ),
+        (
+            r#"{"events":"7"}"#,
+            "/events: a string-encoded value holds neither the array nor the object expected",
+        ),
+        (r#""[1]""#, "the arguments are an array, not a JSON object"),
+    ] {
+        assert_eq!(
+            outcome(&generation, 0, ok(tool_completion("dispatch", arguments))),
+            rejected(FailureCode::NotJson, "not-json", message),
+            "{arguments}"
+        );
+    }
+    // A string no branch decodes to is kept, and the check refuses it.
+    assert_eq!(
+        outcome(
+            &generation,
+            0,
+            ok(tool_completion(
+                "dispatch",
+                r#"{"events":[{"event":"bot.wait","data":"{\"seconds\":\"two\"}"}]}"#
+            ))
+        ),
+        rejected(
+            FailureCode::SchemaMismatch,
+            "schema-mismatch:/events/0/data",
+            "/events/0/data: want object, but got string"
+        )
+    );
+}
+
 #[test]
 fn a_schema_is_the_one_tool_and_a_call_is_required() {
     let generation = parse(&[
@@ -545,7 +784,9 @@ fn image_media_types_come_from_their_signatures() {
         image_media_type(&[0xff, 0xd8, 0xff, 0xe0]),
         Some("image/jpeg")
     );
-    assert_eq!(image_media_type(b"GIF89a.."), Some("image/gif"));
+    // GIF is not one of the original's image media types.
+    assert_eq!(image_media_type(b"GIF89a.."), None);
+    assert_eq!(data_url(b"GIF89a.."), None);
     assert_eq!(
         image_media_type(b"RIFF\0\0\0\0WEBPVP8 "),
         Some("image/webp")
@@ -1008,9 +1249,9 @@ fn a_rejection_names_where_the_arguments_first_fail_and_never_a_value() {
             r#"/events/0/event: value must be one of "bot.say", "bot.wait""#,
         ),
         (
-            serde_json::json!({"events": "[]"}),
+            serde_json::json!({"events": 7}),
             "schema-mismatch:/events",
-            "/events: want array, but got string",
+            "/events: want array, but got number",
         ),
     ] {
         let returned = outcome(
