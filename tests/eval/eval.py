@@ -163,6 +163,8 @@ def grade_job(job, env, judge_names, check_weight):
         "grades": grades,
         "evidence": score.evidence(records),
         "builds": score.builds(records),
+        "complete": score.complete(scenario, records),
+        "learned_any": score.learned_any(scenario, records),
     }
     # A job that crashed before writing anything has no directory yet.
     os.makedirs(job["out"], exist_ok=True)
@@ -209,7 +211,8 @@ def aggregate(graded):
         "criteria": {k: statistics.mean(v) for k, v in sorted(criteria.items())},
         "judge_disagreement": statistics.mean(agreement) if agreement else None,
         "jobs": len(graded),
-        "unfinished": sum(1 for g in graded if not g["done"]),
+        # A job is unfinished when it crashed or any step never settled or ran.
+        "unfinished": sum(1 for g in graded if not (g["done"] and g.get("complete", True))),
     }
 
 
@@ -470,14 +473,17 @@ def builder_table(columns, graded):
             runs = [g for g in rows if g["scenario"] == scenario]
             built = [b for g in runs for b in g["builds"]]
             accepted = [b for b in built if b["accepted"]]
-            learned = [r["score"] for g in runs for r in g["results"] if r["check"] == "learned"]
+            # Learned anywhere in the job, not only on the teaching turn: a
+            # behavior reflection learns turns later still counts here.
+            learned = [float(g["learned_any"]) for g in runs if g.get("learned_any") is not None]
             totals["builds"] += len(built)
             totals["accepted"] += len(accepted)
             totals["attempts"] += [b["attempts"] for b in accepted]
             totals["learned"] += learned
             for b in built:
                 if not b["accepted"]:
-                    totals["reasons"][b["reason"]] = totals["reasons"].get(b["reason"], 0) + 1
+                    key = b["reason"] + (f" ({b['cause']})" if b.get("cause") else "")
+                    totals["reasons"][key] = totals["reasons"].get(key, 0) + 1
             rate = f"{len(accepted) / len(built):.2f}" if built else "n/a"
             attempts = f"{statistics.mean(b['attempts'] for b in accepted):.1f}" if accepted else "n/a"
             mean_learned = f"{statistics.mean(learned):.2f}" if learned else "n/a"

@@ -153,9 +153,11 @@ served by the column's `FLOPPY_BASE_URL` (its `env` files, else
 attempt 1 starts one; `done` "built X in N attempt(s)" or `failed`
 "<reason>: ..." ends it; a build its turn cancelled stays `unfinished`),
 and `builder.md` gives, per column and scenario, the builds, the accepted
-ones, the success rate, the attempts per accepted build and the `learned`
-check, then per column the failed builds by reason (`no-progress`,
-`attempts-exhausted`, `abandoned`, `unfinished`). For example, on the CPA
+ones, the success rate, the attempts per accepted build and whether the
+scenario's behavior was learned anywhere in the job, then per column the
+failed builds by reason and first diagnostic (`no-progress (author-failed
+schema-mismatch)`, `attempts-exhausted ...`, `unfinished`). A job counts
+as unfinished in `report.md` when any step never ran or never settled. For example, on the CPA
 gateway with the decision server on the lab:
 
 ```sh

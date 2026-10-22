@@ -239,7 +239,7 @@ def builds(job):
                 if current is None or attempt == 1:
                     if current is not None:
                         out.append(current)
-                    current = {"accepted": False, "attempts": 0, "reason": "unfinished", "diagnostics": []}
+                    current = {"accepted": False, "attempts": 0, "reason": "unfinished", "cause": "", "diagnostics": []}
                 current["attempts"] = max(current["attempts"], attempt)
             elif current is not None and label == "retry_gate":
                 current["diagnostics"].append(text[:200])
@@ -249,10 +249,31 @@ def builds(job):
                 out.append(current)
                 current = None
             elif current is not None and label == "failed":
-                current["reason"] = text.split(":")[0].split(" ")[0][:40] or "failed"
+                # "<reason>: <kind> <code> ...": no-progress alone hides
+                # whether the draft failed its schema, validation or tests.
+                words = re.findall(r"[A-Za-z0-9_.-]+", text)
+                current["reason"] = words[0][:40] if words else "failed"
+                current["cause"] = " ".join(words[1:3])[:60]
                 current["diagnostics"].append(text[:200])
                 out.append(current)
                 current = None
         if current is not None:
             out.append(current)
     return out
+
+
+def complete(scenario, job):
+    """Whether every step of the scenario ran and settled."""
+    wanted = sum(len(session["steps"]) for session in scenario["sessions"])
+    return len(job["steps"]) == wanted and all(step["completed"] for step in job["steps"])
+
+
+def learned_any(scenario, job):
+    """Whether the job learned, anywhere, a behavior of the lifetime its
+    scenario's first `learned` check asks for (None without one)."""
+    spec = next((c for c in scenario["checks"] if c["check"] == "learned"), None)
+    if spec is None or not job["steps"]:
+        return None if spec is None else False
+    last = job["steps"][-1]
+    value, _ = check(job, {"check": "learned", "by": [last["session"], last["step"]], "lifetime": spec.get("lifetime", "turn")})
+    return value >= 1

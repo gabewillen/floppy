@@ -108,8 +108,8 @@ class Builds(unittest.TestCase):
             log("author", "create draft, attempt 1"),
         ]
         found = score.builds({"steps": [], "sessions": [session], "done": True})
-        self.assertEqual([(b["accepted"], b["attempts"], b["reason"]) for b in found],
-                         [(True, 2, "done"), (False, 2, "no-progress"), (False, 1, "unfinished")])
+        self.assertEqual([(b["accepted"], b["attempts"], b["reason"], b["cause"]) for b in found],
+                         [(True, 2, "done", ""), (False, 2, "no-progress", "validate XML001"), (False, 1, "unfinished", "")])
 
 
 class Codec(unittest.TestCase):
