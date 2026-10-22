@@ -1,19 +1,26 @@
-//! The `memory` extension namespace: `<memory:to_json>` and
-//! `<memory:contents>` as a
+//! The `memory` extension namespace: `<memory:to_json>`,
+//! `<memory:contents>`, `<memory:cut_at_word>` and
+//! `<memory:stm_projection>` as a
 //! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
 //! The original's memory module (`abilities/memory`): the JSON text a
 //! conversation memory row holds (`Memory.to_json`, with `_encode_content`
-//! and `value.identities_json`), and the contents of one statement's
+//! and `value.identities_json`), the contents of one statement's
 //! result of a memory select (`OutputData.contents`), each content cell
-//! parsed as its caller does. The memory ability applies the statements
-//! through the sql service; these elements only build and read what it
-//! stores, so they are synchronous executable content. Documents bind
-//! [`NAMESPACE_URI`] (conventionally with the prefix `memory`):
+//! parsed as its caller does, and the two pure helpers of the short-term
+//! register (`stm.py`): a turn's words bounded and cut at a whole word
+//! (`_cut_at_word`, what `TurnRecordData.of` does), and a stimulus's
+//! bounded scalar projection (`_payload_projection`, what `event_record`
+//! records). The memory ability applies the statements through the sql
+//! service; these elements only build and read what it stores, so they
+//! are synchronous executable content. Documents bind [`NAMESPACE_URI`]
+//! (conventionally with the prefix `memory`):
 //!
 //! ```xml
 //! <memory:to_json location="memory_payload" message="input"/>
 //! <memory:contents location="prior_episodes" result="_event.data.results[0]"/>
+//! <memory:cut_at_word location="heard" words="transcript"/>
+//! <memory:stm_projection location="stm_payload" data="_event.data"/>
 //! ```
 //!
 //! Every attribute but `location` is an expression of the document's data
@@ -51,6 +58,29 @@
 //! value of each row that is a string holding a JSON object, parsed; any
 //! other row is skipped, as the original's readers skip a content that
 //! does not validate.
+//!
+//! # `<memory:cut_at_word location="L" words="W"/>`
+//!
+//! The original's `_cut_at_word`. `words` (required) evaluates to a string.
+//! `location` (required) receives `{"text": T, "cut": B}`: words of at most
+//! [`MAX_TURN_TEXT_BYTES`] UTF-8 bytes are `T` unchanged and `B` false;
+//! longer words are cut, `B` true: `T` is their longest prefix of whole
+//! characters within the bound, less the partial word it ends in when the
+//! bound falls inside a word (neither its last character nor the next one
+//! is white space) and an earlier word break exists, with trailing white
+//! space removed. White space is Python's `str.isspace` (Unicode
+//! `White_Space`, and U+001C to U+001F).
+//!
+//! # `<memory:stm_projection location="L" data="D"/>`
+//!
+//! The original's `_payload_projection`. `data` (required) evaluates to
+//! any value. `location` (required) receives an object: for an object,
+//! its fields in their order, keeping each whose key is not empty and
+//! whose value is a boolean, a number, or a string of at most
+//! [`MAX_PROJECTION_TEXT_LENGTH`] characters (code points), until
+//! [`MAX_PROJECTION_FIELDS`] are kept; every other field (arrays, objects,
+//! null, longer strings) is dropped, never truncated. A bare boolean,
+//! number or bounded string is `{"value": D}`; anything else is `{}`.
 //!
 //! # Failures
 //!
@@ -98,6 +128,18 @@ pub const NAMESPACE_URI: &str = "https://github.com/stateforward/floppy/namespac
 /// The tag of a collision-safe encoded array or object (the original's
 /// `_encode_content`).
 pub const CONTENT_TAG: &str = "__stateforward_memory_content__";
+
+/// Most UTF-8 bytes of one turn's text (the original's
+/// `MAX_TURN_TEXT_BYTES`); a longer turn is cut at a whole word.
+pub const MAX_TURN_TEXT_BYTES: usize = 2048;
+
+/// Longest string, in characters, a stimulus projection keeps (the
+/// original's `MAX_PROJECTION_TEXT_LENGTH`); a longer one is dropped.
+pub const MAX_PROJECTION_TEXT_LENGTH: usize = 40;
+
+/// Most fields one stimulus projection keeps (the original's
+/// `_MAX_PROJECTION_FIELDS`).
+pub const MAX_PROJECTION_FIELDS: usize = 16;
 
 /// The largest integer ECMAScript calls safe (`Number.MAX_SAFE_INTEGER`).
 const MAX_SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
@@ -180,6 +222,8 @@ pub fn execute<H: MemoryHost>(
     match local_name {
         "to_json" => to_json_element(attributes, content, host),
         "contents" => contents_element(attributes, content, host),
+        "cut_at_word" => cut_at_word_element(attributes, content, host),
+        "stm_projection" => stm_projection_element(attributes, content, host),
         _ => Ok(Executed::NotHandled),
     }
 }
@@ -602,6 +646,219 @@ pub fn contents(result: &Map<String, Json>) -> Result<Vec<Json>, &'static str> {
         }
     }
     Ok(contents)
+}
+
+/// Executes `<memory:cut_at_word>`.
+fn cut_at_word_element<H: MemoryHost>(
+    attributes: &[Attribute],
+    content: &[Content],
+    host: &mut H,
+) -> Result<Executed, Failure<H::Error>> {
+    let [location, words] = attribute_values(
+        attributes,
+        ["location", "words"],
+        [
+            "memory:cut_at_word takes only the location and words attributes",
+            "memory:cut_at_word repeats an attribute",
+            "memory:cut_at_word has an empty attribute",
+        ],
+    )?;
+    let location = location.ok_or(Failure::Execution("memory:cut_at_word requires a location"))?;
+    let words = words.ok_or(Failure::Execution("memory:cut_at_word requires words"))?;
+    no_content(content, "memory:cut_at_word holds no content")?;
+    let Data::String(words) = evaluate(host, words, "memory:cut_at_word words did not evaluate")?
+    else {
+        return Err(Failure::Execution(
+            "memory:cut_at_word words are not a string",
+        ));
+    };
+    let (text, cut) = cut_at_word(&words);
+    let mut turn = Map::new();
+    turn.insert("text".into(), Json::String(text));
+    turn.insert("cut".into(), Json::Bool(cut));
+    assign_to(
+        host,
+        location,
+        &Data::JsonObject(Json::Object(turn).to_string()),
+        "memory:cut_at_word could not assign the cut words",
+    )?;
+    Ok(Executed::Handled)
+}
+
+/// Python's `str.isspace` for one character: Unicode `White_Space`, and
+/// the information separators U+001C to U+001F (bidirectional class B or
+/// S), which Python counts and Unicode does not.
+fn is_python_space(character: char) -> bool {
+    character.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&character)
+}
+
+/// The original's `_cut_at_word`: `words` within [`MAX_TURN_TEXT_BYTES`],
+/// cut at the last whole word, and whether it was cut (see the crate
+/// documentation, `<memory:cut_at_word>`).
+#[must_use]
+pub fn cut_at_word(words: &str) -> (String, bool) {
+    if words.len() <= MAX_TURN_TEXT_BYTES {
+        return (words.to_owned(), false);
+    }
+    // `encoded[:MAX].decode(errors="ignore")`: the whole characters within
+    // the bound.
+    let end = (0..=MAX_TURN_TEXT_BYTES)
+        .rev()
+        .find(|index| words.is_char_boundary(*index))
+        .unwrap_or(0);
+    let (mut head, tail) = words.split_at(end);
+    let ends_in_space = head.chars().next_back().is_some_and(is_python_space);
+    let next_is_space = tail.chars().next().is_some_and(is_python_space);
+    if !(ends_in_space || next_is_space) {
+        // The bound fell inside a word: drop that partial word.
+        if let Some(rest) = before_last_word(head) {
+            head = rest;
+        }
+    }
+    (head.trim_end_matches(is_python_space).to_owned(), true)
+}
+
+/// `text.rsplit(maxsplit=1)[0]` when that split has two parts: `text`
+/// without its trailing white space, its last word, and the white space
+/// before that word; `None` when it holds at most one word.
+fn before_last_word(text: &str) -> Option<&str> {
+    let trimmed = text.trim_end_matches(is_python_space);
+    let (index, _) = trimmed
+        .char_indices()
+        .rev()
+        .find(|(_, character)| is_python_space(*character))?;
+    let rest = trimmed
+        .get(..index)
+        .unwrap_or_default()
+        .trim_end_matches(is_python_space);
+    (!rest.is_empty()).then_some(rest)
+}
+
+/// Executes `<memory:stm_projection>`.
+fn stm_projection_element<H: MemoryHost>(
+    attributes: &[Attribute],
+    content: &[Content],
+    host: &mut H,
+) -> Result<Executed, Failure<H::Error>> {
+    let [location, data] = attribute_values(
+        attributes,
+        ["location", "data"],
+        [
+            "memory:stm_projection takes only the location and data attributes",
+            "memory:stm_projection repeats an attribute",
+            "memory:stm_projection has an empty attribute",
+        ],
+    )?;
+    let location = location.ok_or(Failure::Execution(
+        "memory:stm_projection requires a location",
+    ))?;
+    let data = data.ok_or(Failure::Execution("memory:stm_projection requires data"))?;
+    no_content(content, "memory:stm_projection holds no content")?;
+    let value = evaluate(host, data, "memory:stm_projection data did not evaluate")?;
+    let projection = stm_projection(&value).map_err(Failure::Execution)?;
+    assign_to(
+        host,
+        location,
+        &Data::JsonObject(Json::Object(projection).to_string()),
+        "memory:stm_projection could not assign the projection",
+    )?;
+    Ok(Executed::Handled)
+}
+
+/// An object's fields in their order, a repeated key keeping its first
+/// place and its last value, as Python's `json.loads` builds a dict.
+struct OrderedFields(Vec<(String, Json)>);
+
+impl<'de> serde::Deserialize<'de> for OrderedFields {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Fields;
+        impl<'de> serde::de::Visitor<'de> for Fields {
+            type Value = OrderedFields;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("a JSON object")
+            }
+
+            fn visit_map<A: serde::de::MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> Result<OrderedFields, A::Error> {
+                let mut fields: Vec<(String, Json)> = Vec::new();
+                while let Some((key, value)) = map.next_entry::<String, Json>()? {
+                    match fields.iter_mut().find(|(known, _)| *known == key) {
+                        Some(field) => field.1 = value,
+                        None => fields.push((key, value)),
+                    }
+                }
+                Ok(OrderedFields(fields))
+            }
+        }
+        deserializer.deserialize_map(Fields)
+    }
+}
+
+/// The original's `_scalar_projection_value`: a boolean, a number, or a
+/// string of at most [`MAX_PROJECTION_TEXT_LENGTH`] characters; anything
+/// else is dropped.
+fn scalar_projection_value(value: &Json) -> Option<Json> {
+    match value {
+        Json::Bool(_) | Json::Number(_) => Some(value.clone()),
+        Json::String(text) if text.chars().count() <= MAX_PROJECTION_TEXT_LENGTH => {
+            Some(value.clone())
+        }
+        _ => None,
+    }
+}
+
+/// The original's `_payload_projection` of one value (see the crate
+/// documentation, `<memory:stm_projection>`).
+///
+/// # Errors
+///
+/// A static detail when an object's JSON text does not parse.
+pub fn stm_projection(data: &Data) -> Result<Map<String, Json>, &'static str> {
+    let scalar = match data {
+        Data::JsonObject(text) => {
+            let OrderedFields(fields) = serde_json::from_str(text)
+                .map_err(|_| "memory:stm_projection data is not a JSON object")?;
+            let mut projection = Map::new();
+            for (key, value) in fields {
+                if projection.len() >= MAX_PROJECTION_FIELDS {
+                    break;
+                }
+                if key.is_empty() {
+                    continue;
+                }
+                if let Some(projected) = scalar_projection_value(&value) {
+                    projection.insert(key, projected);
+                }
+            }
+            return Ok(projection);
+        }
+        Data::Bool(value) => Some(Json::Bool(*value)),
+        Data::Number(value) => Some(finite_number(value.get())),
+        Data::String(text) => scalar_projection_value(&Json::String(text.clone())),
+        Data::Absent | Data::Undefined | Data::Null | Data::JsonArray(_) | Data::Xml(_) => None,
+    };
+    let mut projection = Map::new();
+    if let Some(value) = scalar {
+        projection.insert("value".into(), value);
+    }
+    Ok(projection)
+}
+
+/// A finite number as JSON: a safe integer as an integer, else a float.
+fn finite_number(value: f64) -> Json {
+    if value.fract() == 0.0 && value.abs() <= MAX_SAFE_INTEGER {
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "a safe integer converts exactly"
+        )]
+        let integer = value as i64;
+        Json::from(integer)
+    } else {
+        serde_json::Number::from_f64(value).map_or(Json::Null, Json::Number)
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
