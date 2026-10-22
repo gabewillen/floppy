@@ -157,6 +157,8 @@ def grade_job(job, env, judge_names, check_weight):
         "grades": grades,
         "evidence": score.evidence(records),
     }
+    # A job that crashed before writing anything has no directory yet.
+    os.makedirs(job["out"], exist_ok=True)
     with open(os.path.join(job["out"], "grade.json"), "w", encoding="utf-8") as handle:
         json.dump(graded, handle, indent=2)
     with open(os.path.join(job["out"], "transcript.txt"), "w", encoding="utf-8") as handle:
@@ -234,7 +236,10 @@ def report_markdown(title, summary, graded):
 
 def evaluate(scenarios, args, out, overlay=None, prefix=""):
     jobs = make_jobs(scenarios, args.repeats, out, overlay, prefix)
-    drive(jobs, out, args.parallel, dry=getattr(args, "dry", False))
+    if getattr(args, "dry", False):
+        drive(jobs, out, args.parallel, dry=True)
+        return None, []
+    drive(jobs, out, args.parallel)
     graded = grade_all(jobs, judge_env(args), args.judge_names, args.check_weight)
     summary = aggregate(graded)
     with open(os.path.join(out, "report.json"), "w", encoding="utf-8") as handle:
@@ -480,6 +485,11 @@ def main(argv=None):
     p.set_defaults(func=cmd_targets)
 
     args = parser.parse_args(argv)
+    # The driver runs with its crate (tests/) as its directory, so every
+    # path it is given is absolute.
+    for name in ("out", "dir", "overlay", "scenarios_dir"):
+        if getattr(args, name, None):
+            setattr(args, name, os.path.abspath(getattr(args, name)))
     if hasattr(args, "judges"):
         args.judge_names = None if args.judges == "none" else [n for n in args.judges.split(",") if n]
         if args.judge_names == []:
