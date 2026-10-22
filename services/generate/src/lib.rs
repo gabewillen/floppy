@@ -1940,8 +1940,8 @@ struct Decoder<'a> {
 impl Decoder<'_> {
     /// `value` with its strings decoded as `schema` (at the schema pointer
     /// `at`, for the instance pointer `instance`, reached through `refs`
-    /// `$ref`s since the last value) says: a `$ref` (a local JSON pointer)
-    /// is followed; of an `anyOf`'s branches the first whose decoding its
+    /// `$ref`s since the last value) says: a `$ref` (a local JSON pointer,
+    /// percent-decoded as the URI fragment it is) is followed; of an `anyOf`'s branches the first whose decoding its
     /// branch admits wins, and with none the value is kept for the check to
     /// refuse; a string where `type` takes an array or an object and not a
     /// string is decoded once, and an object's declared properties and an
@@ -1971,11 +1971,11 @@ impl Decoder<'_> {
             return Ok(value);
         };
         if let Some(Json::String(reference)) = keywords.get("$ref")
-            && let Some(pointer) = reference.strip_prefix('#')
-            && let Some(target) = self.root.pointer(pointer)
+            && let Some(pointer) = reference.strip_prefix('#').and_then(percent_decoded)
+            && let Some(target) = self.root.pointer(&pointer)
             && refs < MAX_DECODED_REFS
         {
-            return self.decoded(value, target, pointer, instance, refs + 1);
+            return self.decoded(value, target, &pointer, instance, refs + 1);
         }
         if let Some(Json::Array(branches)) = keywords.get("anyOf") {
             for (index, branch) in branches.iter().enumerate() {

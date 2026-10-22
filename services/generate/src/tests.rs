@@ -696,6 +696,48 @@ fn a_ref_bound_counts_a_chain_with_no_value_between() {
     );
 }
 
+/// A `$ref` is a URI fragment: one whose pointer is percent-encoded (as
+/// scxml.rs bundles a schema's definitions) is followed, and its branch
+/// checked, at the decoded pointer.
+#[test]
+fn a_percent_encoded_ref_is_followed() {
+    let encoded = parse(&[
+        ("model", text("m")),
+        ("prompt", text("p")),
+        (
+            "schema",
+            text(
+                &serde_json::json!({
+                    "type": "object",
+                    "$defs": {"a wait": {
+                        "type": "object", "required": ["seconds"],
+                        "properties": {"seconds": {"type": "integer"}},
+                    }},
+                    "properties": {"data": {"anyOf": [{"$ref": "#/$defs/a%20wait"}]}},
+                })
+                .to_string(),
+            ),
+        ),
+        ("schemaname", text("wait")),
+    ])
+    .expect("valid");
+    assert_eq!(
+        outcome(
+            &encoded,
+            0,
+            ok(tool_completion("wait", r#"{"data":"{\"seconds\": 2}"}"#))
+        ),
+        calls_result(
+            "",
+            &[(
+                "call-1",
+                "wait",
+                serde_json::json!({"data": {"seconds": 2}})
+            )]
+        )
+    );
+}
+
 #[test]
 fn a_schema_is_the_one_tool_and_a_call_is_required() {
     let generation = parse(&[

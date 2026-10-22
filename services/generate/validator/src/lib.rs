@@ -17,7 +17,8 @@
 //!   `messages`; `schemaname` or `tool_choice` without `schema`.
 //! * `invalid_value` (error, ECMAScript documents, literal `expr` only): a
 //!   `reasoning_effort` that is not one of [`REASONING_EFFORTS`] (a
-//!   machine-applicable fix to the one strictly closest within two edits), a
+//!   machine-applicable fix to the one strictly closest within two edits)
+//!   or, with a `schema`, is not [`TOOLS_REASONING_EFFORT`] (a fix to it), a
 //!   `tool_choice` that is not one of [`TOOL_CHOICES`] (with the same fix),
 //!   a `stream` that is not `true` or `false`, a `temperature` that is not
 //!   a number from 0 to 2, a `max_completion_tokens` or
@@ -70,6 +71,8 @@ pub const PARAMETERS: [&str; 12] = [
 ];
 /// The `tool_choice` values the service accepts.
 pub const TOOL_CHOICES: [&str; 2] = ["required", "auto"];
+/// The only `reasoning_effort` the service accepts with a `schema`.
+pub const TOOLS_REASONING_EFFORT: &str = "none";
 /// The `reasoning_effort` values the service accepts.
 pub const REASONING_EFFORTS: [&str; 6] = ["none", "minimal", "low", "medium", "high", "xhigh"];
 /// The closed failure codes of `generate.failed`.
@@ -283,18 +286,16 @@ fn literal(expr: &str) -> Literal<'_> {
             return Literal::String(inner);
         }
     }
-    let digits = expr.strip_prefix('-').unwrap_or(expr);
+    let digits = expr.strip_prefix(['-', '+']).unwrap_or(expr);
     match expr {
         "true" | "false" => Literal::Bool,
+        _ if digits == "Infinity" || digits == "NaN" => Literal::Number(f64::NAN),
         _ if digits.starts_with(|first: char| first.is_ascii_digit() || first == '.')
             && digits.bytes().all(|byte| {
                 byte.is_ascii_digit() || matches!(byte, b'.' | b'e' | b'E' | b'+' | b'-')
             }) =>
         {
-            expr.parse::<f64>()
-                .ok()
-                .filter(|number| number.is_finite())
-                .map_or(Literal::Other, Literal::Number)
+            expr.parse::<f64>().map_or(Literal::Other, Literal::Number)
         }
         _ => Literal::Other,
     }
@@ -318,6 +319,7 @@ fn parameters(document: &Document, invoke: &Element, findings: &mut Vec<Finding>
         .is_none_or(|datamodel| datamodel == "ecmascript");
     let mut seen: Vec<&str> = Vec::new();
     let mut required_choice = false;
+    let mut effort = None;
     for param in children(document, invoke).filter(|child| child.is("param")) {
         let Some(name) = param.attribute("name") else {
             continue;
@@ -327,6 +329,13 @@ fn parameters(document: &Document, invoke: &Element, findings: &mut Vec<Finding>
             value(&name.value, expr, findings);
             required_choice |=
                 name.value == "tool_choice" && literal(&expr.value) == Literal::String("required");
+            if name.value == "reasoning_effort"
+                && let Literal::String(given) = literal(&expr.value)
+                && given != TOOLS_REASONING_EFFORT
+                && REASONING_EFFORTS.contains(&given)
+            {
+                effort = Some((given, expr.span));
+            }
         }
     }
     if let Some(namelist) = invoke.attribute("namelist") {
@@ -363,6 +372,25 @@ fn parameters(document: &Document, invoke: &Element, findings: &mut Vec<Finding>
                 &format!("add the `schema` parameter, or remove `{name}`"),
             ));
         }
+    }
+    if has("schema")
+        && let Some((given, span)) = effort
+    {
+        findings.push(Finding {
+            code: "invalid_value",
+            severity: Severity::Error,
+            message: format!("reasoning_effort `{given}` is refused with a `schema`"),
+            primary: (span, "the service rejects this value".to_owned()),
+            secondary: Vec::new(),
+            help: Some(format!(
+                "a call is asked for with reasoning_effort `{TOOLS_REASONING_EFFORT}`"
+            )),
+            fix: Some(Fix {
+                message: format!("use `{TOOLS_REASONING_EFFORT}`"),
+                span,
+                replacement: format!("expr=\"'{TOOLS_REASONING_EFFORT}'\""),
+            }),
+        });
     }
     Given {
         schema: has("schema"),

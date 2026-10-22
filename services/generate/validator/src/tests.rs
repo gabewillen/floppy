@@ -5,7 +5,7 @@ use scxml_types::DataValue;
 use super::{
     Attribute, Document, Element, FAILED_EVENT, FAILURE_CODES, Finding, MAX_COMPLETION_TOKENS,
     MAX_TEMPERATURE, PARAMETERS, REASONING_EFFORTS, RESULT_EVENT, SERVICE_URI, Severity,
-    TOOL_CHOICES, Transition, check,
+    TOOL_CHOICES, TOOLS_REASONING_EFFORT, Transition, check,
 };
 
 const EVENT: &str = "https://github.com/stateforward/scxml.rs/namespaces/event";
@@ -222,6 +222,11 @@ fn the_tool_choice_and_the_sampling_parameters_are_checked() {
         ("max_completion_tokens", "0"),
         ("max_completion_tokens", "1.5"),
         ("thinking_token_budget", "2000000"),
+        ("temperature", "+3"),
+        ("temperature", "Infinity"),
+        ("temperature", "-Infinity"),
+        ("temperature", "NaN"),
+        ("max_completion_tokens", "1e999"),
     ] {
         let (_, found) = findings(&invoke(&format!(
             r#"{MODEL}{PROMPT}<param name="{name}" expr="{number}"/>"#
@@ -232,6 +237,19 @@ fn the_tool_choice_and_the_sampling_parameters_are_checked() {
         r#"{MODEL}{PROMPT}{SCHEMA}<param name="tool_choice" expr="1"/>"#
     )));
     assert_eq!(codes(&found), ["invalid_value"]);
+    let bounds = invoke(&format!(
+        r#"{MODEL}{PROMPT}<param name="temperature" expr="+0.5"/>"#
+    ));
+    assert!(findings(&bounds).1.is_empty());
+    // With a schema the service asks for a call with no reasoning, and
+    // refuses any other reasoning_effort.
+    let (source, found) = findings(&invoke(&format!(
+        r#"{MODEL}{PROMPT}{SCHEMA}<param name="reasoning_effort" expr="'high'"/>"#
+    )));
+    assert_eq!(codes(&found), ["invalid_value"]);
+    let repaired = fixed(&source, &found[0]);
+    assert!(repaired.contains(r#"expr="'none'""#), "{repaired}");
+    assert!(findings_of(&repaired).is_empty());
     let bounds = invoke(&format!(
         r#"{MODEL}{PROMPT}<param name="temperature" expr="2"/><param name="max_completion_tokens" expr="1048576"/><param name="thinking_token_budget" expr="1e3"/>"#
     ));
@@ -331,6 +349,10 @@ fn the_contract_is_the_service_s_own() {
     );
     assert_eq!(SERVICE_URI, floppy_service_generate::SERVICE_URI);
     assert_eq!(TOOL_CHOICES, floppy_service_generate::TOOL_CHOICES);
+    assert_eq!(
+        TOOLS_REASONING_EFFORT,
+        floppy_service_generate::TOOLS_REASONING_EFFORT
+    );
     assert_eq!(
         MAX_COMPLETION_TOKENS,
         floppy_service_generate::MAX_COMPLETION_TOKENS
