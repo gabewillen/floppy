@@ -192,12 +192,6 @@ function stageRunFailure(name, _event) {
 
 // running_decision
 
-// The decision layer's own bound: the reflex tier's when the bot gives one,
-// else its default.
-function decisionTimeoutMs() {
-  return bounds.reflex_timeout_ms === undefined ? decision_timeout_ms : bounds.reflex_timeout_ms;
-}
-
 // The decision layer's confidence tuner from its donedata, else the one in hand.
 function decisionTuner(_event) {
   var state = _event.data.confidence_tuner;

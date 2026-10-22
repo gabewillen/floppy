@@ -79,8 +79,10 @@
   Dispatch: each stage sends its own selections, as the original's stages
   dispatch theirs (cognition.types.dispatch_selected_events): a decision
   layer that escalates for low confidence sends its environment actions
-  before the turn goes on to reasoning (the original _environment_actions),
-  and names them in its donedata's acted. The turn's acted is what earlier
+  before the turn goes on to reasoning (the original _environment_actions);
+  a stage that names what it sent in its donedata's acted (the chat
+  intuition tier's handoff, decision D144; the decision layer's does not
+  yet) passes it on with the turn. The turn's acted is what earlier
   stages dispatched before they passed it on (the reference ActedData);
   the turn's output, and the reflection's cognition_output, is the acted
   followed by the handling stage's selections (the original's cognition
@@ -209,7 +211,9 @@
     <data id="child_operation_timeout_ms" expr="30000"/>
     <data id="child_operation_ceiling_ms" expr="240000"/>
     <!-- The decision layer's own bound on its decision (floppy's; the
-         reference's has none), unless the bot gives the reflex tier one. -->
+         reference's has none). A decision not made in time cascades; the
+         reflex tier's step bound (bounds.reflex_timeout_ms), when shorter,
+         fails the turn first (decision D140). -->
     <data id="decision_timeout_ms" expr="20000"/>
     <!-- The bounds the body's bounds param overrides (its <param>): these
          two, each tier's own (reflex_timeout_ms, intuition_timeout_ms,
@@ -441,7 +445,7 @@
         <param name="choices" expr="choices"/>
         <param name="environment" expr="environment"/>
         <param name="confidence_tuner" expr="confidence_tuner"/>
-        <param name="decision_timeout_ms" expr="decisionTimeoutMs()"/>
+        <param name="decision_timeout_ms" expr="decision_timeout_ms"/>
       </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="../schemas/bot.ability.cognition.cancel.json"
                   cond="isCurrentTurn(_event)" target="cancelling_decision"/>

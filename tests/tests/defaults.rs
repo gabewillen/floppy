@@ -239,10 +239,10 @@ fn millis(path: &str, id: &str) -> u64 {
         .unwrap_or_else(|_| panic!("{path}: {id} is a whole number of milliseconds"))
 }
 
-/// The time bounds the bot's `bounds` param may set (decision D101): its
-/// `*_ms` members are exactly the cognition's stage bounds and reflection's
-/// revising bounds, each a `<data>` of its document that the document's
-/// script reads from `bounds` first.
+/// The time bounds the bot's `bounds` param may set with a `<data>` default
+/// (decision D101): the cognition's stage bounds and reflection's revising
+/// bounds, each a `<data>` of its document that the document's script reads
+/// from `bounds` first.
 const ACTIVATION_BOUNDS: [(&str, &str); 4] = [
     (
         "abilities/cognition/cognition.scx",
@@ -255,6 +255,19 @@ const ACTIVATION_BOUNDS: [(&str, &str); 4] = [
     ("abilities/reflection/reflection.scx", "revising_timeout_ms"),
     ("abilities/reflection/reflection.scx", "revising_ceiling_ms"),
 ];
+
+/// The members of the bot's `bounds` param with no `<data>` default: a
+/// cognition tier's own step bound (decision D140, the reference's
+/// `_tier_timeouts`, read as `bounds[tier() + '_timeout_ms']`) and
+/// reasoning's context fit (decision D143); absent, a tier takes the stage
+/// bounds above and reasoning fits nothing. Each is one the body documents
+/// and the cognition's script reads.
+const TIER_BOUNDS: [&str; 3] = [
+    "reflex_timeout_ms",
+    "intuition_timeout_ms",
+    "reasoning_timeout_ms",
+];
+const CONTEXT_BOUNDS: [&str; 2] = ["max_context_tokens", "completion_reserve_tokens"];
 
 #[test]
 fn the_bounds_param_sets_exactly_the_bounds_the_documents_declare() {
@@ -269,9 +282,27 @@ fn the_bounds_param_sets_exactly_the_bounds_the_documents_declare() {
             "{script} reads {id} from bounds"
         );
     }
+    let body = read(Path::new("bots/floppy/floppy.scx"));
+    let cognition = read(Path::new("abilities/cognition/cognition.js"));
     assert!(
-        read(Path::new("bots/floppy/floppy.scx"))
-            .contains(r#"<param name="bounds" expr="bounds"/>"#),
+        cognition.contains("bounds[tier() + '_timeout_ms']"),
+        "the cognition reads its tier's own bound from bounds"
+    );
+    for id in TIER_BOUNDS.into_iter().chain(CONTEXT_BOUNDS) {
+        assert!(body.contains(id), "the body documents the bounds' {id}");
+        assert!(
+            !data(&read(Path::new("abilities/cognition/cognition.scx"))).contains_key(id),
+            "{id} has no <data> default"
+        );
+    }
+    for id in CONTEXT_BOUNDS {
+        assert!(
+            cognition.contains(&format!("bounds.{id}")),
+            "the cognition reads {id} from bounds"
+        );
+    }
+    assert!(
+        body.contains(r#"<param name="bounds" expr="bounds"/>"#),
         "the body passes its bounds on to the cognition"
     );
 }

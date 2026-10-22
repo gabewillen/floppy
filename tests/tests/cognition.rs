@@ -50,6 +50,9 @@ const IGNORE: &str = "bot.ability.cognition.ignore";
 const RESPOND: &str = "bot.ability.communication.respond";
 /// The deliberative handoff the intuition tier is offered (decision D144).
 const HANDOFF: &str = "bot.ability.reasoning.input";
+/// A model context whose budget (three bytes a token) holds the first
+/// turn's prompt but not the second's with its recalled episode.
+const FITTED_TOKENS: u32 = 2_200;
 /// The model a bot composing the intuition tier gives it.
 const INTUITION_MODEL: &str = "chat-model";
 const ADOPT: &str = "bot.ability.identity.adopt";
@@ -1333,6 +1336,45 @@ fn a_reasoned_turn_is_recalled_by_the_next() {
     reasoned_turns_recalled(DATABASE, Some("a_reasoned_turn_is_recalled_by_the_next"));
 }
 
+/// Context fit (decision D143): with the bot's `bounds.max_context_tokens`
+/// each prompt is fitted to its model's context. The first turn recalls
+/// nothing and fits; the second's recalled episode does not fit the same
+/// budget and is trimmed, while the stimulus is kept.
+#[test]
+fn a_prompt_over_its_context_has_its_recalled_memory_trimmed() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Ignore, &[]);
+    support::use_database(&bot.body, DATABASE);
+    let mut run = start_activated(
+        &bot,
+        &[(
+            "bounds",
+            &format!("({{max_context_tokens: {FITTED_TOKENS}}})"),
+        )],
+    );
+    say(&mut run, "remember this");
+    let first = run.until(WAIT, turn_ended);
+    say(&mut run, "and this");
+    let second = run.until(WAIT, turn_ended);
+    assert_eq!(texts(&first, "cognition.fit"), ["fit"]);
+    assert_eq!(texts(&second, "cognition.fit"), ["cut"]);
+    let prompts = prompts(&mock);
+    assert_eq!(prompts.len(), 2, "{prompts:?}");
+    // The trimmed episode is counted as omitted (the original's
+    // recalled.omitted).
+    assert!(
+        prompts[1].contains("<prior_episodes count=\"0\" omitted=\"1\" />"),
+        "{}",
+        prompts[1]
+    );
+    assert!(
+        prompts[1].contains("<entry key=\"data\" value=\"and this\" />"),
+        "{}",
+        prompts[1]
+    );
+    drop(run.close(WAIT));
+}
+
 /// The same on the Postgres engine: the body's database is a `PGlite`
 /// server's, so the cognition's autonomy and reasoning, the identity and
 /// the conversation all keep their memory there.
@@ -1899,8 +1941,8 @@ fn an_unconfigured_decision_layer_cascades_to_reasoning() {
     );
 }
 
-/// The decision layer's own bound (`decision_timeout_ms`, the reflex tier's
-/// when the bot gives one) ends the decision as a failure, which cascades.
+/// The decision layer's own bound (`decision_timeout_ms`) ends the decision
+/// as a failure, which cascades.
 #[test]
 fn a_decision_not_made_in_time_cascades_to_reasoning() {
     let mock = Mock::start();
@@ -2181,6 +2223,49 @@ fn a_silent_decision_layer_fails_only_its_turn() {
         strings(&["autonomy unhandled (no-behaviors)", "reasoning handled"])
     );
     close(run, &mock, test);
+}
+
+/// A tier's own step bound (the bot's `bounds`, the reference's
+/// `_tier_timeouts`, decision D140): the reflex tier's, shorter than the
+/// decision layer's own `decision_timeout_ms`, fails the turn before the
+/// decision can cascade, as the reference's step timeout does.
+#[test]
+fn the_reflex_tiers_bound_fails_a_silent_decision_layers_turn() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Hang, Generation::Ignore, &[]);
+    let mut run = start_activated(&bot, &[("bounds", "({reflex_timeout_ms: 1500})")]);
+    say(&mut run, "hello");
+    let records = until_turn_ended(&run, 1);
+    assert_eq!(
+        texts(&records, "cognition.hop.timed_out"),
+        ["turn 1: decision after 1500 ms without progress"]
+    );
+    assert!(texts(&records, "cognition.cascaded").is_empty());
+    assert_eq!(
+        json_text(&records, "bot.processing.failed"),
+        json!({"message": "Cognition's reflex step took longer than 1.5 seconds, so the turn failed.", "turn": 1})
+    );
+    drop(run.close(WAIT));
+}
+
+/// The reasoning tier's own bound replaces both of the stage's bounds
+/// (decision D140): a reply that is not streamed is cut off at it.
+#[test]
+fn the_reasoning_tiers_bound_fails_a_silent_reasoning_turn() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Hang, &[]);
+    let mut run = start_activated(&bot, &[("bounds", "({reasoning_timeout_ms: 1500})")]);
+    say(&mut run, "hello");
+    let records = until_turn_ended(&run, 1);
+    assert_eq!(
+        texts(&records, "cognition.hop.timed_out"),
+        ["turn 1: reasoning after 1500 ms in all"]
+    );
+    assert_eq!(
+        json_text(&records, "bot.processing.failed"),
+        json!({"message": "Cognition's reasoning step took longer than 1.5 seconds, so the turn failed.", "turn": 1})
+    );
+    drop(run.close(WAIT));
 }
 
 /// A reasoning that outlasts its step fails its turn, and the handed-back

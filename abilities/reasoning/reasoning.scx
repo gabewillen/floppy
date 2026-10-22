@@ -46,7 +46,8 @@
   bot's self (the <param> self, what the cognition was told of itself),
   and is left out when both are empty; the user message is laid out most
   stable first: the recent turns heard and said (the <param> recent, the
-  short-term register's, as <memory:turn> lines, never cut), the recalled prior_episodes (cognition:cognitive_episode)
+  short-term register's, as <memory:turn> lines, uncounted but
+  trimmed to the newest that fit the byte budget), the recalled prior_episodes (cognition:cognitive_episode)
   and standing_directives (cognition:directive) after the turn's
   situation (the environment block, decision D106, then what earlier
   stages already did on the turn, the <param> acted), then the stimulus as
@@ -170,7 +171,8 @@
     <data id="self" expr="null"/>
     <data id="acted" expr="[]"/>
     <!-- The recent turns heard and said (the short-term register's, from
-         the cognition), rendered first and never cut. -->
+         the cognition), rendered first, uncounted, and trimmed to the
+         newest that fit. -->
     <data id="recent" expr="[]"/>
     <!-- The reference reasoning's static policy: none
          (DEFAULT_INSTRUCTIONS ""). -->
