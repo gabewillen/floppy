@@ -113,7 +113,7 @@
 //!
 //! A field renders as the original's `_fill_field` renders a value that is
 //! not a model: `null` is skipped, a scalar is an attribute (a number as
-//! Python's `str` writes it), an object is an element of `<entry key>`
+//! its JSON text), an object is an element of `<entry key>`
 //! elements each holding its `value`, and an array an element with its
 //! `count` of `<item>` elements, a scalar item as its text and an object or
 //! array item filled as `item` (decision D99); an empty array or object
@@ -1478,25 +1478,6 @@ impl Element {
     }
 }
 
-/// A number as Python's `str` writes it: a whole number as an integer,
-/// else the shortest repr, in exponent form below 1e-4 or from 1e16.
-fn python_number(value: f64) -> String {
-    if value.fract() == 0.0 && value.abs() < 1e21 {
-        return whole(value);
-    }
-    let magnitude = value.abs();
-    if magnitude != 0.0 && !(1e-4..1e16).contains(&magnitude) {
-        let (mantissa, exponent) = exponent_parts(value);
-        let (sign, digits) = match exponent.strip_prefix('-') {
-            Some(digits) => ('-', digits),
-            None => ('+', exponent.as_str()),
-        };
-        let padding = if digits.len() < 2 { "0" } else { "" };
-        return format!("{mantissa}e{sign}{padding}{digits}");
-    }
-    value.to_string()
-}
-
 /// A number as ECMAScript's `JSON.stringify` writes it.
 fn ecmascript_number(value: f64) -> String {
     if value.fract() == 0.0 && value.abs() < 1e21 {
@@ -1529,12 +1510,12 @@ fn exponent_parts(value: f64) -> (String, String) {
     }
 }
 
-/// A scalar's text: a boolean as `true`/`false`, a number as Python writes
-/// it, a string as itself; `None` for anything else.
+/// A scalar's text: a boolean as `true`/`false`, a number as its JSON
+/// text, a string as itself; `None` for anything else.
 fn scalar_text(value: &Json) -> Option<String> {
     match value {
         Json::Bool(value) => Some(if *value { "true" } else { "false" }.to_owned()),
-        Json::Number(value) => value.as_f64().map(python_number),
+        Json::Number(value) => value.as_f64().map(ecmascript_number),
         Json::String(text) => Some(text.clone()),
         _ => None,
     }
