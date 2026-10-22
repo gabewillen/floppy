@@ -118,6 +118,8 @@
  "bot.ability.identity.adopt",
  "bot.ability.identity.adopt.failed",
  "bot.ability.identity.adopted",
+ "bot.ability.identity.ask",
+ "bot.ability.identity.named",
  "bot.ability.identity.recalled",
  "bot.ability.identity.recognition.failed",
  "bot.ability.identity.recognized",
