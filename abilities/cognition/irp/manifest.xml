@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/cognition/irp/sources">
   <assert id="cognition-1" specnum="1" specid="#cognition-1">
-    <![CDATA[On start, and on every return to `idle`, it sends `bot.ability.offers` `{ability: "cognition", choices}` to its parent: its one choice, `bot.ability.cognition.ignore`, its schema compacted (`$schema`, `title` and `examples` dropped).]]>
+    <![CDATA[On start, and on every return to `idle`, it sends `bot.ability.offers` `{ability: "cognition", choices}` to its parent: its one choice, `bot.ability.cognition.ignore`, its schema made model-facing (`$schema`, `title` and `examples` dropped).]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -12,7 +12,7 @@
     </test>
   </assert>
   <assert id="cognition-2" specnum="2" specid="#cognition-2">
-    <![CDATA[A `bot.ability.cognition.input` `{turn, stimulus, focus?, focus_candidates?, choices?}` runs one turn of the cascade: autonomy (without a database it leaves the turn unhandled), then intuition, whose confident decision handles the turn: `bot.ability.cognition.output` `{turn, output}`, the output intuition's selections.]]>
+    <![CDATA[A `bot.ability.cognition.input` `{turn, stimulus, focus?, focus_candidates?, choices?}` runs one turn of the cascade: autonomy (without a database it leaves the turn unhandled), then intuition, whose confident decision handles the turn: `bot.ability.cognition.output` `{turn, output}`, the output intuition's selections, which intuition has sent to their targets.]]>
     <test id="110" conformance="mandatory" manual="false">
       <start uri="110/test110.scxml"/>
     </test>
@@ -30,7 +30,7 @@
     </test>
   </assert>
   <assert id="cognition-4" specnum="4" specid="#cognition-4">
-    <![CDATA[An intuition that escalates for low confidence hands out its environment actions (its selections less ignore), which the output carries first, before reasoning's selections; a reasoning selection that repeats one of them (the same event and data) is dropped.]]>
+    <![CDATA[An intuition that escalates for low confidence sends its environment actions (its selections) before the turn goes on to reasoning; the output is reasoning's selections, which reasoning sends after them, a repeat of an environment action included.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>
@@ -51,7 +51,7 @@
     </test>
   </assert>
   <assert id="cognition-6" specnum="6" specid="#cognition-6">
-    <![CDATA[A stage that does not answer within `child_operation_timeout_ms` ends the turn without an answer: the cognition sends `bot.reboot` `{reason: "cognition_child_teardown_failed"}` to its parent and waits in `rebooting`, where it acknowledges any `bot.ability.cognition.cancel` `{turn}` at once with `bot.ability.cognition.cancelled` `{turn}`.]]>
+    <![CDATA[A stage that makes no progress for `child_operation_timeout_ms` (from its start for autonomy and the intuition; for reasoning from its streamed reply's first `generate.progress`, each later one starting it over), or runs `child_operation_ceiling_ms` in all (the `<param>` `bounds` overriding either, decision D101), ends the turn without an answer: the cognition sends `bot.reboot` `{reason: "cognition_child_teardown_failed"}` to its parent and waits in `rebooting`, where it acknowledges any `bot.ability.cognition.cancel` `{turn}` at once with `bot.ability.cognition.cancelled` `{turn}`.]]>
     <test id="150" conformance="mandatory" manual="false">
       <start uri="150/test150.scxml"/>
     </test>

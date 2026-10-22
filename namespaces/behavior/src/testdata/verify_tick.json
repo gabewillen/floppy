@@ -1,0 +1,178 @@
+[
+ {
+  "name": "no_tick",
+  "ticks": [],
+  "messages": [
+   "persistent routine did not emit a tick for its first schedule."
+  ]
+ },
+ {
+  "name": "a_tick_without_its_fields",
+  "ticks": [
+   {
+    "fired_at": "y",
+    "name": "Morning",
+    "output": [],
+    "scheduled_at": "x",
+    "trigger": "hourly"
+   }
+  ],
+  "messages": [
+   "persistent routine tick must carry name, trigger (every or at), scheduled_at and fired_at."
+  ]
+ },
+ {
+  "name": "a_tick_that_is_not_an_object",
+  "ticks": [
+   "tick"
+  ],
+  "messages": [
+   "persistent routine tick must carry name, trigger (every or at), scheduled_at and fired_at."
+  ]
+ },
+ {
+  "name": "an_output_that_is_not_selections",
+  "ticks": [
+   {
+    "fired_at": "2026-10-18T08:00:00.010Z",
+    "name": "Morning",
+    "output": [
+     {
+      "data": {}
+     }
+    ],
+    "scheduled_at": "2026-10-18T08:00:00.000Z",
+    "trigger": "every"
+   }
+  ],
+  "messages": [
+   "behavior output must be a cognition event selection object (or list of them)."
+  ]
+ },
+ {
+  "name": "an_output_with_an_array_selection",
+  "ticks": [
+   {
+    "fired_at": "2026-10-18T08:00:00.010Z",
+    "name": "Morning",
+    "output": [
+     [
+      "bot.speaking.say"
+     ]
+    ],
+    "scheduled_at": "2026-10-18T08:00:00.000Z",
+    "trigger": "every"
+   }
+  ],
+  "messages": [
+   "behavior output must be a cognition event selection object (or list of them)."
+  ]
+ },
+ {
+  "name": "an_empty_output",
+  "ticks": [
+   {
+    "fired_at": "2026-10-18T08:00:00.010Z",
+    "name": "Morning",
+    "output": [],
+    "scheduled_at": "2026-10-18T08:00:00.000Z",
+    "trigger": "every"
+   }
+  ],
+  "messages": [
+   "behavior output must select at least one event for the observed pattern."
+  ]
+ },
+ {
+  "name": "bound_data",
+  "ticks": [
+   {
+    "fired_at": "2026-10-18T08:00:00.010Z",
+    "name": "Morning",
+    "output": [
+     {
+      "data": {
+       "fired_at": "2026-10-18T08:00:00.010Z",
+       "name": "Morning",
+       "text": "Good morning."
+      },
+      "event": "bot.speaking.say"
+     }
+    ],
+    "scheduled_at": "2026-10-18T08:00:00.000Z",
+    "trigger": "every"
+   }
+  ],
+  "messages": []
+ },
+ {
+  "name": "hardcoded_values",
+  "ticks": [
+   {
+    "fired_at": "2026-10-18T08:00:00.010Z",
+    "name": "Morning",
+    "output": [
+     {
+      "data": {
+       "fired_at": {
+        "at": [
+         1,
+         "x"
+        ]
+       },
+       "name": "Evening",
+       "scheduled_at": 1.5,
+       "trigger": "every"
+      },
+      "event": "a"
+     },
+     {
+      "data": [
+       "name"
+      ],
+      "event": "b"
+     },
+     {
+      "data": {
+       "name": null
+      },
+      "event": "c"
+     }
+    ],
+    "scheduled_at": "2026-10-18T08:00:00.000Z",
+    "trigger": "every"
+   },
+   {
+    "fired_at": "2026-10-18T08:00:00.010Z",
+    "name": "Morning",
+    "output": [],
+    "scheduled_at": "2026-10-18T08:00:00.000Z",
+    "trigger": "every"
+   }
+  ],
+  "messages": [
+   "selection data[\"fired_at\"]={\"at\":[1,\"x\"]} does not match live event value \"2026-10-18T08:00:00.010Z\"; read identifiers from the tick at runtime.",
+   "selection data[\"name\"]=\"Evening\" does not match live event value \"Morning\"; read identifiers from the tick at runtime.",
+   "selection data[\"scheduled_at\"]=1.5 does not match live event value \"2026-10-18T08:00:00.000Z\"; read identifiers from the tick at runtime.",
+   "selection data[\"name\"]=null does not match live event value \"Morning\"; read identifiers from the tick at runtime."
+  ]
+ },
+ {
+  "name": "only_the_first_tick_counts",
+  "ticks": [
+   {
+    "fired_at": "2026-10-18T08:00:00.010Z",
+    "name": "Morning",
+    "output": [
+     {
+      "event": "a"
+     }
+    ],
+    "scheduled_at": "2026-10-18T08:00:00.000Z",
+    "trigger": "every"
+   },
+   "not a tick"
+  ],
+  "messages": []
+ }
+]

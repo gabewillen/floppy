@@ -179,11 +179,11 @@ fn required_repeated_and_dependent_parameters_are_checked() {
     let (_, found) = findings(&invoke(&format!("{MODEL}{PROMPT}{MODEL}")));
     assert_eq!(codes(&found), ["duplicate_param"]);
     let (_, found) = findings(&invoke(&format!(
-        r#"{MODEL}{PROMPT}<param name="strict" expr="true"/>"#
+        r#"{MODEL}{PROMPT}<param name="schemaname" expr="'dispatch'"/>"#
     )));
     assert_eq!(codes(&found), ["missing_param"]);
     let (_, found) = findings(&invoke(&format!(
-        r#"{MODEL}{PROMPT}<param name="schema" expr="s"/><param name="strict" expr="'yes'"/><param name="schemaname" expr="'a b'"/>"#
+        r#"{MODEL}{PROMPT}<param name="schema" expr="s"/><param name="stream" expr="'yes'"/><param name="schemaname" expr="'a b'"/>"#
     )));
     assert_eq!(codes(&found), ["invalid_value", "invalid_value"]);
 }
@@ -205,27 +205,36 @@ fn transitions_that_reject_what_generate_returns_are_schema_mismatches() {
             .is_some_and(|help| help.contains("\"schema-mismatch\"")),
         "{found:?}"
     );
-    // Without a schema parameter, the reply is {"text": …}.
-    let json_only = r#"{"type":"object","properties":{"json":true},"required":["json"]}"#;
+    // Without a schema parameter, the reply is a text reply.
+    let calls_only = r#"{"type":"object","properties":{"tool_calls":{"type":"array","minItems":1}},"required":["tool_calls"]}"#;
     let body = format!(
-        r#"{}<transition event="generate.result" event:schema='{json_only}'/>"#,
+        r#"{}<transition event="generate.result" event:schema='{calls_only}'/>"#,
         invoke(&format!("{MODEL}{PROMPT}"))
     );
     assert_eq!(codes(&findings(&body).1), ["schema_mismatch"]);
-    // With one, the reply's value is not known here: nothing is claimed.
+    // With one, it holds a tool call.
     let body = format!(
-        r#"{}<transition event="generate.result" event:schema='{json_only}'/>"#,
+        r#"{}<transition event="generate.result" event:schema='{calls_only}'/>"#,
         invoke(&format!(
             r#"{MODEL}{PROMPT}<param name="schema" expr="s"/>"#
         ))
     );
     assert!(findings(&body).1.is_empty());
+    let text_only =
+        r#"{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}"#;
+    let body = format!(
+        r#"{}<transition event="generate.result" event:schema='{text_only}'/>"#,
+        invoke(&format!(
+            r#"{MODEL}{PROMPT}<param name="schema" expr="s"/>"#
+        ))
+    );
+    assert_eq!(codes(&findings(&body).1), ["schema_mismatch"]);
 }
 
 #[test]
 fn the_builder_bot_schemas_match_what_generate_returns() {
     let failed = r#"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"code":{"enum":["unconfigured","transport","status","malformed","truncated","filtered","refusal","not-json","schema-mismatch"]}},"required":["code"],"additionalProperties":false}"#;
-    let result = r#"{"$schema":"https://json-schema.org/draft/2020-12/schema","oneOf":[{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false},{"type":"object","properties":{"json":true},"required":["json"],"additionalProperties":false}]}"#;
+    let result = r#"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"content":{"type":"string"},"tool_calls":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"args":{"type":"object"}},"required":["id","name","args"],"additionalProperties":false}}},"required":["content","tool_calls"],"additionalProperties":false}"#;
     let body = format!(
         r#"{}<transition event="generate.result" event:schema='{result}'/><transition event="generate.failed" event:schema='{failed}'/>"#,
         invoke(&format!("{MODEL}{PROMPT}"))

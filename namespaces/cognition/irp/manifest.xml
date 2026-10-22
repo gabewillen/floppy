@@ -1,0 +1,71 @@
+<?xml version="1.0"?>
+<!-- The cognition namespace's implementation report plan: each assertion is a
+     numbered statement of namespaces/cognition/README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/namespaces/cognition/irp/sources">
+  <assert id="cognition-1" specnum="1" specid="#cognition-1">
+    <![CDATA[Each element (attention_bias_for_turn, model_facing_content) takes exactly its declared attributes, the required ones present and none empty, and no content, and the namespace has no other element: a malformed element raises error.execution and assigns nothing (its schema, package/cognition.xsd, rejects it before any run under scx validate).]]>
+    <test id="700" conformance="mandatory" manual="false">
+      <start uri="700/test700.txml"/>
+    </test>
+    <test id="701" conformance="mandatory" manual="false">
+      <start uri="701/test701.txml"/>
+    </test>
+    <test id="702" conformance="mandatory" manual="false">
+      <start uri="702/test702.txml"/>
+    </test>
+    <test id="703" conformance="mandatory" manual="false">
+      <start uri="703/test703.txml"/>
+    </test>
+  </assert>
+  <assert id="cognition-2" specnum="2" specid="#cognition-2">
+    <![CDATA[<cognition:attention_bias_for_turn> writes the focus (the given focus when it is a configured device, else null) as the first candidate, then the stimulus's device (a bot.input's data.target_device, which the environment stamps on a device's input) when it is configured and not a candidate already; devices that are not an array raise error.execution and assign nothing.]]>
+    <test id="710" conformance="mandatory" manual="false">
+      <start uri="710/test710.txml"/>
+    </test>
+    <test id="711" conformance="mandatory" manual="false">
+      <start uri="711/test711.txml"/>
+    </test>
+    <test id="712" conformance="mandatory" manual="false">
+      <start uri="712/test712.txml"/>
+    </test>
+    <test id="713" conformance="mandatory" manual="false">
+      <start uri="713/test713.txml"/>
+    </test>
+    <test id="714" conformance="mandatory" manual="false">
+      <start uri="714/test714.txml"/>
+    </test>
+  </assert>
+  <assert id="cognition-3" specnum="3" specid="#cognition-3">
+    <![CDATA[<cognition:model_facing_content> writes the original's model-facing XML of the turn's input, indented as ElementTree writes it: <cognition:processor_input> holding host_input (a processing:input whose input is the stimulus, its data as content, stamped stimulus:event, then stimulus:id, stimulus:source and stimulus:target when set), prior_episodes and standing_directives with their counts, and the environment block, with failurelocation null.]]>
+    <test id="720" conformance="mandatory" manual="false">
+      <start uri="720/test720.txml"/>
+    </test>
+    <test id="721" conformance="mandatory" manual="false">
+      <start uri="721/test721.txml"/>
+    </test>
+    <test id="722" conformance="mandatory" manual="false">
+      <start uri="722/test722.txml"/>
+    </test>
+  </assert>
+  <assert id="cognition-4" specnum="4" specid="#cognition-4">
+    <![CDATA[Over one of the original's projection budgets (262144 encoded bytes, 4096 nodes, 4096 collection items, 65536 characters per scalar, and 65536 characters for the instructions; the instructions and the schema reserved first from the prompt's 262144 bytes, the projection rendering into what they leave), failurelocation receives the original's message and location null; without failurelocation the element raises error.execution and assigns nothing.]]>
+    <test id="730" conformance="mandatory" manual="false">
+      <start uri="730/test730.txml"/>
+    </test>
+    <test id="731" conformance="mandatory" manual="false">
+      <start uri="731/test731.txml"/>
+    </test>
+    <test id="732" conformance="mandatory" manual="false">
+      <start uri="732/test732.txml"/>
+    </test>
+  </assert>
+  <assert id="cognition-5" specnum="5" specid="#cognition-5">
+    <![CDATA[A stimulus that is neither an object with an event nor null, or episodes or directives that are not an array, raise error.execution and assign nothing.]]>
+    <test id="740" conformance="mandatory" manual="false">
+      <start uri="740/test740.txml"/>
+    </test>
+    <test id="741" conformance="mandatory" manual="false">
+      <start uri="741/test741.txml"/>
+    </test>
+  </assert>
+</assertions>

@@ -1,6 +1,8 @@
 # The identity's statements and cases (tests/irp/harness.py writes them).
 
 S = suite
+# hey.wav: 0.1 s of 16 kHz mono 16-bit WAV, constant non-zero samples.
+S.media({"hey.wav": wav(1000)})
 OFFERS = "bot.ability.offers"
 ADOPT = "bot.ability.identity.adopt"
 INPUT = "bot.ability.communication.input"

@@ -58,7 +58,7 @@
                 cond="hasDecodedText(_event)" target="applied">
       <assign location="output" expr="decodedOutput(_event)"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="applied">
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="applied">
       <assign location="output" expr="failedOutput(_event)"/>
     </transition>
     <transition event="done.invoke.decoder" target="applied">

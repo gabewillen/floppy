@@ -1,0 +1,29 @@
+[package]
+name = "floppy-processing"
+description = "The `processing` namespace: `<processing:model_facing_schema>`, `<processing:collect_offered_events>`, `<processing:send>` and `<processing:selection_confidence>`, the original's processing module (the model-facing schemas of the offered events, the turn's offered events tagged with their offering sessions, the dispatch tool, and the selection confidence), as a Wasm extension component"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Canonical JSON (the choices and the dispatch tool schema), the same bytes
+# the decision namespace and service write; no schema is compiled here, so
+# no randomness.
+scxml-event-schema.workspace = true
+scxml-types.workspace = true
+serde_json.workspace = true
+wit-bindgen.workspace = true
+
+[dev-dependencies]
+# The package test reads the manifest with the parser every host uses.
+scxml-validator-core.workspace = true
+
+[lints]
+workspace = true

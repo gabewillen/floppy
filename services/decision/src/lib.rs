@@ -1,7 +1,9 @@
-//! The `decision` invoked service: one decision per `<invoke>` (choose an
-//! event from a choice list, select every groundable event with its
-//! confidence, rank candidates, or classify a state), as a
-//! `stateforward:scxml/invoked-service` Wasm component.
+//! The `decision` invoked service: one decision per `<invoke>`, asked as
+//! one of the `OpenAI` Decisions API's question types (decision D120): a
+//! `choice` (choose an event from a choice list, or a label), a
+//! `predicate` (every groundable event with its confidence), or a `score`
+//! (score candidates), as a `stateforward:scxml/invoked-service` Wasm
+//! component.
 //!
 //! Asking a backend is slow I/O, so a decision is a service, never
 //! executable content: the invoking session keeps processing events and
@@ -32,32 +34,43 @@
 //!
 //! # Parameters (`<param>`)
 //!
-//! * `kind` (optional): `choose` (the default), `select`, `rank`, or
-//!   `classify`.
-//! * `state` (required): the state document the backend decides about, a
-//!   string, a JSON object, or a JSON array.
+//! * `kind` (optional): `choice` (the default), `predicate`, or `score`.
+//! * `state`: the state document the backend decides about, a string, a
+//!   JSON object, or a JSON array; required unless `stimulus` is given.
 //! * `instructions` (optional, a non-empty string): what to decide; each
 //!   kind has a default.
 //! * `model` (optional, a non-empty string): the backend's model; the
 //!   backend's default without one.
-//! * `choose` and `select`: `choices` (required: a JSON array of objects
+//! * `choice` over events, and `predicate`: `choices` (required: a JSON
+//!   array of objects
 //!   with `event`, an event name, `schema`, a self-contained JSON Schema, and
 //!   an optional `description` string, as `<decision:choice>` writes it, and
-//!   an optional `target` string, as `<decision:assemble>` tags it; an event
+//!   an optional `target` string, as `<processing:collect_offered_events>`
+//!   tags it; an event
 //!   is listed once, or once per target with the same schema, and is one
-//!   candidate; no event is named [`ABSTAIN_LABEL`]) and `data` (optional: a
-//!   JSON object of evidence).
-//! * `rank`: `candidates` (required: a non-empty JSON array of distinct
+//!   candidate; no event is named [`ABSTAIN_LABEL`]), and either `data`
+//!   (optional: a JSON object of evidence) or `stimulus` (optional: the
+//!   stimulus the decision is about, from which the service builds the
+//!   state and the evidence, the original's `_stimulus_document`; given
+//!   with neither `state` nor `data`). A `stimulus` that is a JSON object
+//!   whose `event` is a string makes the state
+//!   `{"turn": {"envelope": {"name": event}, "data": D}}`, `D` its `data`
+//!   member (`null` when absent); any other value `V` makes it
+//!   `{"turn": {"data": V}}`; the evidence is `D` (or `V`) when it is a JSON
+//!   object. No other member of the stimulus is read.
+//! * `choice` over labels: `labels` instead of `choices` (a JSON array of
+//!   strings, a JSON object mapping each label to its description, a
+//!   string, object, array, or `null`, or one string of labels separated by
+//!   XML white space; labels non-empty and distinct), and no `data` or
+//!   `stimulus`.
+//! * `score`: `candidates` (required: a non-empty JSON array of distinct
 //!   candidates; a string is its own label, any other value is labelled by
 //!   its canonical JSON, and an object or array is also its description).
-//! * `classify`: `labels` (required: a JSON array of strings, a JSON object
-//!   mapping each label to its description, a string, object, array, or
-//!   `null`, or one string of labels separated by XML white space; labels
-//!   non-empty and distinct).
 //!
-//! Any other parameter, a parameter given twice, or a malformed value
-//! rejects the start: the `<invoke>` raises `error.execution` and nothing is
-//! sent. The `env` slots: `env:apikey="NAME"` (a bearer token, required at
+//! Any other parameter, a parameter given twice, a `choice` with both or
+//! neither of `choices` and `labels`, or a malformed value rejects the
+//! start: the `<invoke>` raises `error.execution` and nothing is sent. The
+//! `env` slots: `env:apikey="NAME"` (a bearer token, required at
 //! run time) and `env:baseurl="NAME"` (the API base URL, for example
 //! `https://api.typesafe.ai`; it must not end with `/`). When no `baseurl`
 //! value is held, the base URL is the package's first declared
@@ -66,16 +79,20 @@
 //! namespace defaulted to its provider's URL; the manifest stays the one
 //! place the origin is written.
 //!
-//! # `choose` and `select`
+//! # `choice` over events, and `predicate`
 //!
 //! Both are the original's `TypeSafe` processor (`providers.typesafe`
 //! `Processor.process`) asking one batch:
 //!
+//! * **The deliberative handoff.** The event [`DELIBERATIVE_HANDOFF_EVENT`]
+//!   is never offered (the processor skips the deliberative handoff's
+//!   schema), so a decision about it is reasoning's.
 //! * **Grounded data.** The data of each offered event is a JSON object
 //!   holding its schema's top-level `required` members, each chosen by its
 //!   own question among grounded options, never authored: the evidence's
-//!   non-null member of that name (the evidence is `data`, else the state
-//!   when it is an object), then the property's non-null `enum` values
+//!   non-null member of that name (the evidence is `data`, the stimulus's
+//!   data, else the state when it is an object), then the property's
+//!   non-null `enum` values
 //!   (the reference `_candidate_values`). An event with a required member that has
 //!   no option is not offered.
 //! * **The batch.** The question `selection` criteria are every offered
@@ -86,30 +103,35 @@
 //!   nothing is offered, the service returns [`ABSTAIN_EVENT`]
 //!   `{"reason": "no-candidates"}` without a request; when the pass
 //!   criterion wins, [`ABSTAIN_EVENT`] `{"reason": "declined", "confidence": P}`.
-//! * **`choose`** returns the winning event itself, with its filled data.
-//! * **`select`** returns [`SELECTED_EVENT`]
-//!   `{"selections": [{"event": E, "data": D, "confidence": P}]}`: every
-//!   offered event, in choices order, with its filled data and its own
-//!   probability in the selection question (the original: "every groundable event
-//!   rides the response"); the invoking document owns what to dispatch.
+//! * **`choice`** returns the winning event itself, with its filled data.
+//! * **`predicate`** returns [`SELECTED_EVENT`]
+//!   `{"selections": [{"event": E, "data": D, "confidence": P, "target": T}]}`:
+//!   every offered event, in choices order, with its filled data, its own
+//!   probability in the selection question (the original: "every groundable
+//!   event rides the response"), and `target` its only offerer, the one
+//!   `target` its listings name (the original's `_single_enabler`; absent
+//!   when no listing or several name one); the invoking document sends
+//!   each to its target. Each event's confidence is its share of the one
+//!   selection question, as the original's intuition receives it, not one
+//!   question per event (D120).
 //! * **Validation before returning.** The filled data of every returned
 //!   event must satisfy its schema from the choices; otherwise the service
 //!   returns [`FAILED_EVENT`] `{"code": "schema-mismatch"}` and never the
 //!   event.
 //!
-//! # `rank` and `classify`
+//! # `choice` over labels, and `score`
 //!
-//! `rank` returns [`RANKED_EVENT`] `{"ranking": [{"candidate": C, "score": P}]}`,
-//! every candidate once, by score descending, ties by label. `classify`
-//! returns [`CLASSIFIED_EVENT`] `{"labels": {L: P}}` with every label's
-//! probability.
+//! `score` returns [`RANKED_EVENT`] `{"ranking": [{"candidate": C, "score": P}]}`,
+//! every candidate once, by score descending, ties by label. `choice` over
+//! labels returns [`CLASSIFIED_EVENT`] `{"labels": {L: P}}` with every
+//! label's probability.
 //!
 //! # Events
 //!
 //! `invoke` (the component's one export, an `async func`) writes exactly
 //! one event to the stream it returns, then resolves its result future with
 //! no data. A failure returns [`FAILED_EVENT`] `{"code": C}` with one closed
-//! [`FailureCode`]. The chosen event of `choose` is defined by the invoking
+//! [`FailureCode`]. The chosen event of `choice` is defined by the invoking
 //! document (its choices' `event:schema` transitions), and the document
 //! describes this service's own events with `event:schema` too
 //! (`bots/builder/builder.scxml`); the service validates what it returns
@@ -173,13 +195,14 @@ pub const API_KEY_SLOT: &str = "apikey";
 /// The `env` slot of the API base URL (`env:baseurl`).
 pub const BASE_URL_SLOT: &str = "baseurl";
 
-/// The event `choose` and `select` return when they take no event.
+/// The event `choice` over events and `predicate` return when they take
+/// no event.
 pub const ABSTAIN_EVENT: &str = "decision.abstain";
-/// The event `select` returns.
+/// The event `predicate` returns.
 pub const SELECTED_EVENT: &str = "decision.selected";
-/// The event `rank` returns.
+/// The event `score` returns.
 pub const RANKED_EVENT: &str = "decision.ranked";
-/// The event `classify` returns.
+/// The event `choice` over labels returns.
 pub const CLASSIFIED_EVENT: &str = "decision.classified";
 /// The event a failed decision returns.
 pub const FAILED_EVENT: &str = "decision.failed";
@@ -189,15 +212,21 @@ pub const ABSTAIN_LABEL: &str = "__unhandled__";
 /// The pass criterion's wording (the reference `_DEFAULT_PASS_WORDING`).
 pub const ABSTAIN_DESCRIPTION: &str = "None of these: leave the turn unhandled.";
 
-/// The selection question's name in a `choose` batch.
+/// The selection question's name in a `choice` or `predicate` batch.
 pub const SELECTION_QUESTION: &str = "selection";
 
-const RANK_INSTRUCTIONS: &str =
+/// The original's deliberative handoff (`types.DELIBERATIVE_HANDOFF_EVENT_NAME`,
+/// the event whose schema is marked `__deliberative_handoff__`): never
+/// offered by `choice` or `predicate`, as the `TypeSafe` processor skips
+/// it.
+pub const DELIBERATIVE_HANDOFF_EVENT: &str = "bot.ability.reasoning.input";
+
+const SCORE_INSTRUCTIONS: &str =
     "Rank the candidates by how well each fits the state: give the best fit the most probability.";
-const CLASSIFY_INSTRUCTIONS: &str = "Classify the state: choose the label that describes it.";
-const CHOOSE_INSTRUCTIONS: &str = "Choose the single event the machine should take in this state: each criterion names an event it can take. Choose the pass criterion when none fits.";
+const LABEL_INSTRUCTIONS: &str = "Classify the state: choose the label that describes it.";
+const CHOICE_INSTRUCTIONS: &str = "Choose the single event the machine should take in this state: each criterion names an event it can take. Choose the pass criterion when none fits.";
 /// The reference `_SELECTION_INSTRUCTIONS`.
-const SELECT_INSTRUCTIONS: &str = "Choose the single criterion that answers this turn from the bot's own peripheral transducers: the criterion text names the situation. Choose the pass criterion when none offered fits.";
+const PREDICATE_INSTRUCTIONS: &str = "Choose the single criterion that answers this turn from the bot's own peripheral transducers: the criterion text names the situation. Choose the pass criterion when none offered fits.";
 /// The reference `_PAYLOAD_KEY_INSTRUCTIONS`.
 const FILL_INSTRUCTIONS: &str = "Fill one payload field for the selected event: the criteria are the exact values the evidence offers. Pick the value the turn supports.";
 
@@ -327,7 +356,7 @@ impl Returned {
     }
 }
 
-/// One event `choose` may return.
+/// One event `choice` or `predicate` may return.
 #[derive(Debug)]
 pub struct Candidate {
     /// The event name.
@@ -338,6 +367,9 @@ pub struct Candidate {
     pub compiled: CompiledSchema,
     /// The first line of what the event means, when known.
     pub description: Option<String>,
+    /// The targets that offer it, in listing order (the session ids
+    /// `<processing:collect_offered_events>` tags them with).
+    pub targets: Vec<String>,
 }
 
 /// The first non-blank line of `text`, trimmed (the reference `_event_wording`
@@ -361,13 +393,13 @@ fn valid_event_name(name: &str) -> bool {
 
 /// The candidates of a `choices` value: an array of objects with `event`,
 /// `schema`, an optional `description`, and an optional `target` (the
-/// offering ability, as `<decision:assemble>` tags it).
+/// offering session's id, as `<processing:collect_offered_events>` tags it).
 ///
 /// An event is one candidate however many targets offer it (the original
 /// `collect_offered_events` keeps one event per name): it may be listed
 /// again only when every listing has a `target` and the same schema, and
-/// the first listing's description is kept. The target is the document's to
-/// route, never part of the decision.
+/// the first listing's description is kept. The targets are never part of
+/// the decision; a selection carries its only one.
 ///
 /// # Errors
 ///
@@ -424,6 +456,9 @@ pub fn choices_from_json(value: &Json) -> Result<Vec<Candidate>, &'static str> {
                 return Err(TWICE);
             }
             targets.push(target);
+            if let Some(candidate) = choices.get_mut(index) {
+                candidate.targets.push(target.to_owned());
+            }
             continue;
         }
         listings.push((source, target.into_iter().collect()));
@@ -445,6 +480,7 @@ pub fn choices_from_json(value: &Json) -> Result<Vec<Candidate>, &'static str> {
             schema,
             compiled,
             description,
+            targets: target.into_iter().map(str::to_owned).collect(),
         });
     }
     Ok(choices)
@@ -550,19 +586,18 @@ pub struct DecisionRequest {
 
 #[derive(Debug)]
 enum Kind {
-    /// `choose` (`every: false`) or `select` (`every: true`).
-    Choose {
+    /// `choice` over events (`every: false`) or `predicate` (`every: true`).
+    Events {
         choices: Vec<Candidate>,
         evidence: Option<Map<String, Json>>,
         every: bool,
     },
-    Rank {
+    Score {
         candidates: Vec<Json>,
         criteria: Vec<Criterion>,
     },
-    Classify {
-        criteria: Vec<Criterion>,
-    },
+    /// `choice` over labels.
+    Labels { criteria: Vec<Criterion> },
 }
 
 /// The JSON value of one parameter value; `None` for a value with no JSON
@@ -632,8 +667,8 @@ fn label_criteria(value: &Data) -> Result<Vec<Criterion>, &'static str> {
     Ok(criteria)
 }
 
-/// The candidates of a `rank` request and their criteria.
-fn rank_criteria(value: &Data) -> Result<(Vec<Json>, Vec<Criterion>), &'static str> {
+/// The candidates of a `score` request and their criteria.
+fn score_criteria(value: &Data) -> Result<(Vec<Json>, Vec<Criterion>), &'static str> {
     const INVALID: &str =
         "decision candidates must be a non-empty JSON array of distinct candidates";
     let Some(Json::Array(candidates)) = json_of(value) else {
@@ -668,31 +703,71 @@ fn find<'a>(given: &[(&str, &'a Data)], name: &str) -> Option<&'a Data> {
         .map(|(_, value)| *value)
 }
 
-/// The `choose` or `select` part of a request: its choices and its
-/// evidence (`data`, else an object `state`).
-fn choose_kind(given: &[(&str, &Data)], state: &Json, every: bool) -> Result<Kind, &'static str> {
+/// The state document and the evidence of the original's `_stimulus_document`:
+/// a stimulus object whose `event` is a string is its envelope's name, with
+/// its `data` (`null` when absent); any other value is the data itself.
+fn stimulus_document(stimulus: Json) -> Json {
+    let mut turn = Map::new();
+    let data = match stimulus {
+        Json::Object(mut members) if members.get("event").is_some_and(Json::is_string) => {
+            let name = members.remove("event").unwrap_or(Json::Null);
+            turn.insert("envelope".into(), serde_json::json!({ "name": name }));
+            members.remove("data").unwrap_or(Json::Null)
+        }
+        other => other,
+    };
+    turn.insert("data".into(), data);
+    serde_json::json!({ "turn": turn })
+}
+
+/// The event part of a `choice` or `predicate` request: its choices and its
+/// evidence (`data`, the stimulus's object data when `state` was built from
+/// a stimulus, else an object `state`).
+fn events_kind(
+    given: &[(&str, &Data)],
+    state: &Json,
+    from_stimulus: bool,
+    every: bool,
+) -> Result<Kind, &'static str> {
     let choices = choices_from_json(
         &json_of(
             find(given, "choices")
-                .ok_or("decision choose and select require a choice list parameter")?,
+                .ok_or("decision choice and predicate require a choice list parameter")?,
         )
         .ok_or("decision choices must be a JSON array")?,
     )?;
-    let evidence = match find(given, "data") {
-        None => match state {
+    let evidence = match (from_stimulus, find(given, "data")) {
+        (true, _) => state
+            .get("turn")
+            .and_then(|turn| turn.get("data"))
+            .and_then(Json::as_object)
+            .cloned(),
+        (false, None) => match state {
             Json::Object(members) => Some(members.clone()),
             _ => None,
         },
-        Some(data) => match json_of(data) {
+        (false, Some(data)) => match json_of(data) {
             Some(Json::Object(members)) => Some(members),
             _ => return Err("decision data must be a JSON object"),
         },
     };
-    Ok(Kind::Choose {
+    Ok(Kind::Events {
         choices,
         evidence,
         every,
     })
+}
+
+/// The kinds of a request, as the `OpenAI` Decisions API names its question
+/// types.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum KindName {
+    /// `choice` with `choices`.
+    ChoiceOfEvents,
+    /// `choice` with `labels`.
+    ChoiceOfLabels,
+    Predicate,
+    Score,
 }
 
 /// The validated decision request of an invocation's parameters (see the
@@ -714,27 +789,47 @@ pub fn parse_parameters<'a>(
     }
     let get = |name: &str| find(&given, name);
     let kind = match get("kind") {
-        None => "choose",
-        Some(Data::String(kind))
-            if matches!(kind.as_str(), "choose" | "select" | "rank" | "classify") =>
-        {
-            kind.as_str()
+        None => KindName::ChoiceOfEvents,
+        Some(Data::String(kind)) => match kind.as_str() {
+            "choice" => KindName::ChoiceOfEvents,
+            "predicate" => KindName::Predicate,
+            "score" => KindName::Score,
+            _ => return Err("decision kind must be choice, predicate, or score"),
+        },
+        Some(_) => return Err("decision kind must be choice, predicate, or score"),
+    };
+    let kind = match (kind, get("choices").is_some(), get("labels").is_some()) {
+        (KindName::ChoiceOfEvents, false, true) => KindName::ChoiceOfLabels,
+        (KindName::ChoiceOfEvents, true, true) | (KindName::ChoiceOfEvents, false, false) => {
+            return Err("decision choice takes either choices or labels");
         }
-        Some(_) => return Err("decision kind must be choose, select, rank, or classify"),
+        (kind, _, _) => kind,
     };
     let allowed: &[&str] = match kind {
-        "choose" | "select" => &["choices", "data"],
-        "rank" => &["candidates"],
-        _ => &["labels"],
+        KindName::ChoiceOfEvents | KindName::Predicate => &["choices", "data", "stimulus"],
+        KindName::Score => &["candidates"],
+        KindName::ChoiceOfLabels => &["labels"],
     };
     if given.iter().any(|(name, _)| {
         !allowed.contains(name) && !matches!(*name, "kind" | "state" | "instructions" | "model")
     }) {
         return Err("decision takes no parameter of that name for its kind");
     }
-    let state = json_of(get("state").ok_or("decision requires a state parameter")?)
-        .filter(|state| matches!(state, Json::String(_) | Json::Object(_) | Json::Array(_)))
-        .ok_or("decision state must be a string, a JSON object, or a JSON array")?;
+    let (state, from_stimulus) = match get("stimulus") {
+        Some(stimulus) => {
+            if get("state").is_some() || get("data").is_some() {
+                return Err("decision takes a stimulus without a state or data parameter");
+            }
+            let stimulus = json_of(stimulus).ok_or("decision stimulus must be a JSON value")?;
+            (stimulus_document(stimulus), true)
+        }
+        None => (
+            json_of(get("state").ok_or("decision requires a state parameter")?)
+                .filter(|state| matches!(state, Json::String(_) | Json::Object(_) | Json::Array(_)))
+                .ok_or("decision state must be a string, a JSON object, or a JSON array")?,
+            false,
+        ),
+    };
     if exceeds_wasm_bound(canonical_json(&state).len(), MAX_STATE_BYTES) {
         return Err("decision state exceeds its bound");
     }
@@ -748,10 +843,10 @@ pub fn parse_parameters<'a>(
         })
         .transpose()?;
     let default_instructions = match kind {
-        "choose" => CHOOSE_INSTRUCTIONS,
-        "select" => SELECT_INSTRUCTIONS,
-        "rank" => RANK_INSTRUCTIONS,
-        _ => CLASSIFY_INSTRUCTIONS,
+        KindName::ChoiceOfEvents => CHOICE_INSTRUCTIONS,
+        KindName::Predicate => PREDICATE_INSTRUCTIONS,
+        KindName::Score => SCORE_INSTRUCTIONS,
+        KindName::ChoiceOfLabels => LABEL_INSTRUCTIONS,
     };
     let instructions = get("instructions")
         .map(|instructions| {
@@ -764,18 +859,18 @@ pub fn parse_parameters<'a>(
         .transpose()?
         .unwrap_or_else(|| default_instructions.to_owned());
     let kind = match kind {
-        "choose" => choose_kind(&given, &state, false)?,
-        "select" => choose_kind(&given, &state, true)?,
-        "rank" => {
+        KindName::ChoiceOfEvents => events_kind(&given, &state, from_stimulus, false)?,
+        KindName::Predicate => events_kind(&given, &state, from_stimulus, true)?,
+        KindName::Score => {
             let (candidates, criteria) =
-                rank_criteria(get("candidates").ok_or("decision rank requires candidates")?)?;
-            Kind::Rank {
+                score_criteria(get("candidates").ok_or("decision score requires candidates")?)?;
+            Kind::Score {
                 candidates,
                 criteria,
             }
         }
-        _ => Kind::Classify {
-            criteria: label_criteria(get("labels").ok_or("decision classify requires labels")?)?,
+        KindName::ChoiceOfLabels => Kind::Labels {
+            criteria: label_criteria(get("labels").ok_or("decision choice requires labels")?)?,
         },
     };
     Ok(DecisionRequest {
@@ -804,15 +899,15 @@ pub struct Prepared {
 
 #[derive(Debug)]
 enum Decide {
-    Choose {
+    Events {
         choices: Vec<Candidate>,
         offered: Vec<Grounded>,
         every: bool,
     },
-    Rank {
+    Score {
         candidates: Vec<Json>,
     },
-    Classify,
+    Labels,
 }
 
 const NO_ANSWER: FailureCode = FailureCode::Malformed;
@@ -845,7 +940,7 @@ fn python_repr(text: &str) -> String {
     repr
 }
 
-/// The questions of one `choose` or `select` batch (the original's `TypeSafe`
+/// The questions of one `choice` or `predicate` batch (the original's `TypeSafe`
 /// `Processor.process`): the selection (every offered event, then
 /// [`ABSTAIN_LABEL`]), then each offered event's member questions
 /// (`<event>::<member>`, each criterion described by the question's
@@ -854,7 +949,7 @@ fn python_repr(text: &str) -> String {
 /// # Errors
 ///
 /// A static detail when two member questions would share a name.
-fn choose_questions(
+fn event_questions(
     choices: &[Candidate],
     offered: &[Grounded],
     instructions: String,
@@ -909,7 +1004,7 @@ fn choose_questions(
 }
 
 /// The data of the offered event at `chosen`: each required member's most
-/// probable grounded option ([`choose_questions`] order).
+/// probable grounded option ([`event_questions`] order).
 fn filled_data(
     offered: &[Grounded],
     chosen: usize,
@@ -933,8 +1028,8 @@ fn filled_data(
 }
 
 impl DecisionRequest {
-    /// What the request does next: an empty `choose` choices (nothing
-    /// grounded) abstains at once; everything else asks one batch.
+    /// What the request does next: event choices with nothing grounded
+    /// abstain at once; everything else asks one batch.
     ///
     /// # Errors
     ///
@@ -948,44 +1043,49 @@ impl DecisionRequest {
             kind,
         } = self;
         let (questions, decide) = match kind {
-            Kind::Choose {
+            Kind::Events {
                 choices,
                 evidence,
                 every,
             } => {
                 let offered: Vec<Grounded> = (0..choices.len())
+                    .filter(|index| {
+                        choices
+                            .get(*index)
+                            .is_some_and(|candidate| candidate.event != DELIBERATIVE_HANDOFF_EVENT)
+                    })
                     .filter_map(|index| ground(&choices, index, evidence.as_ref()))
                     .collect();
                 if offered.is_empty() {
                     return Ok(Plan::Return(Returned::abstain("no-candidates", None)));
                 }
                 (
-                    choose_questions(&choices, &offered, instructions)?,
-                    Decide::Choose {
+                    event_questions(&choices, &offered, instructions)?,
+                    Decide::Events {
                         choices,
                         offered,
                         every,
                     },
                 )
             }
-            Kind::Rank {
+            Kind::Score {
                 candidates,
                 criteria,
             } => (
                 vec![Question {
-                    name: "rank".into(),
+                    name: "score".into(),
                     instructions,
                     criteria,
                 }],
-                Decide::Rank { candidates },
+                Decide::Score { candidates },
             ),
-            Kind::Classify { criteria } => (
+            Kind::Labels { criteria } => (
                 vec![Question {
-                    name: "classify".into(),
+                    name: "choice".into(),
                     instructions,
                     criteria,
                 }],
-                Decide::Classify,
+                Decide::Labels,
             ),
         };
         if exceeds_wasm_bound(questions.len(), MAX_QUESTIONS) {
@@ -1043,11 +1143,11 @@ impl Prepared {
         let question = self.batch.questions.first().ok_or(NO_ANSWER)?;
         let distribution = distributions.first().ok_or(NO_ANSWER)?;
         match &self.decide {
-            Decide::Choose {
+            Decide::Events {
                 choices,
                 offered,
                 every,
-            } => decided_choice(
+            } => decided_events(
                 choices,
                 offered,
                 *every,
@@ -1055,7 +1155,7 @@ impl Prepared {
                 distribution,
                 distributions,
             ),
-            Decide::Rank { candidates } => {
+            Decide::Score { candidates } => {
                 let mut ranked: Vec<(f64, &str, &Json)> = question
                     .criteria
                     .iter()
@@ -1087,7 +1187,7 @@ impl Prepared {
                     &serde_json::json!({ "ranking": ranking }),
                 ))
             }
-            Decide::Classify => {
+            Decide::Labels => {
                 let labels: Map<String, Json> = question
                     .criteria
                     .iter()
@@ -1113,9 +1213,9 @@ impl Prepared {
     }
 }
 
-/// The event a `choose` or `select` answer decides (see the crate
+/// The event a `choice` over events or a `predicate` answer decides (see the crate
 /// documentation).
-fn decided_choice(
+fn decided_events(
     choices: &[Candidate],
     offered: &[Grounded],
     every: bool,
@@ -1136,8 +1236,8 @@ fn decided_choice(
         return Ok(Returned::abstain("declined", Some(probability(chosen))));
     }
     // The event at `index` with its filled data, validated
-    // against its schema.
-    let event = |index: usize| -> Result<(&str, Json), FailureCode> {
+    // against its schema, and the candidate it is.
+    let event = |index: usize| -> Result<(&Candidate, Json), FailureCode> {
         let grounded = offered.get(index).ok_or(NO_ANSWER)?;
         let candidate = choices.get(grounded.candidate).ok_or(NO_ANSWER)?;
         let data = filled_data(offered, index, distributions)?;
@@ -1147,22 +1247,30 @@ fn decided_choice(
         {
             return Err(FailureCode::SchemaMismatch);
         }
-        Ok((candidate.event.as_str(), data))
+        Ok((candidate, data))
     };
     if !every {
-        let (name, data) = event(chosen)?;
-        return Ok(Returned::new(name, &data));
+        let (candidate, data) = event(chosen)?;
+        return Ok(Returned::new(&candidate.event, &data));
     }
     // The original: every groundable event rides the response with
-    // its own probability; the pass criterion never does.
+    // its own probability; the pass criterion never does. Each carries its
+    // only offerer as `target` (the original's `_single_enabler`), none
+    // when several offer it.
     let selections = (0..offered.len())
         .map(|index| {
-            let (name, data) = event(index)?;
-            Ok(serde_json::json!({
-                "event": name,
+            let (candidate, data) = event(index)?;
+            let mut selection = serde_json::json!({
+                "event": candidate.event,
                 "data": data,
                 "confidence": probability(index),
-            }))
+            });
+            if let ([target], Some(selection)) =
+                (candidate.targets.as_slice(), selection.as_object_mut())
+            {
+                selection.insert("target".into(), Json::String(target.clone()));
+            }
+            Ok(selection)
         })
         .collect::<Result<Vec<Json>, FailureCode>>()?;
     Ok(Returned::new(

@@ -171,7 +171,7 @@ after the structural checks.
 | `configuration` | `{"atomic":[…],"full":[…]}`: active atomic/final states and every active state, both in document order |
 | `history` | `[{state, value:[…]}]`: recorded history values |
 | `bound_states` | late-binding states already bound (SCXML 5.3) |
-| `counters` | `{send, invoke}`: the next generated send-id and invoke-id ordinals. Both start at 0: send ids at `sendid_0`, invoke ids at `<state>.<session>.0`. Only a generated id takes an ordinal; a `<send>` or `<invoke>` with a literal `id` leaves its counter unchanged, so a fresh session reports `send: 0, invoke: 0` |
+| `counters` | `{send, invoke}`: the next generated send-id and invoke-id ordinals. Both start at 0: send ids at `sendid_0`, invoke ids at `<state>.0`. Only a generated id takes an ordinal; a `<send>` or `<invoke>` with a literal `id` leaves its counter unchanged, so a fresh session reports `send: 0, invoke: 0` |
 | `system` | section: `{"sessionid","name","ioprocessors"}` |
 | `data_model` | section: `[{name, value}]`, each declared `<data>` id in document order (ECMAScript: late-bound ids declared afterwards follow) with its current value (≤ 256) |
 | `queues` | section: `{"internal","external"}` |
@@ -315,6 +315,27 @@ and computes it only for an extension component whose component imports
 configurations, traces, and fuel are the same whether or not an extension
 component reads it, apart from the image's own computation in the machine call.
 
+## Snapshots of another session
+
+During the same `execute` call, `session-snapshot-host.snapshot` with a
+`target` reads another session of the executing session's run, resolved as
+a `<send>` target is (`#_parent`, `#_<invokeid>` of a live invoked session,
+`#_scxml_<sessionid>` of any running session of the run; a target naming the
+executing session is the executable-content document above). The executor
+runs one session at a time, so every other session is between machine calls
+and stable ("When a snapshot can be taken"): the document is that session's
+at its last checkpoint, `options.point` `checkpoint` (omitted), with one
+session object (an invoked one carries its `invoked_by`, which a document
+listing invocations never has at its root),
+`invocations` and `previews` always in `options.exclude`, carriers stripped,
+its external queue as it stands, and its own clock. Both hosts offer it.
+Nothing is recorded: the read is a pure function of the run's state at the
+call, which replay reproduces, and it changes nothing in the target session
+(its later documents and trace are those of a run without the read). A
+target that is malformed or names no running session of the run (an
+invoked service, a finished, `failed`, or `shut-down` session) is
+`unavailable`; the 64-call and size bounds apply unchanged.
+
 ## Diff (`scxml.session-snapshot-diff/v2`)
 
 `scxml snapshot diff A B` compares two valid documents. The JSON output
@@ -401,8 +422,8 @@ scx snapshot diff A.json B.json [--format human|json] [--include-trace-context] 
   macrostep and listed (`document `URL``, `= for: <invoke src="…">`, and
   its size and SHA-256); a `<script src>` of DOC that cannot be fetched
   rejects it (SCXML 5.8), and any other failure raises `error.execution`
-  when its element runs. An `<invoke srcexpr>` URI is fetched when the
-  invoke runs. Remote documents are fetched over HTTPS only, within 16 MiB,
+  when its element runs. An `<invoke srcexpr>` URI is fetched each time the
+  invoke runs, as the document is then. Remote documents are fetched over HTTPS only, within 16 MiB,
   at most 5 redirects (each to `https:`), and the connect and total
   timeouts, with no retry and no credentials; `--offline` forbids them. A
   document's HTTP `Content-Type`, or else a URL ending in `.json` or `.xml`

@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- behavior-3: the statements delete the triggers and the row, then insert the row and each distinct trigger. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior">
+<datamodel>
+  <data id="s" expr="null"/>
+  <data id="b" expr="({name: 'A', source: '&lt;scxml/&gt;', description: 'd', examples: ['x'], lifetime: 'persistent', status: 'ACTIVE', used_count: 2, last_used_at: 't', failed_count: 0, last_failed_at: '', triggers: ['bot.input', 'x', 'bot.input']})"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <behavior:replace_behavior_clauses location="s" instance="b"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="s.length === 5 &amp;&amp; s[0].sql.indexOf('DELETE FROM bot_behavior_trigger') === 0 &amp;&amp; s[1].sql.indexOf('DELETE FROM bot_behavior ') === 0 &amp;&amp; JSON.stringify(s[2].parameters) === '[&quot;A&quot;,&quot;&lt;scxml/&gt;&quot;,&quot;d&quot;,&quot;[\\&quot;x\\&quot;]&quot;,&quot;persistent&quot;,&quot;ACTIVE&quot;,&quot;2&quot;,&quot;t&quot;,&quot;0&quot;,&quot;&quot;]' &amp;&amp; JSON.stringify(s[4].parameters) === '[&quot;A&quot;,&quot;x&quot;]'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

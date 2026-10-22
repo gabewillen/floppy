@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- reflection-3: a select call that does not answer in time fails the turn. -->
+<!-- reflection-3: a select call that outlasts its backstop fails the turn. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="reflection" type="scxml" src="../../../reflection.scx">
     <param name="database" expr="'/memory/floppy.sqlite'"/>
-    <param name="select_timeout_ms" expr="1"/>
+    <param name="select_ceiling_ms" expr="1"/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>

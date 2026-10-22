@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- intuition-2: the first observation sets the mean and counts once. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:intuition="https://github.com/stateforward/floppy/namespaces/intuition" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="t" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <intuition:observe location="t" confidence="90"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="t.mean === 90 &amp;&amp; t['var'] === 100 &amp;&amp; t.n === 1" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

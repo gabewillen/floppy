@@ -62,6 +62,23 @@ hard cutover.
 
 ### Added
 
+- `outbound-http.send`: an invoked service's request whose response is
+  streamed (`async func send(http-request) -> result<tuple<u16,
+  stream<u8>, future<result<_, component-error>>>, component-error>`,
+  named after `wasi:http`'s `client.send`), admitted and bounded exactly as
+  `fetch`: `ok` once the status has arrived, the body as it arrives, and a
+  future that resolves when the body has ended (`err` for a transport
+  failure or a body past 16 MiB). Each part reaches the invocation as an
+  input at the logical time it arrived; a live session records each one
+  (`InputRecord::HttpResponsePart`, the `http-response-part` replay log
+  record, body bytes that arrived since the last delivery joined) and a
+  replay delivers them from the log. The host's transport trait gains
+  `ExtensionHttp::send` (its default answers `fetch`'s response whole),
+  which `ExtensionHttpClient` implements by reading the body as it
+  arrives; `ExtensionHttpPart` and `ExtensionHttpAnswer` name what a
+  transport answered. The echo example's `send` event streams a GET and
+  returns `echo.received` per body read. Telemetry operation
+  `service-http-send`. `fetch` is unchanged.
 - Data-model packages: a data model other than the built-in `ecmascript`,
   `null`, and `xpath` is a package. The new built-in `datamodel` attribute
   vocabulary (`https://github.com/stateforward/scxml.rs/namespaces/datamodel`,
@@ -461,7 +478,7 @@ hard cutover.
   1,012 bytes, whose `done.invoke.<ID>` event exceeds it; such a document
   compiled and then failed the session when the element ran).
 - An invoke id longer than the 1,024-byte name bound, literal or generated
-  (`<state ID>.<_sessionid>.<n>` over a long state ID), or one whose
+  (`<state ID>.<n>` over a long state ID), or one whose
   `done.invoke.<ID>` event the bound cannot hold, fails that `<invoke>`
   with `error.execution` (SCXML 3.12.2) instead of failing the session, as
   does inline `<invoke><content>` that serializes past the machine's 1 MiB
@@ -598,11 +615,17 @@ hard cutover.
   files: `EmbeddedDocument::event_schemas` carries the files an embedder
   read for one `<invoke src>` document to the Wasmtime host, which hands
   them to that document's compile (an inline `<content>` document below it
-  still gets none). `snapshot run` and `run` read a literal `file:` child's
-  files relative to the child's own directory before the session, exactly
-  as they read the root's; a remote or `srcexpr` child gets none (nothing
-  is fetched for a schema, and nothing is read while a document runs), so a
-  reference rejects it and its `<invoke>` raises `error.execution`.
+  still gets none). `snapshot run` and `run` load every `<invoke src>`
+  child's files against the child's own base URI (read relative to its
+  directory for a `file:` child, exactly as they read the root's, and
+  fetched for an `https:` one): a literal child's before the session, a
+  `srcexpr` child's when its `<invoke>` runs.
+- A `srcexpr` document is fetched each time its `<invoke>` runs, as it is
+  then (never from the run's fetch memo), with the schema files and the
+  `<script src>` files it names, so a document the run writes loads as
+  written. `SessionEmbedder::scripts` takes the base URI of the document
+  the new session runs, and the CLI serves each session the scripts its own
+  document names, resolved against that base URI.
 - Each repository namespace has its own implementation report plan,
   `namespaces/{env,event}/irp`: W3C IRP-format assertions over
   numbered statements added to each namespace's README, `.txml` documents
@@ -629,6 +652,17 @@ hard cutover.
 
 ### Changed
 
+- An `event:schema` reference resolves against the document's base URI as
+  every other relative URI does (`<script src>`, `<invoke src>`; RFC 3986
+  §5): its `.` and `..` segments resolve, so `../schemas/order.json` names
+  a file outside the document's directory. `validate`, `compile`,
+  `snapshot run`, and `run` read a `file:` document's files from its
+  `file:` URL and fetch an `https:` child's from its URL; a reference with
+  a scheme, an absolute path, a query, a backslash, or an empty segment,
+  or a file that cannot be read, is still `EVENT004`. The `event`
+  namespace IRP's test 433 now proves a `..` reference resolves (it was a
+  rejection), and a namespace case's schema dependencies are keyed by
+  their relative path from its start document's directory.
 - The Wasmtime session host compiles each document its embedder serves
   (an `<invoke src>` document) once per run, on a fuel budget of its own
   (`DEFAULT_FUEL`), instead of on the budget of the command that first
@@ -710,8 +744,10 @@ hard cutover.
   0.3 s of Wasm in Node 24 on an Apple M3 Max (the heavy nested start;
   a 64-region `<raise>` toggle loop about 0.21 s), and both still stop
   with `fuel-exhausted`.
-- Generated invoke ids (`<state>.<session>.<n>`, SCXML 6.4.1) start at
-  `.0`, as generated send ids start at `sendid_0`, and an `<invoke>` with a
+- Generated invoke ids are `<state>.<n>` (SCXML 6.4.1
+  `stateid.platformid`, `n` unique within the invoking session; formerly
+  `<state>.<session>.<n>`, whose session id the child's address already
+  carries), start at `.0`, as generated send ids start at `sendid_0`, and an `<invoke>` with a
   literal `id` no longer takes an ordinal: only a generated id does. The
   session snapshot's `counters.invoke` is the next generated ordinal, so a
   session that has generated no invoke id reports `invoke: 0` (it reported
@@ -910,10 +946,51 @@ hard cutover.
   (by default 3,000,000,000 instructions under Wasmtime and 75,000,000
   metered charges in the browser), so a finite command that starts a deep
   or heavy chain of invocations can exhaust it.
+- `session-snapshot-host.snapshot` takes an optional `target`: another
+  session of the executing session's run, named as a `<send>` target names
+  it (`#_parent`, `#_<invokeid>`, `#_scxml_<sessionid>`), whose canonical
+  document at its last checkpoint it returns (`unavailable` for a target no
+  running session of the run answers), in both hosts; nothing is recorded.
+  `<example:snapshot>` gains `target`.
+- An invoked session whose call stops at the machine's per-call command
+  bound (1,024 commands: a `<raise>` that re-enters its own state without
+  end, an eventless loop) no longer fails the whole run, in both hosts: it
+  is ended as a cancelled invocation is (from then on nothing it sends
+  reaches its invoking session, its `cancel` runs on the same call's
+  budget, cancelling the sessions it invoked, and no `done.invoke`
+  follows). A start that stopped there fails its `<invoke>` with
+  `error.execution` (`start-invocation`'s `invalid-input`), and a later
+  call queues `error.communication.<invokeid>` (the `communication-error`
+  message an invoked service's failure after its start sends); the
+  invoking session runs on. The root's own stop there still fails the run
+  (`RunFailure::CommandBound`, `command-bound`), and any other failure or
+  trap of any session still does. A finished invoked session runs nothing
+  more (the rest of a due batch it finished in is dropped).
+- A transition condition that fails on every evaluation (an eventless
+  `cond` that throws: each failure is false and queues `error.execution`,
+  SCXML 5.9.1, so the transition is selected again without end) now stops
+  at the per-call command bound, as any other logical runaway does: the
+  root fails the run with `command-bound`, and an invoked session is ended
+  as above. The engine ends a command when it dequeues an internal event
+  that enables nothing after a condition of the same command failed, with
+  that event bound as `_event` for the next command's eventless selection;
+  before, one command scanned up to 10,000 such events, re-evaluating the
+  condition for each, and the call ran out of fuel (`host-failure`, a trap
+  in the machine component).
+- `#_scxml_<sessionid>` reaches any session of the sender's run while it
+  runs (SCXML C.1 leaves the accessible sessions to the platform): a
+  sibling, a grandchild, or the root, immediately or when a delayed send
+  falls due; an id no running session of the run has raises
+  `error.communication`. The I/O processor WIT's `send-target` gains
+  `session(string)` and `dispatch-decision` and `due-route` gain
+  `session(tuple<string, event>)`, in both hosts.
 - Invoked sessions' `_sessionid`: the host names each one
-  `<root _sessionid>.<n>` in start order across the run (formerly
-  `<parent id>.<n>`, which grew with the nesting depth and stopped a chain
-  at about 510 levels); `invoked-session.session-id` is removed.
+  `<parent _sessionid>.<invokeid>` (formerly `<parent id>.<n>`, `n`
+  counting the run's starts), so an invoker knows a child's address
+  before it starts and a child invoked again under the same invoke id
+  keeps it; the id grows with the nesting depth, and an `<invoke>` whose
+  child's id would exceed the 1024-byte name bound raises
+  `error.execution`; `invoked-session.session-id` is removed.
   Host-side records name the parent beside the session: the live replay
   log's `http` record gains the session's invoke-id `path`.
 - `scxml-scheduler` addresses sessions by `SessionKey` (`InvokedSessions`
@@ -1398,11 +1475,11 @@ hard cutover.
 - Extension components run only under the Wasmtime session
   host; the browser host answers executable-content extensions from the
   page's `executeExtension` callback.
-- `event:schema` references only files relative to the document: no
+- `event:schema` references only files by a relative URI: no
   repository-namespace resource or other absolute URI. Of the child
   documents the Wasmtime host compiles when invoked, only an `<invoke src>`
-  document whose embedder supplies them gets schema files (the CLI: a
-  literal `file:` child); inline `<content>`, remote, and `srcexpr`
+  document whose embedder supplies them gets schema files (the CLI: every
+  `<invoke src>` child, literal or `srcexpr`); inline `<content>`
   children, and documents the browser host compiles, get none (inline
   schemas and `event:schemaexpr` only). A session snapshot never evaluates `event:schemaexpr`, and lists
   schemas on transitions only.

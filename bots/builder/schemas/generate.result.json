@@ -1,29 +1,39 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "generate.result",
-  "description": "The reply of the generate service: text without a requested schema, or the JSON value that satisfies the requested schema.",
-  "oneOf": [
-    {
-      "type": "object",
-      "properties": {
-        "text": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "text"
-      ],
-      "additionalProperties": false
+  "description": "The reply of the generate service as the original text generator returns it: its content and every tool call, each with its id, name and JSON-object arguments.",
+  "type": "object",
+  "properties": {
+    "content": {
+      "type": "string"
     },
-    {
-      "type": "object",
-      "properties": {
-        "json": true
-      },
-      "required": [
-        "json"
-      ],
-      "additionalProperties": false
+    "tool_calls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "args": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "args"
+        ],
+        "additionalProperties": false
+      }
     }
-  ]
+  },
+  "required": [
+    "content",
+    "tool_calls"
+  ],
+  "additionalProperties": false
 }

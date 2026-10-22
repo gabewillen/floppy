@@ -77,6 +77,7 @@ mod guest {
                 super::SendTarget::Local => WitSendTarget::Local,
                 super::SendTarget::Parent => WitSendTarget::Parent,
                 super::SendTarget::Invocation(id) => WitSendTarget::Invocation(id),
+                super::SendTarget::Session(id) => WitSendTarget::Session(id),
                 super::SendTarget::Unreachable => WitSendTarget::Unreachable,
                 super::SendTarget::Invalid => WitSendTarget::Invalid,
             }
@@ -127,6 +128,9 @@ mod guest {
                             event: from_native_event(event),
                         }))
                     }
+                    super::Dispatch::Session { session_id, event } => Ok(
+                        DispatchDecision::Session((session_id, from_native_event(event))),
+                    ),
                 }
             })();
             let (outcome, event) = if result.is_ok() {
@@ -170,6 +174,9 @@ mod guest {
                         invoke_id,
                         event: from_native_event(event),
                     })
+                }
+                super::DueRoute::Session { session_id, event } => {
+                    WitDueRoute::Session((session_id, from_native_event(event)))
                 }
                 super::DueRoute::Undeliverable { send_id } => {
                     WitDueRoute::Undeliverable(send_id.map(|id| id.as_str().to_owned()))
@@ -784,6 +791,9 @@ pub enum SendTarget {
     /// A live invocation of the sender (`#_invokeid`, or the invoked
     /// session's `#_scxml_sessionid`), by invoke id.
     Invocation(String),
+    /// Any other session of the sender's run (`#_scxml_sessionid`), by
+    /// `_sessionid`; the host delivers to it while it runs.
+    Session(String),
     /// A well-formed session address no live session answers
     /// (`error.communication`).
     Unreachable,
@@ -797,8 +807,10 @@ pub enum SendTarget {
 /// event to the external event queue of the sending session"; `#_internal`
 /// is the internal queue; `#_scxml_sessionid` "where sessionid is the id of
 /// an SCXML session that is accessible to the Processor" (the sender
-/// itself, its invoking parent, and the sessions it invoked that still
-/// run); `#_parent`; and `#_invokeid` "where invokeid is the invokeid of an
+/// itself, its invoking parent, the sessions it invoked that still run, and
+/// any other session of its run: "The set of SCXML sessions that are
+/// accessible to a given SCXML Processor is platform-dependent"); `#_parent`;
+/// and `#_invokeid` "where invokeid is the invokeid of an
 /// SCXML session that the sending session has created by `<invoke>`". "If
 /// the sending SCXML session specifies a session that does not exist or is
 /// inaccessible", the target is [`SendTarget::Unreachable`]
@@ -818,6 +830,8 @@ pub fn classify_target(target: Option<&str>, sender: &SessionAddress<'_>) -> Sen
             SendTarget::Parent
         } else if let Some(invoke_id) = (sender.invocation_of_session)(session_id) {
             SendTarget::Invocation(invoke_id)
+        } else if scxml_types::SessionId::new(session_id).is_ok() {
+            SendTarget::Session(session_id.to_owned())
         } else {
             SendTarget::Unreachable
         };
@@ -854,6 +868,13 @@ pub enum Dispatch {
         /// The stamped event.
         event: Event,
     },
+    /// Deliver the stamped event to another session of the sender's run.
+    Session {
+        /// `_sessionid` of the addressed session.
+        session_id: String,
+        /// The stamped event.
+        event: Event,
+    },
 }
 
 /// Where one due delayed send is delivered (WIT `due-route`).
@@ -867,6 +888,14 @@ pub enum DueRoute {
     Invocation {
         /// Invoke id of the addressed child.
         invoke_id: String,
+        /// The event to deliver.
+        event: Event,
+    },
+    /// Another session of the sender's run, which the host delivers to
+    /// while it runs.
+    Session {
+        /// `_sessionid` of the addressed session.
+        session_id: String,
         /// The event to deliver.
         event: Event,
     },
@@ -956,7 +985,10 @@ impl ScxmlIoProcessor {
                     return Err(ProcessorError::InvalidTarget);
                 }
                 SendTarget::Unreachable => return Err(ProcessorError::UnreachableTarget),
-                SendTarget::Local | SendTarget::Parent | SendTarget::Invocation(_) => {}
+                SendTarget::Local
+                | SendTarget::Parent
+                | SendTarget::Invocation(_)
+                | SendTarget::Session(_) => {}
             }
             request.event.origin = Some(session_origin(sender.session_id));
             request.event.origin_type = Some(
@@ -999,6 +1031,10 @@ impl ScxmlIoProcessor {
                     invoke_id,
                     event: request.event,
                 },
+                SendTarget::Session(session_id) => Dispatch::Session {
+                    session_id,
+                    event: request.event,
+                },
                 _ => Dispatch::Local(request.event),
             })
         })();
@@ -1022,6 +1058,10 @@ impl ScxmlIoProcessor {
             SendTarget::Parent => DueRoute::Parent(request.event),
             SendTarget::Invocation(invoke_id) => DueRoute::Invocation {
                 invoke_id,
+                event: request.event,
+            },
+            SendTarget::Session(session_id) => DueRoute::Session {
+                session_id,
                 event: request.event,
             },
             SendTarget::Internal | SendTarget::Unreachable | SendTarget::Invalid => {
@@ -1527,13 +1567,6 @@ mod tests {
             ),
             Err(ProcessorError::InvalidTarget)
         );
-        assert_eq!(
-            ScxmlIoProcessor.dispatch(
-                immediate(Some("#_scxml_nobody"), scxml_types::SendMessage::Empty),
-                &parent
-            ),
-            Err(ProcessorError::UnreachableTarget)
-        );
 
         let none = |_: &str| false;
         let child = SessionAddress {
@@ -1616,6 +1649,35 @@ mod tests {
     }
 
     #[test]
+    fn any_other_session_id_names_a_session_of_the_run() {
+        // SCXML C.1 leaves the accessible sessions to the platform: any
+        // other well-formed session id names a session of the run, which
+        // the host delivers to while it runs; a malformed one is
+        // unreachable.
+        let none = |_: &str| false;
+        let root = SessionAddress {
+            session_id: "root",
+            parent_session_id: None,
+            is_live_invocation: &none,
+            invocation_of_session: &|_| None,
+        };
+        assert!(matches!(
+            ScxmlIoProcessor.dispatch(
+                immediate(Some("#_scxml_nobody"), scxml_types::SendMessage::Empty),
+                &root
+            ),
+            Ok(Dispatch::Session { ref session_id, .. }) if session_id == "nobody"
+        ));
+        assert_eq!(
+            ScxmlIoProcessor.dispatch(
+                immediate(Some("#_scxml_no body"), scxml_types::SendMessage::Empty),
+                &root
+            ),
+            Err(ProcessorError::UnreachableTarget)
+        );
+    }
+
+    #[test]
     fn an_invoked_session_addresses_the_sessions_it_invoked() {
         // An invoked session addresses the sessions it invoked in turn
         // (SCXML 6.2 `#_<invokeid>`), like any invoking session.
@@ -1644,14 +1706,19 @@ mod tests {
             classify_target(Some("#_scxml_root"), &invoking_child),
             SendTarget::Parent
         );
-        // Only the forms C.1 defines: an unknown session or invoke id is
-        // unreachable (error.communication); a bare id, `#_self`, and
-        // `#_scxml_<invokeid>` are none of them.
+        // Only the forms C.1 defines: any other session id names a session
+        // of the run (`#_scxml_<invokeid>` is just such an id), a malformed
+        // one or an unknown invoke id is unreachable (error.communication),
+        // and a bare id is none of them.
         assert_eq!(
             classify_target(Some("gc"), &invoking_child),
             SendTarget::Invalid
         );
-        for target in ["#_self", "#_scxml_gc", "#_child", "#_nobody"] {
+        assert_eq!(
+            classify_target(Some("#_scxml_gc"), &invoking_child),
+            SendTarget::Session("gc".into())
+        );
+        for target in ["#_self", "#_scxml_", "#_child", "#_nobody"] {
             assert_eq!(
                 classify_target(Some(target), &invoking_child),
                 SendTarget::Unreachable,
@@ -1695,6 +1762,16 @@ mod tests {
         assert!(matches!(
             ScxmlIoProcessor.route_due(delayed("t2"), &after),
             DueRoute::Local(_)
+        ));
+        // Another session of the run is the host's to deliver to, or to
+        // refuse once it no longer runs.
+        let sibling = SendRequest {
+            target: Some("#_scxml_root.other".into()),
+            ..delayed("t3")
+        };
+        assert!(matches!(
+            ScxmlIoProcessor.route_due(sibling, &after),
+            DueRoute::Session { ref session_id, .. } if session_id == "root.other"
         ));
     }
 

@@ -36,7 +36,8 @@
   bot.ability.speaking.input {text} to the speaking child
   (dispatching_response), and waits in responding, bounded by the hop
   timer bot.ability.communication.response.hop.timed_out
-  (response_timeout_ms, the original's 6 s; the transition takes only the timer
+  (response_timeout_ms, 36 s: speaking's 30 s encoding bound plus the
+  original's 6 s, decision D98; the transition takes only the timer
   of the response in hand, _event.sendid). Speaking's output goes on to the
   body as bot.ability.speaking.output. A speaking failure
   (bot.ability.failed) or the hop timeout answers the body with
@@ -50,8 +51,12 @@
   Speaking's routes: speaking records the words it said as an outbound
   bot.ability.conversation.append, which the communication passes to the
   conversation (a sibling is out of speaking's reach), and its playout,
-  bot.ability.speaking.efference and then environment.sound, goes on to
-  the body in order, whatever the state.
+  bot.ability.speaking.efference and then environment.sound, is passed on
+  in order whatever the state: the copy to the body, the sound into the
+  environment, at #_scxml_ + the <data> environment (the environment's id,
+  the body's <param>; decision D103, amended 2026-10-15: the communication
+  puts the sound into the environment, after the copy has left for the
+  body, so the copy reaches the listening first).
 
   Activate: bot.ability.communication.activate {} keeps the one
   conversation active (a catalog of conversations to switch between is
@@ -62,7 +67,7 @@
   "communication", choices} to the body: <decision:choice events=
   "bot.ability.communication.respond"> (the original's enabled transitions in
   active; activate is enabled only in inactive, and input is not a tool
-  event), compacted by <decision:compact>
+  event), made model-facing by <processing:model_facing_schema>
   ($schema, title and examples dropped; over 32 KiB descriptions dropped
   too; still over, the offer is empty and logged). The children offer
   nothing, so nothing is relayed.
@@ -74,20 +79,23 @@
   its name and the active state route it; conds only correlate (which
   timer) and keep the original's non-blank response check.
 
-  Bindings: the decision namespace package; speaking's (the conversation
+  Bindings: the decision and processing namespace packages; speaking's (the conversation
   namespace and vocal's speech service).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
        version="1.0" datamodel="ecmascript" name="communication" initial="communication">
   <datamodel>
-    <data id="response_timeout_ms" expr="6000"/>
-    <!-- Speaking's encoding bound, passed to it. -->
-    <data id="encoding_timeout_ms" expr="5000"/>
+    <data id="response_timeout_ms" expr="36000"/>
+    <!-- Speaking's encoding bound, passed to it (decision D98). -->
+    <data id="encoding_timeout_ms" expr="30000"/>
     <!-- The memory database file, for the conversation (null:
          no memory). -->
     <data id="database" expr="null"/>
+    <!-- The environment's id (decision D106), where speaking's sound goes. -->
+    <data id="environment" expr="null"/>
     <data id="ready" expr="({})"/>
     <!-- The response in hand: its number, words and hop timer. -->
     <data id="operation" expr="0"/>
@@ -98,7 +106,6 @@
     <data id="offering" expr="false"/>
     <data id="offered" expr="[]"/>
     <data id="offers_over" expr="false"/>
-    <data id="offer_names" expr="''"/>
     <!-- The children. -->
     <data id="children" expr="['conversation', 'speaking']"/>
   </datamodel>
@@ -112,19 +119,19 @@
       <param name="encoding_timeout_ms" expr="encoding_timeout_ms"/>
     </invoke>
 
-    <transition event="bot.ability.offers" event:schema="schemas/bot.ability.offers.json">
+    <transition event="bot.ability.offers" event:schema="../schemas/bot.ability.offers.json">
       <assign location="ready[_event.data.ability]" expr="true"/>
     </transition>
     <!-- Conversation products go on to the body: a text product as its
          stimulus handoff, any other whose latest message is inbound as
          the output itself; the rest is history. -->
-    <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json">
+    <transition event="bot.ability.cognition.input" event:schema="../schemas/bot.ability.cognition.input.json">
       <log label="communication.product" expr="productSequence(_event)"/>
       <send event="bot.ability.cognition.input" target="#_parent">
         <content expr="_event.data"/>
       </send>
     </transition>
-    <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json">
+    <transition event="bot.ability.conversation.output" event:schema="../schemas/bot.ability.conversation.output.json">
       <log label="communication.history" expr="historyLength(_event)"/>
       <if cond="isInboundProduct(_event)">
         <send event="bot.ability.conversation.output" target="#_parent">
@@ -134,12 +141,12 @@
     </transition>
     <!-- A snapshot of the conversation's participants (the communication
          requests none). -->
-    <transition event="bot.ability.conversation.snapshot.output" event:schema="schemas/bot.ability.conversation.snapshot.output.json">
+    <transition event="bot.ability.conversation.snapshot.output" event:schema="../schemas/bot.ability.conversation.snapshot.output.json">
       <log label="communication.snapshot" expr="_event.data.request_ref"/>
     </transition>
     <!-- A conversation that could not take an input fails it (the original's
          conversation failed terminal, forwarded unchanged). -->
-    <transition event="bot.ability.conversation.failed" event:schema="schemas/bot.ability.conversation.failed.json">
+    <transition event="bot.ability.conversation.failed" event:schema="../schemas/bot.ability.conversation.failed.json">
       <log label="communication.rejected" expr="conversationFailedLog(_event)"/>
       <send event="bot.ability.conversation.failed" target="#_parent">
         <content expr="_event.data"/>
@@ -152,19 +159,23 @@
     <transition event="done.invoke.conversation done.invoke.speaking" target="degraded">
       <assign location="failure" expr="childEndFailure(_event)"/>
     </transition>
-    <!-- Speaking's record of what it said, and its playout. -->
-    <transition event="bot.ability.conversation.append" event:schema="schemas/bot.ability.conversation.append.json">
+    <!-- Speaking's record of what it said, and its playout: the copy to
+         the body, then the sound into the environment, in the order speaking
+         sent them, so the copy is in the body's queue before the
+         environment can deliver the sound back (decision D103, amended
+         2026-10-15). -->
+    <transition event="bot.ability.conversation.append" event:schema="../schemas/bot.ability.conversation.append.json">
       <send event="bot.ability.conversation.append" target="#_conversation">
         <content expr="_event.data"/>
       </send>
     </transition>
-    <transition event="bot.ability.speaking.efference" event:schema="schemas/bot.ability.speaking.efference.json">
+    <transition event="bot.ability.speaking.efference" event:schema="../schemas/bot.ability.speaking.efference.json">
       <send event="bot.ability.speaking.efference" target="#_parent">
         <content expr="_event.data"/>
       </send>
     </transition>
-    <transition event="environment.sound" event:schema="schemas/environment.sound.json">
-      <send event="environment.sound" target="#_parent">
+    <transition event="environment.sound" event:schema="../schemas/environment.sound.json">
+      <send event="environment.sound" targetexpr="environmentTarget()">
         <content expr="_event.data"/>
       </send>
     </transition>
@@ -180,11 +191,11 @@
       <transition event="error.*" target="degraded">
         <assign location="failure" expr="childStartFailure(_event)"/>
       </transition>
-      <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json">
+      <transition event="bot.ability.communication.input" event:schema="../schemas/bot.ability.communication.input.json">
         <event:defer/>
         <log label="communication.deferred" expr="_event.name"/>
       </transition>
-      <transition event="bot.ability.communication.activate" event:schema="schemas/bot.ability.communication.activate.json">
+      <transition event="bot.ability.communication.activate" event:schema="../schemas/bot.ability.communication.activate.json">
         <log label="communication.activate" expr="'conversation'"/>
       </transition>
     </state>
@@ -194,28 +205,27 @@
         <assign location="offering" expr="true"/>
         <decision:choice location="offered" events="bot.ability.communication.respond"/>
         <assign location="offering" expr="false"/>
-        <decision:compact location="offered" bound="32768" overlocation="offers_over"/>
+        <processing:model_facing_schema location="offered" bound="32768" overlocation="offers_over"/>
         <if cond="offers_over">
           <log label="communication.offers.dropped" expr="'the offers are over 32768 bytes'"/>
         </if>
-        <decision:names location="offer_names" choices="offered"/>
-        <log label="communication.offers" expr="offer_names"/>
+        <log label="communication.offers" expr="offered"/>
         <send event="bot.ability.offers" target="#_parent">
           <param name="ability" expr="'communication'"/>
           <param name="choices" expr="offered"/>
         </send>
       </onentry>
-      <transition event="bot.ability.communication.respond" event:schema="schemas/bot.ability.communication.respond.json"
+      <transition event="bot.ability.communication.respond" event:schema="../schemas/bot.ability.communication.respond.json"
                   cond="hasRespond(_event)" target="preparing_response">
         <assign location="response" expr="_event.data.text"/>
       </transition>
-      <transition event="bot.ability.communication.respond" event:schema="schemas/bot.ability.communication.respond.json">
+      <transition event="bot.ability.communication.respond" event:schema="../schemas/bot.ability.communication.respond.json">
         <log label="communication.rejected" expr="'bot.ability.communication.respond needs one non-blank text'"/>
         <send event="bot.ability.communication.failed" target="#_parent">
           <param name="message" expr="'Communication response text must be non-blank.'"/>
         </send>
       </transition>
-      <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json">
+      <transition event="bot.ability.communication.input" event:schema="../schemas/bot.ability.communication.input.json">
         <send event="bot.ability.conversation.routed_input" target="#_conversation">
           <param name="parent" expr="routedParent(_event)"/>
         </send>
@@ -250,17 +260,17 @@
       <onexit>
         <cancel sendidexpr="hop_timer"/>
       </onexit>
-      <transition event="bot.ability.speaking.output" event:schema="schemas/bot.ability.speaking.output.json" target="active">
+      <transition event="bot.ability.speaking.output" event:schema="../schemas/bot.ability.speaking.output.json" target="active">
         <send event="bot.ability.speaking.output" target="#_parent">
           <content expr="_event.data"/>
         </send>
       </transition>
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="active">
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="active">
         <send event="bot.ability.communication.failed" target="#_parent">
           <param name="message" expr="_event.data.message"/>
         </send>
       </transition>
-      <transition event="bot.ability.communication.response.hop.timed_out" event:schema="schemas/bot.ability.communication.response.hop.timed_out.json"
+      <transition event="bot.ability.communication.response.hop.timed_out" event:schema="../schemas/bot.ability.communication.response.hop.timed_out.json"
                   cond="isResponseHopTimeout(_event)" target="active">
         <log label="communication.hop.timed_out" expr="hopTimedOutMessage()"/>
         <send event="bot.ability.communication.failed" target="#_parent">

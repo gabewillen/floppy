@@ -19,21 +19,27 @@
   speech: the audio reference with its media_type, sample_rate_hz and
   channels (speaking's own, the original's 24000 Hz mono audio/pcm, where the
   encoder leaves one null), and its duration when the encoder measured one
-  (the speech service measures it for linear PCM). Synthesis is bounded by the original's
-  5 s (encoding_timeout_ms); leaving encoding cancels vocal and its
-  request.
+  (the speech service measures it for linear PCM). Synthesis is bounded
+  by encoding_timeout_ms, 30 s (decision D98: the original's 5 s is
+  shorter than Gemini's unstreamed synthesis of a sentence, which answers
+  only once the whole clip exists; 30 s is the original's stage operation
+  timeout); leaving encoding cancels vocal and its request.
 
   playing issues the efference copy first (the original's entry action: the
   copy leaves before the sound does): bot.ability.speaking.efference
   {mouth, duration, media_type, sample_rate_hz, channels} to the parent,
-  which carries it to the bot's Listening; mouth is "speaking", the sound's
-  source (the original's source when no speaker is injected; devices are out of
-  scope). As in the original, no copy is sent when the encoded form gives no
-  duration. Then the words are logged as floppy.say and the audio is
-  broadcast: environment.sound {audio, media_type, sample_rate_hz,
-  channels} to the parent, which the body puts into the environment.
+  which carries it to the bot's Listening; mouth is the <data> mouth,
+  "speaking", the sound's source (the original's source when no speaker is
+  injected; devices are out of scope). As in the original, no copy is sent
+  when the encoded form gives no duration. Then the words are logged as
+  floppy.say and the audio is broadcast: environment.sound {audio,
+  media_type, sample_rate_hz, channels, source} to the parent, which the
+  body puts into the environment. source is the mouth (the original stamps
+  it as the sound event's source; a relayed SCXML event keeps only its
+  data, so it travels in the sound): it is how the listening's sensitivity
+  tells the bot's own voice from a sound that only arrives while it speaks.
 
-  recording builds the outbound message with <conversation:commit>
+  recording builds the outbound message with <conversation:message_for_turn>
   (the original's Message: direction outbound, content the text, content_type
   text/plain; sequence 0, the conversation numbers it) and sends
   bot.ability.conversation.append {message} to the parent, which holds the
@@ -78,7 +84,10 @@
     <data id="model" expr="'gemini-3.1-flash-tts-preview'"/>
     <data id="voice" expr="'Kore'"/>
     <data id="output_prefix" expr="'media/speaking-'"/>
-    <data id="encoding_timeout_ms" expr="5000"/>
+    <!-- The mouth: the efference copy's mouth and the sound's source, so
+         the listening can tell its own voice apart. -->
+    <data id="mouth" expr="'speaking'"/>
+    <data id="encoding_timeout_ms" expr="30000"/>
     <data id="recording_timeout_ms" expr="5000"/>
     <!-- The utterance in hand, its number, the encoded speech and timer. -->
     <data id="operation" expr="0"/>
@@ -97,7 +106,7 @@
         <param name="choices" expr="[]"/>
       </send>
     </onentry>
-    <transition event="bot.ability.speaking.input" event:schema="schemas/bot.ability.speaking.input.json"
+    <transition event="bot.ability.speaking.input" event:schema="../schemas/bot.ability.speaking.input.json"
                 target="encoding">
       <assign location="text" expr="spokenText(_event.data.text)"/>
     </transition>
@@ -127,24 +136,24 @@
       <param name="voice" expr="voice"/>
       <param name="media_type" expr="media_type"/>
     </invoke>
-    <transition event="bot.ability.offers" event:schema="schemas/bot.ability.offers.json">
+    <transition event="bot.ability.offers" event:schema="../schemas/bot.ability.offers.json">
       <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal">
         <param name="text" expr="text"/>
       </send>
     </transition>
-    <transition event="bot.ability.vocal.speech.encoding.output" event:schema="schemas/bot.ability.vocal.speech.encoding.output.json" target="playing">
+    <transition event="bot.ability.vocal.speech.encoding.output" event:schema="../schemas/bot.ability.vocal.speech.encoding.output.json" target="playing">
       <assign location="encoded" expr="encodedSpeech(_event)"/>
       <assign location="encoded.sample_rate_hz" expr="encodedSampleRate()"/>
       <assign location="encoded.channels" expr="encodedChannels()"/>
       <assign location="encoded.media_type" expr="encodedMediaType()"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="idle">
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="idle">
       <assign location="message" expr="_event.data.message"/>
       <send event="bot.ability.failed" target="#_parent">
         <param name="message" expr="message"/>
       </send>
     </transition>
-    <transition event="bot.ability.speaking.apply.failed" event:schema="schemas/bot.ability.speaking.apply.failed.json"
+    <transition event="bot.ability.speaking.apply.failed" event:schema="../schemas/bot.ability.speaking.apply.failed.json"
                 cond="isTimer(_event)" target="idle">
       <log label="speaking.timed_out" expr="encodingTimedOutLog()"/>
       <send event="bot.ability.failed" target="#_parent">
@@ -157,7 +166,7 @@
       </send>
     </transition>
     <!-- Input that arrives meanwhile waits (the original defers it). -->
-    <transition event="bot.ability.speaking.input" event:schema="schemas/bot.ability.speaking.input.json">
+    <transition event="bot.ability.speaking.input" event:schema="../schemas/bot.ability.speaking.input.json">
       <event:defer/>
       <log label="speaking.deferred" expr="_event.name"/>
     </transition>
@@ -168,7 +177,7 @@
     <onentry>
       <if cond="hasDuration()">
         <send event="bot.ability.speaking.efference" target="#_parent">
-          <param name="mouth" expr="'speaking'"/>
+          <param name="mouth" expr="mouth"/>
           <param name="duration" expr="encoded.duration"/>
           <param name="media_type" expr="encoded.media_type"/>
           <param name="sample_rate_hz" expr="encoded.sample_rate_hz"/>
@@ -181,6 +190,7 @@
         <param name="media_type" expr="encoded.media_type"/>
         <param name="sample_rate_hz" expr="encoded.sample_rate_hz"/>
         <param name="channels" expr="encoded.channels"/>
+        <param name="source" expr="mouth"/>
       </send>
       <assign location="product" expr="speechProduct()"/>
       <raise event="bot.ability.speaking.apply.completed"/>
@@ -193,7 +203,7 @@
     </transition>
     <!-- Input still waits (the original defers it here too); it was logged
          when it arrived. -->
-    <transition event="bot.ability.speaking.input" event:schema="schemas/bot.ability.speaking.input.json">
+    <transition event="bot.ability.speaking.input" event:schema="../schemas/bot.ability.speaking.input.json">
       <event:defer/>
     </transition>
   </state>
@@ -204,9 +214,9 @@
       <send idlocation="timer" event="bot.ability.speaking.apply.failed" delayexpr="delay(recording_timeout_ms)">
         <param name="message" expr="'Conversation history recording timed out.'"/>
       </send>
-      <conversation:commit location="message" direction="outbound" event="'bot.ability.conversation.append'"
-                           message="({source_ids: [], target_ids: [], content: text, content_type: 'text/plain'})"
-                           provenance="({id: 'speaking-' + operation})" sequence="0"/>
+      <conversation:message_for_turn location="message" direction="outbound" event="'bot.ability.conversation.append'"
+                                     message="({source_ids: [], target_ids: [], content: text, content_type: 'text/plain'})"
+                                     provenance="({id: 'speaking-' + operation})" sequence="0"/>
       <send event="bot.ability.conversation.append" target="#_parent">
         <param name="message" expr="message"/>
       </send>
@@ -220,7 +230,7 @@
         <content expr="product"/>
       </send>
     </transition>
-    <transition event="bot.ability.speaking.apply.failed" event:schema="schemas/bot.ability.speaking.apply.failed.json"
+    <transition event="bot.ability.speaking.apply.failed" event:schema="../schemas/bot.ability.speaking.apply.failed.json"
                 cond="isTimer(_event)" target="idle">
       <log label="speaking.timed_out" expr="recordingTimedOutLog()"/>
       <send event="bot.ability.failed" target="#_parent">
@@ -234,7 +244,7 @@
     </transition>
     <!-- Input still waits (the original defers it here too); it was logged
          when it arrived. -->
-    <transition event="bot.ability.speaking.input" event:schema="schemas/bot.ability.speaking.input.json">
+    <transition event="bot.ability.speaking.input" event:schema="../schemas/bot.ability.speaking.input.json">
       <event:defer/>
     </transition>
   </state>

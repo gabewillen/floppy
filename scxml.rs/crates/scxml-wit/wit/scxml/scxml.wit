@@ -176,6 +176,12 @@ interface types {
     /// A live invocation of the sender (`#_invokeid`, or the invoked
     /// session's `#_scxml_sessionid`), by invoke id.
     invocation(string),
+    /// Any other session of the sender's run (`#_scxml_sessionid` naming
+    /// neither the sender, its parent, nor its invocations), by
+    /// `_sessionid`: SCXML C.1 leaves the accessible sessions to the
+    /// platform, and every session of the run is. The host delivers to it
+    /// while it runs; one that does not run is `error.communication`.
+    session(string),
     /// A well-formed session address no live session answers
     /// (`error.communication`).
     unreachable,
@@ -1019,7 +1025,12 @@ interface machine-capability-types {
     /// An invoked SCXML session (`session`): the host constructs the invoked
     /// machine session, links its data model and I/O processors, calls its
     /// `start-invoked`, and runs it to a stable configuration. An invoked
-    /// session may invoke in turn, at any depth.
+    /// session may invoke in turn, at any depth. An invoked session whose
+    /// call stops at its command bound is ended as `cancel-invocation`
+    /// ends it (nothing it sends reaches this session from then on, its
+    /// `cancel` runs, and no `done.invoke` follows): a start that stopped
+    /// there fails with `invalid-input`, and a later call becomes
+    /// `communication-error` (`error.communication.<invoke-id>`).
     ///
     /// An invoked service (`service`): the host instantiates the service
     /// component bound to exactly `type-uri` in a store of its own and calls
@@ -1033,7 +1044,7 @@ interface machine-capability-types {
     ///
     /// Errors (returned here, or passed to `invocation-completed`):
     /// `invalid-input` when the invoked session is rejected at load or at
-    /// its start, the service's `invoke` returned an error or trapped, the
+    /// its start or its start stops at its command bound, the service's `invoke` returned an error or trapped, the
     /// service imports an interface the host does not link or a resource
     /// the run does not grant, or the host's invoke limits leave no room
     /// for it; `unavailable` when no service component is bound to the
@@ -1502,6 +1513,9 @@ interface io-processor-api {
     parent(event),
     /// Deliver the stamped event to one live invocation of the sender.
     invocation(routed-event),
+    /// Deliver the stamped event to another session of the sender's run,
+    /// by `_sessionid` (`send-target.session`).
+    session(tuple<string, event>),
   }
 
   /// Where one due delayed send is delivered, decided at delivery time.
@@ -1512,6 +1526,10 @@ interface io-processor-api {
     parent(event),
     /// One live invocation of the sender.
     invocation(routed-event),
+    /// Another session of the sender's run, by `_sessionid`
+    /// (`send-target.session`); the host refuses one that no longer runs as
+    /// undeliverable.
+    session(tuple<string, event>),
     /// Nobody answers the target any more (for example an invoked session
     /// that finished), so the message cannot be dispatched: the host calls
     /// the sender's `session.communication-error` with the failed send's id
@@ -1702,8 +1720,8 @@ interface executable-content-extension-api {
 /// `unavailable`. A granting host sends only to the targets its embedder
 /// allowlists, follows no redirect (a redirect status is returned as the
 /// response), and adds no ambient credentials, cookies, or proxy. `fetch`
-/// is asynchronous: a call suspends only the calling task (the invoking
-/// session and the service's other tasks go on). The granting host bounds
+/// and `send` are asynchronous: a call suspends only the calling task (the
+/// invoking session and the service's other tasks go on). The granting host bounds
 /// its connect and total time, and closes the connection of a request when
 /// the invocation is cancelled. The URL, headers, and bodies are component
 /// payload: hosts never put them into telemetry. The capability works only
@@ -1764,6 +1782,21 @@ interface outbound-http {
   /// or the call is made outside an invocation;
   /// `payload-too-large` when the response body exceeds its bound.
   fetch: async func(request: http-request) -> result<http-response, component-error>;
+  /// Performs one request and streams its response, as `wasi:http`'s
+  /// `client.send` does: `ok` once the final status (100..=599) has arrived,
+  /// with the body as the host receives it and a future that resolves when
+  /// the body has ended: `ok` after its last byte, `err` with `unavailable`
+  /// when the transport failed or `payload-too-large` when the body passed
+  /// its bound (16777216 bytes in all, as `fetch`'s). The body's parts reach
+  /// the service as inputs of its invocation, in order, each at the session's
+  /// logical time it arrived (a live session records each one), so a
+  /// service can report progress while a long response is still arriving.
+  /// The request is admitted and bounded exactly as `fetch`'s, it counts
+  /// against the requests in flight until its body has ended, and the call's
+  /// own errors are `fetch`'s. A body the service stops reading is still
+  /// received, within its bound, until it ends or the invocation is
+  /// cancelled.
+  send: async func(request: http-request) -> result<tuple<u16, stream<u8>, future<result<_, component-error>>>, component-error>;
 }
 
 /// Resolves repository packages for the CLI: an extension namespace URI or
@@ -1864,7 +1897,20 @@ interface session-snapshot-host {
   /// document over a bound of the format (32 MiB, or a list bound); `execution`
   /// when a component's read-only `snapshot` export failed; `platform` when the
   /// host failed.
-  snapshot: func(exclude: list<section>) -> result<string, component-error>;
+  ///
+  /// `target`, when given, names another session of the executing session's
+  /// run as a `<send>` target does (`#_parent`, `#_<invokeid>` of a live
+  /// invoked session, or `#_scxml_<sessionid>` of any running session of the
+  /// run), and the result is that session's canonical document at its last
+  /// checkpoint (`options.point` `checkpoint`; every other session of the run
+  /// is between machine calls while this one executes), with its external
+  /// queue, `previews` and `invocations` excluded besides `exclude`, trace
+  /// carriers stripped; a target naming the executing session is the
+  /// executable-content image above. The read changes nothing in the target
+  /// session. Errors besides the above: `unavailable` for a malformed target,
+  /// one no running session of the run answers (including an invoked service,
+  /// or a finished, `failed`, or `shut-down` session).
+  snapshot: func(exclude: list<section>, target: option<string>) -> result<string, component-error>;
 }
 
 /// Supplier of one machine's immutable lowered Machine IR.

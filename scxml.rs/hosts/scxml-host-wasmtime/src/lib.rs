@@ -178,12 +178,12 @@ pub use extension::{
 mod outbound_http;
 #[cfg(feature = "wasmtime")]
 pub use outbound_http::{
-    EnvVariable, ExtensionEnvironment, ExtensionHttp, ExtensionHttpFailure, ExtensionHttpMethod,
-    ExtensionHttpRequest, ExtensionHttpResponse, MAX_DECLARED_ITEMS, MAX_ENVIRONMENT_NAME_BYTES,
-    MAX_ENVIRONMENT_VALUE_BYTES, MAX_EXTENSION_HTTP_HEADER_NAME_BYTES,
-    MAX_EXTENSION_HTTP_HEADER_VALUE_BYTES, MAX_EXTENSION_HTTP_HEADERS, MAX_EXTENSION_HTTP_PARTS,
-    MAX_EXTENSION_HTTP_REQUEST_BODY_BYTES, MAX_EXTENSION_HTTP_RESPONSE_BODY_BYTES,
-    MAX_EXTENSION_HTTP_URL_BYTES,
+    EnvVariable, ExtensionEnvironment, ExtensionHttp, ExtensionHttpAnswer, ExtensionHttpFailure,
+    ExtensionHttpMethod, ExtensionHttpPart, ExtensionHttpRequest, ExtensionHttpResponse,
+    MAX_DECLARED_ITEMS, MAX_ENVIRONMENT_NAME_BYTES, MAX_ENVIRONMENT_VALUE_BYTES,
+    MAX_EXTENSION_HTTP_HEADER_NAME_BYTES, MAX_EXTENSION_HTTP_HEADER_VALUE_BYTES,
+    MAX_EXTENSION_HTTP_HEADERS, MAX_EXTENSION_HTTP_PARTS, MAX_EXTENSION_HTTP_REQUEST_BODY_BYTES,
+    MAX_EXTENSION_HTTP_RESPONSE_BODY_BYTES, MAX_EXTENSION_HTTP_URL_BYTES,
 };
 #[cfg(feature = "wasmtime")]
 mod service;
@@ -299,9 +299,14 @@ pub const DEFAULT_MEMORIES: usize = 100;
 ///
 /// Logical runaways are bounded before fuel: one machine call runs at most
 /// `scxml_engine::MAX_COMMANDS_PER_RUN` (1 024) commands, so an eventless
-/// transition loop, a `<raise>` loop, or a 0 ms self-send chain stops with
-/// `RunFailure::CommandBound` (under 1 000 000 000 fuel for 1 024 commands
-/// of a two-state loop), and the run's command budget bounds the calls.
+/// transition loop, a `<raise>` loop, a 0 ms self-send chain, or an
+/// eventless transition whose condition fails on every evaluation of the
+/// root session stops the run with `RunFailure::CommandBound` (under
+/// 1 000 000 000 fuel for 1 024 commands of a two-state loop), and the
+/// run's command budget bounds the calls. An invoked session's runaway ends
+/// only that session, as a cancelled invocation ends, on the same call's
+/// budget: its invoking session receives `error.execution` for a start that
+/// stopped there, or `error.communication.<invokeid>` for a later call.
 ///
 /// Sizing, measured with the shipped components on an Apple M3 Max
 /// (`tests/fuel_sizing.rs`, release, which prints every figure here): this

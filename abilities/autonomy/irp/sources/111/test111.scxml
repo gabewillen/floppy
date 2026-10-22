@@ -6,7 +6,6 @@
     <param name="turn" expr="2"/>
     <param name="input" expr='{"focus": null, "focus_candidates": []}'/>
     <param name="stimulus" expr='{"event": "bot.ability.listening.speech.output", "data": {"content": "what is the weather like?", "content_type": "text/plain", "voice_detection": {"segments": [{"start_seconds": 0.0, "end_seconds": 0.4, "confidence": 0.9}]}, "media_type": "audio/pcm", "sample_rate_hz": 48000, "channels": 1, "source_ids": ["caller"]}, "source": "listening"}'/>
-    <param name="choices" expr="[]"/>
     <param name="database" expr="'/memory/floppy.sqlite'"/>
   </invoke>
   <state id="boot">

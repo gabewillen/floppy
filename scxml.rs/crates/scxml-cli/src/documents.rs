@@ -24,24 +24,27 @@
 //! non-conformant, and the platform MUST reject it"). Any other literal URI
 //! that cannot be fetched is not an error yet: its `<invoke>` or `<data>`
 //! raises `error.execution` when it runs, as SCXML defines. A `srcexpr` URI
-//! is fetched when its `<invoke>` runs, through the same fetcher; a failure
-//! is `error.execution`. A relative one is resolved against the base URI of
+//! is fetched each time its `<invoke>` runs, through the same fetcher but
+//! never from its memo, so a document written during the run loads as it is
+//! then; a failure is `error.execution`. A relative one is resolved against the base URI of
 //! the document whose session evaluates it: the host resolves it against
 //! an `<invoke src>` document's own URL
 //! ([`scxml_host_wasmtime::EmbeddedDocument::base_uri`]), so only the root
 //! document's sessions (and their inline `<content>` sessions) pass one
 //! here relative, resolved against the root's base.
-//! Everything is fetched once per root session and shared by every session
-//! of the tree.
+//! Every literal URI is fetched once per root session and shared by every
+//! session of the tree.
 //!
-//! A literal `<invoke src>` document loaded from a `file:` URL carries the
-//! schema files its `event:schema` attributes reference, read relative to
-//! its own directory before the session exactly as the root's are
-//! ([`crate::event_schemas`]), to its compile
-//! ([`scxml_host_wasmtime::EmbeddedDocument::event_schemas`]). A remote
-//! (`https:`) or `srcexpr` child gets none (nothing is fetched for a schema,
-//! and nothing is read while a document runs), so a schema-file reference
-//! rejects it and its `<invoke>` raises `error.execution`.
+//! An `<invoke src>` document carries the schema files its `event:schema`
+//! attributes reference, resolved against its own base URI (read from its
+//! directory for a `file:` one, exactly as the root's are, and fetched for
+//! an `https:` one; [`crate::event_schemas`]), to its compile
+//! ([`scxml_host_wasmtime::EmbeddedDocument::event_schemas`]): a literal
+//! child's before the session, a `srcexpr` child's with the document. Its
+//! `<script src>` files resolve against the same base URI: a literal
+//! child's are fetched before the session with the root's, a `srcexpr`
+//! child's with the document, and each session is served the scripts its
+//! own document names ([`scxml_host_wasmtime::SessionEmbedder::scripts`]).
 //!
 //! The documents an `<invoke src>` loads are part of the run: the
 //! repository namespaces and services they use are resolved with the
@@ -125,6 +128,10 @@ pub(crate) struct Documents {
     /// the validator (`EVENT011`).
     #[cfg(feature = "wasmtime")]
     invoked: BTreeMap<String, InvokedDocument>,
+    /// The `<script src>` files of the `srcexpr` documents loaded so far, as
+    /// they were when each was loaded last, by URL.
+    #[cfg(feature = "wasmtime")]
+    srcexpr_scripts: std::sync::Mutex<BTreeMap<String, Fetched>>,
 }
 
 impl std::fmt::Debug for Documents {
@@ -348,6 +355,8 @@ impl Documents {
             event_schemas: BTreeMap::new(),
             #[cfg(feature = "wasmtime")]
             invoked: BTreeMap::new(),
+            #[cfg(feature = "wasmtime")]
+            srcexpr_scripts: std::sync::Mutex::new(BTreeMap::new()),
         };
         let root = String::from_utf8_lossy(source).into_owned();
         let mut pending = vec![(base.clone(), root, true)];
@@ -384,13 +393,11 @@ impl Documents {
                             "the run loads more than {MAX_DOCUMENTS} documents through <invoke src>"
                         ));
                     }
-                    if let Ok(path) = url.to_file_path() {
-                        let schemas = crate::event_schemas::load(&path, &child.bytes);
-                        if !schemas.is_empty() {
-                            documents
-                                .event_schemas
-                                .insert(url.as_str().to_owned(), schemas);
-                        }
+                    let schemas = documents.child_event_schemas(url, &child.bytes, false);
+                    if !schemas.is_empty() {
+                        documents
+                            .event_schemas
+                            .insert(url.as_str().to_owned(), schemas);
                     }
                     documents.children.push((url.clone(), child.bytes.clone()));
                     pending.push((
@@ -499,11 +506,48 @@ impl Documents {
         resolve(&self.base, &scxml_syntax::collapse_whitespace(uri))
     }
 
-    /// The fetched document `uri` names (fetching a `srcexpr` URI now).
+    /// The fetched document `uri` names: a literal one as it was fetched
+    /// before the session, a `srcexpr` one as it is now.
     fn load(&self, uri: &str) -> Option<(url::Url, Fetched)> {
         let url = self.url_of(uri)?;
-        let fetched = self.repository.fetch_document(&url).ok()?;
+        let fetched = if self.is_literal(&url) {
+            self.repository.fetch_document(&url)
+        } else {
+            self.repository.fetch_document_now(&url)
+        }
+        .ok()?;
         Some((url, fetched))
+    }
+
+    /// Whether a literal URI of the run's documents names `url`.
+    fn is_literal(&self, url: &url::Url) -> bool {
+        self.literals
+            .iter()
+            .any(|literal| literal.url.as_ref() == Some(url))
+    }
+
+    /// The schema files the `<invoke src>` document at `url` (holding
+    /// `bytes`) references, resolved against `url`: read from its directory
+    /// for a `file:` URL, fetched for an `https:` one (`now`: not from the
+    /// fetcher's memo).
+    fn child_event_schemas(
+        &self,
+        url: &url::Url,
+        bytes: &[u8],
+        now: bool,
+    ) -> scxml_event_schema::Resources {
+        match url.to_file_path() {
+            Ok(path) => crate::event_schemas::load(&path, bytes),
+            Err(()) => crate::event_schemas::fetch(url, bytes, |schema| {
+                if now {
+                    self.repository.fetch_document_now(schema)
+                } else {
+                    self.repository.fetch_document(schema)
+                }
+                .ok()
+                .map(|fetched| fetched.bytes)
+            }),
+        }
     }
 
     /// The script package of every root `<script src>` (its exact authored
@@ -595,16 +639,22 @@ mod embedder {
     };
     use sha2::{Digest as _, Sha256};
 
-    use super::{Documents, Site, extension_media_type, script_media_type};
+    use super::{
+        Documents, Fetched, Site, extension_media_type, literals_of, resolve, script_media_type,
+    };
 
-    /// Every fetched `<script src>` of the run's documents, served to the
-    /// sessions whose scripts load at run time (invoked children).
-    struct Scripts(BTreeMap<String, ResolvedScript>);
+    /// Every fetched `<script src>` of the run's documents, by URL, served
+    /// to one session whose scripts load at run time (an invoked child): a
+    /// `src` resolves against the base URI of the document it runs.
+    struct Scripts {
+        base: url::Url,
+        scripts: BTreeMap<String, ResolvedScript>,
+    }
 
     impl ScriptResolver for Scripts {
         fn resolve(&mut self, uri: &str) -> Result<ResolvedScript, ScriptResolveError> {
-            self.0
-                .get(scxml_syntax::collapse_whitespace(uri).as_ref())
+            resolve(&self.base, &scxml_syntax::collapse_whitespace(uri))
+                .and_then(|url| self.scripts.get(url.as_str()))
                 .cloned()
                 .ok_or(ScriptResolveError::NotFound)
         }
@@ -636,15 +686,18 @@ mod embedder {
             } else {
                 (None, None)
             };
-            // Only a literal `file:` child's schema files were read, before
-            // the session; nothing is read while it runs.
-            let event_schemas = if kind == DocumentKind::Invocation {
+            // A literal child's schema files and scripts were loaded before
+            // the session; a `srcexpr` child's load with it, as they are now.
+            let event_schemas = if kind != DocumentKind::Invocation {
+                BTreeMap::new()
+            } else if self.is_literal(&url) {
                 self.event_schemas
                     .get(url.as_str())
                     .cloned()
                     .unwrap_or_default()
             } else {
-                BTreeMap::new()
+                self.load_srcexpr_scripts(&url, &fetched.bytes);
+                self.child_event_schemas(&url, &fetched.bytes, true)
             };
             let text = String::from_utf8(fetched.bytes).ok()?;
             Some(EmbeddedDocument {
@@ -657,41 +710,83 @@ mod embedder {
             })
         }
 
-        fn scripts(&self) -> MachineScripts {
-            let mut scripts = BTreeMap::new();
-            let mut trusted = Vec::new();
+        fn scripts(&self, base_uri: Option<&str>) -> MachineScripts {
+            let mut fetched = BTreeMap::new();
             for literal in self
                 .literals
                 .iter()
                 .filter(|literal| literal.site == Site::Script)
             {
-                if scripts.contains_key(&literal.authored) {
-                    continue;
-                }
                 let Some(url) = literal.url.as_ref() else {
                     continue;
                 };
-                let Ok(fetched) = self.repository.fetch_document(url) else {
+                if fetched.contains_key(url.as_str()) {
                     continue;
-                };
-                let Some(media_type) = script_media_type(url, &fetched) else {
+                }
+                if let Ok(script) = self.repository.fetch_document(url) {
+                    fetched.insert(url.as_str().to_owned(), (url.clone(), script));
+                }
+            }
+            if let Ok(loaded) = self.srcexpr_scripts.lock() {
+                for (key, script) in loaded.iter() {
+                    if let Ok(url) = url::Url::parse(key) {
+                        fetched.insert(key.clone(), (url, script.clone()));
+                    }
+                }
+            }
+            let mut scripts = BTreeMap::new();
+            let mut trusted = Vec::new();
+            for (key, (url, script)) in fetched {
+                let Some(media_type) = script_media_type(&url, &script) else {
                     continue;
                 };
                 if let Ok(digest) = TrustedComponentDigest::from_hex(&format!(
                     "{:x}",
-                    Sha256::digest(&fetched.bytes)
+                    Sha256::digest(&script.bytes)
                 )) {
                     trusted.push(digest);
                 }
                 scripts.insert(
-                    literal.authored.clone(),
+                    key,
                     ResolvedScript {
                         media_type: media_type.to_owned(),
-                        bytes: fetched.bytes,
+                        bytes: script.bytes,
                     },
                 );
             }
-            MachineScripts::runtime(Box::new(Scripts(scripts)), ScriptPolicy::new(trusted))
+            let base = base_uri
+                .and_then(|base| url::Url::parse(base).ok())
+                .unwrap_or_else(|| self.base.clone());
+            MachineScripts::runtime(
+                Box::new(Scripts { base, scripts }),
+                ScriptPolicy::new(trusted),
+            )
+        }
+    }
+
+    impl Documents {
+        /// Fetches, as they are now, the `<script src>` files the `srcexpr`
+        /// document at `url` (holding `bytes`) names, resolved against
+        /// `url`, for the sessions that run it.
+        fn load_srcexpr_scripts(&self, url: &url::Url, bytes: &[u8]) {
+            let text = String::from_utf8_lossy(bytes);
+            let mut loaded = Vec::new();
+            for literal in literals_of(url, &text) {
+                if literal.site != Site::Script {
+                    continue;
+                }
+                if let Some(script) = literal.url.as_ref().and_then(|script| {
+                    self.repository
+                        .fetch_document_now(script)
+                        .ok()
+                        .map(|fetched: Fetched| (script.as_str().to_owned(), fetched))
+                }) {
+                    loaded.push(script);
+                }
+            }
+            if let Ok(mut scripts) = self.srcexpr_scripts.lock() {
+                scripts.extend(loaded);
+            }
         }
     }
 }

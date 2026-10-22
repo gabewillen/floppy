@@ -4,8 +4,8 @@ The implementation report plan of the `conversation` namespace, in the format of
 [W3C SCXML IRP](../../../scxml.rs/tests/conformance/w3c-irp/README.md) and of
 scxml.rs's own namespace suites
 ([scxml.rs/docs/conformance.md](../../../scxml.rs/docs/conformance.md#namespace-suites)):
-5 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
-("Statements"), tested by 13 mandatory documents. It runs through exactly
+9 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
+("Statements"), tested by 28 mandatory documents. It runs through exactly
 the pipeline the W3C IRP runs through (the canonical compiler, the shipped
 Wasm components under the Wasmtime session host, the same oracles and report
 envelope), with the namespace's own extension package and component bound,
@@ -35,10 +35,12 @@ SAXON='java -jar /opt/saxon/saxon-he-12.8.jar' sh scripts/namespace-irp.sh prepa
 sh scripts/namespace-irp.sh baselines conversation
 ```
 
-The current baseline (manifest SHA-256 `79b5898bc54441ca70f9435d536dc1f9b8611dd1e2a9f634ceba3ecec1dbd19b`,
+The current baseline (manifest SHA-256 `734a98b0feddfb444040ceb1dfdd187d63a1472aae3dbd45a63a241cffd67822`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
-measured on Linux x86_64) measures:
+measured on macOS arm64 when the namespace took the original's
+`turn_participants`, 2026-10-18; regenerate it on Linux x86_64, the host
+`tests/tests/namespace_irp.rs` compares fuel on) measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 13 / 13 | 0 | `672a0da39a913abe482110f6f7937f5604398c31a18e518cff2223bfb690250a` | `1d07468082efd21639d4897379a53f2bbb162f83ed5b1c2b873e2e619bd14a88` |
+| ECMAScript | 28 / 28 | 0 | `6095a2f1e46bac71e344d7ffb6b9d244f32a2f749d52f401f457e4d7ba2576fc` | `c390ad70d855a26094708e41c31d0cab4b8da2580d9c6ee5510d1b99c0b94911` |

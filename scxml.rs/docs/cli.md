@@ -133,14 +133,16 @@ cargo run -p scxml-cli -- compile machine.scx \
 
 `validate`, `compile`, `snapshot run`, and `run` read every JSON Schema file
 an `event:schema` attribute references
-([namespaces/event](../namespaces/event/README.md)) relative to the
-document's directory, with no flag; a file they cannot read, or a reference
-that is not a relative path at or below that directory, is `EVENT004`.
-`snapshot run` and `run` read the files of every literal `<invoke src>`
-document loaded from a `file:` URL the same way, relative to that child's
-directory and before the session, and the host compiles the child with
-them; a remote or `srcexpr` child gets none, so a schema-file reference
-rejects it when it is invoked (`error.execution`). `validate` and `compile`
+([namespaces/event](../namespaces/event/README.md)) with no flag, each
+resolved against the document's base URI as a `<script src>` is (its `file:`
+URL; `..` segments resolve, so a file may be outside the document's
+directory); a file they cannot read, or a reference that is not a relative
+path, is `EVENT004`.
+`snapshot run` and `run` load the files of every `<invoke src>` document
+the same way, resolved against that child's own base URI (read from its
+directory for a `file:` child, fetched for an `https:` one), and the host
+compiles the child with them: a literal child's before the session, a
+`srcexpr` child's when its `<invoke>` runs. `validate` and `compile`
 also read each `file:` document a literal `<invoke src>` of the document
 names (fetching nothing), with its own schema files, and `snapshot run` and
 `run` pass the documents they loaded, so a `<send>` between the two whose
@@ -453,12 +455,15 @@ document `file:///work/documents/child.scx`
 
 A `<script src>` of the document that cannot be fetched rejects it (SCXML
 1.0 §5.8); any other failure raises `error.execution` when its element runs.
-An `<invoke srcexpr>` URI is fetched when its `<invoke>` runs, through the
-same fetcher; a failure raises `error.execution`. Remote documents come over
+An `<invoke srcexpr>` URI is fetched each time its `<invoke>` runs, through
+the same fetcher, as the document is then (a document the run writes loads
+as written), with the schema files and scripts it names, resolved against
+its own URL; a failure raises `error.execution`. Remote documents come over
 HTTPS only (16 MiB, at most 5 redirects, each to `https:`, the repository
 resolver's timeouts, no retry, no credentials, cookies, or proxies), and
-`--offline` forbids them. Everything is fetched once per run and shared by
-every session of the tree, and the repository namespaces and services of
+`--offline` forbids them. Every literal URI is fetched once per run and
+shared by every session of the tree; each session is served the scripts its
+own document names, and the repository namespaces and services of
 every literal `<invoke src>` document are bound with the root's.
 
 ## BasicHTTP over the network

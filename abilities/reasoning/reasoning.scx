@@ -4,8 +4,7 @@
   System 2 pass. The cognition (abilities/cognition/cognition.scx) invokes it once
   per turn that intuition left unhandled.
 
-    recalling -> applying (an invoked generate service) -> dispatching ->
-      done
+    recalling -> applying (an invoked generate service) -> done
 
   Memory (the original Reasoning._recall_activity): with a
   database (the <param> database, the memory database file), recalling
@@ -14,77 +13,88 @@
   (query_tags cognitive_episode) and standing directives (query_tags
   standing_directive), each for the turn's context or none, oldest first,
   at most 50, and sends itself bot.ability.reasoning.recalled with them and
-  memory_consulted true. It retains nothing: the reflection stores each
-  turn's episode once (decision D97; the original's Reasoning
-  _retain_activity and Reflection _store_activity both insert one, so every
-  reasoned turn was recalled twice). The context is
-  the stimulus's target_device (the original _context_ref_from_input). A recalled
-  row that is not a JSON object is skipped, as the original skips one that does
-  not validate. A memory failure fails the stage ("Reasoning memory recall
+  memory_consulted true. Reasoning writes nothing: the turn's episode is
+  stored once, by reflection after the turn's output (decision D97; the
+  original's _retain_activity inserted a second copy of it). The context is
+  the stimulus's target_device (the original _context_ref_from_input). The
+  recalled rows are read with <memory:contents> (the original's
+  OutputData.contents): a row that is not a JSON object is skipped, as the
+  original skips one that does not validate. A memory failure fails the stage ("Reasoning memory recall
   failed: ..."). Without
-  a database (the original's Reasoning without a memory collaborator) each step
+  a database (the original's Reasoning without a memory collaborator) recalling
   logs <log label="memory" expr="'absent'"> and sends its event with
   memory_consulted false and nothing recalled.
 
-  Prompt (the reference processing.py InputData.model_facing_payload over
-  cognition/event.py model_facing_xml): the user message is the original's
-  ProcessorInput as model-facing XML, built by promptProjection() in
-  reasoning.js: <cognition:processor_input> holding host_input (a
+  Prompt (the original's processing.py InputData.model_facing_content over
+  cognition/event.py model_facing_content): the user message is the
+  original's ProcessorInput as model-facing XML, built by
+  <cognition:model_facing_content>: <cognition:processor_input> holding host_input (a
   processing:input whose input field is the stimulus, stamped
   stimulus:event, stimulus:id, stimulus:source and stimulus:target),
   prior_episodes (cognition:cognitive_episode) and standing_directives
-  (cognition:directive), each list with its count; no focus (the original's
-  ProcessorInput has none). The stimulus's data is JSON here, so it renders
+  (cognition:directive), each list with its count, and the environment
+  block (decision D106); no focus (the original's ProcessorInput has
+  none). The stimulus's data is JSON here, so it renders
   as the original renders a payload that is not a model: a content field, an
-  object as entry elements, an array as item elements, an object item as
-  its entry elements (the original renders those items as models; dropping
-  them hid the conversation's messages from the model, decision D100). ElementTree's
+  object as entry elements, an array as item elements, each object or
+  array item filled as one, as the original renders a model item (so a
+  conversation's messages reach the model; decision D99). ElementTree's
   indent and serialization (two spaces, an empty element as <name />) are
   reproduced. The original's budgets hold: 262144 encoded bytes, 4096 nodes, 4096
-  collection items and 65536 characters per scalar for the projection, and
-  262144 bytes for the system prompt, the projection and the dispatch
-  schema together; over any, the stage fails without a model call with
-  the original's message (for example "prompt projection encoded byte budget
-  exceeded"). applying ends on the generate service's done.invoke, which
+  collection items and 65536 characters per scalar for the projection; the
+  system prompt and the dispatch schema are reserved first, and the
+  projection renders into the bytes they leave of the prompt's 262144.
+  Recalled context never fails the turn: prior_episodes and
+  standing_directives keep their newest items that fit and count the rest
+  as omitted="<n>" (the original's b1654d6). Over a budget otherwise (the
+  stimulus alone overflows), the element writes the original's message to
+  prompt_failure and the stage fails without a model call with it (for
+  example "prompt projection encoded byte budget exceeded"). applying ends on the generate service's done.invoke, which
   stands in for the original's private bot.ability.reasoning.reasoned
-  completion.
+  completion. The call streams its reply when the run's FLOPPY_STREAM
+  says the backend does (env:stream), and each generate.progress the
+  service returns while the reply arrives is sent on to the parent
+  cognition, whose stage bound is then one of inactivity (decision D101).
 
-  Choices: the body's assembled choices for the turn (the <param>
-  choices: the body's own and each ability's offers, tagged with the
-  offering ability's invoke id as target). A selection is returned, not
-  taken: the body routes it. The structured-output schema is built from
-  the choices by <decision:selection>, as the original's dispatch tool:
-  {events: [anyOf one branch per offered event]}, each branch {event (a
-  one-value enum), data (the event's schema without $schema, title and
-  examples), reason, and target (an enum of the abilities offering it) when
-  an ability offers it}, every field required and no extra property, sent
-  strict. The generate service returns only a reply that satisfies it, so a
-  selection outside the choices (event or target) fails the stage as
-  schema-mismatch. With no choices the stage fails without a model call.
+  Choices: the body's collected choices for the turn (the <param>
+  choices: the body's own and each ability's offers, each tagged with the
+  session id of its offerer as target). The original's dispatch tool is
+  built from the choices by <processing:send> and offered as generate's
+  one tool, named dispatch: {events: [anyOf one branch per offered
+  event]}, each branch {event (a one-value enum), data (the event's
+  schema), reason (optional), and target (an enum of the sessions offering
+  it)}. The generate service returns the reply's tool calls only once every
+  one is a dispatch call whose arguments the tool's schema admits, so a
+  selection outside the choices (event, target or data) or a call of
+  another tool fails the stage as schema-mismatch before anything is sent
+  (the original's _events_from_dispatch_tool_calls and
+  events_from_dispatch_args checks). With no choices the stage fails
+  without a model call.
 
-  Dispatching (the original's apply activity dispatches the reasoned selections
-  before bot.ability.reasoning.reasoned, cognition.types.
-  dispatch_selected_events): <bot:verdict> removes the ignore selections
-  and applies attention_selection_error with the turn's focus and
-  focus_candidates, then <decision:route> places each on the target
-  offering it in the choices (_resolve_target: a selection that names no
-  target needs exactly one offerer). A selection that cannot be placed
-  fails the stage with the original's SelectionRejectionError message.
+  Dispatch (the original's apply activity dispatches the reasoned
+  selections before bot.ability.reasoning.reasoned,
+  cognition.types.dispatch_selected_events): generate.result's events, of
+  every dispatch call in order, are each sent to the session their target
+  names (#_scxml_ + target, decision D104) and kept, in order, as the
+  stage's selected. A send that fails (error.*) fails the stage. A
+  selected bot.ability.cognition.ignore goes to the cognition, which only
+  logs it.
 
   Input: the <param>s turn, stimulus, focus, focus_candidates, choices,
   model and database. Output: <donedata>, received by the cognition as
   done.invoke.reasoning:
 
-    {turn, handled: true, selected: [{event, data, reason, target?}]}
+    {turn, handled: true, selected: [{event, data, reason, target}]}
     {turn, handled: false, failed: true, reason}
 
   The cognition's hop timeout bounds the stage (leaving it cancels the model
   call, SCXML 6.4).
 
-  Bindings: the generate service package, the decision namespace
-  (<decision:selection> builds the schema, <decision:names> writes the
-  logged choice names, <decision:route> places the selections) and the bot
-  namespace (<bot:verdict>), resolved from their repository URIs, and the
+  Bindings: the generate service package, the processing namespace
+  (<processing:send> builds the dispatch tool) and the cognition namespace
+  (<cognition:model_facing_content> builds the prompt) and the memory
+  namespace (<memory:contents> reads the recalled rows), resolved from their
+  repository URIs, and the
   memory ability's sql service package (a run grants it its directory,
   scx run's dir option); env scopes FLOPPY_API_KEY and
   FLOPPY_BASE_URL to the service's <invoke> (no default backend: without
@@ -92,10 +102,11 @@
   events are recorded by one transition each.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
-       xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
+       xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory"
+       xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
        version="1.0" datamodel="ecmascript" name="reasoning" initial="recalling">
   <datamodel>
     <!-- The turn, from the cognition's <param>s. -->
@@ -105,30 +116,33 @@
     <data id="focus_candidates" expr="[]"/>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
     <data id="choices" expr="[]"/>
-    <data id="choice_names" expr="''"/>
+    <!-- The bot's environment (decision D106): its prompt renders it as
+         the environment block. -->
+    <data id="environment" expr="null"/>
     <data id="system" expr="'You are the deliberate reasoning of floppy, a small companion robot. You receive one stimulus the robot observed, as JSON, with what the robot is looking at. Select every event the robot should take for it from the offered events (an empty list selects none), with its data, its target when the event names one, and a short reason. When an offered event says something, give it the complete text to say.'"/>
     <!-- The model call: its schema, invocation, and reply. -->
     <data id="schema" expr="null"/>
-    <data id="projection" expr="null"/>
+    <data id="prompt" expr="null"/>
+    <data id="prompt_failure" expr="null"/>
     <data id="selected" expr="null"/>
     <data id="gen_failure" expr="null"/>
     <data id="result" expr="null"/>
-    <!-- The selections being dispatched, and why they were rejected (null
-         when placed). -->
-    <data id="dispatch_selections" expr="[]"/>
-    <data id="rejection" expr="null"/>
+    <!-- The dispatch call and the selection being sent (the <foreach>
+         items). -->
+    <data id="call" expr="null"/>
+    <data id="s" expr="null"/>
     <!-- Memory: the database file (null: no memory) and the original's
-         statements (episodes.py, directives.py), with ?2 the context. The SQL runs on both
-         engines (SQLite and Postgres). A memory id is the next row count
-         as 32 zero-padded digits (neither engine's randomness is unique
-         across invocations in Wasm); JSON rows are told by their
-         content_format, oldest first by created_at, then memory_id. -->
+         episode and directive select, with ?2 the context. The SQL runs on both
+         engines (SQLite and Postgres); JSON rows are told by their
+         content_format, the 50 most recent by created_at,
+         then memory_id (the insertion order), read oldest first (the original's
+         recent_select). -->
     <data id="database" expr="null"/>
     <data id="context_ref" expr="null"/>
     <data id="prior_episodes" expr="[]"/>
     <data id="standing_directives" expr="[]"/>
     <data id="statements" expr="[]"/>
-    <data id="episode_select" expr="'SELECT content FROM bot_memory WHERE query_tags = ?1 AND (CAST(?2 AS TEXT) IS NULL OR context_ref IS NULL OR context_ref = ?2) AND content_format = \'application/json\' ORDER BY created_at, memory_id LIMIT 50'"/>
+    <data id="episode_select" expr="'SELECT content FROM (SELECT content, created_at, memory_id FROM bot_memory WHERE query_tags = ?1 AND (CAST(?2 AS TEXT) IS NULL OR context_ref IS NULL OR context_ref = ?2) AND content_format = \'application/json\' ORDER BY created_at DESC, memory_id DESC LIMIT 50) AS recent ORDER BY created_at, memory_id'"/>
   </datamodel>
   <script src="reasoning.js"/>
 
@@ -163,9 +177,9 @@
         <param name="database" expr="database"/>
         <param name="statements" expr="statements"/>
       </invoke>
-      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json">
-        <assign location="prior_episodes" expr="recalledContents(_event, 0)"/>
-        <assign location="standing_directives" expr="recalledContents(_event, 1)"/>
+      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json">
+        <memory:contents location="prior_episodes" result="_event.data.results[0]"/>
+        <memory:contents location="standing_directives" result="_event.data.results[1]"/>
         <send event="bot.ability.reasoning.recalled" target="#_internal">
           <param name="turn" expr="turn"/>
           <param name="host_input" expr="hostInput()"/>
@@ -175,19 +189,19 @@
           <param name="input" expr="focusInput()"/>
         </send>
       </transition>
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="done">
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="done">
         <assign location="result" expr="recallFailedResult(_event.data.message)"/>
       </transition>
       <transition event="error.*" target="done">
         <assign location="result" expr="recallFailedResult(_event.name)"/>
       </transition>
     </state>
-    <transition event="bot.ability.reasoning.recalled" event:schema="schemas/bot.ability.reasoning.recalled.json"
+    <transition event="bot.ability.reasoning.recalled" event:schema="../schemas/bot.ability.reasoning.recalled.json"
                 cond="hasRecalledWithoutChoices(_event)"
                 target="done">
       <assign location="result" expr="noChoicesResult()"/>
     </transition>
-    <transition event="bot.ability.reasoning.recalled" event:schema="schemas/bot.ability.reasoning.recalled.json"
+    <transition event="bot.ability.reasoning.recalled" event:schema="../schemas/bot.ability.reasoning.recalled.json"
                 cond="isCurrentTurn(_event)"
                 target="applying"/>
   </state>
@@ -195,56 +209,59 @@
   <!-- One structured model call; leaving this state cancels it. -->
   <state id="applying">
     <onentry>
-      <decision:selection location="schema" choices="choices"/>
+      <processing:send location="schema" choices="choices"/>
       <assign location="selected" expr="null"/>
       <assign location="gen_failure" expr="null"/>
-      <decision:names location="choice_names" choices="choices"/>
-      <log label="reasoning" expr="choiceNamesLog()"/>
-      <assign location="projection" expr="promptProjection()"/>
+      <log label="reasoning" expr="choices"/>
+      <cognition:model_facing_content location="prompt" failurelocation="prompt_failure"
+                                      stimulus="stimulus" prior_episodes="prior_episodes"
+                                      standing_directives="standing_directives" environment="environment"
+                                      instructions="system" schema="schema"/>
     </onentry>
     <!-- Over a prompt budget: fail before the model call is started. -->
     <transition cond="hasNoPrompt()" target="done">
       <assign location="result" expr="projectionFailedResult()"/>
     </transition>
     <invoke id="generate" type="https://github.com/stateforward/floppy/services/generate"
-            env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
+            env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL" env:stream="FLOPPY_STREAM">
       <param name="model" expr="model"/>
       <param name="system" expr="system"/>
-      <param name="prompt" expr="projection.prompt"/>
+      <param name="prompt" expr="prompt"/>
       <param name="schema" expr="schema"/>
       <param name="schemaname" expr="'dispatch'"/>
-      <param name="strict" expr="true"/>
     </invoke>
 
+    <!-- A streamed reply's progress goes to the cognition, which bounds this
+         stage by inactivity once it streams (decision D101). -->
+    <transition event="generate.progress">
+      <send event="generate.progress" target="#_parent">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <!-- Every dispatch call's events, in order: each sent to its target
+         and kept. -->
     <transition event="generate.result">
-      <assign location="selected" expr="generatedSelection(_event)"/>
+      <assign location="selected" expr="[]"/>
+      <foreach array="_event.data.tool_calls" item="call">
+        <foreach array="call.args.events" item="s">
+          <send eventexpr="s.event" targetexpr="'#_scxml_' + s.target">
+            <content expr="selectionData(s)"/>
+          </send>
+          <assign location="selected[selected.length]" expr="s"/>
+        </foreach>
+      </foreach>
     </transition>
     <transition event="generate.failed">
       <assign location="gen_failure" expr="generateFailure(_event)"/>
     </transition>
-    <transition event="done.invoke.generate" cond="hasSelection()" target="dispatching"/>
+    <transition event="done.invoke.generate" cond="hasSelection()" target="done">
+      <assign location="result" expr="selectedResult()"/>
+    </transition>
     <transition event="done.invoke.generate" target="done">
       <assign location="result" expr="failedResult()"/>
     </transition>
     <transition event="error.*" target="done">
       <assign location="result" expr="couldNotRunResult(_event)"/>
-    </transition>
-  </state>
-
-  <!-- The selections are checked before the turn is answered. -->
-  <state id="dispatching">
-    <onentry>
-      <bot:verdict location="dispatch_selections" rejectionlocation="rejection" selections="selected"
-                   focus="focus" candidates="focus_candidates"/>
-      <if cond="isAccepted()">
-        <decision:route location="dispatch_selections" rejectionlocation="rejection" selections="dispatch_selections" choices="choices"/>
-      </if>
-    </onentry>
-    <transition cond="isAccepted()" target="done">
-      <assign location="result" expr="selectedResult()"/>
-    </transition>
-    <transition target="done">
-      <assign location="result" expr="rejectedResult()"/>
     </transition>
   </state>
 

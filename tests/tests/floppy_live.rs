@@ -8,7 +8,11 @@
 //! generate service has no default backend) and `TYPESAFE_API_KEY` (the
 //! intuition's decision service); the model is
 //! `FLOPPY_LIVE_MODEL`, else `Qwen/Qwen3.8-Flash-Next`, given to the bot
-//! by `bot.activate`. Each test writes the run's records under
+//! as its `model` param by the room that invokes it
+//! (`environments/room/room.scx`, laid out beside a scratch copy of the
+//! bot, the files service granted the layout's `behaviors/`, where the
+//! builder reflection invokes writes a learned behavior's documents). Each
+//! test writes the run's records under
 //! `target/floppy-live/` and prints pass or fail only; no value is ever
 //! printed.
 
@@ -38,16 +42,40 @@ fn keep(name: &str, records: &[Json]) {
 }
 
 fn start() -> Run {
-    start_body(&workspace().join("bots/floppy/floppy.scx"))
+    start_body(&scratch_bot())
 }
 
+/// Starts the room with the laid-out body at `body` as its bot, given the
+/// live model.
 fn start_body(body: &Path) -> Run {
+    start_holding(body, &[])
+}
+
+/// [`start_body`] with the bot holding `devices`, which the room does not
+/// run (every read of one fails and it offers nothing).
+fn start_holding(body: &Path, devices: &[&str]) -> Run {
     let mut args = Vec::new();
     for file in support::live_env_files() {
         args.push("--env-file".to_owned());
         args.push(file.display().to_string());
     }
-    args.push(body.display().to_string());
+    let model = format!("'{}'", model());
+    let layout = body
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .expect("the body is <layout>/bots/floppy/floppy.scx");
+    let room = support::environment_with_devices(
+        layout,
+        &["floppy"],
+        &[],
+        &[("floppy", devices)],
+        &[("model", &model)],
+    );
+    // The builder (reflection's) writes and reads its documents in the
+    // layout's behaviors directory (decision D121).
+    args.extend(support::behaviors_grant(&room));
+    args.push(room.display().to_string());
     Run::start(&args, &[])
 }
 
@@ -62,27 +90,20 @@ fn copy_dir(from: &Path, to: &Path) {
     }
 }
 
-/// A scratch copy of the bot whose body's `devices` expression is
-/// `devices`; returns the body's path.
-fn with_devices(devices: &str) -> PathBuf {
+/// A scratch copy of the bot and of the builder its reflection invokes
+/// (`../../bots/builder/builder.scx`); returns the body's path.
+fn scratch_bot() -> PathBuf {
     let dir = unique_scratch("floppy-live");
-    for sub in ["bots/floppy", "bots/floppy/schemas"] {
+    for sub in [
+        "bots/floppy",
+        "bots/floppy/schemas",
+        "bots/builder",
+        "bots/builder/schemas",
+    ] {
         copy_dir(&workspace().join(sub), &dir.join(sub));
     }
     support::copy_tree(&workspace().join("abilities"), &dir.join("abilities"));
-    let body = dir.join("bots/floppy/floppy.scx");
-    let text = std::fs::read_to_string(&body).expect("the body is readable");
-    let declared = r#"<data id="devices" expr="[]"/>"#;
-    assert!(text.contains(declared), "the body declares its devices");
-    std::fs::write(
-        &body,
-        text.replace(
-            declared,
-            &format!(r#"<data id="devices" expr="{devices}"/>"#),
-        ),
-    )
-    .expect("the body copy is writable");
-    body
+    dir.join("bots/floppy/floppy.scx")
 }
 
 fn texts(records: &[Json], label: &str) -> Vec<String> {
@@ -93,18 +114,12 @@ fn texts(records: &[Json], label: &str) -> Vec<String> {
         .collect()
 }
 
-/// The turn completed, and every selection of its output but an ignore
-/// (never dispatched) was routed.
-fn all_routed(records: &[Json], output: Option<&Json>) -> bool {
-    let selected = output
+/// The turn completed, and every selection of its output named the
+/// session it was sent to (the stages send their own selections).
+fn all_sent(records: &[Json], output: Option<&Json>) -> bool {
+    output
         .and_then(|output| output["output"].as_array())
-        .map_or(usize::MAX, |items| {
-            items
-                .iter()
-                .filter(|item| item["event"] != "bot.ability.cognition.ignore")
-                .count()
-        });
-    texts(records, "floppy.route").len() == selected
+        .is_some_and(|items| items.iter().all(|item| item["target"].is_string()))
         && texts(records, "bot.processing.failed").is_empty()
 }
 
@@ -115,13 +130,12 @@ fn model() -> String {
 /// One question turn through the full cascade: autonomy's seam leaves it
 /// unhandled, intuition (the decision service on `TypeSafe`) hands it to
 /// reasoning or abstains, and reasoning (the model) selects from the
-/// body's assembled choices, which the body routes (`live_chat` checks
-/// what is said). The env files must also hold `TYPESAFE_API_KEY`.
+/// body's collected choices and sends each selection to its target
+/// (`live_chat` checks what is said). The env files must also hold `TYPESAFE_API_KEY`.
 #[test]
 #[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_cascade() {
     let mut run = start();
-    run.event("bot.activate", &json!({"model": model()}));
     run.event(
         "bot.input",
         &json!({"observation": {"event": "text", "data": "What is the capital of France? Please tell me."}}),
@@ -147,7 +161,7 @@ fn live_cascade() {
         .find(|(label, _)| label == "floppy.output")
         .and_then(|(_, text)| serde_json::from_str::<Json>(&text).ok());
     let responded = output.as_ref().is_some_and(|output| output["turn"] == 1)
-        && all_routed(&all, output.as_ref());
+        && all_sent(&all, output.as_ref());
     let pass = stages.first().map(String::as_str) == Some("autonomy unhandled (no-behaviors)")
         && stages
             .get(1)
@@ -163,13 +177,15 @@ fn live_cascade() {
 
 /// One turn on a bot with a lamp, for an input that names the lamp: the
 /// body's choices are its own `bot.focus_device` (pinned to the lamp) and
-/// the cognition's and the communication's offers; whatever the cascade selects is routed (a focus
-/// on the lamp moves the body's attention there), and the turn completes.
+/// the cognition's and the communication's offers, each tagged with its
+/// offering session's id; whatever the cascade selects is sent to its
+/// target (a focus on the lamp moves the body's attention there, at least
+/// once: intuition's environment action and reasoning may both focus it),
+/// and the turn completes.
 #[test]
 #[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_choices() {
-    let mut run = start_body(&with_devices("['lamp']"));
-    run.event("bot.activate", &json!({"model": model()}));
+    let mut run = start_holding(&scratch_bot(), &["lamp"]);
     run.event(
         "bot.input",
         &json!({"observation": {"event": "text", "data": "Please turn and look at the lamp."}, "target_device": "lamp"}),
@@ -185,41 +201,51 @@ fn live_choices() {
     let mut all = records;
     all.extend(finished.records);
     keep("live_choices", &all);
-    let choices = "bot.focus_device bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity";
+    let choices = "bot.focus_device@session.floppy bot.ability.cognition.ignore@session.floppy.cognition bot.ability.communication.respond@session.floppy.communication bot.ability.identity.adopt@session.floppy.identity";
+    let names = |lines: Vec<String>| -> Vec<String> {
+        lines
+            .iter()
+            .map(|line| support::choice_names(line))
+            .collect()
+    };
     let output = texts(&all, "floppy.output")
         .pop()
         .and_then(|text| serde_json::from_str::<Json>(&text).ok());
-    let reasoned = texts(&all, "reasoning");
-    let focused_on_lamp = output.as_ref().is_some_and(|output| {
+    let reasoned = names(texts(&all, "reasoning"));
+    // Every focus is on the lamp, and an output that focuses it has focused
+    // it at least once: as in the original, intuition's environment action
+    // and reasoning may both send `bot.focus_device` in one turn, with no
+    // dedupe (D113, J12), so the lamp may be focused twice.
+    let focuses = texts(&all, "floppy.focus");
+    let focuses_output = output.as_ref().is_some_and(|output| {
         output["output"]
             .as_array()
             .is_some_and(|items| items.iter().any(|item| item["event"] == "bot.focus_device"))
-    }) == (texts(&all, "floppy.focus") == ["lamp"]);
-    let pass = texts(&all, "floppy.choices") == [choices]
+    });
+    let focused_on_lamp =
+        focuses.iter().all(|device| device == "lamp") && (!focuses_output || !focuses.is_empty());
+    let pass = names(texts(&all, "floppy.choices")) == [choices]
         && output.as_ref().is_some_and(|output| output["turn"] == 1)
-        && reasoned
-            .iter()
-            .all(|line| *line == format!("turn 1: {choices}"))
-        && all_routed(&all, output.as_ref())
+        && reasoned.iter().all(|line| line == choices)
+        && all_sent(&all, output.as_ref())
         && focused_on_lamp;
     println!("live choices: {}", if pass { "pass" } else { "fail" });
     assert!(
         pass,
-        "the turn's choices or routing were wrong (target/floppy-live/live_choices.json)"
+        "the turn's choices or sends were wrong (target/floppy-live/live_choices.json)"
     );
 }
 
 /// One text turn through the original's communication path: a
 /// `bot.ability.communication.input` addressed to the bot is admitted into
 /// the conversation, whose product is the turn's stimulus; the cascade
-/// selects `bot.ability.communication.respond`, which the body routes to
+/// selects `bot.ability.communication.respond`, which reasoning sends to
 /// the communication and speaking says (`floppy.say`), and the spoken text is
 /// recorded in the conversation.
 #[test]
 #[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_chat() {
     let mut run = start();
-    run.event("bot.activate", &json!({"model": model()}));
     run.event(
         "bot.ability.communication.input",
         &json!({
@@ -250,7 +276,7 @@ fn live_chat() {
     let said = texts(&all, "floppy.say");
     let pass = texts(&all, "communication.product") == ["0"]
         && output.as_ref().is_some_and(|output| output["turn"] == 1)
-        && all_routed(&all, output.as_ref())
+        && all_sent(&all, output.as_ref())
         && said.len() == 1
         && said.iter().all(|text| !text.trim().is_empty())
         && texts(&all, "bot.ability.speaking.output").len() == 1
@@ -268,7 +294,12 @@ fn live_chat() {
 /// (standing in for the invoker's `<param>`); returns the body's path.
 fn with_name(name: &str) -> PathBuf {
     let dir = unique_scratch("floppy-live");
-    for sub in ["bots/floppy", "bots/floppy/schemas"] {
+    for sub in [
+        "bots/floppy",
+        "bots/floppy/schemas",
+        "bots/builder",
+        "bots/builder/schemas",
+    ] {
         copy_dir(&workspace().join(sub), &dir.join(sub));
     }
     support::copy_tree(&workspace().join("abilities"), &dir.join("abilities"));
@@ -291,7 +322,6 @@ fn with_name(name: &str) -> PathBuf {
 #[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_identity() {
     let mut run = start_body(&with_name("Floppy"));
-    run.event("bot.activate", &json!({"model": model()}));
     run.event(
         "bot.ability.communication.input",
         &json!({
@@ -356,7 +386,6 @@ fn transcript(records: &[Json]) -> String {
         "bot.ability.routines.reconciled",
         "bot.ability.routines.reconcile.failed",
         "floppy.output",
-        "floppy.route",
         "floppy.say",
         "floppy.deferred",
         "floppy.degraded",
@@ -396,7 +425,12 @@ fn transcript(records: &[Json]) -> String {
 /// answers from memory. Each turn waits for its reflection to settle
 /// (or the turn to fail) before the next. Records go to
 /// `target/floppy-live/live_conversation.json` and a readable transcript
-/// to `live_conversation.txt`; it asserts only that every turn completed.
+/// to `live_conversation.txt`. It asserts that every turn completed, that
+/// reflection learned a behavior by the end of the second turn, and that the
+/// fourth turn's answer names green (the first turn's fact, which the
+/// conversation's history carries to reasoning, decision D99). The last two
+/// depend on the model's choices: a model that never learns the request,
+/// or that does not answer from the history, fails the run.
 #[test]
 #[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_conversation() {
@@ -407,7 +441,6 @@ fn live_conversation() {
         "What is my favorite color?",
     ];
     let mut run = start();
-    run.event("bot.activate", &json!({"model": model()}));
     let settled = std::cell::Cell::new(0_usize);
     for (index, content) in inputs.iter().enumerate() {
         run.event(
@@ -421,7 +454,9 @@ fn live_conversation() {
         );
         let goal = index + 1;
         let waited = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            run.until(Duration::from_mins(10), |record| {
+            // Longer than reflection's revising backstop (30 min), so a
+            // revision that reaches it still settles the turn.
+            run.until(Duration::from_mins(32), |record| {
                 if record["type"] == "log"
                     && matches!(
                         record["label"].as_str(),
@@ -460,6 +495,29 @@ fn live_conversation() {
     assert!(
         failed.is_empty() && completed >= inputs.len(),
         "a turn failed (target/floppy-live/live_conversation.txt)"
+    );
+    let logged = logs(&all);
+    let third = logged
+        .iter()
+        .enumerate()
+        .filter(|(_, (label, _))| label == "bot.processing.completed")
+        .nth(2)
+        .map_or(logged.len(), |(index, _)| index);
+    assert!(
+        logged[..third]
+            .iter()
+            .any(|(label, text)| label == "reflection.inventory"
+                && text.contains(" ACTIVE ")
+                && text.ends_with("(accept)")),
+        "no behavior was learned by the second turn (target/floppy-live/live_conversation.txt)"
+    );
+    let answer = texts(&all, "bot.processing.completed")
+        .get(3)
+        .cloned()
+        .unwrap_or_default();
+    assert!(
+        answer.to_lowercase().contains("green"),
+        "the fourth turn did not recall green (target/floppy-live/live_conversation.txt)"
     );
 }
 

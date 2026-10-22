@@ -321,11 +321,11 @@ fn invoke_src_loads_relative_file_and_absolute_uris_and_lists_them() {
     }
 }
 
-/// A literal `<invoke src>` child's `event:schema` files are read relative
-/// to the child's own directory before the session and reach its compile,
-/// so it runs; a file outside its directory is never read (`EVENT004`
-/// rejects the child), and a `srcexpr` child gets none (nothing is read
-/// while the document runs), so their `<invoke>` raises `error.execution`.
+/// An `<invoke src>` child's `event:schema` files are read against the
+/// child's own base URI (a literal child's before the session, a `srcexpr`
+/// child's when its `<invoke>` runs), `..` segments included, and reach its
+/// compile, so it runs; a file that does not exist is not read (`EVENT004`
+/// rejects the child), so its `<invoke>` raises `error.execution`.
 #[test]
 fn a_literal_invoke_src_child_compiles_with_its_own_event_schema_files() {
     let directory = scratch("invoke-src-event-schemas");
@@ -335,7 +335,7 @@ fn a_literal_invoke_src_child_compiles_with_its_own_event_schema_files() {
         r#"{"$defs": {"Go": {"type": "object"}}}"#,
     )
     .expect("the schema is writable");
-    fs::write(directory.join("go.json"), "{}").expect("the root-relative schema is writable");
+    fs::write(directory.join("go.json"), "{}").expect("the parent directory's schema is writable");
     let child = |reference: &str| {
         format!(
             r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" version="1.0" datamodel="ecmascript"><state id="c0"><transition event="go" event:schema="{reference}" target="f"/><transition cond="true" target="f"/></state><final id="f"/></scxml>"#
@@ -348,6 +348,11 @@ fn a_literal_invoke_src_child_compiles_with_its_own_event_schema_files() {
     .expect("the child is writable");
     fs::write(directory.join("children/outside.scx"), child("../go.json"))
         .expect("the child is writable");
+    fs::write(
+        directory.join("children/missing.scx"),
+        child("../missing.json"),
+    )
+    .expect("the child is writable");
     let body = |invoke: &str| {
         format!(
             r#"<state id="s0">{invoke}<transition event="done.invoke" target="done"/><transition event="error.execution" target="failed"/></state><final id="done"><donedata><content expr="'done'"/></donedata></final><final id="failed"><donedata><content expr="'failed'"/></donedata></final>"#
@@ -357,10 +362,22 @@ fn a_literal_invoke_src_child_compiles_with_its_own_event_schema_files() {
         (r#"<invoke type="scxml" src="children/child.scx"/>"#, "done"),
         (
             r#"<invoke type="scxml" src="children/outside.scx"/>"#,
+            "done",
+        ),
+        (
+            r#"<invoke type="scxml" src="children/missing.scx"/>"#,
             "failed",
         ),
         (
             r#"<invoke type="scxml" srcexpr="'children/child.scx'"/>"#,
+            "done",
+        ),
+        (
+            r#"<invoke type="scxml" srcexpr="'children/outside.scx'"/>"#,
+            "done",
+        ),
+        (
+            r#"<invoke type="scxml" srcexpr="'children/missing.scx'"/>"#,
             "failed",
         ),
     ] {
@@ -624,6 +641,126 @@ fn a_recorded_run_replays_its_records_and_snapshots_byte_for_byte() {
         stderr(&refused).contains("[replay-identity-mismatch]"),
         "{}",
         stderr(&refused)
+    );
+}
+
+/// An invoked session that runs away (a raise that re-enters its own state
+/// without end), at its start and later on an event the root forwards, is
+/// ended, and the run goes on: the root logs `error.execution` and then
+/// `error.communication.<invokeid>` and finishes, exit 0, where the
+/// runaway used to fail the whole run with `command-bound`. A recorded run
+/// replays to the same records.
+#[test]
+fn an_invoked_runaway_is_ended_and_its_recorded_run_replays() {
+    let directory = scratch("invoked-runaway");
+    let child = |initial: &str| {
+        format!(
+            r#"<invoke id="{initial}"><content><scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="{initial}"><state id="{initial}"><transition event="go" target="loop"/></state><state id="loop"><onentry><raise event="again"/></onentry><transition event="again" target="loop"/></state></scxml></content></invoke>"#
+        )
+    };
+    let at_start = r#"<invoke id="first"><content><scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="f0"><state id="f0"><onentry><raise event="again"/></onentry><transition event="again" target="f0"/></state></scxml></content></invoke>"#;
+    let doc = document(
+        &directory,
+        &format!(
+            r##"<state id="s0">{at_start}{later}<transition event="error.execution"><log label="first" expr="_event.name"/></transition><transition event="go"><send event="go" target="#_later"/></transition><transition event="error.communication" target="done"><log label="later" expr="_event.name"/></transition><transition event="done.invoke" target="failed"/></state><final id="done"/><final id="failed"/>"##,
+            later = child("later"),
+        ),
+    );
+    let log = directory.join("session.ndjson");
+    let log_arg = log.display().to_string();
+    let live = run(&doc, &["--record", &log_arg], "{\"name\":\"go\"}\n");
+    assert_eq!(live.status.code(), Some(0), "{}", stderr(&live));
+    let live_records = parse_records(&live);
+    let labels: Vec<(String, String)> = live_records
+        .iter()
+        .filter(|record| record["type"] == "log")
+        .map(|record| {
+            (
+                record["label"].as_str().unwrap_or_default().to_owned(),
+                record["text"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .trim_matches('"')
+                    .to_owned(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        labels,
+        [
+            ("first".to_owned(), "error.execution".to_owned()),
+            ("later".to_owned(), "error.communication.later".to_owned()),
+        ],
+        "{live_records:?}"
+    );
+
+    let replay = run(&doc, &["--replay", &log_arg], "");
+    assert_eq!(replay.status.code(), Some(0), "{}", stderr(&replay));
+    // Everything after `opened` (whose clock differs) is identical.
+    assert_eq!(live_records[1..], parse_records(&replay)[1..]);
+}
+
+/// An eventless transition whose cond throws on every evaluation (each is
+/// false and raises `error.execution`, SCXML 5.9.1) in the root fails the
+/// run with `command-bound`, exit 1, where it used to trap on fuel and fail
+/// with `host-failure`.
+#[test]
+fn a_root_whose_eventless_cond_throws_fails_with_command_bound() {
+    let directory = scratch("throwing-cond-root");
+    let doc = document(
+        &directory,
+        r#"<state id="s0"><transition cond="not x" target="done"/></state><final id="done"/>"#,
+    );
+    let output = run(&doc, &["--clock", "logical"], "");
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    let records = parse_records(&output);
+    let error = records
+        .iter()
+        .find(|record| record["type"] == "error")
+        .expect("an error record");
+    assert_eq!(error["code"], "command-bound", "{records:?}");
+    assert_eq!(error["fatal"], true);
+}
+
+/// An invoked session whose eventless cond throws on every evaluation, at
+/// its start and later on an event the root forwards, is ended and the run
+/// goes on: the root logs `error.execution`, then
+/// `error.communication.<invokeid>`, and finishes, exit 0.
+#[test]
+fn an_invoked_session_whose_eventless_cond_throws_is_ended() {
+    let directory = scratch("throwing-cond-invoked");
+    let at_start = r#"<invoke id="first"><content><scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript"><state id="a"><transition cond="not x" target="b"/></state><final id="b"/></scxml></content></invoke>"#;
+    let later = r#"<invoke id="later"><content><scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript"><state id="idle"><transition event="go" target="a"/></state><state id="a"><transition cond="not x" target="b"/></state><final id="b"/></scxml></content></invoke>"#;
+    let doc = document(
+        &directory,
+        &format!(
+            r##"<state id="s0">{at_start}{later}<transition event="error.execution"><log label="first" expr="_event.name"/></transition><transition event="go"><send event="go" target="#_later"/></transition><transition event="error.communication" target="done"><log label="later" expr="_event.name"/></transition><transition event="done.invoke" target="failed"/></state><final id="done"/><final id="failed"/>"##
+        ),
+    );
+    let output = run(&doc, &["--clock", "logical"], "{\"name\":\"go\"}\n");
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    let records = parse_records(&output);
+    let labels: Vec<(String, String)> = records
+        .iter()
+        .filter(|record| record["type"] == "log")
+        .map(|record| {
+            (
+                record["label"].as_str().unwrap_or_default().to_owned(),
+                record["text"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .trim_matches('"')
+                    .to_owned(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        labels,
+        [
+            ("first".to_owned(), "error.execution".to_owned()),
+            ("later".to_owned(), "error.communication.later".to_owned()),
+        ],
+        "{records:?}"
     );
 }
 
@@ -1167,7 +1304,8 @@ fn fetch_binding(endpoint: &str) -> Vec<String> {
 }
 
 /// `s0` invokes the echo service with its `endpoint` slot; `fetch` makes it
-/// GET the slot's URL with `outbound-http.fetch`, `ping` is echoed, `leave`
+/// GET the slot's URL with `outbound-http.fetch` (`send`: streamed with
+/// `outbound-http.send`, each body read logged as `received`), `ping` is echoed, `leave`
 /// exits `s0` (cancelling the invocation, SCXML 6.4), and the 1 s timer
 /// `fetch` arms fires on the logical clock only once no request is in
 /// flight.
@@ -1175,7 +1313,7 @@ fn fetch_document(directory: &Path) -> PathBuf {
     document(
         directory,
         &format!(
-            r##"<state id="s0" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"><invoke type="{ECHO}" id="echo" env:endpoint="ENDPOINT"/><transition event="fetch"><send event="fetch" target="#_echo"/><send event="timer" delay="1s"/></transition><transition event="ping"><send event="ping" target="#_echo"/></transition><transition event="echo.ping"><log label="ping" expr="_event.name"/></transition><transition event="echo.fetched"><log label="fetched" expr="_event.data"/></transition><transition event="timer" target="done"><log label="timer" expr="'fired'"/></transition><transition event="leave" target="away"/></state><state id="away"><transition event="timer"><log label="timer" expr="'fired'"/></transition></state><final id="done"/>"##
+            r##"<state id="s0" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"><invoke type="{ECHO}" id="echo" env:endpoint="ENDPOINT"/><transition event="fetch"><send event="fetch" target="#_echo"/><send event="timer" delay="1s"/></transition><transition event="send"><send event="send" target="#_echo"/><send event="timer" delay="1s"/></transition><transition event="echo.received"><log label="received" expr="_event.data"/></transition><transition event="ping"><send event="ping" target="#_echo"/></transition><transition event="echo.ping"><log label="ping" expr="_event.name"/></transition><transition event="echo.fetched"><log label="fetched" expr="_event.data"/></transition><transition event="timer" target="done"><log label="timer" expr="'fired'"/></transition><transition event="leave" target="away"/></state><state id="away"><transition event="timer"><log label="timer" expr="'fired'"/></transition></state><final id="done"/>"##
         ),
     )
 }
@@ -1413,7 +1551,157 @@ fn a_recorded_service_fetch_replays_without_the_network() {
     assert_eq!(parse_records(&recorded)[1..], parse_records(&replayed)[1..]);
 }
 
+/// A service's streamed response is recorded part by part: `--record`
+/// writes one `http-response-part` per delivered part of a `send`, and
+/// `--replay` reproduces the session from them with nothing listening.
+#[test]
+fn a_recorded_service_send_replays_its_parts_without_the_network() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port binds");
+    let port = listener.local_addr().expect("an address").port();
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("the service connects");
+        read_head(&mut stream);
+        stream
+            .write_all(
+                b"HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\nconnection: close\r\n\r\n5\r\nhello\r\n",
+            )
+            .expect("the head and a chunk are written");
+        stream.flush().expect("flushed");
+        std::thread::sleep(Duration::from_millis(300));
+        stream
+            .write_all(b"6\r\n world\r\n0\r\n\r\n")
+            .expect("the rest is written");
+    });
+    let directory = scratch("send-record");
+    let doc = fetch_document(&directory);
+    let log = directory.join("session.ndjson");
+    let log_arg = log.display().to_string();
+    let binding = fetch_binding(&format!("http://127.0.0.1:{port}/stream"));
+    let recorded_args = [binding.clone(), vec!["--record".into(), log_arg.clone()]].concat();
+    let recorded_args: Vec<&str> = recorded_args.iter().map(String::as_str).collect();
+    let recorded = run(&doc, &recorded_args, "{\"name\":\"send\"}\n");
+    server.join().expect("the server ends");
+    assert_eq!(recorded.status.code(), Some(0), "{}", stderr(&recorded));
+    let logged = log_lines(&parse_records(&recorded));
+    let received: u64 = logged
+        .iter()
+        .filter_map(|line| line.strip_prefix("received: "))
+        .map(|count| count.parse::<u64>().expect("a byte count"))
+        .sum();
+    assert_eq!(received, 11, "{logged:?}");
+    assert_eq!(
+        &logged[logged.len() - 2..],
+        ["fetched: 200", "timer: fired"],
+        "{logged:?}"
+    );
+    let text = fs::read_to_string(&log).expect("the log is readable");
+    assert!(
+        text.contains("\"http-response-part\""),
+        "each part is a recorded input"
+    );
+    assert!(text.contains("\"end\":true"), "the end is recorded: {text}");
+    let mut replay_args = binding;
+    replay_args.drain(0..2);
+    replay_args.extend(["--replay".into(), log_arg]);
+    let replay_args: Vec<&str> = replay_args.iter().map(String::as_str).collect();
+    let replayed = run(&doc, &replay_args, "");
+    assert_eq!(replayed.status.code(), Some(0), "{}", stderr(&replayed));
+    assert_eq!(parse_records(&recorded)[1..], parse_records(&replayed)[1..]);
+}
+
 const FILES: &str = "https://stateforward.org/scxml/services/files";
+
+/// The `--service-*` options binding the files service example.
+fn files_binding() -> Vec<String> {
+    let (dir, _) = release();
+    let component = Path::new(dir).join("scxml_service_files.virtualized.wasm");
+    let digest = format!(
+        "{:x}",
+        Sha256::digest(fs::read(&component).expect("the files component is readable"))
+    );
+    let manifest = workspace().join("components/scxml-service-files/package/files.service.json");
+    vec![
+        "--service-package".to_owned(),
+        manifest.display().to_string(),
+        "--service-component".into(),
+        format!("{FILES}={}", component.display()),
+        "--service-component-sha256".into(),
+        format!("{FILES}={digest}"),
+    ]
+}
+
+/// `text` as an ECMAScript string literal inside a double-quoted XML
+/// attribute.
+fn script_string(text: &str) -> String {
+    let literal = format!("'{}'", text.replace('\\', "\\\\").replace('\'', "\\'"));
+    literal
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+/// A document the run writes and then invokes by `srcexpr` loads as it is
+/// when its `<invoke>` runs, with the schema file its `event:schema`
+/// references and the script its `<script src>` names, both resolved
+/// against its own URL: invoked again after its script is rewritten, it
+/// runs the new script.
+#[test]
+fn a_srcexpr_child_written_during_the_run_loads_its_own_files_as_they_are() {
+    let directory = scratch("srcexpr-written");
+    let workspace_dir = directory.join("workspace");
+    fs::create_dir_all(&workspace_dir).expect("the workspace is creatable");
+    let child = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" version="1.0" datamodel="ecmascript"><script src="c.js"/><state id="c0"><transition event="go" event:schema="c.json#/$defs/go" target="f"/><transition cond="true" target="f"/></state><final id="f"><donedata><content expr="v"/></donedata></final></scxml>"#;
+    let write = |id: &str, name: &str, text: &str, next: &str| {
+        format!(
+            r#"<state id="{id}"><invoke type="{FILES}"><param name="name" expr="'{name}'"/><param name="text" expr="{}"/></invoke><transition event="done.invoke" target="{next}"/><transition event="error.*" target="failed"/></state>"#,
+            script_string(text)
+        )
+    };
+    let simulate = |id: &str, next: &str| {
+        format!(
+            r#"<state id="{id}"><invoke id="{id}-kid" type="scxml" srcexpr="'workspace/c.scx'"/><transition event="done.invoke.{id}-kid" target="{next}"><assign location="seen" expr="seen.concat([_event.data])"/></transition><transition event="error.*" target="failed"/></state>"#
+        )
+    };
+    let body = [
+        r#"<datamodel><data id="seen" expr="[]"/></datamodel>"#.to_owned(),
+        write("s0", "c.json", r#"{"$defs": {"go": {"type": "object", "required": ["n"]}}}"#, "w1"),
+        write("w1", "c.js", "var v = 'one';", "w2"),
+        write("w2", "c.scx", child, "first"),
+        simulate("first", "w3"),
+        write("w3", "c.js", "var v = 'two';", "second"),
+        simulate("second", "done"),
+        r#"<final id="done"><donedata><content expr="seen"/></donedata></final><final id="failed"><donedata><content expr="'failed'"/></donedata></final>"#.to_owned(),
+    ]
+    .concat();
+    let args = [
+        vec![
+            "--clock".to_owned(),
+            "logical".into(),
+            "--on-eof".into(),
+            "close".into(),
+        ],
+        files_binding(),
+        vec![
+            "--dir".into(),
+            format!("{FILES}={}::/workspace", workspace_dir.display()),
+        ],
+    ]
+    .concat();
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    let output = run(&document(&directory, &body), &args, "");
+    let records = parse_records(&output);
+    let done = records
+        .iter()
+        .find(|record| record["type"] == "done")
+        .unwrap_or_else(|| panic!("{records:?}\n{}", stderr(&output)));
+    assert_eq!(
+        done["data"],
+        serde_json::json!(["one", "two"]),
+        "{records:?}\n{}",
+        stderr(&output)
+    );
+}
 
 /// The files service imports `wasi:filesystem`: `run` binds it only with a
 /// `--dir` grant (wasmtime's `--dir HOST::GUEST`, scoped to its type URI),

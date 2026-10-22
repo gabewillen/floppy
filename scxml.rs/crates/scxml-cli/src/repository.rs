@@ -1025,7 +1025,8 @@ impl Repository {
     }
 
     /// The document at `url`, fetched once per root session (its outcome,
-    /// failure included, is kept): a `file:` URL is read as a regular file,
+    /// failure included, is kept; [`Self::fetch_document_now`] reads it
+    /// again): a `file:` URL is read as a regular file,
     /// an `https:` URL fetched within [`MAX_DOCUMENT_BYTES`], following at
     /// most [`MAX_REDIRECTS`] redirects, each to another `https:` URL, with
     /// the client's timeouts, no retry, and no credentials, cookies, or
@@ -1045,6 +1046,23 @@ impl Repository {
         {
             return outcome.clone();
         }
+        let outcome = self.fetch_document_now(url);
+        self.documents
+            .lock()
+            .map_err(|_| "the document memo is unavailable".to_owned())?
+            .insert(key, outcome.clone());
+        outcome
+    }
+
+    /// The document at `url` as it is now, fetched as
+    /// [`Self::fetch_document`] fetches it but neither taken from nor kept
+    /// in its memo: a `srcexpr` document, and the files it names, load as
+    /// they are when its `<invoke>` runs ([`crate::documents`]).
+    ///
+    /// # Errors
+    ///
+    /// A message naming why the document cannot be loaded.
+    pub(crate) fn fetch_document_now(&self, url: &url::Url) -> Result<Fetched, String> {
         let span = observe(Module::Cli, Operation::CliReadDocument);
         let outcome = match url.scheme() {
             "file" => url
@@ -1076,10 +1094,6 @@ impl Repository {
             )),
         };
         record_outcome(&span, outcome.is_ok());
-        self.documents
-            .lock()
-            .map_err(|_| "the document memo is unavailable".to_owned())?
-            .insert(key, outcome.clone());
         outcome
     }
 

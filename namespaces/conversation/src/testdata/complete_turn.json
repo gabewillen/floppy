@@ -1,0 +1,179 @@
+[
+ {
+  "input": {
+   "content": "hi",
+   "content_type": "text/plain",
+   "source_ids": [
+    "alice"
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  },
+  "turns": [
+   {
+    "turn_ref": "input-1:turn:alice",
+    "text": "hi"
+   }
+  ],
+  "session_ref": "relationship-x",
+  "product": {
+   "content": "hi",
+   "content_type": "text/plain",
+   "source_ids": [
+    "alice"
+   ],
+   "target_ids": [
+    "bot"
+   ]
+  },
+  "provenance": {
+   "session_ref": "relationship-x",
+   "turn_ref": "input-1:turn:alice"
+  }
+ },
+ {
+  "input": {
+   "content": "hi",
+   "content_type": "text/plain",
+   "source_ids": [
+    "alice",
+    "bob"
+   ],
+   "target_ids": []
+  },
+  "turns": [
+   {
+    "turn_ref": "input-2:turn:alice",
+    "text": "hi"
+   },
+   {
+    "turn_ref": "input-2:turn:bob",
+    "text": "hi"
+   }
+  ],
+  "session_ref": "relationship-x",
+  "product": {
+   "content": "hi",
+   "content_type": "text/plain",
+   "source_ids": [
+    "alice",
+    "bob"
+   ],
+   "target_ids": []
+  },
+  "provenance": {
+   "session_ref": "relationship-x",
+   "turn_ref": "input-2:turn:alice"
+  }
+ },
+ {
+  "input": {
+   "content": "x",
+   "content_type": "text/plain",
+   "source_ids": [
+    "a",
+    "b",
+    "c"
+   ],
+   "target_ids": []
+  },
+  "turns": [
+   {
+    "turn_ref": "t1",
+    "text": ""
+   },
+   {
+    "turn_ref": "t2",
+    "text": "one"
+   },
+   {
+    "turn_ref": "t3",
+    "text": "two"
+   }
+  ],
+  "session_ref": "relationship-x",
+  "product": {
+   "content": "one two",
+   "content_type": "text/plain",
+   "source_ids": [
+    "a",
+    "b",
+    "c"
+   ],
+   "target_ids": []
+  },
+  "provenance": {
+   "session_ref": "relationship-x",
+   "turn_ref": "t1"
+  }
+ },
+ {
+  "input": {
+   "content": "media/a.pcm",
+   "content_type": "Audio/PCM",
+   "source_ids": [
+    "a"
+   ],
+   "target_ids": []
+  },
+  "turns": [
+   {
+    "turn_ref": "t1",
+    "text": ""
+   }
+  ],
+  "session_ref": "relationship-x",
+  "product": {
+   "content": null,
+   "content_type": "Audio/PCM",
+   "source_ids": [
+    "a"
+   ],
+   "target_ids": []
+  },
+  "provenance": {
+   "session_ref": "relationship-x",
+   "turn_ref": "t1"
+  }
+ },
+ {
+  "input": {
+   "content": {
+    "k": [
+     1,
+     2
+    ]
+   },
+   "content_type": "application/json",
+   "source_ids": [
+    "a"
+   ],
+   "target_ids": []
+  },
+  "turns": [
+   {
+    "turn_ref": "t1",
+    "text": ""
+   }
+  ],
+  "session_ref": "relationship-x",
+  "product": {
+   "content": {
+    "k": [
+     1,
+     2
+    ]
+   },
+   "content_type": "application/json",
+   "source_ids": [
+    "a"
+   ],
+   "target_ids": []
+  },
+  "provenance": {
+   "session_ref": "relationship-x",
+   "turn_ref": "t1"
+  }
+ }
+]

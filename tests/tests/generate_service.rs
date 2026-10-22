@@ -92,6 +92,28 @@ fn completion(content: &str) -> String {
     .to_string()
 }
 
+/// A non-streamed Chat Completions answer to a required call of
+/// `function`: its one tool call carries `arguments`, its content is `null`.
+fn tool_call(function: &str, arguments: &str) -> String {
+    serde_json::json!({
+        "object": "chat.completion",
+        "choices": [{
+            "index": 0,
+            "finish_reason": "tool_calls",
+            "message": {
+                "role": "assistant",
+                "content": null,
+                "tool_calls": [{
+                    "id": "call-1",
+                    "type": "function",
+                    "function": {"name": function, "arguments": arguments},
+                }],
+            },
+        }],
+    })
+    .to_string()
+}
+
 /// A deterministic fake Chat Completions backend on 127.0.0.1: the first
 /// path segment picks the scripted answer (`/text`, `/json`, `/mismatch`,
 /// `/fail` answers 500); every request is recorded.
@@ -150,11 +172,12 @@ impl Mock {
                     "/text/v1/chat/completions" => {
                         ("200 OK", completion("Hello from the fake backend!"))
                     }
-                    "/json/v1/chat/completions" => {
-                        ("200 OK", completion(r#"{"score":41,"answer":"yes"}"#))
-                    }
+                    "/json/v1/chat/completions" => (
+                        "200 OK",
+                        tool_call("verdict", r#"{"score":41,"answer":"yes"}"#),
+                    ),
                     "/mismatch/v1/chat/completions" => {
-                        ("200 OK", completion(r#"{"answer":"yes"}"#))
+                        ("200 OK", tool_call("verdict", r#"{"answer":"yes"}"#))
                     }
                     "/fail/v1/chat/completions" => (
                         "500 Internal Server Error",
@@ -225,15 +248,14 @@ const TEXT_PARAMS: &str = r#"<param name="model" expr="'mock-model'"/>
 const STRUCTURED_PARAMS: &str = r#"<param name="model" expr="'mock-model'"/>
       <param name="prompt" expr="'Decide.'"/>
       <param name="schema" expr="({type: 'object', properties: {answer: {type: 'string'}, score: {type: 'integer'}}, required: ['answer', 'score'], additionalProperties: false})"/>
-      <param name="schemaname" expr="'verdict'"/>
-      <param name="strict" expr="true"/>"#;
+      <param name="schemaname" expr="'verdict'"/>"#;
 
 #[test]
 fn a_text_generation_posts_the_canonical_request_and_returns_the_reply() {
     let mock = Mock::start();
     let env = env_file("text", &format!("{}/text/v1", mock.origin));
     let args = args(&env);
-    let finished = open(&args, &document(TEXT_PARAMS, "_event.data.text"));
+    let finished = open(&args, &document(TEXT_PARAMS, "_event.data.content"));
     let records = &finished.records;
     assert_eq!(
         logs(records),
@@ -260,7 +282,7 @@ fn a_text_generation_posts_the_canonical_request_and_returns_the_reply() {
 }
 
 #[test]
-fn a_structured_generation_returns_the_schema_valid_object() {
+fn a_structured_generation_returns_the_tool_call() {
     let mock = Mock::start();
     let env = env_file("json", &format!("{}/json/v1", mock.origin));
     let args = args(&env);
@@ -268,22 +290,28 @@ fn a_structured_generation_returns_the_schema_valid_object() {
         &args,
         &document(
             STRUCTURED_PARAMS,
-            "_event.data.json.answer + ':' + (_event.data.json.score + 1)",
+            "_event.data.tool_calls[0].name + ':' + _event.data.tool_calls[0].args.answer + ':' + (_event.data.tool_calls[0].args.score + 1)",
         ),
     );
     let records = &finished.records;
     assert_eq!(
         logs(records),
-        labelled(&[("reply", "yes:42"), ("final", "done")]),
+        labelled(&[("reply", "verdict:yes:42"), ("final", "done")]),
         "{records:?}"
     );
     let received = mock.received();
     assert_eq!(received.len(), 1);
     let body: serde_json::Value =
         serde_json::from_slice(&received[0].body).expect("the body is JSON");
-    assert_eq!(body["response_format"]["type"], "json_schema");
-    assert_eq!(body["response_format"]["json_schema"]["name"], "verdict");
-    assert_eq!(body["response_format"]["json_schema"]["strict"], true);
+    assert!(body.get("response_format").is_none(), "{body}");
+    assert_eq!(body["tools"][0]["type"], "function");
+    assert_eq!(body["tools"][0]["function"]["name"], "verdict");
+    assert!(
+        body["tools"][0]["function"].get("strict").is_none(),
+        "{body}"
+    );
+    assert_eq!(body["tool_choice"], "required");
+    assert_eq!(body["reasoning_effort"], "none");
 }
 
 #[test]
@@ -306,7 +334,7 @@ fn a_failing_backend_returns_generate_failed() {
     let mock = Mock::start();
     let env = env_file("fail", &format!("{}/fail/v1", mock.origin));
     let args = args(&env);
-    let finished = open(&args, &document(TEXT_PARAMS, "_event.data.text"));
+    let finished = open(&args, &document(TEXT_PARAMS, "_event.data.content"));
     let records = &finished.records;
     assert_eq!(
         logs(records),
@@ -345,7 +373,7 @@ fn an_image_part_reaches_the_backend_as_a_data_url() {
     args.extend(media(&granted));
     let finished = open(
         &args,
-        &document(&image_params("media/page.png"), "_event.data.text"),
+        &document(&image_params("media/page.png"), "_event.data.content"),
     );
     let records = &finished.records;
     assert_eq!(
@@ -394,7 +422,7 @@ fn an_image_reference_outside_the_grant_rejects_the_start_and_sends_nothing() {
     ] {
         let finished = open(
             &args,
-            &document(&image_params(reference), "_event.data.text"),
+            &document(&image_params(reference), "_event.data.content"),
         );
         assert_eq!(
             logs(&finished.records),
@@ -414,7 +442,7 @@ fn a_run_without_a_media_grant_is_refused() {
     let path = support::write(
         &support::unique_scratch("generate-no-grant"),
         "generate.scx",
-        &document(TEXT_PARAMS, "_event.data.text"),
+        &document(TEXT_PARAMS, "_event.data.content"),
     );
     let output = support::output(&[
         "run".to_owned(),
@@ -440,7 +468,7 @@ fn parameters_the_package_validator_sees_refuse_the_run_and_send_nothing() {
         "generate.scx",
         &document(
             r#"<param name="prompt" expr="'Say hello.'"/><param name="temperature" expr="1"/>"#,
-            "_event.data.text",
+            "_event.data.content",
         ),
         &args(&env),
         &[],
@@ -465,7 +493,7 @@ fn malformed_parameters_reject_the_start_and_send_nothing() {
         &args,
         &document(
             r#"<param name="model" expr="'mock-model'"/><param name="prompt" expr="'Say hello.'"/><param name="reasoning_effort" expr="'max'.toUpperCase()"/>"#,
-            "_event.data.text",
+            "_event.data.content",
         ),
     );
     let records = &finished.records;
@@ -486,7 +514,7 @@ fn without_a_granted_key_nothing_is_sent() {
     );
     // Only the base URL has a value: the apikey slot stays absent.
     let args = args(&env);
-    let finished = open(&args, &document(TEXT_PARAMS, "_event.data.text"));
+    let finished = open(&args, &document(TEXT_PARAMS, "_event.data.content"));
     let records = &finished.records;
     assert_eq!(
         logs(records),
@@ -504,7 +532,7 @@ fn without_a_granted_key_nothing_is_sent() {
 fn a_held_base_url_outside_the_declared_origins_is_the_one_the_request_reaches() {
     let mock = Mock::start();
     let env = env_file("held-base", &format!("{}/text/v1", mock.origin));
-    let finished = open(&args(&env), &document(TEXT_PARAMS, "_event.data.text"));
+    let finished = open(&args(&env), &document(TEXT_PARAMS, "_event.data.content"));
     assert_eq!(
         logs(&finished.records),
         labelled(&[("reply", "Hello from the fake backend!"), ("final", "done")]),
@@ -526,7 +554,7 @@ fn a_held_base_url_outside_the_declared_origins_is_the_one_the_request_reaches()
 fn without_a_held_base_url_nothing_is_sent_and_the_generation_is_unconfigured() {
     let mock = Mock::start();
     let env = env_file_with("nobase", &format!("FLOPPY_API_KEY={FAKE_KEY}\n"));
-    let finished = open(&args(&env), &document(TEXT_PARAMS, "_event.data.text"));
+    let finished = open(&args(&env), &document(TEXT_PARAMS, "_event.data.content"));
     assert_eq!(
         logs(&finished.records),
         labelled(&[("failed", "unconfigured"), ("final", "done")]),
@@ -553,7 +581,7 @@ fn two_services(params: &str) -> String {
     <invoke id="gen" type="{generate}" env:baseurl="FLOPPY_BASE_URL">
       {params}
     </invoke>
-    <transition event="generate.result"><log label="reply" expr="_event.data.text"/></transition>
+    <transition event="generate.result"><log label="reply" expr="_event.data.content"/></transition>
     <transition event="generate.failed"><log label="failed" expr="_event.data.code"/></transition>
     <transition event="done.invoke.gen" target="done"/>
     <transition event="error.execution" target="rejected"/>
@@ -693,7 +721,7 @@ fn leaving_the_invoking_state_closes_the_streaming_model_call() {
       {TEXT_PARAMS}
       <param name="stream" expr="true"/>
     </invoke>
-    <transition event="generate.result"><log label="reply" expr="_event.data.text"/></transition>
+    <transition event="generate.result"><log label="reply" expr="_event.data.content"/></transition>
     <transition event="leave" target="away"/>
   </state>
   <state id="away">
@@ -748,15 +776,14 @@ fn live_generate_through_an_env_file() {
       <param name="system" expr="'Answer in JSON only.'"/>
       <param name="prompt" expr="'Greet a state machine in at most five words.'"/>
       <param name="schema" expr="({{type: 'object', properties: {{greeting: {{type: 'string'}}}}, required: ['greeting'], additionalProperties: false}})"/>
-      <param name="schemaname" expr="'greeting'"/>
-      <param name="strict" expr="true"/>"#
+      <param name="schemaname" expr="'greeting'"/>"#
     );
     // The env files must hold FLOPPY_BASE_URL: the service has no default.
     let finished = open_with(
         &args,
         &document(
             &params,
-            "typeof _event.data.json.greeting === 'string' &amp;&amp; _event.data.json.greeting.length &gt; 0",
+            "_event.data.tool_calls[0].name === 'greeting' &amp;&amp; typeof _event.data.tool_calls[0].args.greeting === 'string' &amp;&amp; _event.data.tool_calls[0].args.greeting.length &gt; 0",
         ),
         &[],
         Duration::from_secs(180),
@@ -784,7 +811,7 @@ fn live_image_reading_through_an_env_file() {
     let params = image_params("media/total-due.png").replace("'mock-model'", &format!("'{model}'"));
     let finished = open_with(
         &args,
-        &document(&params, "_event.data.text.indexOf('14.21') &gt;= 0"),
+        &document(&params, "_event.data.content.indexOf('14.21') &gt;= 0"),
         &[],
         Duration::from_secs(180),
     );

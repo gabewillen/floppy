@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- memory-2: a message without identity arrays raises error.execution and assigns nothing. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="p" expr="'untouched'"/>
+  <data id="m" expr="({source_ids: 'a', target_ids: [], content: 'x', content_type: 'text/plain'})"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <memory:to_json location="p" message="m"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="p === 'untouched'" target="pass"/>
+  <transition event="*" target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

@@ -121,6 +121,130 @@
         "type": "object"
       },
       "type": "array"
+    },
+    "environment": {
+      "description": "The bot's environment this turn, from its own perspective and in the original's layout, which the cognition passes to reasoning (its prompt renders it as the environment block) and intuition (in its decision instructions): the environment's id, and the bot itself, its state and its own attributes, owned_devices holding each held device it could read this turn under its reference (its reference, session id, state and data model) [floppy field].",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "self"
+      ],
+      "properties": {
+        "id": {
+          "description": "The environment's id, its root session's _sessionid.",
+          "type": "string",
+          "minLength": 1
+        },
+        "self": {
+          "type": "object",
+          "required": [
+            "state",
+            "owned_devices"
+          ],
+          "properties": {
+            "state": {
+              "type": "string",
+              "minLength": 1
+            },
+            "owned_devices": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "ref",
+                  "id",
+                  "state",
+                  "attributes"
+                ],
+                "properties": {
+                  "ref": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "state": {
+                    "type": "string"
+                  },
+                  "attributes": {
+                    "type": "object"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "participants": {
+      "default": [],
+      "description": "Who took part in the stimulus, stamped by the producer of this input. Empty when the producer knows no one (environment sound, routine tick).",
+      "examples": [
+        [
+          {
+            "ref": "caller",
+            "role": "source"
+          },
+          {
+            "ref": "bot",
+            "role": "target"
+          }
+        ]
+      ],
+      "items": {
+        "additionalProperties": false,
+        "description": "Someone who took part in a stimulus: an opaque, producer-stable identity reference and the role it played (source: who produced it; target: who it was addressed to).",
+        "examples": [
+          {
+            "ref": "+15555550100",
+            "role": "source"
+          },
+          {
+            "ref": "person-42",
+            "role": "target"
+          }
+        ],
+        "properties": {
+          "ref": {
+            "description": "Opaque, producer-stable identity such as a phone number, an app person id, or a chat handle. Never a display name chosen by the bot.",
+            "examples": [
+              "+15555550100",
+              "person-42",
+              "caller"
+            ],
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Ref",
+            "type": "string"
+          },
+          "role": {
+            "description": "source: who produced the stimulus (speaker, sender). target: who it was addressed to.",
+            "enum": [
+              "source",
+              "target"
+            ],
+            "examples": [
+              "source",
+              "target"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "role"
+        ],
+        "title": "Participant",
+        "type": "object"
+      },
+      "maxItems": 32,
+      "title": "Participants",
+      "type": "array"
     }
   },
   "type": "object",

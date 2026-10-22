@@ -19,6 +19,24 @@
       "extensions": [],
       "eventSchemas": ["schemas/order.json"],
       "events": [{ "name": "order.placed", "data": { "id": "o-1", "items": [{ "sku": "a", "quantity": 2 }] } }]
+    },
+    {
+      "name": "snapshot-target",
+      "document": "tests/fixtures/host-parity/snapshot-target.scx",
+      "extensions": ["https://stateforward.org/scxml/example"],
+      "events": []
+    },
+    {
+      "name": "sessions",
+      "document": "tests/fixtures/host-parity/sessions.scx",
+      "extensions": [],
+      "events": []
+    },
+    {
+      "name": "invoked-runaway",
+      "document": "tests/fixtures/host-parity/invoked-runaway.scx",
+      "extensions": [],
+      "events": []
     }
   ]
 }

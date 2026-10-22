@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- processing-5: with no selection carrying a confidence the confidence is null. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing">
+<datamodel>
+  <data id="confidence" expr="'untouched'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <processing:selection_confidence location="confidence" selections="[{event: 'a'}]"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="confidence === null" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

@@ -285,6 +285,7 @@
  "bot.clear_focus",
  "bot.deactivate",
  "bot.deactivated",
+ "bot.degraded",
  "bot.focus_device",
  "bot.input",
  "bot.lifecycle.cleanup.done",

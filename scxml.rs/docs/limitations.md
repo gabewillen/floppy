@@ -25,17 +25,17 @@ disagree are in [spec-errata.md](spec-errata.md).
   errata SHA-256
   `54c7f1cb44686e2bf499a0edf2596d311f4623245b2fe380abf0ac5b4663303f`,
   producer report digest
-  `e3ede7c7940b91d20ba4866e70559deaea2b958ad5187960f3f7282dfed0f2da`,
+  `cd3916157996341e10d4e4fe040d334c06694bd1c8d9faac454d378a564277b8`,
   and canonical artifact SHA-256
-  `42599ca8ae2c032752b22a886475cf7ecf917d2e66eb28d15167bab673399bc4`.
+  `7ed53e7731259e9a27c6c36d0f99b1c09a819459f1074e04b499a88a14b66266`.
   The XPath evidence binds corpus digest
   `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca`,
   errata SHA-256
   `72fe9e3ca418f55dadf64d2d6331af724cf8ebbc2a87a0180489db818aa73f2a`,
   producer report digest
-  `e638452638539e158b3697c90f23dea0bdf2de7f0ae8632bb32d69ba4c27044f`,
+  `f99aa26a94993207dcbd865727c37f6857f10773d92695988c81ef9a599c2025`,
   and canonical artifact SHA-256
-  `759288f4141efb51ffa62952545707f7c4ecb410ad66ed0f2c6ccdaaf71e1e40`.
+  `3168603bf04f3b2080142cd12f4df770f639f702d6f5f1b5186f4d837b23bf85`.
   The report bytes are checked in under
   [`tests/conformance/w3c-irp/baselines`](../tests/conformance/w3c-irp/baselines).
   These are measured IRP results of the shipped components under the
@@ -107,6 +107,15 @@ disagree are in [spec-errata.md](spec-errata.md).
   location from the child's event data, SCXML 6.5.2), and autoforward, and a host that links the capability (the
   Wasmtime session host) owns the invoked sessions, `done.invoke`, and
   cross-session routing, ordered by the pure `scxml-scheduler` crate.
+  An invoked session whose call stops at the 1024-command bound is ended as
+  a cancelled invocation is (its `cancel` runs, cancelling the sessions it
+  invoked; nothing more it sends reaches its invoking session, and no
+  `done.invoke` follows): a start that stopped there raises
+  `error.execution` for its `<invoke>`, and a later call
+  `error.communication.<invokeid>`, in the invoking session, which runs on
+  (proven by `hosts/scxml-host-wasmtime/tests/nested_invocation.rs` and the
+  `invoked-runaway` host-parity case); only the root's own stop, and any
+  other failure or trap of a session, fails the run.
   Delayed sends run on the `scxml-ioprocessor-scxml` and `scxml-clock`
   components. See [conformance.md](conformance.md#component-execution) for exactly
   who does what.
@@ -144,19 +153,25 @@ disagree are in [spec-errata.md](spec-errata.md).
   so the validator component reports every literal service type as unbound
   (`PKG004`, a warning); and the browser host binds no service
   (`start-invocation` of a service answers `unavailable`).
-- Invoked services' outbound HTTP: `outbound-http.fetch` is an `async func`
-  that suspends only the calling task. A batch run performs the request
-  through the embedder's transport (`ServiceComponents::with_outbound_http`);
-  a live session performs it on a transport thread of its own and delivers
-  the response as a recorded external input (`http-response`), which a
-  replay delivers from its log. Proven by the `service_invoke` tests
+- Invoked services' outbound HTTP: `outbound-http.fetch` and
+  `outbound-http.send` are `async func`s that suspend only the calling
+  task. A batch run performs the request through the embedder's transport
+  (`ServiceComponents::with_outbound_http`); a live session performs it on
+  a transport thread of its own and delivers the response as a recorded
+  external input (`http-response`), or a `send`'s status, body bytes, and
+  end each as one as they arrive (`http-response-part`), which a replay
+  delivers from its log. Proven by the `service_invoke` tests
   (`a_fetch_suspends_only_its_task_and_its_response_arrives_as_an_external_input`,
   `leaving_the_invoking_state_drops_a_request_in_flight`,
-  `a_recorded_http_response_replays_without_the_network`, and
+  `a_recorded_http_response_replays_without_the_network`,
+  `a_streamed_response_reaches_the_service_part_by_part_and_replays`,
+  `a_streamed_response_that_fails_midway_fails_the_invocation`,
+  `a_streamed_response_arrives_while_the_server_still_writes`, and
   `cancelling_the_invoking_state_closes_the_streaming_connection_and_ends_its_thread`,
   which proves the connection closes and its thread ends within 2 s) and
   the CLI's `live_run` service fetch tests, against loopback servers. Gaps:
-  responses are delivered whole (no streaming); a cancelled request still
+  a batch run delivers a `send`'s body whole, after the request ended (it
+  performs each request at once); a cancelled request still
   resolving or connecting ends only when the operating system answers or
   gives up (nothing is sent); and the browser host offers none. A request
   has no time limit of its own: the invocation's lifetime bounds it
@@ -367,12 +382,14 @@ In detail:
   listing cannot say whether the run holds its value.
 - An `event:schema` ([namespaces/event](../namespaces/event/README.md))
   references only files relative to the document, never a
-  repository-namespace resource or another absolute URI. A literal
-  `<invoke src>` child loaded from a `file:` URL gets the files it
-  references, read relative to its own directory before the session
-  (`EmbeddedDocument::event_schemas`); every other child document the
-  Wasmtime host compiles when it is invoked (inline `<content>`, a remote or
-  `srcexpr` `<invoke src>`), and every document the browser host compiles
+  repository-namespace resource or another absolute URI. An
+  `<invoke src>` child (literal or `srcexpr`, `file:` or `https:`) gets the
+  files it references, resolved against its own base URI
+  (`EmbeddedDocument::event_schemas`): a literal child's before the
+  session, a `srcexpr` child's each time its `<invoke>` runs, as they are
+  then, like the `srcexpr` document itself and the scripts its
+  `<script src>` names (`SessionEmbedder::scripts`). An inline `<content>`
+  child, and every document the browser host compiles
   without the page supplying them, get no schema files, so a schema-file
   reference rejects it; a browser page supplies a
   document's schema files to the validator and compiler

@@ -1,0 +1,141 @@
+[
+ {
+  "result": {
+   "rowcount": 0,
+   "rows": []
+  },
+  "contents": []
+ },
+ {
+  "result": {
+   "rowcount": 8,
+   "rows": [
+    {
+     "columns": [
+      "content"
+     ],
+     "values": [
+      "{\"a\": 1, \"b\": {\"c\": [1, 2]}}"
+     ]
+    },
+    {
+     "columns": [
+      "content"
+     ],
+     "values": [
+      "[1, 2]"
+     ]
+    },
+    {
+     "columns": [
+      "content"
+     ],
+     "values": [
+      "not json"
+     ]
+    },
+    {
+     "columns": [
+      "content"
+     ],
+     "values": [
+      "null"
+     ]
+    },
+    {
+     "columns": [
+      "content"
+     ],
+     "values": [
+      "\"text\""
+     ]
+    },
+    {
+     "columns": [
+      "content"
+     ],
+     "values": [
+      "7"
+     ]
+    },
+    {
+     "columns": [
+      "content"
+     ],
+     "values": [
+      "{}"
+     ]
+    },
+    {
+     "columns": [
+      "content"
+     ],
+     "values": [
+      "{\"z\": 1, \"a\": 2}"
+     ]
+    }
+   ]
+  },
+  "contents": [
+   {
+    "a": 1,
+    "b": {
+     "c": [
+      1,
+      2
+     ]
+    }
+   },
+   {},
+   {
+    "a": 2,
+    "z": 1
+   }
+  ]
+ },
+ {
+  "result": {
+   "rowcount": 4,
+   "rows": [
+    {
+     "columns": [
+      "content"
+     ],
+     "values": [
+      null
+     ]
+    },
+    {
+     "columns": [
+      "content"
+     ],
+     "values": [
+      5
+     ]
+    },
+    {
+     "columns": [
+      "content"
+     ],
+     "values": [
+      true
+     ]
+    },
+    {
+     "columns": [
+      "content"
+     ],
+     "values": [
+      "{\"text\": \"Be brief.\", \"kind\": \"instruction\"}"
+     ]
+    }
+   ]
+  },
+  "contents": [
+   {
+    "kind": "instruction",
+    "text": "Be brief."
+   }
+  ]
+ }
+]

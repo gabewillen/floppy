@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- identity-3: names come first in code point order, then embeddings by their Python JSON; repeats are kept. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:identity="https://github.com/stateforward/floppy/namespaces/identity" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="ids" expr="['zed', [0.5, 1], 'alice', [0.25, 3], 'Bob', 'alice']"/>
+  <data id="s" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <identity:sorted_identities location="s" ids="ids"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="JSON.stringify(s) === '[&#34;Bob&#34;,&#34;alice&#34;,&#34;alice&#34;,&#34;zed&#34;,[0.25,3],[0.5,1]]'" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

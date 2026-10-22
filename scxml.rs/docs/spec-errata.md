@@ -451,10 +451,9 @@ matrix marks the requirements concerned as partial, not covered.
     call of the session that invokes it, and a chain of any depth runs,
     given fuel for every level (the command that starts the chain spends
     one fuel budget on all of them, see L.4). The
-    host names invoked sessions `<root _sessionid>.<n>`, so only a root
-    `_sessionid` within a few bytes of the 1024-byte name bound leaves too
-    little room for an invoked session's id (its `<invoke>` then raises
-    `error.execution`);
+    host names an invoked session `<parent _sessionid>.<invokeid>`, so a
+    chain whose child id would exceed the 1024-byte name bound stops there
+    (that `<invoke>` raises `error.execution`);
   - the 1024-byte name bound, on every build: a `<state>`, `<parallel>`,
     `<final>`, or `<history>` ID longer than that (`LIMIT006`), which no
     configuration, snapshot, or `In()` could name once the state is

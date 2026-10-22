@@ -59,7 +59,7 @@
         <param name="choices" expr="[]"/>
       </send>
     </onentry>
-    <transition event="bot.ability.vocal.speech.encoding.input" event:schema="schemas/bot.ability.vocal.speech.encoding.input.json"
+    <transition event="bot.ability.vocal.speech.encoding.input" event:schema="../schemas/bot.ability.vocal.speech.encoding.input.json"
                 target="applying">
       <assign location="text" expr="_event.data.text"/>
     </transition>
@@ -82,10 +82,10 @@
     </invoke>
 
     <!-- The speech service's answer, kept until it ends. -->
-    <transition event="bot.ability.vocal.speech.encoding.output" event:schema="schemas/bot.ability.vocal.speech.encoding.output.json">
+    <transition event="bot.ability.vocal.speech.encoding.output" event:schema="../schemas/bot.ability.vocal.speech.encoding.output.json">
       <assign location="encoded" expr="encodedAnswer(_event)"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json">
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json">
       <assign location="failure" expr="failureAnswer(_event)"/>
     </transition>
     <transition event="done.invoke.speech" cond="hasEncoded()" target="idle">
@@ -103,7 +103,7 @@
         <param name="message" expr="speechRunFailure(_event)"/>
       </send>
     </transition>
-    <transition event="bot.ability.vocal.speech.encoding.input" event:schema="schemas/bot.ability.vocal.speech.encoding.input.json">
+    <transition event="bot.ability.vocal.speech.encoding.input" event:schema="../schemas/bot.ability.vocal.speech.encoding.input.json">
       <log label="vocal.dropped" expr="_event.name"/>
     </transition>
   </state>

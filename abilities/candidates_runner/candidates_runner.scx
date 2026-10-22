@@ -19,47 +19,48 @@
 
   Input: the <param>s turn, input (the reference behavior_input_payload, the
   candidate's input), candidates (the behaviors left to try, in inventory
-  order: [{name, source}], at least one), choices (the turn's assembled
-  choices), database, silence_ms and memory_timeout_ms.
+  order: [{name, source}], at least one), database, silence_ms and
+  memory_timeout_ms.
 
-  Candidates: as Autonomy describes; the candidate's source is run as the
-  child "candidate" by <invoke><content expr> with the <param>s turn and
-  input. Handled with selections, dispatching checks them (<bot:verdict>,
-  then <decision:route>); placed, the use is persisted and the runner
-  answers; rejected, the failure is persisted and the runner answers the
-  rejection. Not handled, silent within silence_ms, or an error.* for it
+  Candidates: as Autonomy describes; the candidate's source is the path
+  of its program (the builder's <name>.scx, beside its <name>.json and
+  <name>.js; decision D121), run as the child "candidate" by <invoke
+  srcexpr> with the <param>s turn and input. Handled with selections, dispatching sends each to the session
+  its target names (#_scxml_ + target, decision D104; a learned behavior
+  names its targets, the session ids its turn's choices carry) and then
+  raises bot.ability.autonomy.candidate.dispatch.succeeded, which a send
+  that failed (error.*, raised before it) preempts: sent, the use is
+  persisted and the runner answers; failed, the failure is persisted and
+  the runner answers the failure (the original's
+  bot.ability.autonomy.candidate.dispatch.failed). Not handled, silent within silence_ms, or an error.* for it
   (its failure persisted): the rest run.
 
   Output (donedata): {tried, handled, selected, rejection}: tried names the
   candidates this runner and the rest tried, in order; selected is the
-  handled candidate's selections; rejection is the rejected one's message
-  (null otherwise).
+  handled candidate's selections; rejection is the failed dispatch's
+  message (null otherwise).
 
   Memory: each transaction invokes the Memory ability
   (abilities/memory/memory.scx); one that fails or outlasts
   memory_timeout_ms is logged and takes the same effect as one persisted
   (the reference persistence_failed).
 
-  Bindings: the bot and decision namespace packages (the Memory ability
-  binds the sql service).
+  Bindings: none of its own (the Memory ability binds the sql service).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
-       xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="candidates_runner" initial="running">
   <datamodel>
     <data id="turn" expr="0"/>
     <data id="input" expr="null"/>
     <data id="candidates" expr="[]"/>
-    <data id="choices" expr="[]"/>
     <data id="database" expr="null"/>
     <data id="silence_ms" expr="1000"/>
     <data id="memory_timeout_ms" expr="10000"/>
     <data id="answer" expr="null"/>
-    <!-- The handled candidate's selections being dispatched, and why they
-         were rejected (null when placed). -->
-    <data id="dispatch_selections" expr="[]"/>
+    <!-- The handled candidate's selection being sent (the <foreach>
+         item), and why its dispatch failed (null when sent). -->
+    <data id="s" expr="null"/>
     <data id="rejection" expr="null"/>
     <!-- The rest's output. -->
     <data id="rest_output" expr="null"/>
@@ -74,8 +75,7 @@
       <log label="autonomy.candidate" expr="candidateName()"/>
       <send event="bot.ability.autonomy.candidate.silent" delayexpr="silenceDelay()"/>
     </onentry>
-    <invoke id="candidate" type="scxml">
-      <content expr="candidateSource()"/>
+    <invoke id="candidate" type="scxml" srcexpr="candidateSource()">
       <param name="turn" expr="turn"/>
       <param name="input" expr="input"/>
     </invoke>
@@ -88,25 +88,31 @@
     <transition event="bot.ability.autonomy.candidate.silent" target="advancing">
       <log label="autonomy.candidate.silent" expr="candidateSilentLog()"/>
     </transition>
-    <!-- A source that does not compile fails the invocation with no
-         invokeid (SCXML 3.12.2); nothing else here raises one. -->
+    <!-- A source that does not load or compile fails the invocation with
+         no invokeid (SCXML 3.12.2); nothing else here raises one. -->
     <transition event="error.*" target="recording_failure">
       <log label="autonomy.candidate.failed" expr="candidateFailedLog(_event)"/>
     </transition>
   </state>
 
   <!-- the reference _dispatch_candidate_activity: the handled candidate's
-       selections are checked before its use is persisted. -->
+       selections are sent before its use is persisted. -->
   <state id="dispatching">
     <onentry>
-      <bot:verdict location="dispatch_selections" rejectionlocation="rejection" selections="answer"
-                   focus="input.focus" candidates="input.focus_candidates"/>
-      <if cond="isAccepted()">
-        <decision:route location="dispatch_selections" rejectionlocation="rejection" selections="dispatch_selections" choices="choices"/>
-      </if>
+      <foreach array="answer" item="s">
+        <send eventexpr="s.event" targetexpr="'#_scxml_' + s.target">
+          <content expr="selectionData(s)"/>
+        </send>
+      </foreach>
     </onentry>
-    <transition cond="isAccepted()" target="using"/>
-    <transition target="recording_failure">
+    <!-- Its own block, so it runs after a send that failed above and the
+         failure (raised first) preempts it. -->
+    <onentry>
+      <raise event="bot.ability.autonomy.candidate.dispatch.succeeded"/>
+    </onentry>
+    <transition event="bot.ability.autonomy.candidate.dispatch.succeeded" target="using"/>
+    <transition event="error.*" target="recording_failure">
+      <assign location="rejection" expr="dispatchFailure(_event)"/>
       <log label="autonomy.candidate.failed" expr="candidateRejectedLog()"/>
     </transition>
   </state>
@@ -121,10 +127,10 @@
       <param name="statements" expr="usedPersistenceStatements()"/>
     </invoke>
     <!-- The update's results: nothing to keep. -->
-    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"/>
+    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json"/>
     <transition event="done.invoke.usage" target="answered"/>
     <!-- the original: persistence_failed takes the same effect as persisted. -->
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="answered">
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="answered">
       <log label="autonomy.behavior_usage.persistence_failed" expr="usageFailedReason(_event.data.message)"/>
     </transition>
     <transition event="error.*" target="answered">
@@ -146,10 +152,10 @@
       <param name="database" expr="database"/>
       <param name="statements" expr="failedPersistenceStatements()"/>
     </invoke>
-    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"/>
+    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json"/>
     <transition event="done.invoke.failure" target="recorded_failure"/>
     <!-- the original: persistence_failed takes the same effect as persisted. -->
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="recorded_failure">
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="recorded_failure">
       <log label="autonomy.behavior_usage.persistence_failed" expr="usageFailedReason(_event.data.message)"/>
     </transition>
     <transition event="error.*" target="recorded_failure">
@@ -176,7 +182,6 @@
       <param name="turn" expr="turn"/>
       <param name="input" expr="input"/>
       <param name="candidates" expr="restCandidates()"/>
-      <param name="choices" expr="choices"/>
       <param name="database" expr="database"/>
       <param name="silence_ms" expr="silence_ms"/>
       <param name="memory_timeout_ms" expr="memory_timeout_ms"/>

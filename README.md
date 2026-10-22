@@ -18,14 +18,23 @@ other, and [docs/decisions.md](docs/decisions.md) records the decisions that sha
 | --- | --- |
 | `scxml.rs/` | scxml.rs as a squashed git subtree (see [docs/decisions.md](docs/decisions.md) for the source commit) |
 | `namespaces/decision/` | the canonical extension namespace (a Wasm component; synchronous executable content: `decision:choice` and the choice elements); the builder's `scx:validate` is scxml.rs's embedded `scx` namespace |
-| `namespaces/bot/` | the bot body's extension namespace (a Wasm component; synchronous executable content: `bot:attention`, `bot:stimulus`, `bot:recognize`) |
-| `namespaces/conversation/` | the conversation's extension namespace (a Wasm component; synchronous executable content: `conversation:commit`) |
+| `namespaces/processing/` | the original's processing module (a Wasm component; synchronous executable content: `processing:model_facing_schema`, `processing:collect_offered_events`, `processing:send`, `processing:selection_confidence`; [processing](namespaces/processing/README.md)) |
+| `namespaces/intuition/` | the original's intuition `ConfidenceTuner` (a Wasm component; synchronous executable content: `intuition:observe`, `intuition:escalate`; [intuition](namespaces/intuition/README.md)) |
+| `namespaces/cognition/` | the original's cognition module (a Wasm component; synchronous executable content: `cognition:attention_bias_for_turn`, `cognition:model_facing_content`; [cognition](namespaces/cognition/README.md)) |
+| `namespaces/conversation/` | the original's conversation module and its turn detector (a Wasm component; synchronous executable content: `conversation:message_for_turn`, `conversation:relationship_for_input`, `conversation:complete_turn`, `conversation:on_end`, ...; [conversation](namespaces/conversation/README.md)) |
+| `namespaces/identity/` | the original's identity module (a Wasm component; synchronous executable content: `identity:hears_name`, `identity:sorted_identities`; [identity](namespaces/identity/README.md)) |
+| `namespaces/memory/` | the original's memory module (a Wasm component; synchronous executable content: `memory:to_json`, `memory:contents`; [memory](namespaces/memory/README.md)) |
+| `namespaces/behavior/` | the original's behavior package (a Wasm component; synchronous executable content: `behavior:instances_from_behavior_results`, `behavior:replace_behavior_clauses`, `behavior:lifetime_errors`, `behavior:verify_tick`; [behavior](namespaces/behavior/README.md)) |
+| `namespaces/autonomy/` | the original's autonomy module (a Wasm component; synchronous executable content: `autonomy:behavior_input_payload`; [autonomy](namespaces/autonomy/README.md)) |
 | `namespaces/migration/` | Alembic's revision walk as an extension namespace (a Wasm component; synchronous executable content: `migration:plan`) |
+| `namespaces/device/` | a bot's read of a device it holds (a Wasm component; synchronous executable content: `device:snapshot`, decision D109; [device](namespaces/device/README.md)) |
 | `services/{generate,decision}/` | canonical invoked services (Wasm components: model generation, decisions) |
+| `services/files/` | the files service (a Wasm component: reads and writes the directory the run grants, where the builder writes a learned behavior's three documents; decision D121; [files](services/files/README.md)) |
 | `services/{sql,pgsql}/` | the memory engines (Wasm components: one SQLite or Postgres transaction per `<invoke>`, [sql](services/sql/README.md), [pgsql](services/pgsql/README.md)) |
 | `services/speech/` | the speech service (a Wasm component: speech decoding and encoding on OpenAI-compatible audio APIs, voice detection, diarization and identification on LocalAI's voice APIs; decisions D57, D66; [speech](services/speech/README.md)) |
 | `bots/builder/` | the builder bot: its SCXML document (`builder.scx`), schemas, and saved live examples |
 | `bots/floppy/` | the floppy bot: the body (`floppy.scx`, the original's Bot) and its event contracts |
+| `environments/room/` | the room, the environment the floppy bot runs in: the root session that invokes its bots (and any devices) as participants, routes host input, and delivers sound and visuals (decisions D102 to D111; [room](environments/room/README.md)) |
 | `abilities/` | the abilities and stages the bots invoke, each `<name>/<name>.scx` with `<name>/<name>.js` (memory, migration, cognition, communication, listening, ...) |
 | `tests/` | `floppy-tests`: integration tests that run the bots, namespaces, and services through `scx run` |
 | `scripts/` | build and proof scripts |
@@ -51,15 +60,16 @@ SCXML_WASM_ARTIFACTS_DIR="$PWD/target/components/scxml" \
   cargo install --locked --path scxml.rs/crates/scxml-cli
 # The builder bot, with the locally built packages.
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button"}}' |
-  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx
-# The floppy bot: activate it and say hello.
-printf '%s\n' '{"name":"bot.activate","data":{}}' \
+  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --dir "https://github.com/stateforward/floppy/services/files=$PWD/behaviors::/behaviors" bots/builder/builder.scx
+# The floppy bot in its environment, the room, which activates it: say hello.
+printf '%s\n' \
   '{"name":"bot.ability.communication.input","data":{"source_ids":["gabe"],"target_ids":["floppy"],"content":"Hi floppy!","content_type":"text/plain"}}' |
   scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" \
-    --dir "https://github.com/stateforward/floppy/services/speech=$PWD/media::/media" bots/floppy/floppy.scx
+    --dir "https://github.com/stateforward/floppy/services/speech=$PWD/media::/media" --dir "https://github.com/stateforward/floppy/services/files=$PWD/behaviors::/behaviors" \
+    --fuel 9223372036854775807 environments/room/room.scx
 # A bot, with the packages of floppy's latest GitHub release (once one is
 # published: docs/release.md).
-scx run --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx
+scx run --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --dir "https://github.com/stateforward/floppy/services/files=$PWD/behaviors::/behaviors" bots/builder/builder.scx
 ```
 
 A bot's document is all a run needs: its namespaces and `<invoke type>`s are
@@ -75,7 +85,11 @@ names from a directory the run grants, so every run that binds it gives one
 runs grant the `speech` service the same directory, where it reads what
 the bot hears and writes what it says, and the floppy bot's
 memory is a file in the directory the run grants the `sql` service (create
-`memory/` first). Each bot's README gives its input events and output
+`memory/` first). The builder writes each draft, a learned behavior, as
+three documents (`<name>.scx`, `<name>.json`, `<name>.js`) into the
+directory the run grants the `files` service, `behaviors/` (create it
+first; it is ignored by git), where the documents that run a learned
+behavior load it by its path (decision D121). Each bot's README gives its input events and output
 ([bots/builder/README.md](bots/builder/README.md#running),
 [bots/floppy/README.md](bots/floppy/README.md#running)).
 
@@ -121,6 +135,7 @@ values. No package has a default model endpoint (decision D31).
 | --- | --- | --- |
 | `FLOPPY_BASE_URL` | the `generate` service (`env:baseurl`): the builder's design and author stages, the floppy bot's reasoning | yes: without it a generation fails `unconfigured` |
 | `FLOPPY_API_KEY` | the `generate` service (`env:apikey`), as above | yes, as above |
+| `FLOPPY_STREAM` | the `generate` service (`env:stream`): whether the model endpoint streams; `true` or `false` | no: unset (the default), no call is streamed and each model-bound stage is bounded by its backstop alone; `true` makes reasoning's, reflection's and the builder's calls streamed and bounded by inactivity once they stream (decision D101). The CPA gateway does not stream (it answers a streamed request with keep-alive comments only), the maintainer's vLLM does |
 | `TYPESAFE_BASE_URL` | the `decision` service (`env:baseurl`): the builder's triage, the floppy bot's intuition | no: the service's declared origin, `https://api.typesafe.ai` |
 | `TYPESAFE_API_KEY` | the `decision` service (`env:apikey`), as above | for the floppy bot: without it every turn fails (`unconfigured`); the builder triages with its fallback |
 | `FLOPPY_SPEECH_BASE_URL` | the `speech` service (`env:baseurl`): the floppy bot's speech decoding (listening) and speech encoding (speaking) | yes: without it decoding and speaking fail `unconfigured` |
@@ -137,8 +152,8 @@ read `FLOPPY_TRACE_BLESS`. Those are test settings, not bot variables.
 `Qwen/Qwen3.8-Flash-Next`, the model the maintainer's DGX Sparks serve
 (direct vLLM; the CPA gateway lists it as `sparks/qwen3.8-flash-next`). It is
 the `model` `<data>` of `bots/builder/builder.scx` (a `builder.request`'s
-`model` overrides it), `bots/floppy/floppy.scx` (a `bot.activate`'s `model`
-overrides it), `abilities/cognition/cognition.scx`, `abilities/reasoning/reasoning.scx` and
+`model` overrides it), `bots/floppy/floppy.scx` (its environment's `model`
+`<param>` overrides it), `abilities/cognition/cognition.scx`, `abilities/reasoning/reasoning.scx` and
 `abilities/reflection/reflection.scx` (each takes its invoker's by `<param>`), and
 `abilities/reading/reading.scx` (the original's image decoder).
 
@@ -165,28 +180,31 @@ them). Both directions therefore call the Gemini API, so
 
 | Document | `<data>` | Default | What it bounds |
 | --- | --- | --- | --- |
-| `bots/builder/builder.scx` | `generate_timeout_ms` | `300000` | one design or author generation (a `builder.request`'s `generate_timeout_ms` overrides it) |
+| `bots/builder/builder.scx` | `generate_timeout_ms` | `30000` | one design or author generation without progress, once its reply streams: the first progress arms it, each later one re-arms it (decision D101; a `builder.request`'s `generate_timeout_ms` overrides it) |
+| `bots/builder/builder.scx` | `generate_ceiling_ms` | `1200000` | one design or author generation in all, the backstop, and the only bound of a reply that is not streamed (decision D101; a `builder.request`'s `generate_ceiling_ms` overrides it) |
+| `bots/builder/builder.scx` | `max_completion_tokens` | `8192` | the tokens of one design or author reply, reasoning included: a model that reasons on without answering fails `truncated` (decision D101) |
 | `bots/builder/builder.scx` | `decision_timeout_ms` | `60000` | one triage decision |
 | `bots/builder/builder.scx` | `max_tests` | `8` | the test scripts one draft may carry |
 | `bots/builder/builder.scx` | `sim_test_cap_ms` | `120000` | each test script's simulation run |
 | `bots/floppy/floppy.scx` | `activation_timeout_ms` | `30000` | activation until every ability offers (the original's 30 s attachment timeout) |
 | `bots/floppy/floppy.scx` | `processing_timeout_ms` | `300000` | one turn (the original's 5 min processing timeout) |
-| `bots/floppy/floppy.scx` | `encoding_timeout_ms` | `30000` | speaking's speech synthesis, passed through the communication (the remote speech backend, D96) |
-| `bots/floppy/floppy.scx` | `response_timeout_ms` | `35000` | the communication's wait for speaking, passed to it (D96) |
-| `abilities/cognition/cognition.scx` | `child_operation_timeout_ms` | `30000` | each cascade stage (the original's 30 s) |
+| `abilities/cognition/cognition.scx` | `child_operation_timeout_ms` | `30000` | each cascade stage without progress (the original's 30 s): autonomy's and the intuition's from their start, reasoning's once its reply streams (the first progress arms it, each later one re-arms it); live streamed replies had at most 6.2 s between chunks (decision D101; the bot's `bounds` param's `child_operation_timeout_ms` overrides it) |
+| `abilities/cognition/cognition.scx` | `child_operation_ceiling_ms` | `240000` | each cascade stage in all, the backstop and the only bound of a reasoning reply that is not streamed, inside the body's `processing_timeout_ms` with the stages before reasoning (decision D101; the bot's `bounds` param's `child_operation_ceiling_ms` overrides it) |
 | `abilities/intuition/intuition.scx` | `decision_timeout_ms` | `20000` | the intuition's decision |
 | `abilities/autonomy/autonomy.scx` | `silence_ms` | `1000` | a behavior's answer (the original's `TURN_SILENCE_BOUND`) |
 | `abilities/autonomy/autonomy.scx` | `memory_timeout_ms` | `10000` | one memory transaction |
 | `abilities/candidates_runner/candidates_runner.scx` | `memory_timeout_ms` | `10000` | one candidate's memory transaction (autonomy passes its own) |
 | `abilities/conversation/conversation.scx` | `memory_timeout_ms` | `5000` | each of the conversation's memory operations, the recall before the turns and the remember after them (the original's 5 s turn stage timeout) |
-| `abilities/communication/communication.scx` | `response_timeout_ms` | `6000` | saying one response (the original's 6 s) |
-| `abilities/communication/communication.scx` | `encoding_timeout_ms` | `5000` | speaking's speech synthesis (communication passes its own) |
-| `abilities/reflection/reflection.scx` | `select_timeout_ms` | `30000` | reflection's select generation (the original's 30 s) |
-| `abilities/reflection/reflection.scx` | `revising_timeout_ms` | `180000` | reflection's revising through the builder (D99; the original's 30 s bounded one change call) |
+| `abilities/communication/communication.scx` | `response_timeout_ms` | `36000` | saying one response (speaking's 30 s synthesis bound plus the original's 6 s; decision D98) |
+| `abilities/communication/communication.scx` | `encoding_timeout_ms` | `30000` | speaking's speech synthesis (communication passes its own; decision D98) |
+| `abilities/reflection/reflection.scx` | `select_timeout_ms` | `30000` | reflection's select generation without progress once its reply streams (the original's 30 s; decision D101) |
+| `abilities/reflection/reflection.scx` | `select_ceiling_ms` | `600000` | reflection's select generation in all, the backstop (decision D101) |
+| `abilities/reflection/reflection.scx` | `revising_timeout_ms` | `30000` | reflection's revising through the builder without progress while a builder generation streams: its first progress arms it, each later one re-arms it, and the builder's next stage disarms it (decision D101; the bot's `bounds` param's `revising_timeout_ms` overrides it) |
+| `abilities/reflection/reflection.scx` | `revising_ceiling_ms` | `1800000` | reflection's revising in all, the backstop (live revisions on the maintainer's vLLM ran past 600 s while making progress; decision D101; the bot's `bounds` param's `revising_ceiling_ms` overrides it) |
 | `abilities/reading/reading.scx` | `stage_timeout_ms` | `30000` | each reading stage (the original's 30 s) |
 | `abilities/conversation/conversation.scx` | `turn_timeout_ms` | `5000` | a turn detector's readiness, and then its turn, for each source of an input (the original's 5 s) |
 | `abilities/turn_detector/turn_detector.scx` | `end_of_turn_silence_seconds` | `0.5` | the silence that closes an open or paused turn (the original's 0.5 s; at least 0.01 s) |
-| `abilities/speaking/speaking.scx` | `encoding_timeout_ms` | `5000` | one speech synthesis (the original's 5 s) |
+| `abilities/speaking/speaking.scx` | `encoding_timeout_ms` | `30000` | one speech synthesis: Gemini answers only once the whole clip is synthesized, which outlasts the original's 5 s for a sentence, so the original's 30 s stage operation timeout (decision D98) |
 | `abilities/speaking/speaking.scx` | `recording_timeout_ms` | `5000` | recording the spoken words in the conversation (the original's 5 s) |
 | `abilities/listening/listening.scx` | `sensitivity_timeout_ms` | `30000` | scoring one sound (the original's 30 s stage operation timeout) |
 | `abilities/interpretation/interpretation.scx` | `stage_timeout_ms` | `30000` | each interpretation stage (the original's 30 s) |

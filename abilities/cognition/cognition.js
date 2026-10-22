@@ -12,6 +12,11 @@ function inputFocusCandidates(_event) {
   return _event.data.focus_candidates === undefined ? [] : _event.data.focus_candidates;
 }
 
+// The turn's environment (decision D106), null when the input has none.
+function inputEnvironment(_event) {
+  return _event.data.environment === undefined ? null : _event.data.environment;
+}
+
 function inputChoices(_event) {
   return _event.data.choices === undefined ? [] : _event.data.choices;
 }
@@ -26,19 +31,35 @@ function turnLog() {
   return 'turn ' + turn;
 }
 
-// The hop timer of the stage in hand, for the turn in hand (the original _is_child_hop_timeout).
+// A hop timer of the stage in hand, for the turn in hand (the original _is_child_hop_timeout).
 function isChildHopTimeout(_event) {
-  return _event.sendid === hop_timer && _event.data.turn === turn;
+  return (_event.sendid === hop_timer || _event.sendid === ceiling_timer) && _event.data.turn === turn;
 }
 
-function hopTimeoutLog() {
-  return 'turn ' + turn + ': ' + stage + ' after ' + child_operation_timeout_ms + ' ms';
+function hopTimeoutLog(_event) {
+  return _event.sendid === ceiling_timer
+    ? 'turn ' + turn + ': ' + stage + ' after ' + ceilingMs() + ' ms in all'
+    : 'turn ' + turn + ': ' + stage + ' after ' + inactivityMs() + ' ms without progress';
 }
 
 // running_autonomy, running_intuition, running_reasoning
 
+// A stage's inactivity bound and its backstop: the bot's bounds, else this
+// document's defaults (decision D101).
+function inactivityMs() {
+  return bounds.child_operation_timeout_ms === undefined ? child_operation_timeout_ms : bounds.child_operation_timeout_ms;
+}
+
+function ceilingMs() {
+  return bounds.child_operation_ceiling_ms === undefined ? child_operation_ceiling_ms : bounds.child_operation_ceiling_ms;
+}
+
 function hopDelay() {
-  return child_operation_timeout_ms + 'ms';
+  return inactivityMs() + 'ms';
+}
+
+function ceilingDelay() {
+  return ceilingMs() + 'ms';
 }
 
 // The stage's input param, and bot.ability.failed's input (the original _build_processing_input).
@@ -84,49 +105,21 @@ function stageRunFailure(name, _event) {
 
 // running_intuition
 
-// The intuition's tuner from its donedata, else the one in hand.
+// The intuition's confidence tuner from its donedata, else the one in hand.
 function intuitionTuner(_event) {
-  return _event.data.tuner instanceof Object && !Array.isArray(_event.data.tuner) ? _event.data.tuner : tuner;
+  var state = _event.data.confidence_tuner;
+  return state instanceof Object && !Array.isArray(state) ? state : confidence_tuner;
 }
 
 function tunerLog() {
-  return JSON.stringify(tuner);
+  return JSON.stringify(confidence_tuner);
 }
 
 function intuitionFailure(_event) {
   return stageFailure(_event);
 }
 
-// An escalated intuition's environment actions (the original _environment_actions), else none.
-function environmentActions(_event) {
-  return Array.isArray(_event.data.selected) ? _event.data.selected : [];
-}
-
 // completing
-
-// The turn's output: an escalated intuition's environment actions first,
-// then the handling stage's selections that do not repeat one of them
-// (the same event and data: intuition names no target, and an event the
-// body routes without one has exactly one offerer; decision D98).
-function turnOutput() {
-  var routed = environment_actions.map(selectionKey);
-  return environment_actions.concat(selected.filter(function (s) { return routed.indexOf(selectionKey(s)) < 0; }));
-}
-
-// A selection's event and data as one string, its objects' keys sorted.
-function selectionKey(s) {
-  return canonical([s.event, s.data === undefined ? null : s.data]);
-}
-
-function canonical(v) {
-  if (Array.isArray(v)) {
-    return '[' + v.map(canonical).join(',') + ']';
-  }
-  if (v !== null && typeof v === 'object') {
-    return '{' + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ':' + canonical(v[k]); }).join(',') + '}';
-  }
-  return JSON.stringify(v);
-}
 
 // The reflection's cognition_input: the turn's stimulus, focus and focus_candidates.
 function cognitionInput() {

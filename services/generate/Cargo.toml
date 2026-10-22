@@ -1,6 +1,6 @@
 [package]
 name = "floppy-service-generate"
-description = "The `generate` invoked service: one provider-neutral model generation (text or schema-validated structured output) per `<invoke>`, as a Wasm component whose `invoke` export is an `async func`"
+description = "The `generate` invoked service: one provider-neutral model generation (text, or the calls of its one function tool) per `<invoke>`, as a Wasm component whose `invoke` export is an `async func`"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,7 +14,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 # Canonical JSON (deterministic request bodies) and the JSON Schema checks of
-# structured output: `resolve` (metaschema, no external references) and
+# the tool call's arguments: `resolve` (metaschema, no external references) and
 # `CompiledSchema` (boon, nothing ever loaded).
 scxml-event-schema.workspace = true
 scxml-types.workspace = true

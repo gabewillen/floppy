@@ -1,0 +1,10 @@
+{
+  "format": "stateforward.scxml.extension-package/v2",
+  "namespace-uri": "https://github.com/stateforward/floppy/namespaces/processing",
+  "package-version": "0.1.0",
+  "extension-artifact": "floppy_processing.virtualized.wasm",
+  "schema-artifact": "processing.xsd",
+  "schema-sha256": "b72c5b28de4598ab664dc0a44a4f2f97a80a29f259aa142f77e5169399ea1ee4",
+  "wit-world": "stateforward:scxml/executable-content-extension",
+  "wit-version": "0.2.0"
+}

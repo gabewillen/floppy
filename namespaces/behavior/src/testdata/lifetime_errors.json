@@ -1,0 +1,653 @@
+[
+ {
+  "name": "a_turn_behavior_without_delays",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"bot.speaking.say\"/></onentry></state></scxml>",
+  "min_every": 60000,
+  "turn_after_bound": 1000,
+  "errors": [],
+  "lifetime": "turn",
+  "schedules": []
+ },
+ {
+  "name": "a_turn_behavior_without_delays",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"bot.speaking.say\"/></onentry></state></scxml>",
+  "min_every": null,
+  "turn_after_bound": null,
+  "errors": [],
+  "lifetime": "turn",
+  "schedules": []
+ },
+ {
+  "name": "a_turn_behavior_without_delays",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"bot.speaking.say\"/></onentry></state></scxml>",
+  "min_every": 90000,
+  "turn_after_bound": null,
+  "errors": [],
+  "lifetime": "turn",
+  "schedules": []
+ },
+ {
+  "name": "a_turn_behavior_without_delays",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"bot.speaking.say\"/></onentry></state></scxml>",
+  "min_every": null,
+  "turn_after_bound": 2000,
+  "errors": [],
+  "lifetime": "turn",
+  "schedules": []
+ },
+ {
+  "name": "a_turn_after_within_and_past_the_bound",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"soon\" delay=\"500ms\"/><send event=\"late\" delay=\"5s\"/><send event=\"exact\" delay=\"1s\"/></onentry></state></scxml>",
+  "min_every": 60000,
+  "turn_after_bound": 1000,
+  "errors": [
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the late delay of 5s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   }
+  ],
+  "lifetime": "turn",
+  "schedules": []
+ },
+ {
+  "name": "a_turn_after_within_and_past_the_bound",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"soon\" delay=\"500ms\"/><send event=\"late\" delay=\"5s\"/><send event=\"exact\" delay=\"1s\"/></onentry></state></scxml>",
+  "min_every": null,
+  "turn_after_bound": null,
+  "errors": [],
+  "lifetime": "turn",
+  "schedules": []
+ },
+ {
+  "name": "a_turn_after_within_and_past_the_bound",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"soon\" delay=\"500ms\"/><send event=\"late\" delay=\"5s\"/><send event=\"exact\" delay=\"1s\"/></onentry></state></scxml>",
+  "min_every": 90000,
+  "turn_after_bound": null,
+  "errors": [],
+  "lifetime": "turn",
+  "schedules": []
+ },
+ {
+  "name": "a_turn_after_within_and_past_the_bound",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"soon\" delay=\"500ms\"/><send event=\"late\" delay=\"5s\"/><send event=\"exact\" delay=\"1s\"/></onentry></state></scxml>",
+  "min_every": null,
+  "turn_after_bound": 2000,
+  "errors": [
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the late delay of 5s) never fires in a turn behavior, which is silenced 2s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   }
+  ],
+  "lifetime": "turn",
+  "schedules": []
+ },
+ {
+  "name": "a_routine_every_below_the_minimum",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send id=\"t\" event=\"tick.every\" delay=\"30s\"/></onentry><transition event=\"tick.every\" target=\"waiting\"><send event=\"bot.behavior.tick\" target=\"#_parent\"><content expr=\"tick()\"/></send></transition></state></scxml>",
+  "min_every": 60000,
+  "turn_after_bound": 1000,
+  "errors": [
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "every (the tick.every delay of 30s) is shorter than the 60-second minimum routine interval. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   }
+  ],
+  "lifetime": "persistent",
+  "schedules": [
+   "tick.every"
+  ]
+ },
+ {
+  "name": "a_routine_every_below_the_minimum",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send id=\"t\" event=\"tick.every\" delay=\"30s\"/></onentry><transition event=\"tick.every\" target=\"waiting\"><send event=\"bot.behavior.tick\" target=\"#_parent\"><content expr=\"tick()\"/></send></transition></state></scxml>",
+  "min_every": null,
+  "turn_after_bound": null,
+  "errors": [],
+  "lifetime": "persistent",
+  "schedules": [
+   "tick.every"
+  ]
+ },
+ {
+  "name": "a_routine_every_below_the_minimum",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send id=\"t\" event=\"tick.every\" delay=\"30s\"/></onentry><transition event=\"tick.every\" target=\"waiting\"><send event=\"bot.behavior.tick\" target=\"#_parent\"><content expr=\"tick()\"/></send></transition></state></scxml>",
+  "min_every": 90000,
+  "turn_after_bound": null,
+  "errors": [
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "every (the tick.every delay of 30s) is shorter than the 90-second minimum routine interval. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   }
+  ],
+  "lifetime": "persistent",
+  "schedules": [
+   "tick.every"
+  ]
+ },
+ {
+  "name": "a_routine_every_below_the_minimum",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send id=\"t\" event=\"tick.every\" delay=\"30s\"/></onentry><transition event=\"tick.every\" target=\"waiting\"><send event=\"bot.behavior.tick\" target=\"#_parent\"><content expr=\"tick()\"/></send></transition></state></scxml>",
+  "min_every": null,
+  "turn_after_bound": 2000,
+  "errors": [],
+  "lifetime": "persistent",
+  "schedules": [
+   "tick.every"
+  ]
+ },
+ {
+  "name": "a_routine_every_and_at_within_bounds",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send id=\"t\" event=\"tick.every\" delay=\"60s\"/><send id=\"a\" event=\"tick.at\" delayexpr=\"(due.ms - Date.now()) + 'ms'\"/><send event=\"other\" delay=\"10s\"/></onentry><transition event=\"tick.every tick.at\" target=\"waiting\"><send event=\"bot.behavior.tick\" target=\"#_parent\"><content expr=\"tick()\"/></send></transition></state></scxml>",
+  "min_every": 60000,
+  "turn_after_bound": 1000,
+  "errors": [],
+  "lifetime": "persistent",
+  "schedules": [
+   "tick.every",
+   "tick.at"
+  ]
+ },
+ {
+  "name": "a_routine_every_and_at_within_bounds",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send id=\"t\" event=\"tick.every\" delay=\"60s\"/><send id=\"a\" event=\"tick.at\" delayexpr=\"(due.ms - Date.now()) + 'ms'\"/><send event=\"other\" delay=\"10s\"/></onentry><transition event=\"tick.every tick.at\" target=\"waiting\"><send event=\"bot.behavior.tick\" target=\"#_parent\"><content expr=\"tick()\"/></send></transition></state></scxml>",
+  "min_every": null,
+  "turn_after_bound": null,
+  "errors": [],
+  "lifetime": "persistent",
+  "schedules": [
+   "tick.every",
+   "tick.at"
+  ]
+ },
+ {
+  "name": "a_routine_every_and_at_within_bounds",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send id=\"t\" event=\"tick.every\" delay=\"60s\"/><send id=\"a\" event=\"tick.at\" delayexpr=\"(due.ms - Date.now()) + 'ms'\"/><send event=\"other\" delay=\"10s\"/></onentry><transition event=\"tick.every tick.at\" target=\"waiting\"><send event=\"bot.behavior.tick\" target=\"#_parent\"><content expr=\"tick()\"/></send></transition></state></scxml>",
+  "min_every": 90000,
+  "turn_after_bound": null,
+  "errors": [
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "every (the tick.every delay of 60s) is shorter than the 90-second minimum routine interval. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   }
+  ],
+  "lifetime": "persistent",
+  "schedules": [
+   "tick.every",
+   "tick.at"
+  ]
+ },
+ {
+  "name": "a_routine_every_and_at_within_bounds",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send id=\"t\" event=\"tick.every\" delay=\"60s\"/><send id=\"a\" event=\"tick.at\" delayexpr=\"(due.ms - Date.now()) + 'ms'\"/><send event=\"other\" delay=\"10s\"/></onentry><transition event=\"tick.every tick.at\" target=\"waiting\"><send event=\"bot.behavior.tick\" target=\"#_parent\"><content expr=\"tick()\"/></send></transition></state></scxml>",
+  "min_every": null,
+  "turn_after_bound": 2000,
+  "errors": [],
+  "lifetime": "persistent",
+  "schedules": [
+   "tick.every",
+   "tick.at"
+  ]
+ },
+ {
+  "name": "a_routine_without_a_schedule",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"x\" delay=\"2s\"/></onentry><transition event=\"go\"><send event=\"bot.behavior.tick\" target=\"#_parent\"/></transition></state></scxml>",
+  "min_every": 60000,
+  "turn_after_bound": 1000,
+  "errors": [
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "a persistent routine must schedule at least one transition with every or at: a delayed send of an event whose transition sends bot.behavior.tick. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   }
+  ],
+  "lifetime": "persistent",
+  "schedules": []
+ },
+ {
+  "name": "a_routine_without_a_schedule",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"x\" delay=\"2s\"/></onentry><transition event=\"go\"><send event=\"bot.behavior.tick\" target=\"#_parent\"/></transition></state></scxml>",
+  "min_every": null,
+  "turn_after_bound": null,
+  "errors": [],
+  "lifetime": "persistent",
+  "schedules": []
+ },
+ {
+  "name": "a_routine_without_a_schedule",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"x\" delay=\"2s\"/></onentry><transition event=\"go\"><send event=\"bot.behavior.tick\" target=\"#_parent\"/></transition></state></scxml>",
+  "min_every": 90000,
+  "turn_after_bound": null,
+  "errors": [
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "a persistent routine must schedule at least one transition with every or at: a delayed send of an event whose transition sends bot.behavior.tick. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   }
+  ],
+  "lifetime": "persistent",
+  "schedules": []
+ },
+ {
+  "name": "a_routine_without_a_schedule",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"x\" delay=\"2s\"/></onentry><transition event=\"go\"><send event=\"bot.behavior.tick\" target=\"#_parent\"/></transition></state></scxml>",
+  "min_every": null,
+  "turn_after_bound": 2000,
+  "errors": [
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "a persistent routine must schedule at least one transition with every or at: a delayed send of an event whose transition sends bot.behavior.tick. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   }
+  ],
+  "lifetime": "persistent",
+  "schedules": []
+ },
+ {
+  "name": "decimal_and_spaced_delays",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"a\" delay=\"1.5s\"/><send event=\"b\" delay=\".5s\"/><send event=\"c\" delay=\" 2500 ms \"/><send event=\"d\" delay=\"abc\"/><send event=\"e\" delay=\"2.s\"/></onentry></state></scxml>",
+  "min_every": 60000,
+  "turn_after_bound": 1000,
+  "errors": [
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the a delay of 1.5s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the c delay of 2.5s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   }
+  ],
+  "lifetime": "turn",
+  "schedules": []
+ },
+ {
+  "name": "decimal_and_spaced_delays",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"a\" delay=\"1.5s\"/><send event=\"b\" delay=\".5s\"/><send event=\"c\" delay=\" 2500 ms \"/><send event=\"d\" delay=\"abc\"/><send event=\"e\" delay=\"2.s\"/></onentry></state></scxml>",
+  "min_every": null,
+  "turn_after_bound": null,
+  "errors": [],
+  "lifetime": "turn",
+  "schedules": []
+ },
+ {
+  "name": "decimal_and_spaced_delays",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"a\" delay=\"1.5s\"/><send event=\"b\" delay=\".5s\"/><send event=\"c\" delay=\" 2500 ms \"/><send event=\"d\" delay=\"abc\"/><send event=\"e\" delay=\"2.s\"/></onentry></state></scxml>",
+  "min_every": 90000,
+  "turn_after_bound": null,
+  "errors": [],
+  "lifetime": "turn",
+  "schedules": []
+ },
+ {
+  "name": "decimal_and_spaced_delays",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"a\" delay=\"1.5s\"/><send event=\"b\" delay=\".5s\"/><send event=\"c\" delay=\" 2500 ms \"/><send event=\"d\" delay=\"abc\"/><send event=\"e\" delay=\"2.s\"/></onentry></state></scxml>",
+  "min_every": null,
+  "turn_after_bound": 2000,
+  "errors": [
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the c delay of 2.5s) never fires in a turn behavior, which is silenced 2s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   }
+  ],
+  "lifetime": "turn",
+  "schedules": []
+ },
+ {
+  "name": "a_schedule_sent_twice_and_one_without_an_event",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"tick.every\" delay=\"20s\"/><send event=\"tick.every\" delay=\"90s\"/><send eventexpr=\"'tick.every'\" delay=\"40s\"/></onentry><transition event=\"tick.every\" target=\"waiting\"><send event=\"bot.behavior.tick\" target=\"#_parent\"><content expr=\"tick()\"/></send></transition></state></scxml>",
+  "min_every": 60000,
+  "turn_after_bound": 1000,
+  "errors": [
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "every (the tick.every delay of 20s) is shorter than the 60-second minimum routine interval. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   }
+  ],
+  "lifetime": "persistent",
+  "schedules": [
+   "tick.every"
+  ]
+ },
+ {
+  "name": "a_schedule_sent_twice_and_one_without_an_event",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"tick.every\" delay=\"20s\"/><send event=\"tick.every\" delay=\"90s\"/><send eventexpr=\"'tick.every'\" delay=\"40s\"/></onentry><transition event=\"tick.every\" target=\"waiting\"><send event=\"bot.behavior.tick\" target=\"#_parent\"><content expr=\"tick()\"/></send></transition></state></scxml>",
+  "min_every": null,
+  "turn_after_bound": null,
+  "errors": [],
+  "lifetime": "persistent",
+  "schedules": [
+   "tick.every"
+  ]
+ },
+ {
+  "name": "a_schedule_sent_twice_and_one_without_an_event",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"tick.every\" delay=\"20s\"/><send event=\"tick.every\" delay=\"90s\"/><send eventexpr=\"'tick.every'\" delay=\"40s\"/></onentry><transition event=\"tick.every\" target=\"waiting\"><send event=\"bot.behavior.tick\" target=\"#_parent\"><content expr=\"tick()\"/></send></transition></state></scxml>",
+  "min_every": 90000,
+  "turn_after_bound": null,
+  "errors": [
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "every (the tick.every delay of 20s) is shorter than the 90-second minimum routine interval. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   }
+  ],
+  "lifetime": "persistent",
+  "schedules": [
+   "tick.every"
+  ]
+ },
+ {
+  "name": "a_schedule_sent_twice_and_one_without_an_event",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"tick.every\" delay=\"20s\"/><send event=\"tick.every\" delay=\"90s\"/><send eventexpr=\"'tick.every'\" delay=\"40s\"/></onentry><transition event=\"tick.every\" target=\"waiting\"><send event=\"bot.behavior.tick\" target=\"#_parent\"><content expr=\"tick()\"/></send></transition></state></scxml>",
+  "min_every": null,
+  "turn_after_bound": 2000,
+  "errors": [],
+  "lifetime": "persistent",
+  "schedules": [
+   "tick.every"
+  ]
+ },
+ {
+  "name": "a_tick_inside_an_if",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"tick.every\" delay=\"45000ms\"/></onentry><transition event=\"tick.every\"><if cond=\"ready()\"><send event=\"bot.behavior.tick\" target=\"#_parent\"/></if></transition></state></scxml>",
+  "min_every": 60000,
+  "turn_after_bound": 1000,
+  "errors": [
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "every (the tick.every delay of 45s) is shorter than the 60-second minimum routine interval. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   }
+  ],
+  "lifetime": "persistent",
+  "schedules": [
+   "tick.every"
+  ]
+ },
+ {
+  "name": "a_tick_inside_an_if",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"tick.every\" delay=\"45000ms\"/></onentry><transition event=\"tick.every\"><if cond=\"ready()\"><send event=\"bot.behavior.tick\" target=\"#_parent\"/></if></transition></state></scxml>",
+  "min_every": null,
+  "turn_after_bound": null,
+  "errors": [],
+  "lifetime": "persistent",
+  "schedules": [
+   "tick.every"
+  ]
+ },
+ {
+  "name": "a_tick_inside_an_if",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"tick.every\" delay=\"45000ms\"/></onentry><transition event=\"tick.every\"><if cond=\"ready()\"><send event=\"bot.behavior.tick\" target=\"#_parent\"/></if></transition></state></scxml>",
+  "min_every": 90000,
+  "turn_after_bound": null,
+  "errors": [
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "every (the tick.every delay of 45s) is shorter than the 90-second minimum routine interval. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   }
+  ],
+  "lifetime": "persistent",
+  "schedules": [
+   "tick.every"
+  ]
+ },
+ {
+  "name": "a_tick_inside_an_if",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"tick.every\" delay=\"45000ms\"/></onentry><transition event=\"tick.every\"><if cond=\"ready()\"><send event=\"bot.behavior.tick\" target=\"#_parent\"/></if></transition></state></scxml>",
+  "min_every": null,
+  "turn_after_bound": 2000,
+  "errors": [],
+  "lifetime": "persistent",
+  "schedules": [
+   "tick.every"
+  ]
+ },
+ {
+  "name": "many_errors_are_bounded",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"e0\" delay=\"2s\"/><send event=\"e1\" delay=\"3s\"/><send event=\"e2\" delay=\"4s\"/><send event=\"e3\" delay=\"5s\"/><send event=\"e4\" delay=\"6s\"/><send event=\"e5\" delay=\"7s\"/><send event=\"e6\" delay=\"8s\"/><send event=\"e7\" delay=\"9s\"/><send event=\"e8\" delay=\"10s\"/><send event=\"e9\" delay=\"11s\"/><send event=\"e10\" delay=\"12s\"/><send event=\"e11\" delay=\"13s\"/><send event=\"e12\" delay=\"14s\"/><send event=\"e13\" delay=\"15s\"/><send event=\"e14\" delay=\"16s\"/><send event=\"e15\" delay=\"17s\"/><send event=\"e16\" delay=\"18s\"/><send event=\"e17\" delay=\"19s\"/><send event=\"e18\" delay=\"20s\"/><send event=\"e19\" delay=\"21s\"/><send event=\"e20\" delay=\"22s\"/><send event=\"e21\" delay=\"23s\"/><send event=\"e22\" delay=\"24s\"/><send event=\"e23\" delay=\"25s\"/><send event=\"e24\" delay=\"26s\"/></onentry></state></scxml>",
+  "min_every": 60000,
+  "turn_after_bound": 1000,
+  "errors": [
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e0 delay of 2s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e1 delay of 3s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e2 delay of 4s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e3 delay of 5s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e4 delay of 6s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e5 delay of 7s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e6 delay of 8s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e7 delay of 9s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e8 delay of 10s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e9 delay of 11s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e10 delay of 12s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e11 delay of 13s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e12 delay of 14s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e13 delay of 15s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e14 delay of 16s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e15 delay of 17s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e16 delay of 18s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e17 delay of 19s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e18 delay of 20s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e19 delay of 21s) never fires in a turn behavior, which is silenced 1s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   }
+  ],
+  "lifetime": "turn",
+  "schedules": []
+ },
+ {
+  "name": "many_errors_are_bounded",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"e0\" delay=\"2s\"/><send event=\"e1\" delay=\"3s\"/><send event=\"e2\" delay=\"4s\"/><send event=\"e3\" delay=\"5s\"/><send event=\"e4\" delay=\"6s\"/><send event=\"e5\" delay=\"7s\"/><send event=\"e6\" delay=\"8s\"/><send event=\"e7\" delay=\"9s\"/><send event=\"e8\" delay=\"10s\"/><send event=\"e9\" delay=\"11s\"/><send event=\"e10\" delay=\"12s\"/><send event=\"e11\" delay=\"13s\"/><send event=\"e12\" delay=\"14s\"/><send event=\"e13\" delay=\"15s\"/><send event=\"e14\" delay=\"16s\"/><send event=\"e15\" delay=\"17s\"/><send event=\"e16\" delay=\"18s\"/><send event=\"e17\" delay=\"19s\"/><send event=\"e18\" delay=\"20s\"/><send event=\"e19\" delay=\"21s\"/><send event=\"e20\" delay=\"22s\"/><send event=\"e21\" delay=\"23s\"/><send event=\"e22\" delay=\"24s\"/><send event=\"e23\" delay=\"25s\"/><send event=\"e24\" delay=\"26s\"/></onentry></state></scxml>",
+  "min_every": null,
+  "turn_after_bound": null,
+  "errors": [],
+  "lifetime": "turn",
+  "schedules": []
+ },
+ {
+  "name": "many_errors_are_bounded",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"e0\" delay=\"2s\"/><send event=\"e1\" delay=\"3s\"/><send event=\"e2\" delay=\"4s\"/><send event=\"e3\" delay=\"5s\"/><send event=\"e4\" delay=\"6s\"/><send event=\"e5\" delay=\"7s\"/><send event=\"e6\" delay=\"8s\"/><send event=\"e7\" delay=\"9s\"/><send event=\"e8\" delay=\"10s\"/><send event=\"e9\" delay=\"11s\"/><send event=\"e10\" delay=\"12s\"/><send event=\"e11\" delay=\"13s\"/><send event=\"e12\" delay=\"14s\"/><send event=\"e13\" delay=\"15s\"/><send event=\"e14\" delay=\"16s\"/><send event=\"e15\" delay=\"17s\"/><send event=\"e16\" delay=\"18s\"/><send event=\"e17\" delay=\"19s\"/><send event=\"e18\" delay=\"20s\"/><send event=\"e19\" delay=\"21s\"/><send event=\"e20\" delay=\"22s\"/><send event=\"e21\" delay=\"23s\"/><send event=\"e22\" delay=\"24s\"/><send event=\"e23\" delay=\"25s\"/><send event=\"e24\" delay=\"26s\"/></onentry></state></scxml>",
+  "min_every": 90000,
+  "turn_after_bound": null,
+  "errors": [],
+  "lifetime": "turn",
+  "schedules": []
+ },
+ {
+  "name": "many_errors_are_bounded",
+  "scxml": "<scxml xmlns=\"http://www.w3.org/2005/07/scxml\" version=\"1.0\" datamodel=\"ecmascript\" initial=\"waiting\"><state id=\"waiting\"><onentry><send event=\"e0\" delay=\"2s\"/><send event=\"e1\" delay=\"3s\"/><send event=\"e2\" delay=\"4s\"/><send event=\"e3\" delay=\"5s\"/><send event=\"e4\" delay=\"6s\"/><send event=\"e5\" delay=\"7s\"/><send event=\"e6\" delay=\"8s\"/><send event=\"e7\" delay=\"9s\"/><send event=\"e8\" delay=\"10s\"/><send event=\"e9\" delay=\"11s\"/><send event=\"e10\" delay=\"12s\"/><send event=\"e11\" delay=\"13s\"/><send event=\"e12\" delay=\"14s\"/><send event=\"e13\" delay=\"15s\"/><send event=\"e14\" delay=\"16s\"/><send event=\"e15\" delay=\"17s\"/><send event=\"e16\" delay=\"18s\"/><send event=\"e17\" delay=\"19s\"/><send event=\"e18\" delay=\"20s\"/><send event=\"e19\" delay=\"21s\"/><send event=\"e20\" delay=\"22s\"/><send event=\"e21\" delay=\"23s\"/><send event=\"e22\" delay=\"24s\"/><send event=\"e23\" delay=\"25s\"/><send event=\"e24\" delay=\"26s\"/></onentry></state></scxml>",
+  "min_every": null,
+  "turn_after_bound": 2000,
+  "errors": [
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e1 delay of 3s) never fires in a turn behavior, which is silenced 2s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e2 delay of 4s) never fires in a turn behavior, which is silenced 2s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e3 delay of 5s) never fires in a turn behavior, which is silenced 2s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e4 delay of 6s) never fires in a turn behavior, which is silenced 2s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e5 delay of 7s) never fires in a turn behavior, which is silenced 2s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e6 delay of 8s) never fires in a turn behavior, which is silenced 2s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e7 delay of 9s) never fires in a turn behavior, which is silenced 2s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e8 delay of 10s) never fires in a turn behavior, which is silenced 2s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e9 delay of 11s) never fires in a turn behavior, which is silenced 2s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e10 delay of 12s) never fires in a turn behavior, which is silenced 2s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e11 delay of 13s) never fires in a turn behavior, which is silenced 2s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e12 delay of 14s) never fires in a turn behavior, which is silenced 2s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e13 delay of 15s) never fires in a turn behavior, which is silenced 2s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e14 delay of 16s) never fires in a turn behavior, which is silenced 2s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e15 delay of 17s) never fires in a turn behavior, which is silenced 2s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e16 delay of 18s) never fires in a turn behavior, which is silenced 2s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e17 delay of 19s) never fires in a turn behavior, which is silenced 2s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e18 delay of 20s) never fires in a turn behavior, which is silenced 2s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e19 delay of 21s) never fires in a turn behavior, which is silenced 2s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   },
+   {
+    "code": "E0009",
+    "kind": "lifetime",
+    "message": "after (the e20 delay of 22s) never fires in a turn behavior, which is silenced 2s after it starts; shorten it or make the behavior a persistent routine. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+   }
+  ],
+  "lifetime": "turn",
+  "schedules": []
+ }
+]

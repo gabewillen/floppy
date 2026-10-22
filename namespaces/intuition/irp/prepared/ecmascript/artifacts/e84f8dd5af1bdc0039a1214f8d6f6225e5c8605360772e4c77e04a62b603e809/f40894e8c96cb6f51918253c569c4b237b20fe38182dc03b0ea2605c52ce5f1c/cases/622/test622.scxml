@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- intuition-3: the threshold is never under half the floor. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:intuition="https://github.com/stateforward/floppy/namespaces/intuition" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="t" expr="{&#34;mean&#34;: 20, &#34;var&#34;: 100, &#34;n&#34;: 20}"/>
+  <data id="below" expr="null"/>
+  <data id="above" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <intuition:escalate location="below" confidence="17" tuner="t"/>
+    <intuition:escalate location="above" confidence="18" tuner="t"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="below === true &amp;&amp; above === false" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

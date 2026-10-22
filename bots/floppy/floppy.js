@@ -4,12 +4,8 @@
 
 // Shared: event records and send delays.
 
-function eventDataJson(_event) {
-  return JSON.stringify(_event.data);
-}
-
-function emptyDataJson() {
-  return JSON.stringify({});
+function emptyData() {
+  return {};
 }
 
 function delay(ms) {
@@ -20,13 +16,17 @@ function abilityTarget(id) {
   return '#_' + id;
 }
 
-// inactive
+// live
 
-function activationModel(_event) {
-  return _event.data.model === undefined ? model : _event.data.model;
+// The references of the devices the bot holds (decision D105).
+function heldDevices() {
+  return Object.keys(owned_devices);
 }
 
-// live
+// A held device's address (decision D110).
+function deviceTarget(reference) {
+  return '#_scxml_' + owned_devices[reference];
+}
 
 function nextLiveRun() {
   return live_run + 1;
@@ -79,21 +79,14 @@ function hasFocusedDevice() {
   return focused_device !== null;
 }
 
-// While offering, whether bot.focus_device is among the enabled transitions;
-// while routing, whether it is a routed selection.
+// Whether bot.focus_device applies: the turn has focus candidates.
 function focusDeviceEnabled() {
-  return offering ? focus_candidates.length > 0 : routing_selections;
+  return focus_candidates.length > 0;
 }
 
 // Whether the routed bot.focus_device names a candidate device.
 function isFocusCandidate(_event) {
   return focus_candidates.indexOf(_event.data.device) >= 0 && devices.indexOf(_event.data.device) >= 0;
-}
-
-// While offering, whether bot.clear_focus is among the enabled transitions;
-// while routing, whether it is a routed selection.
-function clearFocusEnabled() {
-  return offering ? hasFocusedDevice() : routing_selections;
 }
 
 // processing
@@ -107,11 +100,32 @@ function choicesFit() {
 }
 
 function cognitionInput() {
-  return {turn: turn, stimulus: stimulus, focus: focus, focus_candidates: focus_candidates, choices: choices};
+  return {turn: turn, stimulus: stimulus, focus: focus, focus_candidates: focus_candidates, participants: participants, choices: choices, environment: environmentField()};
+}
+
+// The participants a handoff's producer stamped (none when it names none).
+function handoffParticipants(_event) {
+  return _event.data.participants || [];
+}
+
+// The turn's environment from the bot's perspective (decision D106), in
+// the original's layout: the environment's id, then the bot itself, its
+// state and its own attributes (owned_devices), each held device that was
+// read this turn under its reference with its id, state and attributes (a
+// device that is not running is left out).
+function environmentField() {
+  var owned = {};
+  devices.forEach(function (reference) {
+    var snapshot = device_snapshots[reference];
+    if (snapshot !== undefined) {
+      owned[reference] = {ref: reference, id: snapshot.id, state: snapshot.state, attributes: snapshot.attributes};
+    }
+  });
+  return {id: environment, self: {state: 'processing', owned_devices: owned}};
 }
 
 function choicesOverFailure() {
-  return JSON.stringify({message: 'the turn\'s choices are ' + choices_size + ' bytes, over 32768', turn: turn});
+  return {message: 'the turn\'s choices are ' + choices_size + ' bytes, over 32768', turn: turn};
 }
 
 // A reply or timer for the current turn.
@@ -124,15 +138,15 @@ function botOutput(_event) {
 }
 
 function processingCompleted() {
-  return JSON.stringify({output: selections, focus_candidates: focus_candidates, turn: turn});
+  return {output: selections, focus_candidates: focus_candidates, turn: turn};
 }
 
 function cognitionFailure(_event) {
-  return JSON.stringify({message: typeof _event.data.message === 'string' && _event.data.message.length > 0 ? _event.data.message : 'Bot processing ability failed.', turn: turn});
+  return {message: typeof _event.data.message === 'string' && _event.data.message.length > 0 ? _event.data.message : 'Bot processing ability failed.', turn: turn};
 }
 
-function turnJson() {
-  return JSON.stringify({turn: turn});
+function turnData() {
+  return {turn: turn};
 }
 
 // cancelling_processing
@@ -145,46 +159,28 @@ function cancelDelay() {
 // The original _dispatch_processing_timeout_failure, after an acknowledged cancel
 // and after an unacknowledged one alike.
 function cancelledFailure() {
-  return JSON.stringify({message: 'Bot processing timed out after ' + processing_timeout_ms / 1000 + ' seconds.', turn: turn});
+  return {message: 'Bot processing timed out after ' + processing_timeout_ms / 1000 + ' seconds.', turn: turn};
 }
 
 function cancelUnacknowledgedReason() {
   return 'turn ' + turn + ': the cognition did not acknowledge its cancel';
 }
 
-// routing
+// The turn's output
 
-// No selection was rejected (by <bot:verdict> or <decision:route>).
-function isAccepted() {
-  return rejection === null;
-}
-
-// The turn's choices, and bot.ability.communication.input placed on the
-// body itself (the trusted SpeechHeard seed's selection, the original's declared
-// event of the bot), which takes it as outside communication input.
-function routeChoices() {
-  return choices.concat([{event: 'bot.ability.communication.input', schema: {}}]);
-}
-
-// The original: a rejected selection fails the turn (bot.processing.failed).
-function rejectionFailure() {
-  return JSON.stringify({message: rejection, turn: turn});
-}
-
-function isBodyRoute(route) {
-  return route.target === null;
-}
-
-function bodyRouteLog(route) {
-  return route.event + ' -> bot';
-}
-
-function abilityRouteLog(route) {
-  return route.event + ' -> ' + route.target;
+// A selection that names no target: the trusted seed's, the body's own.
+function hasNoTarget(s) {
+  return typeof s.target !== 'string';
 }
 
 // active (after its states)
 
 function staleReplyLog(_event) {
   return _event.name + ' for turn ' + _event.data.turn + ' (current ' + turn + ')';
+}
+
+// The data a selection is sent with, as the original's dispatch_selected_events
+// takes it: its data object, else {} (no data, null, or a non-object).
+function selectionData(s) {
+  return s.data !== null && typeof s.data === 'object' && !Array.isArray(s.data) ? s.data : ({});
 }

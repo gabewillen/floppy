@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!-- autonomy-2: data that is not an object, an array included, is the event member. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:autonomy="https://github.com/stateforward/floppy/namespaces/autonomy">
+<datamodel>
+  <data id="p" expr="null"/>
+  <data id="q" expr="null"/>
+  <data id="s" expr="({event: 'environment.sound', data: 'knock', source: 'listening'})"/>
+  <data id="a" expr="({event: 'x', data: [1, 2]})"/>
+  <data id="f" expr="null"/>
+  <data id="c" expr="[]"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <autonomy:behavior_input_payload location="p" stimulus="s" focus="f" focus_candidates="c"/>
+    <autonomy:behavior_input_payload location="q" stimulus="a" focus="f" focus_candidates="c"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="JSON.stringify(p) === '{&quot;event&quot;:&quot;knock&quot;,&quot;focus&quot;:null,&quot;focus_candidates&quot;:[]}' &amp;&amp; JSON.stringify(q) === '{&quot;event&quot;:[1,2],&quot;focus&quot;:null,&quot;focus_candidates&quot;:[]}'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

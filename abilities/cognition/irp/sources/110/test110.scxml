@@ -14,7 +14,7 @@
   </state>
   <state id="step1">
     <onentry>
-      <send event="bot.ability.cognition.input" target="#_cognition"><content expr='{"turn": 1, "stimulus": {"event": "bot.input", "data": {"text": "hello"}, "source": "conversation"}, "focus": null, "focus_candidates": [], "choices": [{"event": "bot.ability.cognition.ignore", "schema": {"additionalProperties": false, "description": "Deliberately ignore this stimulus: no device command, no focus change, no speech. Required when no other offered event should run. Do not use a device command, focus, or clear_focus as a stand-in for ignore. Put why on the selection envelope reason field, not on this empty payload.", "properties": {}, "type": "object"}, "target": "cognition"}]}'/></send>
+      <send event="bot.ability.cognition.input" target="#_cognition"><content expr='{"turn": 1, "stimulus": {"event": "bot.input", "data": {"text": "hello"}, "source": "conversation"}, "focus": null, "focus_candidates": [], "choices": [{"event": "bot.ability.cognition.ignore", "schema": {"additionalProperties": false, "description": "Deliberately ignore this stimulus: no device command, no focus change, no speech. Required when no other offered event should run. Do not use a device command, focus, or clear_focus as a stand-in for ignore. Put why on the selection envelope reason field, not on this empty payload.", "properties": {}, "type": "object"}, "target": "session.cognition"}]}'/></send>
     </onentry>
     <transition event="bot.ability.cognition.output" cond='_event.data.turn === 1 &amp;&amp; _event.data.output.length === 1 &amp;&amp; _event.data.output[0].event === "bot.ability.cognition.ignore"' target="step2"/>
   </state>

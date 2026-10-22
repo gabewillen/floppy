@@ -101,7 +101,7 @@ impl SessionEmbedder for Documents {
             .map(|(_, text)| text.clone().into())
     }
 
-    fn scripts(&self) -> MachineScripts {
+    fn scripts(&self, _base_uri: Option<&str>) -> MachineScripts {
         MachineScripts::none()
     }
 }
@@ -735,9 +735,10 @@ fn inbound_messages_reach_an_invoked_session_at_its_own_location() {
     let [(session, location)] = logged.as_slice() else {
         panic!("the grandchild logs its location: {logged:?}");
     };
-    // The host names invoked sessions from one run-wide counter: the
-    // grandchild is the run's second invoked session.
-    assert_eq!(session, "root.2");
+    // A child session is named `<parent _sessionid>.<invokeid>`, and a
+    // generated invoke id is `<state id>.<n>` (SCXML 6.4.1
+    // `stateid.platformid`), `n` counting the invoking session's own.
+    assert_eq!(session, "root.s0.0.s0.0");
     assert_eq!(location, &format!("{public}/sessions/{session}/basichttp"));
     let path = location
         .strip_prefix(&format!("http://{}", inbound.addr))
@@ -773,8 +774,8 @@ fn inbound_messages_reach_an_invoked_session_at_its_own_location() {
     assert_eq!(
         http,
         [(
-            "root.2",
-            ["s0.root.0".to_owned(), "s0.root.1.0".to_owned()].as_slice()
+            "root.s0.0.s0.0",
+            ["s0.0".to_owned(), "s0.0".to_owned()].as_slice()
         )]
     );
     live.close().expect("close");
@@ -833,7 +834,7 @@ fn an_invoked_session_gets_its_late_communication_error_recorded_and_replayed() 
     let outputs = live.take_outputs();
     assert_eq!(
         logs(&outputs),
-        [("root.1".to_owned(), "kid-note".to_owned())],
+        [("root.kid".to_owned(), "kid-note".to_owned())],
         "the child that sent gets the error"
     );
     let records = live.take_recorded();
@@ -849,7 +850,7 @@ fn an_invoked_session_gets_its_late_communication_error_recorded_and_replayed() 
     assert_eq!(
         senders,
         [&CommunicationSender {
-            session_id: "root.1".into(),
+            session_id: "root.kid".into(),
             path: vec!["kid".into()],
             send_id: "kid-note".into(),
         }]

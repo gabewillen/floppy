@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- memory-1: a contents with an undeclared attribute raises error.execution and assigns nothing. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="c" expr="'untouched'"/>
+  <data id="r" expr="({rows: []})"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <memory:contents location="c" result="r" statement="0"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="c === 'untouched'" target="pass"/>
+  <transition event="*" target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

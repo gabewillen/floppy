@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- An extension component reads another session of its run
+  (`session-snapshot-host.snapshot` with a target, through
+  <example:snapshot target>): the root reads its child by `#_<invokeid>` and
+  by `#_scxml_<sessionid>`, the child reads its parent by `#_parent` and its
+  sibling by its address, `exclude` holds (`system` excluded everywhere:
+  its `BasicHTTP` entries are a documented host difference), and a target
+  no running session answers is `unavailable`. The logs record each document's options and
+  session object. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:example="https://stateforward.org/scxml/example"
+       version="1.0" datamodel="ecmascript" initial="s0">
+  <datamodel>
+    <data id="flag" expr="'root'"/>
+    <data id="doc" expr="''"/>
+  </datamodel>
+  <state id="s0" initial="wait">
+    <invoke id="kid">
+      <content>
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="k0">
+          <datamodel><data id="secret" expr="'k'"/></datamodel>
+          <state id="k0">
+            <onentry><send event="ready" target="#_parent"/></onentry>
+            <transition event="poke" target="k1"/>
+          </state>
+          <state id="k1"/>
+        </scxml>
+      </content>
+    </invoke>
+    <invoke id="a">
+      <content>
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:example="https://stateforward.org/scxml/example"
+               version="1.0" datamodel="ecmascript" initial="a0">
+          <datamodel><data id="up" expr="''"/><data id="sib" expr="''"/></datamodel>
+          <state id="a0">
+            <transition event="read">
+              <example:snapshot location="up" target="#_parent" exclude="system pending_sends"/>
+              <example:snapshot location="sib" target="#_scxml_session.kid" exclude="data_model system"/>
+              <send event="read" target="#_parent"><param name="up" expr="up"/><param name="sib" expr="sib"/></send>
+            </transition>
+          </state>
+        </scxml>
+      </content>
+    </invoke>
+    <state id="wait">
+      <transition event="ready" target="reading"/>
+    </state>
+    <state id="reading">
+      <onentry>
+        <example:snapshot location="doc" target="#_kid" exclude="system pending_sends"/>
+        <log label="kid" expr="JSON.stringify(JSON.parse(doc).options) + JSON.stringify(JSON.parse(doc).snapshot.root)"/>
+        <example:snapshot location="doc" target="#_scxml_session.kid" exclude="system pending_sends"/>
+        <log label="kid-by-address" expr="JSON.stringify(JSON.parse(doc).snapshot.root.configuration)"/>
+        <example:snapshot location="doc" target="#_scxml_session.nobody"/>
+        <log label="nobody" expr="doc"/>
+        <send event="read" target="#_a"/>
+      </onentry>
+      <transition event="read" target="done">
+        <log label="parent" expr="JSON.stringify(JSON.parse(_event.data.up).options) + JSON.stringify(JSON.parse(_event.data.up).snapshot.root)"/>
+        <log label="sibling" expr="JSON.stringify(JSON.parse(_event.data.sib).options) + JSON.stringify(JSON.parse(_event.data.sib).snapshot.root)"/>
+      </transition>
+    </state>
+  </state>
+  <final id="done"/>
+</scxml>

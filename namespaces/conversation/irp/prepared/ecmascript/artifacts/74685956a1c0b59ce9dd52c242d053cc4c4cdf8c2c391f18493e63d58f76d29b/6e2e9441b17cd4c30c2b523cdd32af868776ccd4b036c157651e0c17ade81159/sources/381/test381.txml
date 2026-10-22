@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- conversation-9: carried participants that are not {ref, role} raise error.execution and assign nothing. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation">
+<datamodel>
+  <data id="p" expr="'untouched'"/>
+  <data id="i" expr="({source_ids: ['ann'], target_ids: []})"/>
+  <data id="e" expr="({data: {participants: [{ref: 'ann', role: 'speaker'}]}})"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:turn_participants location="p" input="i" parent="e"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="p === 'untouched'" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

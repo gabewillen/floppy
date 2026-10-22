@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!-- conversation-9: a turn stamps its names as sources then targets, never an embedding, then the parent's participants, each once. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation">
+<datamodel>
+  <data id="p" expr="null"/>
+  <data id="q" expr="null"/>
+  <data id="i" expr="({source_ids: ['zoe', [0.1, 0.2], 'ann'], target_ids: ['floppy']})"/>
+  <data id="e" expr="({event: 'bot.ability.listening.speech.output', data: {participants: [{ref: 'ann', role: 'source'}, {ref: 'person-42', role: 'source'}]}})"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:turn_participants location="p" input="i" parent="e"/>
+    <conversation:turn_participants location="q" input="i"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="JSON.stringify(p) === '[{&quot;ref&quot;:&quot;ann&quot;,&quot;role&quot;:&quot;source&quot;},{&quot;ref&quot;:&quot;zoe&quot;,&quot;role&quot;:&quot;source&quot;},{&quot;ref&quot;:&quot;floppy&quot;,&quot;role&quot;:&quot;target&quot;},{&quot;ref&quot;:&quot;person-42&quot;,&quot;role&quot;:&quot;source&quot;}]' &amp;&amp; q.length === 3" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

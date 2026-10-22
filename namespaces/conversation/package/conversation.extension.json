@@ -4,7 +4,7 @@
   "package-version": "0.1.0",
   "extension-artifact": "floppy_conversation.virtualized.wasm",
   "schema-artifact": "conversation.xsd",
-  "schema-sha256": "d7b24d0a2c45cba38894d2d67a961a8ae878dba0dd86a5f696febb13fa4974bc",
+  "schema-sha256": "2e0a31ecd7ac61f809e4af012ff770c1172f2c478a61b96d7cd18e9c68574fa8",
   "wit-world": "stateforward:scxml/executable-content-extension",
   "wit-version": "0.2.0"
 }

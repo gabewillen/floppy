@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- conversation-8: relationships that are not an array raise error.execution and assign nothing. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="rs" expr="'untouched'"/>
+  <data id="i" expr="'untouched'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:relationship_for_input location="rs" indexlocation="i" input="({source_ids: [], target_ids: []})"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="rs === 'untouched' &amp;&amp; i === 'untouched'" target="pass"/>
+  <transition event="*" target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

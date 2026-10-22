@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- behavior-5: an empty output, or data that hardcodes a tick field, is a message. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior" xmlns:conf="http://www.w3.org/2005/scxml-conformance" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="a" expr="null"/>
+  <data id="b" expr="null"/>
+  <data id="t1" expr="[{name: 'M', trigger: 'every', scheduled_at: 'a', fired_at: 'b', output: []}]"/>
+  <data id="t2" expr="[{name: 'M', trigger: 'every', scheduled_at: 'a', fired_at: 'b', output: [{event: 'e', data: {name: 'N'}}]}]"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <behavior:verify_tick location="a" ticks="t1"/>
+    <behavior:verify_tick location="b" ticks="t2"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="a[0] === 'behavior output must select at least one event for the observed pattern.' &amp;&amp; b[0] === 'selection data[&#34;name&#34;]=&#34;N&#34; does not match live event value &#34;M&#34;; read identifiers from the tick at runtime.'" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

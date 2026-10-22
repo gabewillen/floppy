@@ -1,0 +1,33 @@
+{
+  "configuration": [
+    "pass"
+  ],
+  "done": null,
+  "logs": [
+    [
+      "start",
+      "error.execution"
+    ],
+    [
+      "up",
+      "second"
+    ],
+    [
+      "looping",
+      "second"
+    ],
+    [
+      "ended",
+      "error.communication.second second"
+    ],
+    [
+      "gone",
+      "to-second"
+    ],
+    [
+      "gone",
+      "to-grand"
+    ]
+  ],
+  "status": "finished"
+}

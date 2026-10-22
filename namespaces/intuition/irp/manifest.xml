@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<!-- The intuition namespace's implementation report plan: each assertion is a
+     numbered statement of namespaces/intuition/README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/namespaces/intuition/irp/sources">
+  <assert id="intuition-1" specnum="1" specid="#intuition-1">
+    <![CDATA[Each element (observe, escalate) takes exactly its declared attributes, the required ones present and none empty, and no content, and the namespace has no other element: a malformed element raises error.execution and assigns nothing (its schema, package/intuition.xsd, rejects it before any run under scx validate).]]>
+    <test id="600" conformance="mandatory" manual="false">
+      <start uri="600/test600.txml"/>
+    </test>
+    <test id="601" conformance="mandatory" manual="false">
+      <start uri="601/test601.txml"/>
+    </test>
+    <test id="602" conformance="mandatory" manual="false">
+      <start uri="602/test602.txml"/>
+    </test>
+    <test id="603" conformance="mandatory" manual="false">
+      <start uri="603/test603.txml"/>
+    </test>
+  </assert>
+  <assert id="intuition-2" specnum="2" specid="#intuition-2">
+    <![CDATA[<intuition:observe> keeps the original's ConfidenceTuner state {mean, var, n}: anything else is read as the initial state {mean: 70, var: 100, n: 0}; a number confidence, clamped to 0-100, is observed (the first sets the mean, later ones move the mean and variance by the EMA with alpha 0.08, the variance never under 100), and a null confidence is not.]]>
+    <test id="610" conformance="mandatory" manual="false">
+      <start uri="610/test610.txml"/>
+    </test>
+    <test id="611" conformance="mandatory" manual="false">
+      <start uri="611/test611.txml"/>
+    </test>
+    <test id="612" conformance="mandatory" manual="false">
+      <start uri="612/test612.txml"/>
+    </test>
+    <test id="613" conformance="mandatory" manual="false">
+      <start uri="613/test613.txml"/>
+    </test>
+  </assert>
+  <assert id="intuition-3" specnum="3" specid="#intuition-3">
+    <![CDATA[<intuition:escalate> writes true exactly when the confidence is a number below the tuner's threshold: the floor 35 during the warmup of 8 observations, else max(17.5, mean - sqrt(max(var, 100))); a null confidence never escalates.]]>
+    <test id="620" conformance="mandatory" manual="false">
+      <start uri="620/test620.txml"/>
+    </test>
+    <test id="621" conformance="mandatory" manual="false">
+      <start uri="621/test621.txml"/>
+    </test>
+    <test id="622" conformance="mandatory" manual="false">
+      <start uri="622/test622.txml"/>
+    </test>
+    <test id="623" conformance="mandatory" manual="false">
+      <start uri="623/test623.txml"/>
+    </test>
+  </assert>
+  <assert id="intuition-4" specnum="4" specid="#intuition-4">
+    <![CDATA[A confidence that is neither a number nor null raises error.execution and assigns nothing.]]>
+    <test id="630" conformance="mandatory" manual="false">
+      <start uri="630/test630.txml"/>
+    </test>
+    <test id="631" conformance="mandatory" manual="false">
+      <start uri="631/test631.txml"/>
+    </test>
+  </assert>
+</assertions>

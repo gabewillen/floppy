@@ -9,30 +9,6 @@ function hasDeferredInput() {
   return deferred.length > 0;
 }
 
-// The behaviors of select_behaviors' rows (named as the inventory's
-// fields) with their triggers from select_triggers' rows: the SQL both
-// engines run returns plain rows, assembled here.
-function assembledBehaviors(behaviorRows, triggerRows) {
-  return behaviorRows.map(function (r) {
-    var b = Object.fromEntries(r.columns.map(function (c, i) { return [c, r.values[i]]; }));
-    return Object.assign(b, {
-      examples: JSON.parse(b.examples),
-      used_count: Number(b.used_count),
-      failed_count: Number(b.failed_count),
-      triggers: triggerRows.filter(function (t) { return t.values[0] === b.name; }).map(function (t) { return t.values[1]; })
-    });
-  });
-}
-
-// The intent's triggers, each once.
-function distinctIntentTriggers(list) {
-  return list.filter(function (t, i, a) { return a.indexOf(t) === i; });
-}
-
-function triggerInserts(list) {
-  return distinctIntentTriggers(list).map(function (t) { return {sql: insert_trigger, parameters: [intent.name, t]}; });
-}
-
 // recalling
 
 function hasNoDatabase() {
@@ -53,8 +29,9 @@ function recalledEpisodes(_event) {
   return _event.data.results[0].rows.map(function (r) { return JSON.parse(r.values[0]); });
 }
 
-function recalledBehaviors(_event) {
-  return assembledBehaviors(_event.data.results[1].rows, _event.data.results[2].rows);
+// The recalled inventory's names, which a change or a break may name.
+function behaviorNames() {
+  return behaviors.map(function (b) { return b.name; });
 }
 
 function recalledLog() {
@@ -71,15 +48,13 @@ function selectTimeoutDelay() {
   return select_timeout_ms + 'ms';
 }
 
+function selectCeilingDelay() {
+  return select_ceiling_ms + 'ms';
+}
+
 // The reference SelectInput.
 function selectPrompt() {
   return JSON.stringify({cognition_input: cognition_input, cognition_output: cognition_output, prior_episodes: prior_episodes, behaviors: behaviors});
-}
-
-// The events of a generate.result object reply, else selected unchanged
-// (D41: the service's events are unchecked).
-function generatedSelection(_event) {
-  return Object(_event.data).json instanceof Object ? _event.data.json.events : selected;
 }
 
 // The code of a generate.failed, else gen_failure unchanged.
@@ -99,22 +74,6 @@ function hasSelection(_event) {
   return isGenerate(_event) && Array.isArray(selected);
 }
 
-function hasEmptySelection(_event) {
-  return hasSelection(_event) && selected.length === 0;
-}
-
-function hasSingleSelection(_event) {
-  return hasSelection(_event) && selected.length === 1;
-}
-
-function selectedEvent() {
-  return selected[0].event;
-}
-
-function selectedData() {
-  return selected[0].data;
-}
-
 function selectFailedMessage(detail) {
   return 'Reflection select failed (' + detail + ')';
 }
@@ -124,7 +83,7 @@ function generateFailedMessage() {
 }
 
 function isSelectHopTimeout(_event) {
-  return _event.sendid === hop_timer;
+  return _event.sendid === hop_timer || _event.sendid === ceiling_timer;
 }
 
 // The original _fail_cancel_timeout: the select child is cancelled on the hop
@@ -163,13 +122,9 @@ function isCreate() {
   return create_intent !== null && !behaviors.some(function (b) { return b.name === intent.name; });
 }
 
-// The original revision._draft: the create stub.
-function insertDraftStatements() {
-  return [{sql: insert_draft, parameters: [intent.name, intent.description || '']}];
-}
-
-function insertDraftTriggersStatements() {
-  return statements.concat(triggerInserts(intent.triggers || []));
+// The original revision._draft: the create stub, DRAFT.
+function draftInstance() {
+  return ({name: intent.name, source: '', description: intent.description || '', status: 'DRAFT', triggers: intent.triggers || []});
 }
 
 // The intent's behavior row appended.
@@ -178,13 +133,29 @@ function intentBehaviorSelectStatements() {
 }
 
 // The intent's row, from the last two statements (undefined: unknown).
-function preparedBehavior(_event) {
-  return assembledBehaviors(_event.data.results.at(-2).rows, _event.data.results.at(-1).rows)[0];
+function preparedBehavior() {
+  return prepared[0];
 }
 
 // Shared by preparing, authoring and accepting.
 function revisionFailedMessage(detail) {
   return 'Reflection revision failed: ' + detail;
+}
+
+// reading
+
+// No program to read: an unknown row, or one with no source yet.
+function hasNoDocuments() {
+  return existing_behavior === undefined || existing_behavior.source === '';
+}
+
+// The file of the row's program named by its path's last segment.
+function documentFile(extension) {
+  return existing_behavior.source.split('/').pop().replace(/\.scx$/, '') + extension;
+}
+
+function seededSchemas(_event) {
+  return JSON.parse(_event.data.seed);
 }
 
 // authoring
@@ -215,32 +186,18 @@ function changeWriteInputWithIntent() {
 // which checks the document it builds against the original check()'s lifetime
 // bounds (min_every, turn_after_bound).
 function builderRequest() {
-  return ({spec: change_instructions + '\n\n' + JSON.stringify(write), model: model, min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms});
+  return ({spec: change_instructions + '\n\n' + JSON.stringify(write), name: intent.name, model: model, min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms});
 }
 
 function builderConstraints() {
-  return [turn_contract, routineContract(), triggerContract(), no_schema_files];
+  return [turnContract(), routineContract()];
 }
 
-// This turn's stimulus as Autonomy would give it to a turn behavior (the
-// reference behavior_input_payload, autonomy.js behaviorInputPayload).
-function turnBehaviorInput() {
-  var data = cognition_input.stimulus.data;
-  var given = data !== null && typeof data === 'object' ? Object.assign({}, data) : {event: data};
-  given.focus = cognition_input.focus;
-  given.focus_candidates = cognition_input.focus_candidates;
-  return given;
-}
-
-// What a turn behavior's input is when Autonomy runs it (the reference
-// behavior_input_payload): the data of a stimulus whose event is one of the
-// triggers the accepted row will carry (the grounded triggers, computed as
-// accepting does).
-function triggerContract() {
-  if (triggers.length === 0) {
-    return 'No stimulus triggers are grounded for this behavior, so Autonomy will not run it as a turn behavior.';
-  }
-  return 'Autonomy runs a turn behavior only for a stimulus whose event is one of its triggers, ' + JSON.stringify(triggers) + ', so the stimulus event is already matched: input holds that stimulus\'s data fields with focus and focus_candidates, and has no stimulus or event field to test. Guard on input\'s data fields only. For this turn input is ' + JSON.stringify(turnBehaviorInput()) + '.';
+// The turn behavior contract with the grounded triggers it is stored under
+// (autonomy matches them against the stimulus event) and this turn's input
+// (behavior_input, as autonomy builds it).
+function turnContract() {
+  return turn_contract.replace(/TRIGGERS|INPUT/g, function (m) { return JSON.stringify(m === 'INPUT' ? behavior_input : triggers); });
 }
 
 // The original schedule.At.next_after for an at schedule {time: 'HH:MM', days,
@@ -300,13 +257,13 @@ function routineContract() {
 
 // The builder's done: a document that validated and passed its simulation.
 function isBuilt(_event) {
-  return typeof Object(_event.data).reason !== 'string' && typeof Object(_event.data).scxml === 'string' && _event.data.scxml.length > 0;
+  return typeof Object(_event.data).reason !== 'string' && typeof Object(_event.data).scxml === 'string' && _event.data.scxml.length > 0 && typeof _event.data.path === 'string';
 }
 
 // The builder's failed with the last draft it rejected (the original: a failed
 // check, which drafts the rejected source).
 function hasRejectedDraft(_event) {
-  return typeof Object(_event.data).reason === 'string' && typeof _event.data.scxml === 'string' && _event.data.scxml.length > 0;
+  return typeof Object(_event.data).reason === 'string' && typeof _event.data.scxml === 'string' && _event.data.scxml.length > 0 && typeof _event.data.path === 'string';
 }
 
 // The original diagnostic.Report.render of the builder's diagnostics.
@@ -351,44 +308,22 @@ function acceptedTriggers() {
   return triggers.length > 0 ? triggers : existing_behavior.triggers;
 }
 
-// persistent when the program sends bot.behavior.tick.
-function writtenLifetime() {
-  return written.indexOf('bot.behavior.tick') >= 0 ? 'persistent' : 'turn';
-}
-
 // The original _AppliedEventData.behavior.
 function appliedBehavior() {
   return ({event: intent.event, name: intent.name, triggers: triggers, description: intent.description || existing_behavior.description || null});
 }
 
 function appliedBehaviorWithSource() {
-  return Object.assign(behavior, {reason: intent.reason || null, source: written});
+  return Object.assign(behavior, {reason: intent.reason || null, source: path});
 }
 
-// insert_behavior's parameters, the usage counters kept.
-function behaviorRow() {
-  return [intent.name, written, behavior.description || '', JSON.stringify(existing_behavior.examples), lifetime];
-}
-
-function behaviorRowWithUsage() {
-  return row.concat([String(existing_behavior.used_count), existing_behavior.last_used_at]);
-}
-
-function behaviorRowWithFailures() {
-  return row.concat([String(existing_behavior.failed_count), existing_behavior.last_failed_at]);
-}
-
-// The original storage.replace_behavior_clauses: delete triggers, delete row.
-function replaceBehaviorStatements() {
-  return [{sql: delete_triggers, parameters: [intent.name]}, {sql: delete_behavior, parameters: [intent.name]}];
-}
-
-function replaceBehaviorWithRow() {
-  return statements.concat([{sql: insert_behavior, parameters: row}]);
-}
-
-function replaceBehaviorWithTriggers() {
-  return statements.concat(triggerInserts(triggers));
+// The accepted Instance, ACTIVE with the written documents' path as its
+// source and their lifetime, the
+// grounded triggers and the existing row's examples and usage counters.
+function acceptedInstance() {
+  var e = existing_behavior;
+  return ({name: intent.name, source: path, description: behavior.description || '', examples: e.examples, lifetime: lifetime, status: 'ACTIVE', triggers: triggers,
+    used_count: e.used_count, last_used_at: e.last_used_at, failed_count: e.failed_count, last_failed_at: e.last_failed_at});
 }
 
 function acceptedLog() {
@@ -397,9 +332,9 @@ function acceptedLog() {
 
 // abandoning
 
-// The original Revision._persist_draft: the rejected source, DRAFT validation.
+// The original Revision._persist_draft: the rejected draft's path, DRAFT validation.
 function draftBehaviorStatements() {
-  return [{sql: draft_behavior, parameters: [written, intent.name]}];
+  return [{sql: draft_behavior, parameters: [path, intent.name]}];
 }
 
 function draftLog() {
@@ -408,9 +343,15 @@ function draftLog() {
 
 // storing
 
-// The reference CognitiveEpisode: the turn's focus.
-function cognitiveEpisode() {
-  return ({focus: cognition_input.focus, focus_candidates: cognition_input.focus_candidates});
+// The reference CognitiveEpisode, with the behavior the turn applied (null: none).
+function cognitiveEpisode(applied) {
+  var input = cognition_input;
+  return ({focus: input.focus, focus_candidates: input.focus_candidates, stimulus_name: input.stimulus.event, output: cognition_output, behavior: applied});
+}
+
+// Whether a failing turn has not tried to store its episode yet.
+function isEpisodeUnstored() {
+  return episode === null;
 }
 
 // The original episodes.episode_insert_input.
@@ -428,6 +369,18 @@ function episodeStoreFailedMessage(detail) {
 
 // revising
 
+// The revision's inactivity bound and its backstop: the bot's (bounds),
+// else this document's defaults (decision D101).
 function revisingTimeoutDelay() {
-  return revising_timeout_ms + 'ms';
+  return (bounds.revising_timeout_ms === undefined ? revising_timeout_ms : bounds.revising_timeout_ms) + 'ms';
+}
+
+function revisingCeilingDelay() {
+  return (bounds.revising_ceiling_ms === undefined ? revising_ceiling_ms : bounds.revising_ceiling_ms) + 'ms';
+}
+
+// The data a selection is sent with, as the original's dispatch_selected_events
+// takes it: its data object, else {} (no data, null, or a non-object).
+function selectionData(s) {
+  return s.data !== null && typeof s.data === 'object' && !Array.isArray(s.data) ? s.data : ({});
 }

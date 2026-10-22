@@ -1,0 +1,151 @@
+[
+ {
+  "input": {
+   "content": "hi",
+   "content_type": "text/plain",
+   "source_ids": [
+    "alice"
+   ],
+   "target_ids": []
+  },
+  "source": "alice",
+  "content": {
+   "content": "hi",
+   "kind": "text",
+   "source_participant_ref": "alice"
+  }
+ },
+ {
+  "input": {
+   "content": "hi",
+   "content_type": "TEXT/Plain",
+   "source_ids": [
+    "alice"
+   ],
+   "target_ids": []
+  },
+  "source": "alice",
+  "content": {
+   "content": "hi",
+   "kind": "text",
+   "source_participant_ref": "alice"
+  }
+ },
+ {
+  "input": {
+   "content": "media/a.pcm",
+   "content_type": "audio/pcm",
+   "sample_rate_hz": 16000,
+   "channels": 1,
+   "source_ids": [
+    [
+     3,
+     4
+    ]
+   ],
+   "target_ids": []
+  },
+  "source": [
+   3,
+   4
+  ],
+  "content": {
+   "channels": 1,
+   "content": "media/a.pcm",
+   "kind": "audio",
+   "sample_rate_hz": 16000,
+   "source_participant_ref": [
+    3,
+    4
+   ]
+  }
+ },
+ {
+  "input": {
+   "content": "media/a.wav",
+   "content_type": "audio/wav",
+   "source_ids": [
+    "alice"
+   ],
+   "target_ids": []
+  },
+  "source": "alice",
+  "content": {
+   "channels": null,
+   "content": "media/a.wav",
+   "kind": "audio",
+   "sample_rate_hz": null,
+   "source_participant_ref": "alice"
+  }
+ },
+ {
+  "input": {
+   "content": {
+    "a": 1
+   },
+   "content_type": "application/json",
+   "source_ids": [
+    "alice"
+   ],
+   "target_ids": []
+  },
+  "source": "alice",
+  "content": {
+   "content": {
+    "a": 1
+   },
+   "content_type": "application/json",
+   "kind": "content",
+   "source_participant_ref": "alice"
+  }
+ },
+ {
+  "input": {
+   "content": 5,
+   "content_type": "text/plain",
+   "source_ids": [
+    "alice"
+   ],
+   "target_ids": []
+  },
+  "source": "alice",
+  "content": {
+   "content": 5,
+   "content_type": "text/plain",
+   "kind": "content",
+   "source_participant_ref": "alice"
+  }
+ },
+ {
+  "input": {
+   "content": null,
+   "content_type": "audio/pcm",
+   "source_ids": [
+    "alice"
+   ],
+   "target_ids": []
+  },
+  "source": "alice",
+  "content": {
+   "content": null,
+   "content_type": "audio/pcm",
+   "kind": "content",
+   "source_participant_ref": "alice"
+  }
+ },
+ {
+  "input": {
+   "content_type": "text/markdown",
+   "source_ids": [
+    "alice"
+   ],
+   "target_ids": []
+  },
+  "source": "alice",
+  "content": {
+   "content_type": "text/markdown",
+   "kind": "content",
+   "source_participant_ref": "alice"
+  }
+ }
+]

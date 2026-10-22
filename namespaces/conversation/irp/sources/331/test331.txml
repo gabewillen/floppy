@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- conversation-4: the detector references are ordered by relationship and then identity. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation">
+<datamodel>
+  <data id="refs" expr="null"/>
+  <data id="rs" expr="[({session_ref: 'relationship-b', participants: ['bob', [3, 4], 'alice']}), ({session_ref: 'relationship-a', participants: ['zed']})]"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:detector_refs location="refs" relationships="rs"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="JSON.stringify(refs) === '[[&quot;relationship-a&quot;,&quot;zed&quot;],[&quot;relationship-b&quot;,&quot;alice&quot;],[&quot;relationship-b&quot;,&quot;bob&quot;],[&quot;relationship-b&quot;,[3,4]]]'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

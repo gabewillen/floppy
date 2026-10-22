@@ -2085,7 +2085,7 @@ fn invoke_src_compiles_and_starts_the_child_with_evaluated_parameters() {
     );
     assert_eq!(session.active(), ["s"]);
     let started = &session.caps.invocations[0];
-    assert_eq!(started.invoke_id, "s.session.0");
+    assert_eq!(started.invoke_id, "s.0");
     assert_eq!(started.data_model.as_deref(), Some("ecmascript"));
     let names: Vec<&str> = started.parameters.iter().map(|p| p.name.as_str()).collect();
     assert_eq!(names, ["p", "v"]);
@@ -2100,7 +2100,7 @@ fn invoke_src_compiles_and_starts_the_child_with_evaluated_parameters() {
             .caps
             .calls
             .iter()
-            .any(|call| call.starts_with("assign:where=Value(String(\"s.session.0\"))")),
+            .any(|call| call.starts_with("assign:where=Value(String(\"s.0\"))")),
         "{:?}",
         session.caps.calls
     );
@@ -2110,26 +2110,21 @@ fn invoke_src_compiles_and_starts_the_child_with_evaluated_parameters() {
     );
     // SCXML 6.4: a child event runs `<finalize>` first; an external event
     // is autoforwarded (6.4.1).
-    let mut done = external("done.invoke.s.session.0");
-    done.invoke_id = Some(InvokeId::new("s.session.0").expect("valid id"));
+    let mut done = external("done.invoke.s.0");
+    done.invoke_id = Some(InvokeId::new("s.0").expect("valid id"));
     session.send(&done).expect("delivers");
     assert_eq!(
         session.caps.logs,
         [(Some("finalized".into()), String::new())]
     );
     session.send(&external("leave")).expect("delivers");
-    assert!(
-        session
-            .caps
-            .calls
-            .contains(&"forward:s.session.0:leave".to_owned())
-    );
+    assert!(session.caps.calls.contains(&"forward:s.0:leave".to_owned()));
     // Exiting the invoking state cancels the invocation.
     assert!(
         session
             .caps
             .calls
-            .contains(&"cancel-invocation:s.session.0".to_owned())
+            .contains(&"cancel-invocation:s.0".to_owned())
     );
     assert_eq!(session.active(), ["left"]);
     assert_eq!(session.state.invoke_counter, 1);
@@ -2158,7 +2153,7 @@ fn generated_ids_start_at_zero_and_literal_ids_take_no_ordinal() {
         .iter()
         .map(|invocation| invocation.invoke_id.as_str())
         .collect();
-    assert_eq!(invoked, ["kid", "s.session.0"]);
+    assert_eq!(invoked, ["kid", "s.0"]);
     assert_eq!(session.state.invoke_counter, 1);
     assert_eq!(session.state.send_counter, 0);
 }
@@ -2189,15 +2184,15 @@ fn inline_content_children_become_a_standalone_child_document() {
 /// SCXML 3.12.2: "Once the SCXML processor has begun executing a
 /// well-formed SCXML document, it MUST signal any errors that occur by
 /// raising SCXML events whose names begin with 'error.'." A generated
-/// invoke id (`<state>.<session>.<n>`, SCXML 6.4.1) longer than the
-/// 1024-byte name bound cannot be represented: that `<invoke>` raises
-/// `error.execution` and starts nothing; the session runs on.
+/// invoke id (`<state>.<n>`, SCXML 6.4.1) longer than the 1024-byte name
+/// bound cannot be represented: that `<invoke>` raises `error.execution`
+/// and starts nothing; the session runs on.
 #[test]
 fn a_generated_invoke_id_over_the_name_bound_raises_error_execution() {
-    // 1,015 bytes: the state id fits; `.session.1` makes the generated id
-    // 1,025 bytes.
-    let state = format!("s{}", "x".repeat(1_014));
-    assert_eq!(state.len(), 1_015);
+    // 1,023 bytes: the state id fits; `.0` makes the generated id 1,025
+    // bytes.
+    let state = format!("s{}", "x".repeat(1_022));
+    assert_eq!(state.len(), 1_023);
     let mut caps = Mock::default();
     caps.documents
         .insert("file:child.scxml".into(), CHILD.into());
@@ -2225,9 +2220,10 @@ fn a_generated_invoke_id_over_the_name_bound_raises_error_execution() {
 /// nothing; the session runs on.
 #[test]
 fn a_generated_invoke_id_whose_done_event_exceeds_the_name_bound_raises_error_execution() {
-    // 1,005 bytes: `.session.1` makes a 1,015-byte id, and `done.invoke.`
-    // a 1,027-byte event name.
-    let state = format!("s{}", "x".repeat(1_004));
+    // 1,011 bytes: `.0` makes a 1,013-byte id, and `done.invoke.` a
+    // 1,025-byte event name.
+    let state = format!("s{}", "x".repeat(1_010));
+    assert_eq!(state.len(), 1_011);
     let mut caps = Mock::default();
     caps.documents
         .insert("file:child.scxml".into(), CHILD.into());
@@ -2246,6 +2242,34 @@ fn a_generated_invoke_id_whose_done_event_exceeds_the_name_bound_raises_error_ex
     );
     assert_eq!(session.active(), ["exec"]);
     assert!(session.caps.invocations.is_empty());
+}
+
+/// A generated invoke id is `<state>.<n>` (SCXML 6.4.1 `stateid.platformid`)
+/// and carries no session id, so a state id whose `done.invoke.<id>` event
+/// just fits the 1024-byte name bound still invokes.
+#[test]
+fn a_generated_invoke_id_whose_done_event_fits_the_name_bound_starts() {
+    // 1,010 bytes: `.0` makes a 1,012-byte id, and `done.invoke.` a
+    // 1,024-byte event name.
+    let state = format!("s{}", "x".repeat(1_009));
+    let mut caps = Mock::default();
+    caps.documents
+        .insert("file:child.scxml".into(), CHILD.into());
+    let session = Session::started(
+        machine(
+            &format!(r#"initial="{state}""#),
+            &format!(
+                r#"<state id="{state}">
+                     <invoke src="file:child.scxml"/>
+                     <transition event="error.execution" target="exec"/>
+                   </state>
+                   <final id="exec"/>"#
+            ),
+        ),
+        caps,
+    );
+    assert_eq!(session.active(), [state.as_str()]);
+    assert_eq!(session.caps.invocations[0].invoke_id, format!("{state}.0"));
 }
 
 #[test]
@@ -2427,7 +2451,7 @@ fn an_unbound_or_platform_specific_service_type_raises_error_execution() {
             .caps
             .calls
             .iter()
-            .any(|call| call == "start-service:s.session.0:echo"),
+            .any(|call| call == "start-service:s.0:echo"),
         "{:?}",
         session.caps.calls
     );
@@ -3377,7 +3401,7 @@ fn generated_ids_are_new_each_time_the_element_is_executed() {
         .iter()
         .map(|invocation| invocation.invoke_id.as_str())
         .collect();
-    assert_eq!(invoked, ["s.session.0", "s.session.1", "s.session.2"]);
+    assert_eq!(invoked, ["s.0", "s.1", "s.2"]);
 }
 
 #[test]

@@ -1,0 +1,28 @@
+[package]
+name = "floppy-intuition"
+description = "The `intuition` namespace: `<intuition:observe>` and `<intuition:escalate>`, the original's intuition ConfidenceTuner (its observe and should_escalate), as a Wasm extension component"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# The tuner state as canonical JSON, the same bytes the data model writes;
+# no schema is compiled here, so no randomness.
+scxml-event-schema.workspace = true
+scxml-types.workspace = true
+serde_json.workspace = true
+wit-bindgen.workspace = true
+
+[dev-dependencies]
+# The package test reads the manifest with the parser every host uses.
+scxml-validator-core.workspace = true
+
+[lints]
+workspace = true

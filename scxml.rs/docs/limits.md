@@ -20,10 +20,15 @@ with the known open defects under its "Known limitations (pending)".
   ([spec-errata.md](spec-errata.md), S.1).
 - **Sessions `#_scxml_<sessionid>` reaches.** SCXML 1.0 C.1: "The set of
   SCXML sessions that are accessible to a given SCXML Processor is
-  platform-dependent." A session reaches itself, the session that invoked
-  it, and its own live invoked sessions; any other id (a sibling, a
-  grandchild, a finished child, another run's session) raises
-  `error.communication`.
+  platform-dependent." A session reaches every session of its run while
+  that session runs: itself, the session that invoked it, its own live
+  invoked sessions, and any other (a sibling, a grandchild, the root), each
+  on its external queue, immediately or when a delayed send falls due. Any
+  other id (a finished or cancelled session, another run's session, an id
+  no session has) raises `error.communication` in the sender, at the
+  `<send>` or when its delay elapses. `_event.origin` is the sender's
+  `#_scxml_<sessionid>`, and `_event.invokeid` is set only on an event a
+  child sends its invoking session (SCXML 5.10.1).
 - **`BasicHTTP` location.** SCXML 1.0 C.2.3: the processor "MUST maintain a
   'location' field inside this entry whose value holds an address that
   external entities can use to communicate with this SCXML session". In
@@ -34,7 +39,7 @@ with the known open defects under its "Known limitations (pending)".
   `scx run --http-listen` (or a browser `http.location`) advertises an
   address external clients reach (`<base>/sessions/<_sessionid>/basichttp`).
   The SCXML processor's own location, `#_scxml_<sessionid>`, likewise reaches
-  only the sessions listed above.
+  only the sessions of the run.
 - **Duplicate keys in `_event.data`.** SCXML 1.0 §5.10.1: "In the case of
   duplicate keys, the behavior is platform-specific." ECMAScript keeps the
   last value of a repeated key; XPath keeps every one, each as its own
@@ -43,18 +48,23 @@ with the known open defects under its "Known limitations (pending)".
   "the system-generated id for the current SCXML session". The host chooses
   the root's id (`scx run --session-id`, default `session`; the browser
   host's default `machine-session`), and names each invoked session
-  `<root id>.<n>`, `n` counting the sessions the run invoked in the order
-  they start; ids are unique within one run, the only scope `#_scxml_`
-  addresses, and do not grow with the nesting depth, so an invoke chain of
-  any depth keeps every id within the 1024-byte name bound (only a root id
-  within a few bytes of that bound leaves too little room for its invoked
-  sessions' ids). A generated invoke id is `<state id>.<invoking session's
-  _sessionid>.<n>` (SCXML 6.4.1 `stateid.platformid`). The host-side
+  `<parent _sessionid>.<invokeid>`, so an invoker knows its child's
+  address before the child starts, and a child invoked again under the
+  same invoke id has the same address. Ids are unique within one run, the
+  only scope `#_scxml_` addresses, since invoke ids are unique among one
+  session's live invocations. An id grows with the nesting depth by each
+  level's invoke id and a `.`: an `<invoke>` whose child's id would exceed
+  the 1024-byte name bound raises `error.execution` and starts nothing. A
+  generated invoke id is `<state id>.<n>` (SCXML 6.4.1
+  `stateid.platformid`), `n` unique within the invoking session (so the
+  same generated id names children of different sessions, whose
+  `_sessionid`s still differ). The host-side
   records that name a session also name its parent: trace entries and
   `log` outputs (`parent`), snapshots (each session's `parent` index and
   `invoked_by`), and the replay log's `http` and `communication-error`
-  records (the invoke-id `path` from the root); an `http-response` record
-  names an invoked service's invocation by the same `path`.
+  records (the invoke-id `path` from the root); an `http-response` or
+  `http-response-part` record names an invoked service's invocation by the
+  same `path`.
 - **ECMAScript XML values.** SCXML 1.0 B.2.1: "the Processor MUST create the
   corresponding DOM structure and assign it as the value of the variable."
   The DOM is a frozen, read-only DOM Core subset (node, element, attribute,
@@ -126,10 +136,16 @@ fuel: the heavy nested `<foreach>`/`<script>` document traps inside its
 `start` after 0.23 to 0.25 s, and a 128-region parallel machine whose regions
 toggle eventlessly traps after 505 commands and 0.22 to 0.25 s
 (`default_fuel_runaway_call_time` prints them). Logical runaways (an eventless
-transition loop, a `<raise>` loop, a 0 ms self-send chain) of narrower
+transition loop, a `<raise>` loop, a 0 ms self-send chain, an eventless
+transition whose condition fails on every evaluation, each failure one
+command) of narrower
 machines, a 64-region one among them, stop earlier, at the machine's
 1 024-command per-call bound, and a command budget the caller sets
-(`--max-commands`; none by default) bounds the calls. The fuel default is
+(`--max-commands`; none by default) bounds the calls. The root's stop at that
+bound fails the run (`command-bound`); an invoked session's ends only that
+session, as a cancelled invocation ends (on the same call's budget), and its
+invoking session receives `error.execution` for a start that stopped there or
+`error.communication.<invokeid>` for a later call. The fuel default is
 sized from the largest single call of each workload, the smallest fuel it runs
 under, on documents `compile` accepts (`default_fuel_sizing_workloads` in
 hosts/scxml-host-wasmtime/tests/fuel_sizing.rs bisects and prints them and

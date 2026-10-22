@@ -495,13 +495,16 @@ per level (the same for a cancel):
 
 - each child gets its own machine instance, the data model its document
   names, and its own SCXML I/O processor and clock, advanced with the
-  root's (one shared logical clock); `_sessionid` is the root's
-  `_sessionid`, `.`, and the child's ordinal among the run's invoked
-  sessions in start order (`<root _sessionid>.<n>`, as under Wasmtime);
+  root's (one shared logical clock); `_sessionid` is the invoking
+  session's `_sessionid`, `.`, and the child's invoke id
+  (`<parent _sessionid>.<invokeid>`, as under Wasmtime), and an
+  `<invoke>` whose child's id would exceed the 1024-byte name bound raises
+  `error.execution`;
 - every session owns an internal and an external event queue; the SCXML
   Event I/O Processor pushes an event for another session straight onto
-  that session's external queue (`#_parent`, `#_<invokeid>`, autoforward),
-  and a finished session's `done.invoke` follows every event it sent; the
+  that session's external queue (`#_parent`, `#_<invokeid>`, autoforward,
+  and `#_scxml_<sessionid>` of any running session of the run, as under
+  Wasmtime), and a finished session's `done.invoke` follows every event it sent; the
   run processes one queued entry at a time, the first session in
   invocation order with one, in the Wasmtime executor's order
   (src/invoked-sessions.js keeps the order `scxml-scheduler`'s
@@ -509,8 +512,16 @@ per level (the same for a cancel):
   command and in every delivery pass;
 - a session whose cancellation began sends nothing more to its invoking
   session, and cancelling a session cancels the sessions it invoked;
-- a failure, trap, or command-bound stop of any session fails the whole
-  session, as it fails the Wasmtime run;
+- an invoked session whose call stops at its per-call command bound is
+  ended as its invoking session's cancel would end it (SCXML 6.4): nothing
+  it sends reaches its invoking session from then on, its `cancel` runs
+  (cancelling the sessions it invoked), and no `done.invoke` follows; a
+  start that stopped there fails its `<invoke>` (`error.execution` in the
+  invoking session), and a later call queues
+  `error.communication.<invokeid>` for it, as under Wasmtime. Any other
+  failure or trap of any session, and a failure of that cancel, fails the
+  whole session, as it fails the Wasmtime run; the root's own stop at the
+  bound leaves it unstable until `resume`;
 - depth and breadth are the Wasmtime host's: an invoked session invokes in
   turn, with no limit unless the page sets one in
   `invokeLimits: { maxInvokeDepth?, maxInvokedSessions? }` (non-negative

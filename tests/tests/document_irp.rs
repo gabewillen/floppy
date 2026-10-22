@@ -23,9 +23,13 @@
 //! * `irp/sources/<id>/backend.json` (optional) scripts the fake HTTP
 //!   backend of the services the run reaches: `{"clock": "wall" |
 //!   "logical", "answers": [{"path": SUFFIX, "status": N, "body": JSON},
-//!   ...]}`. A request takes the first unused answer whose `path` ends its
+//!   ...], "stream": true?}`; with `stream` the run's `FLOPPY_STREAM` is
+//!   `true` (decision D101). A request takes the first unused answer whose `path` ends its
 //!   target (the last one for a path repeats); a request no answer matches
-//!   is answered 404. Every service's base URL points at it;
+//!   is answered 404; a 200 completion answers a request that requires a
+//!   function call as that call, its content the arguments, and a streamed
+//!   request (`"stream": true`) as its server-sent-event stream
+//!   ([`support::answer_as_asked`]). Every service's base URL points at it;
 //! * `irp/sources/<id>/media/` (optional) is the media the generate and
 //!   speech services find at `/media` (a fresh copy per case; an empty
 //!   directory without it).
@@ -33,7 +37,11 @@
 //! A case passes when `scx run` ends with the root finished (exit 0) and
 //! the run logged `Outcome` `pass`. The run grants each service the
 //! document tree binds a fresh scratch directory, as the integration tests
-//! do. `FLOPPY_IRP_SUITE=<name>` runs only that document's suite.
+//! do; a case whose document binds the files service (the builder and the
+//! documents that invoke it, decision D121) runs in a scratch copy of
+//! `bots/`, `abilities/` and `environments/` of its own, the files service
+//! granted that copy's `behaviors/`, so cases never share the documents
+//! the builder writes. `FLOPPY_IRP_SUITE=<name>` runs only that document's suite.
 
 #![allow(
     missing_docs,
@@ -169,6 +177,7 @@ fn serve(mut stream: TcpStream, state: &Arc<Script>) {
         return;
     }
     let target = request_line.split(' ').nth(1).unwrap_or("").to_owned();
+    let request: Json = serde_json::from_slice(&body).unwrap_or(Json::Null);
     let (status, text) = {
         let mut guard = state.lock().expect("the script lock");
         let (answers, used) = &mut *guard;
@@ -190,6 +199,12 @@ fn serve(mut stream: TcpStream, state: &Arc<Script>) {
                 (answers[index].status, answers[index].body.clone())
             },
         )
+    };
+    // A streamed request gets its scripted completion as a stream.
+    let text = if status == 200 {
+        support::answer_as_asked(&request, text)
+    } else {
+        text
     };
     let _written = write!(
         stream,
@@ -239,17 +254,35 @@ fn run_case(document: &Path, case: &Path, test: &str) -> Option<String> {
         return Some(format!("{} is missing", start.display()));
     }
     let (wall, answers) = script(case);
+    let streams = std::fs::read_to_string(case.join("backend.json"))
+        .ok()
+        .and_then(|text| serde_json::from_str::<Json>(&text).ok())
+        .is_some_and(|script| script["stream"] == true);
     let backend = Backend::start(answers);
     let env = unique_scratch("irp-env").join("fake.env");
     std::fs::write(
         &env,
         format!(
-            "{FAKE_KEYS}FLOPPY_BASE_URL={origin}/v1\nTYPESAFE_BASE_URL={origin}\nFLOPPY_SPEECH_BASE_URL={origin}/v1\nFLOPPY_VOICE_BASE_URL={origin}/v1\n",
-            origin = backend.origin
+            "{FAKE_KEYS}FLOPPY_BASE_URL={origin}/v1\nTYPESAFE_BASE_URL={origin}\nFLOPPY_SPEECH_BASE_URL={origin}/v1\nFLOPPY_VOICE_BASE_URL={origin}/v1\n{stream}",
+            origin = backend.origin,
+            stream = if streams { "FLOPPY_STREAM=true\n" } else { "" },
         ),
     )
     .expect("the env file is writable");
     let mut args = vec!["--env-file".to_owned(), env.display().to_string()];
+    // The builder writes a draft's documents into the layout's behaviors
+    // directory: a layout of the case's own.
+    let start = if binds(document, "files") {
+        let root = unique_scratch("irp-layout");
+        for kind in ["bots", "abilities", "environments"] {
+            support::copy_tree(&workspace().join(kind), &root.join(kind));
+        }
+        let copied = root.join(start.strip_prefix(workspace()).unwrap_or(&start));
+        args.extend(support::behaviors_grant(&copied));
+        copied
+    } else {
+        start
+    };
     if binds(document, "sql") {
         args.extend(support::memory_grant());
     }

@@ -1,0 +1,10 @@
+{
+  "format": "stateforward.scxml.extension-package/v2",
+  "namespace-uri": "https://github.com/stateforward/floppy/namespaces/device",
+  "package-version": "0.1.0",
+  "extension-artifact": "floppy_device.virtualized.wasm",
+  "schema-artifact": "device.xsd",
+  "schema-sha256": "af8ed7066fe2378612b2eefd290c62391bdecf51aa784e7050c5f9bcfc34da67",
+  "wit-world": "stateforward:scxml/executable-content-extension",
+  "wit-version": "0.2.0"
+}

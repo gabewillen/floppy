@@ -1,0 +1,422 @@
+{
+  "report_version": 9,
+  "suite": {
+    "id": "namespaces/identity/irp",
+    "version": "0.1.0",
+    "kind": "namespace-irp",
+    "source": "namespaces/identity/irp/manifest.xml",
+    "revision": "0.1.0",
+    "corpus_digest": "188544fcfbdd30b0446ccdd0b364ba6625b00ab582e4bfc86e70853dbf1720d3",
+    "source_digest": "50cb0e983496e41686b21024ee4a3709680e77424bddbb5144784150deaa5e04",
+    "manifest_digest": "6fe85eebe8aca79e036035dcc9984d14095e55618e617cabb7a50152ff7a3735",
+    "template_digests": {
+      "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
+    },
+    "transformer": {
+      "name": "saxon-process-sandboxed",
+      "version": "SaxonJ-HE 12.8 from Saxonica",
+      "command_argv": [
+        "java",
+        "-jar",
+        "saxon-he-12.8.jar",
+        "-a:off",
+        "-p:off",
+        "-dtd:off",
+        "-expand:off",
+        "-ext:off",
+        "-xi:off",
+        "-xsiloc:off"
+      ],
+      "executable_digest": "c13657d80564f40f10b8ab91b29fdc74080e7d8bb36d6cd06589292755d3476f"
+    },
+    "datamodel": "ecmascript",
+    "provenance": "baseuri=https://github.com/stateforward/floppy/tree/main/namespaces/identity/irp/sources"
+  },
+  "schema_policy": "off",
+  "compiler": {
+    "name": "scxml-compiler-core",
+    "version": "0.2.0",
+    "source_digest": "3711416da670c0ca5ba41fb1d9b189939b4fb113bc9a1da05f313205f6187294"
+  },
+  "engine": {
+    "name": "scxml-machine",
+    "version": "0.2.0",
+    "source_digest": "b3fde869dbf1c6e0b9494fb7013aef41e3436225ac598902afafdf761c9e2dd5"
+  },
+  "data_model": {
+    "name": "scxml-data-model-ecmascript",
+    "version": "0.2.0",
+    "source_digest": "e84a0f3d2c9335c246e1e63d11927c9778ca51ce1891cbf024b93660b8d2d969"
+  },
+  "runner": {
+    "name": "scxml-conformance/wasm",
+    "version": "0.2.0",
+    "source_digest": "d7eac1d8e8b8a47312cef5eb06ab22dd43d9c5bd7130a5b9da6cddfcccb8eee3"
+  },
+  "manual_oracle": {
+    "name": "scxml-conformance-manual-oracle",
+    "version": "4",
+    "source_digest": "5929ef7c1486fa42aead96eabf4a8e912cde92014c14cae0bdacecec1f90a914"
+  },
+  "extensions": [
+    {
+      "namespace_uri": "https://github.com/stateforward/floppy/namespaces/identity",
+      "package_version": "0.1.0",
+      "manifest_sha256": "e7d377b4256e0823c55cce1fc3ad0e6c4b53099667ac2c5d12f1093d46afe9fb",
+      "schema_sha256": "9fee82cf9fcf6f1ba666685c441812e5848c711cb7fd96d05fd8994a0d3b3fa3",
+      "component_sha256": "89b46c6e2d021b8b2a5a8da729a9c1717c9bb93846b991f54079f0e34a56bf14"
+    }
+  ],
+  "ir_version": 5,
+  "filters": {
+    "ids": [],
+    "id_ranges": [],
+    "spec_ids": [],
+    "spec_nums": [],
+    "conformance": [],
+    "datamodels": [],
+    "tags": []
+  },
+  "identity_digest": "b401c4d9262cd6cf17a8587e44f2f9c8826196a4c71a1499f28016f738201646",
+  "summary": {
+    "total_selected": 10,
+    "applicable_selected": 10,
+    "passed": 10,
+    "failed": 0,
+    "unsupported": 0,
+    "invalid": 0,
+    "harness_error": 0,
+    "skipped": 0,
+    "not_applicable": 0,
+    "not_passing": 0,
+    "passed_under_erratum": 0,
+    "mandatory": {
+      "applicable_selected": 10,
+      "passed": 10,
+      "failed": 0,
+      "unsupported": 0,
+      "invalid": 0,
+      "harness_error": 0,
+      "skipped": 0,
+      "not_applicable": 0,
+      "not_passing": 0,
+      "passed_under_erratum": 0
+    },
+    "optional": {
+      "applicable_selected": 0,
+      "passed": 0,
+      "failed": 0,
+      "unsupported": 0,
+      "invalid": 0,
+      "harness_error": 0,
+      "skipped": 0,
+      "not_applicable": 0,
+      "not_passing": 0,
+      "passed_under_erratum": 0
+    },
+    "by_spec": {
+      "#identity-1": {
+        "applicable_selected": 3,
+        "passed": 3,
+        "failed": 0,
+        "unsupported": 0,
+        "invalid": 0,
+        "harness_error": 0,
+        "skipped": 0,
+        "not_applicable": 0,
+        "not_passing": 0,
+        "passed_under_erratum": 0
+      },
+      "#identity-2": {
+        "applicable_selected": 4,
+        "passed": 4,
+        "failed": 0,
+        "unsupported": 0,
+        "invalid": 0,
+        "harness_error": 0,
+        "skipped": 0,
+        "not_applicable": 0,
+        "not_passing": 0,
+        "passed_under_erratum": 0
+      },
+      "#identity-3": {
+        "applicable_selected": 3,
+        "passed": 3,
+        "failed": 0,
+        "unsupported": 0,
+        "invalid": 0,
+        "harness_error": 0,
+        "skipped": 0,
+        "not_applicable": 0,
+        "not_passing": 0,
+        "passed_under_erratum": 0
+      }
+    },
+    "by_datamodel": {
+      "ecmascript": {
+        "applicable_selected": 10,
+        "passed": 10,
+        "failed": 0,
+        "unsupported": 0,
+        "invalid": 0,
+        "harness_error": 0,
+        "skipped": 0,
+        "not_applicable": 0,
+        "not_passing": 0,
+        "passed_under_erratum": 0
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "800",
+      "assertion_id": "identity-1",
+      "spec_num": "1",
+      "spec_id": "#identity-1",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "801",
+      "assertion_id": "identity-1",
+      "spec_num": "1",
+      "spec_id": "#identity-1",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "802",
+      "assertion_id": "identity-1",
+      "spec_num": "1",
+      "spec_id": "#identity-1",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "810",
+      "assertion_id": "identity-2",
+      "spec_num": "2",
+      "spec_id": "#identity-2",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "811",
+      "assertion_id": "identity-2",
+      "spec_num": "2",
+      "spec_id": "#identity-2",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "812",
+      "assertion_id": "identity-2",
+      "spec_num": "2",
+      "spec_id": "#identity-2",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "813",
+      "assertion_id": "identity-2",
+      "spec_num": "2",
+      "spec_id": "#identity-2",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "820",
+      "assertion_id": "identity-3",
+      "spec_num": "3",
+      "spec_id": "#identity-3",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "821",
+      "assertion_id": "identity-3",
+      "spec_num": "3",
+      "spec_id": "#identity-3",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "822",
+      "assertion_id": "identity-3",
+      "spec_num": "3",
+      "spec_id": "#identity-3",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    }
+  ]
+}

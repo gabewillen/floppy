@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- conversation-3: an input matches its relationship in either direction. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="rs" expr="[({session_ref: 'relationship-a', context_ref: 'a', source_ids: ['alice'], target_ids: ['bot'], participants: [], sequences: []})]"/>
+  <data id="i" expr="null"/>
+  <data id="input" expr="({source_ids: ['bot'], target_ids: ['alice']})"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:relationship_for_input location="rs" indexlocation="i" input="input"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="i === 0 &amp;&amp; rs.length === 1" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

@@ -89,9 +89,15 @@ build.
 
 ## Outbound HTTP
 
-`outbound-http.fetch` is an `async func`: a service's call suspends only the
-calling task, never the session, and the service's other tasks (reading
-`events`, a timer) go on. The host substitutes the slot references, admits
+`outbound-http.fetch` and `outbound-http.send` are `async func`s: a
+service's call suspends only the calling task, never the session, and the
+service's other tasks (reading `events`, a timer) go on. `fetch` answers
+the whole response; `send` (named after `wasi:http`'s `client.send`)
+answers once the status has arrived, with the body as a `stream<u8>` and a
+future that resolves when the body has ended (`err` when the transport
+failed or the body passed its 16 MiB bound), so a service can report
+progress while a long response, such as a streamed model completion, is
+still arriving. The host substitutes the slot references, admits
 the request only to an origin or URL prefix the service package declares
 (`http-origins`) or to an origin a reference's value supplies entirely, and
 then:
@@ -101,9 +107,12 @@ then:
 - in a live session, performs it on a transport thread of its own and
   delivers the response later as an external input
   (`LiveSession::deliver_http_responses`; in `scx run`, a `call` with
-  cause `http-response`). A logical-clock live session never moves its
-  clock past a request in flight: its response is the next thing that
-  happens.
+  cause `http-response`); a `send`'s status, body bytes, and end are each
+  such an input, delivered as they arrive (the body bytes that arrived
+  since the last delivery joined into one). A logical-clock live session
+  never moves its clock past a request in flight: its next part is the
+  next thing that happens. A `send` counts against the 16 requests in
+  flight until its body has ended.
 
 Admission, in detail:
 
@@ -137,15 +146,20 @@ Without a transport every request fails with `unavailable`. The echo
 example's `fetch` event GETs the URL its `endpoint` slot references,
 followed by the event's data when it is a string (a path, query, or
 fragment), with `authorization: Bearer <token>` when the `token` slot is
-bound, and returns `echo.fetched` carrying the status.
+bound, and returns `echo.fetched` carrying the status; its `send` event
+GETs the same URL through `outbound-http.send` and returns `echo.received`
+carrying the byte count of each body read as it arrives, then
+`echo.fetched`.
 
 ## Record and replay
 
 A service's HTTP responses are recorded inputs: `--record` writes one
-`http-response` record per response (its time, the invocation's lineage of
-invoke ids, the request's number within the invocation, and the status and
-body or the transport failure), and `--replay` delivers each from the log
-without the network ([live-session.md](live-session.md#replay-log)).
+`http-response` record per `fetch` response (its time, the invocation's
+lineage of invoke ids, the request's number within the invocation, and the
+status and body or the transport failure) and one `http-response-part`
+record per delivered part of a `send`'s response (the same fields, then its
+`status`, its body bytes, its `end`, or the failure that ended it), and
+`--replay` delivers each from the log without the network ([live-session.md](live-session.md#replay-log)).
 Timers run on the logical clock, so a run with services, including services
 that import WASI interfaces, records and replays. What a service reads
 through its WASI resources (a preopened directory, a socket) is not

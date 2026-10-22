@@ -2,29 +2,45 @@
 <!-- floppy-7: an input during a turn waits and becomes turn 2 when the turn ends. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
-  <invoke id="floppy" type="scxml" src="../../../floppy.scx"/>
+  <invoke id="floppy" type="scxml" src="../../../floppy.scx">
+    <param name="environment" expr="_sessionid"/>
+  </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
+    <transition event="bot.activated" target="step1"/>
+  </state>
+  <state id="step1">
     <onentry>
-      <send event="bot.activate" target="#_floppy"><content expr="{}"/></send>
-      <send event="bot.ability.offers" target="#_floppy"><content expr='{"ability": "cognition", "choices": []}'/></send>
-      <send event="bot.ability.offers" target="#_floppy"><content expr='{"ability": "communication", "choices": []}'/></send>
-      <send event="bot.ability.offers" target="#_floppy"><content expr='{"ability": "identity", "choices": []}'/></send>
-      <send event="bot.ability.offers" target="#_floppy"><content expr='{"ability": "listening", "choices": []}'/></send>
       <send event="bot.input" target="#_floppy"><content expr='{"observation": {"event": "text", "data": "first"}}'/></send>
       <send event="bot.input" target="#_floppy"><content expr='{"observation": {"event": "text", "data": "second"}}'/></send>
       <send event="bot.ability.failed" target="#_floppy"><content expr='{"turn": 1, "message": "done"}'/></send>
       <send event="bot.processing.timed_out" target="#_floppy"><content expr='{"turn": 2}'/></send>
       <send event="bot.processing.cancel.timed_out" target="#_floppy"><content expr='{"turn": 2}'/></send>
     </onentry>
-    <transition event="done.invoke.floppy" cond='_event.data.reason === "turn 2: the cognition did not acknowledge its cancel"' target="step1"/>
+    <transition event="bot.processing.failed" cond="_event.data.turn === 1" target="step2"/>
   </state>
-  <state id="step1">
+  <state id="step2">
+    <transition event="bot.processing.timed_out" cond="_event.data.turn === 2" target="step3"/>
+  </state>
+  <state id="step3">
+    <transition event="bot.processing.cancel.timed_out" cond="_event.data.turn === 2" target="step4"/>
+  </state>
+  <state id="step4">
+    <transition event="bot.processing.failed" cond="_event.data.turn === 2" target="step5"/>
+  </state>
+  <state id="step5">
+    <transition event="bot.degraded" cond="_event.data.stage === 'processing_cancel'" target="step6"/>
+  </state>
+  <state id="step6">
+    <transition event="done.invoke.floppy" cond='_event.data.reason === "turn 2: the cognition did not acknowledge its cancel"' target="step7"/>
+  </state>
+  <state id="step7">
     <transition target="pass"/>
   </state>
+  <transition event="bot.ability"/>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
 </state>
 <final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>

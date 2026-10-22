@@ -20,7 +20,8 @@
 
   Sensing: environment.sound {audio, ...} from the body goes to the
   sensitivity as bot.ability.listening.sensitivity.score {stimulus} (the
-  sound's envelope {event, data}), bounded by the original's 30 s stage
+  sound's envelope {event, data, source}: source is the sound's own, the
+  transducer it came off, and absent when it names none), bounded by the original's 30 s stage
   operation timeout (sensitivity_timeout_ms): the sensitivity's
   bot.ability.listening.sensitivity.output goes on to the interpretation
   and Sensing returns to Listening; the timer,
@@ -46,7 +47,13 @@
   modulates perception, it does not interrupt it. The body sends it here
   (its listening_abilities list, the original's Speaking listening peers) just
   before the bot's own speech comes back as environment.sound, so the bot
-  can tell its own voice apart.
+  can tell its own voice apart: while the copy's window is open the
+  sensitivity scores a sound whose source is the copy's mouth against the
+  prediction (fully predicted its level is 0, below the interpretation's
+  threshold, so its product is withheld), and any other sound at its
+  received level. The interpretation still runs on the bot's own voice
+  (the original: the one comparison is made at the end of the pipeline),
+  so a voice detection backend the run does not configure fails it there.
 
   Readiness: the entry into Perceiving sends bot.ability.offers {ability:
   "listening", choices: []} to the body; it offers nothing (the original: the
@@ -61,7 +68,6 @@
   bind the speech service).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="listening" initial="live">
   <datamodel>
@@ -79,7 +85,7 @@
     <invoke id="sensitivity" type="scxml" src="../sensitivity/sensitivity.scx"/>
     <invoke id="interpretation" type="scxml" src="../interpretation/interpretation.scx"/>
 
-    <transition event="bot.ability.offers" event:schema="schemas/bot.ability.offers.json">
+    <transition event="bot.ability.offers" event:schema="../schemas/bot.ability.offers.json">
       <assign location="ready[_event.data.ability]" expr="true"/>
     </transition>
     <!-- A child that cannot run, or ends, degrades the ability. -->
@@ -97,7 +103,7 @@
       <transition event="error.*" target="degraded">
         <log label="listening.degraded" expr="childCouldNotStartLog(_event)"/>
       </transition>
-      <transition event="environment.sound" event:schema="schemas/environment.sound.json">
+      <transition event="environment.sound" event:schema="../schemas/environment.sound.json">
         <event:defer/>
       </transition>
     </state>
@@ -111,32 +117,37 @@
       </onentry>
       <!-- The body's report of what it is producing reaches the
            prediction from wherever perception happens to be. -->
-      <transition event="bot.ability.speaking.efference" event:schema="schemas/bot.ability.speaking.efference.json">
+      <transition event="bot.ability.speaking.efference" event:schema="../schemas/bot.ability.speaking.efference.json">
         <send event="bot.ability.speaking.efference" target="#_sensitivity">
           <content expr="_event.data"/>
         </send>
       </transition>
       <!-- The interpretation's products and failures, out through this
            ability's own. -->
-      <transition event="bot.ability.listening.speech.output" event:schema="schemas/bot.ability.listening.speech.output.json">
-        <bot:stimulus location="product" event="_event.name" data="_event.data" source="'listening'"/>
+      <transition event="bot.ability.listening.speech.output" event:schema="../schemas/bot.ability.listening.speech.output.json">
+        <assign location="product" expr="({})"/>
+        <assign location="product.event" expr="_event.name"/>
+        <assign location="product.data" expr="_event.data"/>
+        <assign location="product.source" expr="'listening'"/>
+        <!-- The speech product's participants ride forward (f6c4e08). -->
         <send event="bot.ability.cognition.input" target="#_parent">
           <param name="stimulus" expr="product"/>
+          <param name="participants" expr="productParticipants(_event)"/>
         </send>
       </transition>
-      <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json">
+      <transition event="bot.ability.cognition.input" event:schema="../schemas/bot.ability.cognition.input.json">
         <send event="bot.ability.cognition.input" target="#_parent">
           <content expr="_event.data"/>
         </send>
       </transition>
-      <transition event="bot.ability.listening.failed" event:schema="schemas/bot.ability.listening.failed.json">
+      <transition event="bot.ability.listening.failed" event:schema="../schemas/bot.ability.listening.failed.json">
         <send event="bot.ability.listening.failed" target="#_parent">
           <content expr="_event.data"/>
         </send>
       </transition>
 
       <state id="Listening">
-        <transition event="environment.sound" event:schema="schemas/environment.sound.json" target="Sensing">
+        <transition event="environment.sound" event:schema="../schemas/environment.sound.json" target="Sensing">
           <assign location="sound" expr="_event.data"/>
         </transition>
       </state>
@@ -154,15 +165,15 @@
         <onexit>
           <cancel sendid="sensing-timer"/>
         </onexit>
-        <transition event="environment.sound" event:schema="schemas/environment.sound.json">
+        <transition event="environment.sound" event:schema="../schemas/environment.sound.json">
           <event:defer/>
         </transition>
-        <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json" target="Listening">
+        <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json" target="Listening">
           <send event="bot.ability.listening.sensitivity.output" target="#_interpretation">
             <content expr="_event.data"/>
           </send>
         </transition>
-        <transition event="bot.ability.listening.sensitivity.failed" event:schema="schemas/bot.ability.listening.sensitivity.failed.json" target="Listening">
+        <transition event="bot.ability.listening.sensitivity.failed" event:schema="../schemas/bot.ability.listening.sensitivity.failed.json" target="Listening">
           <send event="bot.ability.listening.failed" target="#_parent">
             <content expr="_event.data"/>
           </send>

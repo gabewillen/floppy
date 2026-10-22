@@ -122,7 +122,7 @@ pub struct InvocationContext {
 /// Invariant: `session_id` is the session's `_sessionid`, fixed at
 /// construction. Counters only grow; they back generated send ids
 /// (`sendid_<n>`, SCXML 6.2.4) and generated invoke ids
-/// (`<state>.<session>.<n>`, SCXML 6.4.1).
+/// (`<state>.<n>`, SCXML 6.4.1).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SessionState {
     session_id: String,
@@ -215,15 +215,11 @@ impl SessionState {
         id
     }
 
-    /// Allocates the next generated invoke id (`<state>.<session>.<n>`)
-    /// for an `<invoke>` in `state`.
+    /// Allocates the next generated invoke id (`<state>.<n>`, SCXML 6.4.1
+    /// `stateid.platformid`, `n` unique within this session) for an
+    /// `<invoke>` in `state`.
     fn next_invoke_id(&mut self, state: &StateId) -> String {
-        let id = format!(
-            "{}.{}.{}",
-            state.as_str(),
-            self.session_id,
-            self.invoke_counter
-        );
+        let id = format!("{}.{}", state.as_str(), self.invoke_counter);
         self.invoke_counter = self.invoke_counter.saturating_add(1);
         id
     }

@@ -109,24 +109,9 @@ pub(crate) struct SessionRecord {
 pub(crate) struct SessionTable {
     records: BTreeMap<SessionKey, SessionRecord>,
     by_session_id: BTreeMap<String, SessionKey>,
-    /// The root's `_sessionid`.
-    root_session_id: String,
-    /// Invoked sessions named so far in this run.
-    invoked_named: u64,
 }
 
 impl SessionTable {
-    /// The `_sessionid` of the next session the run starts: the root's,
-    /// then `.` and the session's ordinal among the invoked sessions the
-    /// run started (SCXML 5.10 "the system-generated id for the current
-    /// SCXML session"). Unique across the run, so `#_scxml_<sessionid>`
-    /// (C.1) names one session, and of a length that does not grow with
-    /// the nesting depth.
-    pub(crate) fn next_invoked_session_id(&mut self) -> String {
-        self.invoked_named = self.invoked_named.saturating_add(1);
-        format!("{}.{}", self.root_session_id, self.invoked_named)
-    }
-
     /// Adds the session `key` with `session_id` (none for an invoked
     /// service), not finished.
     pub(crate) fn insert(&mut self, key: SessionKey, session_id: Option<String>) {
@@ -144,10 +129,12 @@ impl SessionTable {
         );
     }
 
-    /// Removes the session `key`.
+    /// Removes the session `key`. Its `_sessionid` keeps naming a later
+    /// session invoked under the same invoke id that took it over.
     pub(crate) fn remove(&mut self, key: SessionKey) {
         if let Some(record) = self.records.remove(&key)
             && let Some(session_id) = &record.session_id
+            && self.by_session_id.get(session_id) == Some(&key)
         {
             self.by_session_id.remove(session_id);
         }
@@ -382,6 +369,30 @@ impl RunShared {
         machine.accepts_event_data(event)
     }
 
+    /// The session of this run whose `_sessionid` is `session_id`, while it
+    /// runs: what `#_scxml_<sessionid>` reaches (SCXML C.1). None for an id
+    /// no session of the run has, or for one that finished.
+    pub(crate) fn running_session(&self, session_id: &str) -> Option<SessionKey> {
+        let sessions = self.sessions.borrow();
+        sessions
+            .key_of(session_id)
+            .filter(|key| sessions.get(*key).is_some_and(|record| !record.finished))
+    }
+
+    /// The machine session `key` of this run, unless it is gone or its own
+    /// call is running.
+    pub(crate) fn machine(&self, key: SessionKey) -> Option<Rc<RefCell<MachineHandle>>> {
+        self.machines.borrow().get(&key).and_then(Weak::upgrade)
+    }
+
+    /// Whether the session `key` of this run finished.
+    pub(crate) fn finished(&self, key: SessionKey) -> bool {
+        self.sessions
+            .borrow()
+            .get(key)
+            .is_some_and(|record| record.finished)
+    }
+
     /// Records the run's first fault; later ones are consequences.
     pub(crate) fn fault(&self, failure: RunFailure) {
         let mut fault = self.fault.borrow_mut();
@@ -558,6 +569,7 @@ impl MachineHandle {
         // Every bound extension component gets its own instance for this
         // session, initialized before the machine runs anything.
         let namespaces = core.session_namespaces(execution_context, spec.bindings.as_deref())?;
+        let base_uri = spec.bindings.as_ref().and_then(|b| b.base_uri());
         let (mut store, machine) = instantiate_session_machine(
             &core.engine,
             core.machine(),
@@ -568,7 +580,7 @@ impl MachineHandle {
             SessionMachine {
                 machine_ir: spec.machine_ir,
                 data_model,
-                scripts: embedder.scripts(),
+                scripts: embedder.scripts(base_uri),
                 session_id: spec.session_id.clone(),
                 links: Box::new(links),
                 call_budget: Arc::clone(&core.call_budget),
@@ -1081,22 +1093,78 @@ impl RunSessions {
     /// call of the fuel budget: the call, every start, cancel, and
     /// continuation carried out for it, spend one budget (compiling a
     /// document the embedder served aside, `SessionLinks::compile_invocation`).
+    ///
+    /// An invoked session whose call stops at its command bound is ended
+    /// ([`Self::end_at_command_bound`]) on the same budget, and its
+    /// invoking session receives `error.communication.<invokeid>`, as for
+    /// an invoked service that fails after its start; the root's stop
+    /// fails the run. A finished invoked session runs nothing (the rest of
+    /// a due batch drained before it finished, or was ended).
     fn command(
         &mut self,
         key: SessionKey,
         call: impl FnOnce(&mut MachineHandle) -> MachineResult,
     ) -> Result<(), RunFailure> {
-        let core = Rc::clone(&self.core);
-        let result = core.call_budget.hold(|| {
-            let result = call(&mut *self.session(key)?);
-            self.carry_out_deferred(key, result)
-        })?;
-        if key.is_root() {
-            return self.root_step(result);
+        if !key.is_root() && self.is_finished(key) {
+            return Ok(());
         }
-        let step = settle(&self.shared, result)?;
-        self.shared.sessions.borrow_mut().observe_step(key, step);
-        Ok(())
+        let core = Rc::clone(&self.core);
+        core.call_budget.hold(|| {
+            let result = call(&mut *self.session(key)?);
+            let result = self.carry_out_deferred(key, result)?;
+            if key.is_root() {
+                return self.root_step(result);
+            }
+            match settle(&self.shared, result) {
+                Ok(step) => {
+                    self.shared.sessions.borrow_mut().observe_step(key, step);
+                    Ok(())
+                }
+                Err(RunFailure::CommandBound) => {
+                    // Queued before its cancellation begins, which drops
+                    // whatever it sends from then on.
+                    self.shared
+                        .invoked_sessions
+                        .borrow_mut()
+                        .push_to_parent(key, Invoked::CommunicationError);
+                    self.end_at_command_bound(key)
+                }
+                Err(failure) => Err(failure),
+            }
+        })
+    }
+
+    /// Ends the invoked session `key`, whose call stopped at its command
+    /// bound, as its invoking session's cancel would (SCXML 6.4): from now
+    /// on nothing it sends reaches its invoking session, its `cancel` runs
+    /// (cancelling the sessions it invoked as its own exit reaches them, on
+    /// this loop), and it is finished, so it runs nothing more and no
+    /// `done.invoke` follows. It stays in the run, as a finished session
+    /// does, until its invoking session cancels the invocation. Only the
+    /// session's own store ran away; a failure of its cancel is the run's.
+    fn end_at_command_bound(&mut self, key: SessionKey) -> Result<(), RunFailure> {
+        let span = scxml_telemetry::observe(
+            scxml_telemetry::Module::HostWasmtime,
+            scxml_telemetry::Operation::HostWasmtimeInvokedSessionCancel,
+        );
+        self.shared.invoked_sessions.borrow_mut().begin_cancel(key);
+        self.shared.touch(key);
+        let ended = (|| {
+            let result = self.session(key)?.cancel();
+            let result = self.carry_out_deferred(key, result)?;
+            settle(&self.shared, result)
+        })();
+        match ended {
+            Ok(step) => {
+                span.event(scxml_telemetry::SignalEvent::TransformationCompleted);
+                self.shared.sessions.borrow_mut().observe_step(key, step);
+                Ok(())
+            }
+            Err(failure) => {
+                span.fail(scxml_telemetry::ErrorCategory::Execution);
+                Err(failure)
+            }
+        }
     }
 
     /// Carries out the invocation request the call that returned `result`
@@ -1242,8 +1310,10 @@ impl RunSessions {
 
     /// The result of the `start-invocation` request of the session
     /// `child`, whose `start-invoked` returned `started`. A child that
-    /// rejected its start fails that `<invoke>` (`error.execution` in the
-    /// invoking session) and is dropped; any other failure is the run's.
+    /// rejected its start, or whose start stopped at its command bound
+    /// (ended first, [`Self::end_at_command_bound`]), fails that `<invoke>`
+    /// (`error.execution` in the invoking session) and is dropped; any
+    /// other failure is the run's.
     fn complete_start(
         &mut self,
         child: SessionKey,
@@ -1262,6 +1332,16 @@ impl RunSessions {
             Ok(step) => {
                 self.shared.sessions.borrow_mut().observe_step(child, step);
                 Ok(())
+            }
+            Err(RunFailure::CommandBound) => {
+                let ended = self.end_at_command_bound(child);
+                self.drop_sessions(child);
+                match ended {
+                    Ok(()) => Err(invalid_input(
+                        "the invoked session stopped at its command bound",
+                    )),
+                    Err(failure) => Err(fatal(&self.shared, failure)),
+                }
             }
             Err(failure) => {
                 self.drop_sessions(child);
@@ -1574,6 +1654,14 @@ impl Sessions for RunSessions {
             DueRoute::Invocation(routed) => invoked_sessions
                 .child(session, &routed.invoke_id)
                 .map(|child| (child, &routed.event)),
+            // Another session of the run (SCXML C.1): one that no longer
+            // runs cannot be dispatched to.
+            DueRoute::Session((session_id, event)) => {
+                let Some(receiver) = self.shared.running_session(session_id) else {
+                    return Ok(InvocationDueRoute::Undeliverable(send_id));
+                };
+                Some((receiver, event))
+            }
             DueRoute::Local(_) | DueRoute::Undeliverable(_) => None,
         };
         if let Some((receiver, event)) = receiver
@@ -1589,6 +1677,12 @@ impl Sessions for RunSessions {
             DueRoute::Parent(event) => InvocationDueRoute::Parent(event),
             DueRoute::Invocation(routed) => {
                 InvocationDueRoute::Invocation(routed.invoke_id, routed.event)
+            }
+            DueRoute::Session((session_id, event)) => {
+                if let Some(receiver) = self.shared.running_session(&session_id) {
+                    invoked_sessions.push_external(receiver, event);
+                }
+                InvocationDueRoute::Dispatched
             }
             DueRoute::Undeliverable(send_id) => InvocationDueRoute::Undeliverable(send_id),
         })
@@ -1765,7 +1859,6 @@ impl RunEngine {
             };
         {
             let mut sessions = shared.sessions.borrow_mut();
-            root.session_id.clone_into(&mut sessions.root_session_id);
             sessions.insert(SessionKey::ROOT, Some(root.session_id.to_owned()));
         }
         let handle = Rc::new(RefCell::new(*handle));
@@ -1992,16 +2085,16 @@ impl RunEngine {
                 continue;
             };
             let request = item.request;
-            let outcome = item.outcome.clone();
+            let answer = item.answer.clone();
             let mut answered = false;
             self.sessions.with_invoked_sessions(
                 self.scheduler.invoked_sessions_mut(),
                 |sessions| {
                     sessions.service_input(
                         key,
-                        scxml_telemetry::Operation::HostWasmtimeServiceHttpFetch,
+                        answer_operation(&item.answer),
                         |service, now, requests| {
-                            let step = service.respond(request, item.outcome, now, requests);
+                            let step = service.respond(request, item.answer, now, requests);
                             answered = step.is_some();
                             step
                         },
@@ -2012,14 +2105,14 @@ impl RunEngine {
                 delivered.push(super::RecordedResponse {
                     path,
                     request,
-                    outcome,
+                    answer,
                 });
             }
         }
         Ok(delivered)
     }
 
-    /// Delivers one recorded response to the invoked service at `path` (a
+    /// Delivers one recorded answer to the invoked service at `path` (a
     /// replay); `false` when no live invocation of that lineage waits for
     /// that request.
     ///
@@ -2040,19 +2133,15 @@ impl RunEngine {
             return Ok(false);
         };
         let mut answered = false;
-        let outcome = response.outcome.clone();
+        let answer = response.answer.clone();
         let request = response.request;
         self.sessions
             .with_invoked_sessions(self.scheduler.invoked_sessions_mut(), |sessions| {
-                sessions.service_input(
-                    key,
-                    scxml_telemetry::Operation::HostWasmtimeServiceHttpFetch,
-                    |service, now, requests| {
-                        let step = service.respond(request, outcome, now, requests);
-                        answered = step.is_some();
-                        step
-                    },
-                )
+                sessions.service_input(key, answer_operation(&answer), |service, now, requests| {
+                    let step = service.respond(request, answer, now, requests);
+                    answered = step.is_some();
+                    step
+                })
             })?;
         Ok(answered)
     }
@@ -2290,4 +2379,17 @@ pub(crate) fn fatal(shared: &RunShared, failure: RunFailure) -> ComponentError {
     };
     shared.fault(failure);
     crate::component::component_error(code, "session host failure")
+}
+
+/// The operation that delivers `answer`: a `fetch`'s response, or a part of
+/// a `send`'s.
+const fn answer_operation(answer: &crate::ExtensionHttpAnswer) -> scxml_telemetry::Operation {
+    match answer {
+        crate::ExtensionHttpAnswer::Response(_) => {
+            scxml_telemetry::Operation::HostWasmtimeServiceHttpFetch
+        }
+        crate::ExtensionHttpAnswer::Part(_) => {
+            scxml_telemetry::Operation::HostWasmtimeServiceHttpSend
+        }
+    }
 }

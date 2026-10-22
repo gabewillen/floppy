@@ -30,10 +30,22 @@ function childCouldNotStartLog(_event) {
 
 // Sensing
 
+// The sound's envelope. Its source is the transducer the sound came off
+// (the mouth the sensitivity compares it with); a sound that names none
+// gets an envelope without one.
 function scoreRequest(sound) {
-  return ({stimulus: {event: 'environment.sound', data: sound}});
+  return ({stimulus: Object.assign({event: 'environment.sound', data: sound}, soundSource(sound))});
+}
+
+function soundSource(sound) {
+  return typeof sound.source === 'string' ? {source: sound.source} : {};
 }
 
 function sensitivityTimedOut() {
   return ({stage: 'sensitivity', message: 'Listening sensitivity timed out.'});
+}
+
+// The participants a speech product carries (the original's f6c4e08).
+function productParticipants(_event) {
+  return _event.data.participants || [];
 }

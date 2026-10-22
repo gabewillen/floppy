@@ -53,8 +53,8 @@ expected_wasi_virt_rev='448f6df8f688cee5d6995e96b1ffc31f9bf00742'
 # pinned wasi-sdk release, checked by its VERSION file.
 expected_wasi_sdk='25.0'
 session_components='scxml_machine scxml_compiler scxml_data_model_ecmascript scxml_data_model_xpath scxml_data_model_null scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_clock scxml_resolver_github scx'
-namespace_components='floppy_decision floppy_bot floppy_conversation floppy_migration'
-service_components='floppy_service_generate floppy_service_decision floppy_service_sql floppy_service_speech floppy_service_pgsql'
+namespace_components='floppy_decision floppy_conversation floppy_migration floppy_device floppy_processing floppy_intuition floppy_cognition floppy_identity floppy_memory floppy_behavior floppy_autonomy'
+service_components='floppy_service_generate floppy_service_decision floppy_service_sql floppy_service_files floppy_service_speech floppy_service_pgsql'
 # Package validator components (stateforward:scxml-validator/package-validator),
 # each named by its package's manifest (`validator-artifact`).
 validator_components='floppy_service_generate_validator'
@@ -106,22 +106,39 @@ expected_imports() {
                 'stateforward:scxml/data-model-host@0.2.0' \
                 'stateforward:scxml/session-snapshot-host@0.2.0'
             ;;
-        # <bot:attention> and <bot:stimulus>: evaluate their expressions and
-        # assign their results through the data model; no session snapshot,
-        # execution-host, or outbound-http.
-        floppy_bot)
+        # <device:snapshot>: reads another session of the run through the
+        # session snapshot (its target) and assigns the read through the
+        # data model; no execution-host or outbound-http.
+        floppy_device)
             printf '%s\n' \
                 'stateforward:scxml/types@0.2.0' \
                 'stateforward:scxml/telemetry@0.2.0' \
-                'stateforward:scxml/data-model-host@0.2.0'
+                'stateforward:scxml/data-model-host@0.2.0' \
+                'stateforward:scxml/session-snapshot-host@0.2.0'
             ;;
-        # <conversation:commit>: evaluates its expressions and assigns the
-        # committed message through the data model; no session snapshot,
-        # execution-host, or outbound-http.
+        # The conversation elements (<conversation:message_for_turn>,
+        # <conversation:relationship_for_input> and the rest of the
+        # original's conversation module and turn detector): evaluate their
+        # expressions and assign their results through the data model; no
+        # session snapshot, execution-host, or outbound-http.
         # <migration:plan>: evaluates its expressions and assigns the plan
         # through the data model; no session snapshot, execution-host, or
         # outbound-http.
-        floppy_migration|floppy_conversation)
+        # The processing elements (<processing:model_facing_schema>,
+        # <processing:collect_offered_events>, <processing:send>,
+        # <processing:selection_confidence>): evaluate their expressions and
+        # assign their results through the data model; no session snapshot,
+        # execution-host, or outbound-http.
+        # The intuition elements (<intuition:observe>, <intuition:escalate>),
+        # the cognition elements (<cognition:attention_bias_for_turn>,
+        # <cognition:model_facing_content>), the identity elements
+        # (<identity:hears_name>, <identity:sorted_identities>) and the
+        # memory elements (<memory:to_json>, <memory:contents>), the
+        # behavior elements (<behavior:instances_from_behavior_results>,
+        # <behavior:replace_behavior_clauses>, <behavior:lifetime_errors>,
+        # <behavior:verify_tick>) and the autonomy element
+        # (<autonomy:behavior_input_payload>): the same.
+        floppy_migration|floppy_conversation|floppy_processing|floppy_intuition|floppy_cognition|floppy_identity|floppy_memory|floppy_behavior|floppy_autonomy)
             printf '%s\n' \
                 'stateforward:scxml/types@0.2.0' \
                 'stateforward:scxml/telemetry@0.2.0' \
@@ -140,9 +157,12 @@ expected_imports() {
         # read from the directory the run grants. Like the sql service it
         # keeps exactly the filesystem it imports for the host (linked only
         # under `--dir`); wasi:cli and the 0.2 monotonic clock are denied by
-        # the composed provider (services/sql/wasi-cli-deny.wat).
+        # the composed provider (services/sql/wasi-cli-deny.wat). It reads
+        # the world's 0.3 monotonic clock (the session's logical clock) to
+        # space a streamed call's progress events (decision D101).
         floppy_service_generate)
             printf '%s\n' \
+                'wasi:clocks/monotonic-clock@0.3.0' \
                 'stateforward:scxml/types@0.2.0' \
                 'stateforward:scxml/outbound-http@0.2.0' \
                 'stateforward:scxml/telemetry@0.2.0' \
@@ -170,6 +190,27 @@ expected_imports() {
                 'wasi:io/streams@0.2.12' \
                 'wasi:filesystem/types@0.2.12' \
                 'wasi:filesystem/preopens@0.2.12'
+            ;;
+        # The files service: one async `invoke` export and the files of the
+        # directory the run grants (a learned behavior's documents). It
+        # keeps exactly the filesystem it imports for the host (which links
+        # it only under `--dir`): the filesystem interfaces, the wasi:io
+        # interfaces they use, and wasi:clocks/wall-clock for their
+        # timestamps, at the standard library's 0.2.9 versions (it uses no
+        # interface of its world that raises them); wasi:cli and the 0.2
+        # monotonic clock are denied by the composed provider of the
+        # example it is modeled on
+        # (scxml.rs/components/scxml-service-files/wasi-cli-deny.wat).
+        floppy_service_files)
+            printf '%s\n' \
+                'stateforward:scxml/types@0.2.0' \
+                'stateforward:scxml/telemetry@0.2.0' \
+                'wasi:io/poll@0.2.9' \
+                'wasi:clocks/wall-clock@0.2.9' \
+                'wasi:io/error@0.2.9' \
+                'wasi:io/streams@0.2.9' \
+                'wasi:filesystem/types@0.2.9' \
+                'wasi:filesystem/preopens@0.2.9'
             ;;
         # The speech service: one async `invoke` export, one request through
         # outbound-http's async `fetch`, and the media files in the directory
@@ -329,15 +370,17 @@ build_component() {
         virt_input=$seeded
         ;;
     esac
-    if [ "$component" = floppy_service_sql ] || [ "$component" = floppy_service_speech ] || [ "$component" = floppy_service_generate ] || [ "$component" = floppy_service_pgsql ]; then
-        # The sql, speech and generate services keep their filesystem
+    if [ "$component" = floppy_service_sql ] || [ "$component" = floppy_service_files ] || [ "$component" = floppy_service_speech ] || [ "$component" = floppy_service_generate ] || [ "$component" = floppy_service_pgsql ]; then
+        # The sql, files, speech and generate services keep their filesystem
         # imports for the host (and pgsql its sockets): a wasi-virt adapter would virtualize the
         # filesystem too, so the standard library's and wasi-libc's other
         # WASI imports (wasi:cli and the monotonic clock) are satisfied by
         # a pinned deny-all provider instead (see the .wat header; generate
-        # uses sql's), as scxml.rs does for its files example service.
+        # uses sql's, and files its model's, scxml.rs's files example
+        # service's), as scxml.rs does for that example.
         name=${component#floppy_service_}
         wat="$workspace/services/$name/wasi-cli-deny.wat"
+        [ "$name" != files ] || wat="$workspace/scxml.rs/components/scxml-service-files/wasi-cli-deny.wat"
         [ -f "$wat" ] || wat="$workspace/services/sql/wasi-cli-deny.wat"
         deny="$run_tmp/wasi-cli-deny-$name.wasm"
         wasm-tools parse "$wat" -o "$deny"

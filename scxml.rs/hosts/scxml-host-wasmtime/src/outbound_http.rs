@@ -96,12 +96,29 @@ pub enum ExtensionHttpFailure {
     ResponseTooLarge,
 }
 
+/// One part of a streamed `outbound-http` response (`send`). A transport
+/// answers, in order, one [`ExtensionHttpPart::Status`], zero or more
+/// [`ExtensionHttpPart::Body`] parts, and [`ExtensionHttpPart::End`]; an
+/// [`ExtensionHttpFailure`] in place of any of them ends the response
+/// there (before the status, the `send` call fails; after it, the body's
+/// future resolves `err`).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ExtensionHttpPart {
+    /// The final status (100..=599).
+    Status(u16),
+    /// The next bytes of the body, as they arrived (never empty).
+    Body(Vec<u8>),
+    /// The body ended after its last byte.
+    End,
+}
+
 /// The outbound HTTP transport an embedder grants to invoked services
 /// (`stateforward:scxml/outbound-http`). The host admits every request
-/// (`admit_request`) before calling [`ExtensionHttp::fetch`]: the
-/// implementation must bound its own time and the response body, follow no
-/// redirect, and add no ambient credentials. With the `http` feature, `ExtensionHttpClient`
-/// is the allowlisted implementation.
+/// (`admit_request`) before calling [`ExtensionHttp::fetch`] or
+/// [`ExtensionHttp::send`]: the implementation must bound its own time and
+/// the response body, follow no redirect, and add no ambient credentials.
+/// With the `http` feature, `ExtensionHttpClient` is the allowlisted
+/// implementation.
 pub trait ExtensionHttp: std::fmt::Debug + Send + Sync {
     /// Performs one request.
     ///
@@ -112,6 +129,51 @@ pub trait ExtensionHttp: std::fmt::Debug + Send + Sync {
         &self,
         request: &ExtensionHttpRequest,
     ) -> Result<ExtensionHttpResponse, ExtensionHttpFailure>;
+
+    /// Performs one request and hands each part of its response to `part`
+    /// as it arrives, in order, ending with [`ExtensionHttpPart::End`] or a
+    /// failure; nothing follows either. The default answers [`Self::fetch`]'s
+    /// response whole: its status, its body as one part (when it has
+    /// one), and its end.
+    fn send(
+        &self,
+        request: &ExtensionHttpRequest,
+        part: &mut dyn FnMut(Result<ExtensionHttpPart, ExtensionHttpFailure>),
+    ) {
+        match self.fetch(request) {
+            Ok(response) => {
+                part(Ok(ExtensionHttpPart::Status(response.status)));
+                if !response.body.is_empty() {
+                    part(Ok(ExtensionHttpPart::Body(response.body)));
+                }
+                part(Ok(ExtensionHttpPart::End));
+            }
+            Err(failure) => part(Err(failure)),
+        }
+    }
+}
+
+/// What a transport answered one admitted request: the whole response of a
+/// `fetch`, or one part of a `send`'s.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ExtensionHttpAnswer {
+    /// A `fetch`'s response, or the transport's failure.
+    Response(Result<ExtensionHttpResponse, ExtensionHttpFailure>),
+    /// One part of a `send`'s response, or the transport's failure, which
+    /// ends it.
+    Part(Result<ExtensionHttpPart, ExtensionHttpFailure>),
+}
+
+impl ExtensionHttpAnswer {
+    /// Whether nothing follows this answer for its request: a `fetch`'s
+    /// response, or a `send`'s end or failure.
+    #[must_use]
+    pub const fn is_final(&self) -> bool {
+        !matches!(
+            self,
+            Self::Part(Ok(ExtensionHttpPart::Status(_) | ExtensionHttpPart::Body(_)))
+        )
+    }
 }
 
 /// One variable a run grants: its name, its value, and the exact package URIs
@@ -509,7 +571,32 @@ pub(crate) fn admit_request(
 pub(crate) fn settle_response(
     outcome: Result<ExtensionHttpResponse, ExtensionHttpFailure>,
 ) -> Result<outbound_http::HttpResponse, (ComponentError, ErrorCategory)> {
-    let response = outcome.map_err(|failure| match failure {
+    let response = outcome.map_err(failure_error)?;
+    settle_status(response.status)?;
+    if response.body.len() > MAX_EXTENSION_HTTP_RESPONSE_BODY_BYTES {
+        return Err(failure_error(ExtensionHttpFailure::ResponseTooLarge));
+    }
+    Ok(outbound_http::HttpResponse {
+        status: response.status,
+        body: response.body,
+    })
+}
+
+/// A streamed response's status as the caller gets it: within 100..=599,
+/// else the transport's failure.
+pub(crate) fn settle_status(status: u16) -> Result<u16, (ComponentError, ErrorCategory)> {
+    if (100..=599).contains(&status) {
+        Ok(status)
+    } else {
+        Err(failure_error(ExtensionHttpFailure::Transport))
+    }
+}
+
+/// The `outbound-http` failure a transport failure becomes: `unavailable`
+/// for a refusal or a transport failure, `payload-too-large` for an
+/// oversized body.
+pub(crate) fn failure_error(failure: ExtensionHttpFailure) -> (ComponentError, ErrorCategory) {
+    match failure {
         ExtensionHttpFailure::NotAllowed => (
             component_error(
                 ErrorCode::Unavailable,
@@ -528,26 +615,7 @@ pub(crate) fn settle_response(
             ),
             ErrorCategory::Platform,
         ),
-    })?;
-    if !(100..=599).contains(&response.status) {
-        return Err((
-            component_error(ErrorCode::Unavailable, "the HTTP transport failed"),
-            ErrorCategory::Platform,
-        ));
     }
-    if response.body.len() > MAX_EXTENSION_HTTP_RESPONSE_BODY_BYTES {
-        return Err((
-            component_error(
-                ErrorCode::PayloadTooLarge,
-                "the response body exceeds its byte bound",
-            ),
-            ErrorCategory::Platform,
-        ));
-    }
-    Ok(outbound_http::HttpResponse {
-        status: response.status,
-        body: response.body,
-    })
 }
 
 #[cfg(test)]

@@ -34,7 +34,9 @@ def offered(event):
 
 
 def turn(n, text="hello", choices=(IGNORE,)):
-    targets = {IGNORE: "cognition", RESPOND: "communication"}
+    # Tagged with their offering sessions' ids: the cognition's own ignore,
+    # and respond offered by the harness (the run's root, "session").
+    targets = {IGNORE: "session.cognition", RESPOND: "session"}
     return js({"turn": n,
                "stimulus": {"event": "bot.input", "data": {"text": text}, "source": "conversation"},
                "focus": None, "focus_candidates": [],
@@ -63,8 +65,9 @@ DECIDE_ABSTAIN = decided({IGNORE: 0.2, "__unhandled__": 0.8}, "__unhandled__")
 # Ignore 0.34 and respond 0.33 (its text grounded in the stimulus): the least, 33, is under the warmup floor 35.
 DECIDE_LOW = decided({IGNORE: 0.34, RESPOND: 0.33, "__unhandled__": 0.33}, IGNORE,
                      {f"{RESPOND}::text": {"type": "choice", "choice": "hi", "confidence": 1.0, "probabilities": {"hi": 1.0}}})
-REASONED_IGNORE = chat([{"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"}])
-REASONED_REPEAT = chat([{"event": RESPOND, "data": {"text": "hi"}, "reason": "say it again", "target": "communication"}])
+REASONED_IGNORE = chat([{"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "session.cognition"}])
+REASONED_REPEAT = chat([{"event": RESPOND, "data": {"text": "hi"}, "reason": "answer", "target": "session"}])
+SAID_HI = expect(RESPOND, "_event.data.text === 'hi'")
 OFF_CHOICE = chat([{"event": "bot.focus_device", "data": {"device": "lamp"}, "reason": "look"}])
 
 
@@ -79,15 +82,15 @@ def failed(n, message):
 
 IGNORED = f"_event.data.output.length === 1 && _event.data.output[0].event === {js(IGNORE)}"
 REASONED = (f"_event.data.output.length === 1 && _event.data.output[0].event === {js(IGNORE)}"
-            " && _event.data.output[0].reason === 'nothing to say' && _event.data.output[0].target === 'cognition'")
+            " && _event.data.output[0].reason === 'nothing to say' && _event.data.output[0].target === 'session.cognition'")
 
 
-S.statement(1, "On start, and on every return to `idle`, it sends `bot.ability.offers` `{ability: \"cognition\", choices}` to its parent: its one choice, `bot.ability.cognition.ignore`, its schema compacted (`$schema`, `title` and `examples` dropped).")
-S.statement(2, "A `bot.ability.cognition.input` `{turn, stimulus, focus?, focus_candidates?, choices?}` runs one turn of the cascade: autonomy (without a database it leaves the turn unhandled), then intuition, whose confident decision handles the turn: `bot.ability.cognition.output` `{turn, output}`, the output intuition's selections.")
+S.statement(1, "On start, and on every return to `idle`, it sends `bot.ability.offers` `{ability: \"cognition\", choices}` to its parent: its one choice, `bot.ability.cognition.ignore`, its schema made model-facing (`$schema`, `title` and `examples` dropped).")
+S.statement(2, "A `bot.ability.cognition.input` `{turn, stimulus, focus?, focus_candidates?, choices?}` runs one turn of the cascade: autonomy (without a database it leaves the turn unhandled), then intuition, whose confident decision handles the turn: `bot.ability.cognition.output` `{turn, output}`, the output intuition's selections, which intuition has sent to their targets.")
 S.statement(3, "When intuition leaves the turn unhandled (its decision abstains), reasoning (the generate service, schema `dispatch`) handles it, and the output is reasoning's selections; with a database (the `<param>` `database`) autonomy and reasoning use the memory and the turn is answered the same way.")
-S.statement(4, "An intuition that escalates for low confidence hands out its environment actions (its selections less ignore), which the output carries first, before reasoning's selections; a reasoning selection that repeats one of them (the same event and data) is dropped.")
+S.statement(4, "An intuition that escalates for low confidence sends its environment actions (its selections) before the turn goes on to reasoning; the output is reasoning's selections, which reasoning sends after them, a repeat of an environment action included.")
 S.statement(5, "A stage that fails answers the turn with `bot.ability.failed` `{message, turn, input: {focus, focus_candidates}}`, the message the stage's reason (`the decision failed (status)`, `the reasoning failed (status)`, `the reasoning failed (schema-mismatch)`).")
-S.statement(6, "A stage that does not answer within `child_operation_timeout_ms` ends the turn without an answer: the cognition sends `bot.reboot` `{reason: \"cognition_child_teardown_failed\"}` to its parent and waits in `rebooting`, where it acknowledges any `bot.ability.cognition.cancel` `{turn}` at once with `bot.ability.cognition.cancelled` `{turn}`.")
+S.statement(6, "A stage that makes no progress for `child_operation_timeout_ms` (from its start for autonomy and the intuition; for reasoning from its streamed reply's first `generate.progress`, each later one starting it over), or runs `child_operation_ceiling_ms` in all (the `<param>` `bounds` overriding either, decision D101), ends the turn without an answer: the cognition sends `bot.reboot` `{reason: \"cognition_child_teardown_failed\"}` to its parent and waits in `rebooting`, where it acknowledges any `bot.ability.cognition.cancel` `{turn}` at once with `bot.ability.cognition.cancelled` `{turn}`.")
 S.statement(7, "`bot.ability.cognition.cancel` `{turn}` for the turn in hand cancels the stage and is acknowledged with `bot.ability.cognition.cancelled` `{turn}`, and the cognition is idle again (it offers); in `idle` a cancel is acknowledged at once; a cancel for another turn is not taken and the turn goes on.")
 S.statement(8, "`bot.ability.cognition.ignore` (its offer) is taken in `idle` and while processing, and only logged: it sends nothing and does not end a turn.")
 S.statement(9, "The events it takes are checked against `abilities/schemas/` where they are created: a `bot.ability.cognition.input` without a stimulus is refused at its sender (`error.execution` there) and starts no turn.")
@@ -111,16 +114,15 @@ S.case(121, 3, "with a database, the turn goes through autonomy's and reasoning'
        [READY, send(INPUT, turn(1)), output(1, REASONED)],
        params=[SLOW, DB], backend=[DECIDE_ABSTAIN, REASONED_IGNORE, chat([])], clock="logical", ignore=[OFFERS])
 
-S.case(130, 4, "a low-confidence intuition's respond goes first, then reasoning's ignore.",
-       [READY, send(INPUT, turn(1, text="hi", choices=(IGNORE, RESPOND))),
-        output(1, f"_event.data.output.length === 2 && _event.data.output[0].event === {js(RESPOND)}"
-                  " && _event.data.output[0].data.text === 'hi'"
-                  f" && _event.data.output[1].event === {js(IGNORE)} && _event.data.output[1].reason === 'nothing to say'")],
+S.case(130, 4, "a low-confidence intuition's respond is sent first; the output is reasoning's ignore.",
+       [READY, send(INPUT, turn(1, text="hi", choices=(IGNORE, RESPOND))), SAID_HI,
+        output(1, f"_event.data.output.length === 1"
+                  f" && _event.data.output[0].event === {js(IGNORE)} && _event.data.output[0].reason === 'nothing to say'")],
        params=[SLOW], backend=[DECIDE_LOW, REASONED_IGNORE], clock="logical", ignore=[OFFERS])
-S.case(131, 4, "reasoning's repeat of a low-confidence intuition's respond is dropped.",
-       [READY, send(INPUT, turn(1, text="hi", choices=(IGNORE, RESPOND))),
+S.case(131, 4, "reasoning's repeat of the low-confidence intuition's respond is sent again, after it.",
+       [READY, send(INPUT, turn(1, text="hi", choices=(IGNORE, RESPOND))), SAID_HI, SAID_HI,
         output(1, f"_event.data.output.length === 1 && _event.data.output[0].event === {js(RESPOND)}"
-                  " && _event.data.output[0].data.text === 'hi'")],
+                  " && _event.data.output[0].data.text === 'hi' && _event.data.output[0].target === 'session'")],
        params=[SLOW], backend=[DECIDE_LOW, REASONED_REPEAT], clock="logical", ignore=[OFFERS])
 
 S.case(140, 5, "a failed decision fails the turn.",

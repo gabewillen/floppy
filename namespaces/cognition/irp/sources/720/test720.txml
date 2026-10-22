@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!-- cognition-3: a stimulus with text data renders as its input's content, stamped with its event and source, beside the empty lists. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition">
+<datamodel>
+  <data id="p" expr="null"/>
+  <data id="f" expr="'unset'"/>
+  <data id="s" expr='{"event": "bot.input", "data": "hi", "source": "gabe"}'/>
+  <data id="e" expr="[]"/>
+  <data id="d" expr="[]"/>
+  <data id="expected" expr='"&lt;cognition:processor_input&gt;\n  &lt;host_input&gt;\n    &lt;processing:input&gt;\n      &lt;input content=\"hi\" stimulus:event=\"bot.input\" stimulus:source=\"gabe\" /&gt;\n    &lt;/processing:input&gt;\n  &lt;/host_input&gt;\n  &lt;prior_episodes count=\"0\" /&gt;\n  &lt;standing_directives count=\"0\" /&gt;\n&lt;/cognition:processor_input&gt;"'/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <cognition:model_facing_content location="p" failurelocation="f" stimulus="s" prior_episodes="e" standing_directives="d"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="f === null &amp;&amp; p === expected" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

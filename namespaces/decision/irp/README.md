@@ -4,8 +4,8 @@ The implementation report plan of the `decision` namespace, in the format of the
 [W3C SCXML IRP](../../../scxml.rs/tests/conformance/w3c-irp/README.md) and of
 scxml.rs's own namespace suites
 ([scxml.rs/docs/conformance.md](../../../scxml.rs/docs/conformance.md#namespace-suites)):
-11 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
-("Statements"), tested by 26 mandatory documents. It runs through exactly
+5 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
+("Statements"), tested by 11 mandatory documents. It runs through exactly
 the pipeline the W3C IRP runs through (the canonical compiler, the shipped
 Wasm components under the Wasmtime session host, the same oracles and report
 envelope), with the namespace's own extension package and component bound,
@@ -35,10 +35,12 @@ SAXON='java -jar /opt/saxon/saxon-he-12.8.jar' sh scripts/namespace-irp.sh prepa
 sh scripts/namespace-irp.sh baselines decision
 ```
 
-The current baseline (manifest SHA-256 `80dec813566c93be572914288f3aac8b17820755d4e926601b90b1d1a5b15ebf`,
+The current baseline (manifest SHA-256 `5813315a2666062dfbde00f50052bc0030b32b1c5f02cad7bf45d9c13909ef34`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
-measured on Linux x86_64) measures:
+measured on macOS arm64 after its processing elements moved to the
+processing namespace; regenerate it on Linux x86_64, the host
+`tests/tests/namespace_irp.rs` compares fuel on) measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 26 / 26 | 0 | `982c000e9b2d2cab703579f7ba9695418f79ce049578afb6337e965dfe2519f6` | `78647a737c39eead5dd1c3f4a1aa6e7a1ac8cba55cb4e1de15b5a98cf5d126ab` |
+| ECMAScript | 11 / 11 | 0 | `d3eaad47b850a6b685df59c004e1bca6af6b4da48e307915db270eddce60b173` | `a6601212f90c530d4e535efb62395856dab622805bb0679c471d813459e8c3be` |

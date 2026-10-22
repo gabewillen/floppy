@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- behavior-5: ticks that are not an array raise error.execution and assign nothing. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior">
+<datamodel>
+  <data id="a" expr="'untouched'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <behavior:verify_tick location="a" ticks="({})"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="a === 'untouched'" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

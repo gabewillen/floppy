@@ -12,7 +12,7 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "{\"events\": [{\"event\": \"bot.behavior.break\", \"data\": {\"event\": \"bot.behavior.break\", \"name\": \"GreetOnKnock\", \"reason\": \"  It greets strangers.  \"}, \"reason\": \"harm outweighs practice\"}, {\"event\": \"bot.behavior.break\", \"data\": {\"event\": \"bot.behavior.break\", \"name\": \"Other\", \"reason\": \"  It greets strangers.  \"}, \"reason\": \"harm outweighs practice\"}]}"
+              "content": "{\"events\": [{\"event\": \"bot.behavior.create\", \"target\": \"session.reflection\", \"data\": {\"event\": \"bot.behavior.create\", \"name\": \"GreetOnKnock\", \"triggers\": [\"phone.incoming_call\", \"environment.sound\"], \"description\": \"Say hello when a knock sound arrives.\", \"reason\": \"Same knock and greeting pattern across recent episodes.\", \"source\": null}, \"reason\": \"a repeated pattern\"}, {\"event\": \"bot.behavior.create\", \"target\": \"session.reflection\", \"data\": {\"event\": \"bot.behavior.create\", \"name\": \"GreetOnKnock\", \"triggers\": [\"phone.incoming_call\", \"environment.sound\"], \"description\": \"Say hello when a knock sound arrives.\", \"reason\": \"Same knock and greeting pattern across recent episodes.\", \"source\": null}, \"reason\": \"a repeated pattern\"}]}"
             }
           }
         ]

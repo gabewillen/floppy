@@ -1,0 +1,68 @@
+<?xml version="1.0"?>
+<!-- The processing namespace's implementation report plan: each assertion is a
+     numbered statement of namespaces/processing/README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/namespaces/processing/irp/sources">
+  <assert id="processing-1" specnum="1" specid="#processing-1">
+    <![CDATA[Each element takes exactly its declared attributes, the required ones present, and no content, and the namespace has no other element: a malformed element raises error.execution and assigns nothing (its schema, package/processing.xsd, rejects it before any run under scx validate).]]>
+    <test id="500" conformance="mandatory" manual="false">
+      <start uri="500/test500.txml"/>
+    </test>
+    <test id="501" conformance="mandatory" manual="false">
+      <start uri="501/test501.txml"/>
+    </test>
+    <test id="502" conformance="mandatory" manual="false">
+      <start uri="502/test502.txml"/>
+    </test>
+    <test id="503" conformance="mandatory" manual="false">
+      <start uri="503/test503.txml"/>
+    </test>
+  </assert>
+  <assert id="processing-2" specnum="2" specid="#processing-2">
+    <![CDATA[<processing:model_facing_schema> drops $schema, title and examples at every schema level, keeping property names; over the bound it drops every description, and still over it writes [], with overlocation true exactly when it wrote [].]]>
+    <test id="510" conformance="mandatory" manual="false">
+      <start uri="510/test510.txml"/>
+    </test>
+    <test id="511" conformance="mandatory" manual="false">
+      <start uri="511/test511.txml"/>
+    </test>
+    <test id="512" conformance="mandatory" manual="false">
+      <start uri="512/test512.txml"/>
+    </test>
+  </assert>
+  <assert id="processing-3" specnum="3" specid="#processing-3">
+    <![CDATA[<processing:collect_offered_events> writes the document's own choices tagged with its _sessionid, then each offer's choices and the focused device's events (schema {type: object}, tagged with its id) in name order, each offer's tagged with <_sessionid>.<invoke id>, made model-facing, with its size and whether it is over the bound.]]>
+    <test id="520" conformance="mandatory" manual="false">
+      <start uri="520/test520.txml"/>
+    </test>
+    <test id="521" conformance="mandatory" manual="false">
+      <start uri="521/test521.txml"/>
+    </test>
+  </assert>
+  <assert id="processing-4" specnum="4" specid="#processing-4">
+    <![CDATA[<processing:send> writes the original's dispatch tool as one schema: its description as the root description and its parameters {events: [anyOf one branch per offered event]} with the original's descriptions and examples, and max as the events' maxItems; each branch {event, data, reason?, target?} has event a one-value enum, data the choice's schema without $schema (an empty object for none, wrapped as value for a non-object), required only when the schema requires a field, the schema's description else the event name, and target, required, a sorted enum of the offering targets when one has a target; nothing is normalized for strict decoding.]]>
+    <test id="530" conformance="mandatory" manual="false">
+      <start uri="530/test530.txml"/>
+    </test>
+    <test id="531" conformance="mandatory" manual="false">
+      <start uri="531/test531.txml"/>
+    </test>
+    <test id="532" conformance="mandatory" manual="false">
+      <start uri="532/test532.txml"/>
+    </test>
+  </assert>
+  <assert id="processing-5" specnum="5" specid="#processing-5">
+    <![CDATA[<processing:selection_confidence> writes the least of the selections' confidences, each normalized as the original does (a number in (0, 1] scaled to 0-100, rounded half to even, clamped to 0-100), leaving out a selection whose confidence is not a number, and null when none is left.]]>
+    <test id="540" conformance="mandatory" manual="false">
+      <start uri="540/test540.txml"/>
+    </test>
+    <test id="541" conformance="mandatory" manual="false">
+      <start uri="541/test541.txml"/>
+    </test>
+  </assert>
+  <assert id="processing-6" specnum="6" specid="#processing-6">
+    <![CDATA[A location or expression that does not hold what the element reads raises error.execution and assigns nothing.]]>
+    <test id="550" conformance="mandatory" manual="false">
+      <start uri="550/test550.txml"/>
+    </test>
+  </assert>
+</assertions>

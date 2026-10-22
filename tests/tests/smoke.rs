@@ -103,10 +103,18 @@ fn the_dev_build_publishes_under_target_and_leaves_the_release_cache_untouched()
     assert!(components.cache.starts_with(&components.dir));
     for uri in [
         "https://github.com/stateforward/floppy/namespaces/decision",
-        "https://github.com/stateforward/floppy/namespaces/bot",
         "https://github.com/stateforward/floppy/namespaces/conversation",
+        "https://github.com/stateforward/floppy/namespaces/device",
+        "https://github.com/stateforward/floppy/namespaces/processing",
+        "https://github.com/stateforward/floppy/namespaces/intuition",
+        "https://github.com/stateforward/floppy/namespaces/cognition",
+        "https://github.com/stateforward/floppy/namespaces/identity",
+        "https://github.com/stateforward/floppy/namespaces/memory",
+        "https://github.com/stateforward/floppy/namespaces/behavior",
+        "https://github.com/stateforward/floppy/namespaces/autonomy",
         "https://github.com/stateforward/floppy/services/generate",
         "https://github.com/stateforward/floppy/services/decision",
+        "https://github.com/stateforward/floppy/services/files",
     ] {
         let entry = components
             .cache

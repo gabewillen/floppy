@@ -5,8 +5,7 @@
   <invoke id="candidates_runner" type="scxml" src="../../../candidates_runner.scx">
     <param name="turn" expr="3"/>
     <param name="input" expr='{"text": "hello", "focus": null, "focus_candidates": []}'/>
-    <param name="candidates" expr="[{&quot;name&quot;: &quot;A&quot;, &quot;source&quot;: &quot;&lt;scxml xmlns=\&quot;http://www.w3.org/2005/07/scxml\&quot; version=\&quot;1.0\&quot; datamodel=\&quot;ecmascript\&quot; initial=\&quot;done\&quot;&gt;&lt;datamodel&gt;&lt;data id=\&quot;turn\&quot; expr=\&quot;0\&quot;/&gt;&lt;data id=\&quot;input\&quot; expr=\&quot;null\&quot;/&gt;&lt;/datamodel&gt;&lt;final id=\&quot;done\&quot;&gt;&lt;donedata&gt;&lt;content expr=\&quot;({turn: turn, handled: true, selected: [{event: 'bot.ability.cognition.ignore', data: {}, reason: 'handled'}]})\&quot;/&gt;&lt;/donedata&gt;&lt;/final&gt;&lt;/scxml&gt;&quot;}, {&quot;name&quot;: &quot;B&quot;, &quot;source&quot;: &quot;&lt;scxml&quot;}]"/>
-    <param name="choices" expr="[]"/>
+    <param name="candidates" expr='[{"name": "A", "source": "irp/behaviors/200e73a7af5935bb.scxml"}, {"name": "B", "source": "irp/behaviors/ca16f276b6dd4ced.scxml"}]'/>
     <param name="database" expr="'/memory/floppy.sqlite'"/>
   </invoke>
   <state id="boot">

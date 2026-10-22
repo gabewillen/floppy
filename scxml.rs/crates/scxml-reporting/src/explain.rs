@@ -860,7 +860,7 @@ pub const CODES: &[CodeDoc] = &[
     ),
     doc!(
         "EVENT004", "error", "semantic", "an `event:schema` file is not available",
-        why: "a schema reference names a JSON file by a path relative to the document, at or below its directory (no scheme, absolute path, query, or `.`/`..` segment; repository-namespace resources are not supported). The compiler reads the file at compile time and embeds the schema in the Machine IR; nothing is read or fetched while the document runs, so a file the compiler cannot read rejects the document",
+        why: "a schema reference names a JSON file by a relative URI path resolved against the document's base URI, as `<script src>` and `<invoke src>` are (`.` and `..` segments resolve, so the file may be outside the document's directory; no scheme, absolute path, query, backslash, or empty segment; repository-namespace resources are not supported). The compiler reads the file at compile time and embeds the schema in the Machine IR; nothing is read or fetched while the document runs, so a file the compiler cannot read rejects the document",
         help: "create the file next to the document, correct the path, or write the schema inline",
         bad: "<transition event=\"go\" target=\"done\" event:schema=\"schemas/missing.json\"/>",
         fixed: "<transition event=\"go\" target=\"done\" event:schema=\"schemas/order.json\"/>",

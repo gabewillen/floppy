@@ -41,9 +41,10 @@ use sha2::{Digest as _, Sha256};
 /// The variables the bots' documents name. The child process never inherits
 /// them, so a test supplies values only through its env file (or an
 /// explicit `--env NAME=VALUE`).
-pub const GRANTED: [&str; 8] = [
+pub const GRANTED: [&str; 9] = [
     "FLOPPY_API_KEY",
     "FLOPPY_BASE_URL",
+    "FLOPPY_STREAM",
     "TYPESAFE_API_KEY",
     "TYPESAFE_BASE_URL",
     "FLOPPY_SPEECH_API_KEY",
@@ -51,6 +52,12 @@ pub const GRANTED: [&str; 8] = [
     "FLOPPY_VOICE_API_KEY",
     "FLOPPY_VOICE_BASE_URL",
 ];
+
+/// The fuel of every run of an environment document (`environments/...`,
+/// where the bots run): `i64::MAX`, until average usage is measured
+/// (decision D111). One host call's budget pays for every session it
+/// starts, and entering a room starts its bots and all their abilities.
+pub const FUEL: &str = "9223372036854775807";
 
 /// The model floppy ships (README.md, "Defaults"): every document's `model`
 /// `<data>`, checked by `tests/tests/defaults.rs`.
@@ -259,15 +266,32 @@ impl Run {
     /// Starts `scx run` with `args` (the document among them) and the
     /// extra environment `env`.
     ///
+    /// A run of an environment document (`environments/<name>/<name>.scx`)
+    /// gets `--fuel` [`FUEL`] unless it names its own.
+    ///
     /// A run whose document tree binds the sql, the generate or the speech
     /// service (decided by [`binds`]) and that grants it no directory gets
     /// a fresh one ([`memory_grant`], [`media_grant`],
     /// [`speech_media_grant`]): each imports `wasi:filesystem`, and a run
-    /// that binds one without a `--dir` grant is refused. One that binds the pgsql service gets the network
+    /// that binds one without a `--dir` grant is refused. One that binds the
+    /// files service gets the behaviors directory of its layout
+    /// ([`behaviors_grant`]). One that binds the pgsql service gets the network
     /// ([`pgsql_grant`]).
     pub fn start(args: &[String], env: &[(&str, &str)]) -> Self {
         let mut full = vec!["run".to_owned()];
         full.extend_from_slice(args);
+        // A bot runs in its environment, with the run's fuel (decision D111).
+        if !args.iter().any(|arg| arg == "--fuel")
+            && args.iter().any(|arg| {
+                Path::new(arg)
+                    .parent()
+                    .and_then(Path::parent)
+                    .and_then(Path::file_name)
+                    .is_some_and(|name| name == "environments")
+            })
+        {
+            full.splice(1..1, ["--fuel".to_owned(), FUEL.to_owned()]);
+        }
         for (name, grant) in [
             ("sql", memory_grant as fn() -> Vec<String>),
             ("generate", media_grant),
@@ -281,6 +305,15 @@ impl Run {
             if !granted && args.iter().any(|arg| binds(&workspace().join(arg), name)) {
                 full.splice(1..1, grant());
             }
+        }
+        let files = service_uri("files");
+        if !args.iter().any(|arg| arg.starts_with(&format!("{files}=")))
+            && let Some(document) = args
+                .iter()
+                .map(|arg| workspace().join(arg))
+                .find(|path| binds(path, "files"))
+        {
+            full.splice(1..1, behaviors_grant(&document));
         }
         let mut command = command(&full);
         for (name, value) in env {
@@ -449,6 +482,53 @@ pub fn logs(records: &[Json]) -> Vec<(String, String)> {
         .collect()
 }
 
+/// The events of logged choices (`<log expr="choices"/>`, JSON text),
+/// space separated, each `event@target` for a tagged choice.
+pub fn choice_names(text: &str) -> String {
+    let choices: Json = serde_json::from_str(text).expect("the logged choices are JSON");
+    choices
+        .as_array()
+        .expect("an array of choices")
+        .iter()
+        .map(|choice| {
+            let event = choice["event"].as_str().unwrap_or_default();
+            choice["target"]
+                .as_str()
+                .map_or_else(|| event.to_owned(), |target| format!("{event}@{target}"))
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// `events` with each one's `target` the first one the request's dispatch
+/// tool offers for its event, as a model fills it (an event the tool does
+/// not offer keeps none).
+pub fn with_targets(body: &Json, events: &Json) -> Json {
+    let branches =
+        body["tools"][0]["function"]["parameters"]["properties"]["events"]["items"]["anyOf"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+    Json::Array(
+        events
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|mut event| {
+                let target = branches
+                    .iter()
+                    .find(|branch| branch["properties"]["event"]["enum"][0] == event["event"])
+                    .map(|branch| branch["properties"]["target"]["enum"][0].clone());
+                if let (Some(target), Some(fields)) = (target, event.as_object_mut()) {
+                    fields.insert("target".into(), target);
+                }
+                event
+            })
+            .collect(),
+    )
+}
+
 /// `(label, text)` pairs from string pairs.
 pub fn labelled(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
     pairs
@@ -505,6 +585,37 @@ pub fn speech_media_grant() -> Vec<String> {
             "{}={}::/media",
             service_uri("speech"),
             unique_scratch("speech-media").display()
+        ),
+    ]
+}
+
+/// `--dir` granting the files service the behaviors directory of the
+/// layout `document` sits in (decision D121): the nearest ancestor holding
+/// `bots/` (the workspace, or a scratch layout), whose `behaviors/` the
+/// documents that invoke a learned behavior (two levels below it) name as
+/// `../../behaviors/<name>.scx`; created when missing. A document in no
+/// such layout gets a fresh scratch directory.
+pub fn behaviors_grant(document: &Path) -> Vec<String> {
+    let layout = document.canonicalize().ok().and_then(|path| {
+        path.ancestors()
+            .skip(1)
+            .find(|dir| dir.join("bots").is_dir())
+            .map(Path::to_path_buf)
+    });
+    let directory = match layout {
+        Some(layout) => {
+            let directory = layout.join("behaviors");
+            std::fs::create_dir_all(&directory).expect("the behaviors directory is creatable");
+            directory
+        }
+        None => unique_scratch("behaviors"),
+    };
+    vec![
+        "--dir".to_owned(),
+        format!(
+            "{}={}::/behaviors",
+            service_uri("files"),
+            directory.display()
         ),
     ]
 }
@@ -599,12 +710,163 @@ pub fn copy_tree(from: &Path, to: &Path) {
     }
 }
 
+/// The bot invoke of `environments/room/room.scx`, which [`environment`]
+/// replaces.
+const ROOM_BOT: &str = r#"    <invoke id="floppy" type="scxml" src="../../bots/floppy/floppy.scx">
+      <param name="environment" expr="_sessionid"/>
+      <param name="owned_devices" expr="ownedDevices('floppy')"/>
+    </invoke>"#;
+
+/// Where `environments/room/room.scx` sets its participants on entry.
+const ROOM_PARTICIPANTS: &str = r#"<assign location="participants" expr="['floppy']"/>"#;
+
+/// The holdings `environments/room/room.scx` declares.
+const ROOM_HOLDINGS: &str = r#"<data id="holdings" expr="({floppy: []})"/>"#;
+
+/// Lays `environments/room/` (its document and script, with the
+/// `abilities/schemas/` and `bots/floppy/schemas/` files it references)
+/// into the scratch layout `dir`, whose `bots/floppy/` it invokes, and returns
+/// the path of its document. The room invokes one floppy bot per id in
+/// `bots` (each a participant), each with `params` (`(name, ECMAScript
+/// expression)`) after its `environment` and `owned_devices`: the test's
+/// activation settings (decision D107).
+pub fn environment(dir: &Path, bots: &[&str], params: &[(&str, &str)]) -> PathBuf {
+    environment_with_devices(dir, bots, &[], &[], params)
+}
+
+/// [`environment`] with devices: each of `devices` is a fixture device
+/// (`tests/fixtures/environment/<name>/`, copied beside the room, or one
+/// the test laid out there as `<name>/<name>.scx`) the room
+/// invokes as `<name>` before its bots (a participant too), and
+/// `holdings` names the devices each bot holds (a bot not named holds
+/// none).
+pub fn environment_with_devices(
+    dir: &Path,
+    bots: &[&str],
+    devices: &[&str],
+    holdings: &[(&str, &[&str])],
+    params: &[(&str, &str)],
+) -> PathBuf {
+    let room = dir.join("environments/room");
+    copy_tree(&workspace().join("environments/room"), &room);
+    copy_tree(
+        &workspace().join("abilities/schemas"),
+        &dir.join("abilities/schemas"),
+    );
+    copy_tree(
+        &workspace().join("bots/floppy/schemas"),
+        &dir.join("bots/floppy/schemas"),
+    );
+    for device in devices {
+        // A device the test laid out beside the room itself has no fixture.
+        let fixture = workspace().join("tests/fixtures/environment").join(device);
+        if fixture.is_dir() {
+            copy_tree(&fixture, &room.join(device));
+        }
+    }
+    let path = room.join("room.scx");
+    let text = std::fs::read_to_string(&path).expect("the room is readable");
+    assert!(
+        text.contains(ROOM_BOT) && text.contains(ROOM_PARTICIPANTS) && text.contains(ROOM_HOLDINGS),
+        "environments/room/room.scx invokes the floppy bot"
+    );
+    let mut extra = String::new();
+    for (name, expr) in params {
+        extra.push_str("\n      <param name=\"");
+        extra.push_str(name);
+        extra.push_str("\" expr=\"");
+        extra.push_str(expr);
+        extra.push_str("\"/>");
+    }
+    let mut invokes: Vec<String> = devices
+        .iter()
+        .map(|id| format!(r#"    <invoke id="{id}" type="scxml" src="{id}/{id}.scx"/>"#))
+        .collect();
+    invokes.extend(bots.iter().map(|id| {
+        ROOM_BOT
+            .replace(r#"id="floppy""#, &format!(r#"id="{id}""#))
+            .replace("ownedDevices('floppy')", &format!("ownedDevices('{id}')"))
+            .replace("\n    </invoke>", &format!("{extra}\n    </invoke>"))
+    }));
+    let ids: Vec<String> = devices
+        .iter()
+        .chain(bots)
+        .map(|id| format!("'{id}'"))
+        .collect();
+    let held: Vec<String> = bots
+        .iter()
+        .map(|bot| {
+            let devices: Vec<String> = holdings
+                .iter()
+                .filter(|(holder, _)| holder == bot)
+                .flat_map(|(_, devices)| devices.iter().map(|device| format!("'{device}'")))
+                .collect();
+            format!("'{bot}': [{}]", devices.join(", "))
+        })
+        .collect();
+    let text = text
+        .replacen(ROOM_BOT, &invokes.join("\n"), 1)
+        .replacen(
+            ROOM_PARTICIPANTS,
+            &format!(
+                r#"<assign location="participants" expr="[{}]"/>"#,
+                ids.join(", ")
+            ),
+            1,
+        )
+        .replacen(
+            ROOM_HOLDINGS,
+            &format!(r#"<data id="holdings" expr="({{{}}})"/>"#, held.join(", ")),
+            1,
+        );
+    std::fs::write(&path, text).expect("the room copy is writable");
+    path
+}
+
+/// Sets the placements of the room at `room` (as [`environment`] laid it
+/// out) to `placements`, an ECMAScript object expression: invoke id to
+/// `{position: {x, y, z}, threshold_db}`.
+pub fn place(room: &Path, placements: &str) {
+    let declared = r#"<data id="placements" expr="({})"/>"#;
+    let text = std::fs::read_to_string(room).expect("the room is readable");
+    assert!(text.contains(declared), "the room declares its placements");
+    std::fs::write(
+        room,
+        text.replacen(
+            declared,
+            &format!(r#"<data id="placements" expr="({{{placements}}})"/>"#),
+            1,
+        ),
+    )
+    .expect("the room copy is writable");
+}
+
+/// [`environment`] for the laid-out body at `body`
+/// (`<layout>/bots/floppy/floppy.scx`): the room, with one floppy bot
+/// (`floppy`) given `params`, laid into the same layout, as the path `scx
+/// run` takes.
+pub fn environment_for(body: &Path, params: &[(&str, &str)]) -> String {
+    let layout = body
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .expect("the body is <layout>/bots/floppy/floppy.scx");
+    environment(layout, &["floppy"], params)
+        .display()
+        .to_string()
+}
+
 /// Copies the ability `name` (`abilities/<name>/`: its document, its
-/// script, its schema twins, and any data beside them) into `abilities`,
-/// and returns the path of its copied document. The memory ability comes
+/// script, and any data beside them) into `abilities`, with the
+/// abilities' schemas (`abilities/schemas/`, which it references as
+/// `../schemas/<event>.json`), and returns the path of its copied document. The memory ability comes
 /// with the migration ability it invokes, and the conversation with its
 /// turn detector.
 pub fn copy_ability(name: &str, abilities: &Path) -> PathBuf {
+    copy_tree(
+        &workspace().join("abilities/schemas"),
+        &abilities.join("schemas"),
+    );
     copy_tree(
         &workspace().join("abilities").join(name),
         &abilities.join(name),
@@ -870,5 +1132,221 @@ impl Drop for Pglite {
             }
         }
         let _waited = self.child.wait();
+    }
+}
+
+/// The function a Chat Completions `request` requires a call of: its one
+/// tool when `tool_choice` is `required`, as the generate service sends a
+/// schema (decision D112).
+pub fn required_function(request: &Json) -> Option<&str> {
+    if request["tool_choice"] != "required" {
+        return None;
+    }
+    request.pointer("/tools/0/function/name")?.as_str()
+}
+
+/// The `delta` of a streamed reply's piece of `content`: the content
+/// itself, or, when `function` is required, a fragment of its call's
+/// `arguments` (the first fragment, `first`, naming the function).
+fn piece_delta(function: Option<&str>, content: &str, first: bool) -> Json {
+    match function {
+        None => serde_json::json!({"content": content}),
+        Some(name) if first => serde_json::json!({"tool_calls": [{
+            "index": 0, "id": "call-1", "type": "function",
+            "function": {"name": name, "arguments": content},
+        }]}),
+        Some(_) => {
+            serde_json::json!({"tool_calls": [{"index": 0, "function": {"arguments": content}}]})
+        }
+    }
+}
+
+/// The `message` of a completion of `content`: the content itself, or,
+/// when `function` is required, its call with `content` as the arguments.
+fn completion_message(function: Option<&str>, content: &str) -> Json {
+    match function {
+        None => serde_json::json!({"role": "assistant", "content": content}),
+        Some(name) => serde_json::json!({"role": "assistant", "content": null, "tool_calls": [{
+            "id": "call-1", "type": "function",
+            "function": {"name": name, "arguments": content},
+        }]}),
+    }
+}
+
+/// `text`, a fake backend's answer to the Chat Completions `request`, as
+/// the backend sends it. A completion whose content is the scripted reply
+/// becomes, when the request requires a function call ([`required_function`]),
+/// the call of that function with the content as its `arguments` (content
+/// `null`, a `stop` finish reason as `tool_calls`), as a backend answers a
+/// required call. And when the request asks
+/// for a streamed reply (`"stream": true`, as every model call of
+/// reasoning, reflection and the builder does, decision D101), the
+/// server-sent-event stream of the same reply (a role chunk, its content or
+/// call, its finish, then `data: [DONE]`). Any other answer is unchanged.
+pub fn answer_as_asked(request: &Json, text: String) -> String {
+    let Ok(mut completion) = serde_json::from_str::<Json>(&text) else {
+        return text;
+    };
+    let Some(content) = completion["choices"][0]["message"]["content"]
+        .as_str()
+        .map(str::to_owned)
+    else {
+        return text;
+    };
+    let function = required_function(request);
+    if request["stream"] != true {
+        if function.is_none() {
+            return text;
+        }
+        completion["choices"][0]["message"] = completion_message(function, &content);
+        if completion["choices"][0]["finish_reason"] == "stop" {
+            completion["choices"][0]["finish_reason"] = "tool_calls".into();
+        }
+        return completion.to_string();
+    }
+    let choice = &completion["choices"][0];
+    let chunk = |delta: Json, finish: Json| {
+        format!(
+            "data: {}\n\n",
+            serde_json::json!({
+                "object": "chat.completion.chunk",
+                "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
+            })
+        )
+    };
+    [
+        chunk(
+            serde_json::json!({"role": "assistant", "content": ""}),
+            Json::Null,
+        ),
+        chunk(piece_delta(function, &content, true), Json::Null),
+        chunk(
+            serde_json::json!({}),
+            if function.is_some() && choice["finish_reason"] == "stop" {
+                Json::from("tool_calls")
+            } else {
+                choice["finish_reason"].clone()
+            },
+        ),
+        "data: [DONE]\n\n".to_owned(),
+    ]
+    .concat()
+}
+
+/// Answers the Chat Completions `request` on `stream` with `content` (as
+/// [`answer_as_asked`] does: the required function's call when the request
+/// requires one) the way a slow backend does: a streamed request (`"stream": true`) gets its
+/// head at once and then `content` in `pieces` server-sent-event chunks
+/// `gap` apart, then its finish and `data: [DONE]`; with `stall`, only the
+/// first piece, and then nothing until the client closes the connection
+/// (at most two minutes). A request that is not streamed gets its head at
+/// once and the whole completion once all of it is ready, `pieces` × `gap`
+/// later, as a backend that answers only when it has finished (a gateway
+/// may send the head early). The body ends when the connection closes.
+pub fn answer_slowly(
+    stream: &mut std::net::TcpStream,
+    request: &Json,
+    content: &str,
+    pieces: usize,
+    gap: std::time::Duration,
+    stall: bool,
+) {
+    use std::io::Write as _;
+    let streamed = request["stream"] == true;
+    let function = required_function(request);
+    let head = format!(
+        "HTTP/1.1 200 OK\r\ncontent-type: {}\r\nconnection: close\r\n\r\n",
+        if streamed {
+            "text/event-stream"
+        } else {
+            "application/json"
+        }
+    );
+    if !streamed {
+        if stream
+            .write_all(head.as_bytes())
+            .and_then(|()| stream.flush())
+            .is_err()
+        {
+            return;
+        }
+        std::thread::sleep(gap * u32::try_from(pieces).unwrap_or(u32::MAX));
+        let completion = serde_json::json!({
+            "object": "chat.completion",
+            "choices": [{"index": 0, "finish_reason": if function.is_some() { "tool_calls" } else { "stop" }, "message": completion_message(function, content)}],
+        });
+        let _ = write!(stream, "{completion}");
+        return;
+    }
+    let chunk = |delta: Json, finish: Json| {
+        format!(
+            "data: {}\n\n",
+            serde_json::json!({
+                "object": "chat.completion.chunk",
+                "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
+            })
+        )
+    };
+    let text: Vec<char> = content.chars().collect();
+    let size = text.len().div_ceil(pieces.max(1)).max(1);
+    if stream
+        .write_all(head.as_bytes())
+        .and_then(|()| stream.flush())
+        .is_err()
+    {
+        return;
+    }
+    for (index, piece) in text.chunks(size).enumerate() {
+        if index > 0 {
+            if stall {
+                std::thread::sleep(std::time::Duration::from_secs(120));
+                return;
+            }
+            std::thread::sleep(gap);
+        }
+        let piece: String = piece.iter().collect();
+        let written = stream
+            .write_all(chunk(piece_delta(function, &piece, index == 0), Json::Null).as_bytes())
+            .and_then(|()| stream.flush());
+        if written.is_err() {
+            return;
+        }
+    }
+    let _ = write!(
+        stream,
+        "{}data: [DONE]\n\n",
+        chunk(
+            serde_json::json!({}),
+            Json::String(
+                if function.is_some() {
+                    "tool_calls"
+                } else {
+                    "stop"
+                }
+                .to_owned()
+            )
+        )
+    );
+}
+
+/// Answers a streamed request on `stream` as a gateway does while its model
+/// says nothing: the head at once, then only keep-alive comments
+/// (`: ping`) every `gap`, for at most a minute.
+pub fn answer_with_pings(stream: &mut std::net::TcpStream, gap: std::time::Duration) {
+    use std::io::Write as _;
+    let head = "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n";
+    if stream.write_all(head.as_bytes()).is_err() {
+        return;
+    }
+    let started = std::time::Instant::now();
+    while started.elapsed() < std::time::Duration::from_secs(60) {
+        if stream
+            .write_all(b": ping\n\n")
+            .and_then(|()| stream.flush())
+            .is_err()
+        {
+            return;
+        }
+        std::thread::sleep(gap);
     }
 }

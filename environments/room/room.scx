@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A room: floppy's environment (the original's Environment, decision D102),
+  run as the root session. Its invoked children are its participants: join
+  is an invoke starting, leave is the invoke ending (cancelled, done, or
+  failed). It keeps membership and delivers what enters it, and nothing
+  else.
+
+    present (invokes floppy)
+
+  Participants: present invokes the floppy bot (bots/floppy/floppy.scx) as
+  its child "floppy", with the environment's id (the root's _sessionid,
+  decision D106) as <param name="environment"> and the devices it holds as
+  <param name="owned_devices">; the bot activates on joining (decision
+  D107). An environment with devices (devices/<name>/<name>.scx, decision
+  D105) invokes them in the same state, before its bots, and names in
+  holdings which bot holds which; this room has none. A child's
+  _sessionid is <the environment's _sessionid>.<invoke id> (scxml.rs,
+  decision D110), so each bot's owned_devices maps each device's reference,
+  its invoke id, to its address before anything starts. A device is a
+  participant too: it receives the broadcasts, and its bot.input goes to
+  the bots holding it. participants holds the invoke ids of the children
+  present invokes, set on its entry; a child's done.invoke.<id> (the bot's
+  session ended in inactive or degraded) or error.communication.<id> (it
+  failed) removes it, and the environment logs the event's invokeid and
+  data (the bot's donedata). A failed send (error.communication with no
+  invokeid) removes nobody.
+
+  Sound (decision D103): an environment.sound or environment.visual from a
+  participant (a bot's communication sends its speaking's playout to
+  #_scxml_ + the environment's id; a device sends to its parent) or from
+  the host is logged, which keeps the environment's broadcasts in the
+  run's records, and goes to every participant that perceives it, the
+  emitter included (its efference copy withholds its own speech). A visual
+  stimulus reaches every participant. A sound's level where a participant
+  is follows the original's free-field law, from the emitter's amplitude_db
+  (dB SPL at 1 m) and the distance d between the sender's placement (the
+  origin: placements[_event.invokeid], so only a placed child has one) and
+  the participant's: received_level_db = amplitude_db - 20 log10(max(d,
+  0.01) / 1) (a 1 cm clamp); the participant receives it, with that
+  received_level_db, only when it is at least its threshold_db. With no
+  amplitude, no origin, or no placement there is nothing to measure: the
+  participant hears it, and received_level_db is left as it was. A sound
+  too quiet for everyone is sent to nobody.
+
+  Host input (decision D108) enters the environment and is routed by what
+  its payload says, never by who sent it: bot.ability.communication.input
+  goes to each participant its target_ids names, and to every participant
+  when target_ids is empty (the original: the input is ambient);
+  environment.sound and environment.visual go to every participant (the
+  original's broadcast); bot.deactivate and bot.input go to every bot.
+
+  Records: each event a bot sends its parent (bot.activated,
+  bot.processing.completed, ...) is logged as <log label="EVENT"> with its
+  data as JSON, which keeps the run's records. A voice embedding is
+  biometric and is never written: an identity in source_ids or target_ids
+  that is an array of numbers is written as <biometric:VoiceEmbedding>, as
+  the original's capture writes its VoiceEmbedding.
+
+  Contracts: every event the room takes references its one schema file
+  (../../bots/floppy/schemas/ for the body's events,
+  ../../abilities/schemas/ for the abilities'); scx run refuses host input
+  they reject (machine-invalid-input).
+
+  Running: scx run with an env file and this document (bots/floppy/README.md
+  gives the grants and variables the bot needs).
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="room" initial="present">
+  <datamodel>
+    <!-- The invoke ids of the participants present, and the one being sent
+         to. -->
+    <data id="participants" expr="[]"/>
+    <data id="participant" expr="null"/>
+    <!-- Which devices each bot holds: bot invoke id to device invoke ids
+         (decision D105). Its keys are the bots; every other participant
+         is a device. -->
+    <data id="holdings" expr="({floppy: []})"/>
+    <!-- Where each participant is and the quietest sound it hears:
+         invoke id to {position: {x, y, z} in metres, threshold_db in dB
+         SPL}. A participant with none hears every sound. -->
+    <data id="placements" expr="({})"/>
+  </datamodel>
+  <script src="room.js"/>
+
+  <state id="present">
+    <onentry>
+      <assign location="participants" expr="['floppy']"/>
+    </onentry>
+    <invoke id="floppy" type="scxml" src="../../bots/floppy/floppy.scx">
+      <param name="environment" expr="_sessionid"/>
+      <param name="owned_devices" expr="ownedDevices('floppy')"/>
+    </invoke>
+
+    <!-- Leave: a participant that finished or failed. -->
+    <transition event="done.invoke">
+      <log label="done.invoke" expr="leaveJson(_event)"/>
+      <assign location="participants" expr="without(_event.invokeid)"/>
+    </transition>
+    <transition event="error.communication">
+      <log label="error.communication" expr="leaveJson(_event)"/>
+      <assign location="participants" expr="without(_event.invokeid)"/>
+    </transition>
+
+    <!-- Host input. -->
+    <transition event="bot.ability.communication.input" event:schema="../../abilities/schemas/bot.ability.communication.input.json">
+      <foreach array="addressees(_event.data.target_ids)" item="participant">
+        <send event="bot.ability.communication.input" targetexpr="participantTarget(participant)">
+          <content expr="_event.data"/>
+        </send>
+      </foreach>
+    </transition>
+    <transition event="environment.sound" event:schema="../../abilities/schemas/environment.sound.json">
+      <log label="environment.sound" expr="eventDataJson(_event)"/>
+      <foreach array="participants" item="participant">
+        <if cond="hears(participant, _event)">
+          <send event="environment.sound" targetexpr="participantTarget(participant)">
+            <content expr="delivered(participant, _event)"/>
+          </send>
+        </if>
+      </foreach>
+    </transition>
+    <transition event="environment.visual" event:schema="../../bots/floppy/schemas/environment.visual.json">
+      <log label="environment.visual" expr="eventDataJson(_event)"/>
+      <foreach array="participants" item="participant">
+        <send event="environment.visual" targetexpr="participantTarget(participant)">
+          <content expr="_event.data"/>
+        </send>
+      </foreach>
+    </transition>
+    <transition event="bot.deactivate" event:schema="../../bots/floppy/schemas/bot.deactivate.json">
+      <foreach array="bots()" item="participant">
+        <send event="bot.deactivate" targetexpr="participantTarget(participant)">
+          <content expr="_event.data"/>
+        </send>
+      </foreach>
+    </transition>
+    <!-- bot.input: from a device, to the bots that hold it, with
+         target_device stamped as the device's reference; from the host,
+         to every bot. The recipients and the stamp are chosen from
+         _event.invokeid in exprs (decision D108). -->
+    <transition event="bot.input" event:schema="../../bots/floppy/schemas/bot.input.json">
+      <foreach array="inputRecipients(_event)" item="participant">
+        <send event="bot.input" targetexpr="participantTarget(participant)">
+          <content expr="inputData(_event)"/>
+        </send>
+      </foreach>
+    </transition>
+
+    <!-- What the bots emit. -->
+    <transition event="bot.activated" event:schema="../../bots/floppy/schemas/bot.activated.json">
+      <log label="bot.activated" expr="eventDataJson(_event)"/>
+    </transition>
+    <transition event="bot.activating.failed" event:schema="../../bots/floppy/schemas/bot.activating.failed.json">
+      <log label="bot.activating.failed" expr="eventDataJson(_event)"/>
+    </transition>
+    <transition event="bot.deactivated" event:schema="../../bots/floppy/schemas/bot.deactivated.json">
+      <log label="bot.deactivated" expr="eventDataJson(_event)"/>
+    </transition>
+    <transition event="bot.processing.completed" event:schema="../../bots/floppy/schemas/bot.processing.completed.json">
+      <log label="bot.processing.completed" expr="eventDataJson(_event)"/>
+    </transition>
+    <transition event="bot.processing.failed" event:schema="../../bots/floppy/schemas/bot.processing.failed.json">
+      <log label="bot.processing.failed" expr="eventDataJson(_event)"/>
+    </transition>
+    <transition event="bot.processing.timed_out" event:schema="../../bots/floppy/schemas/bot.processing.timed_out.json">
+      <log label="bot.processing.timed_out" expr="eventDataJson(_event)"/>
+    </transition>
+    <transition event="bot.processing.cancel.timed_out" event:schema="../../bots/floppy/schemas/bot.processing.cancel.timed_out.json">
+      <log label="bot.processing.cancel.timed_out" expr="eventDataJson(_event)"/>
+    </transition>
+    <transition event="bot.degraded" event:schema="../../bots/floppy/schemas/bot.degraded.json">
+      <log label="bot.degraded" expr="eventDataJson(_event)"/>
+    </transition>
+    <transition event="bot.reboot" event:schema="../../abilities/schemas/bot.reboot.json">
+      <log label="bot.reboot" expr="eventDataJson(_event)"/>
+    </transition>
+    <transition event="bot.ability.speaking.output" event:schema="../../abilities/schemas/bot.ability.speaking.output.json">
+      <log label="bot.ability.speaking.output" expr="eventDataJson(_event)"/>
+    </transition>
+    <transition event="bot.ability.communication.failed" event:schema="../../abilities/schemas/bot.ability.communication.failed.json">
+      <log label="bot.ability.communication.failed" expr="eventDataJson(_event)"/>
+    </transition>
+    <transition event="bot.ability.conversation.failed" event:schema="../../abilities/schemas/bot.ability.conversation.failed.json">
+      <log label="bot.ability.conversation.failed" expr="eventDataJson(_event)"/>
+    </transition>
+    <transition event="bot.ability.conversation.output" event:schema="../../abilities/schemas/bot.ability.conversation.output.json">
+      <log label="bot.ability.conversation.output" expr="eventDataJson(_event)"/>
+    </transition>
+    <transition event="bot.ability.listening.failed" event:schema="../../abilities/schemas/bot.ability.listening.failed.json">
+      <log label="bot.ability.listening.failed" expr="eventDataJson(_event)"/>
+    </transition>
+    <transition event="bot.ability.failed" event:schema="../../abilities/schemas/bot.ability.failed.json">
+      <log label="bot.ability.failed" expr="eventDataJson(_event)"/>
+    </transition>
+  </state>
+</scxml>

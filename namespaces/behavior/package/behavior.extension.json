@@ -1,0 +1,10 @@
+{
+  "format": "stateforward.scxml.extension-package/v2",
+  "namespace-uri": "https://github.com/stateforward/floppy/namespaces/behavior",
+  "package-version": "0.1.0",
+  "extension-artifact": "floppy_behavior.virtualized.wasm",
+  "schema-artifact": "behavior.xsd",
+  "schema-sha256": "28a8ee40b7737b6acea4cdcc696752d4691f60661d8ae323a42047f05fe5157b",
+  "wit-world": "stateforward:scxml/executable-content-extension",
+  "wit-version": "0.2.0"
+}

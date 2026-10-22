@@ -1,0 +1,29 @@
+{
+  "configuration": [
+    "done"
+  ],
+  "done": null,
+  "logs": [
+    [
+      "kid",
+      "{\"exclude\":[\"system\",\"pending_sends\",\"previews\",\"invocations\"],\"trace_context\":\"strip\"}{\"session_id\":\"session.kid\",\"datamodel_name\":\"ecmascript\",\"ir\":{\"version\":5,\"sha256\":\"b0c327a34c6e3aee1f98eb4f508e6f5fe93ab87a089bebae1a8318e14da95995\"},\"status\":\"running\",\"invoked_by\":{\"parent_session_id\":\"session\",\"invoke_id\":\"kid\"},\"configuration\":{\"atomic\":[\"k0\"],\"full\":[\"k0\"]},\"history\":[],\"bound_states\":[],\"counters\":{\"send\":0,\"invoke\":0},\"data_model\":[{\"name\":\"secret\",\"value\":{\"type\":\"text\",\"value\":\"k\"}}],\"queues\":{\"internal\":[],\"external\":[]},\"transitions\":[{\"source\":\"k0\",\"index\":0,\"events\":[\"poke\"],\"targets\":[\"k1\"],\"type\":\"external\",\"has_cond\":false}]}"
+    ],
+    [
+      "kid-by-address",
+      "{\"atomic\":[\"k0\"],\"full\":[\"k0\"]}"
+    ],
+    [
+      "nobody",
+      "unavailable"
+    ],
+    [
+      "parent",
+      "{\"exclude\":[\"system\",\"pending_sends\",\"previews\",\"invocations\"],\"trace_context\":\"strip\"}{\"session_id\":\"session\",\"datamodel_name\":\"ecmascript\",\"ir\":{\"version\":5,\"sha256\":\"956bc473e867c11ea6baa12eb67906c3e6be18c12741e057126c6c40e5b75d86\"},\"status\":\"running\",\"configuration\":{\"atomic\":[\"reading\"],\"full\":[\"s0\",\"reading\"]},\"history\":[],\"bound_states\":[],\"counters\":{\"send\":0,\"invoke\":0},\"data_model\":[{\"name\":\"flag\",\"value\":{\"type\":\"text\",\"value\":\"root\"}},{\"name\":\"doc\",\"value\":{\"type\":\"text\",\"value\":\"unavailable\"}}],\"queues\":{\"internal\":[],\"external\":[]},\"transitions\":[{\"source\":\"reading\",\"index\":0,\"events\":[\"read\"],\"targets\":[\"done\"],\"type\":\"external\",\"has_cond\":false}]}"
+    ],
+    [
+      "sibling",
+      "{\"exclude\":[\"system\",\"data_model\",\"previews\",\"invocations\"],\"trace_context\":\"strip\"}{\"session_id\":\"session.kid\",\"datamodel_name\":\"ecmascript\",\"ir\":{\"version\":5,\"sha256\":\"b0c327a34c6e3aee1f98eb4f508e6f5fe93ab87a089bebae1a8318e14da95995\"},\"status\":\"running\",\"invoked_by\":{\"parent_session_id\":\"session\",\"invoke_id\":\"kid\"},\"configuration\":{\"atomic\":[\"k0\"],\"full\":[\"k0\"]},\"history\":[],\"bound_states\":[],\"counters\":{\"send\":0,\"invoke\":0},\"queues\":{\"internal\":[],\"external\":[]},\"pending_sends\":[],\"transitions\":[{\"source\":\"k0\",\"index\":0,\"events\":[\"poke\"],\"targets\":[\"k1\"],\"type\":\"external\",\"has_cond\":false}]}"
+    ]
+  ],
+  "status": "finished"
+}

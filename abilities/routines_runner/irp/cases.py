@@ -32,7 +32,7 @@ def every(name, text="every"):
 
 
 def chain(*rows):
-    return [("routines", js([{"name": name, "source": source} for name, source in rows]))]
+    return [("routines", js([{"name": name, "source": S.behavior(source)} for name, source in rows]))]
 
 
 def ticked(name, text):
@@ -44,12 +44,12 @@ def ticked(name, text):
 QUIET = wait("1s")
 
 
-S.statement(1, "It takes the `<param>` `routines` `[{name, source}]` and runs the first routine's source as its child `routine` (`<invoke><content expr>`); on start it sends nothing of its own, and it never reaches a final state.")
+S.statement(1, "It takes the `<param>` `routines` `[{name, source}]` (`source` the path of the routine's program, decision D121) and runs the first routine as its child `routine` (`<invoke srcexpr>` on its source); on start it sends nothing of its own, and it never reaches a final state.")
 S.statement(2, "Each `bot.behavior.tick` its routine sends it goes to its parent unchanged, once.")
 S.statement(3, "With more than one routine it invokes itself (`rest`) with the rest of the routines, so every routine runs and each tick of the chain reaches the parent once, whatever its depth.")
 S.statement(4, "A tick whose `name` is none of the chain's routines' names is not forwarded (the original's stale tick).")
 S.statement(5, "A routine that ends (`done.invoke.routine`) stays stopped, and the rest keep running.")
-S.statement(6, "A routine whose source does not compile (`error.execution` in the runner) stays stopped, logged `routines.failed` `<name> (error.execution)`, and the rest keep running.")
+S.statement(6, "A routine whose program does not compile (`error.execution` in the runner) stays stopped, logged `routines.failed` `<name> (error.execution)`, and the rest keep running.")
 S.statement(7, "A tick the routine sends whose data its schema rejects never reaches the runner (`error.execution` in the routine) and is not forwarded; the routine's later ticks are.")
 
 S.case(100, 1, "a routine that never ticks: the runner sends nothing.",

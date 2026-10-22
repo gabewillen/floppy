@@ -10,7 +10,7 @@
 //! answer logs it and then the inventory and the stored episodes.
 //!
 //! One deterministic fake Chat Completions backend on 127.0.0.1 answers
-//! by the request's structured-output schema: `dispatch` (the select step)
+//! by the schema's name, the one tool the request requires a call of: `dispatch` (the select step)
 //! by the route (the first path segment of `FLOPPY_BASE_URL`),
 //! `topology_plan` and `scxml_draft` (the builder) with a plan and a turn
 //! behavior draft, or with drafts that never validate on the `buildfail`
@@ -35,7 +35,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use serde_json::{Value as Json, json};
+use serde_json::{Map, Value as Json, json};
 use support::{Run, logs, unique_scratch, workspace};
 
 /// Bounded wait for any one expected record (scx startup and a builder run
@@ -61,12 +61,13 @@ const BEHAVIOR: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version
 
 const PLAN: &str = r#"{"name":"GreetOnKnock","summary":"Answer a knock with a greeting.","states":[{"id":"answering","kind":"atomic","parent":"","purpose":"Decide the answer."},{"id":"answered","kind":"final","parent":"","purpose":"Carry the answer."}],"events":[],"transitions":[{"source":"answering","event":"","target":"answered","description":"Answer at once."}]}"#;
 
-/// The builder's draft: `scxml` with one test that drives nothing and
-/// expects the behavior to finish.
+/// The builder's draft: `scxml`, no schema and no script, with one test
+/// that drives nothing and expects the behavior to finish.
 fn draft(scxml: &str) -> String {
     json!({
         "scxml": scxml,
-        "schemas": [],
+        "schemas": {"$defs": {}},
+        "script": "",
         "tests": [{"name": "answers its turn", "events": [], "settle_ms": 2000, "expect_events": [], "expect_done": true}],
     })
     .to_string()
@@ -101,6 +102,18 @@ fn create_selection() -> Json {
     }])
 }
 
+fn change_selection() -> Json {
+    json!([{
+        "event": "bot.behavior.change",
+        "data": {
+            "event": "bot.behavior.change",
+            "name": "GreetOnKnock",
+            "reason": "It should greet by name.",
+        },
+        "reason": "a regression",
+    }])
+}
+
 fn break_selection(name: &str) -> Json {
     json!([{
         "event": "bot.behavior.break",
@@ -113,12 +126,15 @@ fn break_selection(name: &str) -> Json {
 fn selection(route: &str) -> Option<Json> {
     match route {
         "none" => Some(json!([])),
-        "create" | "buildfail" | "genfail" => Some(create_selection()),
+        "create" | "buildfail" | "genfail" | "slowbuild" | "stallbuild" | "slowplain" => {
+            Some(create_selection())
+        }
         "break" => Some(break_selection("GreetOnKnock")),
+        "change" => Some(change_selection()),
         "breakunknown" => Some(break_selection("Nobody")),
         "two" => Some(json!([
             break_selection("GreetOnKnock")[0].clone(),
-            break_selection("Other")[0].clone()
+            create_selection()[0].clone()
         ])),
         _ => None,
     }
@@ -130,12 +146,10 @@ fn answer(target: &str, body: &Json) -> Option<String> {
     if !target.ends_with("/v1/chat/completions") {
         return None;
     }
-    let schema = body
-        .pointer("/response_format/json_schema/name")?
-        .as_str()?;
+    let schema = body.pointer("/tools/0/function/name")?.as_str()?;
     match schema {
         "dispatch" => Some(completion(
-            &json!({"events": selection(route)?}).to_string(),
+            &json!({"events": support::with_targets(body, &selection(route)?)}).to_string(),
         )),
         "topology_plan" => Some(completion(PLAN)),
         "scxml_draft" if route == "buildfail" => Some(completion(&draft(&rejected_behavior()))),
@@ -159,7 +173,7 @@ struct Received {
 impl Received {
     fn schema_name(&self) -> Option<&str> {
         self.body
-            .pointer("/response_format/json_schema/name")
+            .pointer("/tools/0/function/name")
             .and_then(Json::as_str)
     }
 
@@ -197,7 +211,40 @@ fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
     }
     let target = request_line.split(' ').nth(1).unwrap_or("").to_owned();
     let body: Json = serde_json::from_slice(&body).unwrap_or(Json::Null);
-    let reply = answer(&target, &body);
+    // The builder's generations on the slow routes stream slowly but
+    // steadily (seven pieces 1.5 s apart), or stall after their first
+    // piece.
+    let schema = body
+        .pointer("/tools/0/function/name")
+        .and_then(Json::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    for (route, stall) in [
+        ("slowbuild", false),
+        ("stallbuild", true),
+        ("slowplain", false),
+    ] {
+        let content = match schema.as_str() {
+            "topology_plan" => PLAN.to_owned(),
+            "scxml_draft" => draft(BEHAVIOR),
+            _ => continue,
+        };
+        if target == format!("/{route}/v1/chat/completions") {
+            log.lock()
+                .expect("the log lock")
+                .push(Received { body: body.clone() });
+            support::answer_slowly(
+                &mut stream,
+                &body,
+                &content,
+                7,
+                Duration::from_millis(1_500),
+                stall && schema == "scxml_draft",
+            );
+            return;
+        }
+    }
+    let reply = answer(&target, &body).map(|text| support::answer_as_asked(&body, text));
     log.lock().expect("the log lock").push(Received { body });
     let (status, text) = reply.map_or_else(
         || {
@@ -239,7 +286,7 @@ impl Mock {
         Self { origin, received }
     }
 
-    /// The requests with the structured-output schema `name`, in order.
+    /// The requests requiring a call of the schema `name`'s function, in order.
     fn requests(&self, name: &str) -> Vec<Received> {
         self.received
             .lock()
@@ -269,6 +316,18 @@ const SQLITE: &str = "/memory/floppy.sqlite";
 /// statements expression) on `database` and an env file for `route`;
 /// returns the harness's path and the env file's.
 fn layout(mock: &Mock, route: &str, seed: &str, database: &str) -> (PathBuf, PathBuf) {
+    layout_bounded(mock, route, seed, database, "({})")
+}
+
+/// [`layout`], the harness passing the reflection `bounds` (the
+/// cognition's `<param>` of the bot's time bounds, decision D101).
+fn layout_bounded(
+    mock: &Mock,
+    route: &str,
+    seed: &str,
+    database: &str,
+    bounds: &str,
+) -> (PathBuf, PathBuf) {
     let dir = unique_scratch("reflection");
     support::copy_tree(&workspace().join("abilities"), &dir.join("abilities"));
     copy_dir(&workspace().join("bots/builder"), &dir.join("bots/builder"));
@@ -276,21 +335,34 @@ fn layout(mock: &Mock, route: &str, seed: &str, database: &str) -> (PathBuf, Pat
         &workspace().join("bots/builder/schemas"),
         &dir.join("bots/builder/schemas"),
     );
-    let harness =
-        std::fs::read_to_string(workspace().join("tests/fixtures/phase5/reflection_harness.scx"))
-            .expect("the harness is readable")
-            .replace(
-                r#"<data id="seed" expr="[]"/>"#,
-                &format!(r#"<data id="seed" expr="{seed}"/>"#),
-            );
+    let harness = std::fs::read_to_string(
+        workspace().join("tests/fixtures/phase5/reflection_harness.scx"),
+    )
+    .expect("the harness is readable")
+    .replace(
+        r#"<data id="seed" expr="[]"/>"#,
+        &format!(r#"<data id="seed" expr="{seed}"/>"#),
+    )
+    .replace(
+        r#"<param name="model" expr="'fake-model'"/>"#,
+        &format!(
+            r#"<param name="model" expr="'fake-model'"/><param name="bounds" expr="{bounds}"/>"#
+        ),
+    );
     let path = dir.join("abilities/reflection_harness.scx");
     std::fs::write(&path, harness).expect("the harness is writable");
     support::use_database(&path, database);
     let env = dir.join("fake.env");
+    // The slow routes' backend streams (decision D101).
+    let stream = if route == "slowbuild" || route == "stallbuild" {
+        "FLOPPY_STREAM=true\n"
+    } else {
+        ""
+    };
     std::fs::write(
         &env,
         format!(
-            "{FAKE_KEYS}FLOPPY_BASE_URL={origin}/{route}/v1\nTYPESAFE_BASE_URL={origin}/{route}\n",
+            "{FAKE_KEYS}FLOPPY_BASE_URL={origin}/{route}/v1\nTYPESAFE_BASE_URL={origin}/{route}\n{stream}",
             origin = mock.origin,
         ),
     )
@@ -348,6 +420,41 @@ fn json_log(records: &[Json], label: &str) -> Json {
     serde_json::from_str(&text).expect("the log text is JSON")
 }
 
+/// The turn's episode when it applied no behavior: an empty selection, or
+/// a reflection that failed (decision D97).
+fn unapplied_episode() -> Json {
+    json!({
+        "focus": "door",
+        "focus_candidates": ["door"],
+        "stimulus_name": "environment.sound",
+        "output": input(1)["cognition_output"],
+        "behavior": null,
+    })
+}
+
+/// The logged episodes when `episode` is the only one stored.
+fn stored(episode: &Json) -> Json {
+    json!([{"context_ref": "door", "scope": "memory", "kind": "task", "content": episode}])
+}
+
+/// The path the builder writes `GreetOnKnock`'s documents under, the row's
+/// source (decision D121).
+const GREET_PATH: &str = "../../behaviors/GreetOnKnock.scx";
+
+/// The behaviors directory of the layout whose harness is `harness`: where
+/// the builder writes, the run's files grant (`support::behaviors_grant`).
+fn behaviors(harness: &Path) -> PathBuf {
+    harness
+        .parent()
+        .and_then(Path::parent)
+        .expect("the harness is <layout>/abilities/reflection_harness.scx")
+        .join("behaviors")
+}
+
+/// A seed of one ACTIVE turn behavior named `GreetOnKnock` whose program the
+/// builder wrote ([`GREET_PATH`]).
+const SEED_STORED: &str = "[{sql: &quot;INSERT INTO bot_behavior (name, source, description, status) VALUES ('GreetOnKnock', '../../behaviors/GreetOnKnock.scx', 'Say hello.', 'ACTIVE')&quot;}, {sql: &quot;INSERT INTO bot_behavior_trigger (behavior_name, \\&quot;trigger\\&quot;) VALUES ('GreetOnKnock', 'environment.sound')&quot;}]";
+
 /// A seed of one ACTIVE turn behavior named `GreetOnKnock`, used once.
 const SEED_BEHAVIOR: &str = "[{sql: &quot;INSERT INTO bot_behavior (name, source, description, status, used_count, last_used_at) VALUES ('GreetOnKnock', '&lt;scxml/&gt;', 'Say hello.', 'ACTIVE', '1', '2026-10-09T00:00:00Z')&quot;}, {sql: &quot;INSERT INTO bot_behavior_trigger (behavior_name, \\&quot;trigger\\&quot;) VALUES ('GreetOnKnock', 'environment.sound')&quot;}]";
 
@@ -373,17 +480,8 @@ fn an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it_on(databas
     assert_eq!(texts(&first, "harness.output"), ["answered"]);
     assert_eq!(texts(&first, "reflection.selected"), ["none"]);
     assert_eq!(json_log(&first, "inventory"), json!([]));
-    let episode = json!({
-        "focus": "door",
-        "focus_candidates": ["door"],
-        "stimulus_name": "environment.sound",
-        "output": input(1)["cognition_output"],
-        "behavior": null,
-    });
-    assert_eq!(
-        json_log(&first, "episodes"),
-        json!([{"context_ref": "door", "scope": "memory", "kind": "task", "content": episode}])
-    );
+    let episode = unapplied_episode();
+    assert_eq!(json_log(&first, "episodes"), stored(&episode));
     let second = reflect(&mut run, 2);
     assert_eq!(texts(&second, "harness.output"), ["answered"], "{second:?}");
     assert_eq!(
@@ -406,28 +504,34 @@ fn an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it_on(databas
     assert_eq!(prompt(0)["behaviors"], json!([]));
     assert_eq!(prompt(0)["cognition_input"], input(1)["cognition_input"]);
     assert_eq!(prompt(1)["prior_episodes"], json!([episode]));
-    // The offered events are exactly the three inventory events.
-    let schema = &selects[0].body["response_format"]["json_schema"]["schema"];
-    let mut offered: Vec<String> = schema["properties"]["events"]["items"]["anyOf"]
+    // With an empty inventory only a create is offered: nothing could be
+    // changed or broken (decision D100).
+    assert_eq!(
+        offered_names(&selects[0].body),
+        json!({"bot.behavior.create": null})
+    );
+}
+
+/// The inventory events the select call offers, each with the `enum` its
+/// `name` is pinned to (`null`: any name).
+fn offered_names(body: &Json) -> Json {
+    let schema = &body["tools"][0]["function"]["parameters"];
+    schema["properties"]["events"]["items"]["anyOf"]
         .as_array()
         .expect("one branch per offered event")
         .iter()
         .map(|branch| {
-            branch["properties"]["event"]["enum"][0]
+            let event = branch["properties"]["event"]["enum"][0]
                 .as_str()
                 .expect("the branch's event")
-                .to_owned()
+                .to_owned();
+            (
+                event,
+                branch["properties"]["data"]["properties"]["name"]["enum"].clone(),
+            )
         })
-        .collect();
-    offered.sort();
-    assert_eq!(
-        offered,
-        [
-            "bot.behavior.break",
-            "bot.behavior.change",
-            "bot.behavior.create"
-        ]
-    );
+        .collect::<Map<String, Json>>()
+        .into()
 }
 
 /// The reference `_apply_break`: the row is kept, BROKEN with the trimmed reason,
@@ -471,6 +575,16 @@ fn a_break_marks_the_behavior_broken_and_keeps_it_on(database: &str) {
     let prompt: Json = serde_json::from_str(&mock.requests("dispatch")[0].message("user"))
         .expect("the select prompt is JSON");
     assert_eq!(prompt["behaviors"][0]["name"], "GreetOnKnock");
+    // A change or a break names a behavior the inventory holds (decision
+    // D100).
+    assert_eq!(
+        offered_names(&mock.requests("dispatch")[0].body),
+        json!({
+            "bot.behavior.create": null,
+            "bot.behavior.change": ["GreetOnKnock"],
+            "bot.behavior.break": ["GreetOnKnock"],
+        })
+    );
     assert_eq!(prompt["behaviors"][0]["used_count"], 1);
     assert_eq!(
         prompt["behaviors"][0]["triggers"],
@@ -478,21 +592,23 @@ fn a_break_marks_the_behavior_broken_and_keeps_it_on(database: &str) {
     );
 }
 
-/// A break of a behavior the inventory does not hold fails the turn and
-/// stores nothing.
+/// A break of a behavior the inventory does not hold is not offered
+/// (decision D100), so a model that selects one fails the select call as
+/// schema-mismatch, and the turn's episode is still stored, with no
+/// behavior (decision D97).
 #[test]
-fn a_break_of_an_unknown_behavior_fails() {
-    a_break_of_an_unknown_behavior_fails_on(SQLITE);
+fn a_break_outside_the_inventory_is_refused() {
+    a_break_outside_the_inventory_is_refused_on(SQLITE);
 }
 
 #[test]
 #[ignore = "needs a PGlite server: FLOPPY_PGLITE_SERVER"]
-fn postgres_a_break_of_an_unknown_behavior_fails() {
+fn postgres_a_break_outside_the_inventory_is_refused() {
     let server = support::Pglite::start().expect("FLOPPY_PGLITE_SERVER is set");
-    a_break_of_an_unknown_behavior_fails_on(&server.database());
+    a_break_outside_the_inventory_is_refused_on(&server.database());
 }
 
-fn a_break_of_an_unknown_behavior_fails_on(database: &str) {
+fn a_break_outside_the_inventory_is_refused_on(database: &str) {
     let mock = Mock::start();
     let (harness, env) = layout(&mock, "breakunknown", "[]", database);
     let mut run = start(&harness, &env);
@@ -500,12 +616,14 @@ fn a_break_of_an_unknown_behavior_fails_on(database: &str) {
     drop(run.close(WAIT));
     assert_eq!(
         texts(&records, "harness.failed"),
-        ["Reflection break failed: Reflection break selected unknown behavior: Nobody."]
+        ["Reflection select failed (schema-mismatch)"]
     );
-    assert_eq!(json_log(&records, "episodes"), json!([]));
+    assert_eq!(json_log(&records, "episodes"), stored(&unapplied_episode()));
 }
 
-/// The original's select returns at most one inventory event.
+/// The original's select returns at most one inventory event: the dispatch
+/// tool's `events` admits one (`<processing:send max="1">`), so the
+/// generate service refuses a reply with two before anything is sent.
 #[test]
 fn more_than_one_selection_fails() {
     more_than_one_selection_fails_on(SQLITE);
@@ -526,7 +644,7 @@ fn more_than_one_selection_fails_on(database: &str) {
     drop(run.close(WAIT));
     assert_eq!(
         texts(&records, "harness.failed"),
-        ["Reflection select must return at most one behavior event."]
+        ["Reflection select failed (schema-mismatch)"]
     );
     assert_eq!(json_log(&records, "inventory")[0]["status"], "ACTIVE");
 }
@@ -563,7 +681,7 @@ fn a_create_is_built_and_stored_active_with_grounded_triggers_on(database: &str)
     assert_eq!(
         json_log(&records, "inventory"),
         json!([{
-            "name": "GreetOnKnock", "source": BEHAVIOR,
+            "name": "GreetOnKnock", "source": GREET_PATH,
             "description": "Say hello when a knock sound arrives.",
             "lifetime": "turn", "status": "ACTIVE", "status_reason": "",
             "used_count": "0", "failed_count": "0", "triggers": ["environment.sound"],
@@ -572,7 +690,23 @@ fn a_create_is_built_and_stored_active_with_grounded_triggers_on(database: &str)
     let behavior = &json_log(&records, "episodes")[0]["content"]["behavior"];
     assert_eq!(behavior["name"], "GreetOnKnock");
     assert_eq!(behavior["triggers"], json!(["environment.sound"]));
-    assert_eq!(behavior["source"], BEHAVIOR);
+    assert_eq!(behavior["source"], GREET_PATH);
+    // The row's source is the path of the documents the builder wrote
+    // under the intent's name (decision D121).
+    let written = behaviors(&harness);
+    assert_eq!(
+        std::fs::read_to_string(written.join("GreetOnKnock.scx")).expect("the chart is written"),
+        BEHAVIOR
+    );
+    assert_eq!(
+        std::fs::read_to_string(written.join("GreetOnKnock.json"))
+            .expect("the schemas are written"),
+        r#"{"$defs":{}}"#
+    );
+    assert_eq!(
+        std::fs::read_to_string(written.join("GreetOnKnock.js")).expect("the script is written"),
+        ""
+    );
     // The builder was asked once, with the intent, the DRAFT stub, and the
     // turn behavior contract.
     let drafts = mock.requests("scxml_draft");
@@ -597,19 +731,166 @@ fn a_create_is_built_and_stored_active_with_grounded_triggers_on(database: &str)
                 .contains(r#"<data id="next_after" expr="(at, now) => { const hms"#)),
         "{prompt}"
     );
-    // The trigger contract names the triggers the accepted row carries, so
-    // the draft's guard reads the stimulus Autonomy will run it for.
+}
+
+/// The turn behavior contract the builder gets names what autonomy will
+/// run the behavior with: the grounded triggers it is stored under (the
+/// stimulus events autonomy matches), so the behavior tests no event name,
+/// and this turn's `input` exactly as autonomy builds it (the stimulus
+/// data's fields with `focus` and `focus_candidates`; no stimulus envelope,
+/// no event name). The live run of 2026-10-12 (docs/live-proof.md) built a
+/// behavior that tested a stimulus event it never receives, because the
+/// contract said `input` holds "the stimulus".
+#[test]
+fn the_builder_is_told_the_triggers_and_the_input_the_behavior_runs_with() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "create", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let records = reflect(&mut run, 1);
+    drop(run.close(WAIT));
+    assert_eq!(
+        texts(&records, "reflection.inventory"),
+        [r#"GreetOnKnock ACTIVE turn ["environment.sound"] (accept)"#]
+    );
+    let drafts = mock.requests("scxml_draft");
+    assert_eq!(drafts.len(), 1);
+    let prompt: Json =
+        serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
+    let contract = prompt["constraints"][0]
+        .as_str()
+        .expect("the turn behavior contract")
+        .to_owned();
+    assert!(contract.starts_with("Write a turn behavior"), "{contract}");
     assert!(
-        prompt["constraints"][2]
-            .as_str()
-            .is_some_and(|contract| contract.contains(r#"["environment.sound"]"#)),
-        "{prompt}"
+        contract.contains(r#"its triggers ["environment.sound"]"#),
+        "{contract}"
+    );
+    assert!(
+        contract.contains(
+            r#"for this turn input is {"focus":"door","focus_candidates":["door"],"label":"knock"}"#
+        ),
+        "{contract}"
+    );
+    assert!(!contract.contains("and the stimulus"), "{contract}");
+    // A conversation's output carries the whole history: the behavior
+    // decides from the message this turn answers, and a turn it does not
+    // apply to is unhandled (decision D96; the 2026-10-12 live run's
+    // behavior answered every later turn because an earlier message
+    // matched).
+    assert!(
+        contract.contains(
+            "parent.data is the message this turn answers and messages is the whole conversation so far"
+        ),
+        "{contract}"
+    );
+    assert!(
+        contract.contains("never handled true with an empty list"),
+        "{contract}"
+    );
+}
+
+/// A revision is bounded by inactivity (decision D101): the builder's
+/// generations stream slowly but steadily (about 9 s each), and each stage
+/// and each progress it reports starts the 8 s bound over, so a build of
+/// some twenty seconds in all is accepted.
+#[test]
+fn a_build_that_keeps_making_progress_outlasts_the_inactivity_bound() {
+    let mock = Mock::start();
+    let (harness, env) = layout_bounded(
+        &mock,
+        "slowbuild",
+        "[]",
+        SQLITE,
+        "({revising_timeout_ms: 8000})",
+    );
+    let mut run = start(&harness, &env);
+    let records = reflect(&mut run, 1);
+    drop(run.close(WAIT));
+    assert_eq!(
+        texts(&records, "harness.output"),
+        ["answered"],
+        "{records:?}"
+    );
+    assert_eq!(
+        texts(&records, "reflection.inventory"),
+        [r#"GreetOnKnock ACTIVE turn ["environment.sound"] (accept)"#]
+    );
+    let generations = [mock.requests("topology_plan"), mock.requests("scxml_draft")].concat();
+    assert!(!generations.is_empty());
+    assert!(
+        generations
+            .iter()
+            .all(|request| request.body["stream"] == true),
+        "the builder streams its generations"
+    );
+}
+
+/// A build whose generations are not streamed (the run's `FLOPPY_STREAM`
+/// is unset) reports no generation progress, so the revision's inactivity
+/// bound never arms: each generation of about 10 s outlasts the 8 s bound
+/// and the build is accepted, bounded by the revision's backstop alone
+/// (decision D101).
+#[test]
+fn a_build_that_is_not_streamed_is_bounded_by_the_backstop_alone() {
+    let mock = Mock::start();
+    let (harness, env) = layout_bounded(
+        &mock,
+        "slowplain",
+        "[]",
+        SQLITE,
+        "({revising_timeout_ms: 8000})",
+    );
+    let mut run = start(&harness, &env);
+    let records = reflect(&mut run, 1);
+    drop(run.close(WAIT));
+    assert_eq!(
+        texts(&records, "harness.output"),
+        ["answered"],
+        "{records:?}"
+    );
+    assert_eq!(
+        texts(&records, "reflection.inventory"),
+        [r#"GreetOnKnock ACTIVE turn ["environment.sound"] (accept)"#]
+    );
+    let drafts = mock.requests("scxml_draft");
+    assert!(
+        drafts
+            .iter()
+            .all(|request| request.body.get("stream").is_none())
+    );
+    assert!(
+        drafts
+            .iter()
+            .all(|request| request.body["max_completion_tokens"] == 8192),
+        "a draft's tokens are bounded"
+    );
+}
+
+/// A build whose generation stops arriving fails the revision at the
+/// inactivity bound (decision D101), with the original's message.
+#[test]
+fn a_build_that_stalls_fails_at_the_inactivity_bound() {
+    let mock = Mock::start();
+    let (harness, env) = layout_bounded(
+        &mock,
+        "stallbuild",
+        "[]",
+        SQLITE,
+        "({revising_timeout_ms: 8000})",
+    );
+    let mut run = start(&harness, &env);
+    let records = reflect(&mut run, 1);
+    drop(run.close(WAIT));
+    assert_eq!(
+        texts(&records, "harness.failed"),
+        ["Reflection child cancellation timed out."]
     );
 }
 
 /// A build that fails its checks drafts the rejected source as DRAFT with
 /// `status_reason` validation, and the turn fails with the original's abandon
-/// message and rendered report (the reference `_abandon`, `_persist_draft`).
+/// message and rendered report (the reference `_abandon`, `_persist_draft`);
+/// the turn's episode is stored with no behavior (decision D97).
 #[test]
 fn a_failed_build_leaves_a_validation_draft() {
     a_failed_build_leaves_a_validation_draft_on(SQLITE);
@@ -639,19 +920,81 @@ fn a_failed_build_leaves_a_validation_draft_on(database: &str) {
     assert_eq!(
         json_log(&records, "inventory"),
         json!([{
-            "name": "GreetOnKnock", "source": rejected_behavior(),
+            "name": "GreetOnKnock", "source": GREET_PATH,
             "description": "Say hello when a knock sound arrives.",
             "lifetime": "turn", "status": "DRAFT", "status_reason": "validation",
             "used_count": "0", "failed_count": "0",
             "triggers": ["environment.sound", "phone.incoming_call"],
         }])
     );
-    assert_eq!(json_log(&records, "episodes"), json!([]));
+    assert_eq!(
+        std::fs::read_to_string(behaviors(&harness).join("GreetOnKnock.scx"))
+            .expect("the rejected draft is written"),
+        rejected_behavior(),
+        "the DRAFT row's path names the rejected draft"
+    );
+    assert_eq!(json_log(&records, "episodes"), stored(&unapplied_episode()));
+}
+
+/// A change revises the stored program: reading reads its three documents
+/// back through the files service (decision D121), the builder is given
+/// them as the existing row's `scxml`, `schemas` and `script`, and the
+/// revision is written under the same name, so the row keeps its path.
+#[test]
+fn a_change_reads_the_stored_documents_back_for_the_builder() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "change", SEED_STORED, SQLITE);
+    let stored_dir = behaviors(&harness);
+    std::fs::create_dir_all(&stored_dir).expect("the behaviors directory is creatable");
+    let old = BEHAVIOR.replace("Hello!", "Hi!");
+    std::fs::write(stored_dir.join("GreetOnKnock.scx"), &old).expect("writable");
+    std::fs::write(
+        stored_dir.join("GreetOnKnock.json"),
+        r#"{"$defs": {"knock": {"type": "object"}}}"#,
+    )
+    .expect("writable");
+    std::fs::write(stored_dir.join("GreetOnKnock.js"), "// stored\n").expect("writable");
+    let mut run = start(&harness, &env);
+    let records = reflect(&mut run, 1);
+    drop(run.close(WAIT));
+    assert_eq!(
+        texts(&records, "harness.output"),
+        ["answered"],
+        "{records:?}"
+    );
+    let drafts = mock.requests("scxml_draft");
+    assert_eq!(drafts.len(), 1, "{records:?}");
+    let prompt: Json =
+        serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
+    let spec = prompt["spec"].as_str().expect("the spec");
+    let write: Json = serde_json::from_str(spec.rsplit("\n\n").next().expect("the input"))
+        .expect("the change write input is JSON");
+    let existing = &write["existing_behavior"];
+    assert_eq!(existing["source"], GREET_PATH, "{existing}");
+    assert_eq!(existing["scxml"], old.as_str(), "{existing}");
+    assert_eq!(
+        existing["schemas"],
+        json!({"$defs": {"knock": {"type": "object"}}}),
+        "{existing}"
+    );
+    assert_eq!(existing["script"], "// stored\n", "{existing}");
+    assert_eq!(prompt["name"], "GreetOnKnock", "{prompt}");
+    assert_eq!(
+        json_log(&records, "inventory")[0]["source"],
+        GREET_PATH,
+        "the revision keeps the row's path"
+    );
+    assert_eq!(
+        std::fs::read_to_string(stored_dir.join("GreetOnKnock.scx")).expect("readable"),
+        BEHAVIOR,
+        "the revision is written over the stored chart"
+    );
 }
 
 /// A change call that fails without a draft to check (every generation
 /// fails) fails the turn and drafts nothing: the create's stub stays as
-/// The original's `_prepare` stored it (the reference `_fail_child`).
+/// The original's `_prepare` stored it (the reference `_fail_child`). The
+/// turn's episode is stored with no behavior (decision D97).
 #[test]
 fn a_failed_change_call_drafts_nothing() {
     a_failed_change_call_drafts_nothing_on(SQLITE);
@@ -691,5 +1034,5 @@ fn a_failed_change_call_drafts_nothing_on(database: &str) {
             "triggers": ["environment.sound", "phone.incoming_call"],
         }])
     );
-    assert_eq!(json_log(&records, "episodes"), json!([]));
+    assert_eq!(json_log(&records, "episodes"), stored(&unapplied_episode()));
 }

@@ -1,11 +1,13 @@
 //! Phase 4 event contracts: one canonical JSON Schema file per event,
 //! extracted from the original's pydantic models (docs/port-plan.md, "Phase 4
 //! event contracts"). Body events live in `bots/floppy/schemas/`, ability
-//! events in `abilities/schemas/`: an `event:schema` file reference is
-//! relative to its document and cannot leave the document's directory, so
-//! each ability references twins of these files in its own
-//! `abilities/<ability>/schemas/` (`schemas/<event>.json`) and never
-//! carries inline copies.
+//! events in `abilities/schemas/`, each in exactly one file: an
+//! `event:schema` file reference resolves against its document's base URI
+//! like any relative URI, so an ability references
+//! `../schemas/<event>.json`, and the body and the environments
+//! `../../abilities/schemas/<event>.json` or
+//! `../../bots/floppy/schemas/<event>.json`; no document carries an inline
+//! copy.
 //!
 //! Checked here, over the schema set:
 //!
@@ -17,9 +19,10 @@
 //! * the mapping rules hold: correlated events require an integer `turn`,
 //!   the original's runtime-only fields are gone, and media is a reference.
 //!
-//! And over every `.scx` under `abilities/` and `bots/floppy/` (the body
-//! `bots/floppy/floppy.scx` and its abilities; the checks themselves are
-//! proven on `tests/fixtures/phase4/contracts/`):
+//! And over every `.scx` under `abilities/`, `bots/floppy/` and
+//! `environments/` (the body `bots/floppy/floppy.scx`, its abilities, and
+//! the environments that invoke it; the checks themselves are proven on
+//! `tests/fixtures/phase4/contracts/`):
 //!
 //! * `scx validate` reports nothing (which includes `EVENT011`: a literal
 //!   payload sent to a literal child is judged against the child's schema);
@@ -31,28 +34,29 @@
 //! * the layout rule (decision D65): the document is `<name>/<name>.scx`,
 //!   its only `<script>` is the root `<script src="<name>.js"/>` naming the
 //!   `<name>.js` beside it, and the document itself has no `function`
-//!   token; each schema it references is a byte-identical twin of its
-//!   `abilities/schemas/` source;
+//!   token;
 //! * payload checks are `event:schema` (scxml.rs checks them where an
 //!   event is created), and a transition taking one contract event carries
 //!   its `event:schema`;
 //! * every `cond`, and every `expr` outside `<data>`, is at most 160
 //!   characters [floppy rule];
 //! * every `<invoke type="scxml">` has a literal `id` and either a
-//!   literal relative `src`, a `srcexpr`, or a `<content expr>` (the
-//!   candidates runner invokes a builder-produced behavior from its
-//!   inventory row's source).
+//!   literal relative `src` or a `srcexpr` (the candidates and routines
+//!   runners invoke a builder-produced behavior by its inventory row's
+//!   source, the path of its program).
 //!
-//! Builder output, the documents a `srcexpr` or `<content expr>` invokes,
-//! gets no schema files (scxml.rs reads them only for a literal `src`
-//! child), so it carries no
-//! `event:schema` reference; it meets the rest of the structure rule.
+//! Builder output, the documents a `srcexpr` invokes, is three documents
+//! beside each other in a directory (decision D121), `<name>.scx`,
+//! `<name>.json` and `<name>.js`, which scxml.rs loads against the
+//! document's own base URI: every `event:schema` it carries references
+//! `<name>.json`, and it carries at most its one root
+//! `<script src="<name>.js"/>`; it meets the rest of the structure rule.
 //! `tests/fixtures/phase4/behavior_double.scx`, the stand-in for one, is
 //! checked here.
 //!
-//! The body's twins (`bots/floppy/schemas/` copies of the ability events
-//! the body takes, which it cannot reference across directories) are
-//! byte-identical to their `abilities/schemas/` sources.
+//! Every reference of those documents resolves to its event's one schema
+//! file in `abilities/schemas/` or `bots/floppy/schemas/`, and no schema
+//! file name occurs twice in the workspace's `schemas/` directories.
 
 #![allow(
     missing_docs,
@@ -75,7 +79,6 @@ const DIALECT: &str = "https://json-schema.org/draft/2020-12/schema";
 
 /// The body's events (`bots/floppy/schemas/`).
 const BODY_EVENTS: [&str; 13] = [
-    "bot.activate",
     "bot.deactivate",
     "bot.input",
     "bot.focus_device",
@@ -87,11 +90,12 @@ const BODY_EVENTS: [&str; 13] = [
     "bot.processing.failed",
     "bot.processing.timed_out",
     "bot.processing.cancel.timed_out",
+    "bot.degraded",
     "environment.visual",
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 76] = [
+const ABILITY_EVENTS: [&str; 75] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -108,7 +112,6 @@ const ABILITY_EVENTS: [&str; 76] = [
     "bot.ability.reasoning.input",
     "bot.ability.reasoning.output",
     "bot.ability.reasoning.recalled",
-    "bot.ability.reasoning.retained",
     "bot.ability.communication.input",
     "bot.ability.communication.activate",
     "bot.ability.communication.respond",
@@ -182,7 +185,7 @@ const ABILITY_EVENTS: [&str; 76] = [
 /// The correlated events of one processing turn: each requires `turn`.
 /// Tool events (the ones a model chooses, such as
 /// `bot.ability.cognition.ignore`) never do: their data is the model's.
-const CORRELATED: [&str; 17] = [
+const CORRELATED: [&str; 16] = [
     "bot.processing.completed",
     "bot.processing.failed",
     "bot.processing.timed_out",
@@ -199,7 +202,6 @@ const CORRELATED: [&str; 17] = [
     "bot.ability.reflection.input",
     "bot.ability.reasoning.output",
     "bot.ability.reasoning.recalled",
-    "bot.ability.reasoning.retained",
 ];
 
 /// The original's runtime-only correlation and cancel-token fields, which SCXML
@@ -216,25 +218,6 @@ const RUNTIME_ONLY: [&str; 8] = [
 ];
 
 const NAMES_FILE: &str = "floppy-event-names.json";
-
-/// The ability events the body takes, twinned into `bots/floppy/schemas/`.
-const BODY_TWINS: [&str; 15] = [
-    "bot.reboot",
-    "bot.ability.offers",
-    "bot.ability.communication.input",
-    "bot.ability.communication.failed",
-    "bot.ability.speaking.output",
-    "bot.ability.speaking.efference",
-    "environment.sound",
-    "bot.ability.cognition.output",
-    "bot.ability.cognition.cancelled",
-    "bot.ability.processing.cancelled",
-    "bot.ability.failed",
-    "bot.ability.cognition.input",
-    "bot.ability.conversation.output",
-    "bot.ability.conversation.failed",
-    "bot.ability.listening.failed",
-];
 
 /// The longest `cond` or (outside `<data>`) `expr` a phase 4 document may
 /// carry, in characters [floppy rule].
@@ -285,9 +268,6 @@ fn all_schemas() -> BTreeMap<String, Json> {
     let mut all = BTreeMap::new();
     for dir in [body_schemas(), ability_schemas()] {
         for (event, path) in schema_files(&dir) {
-            if dir == body_schemas() && BODY_TWINS.contains(&event.as_str()) {
-                continue;
-            }
             assert!(
                 all.insert(event.clone(), read_json(&path)).is_none(),
                 "{event} has one schema file"
@@ -383,11 +363,7 @@ fn the_schema_set_is_exactly_the_phase4_events_split_body_and_abilities() {
     let abilities: BTreeSet<String> = schema_files(&ability_schemas()).into_keys().collect();
     assert_eq!(
         body,
-        BODY_EVENTS
-            .iter()
-            .chain(BODY_TWINS.iter())
-            .map(|&name| name.to_owned())
-            .collect()
+        BODY_EVENTS.iter().map(|&name| name.to_owned()).collect()
     );
     assert_eq!(
         abilities,
@@ -395,58 +371,87 @@ fn the_schema_set_is_exactly_the_phase4_events_split_body_and_abilities() {
     );
 }
 
+/// Every `schemas/` directory's JSON files under `dir`, recursively,
+/// skipping build output (`target/`).
+fn schema_files_under(dir: &Path) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    let mut pending = vec![dir.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries {
+            let path = entry.expect("a directory entry").path();
+            if path.is_dir() {
+                if path.file_name().is_some_and(|name| name != "target") {
+                    pending.push(path);
+                }
+            } else if path
+                .extension()
+                .is_some_and(|extension| extension == "json")
+                && dir.file_name().is_some_and(|name| name == "schemas")
+            {
+                found.push(path);
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
 #[test]
-fn the_bodys_twins_are_byte_identical_to_their_ability_schemas() {
-    for event in BODY_TWINS {
-        let file = format!("{event}.json");
-        let twin = std::fs::read(body_schemas().join(&file)).expect("the twin is readable");
-        let source = std::fs::read(ability_schemas().join(&file)).expect("the source is readable");
-        assert!(
-            twin == source,
-            "bots/floppy/schemas/{file} differs from abilities/schemas/{file}"
-        );
+fn every_schema_file_has_one_copy() {
+    let mut seen: BTreeMap<String, PathBuf> = BTreeMap::new();
+    for top in ["abilities", "bots", "environments", "devices", "services"] {
+        for path in schema_files_under(&workspace().join(top)) {
+            let name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .expect("a UTF-8 file name")
+                .to_owned();
+            if let Some(first) = seen.insert(name.clone(), path.clone()) {
+                panic!(
+                    "{name} has two copies: {} and {}",
+                    first.display(),
+                    path.display()
+                );
+            }
+        }
     }
 }
 
 #[test]
-fn each_abilitys_twins_are_byte_identical_and_exactly_what_it_references() {
-    for document in documents_under(&workspace().join("abilities")) {
+fn every_reference_resolves_to_its_events_one_schema_file() {
+    let body = std::fs::canonicalize(body_schemas()).expect("the body's schemas exist");
+    let abilities = std::fs::canonicalize(ability_schemas()).expect("the abilities' schemas exist");
+    for document in phase4_documents() {
         let dir = document.parent().expect("a document has a directory");
-        let referenced: BTreeSet<String> = Parsed::read(&document).with(|root| {
-            let mut referenced = BTreeSet::new();
+        Parsed::read(&document).with(|root| {
             root.visit(&mut |element| {
                 for attribute in element.attributes.iter().filter(|a| is_schema_attribute(a)) {
-                    if let Some(file) = attribute.value.strip_prefix("schemas/") {
-                        referenced.insert(file.split('#').next().unwrap_or(file).to_owned());
-                    }
+                    let scxml_event_schema::Source::Reference { resource, .. } =
+                        scxml_event_schema::source(&attribute.value)
+                    else {
+                        continue;
+                    };
+                    let resolved = std::fs::canonicalize(dir.join(resource)).unwrap_or_else(|_| {
+                        panic!("{}: {resource} does not resolve", document.display())
+                    });
+                    let file = resolved.file_name().expect("a file name");
+                    let canonical = if abilities.join(file).is_file() {
+                        abilities.join(file)
+                    } else {
+                        body.join(file)
+                    };
+                    assert_eq!(
+                        resolved,
+                        canonical,
+                        "{}: {resource} is not its event's schema file",
+                        document.display()
+                    );
                 }
             });
-            referenced
         });
-        let twins: BTreeSet<String> = match std::fs::read_dir(dir.join("schemas")) {
-            Ok(entries) => entries
-                .map(|entry| {
-                    entry
-                        .expect("a directory entry")
-                        .file_name()
-                        .into_string()
-                        .expect("a UTF-8 file name")
-                })
-                .collect(),
-            Err(_) => BTreeSet::new(),
-        };
-        assert_eq!(twins, referenced, "{}", dir.display());
-        for file in twins {
-            let twin =
-                std::fs::read(dir.join("schemas").join(&file)).expect("the twin is readable");
-            let source =
-                std::fs::read(ability_schemas().join(&file)).expect("the source is readable");
-            assert!(
-                twin == source,
-                "{}/schemas/{file} differs from abilities/schemas/{file}",
-                dir.display()
-            );
-        }
     }
 }
 
@@ -536,7 +541,7 @@ fn runtime_only_fields_are_gone_and_media_is_a_reference() {
         ("environment.sound", "audio"),
         ("environment.visual", "image"),
     ] {
-        let schema = read_json(&body_schemas().join(format!("{event}.json")));
+        let schema = &all_schemas()[event];
         assert_eq!(
             schema
                 .pointer(&format!("/properties/{field}/format"))
@@ -574,6 +579,7 @@ fn documents_under(dir: &Path) -> Vec<PathBuf> {
 fn phase4_documents() -> Vec<PathBuf> {
     let mut documents = documents_under(&workspace().join("abilities"));
     documents.extend(documents_under(&workspace().join("bots/floppy")));
+    documents.extend(documents_under(&workspace().join("environments")));
     documents
 }
 
@@ -774,8 +780,8 @@ fn unknown_domain_names(document: &Parsed, known: &BTreeSet<String>) -> Vec<Stri
 /// `<name>/<name>.scx`, else any `<script>`; a `cond` or (outside `<data>`) `expr` over
 /// [`MAX_EXPRESSION_CHARS`], a transition taking one contract event without
 /// an `event:schema`, or an SCXML `<invoke>` without a literal `id` and
-/// either a literal relative `src`, a `srcexpr` (builder output; see
-/// [`builder_output_problems`]) or a `<content expr>` (a stored behavior).
+/// either a literal relative `src` or a `srcexpr` (builder output, a stored
+/// behavior's path; see [`builder_output_problems`]).
 fn structure_problems(
     document: &Parsed,
     contract: &BTreeSet<String>,
@@ -825,19 +831,12 @@ fn structure_problems(
                 let literal_src = element
                     .attribute("src")
                     .is_some_and(|src| !src.value.contains(':') && !src.value.starts_with('/'));
+                // A stored behavior's source (decision D121): its path.
                 let srcexpr =
                     element.attribute("src").is_none() && element.attribute("srcexpr").is_some();
-                // A stored behavior's source (phase 5): `<content expr>`.
-                let content = element.attribute("src").is_none()
-                    && element.attribute("srcexpr").is_none()
-                    && element.children.iter().any(|child| {
-                        matches!(child, scxml_syntax::Node::Element(content)
-                            if content.name.local_name == "content"
-                                && content.attribute("expr").is_some())
-                    });
-                if element.attribute("id").is_none() || !(literal_src || srcexpr || content) {
+                if element.attribute("id").is_none() || !(literal_src || srcexpr) {
                     problems.push(
-                        "an SCXML <invoke> without a literal id and a relative src, a srcexpr or a <content expr>"
+                        "an SCXML <invoke> without a literal id and a relative src or a srcexpr"
                             .to_owned(),
                     );
                 }
@@ -901,21 +900,57 @@ fn script_problems(document: &Parsed) -> Vec<String> {
 }
 
 /// The builder output rule's problems in one document a `srcexpr`
-/// invokes: any `event:schema` (a `srcexpr` child gets no schema files, and
-/// floppy documents carry no inline schema), and the structure rule's.
+/// invokes, `<name>.scx` (decision D121): an `event:schema` that is not a
+/// reference into `<name>.json` (floppy documents carry no inline schema),
+/// a `<script>` other than one root `<script src="<name>.js"/>`, and the
+/// structure rule's.
 fn builder_output_problems(document: &Parsed) -> Vec<String> {
+    let stem = document
+        .path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .expect("a UTF-8 document name");
+    let schemas = format!("{stem}.json#");
+    let script = format!("{stem}.js");
     let mut problems = Vec::new();
     document.with(|root| {
+        let mut roots = 0;
+        for child in &root.children {
+            if let scxml_syntax::Node::Element(element) = child
+                && element.name.local_name == "script"
+                && element
+                    .attribute("src")
+                    .is_some_and(|src| src.value == script)
+                && element.children.is_empty()
+            {
+                roots += 1;
+            }
+        }
+        let mut all = 0;
         root.visit(&mut |element| {
-            if element.attributes.iter().any(is_schema_attribute) {
-                problems.push(format!(
-                    "<{}> carries an event:schema",
-                    element.name.local_name
-                ));
+            if element.name.local_name == "script" {
+                all += 1;
+            }
+            for attribute in element.attributes.iter().filter(|a| is_schema_attribute(a)) {
+                if !attribute.value.starts_with(&schemas) {
+                    problems.push(format!(
+                        "<{}> carries an event:schema that is not {schemas}...",
+                        element.name.local_name
+                    ));
+                }
             }
         });
+        if all != roots || roots > 1 {
+            problems.push(format!(
+                "a <script> other than one root <script src=\"{script}\"/>"
+            ));
+        }
     });
-    problems.extend(structure_problems(document, &BTreeSet::new(), false));
+    problems.extend(
+        structure_problems(document, &BTreeSet::new(), false)
+            .into_iter()
+            .filter(|problem| problem != "a <script> element"),
+    );
     problems
 }
 
@@ -1050,23 +1085,55 @@ fn validate_judges_a_literal_payload_against_the_childs_schema_file() {
 }
 
 #[test]
-fn builder_output_carries_no_event_schema_and_meets_the_structure_rule() {
+fn builder_output_references_its_own_documents_and_meets_the_structure_rule() {
     let double = workspace().join("tests/fixtures/phase4/behavior_double.scx");
     let problems = builder_output_problems(&Parsed::read(&double));
     assert!(problems.is_empty(), "{problems:#?}");
     validates_clean(&double).expect("the behavior double validates clean");
-    // A schema reference, valid in a literal child, breaks builder output.
+    // Three documents beside each other: the chart, its schemas and its
+    // script.
+    let dir = support::unique_scratch("contracts-builder-output");
+    std::fs::write(
+        dir.join("greet.json"),
+        r#"{"$defs": {"knock": {"type": "object"}}}"#,
+    )
+    .expect("writable");
+    std::fs::write(
+        dir.join("greet.js"),
+        "function greeting() {\n  return 'hello';\n}\n",
+    )
+    .expect("writable");
+    let greet = support::write(
+        &dir,
+        "greet.scx",
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" version="1.0" datamodel="ecmascript" initial="waiting"><datamodel><data id="said" expr="null"/></datamodel><script src="greet.js"/><state id="waiting"><transition event="knock" event:schema="greet.json#/$defs/knock" target="done"><assign location="said" expr="greeting()"/></transition></state><final id="done"/></scxml>"#,
+    );
+    let problems = builder_output_problems(&Parsed::read(&greet));
+    assert!(problems.is_empty(), "{problems:#?}");
+    validates_clean(&greet).expect("the three documents validate clean");
+    // A schema file of another name, valid in a literal child, breaks
+    // builder output.
     let referencing = Parsed::read(&fixture("good/child/child.scx"));
     assert!(
         builder_output_problems(&referencing)
             .iter()
-            .any(|problem| problem.ends_with("carries an event:schema")),
-        "the good child references its schema files"
+            .any(|problem| problem.contains("carries an event:schema that is not child.json#")),
+        "the good child references its schemas/ files"
+    );
+    // So does a script of another name.
+    let other = support::write(
+        &dir,
+        "other.scx",
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript"><script src="greet.js"/><final id="done"/></scxml>"#,
+    );
+    assert_eq!(
+        builder_output_problems(&Parsed::read(&other)),
+        [r#"a <script> other than one root <script src="other.js"/>"#]
     );
 }
 
 #[test]
-fn an_scxml_invoke_needs_a_literal_id_and_a_relative_src_a_srcexpr_or_content() {
+fn an_scxml_invoke_needs_a_literal_id_and_a_relative_src_or_a_srcexpr() {
     let dir = support::unique_scratch("contracts-invoke");
     let problems = |invoke: &str| {
         let text = format!(
@@ -1081,21 +1148,19 @@ fn an_scxml_invoke_needs_a_literal_id_and_a_relative_src_a_srcexpr_or_content() 
     for allowed in [
         r#"<invoke id="child" type="scxml" src="child.scx"/>"#,
         r#"<invoke id="behavior" type="scxml" srcexpr="behavior"/>"#,
-        r#"<invoke id="candidate" type="scxml"><content expr="source"/></invoke>"#,
     ] {
         assert!(problems(allowed).is_empty(), "{allowed}");
     }
     for refused in [
         r#"<invoke type="scxml" srcexpr="behavior"/>"#,
+        r#"<invoke id="candidate" type="scxml"><content expr="source"/></invoke>"#,
         r#"<invoke id="candidate" type="scxml"><content>text</content></invoke>"#,
         r#"<invoke id="child" type="scxml" src="/abs/child.scx"/>"#,
         r#"<invoke id="child" type="scxml" src="https://example.com/child.scx"/>"#,
     ] {
         assert_eq!(
             problems(refused),
-            [
-                "an SCXML <invoke> without a literal id and a relative src, a srcexpr or a <content expr>"
-            ],
+            ["an SCXML <invoke> without a literal id and a relative src or a srcexpr"],
             "{refused}"
         );
     }

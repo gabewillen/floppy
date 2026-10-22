@@ -1,16 +1,16 @@
 <?xml version="1.0"?>
-<!-- conversation-2: an inbound commit holds the sequence, direction, identities, content and content type, and drops other members. -->
+<!-- conversation-2: an inbound message drops audio content and other members, and takes its relationship's reference. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation">
 <datamodel>
-  <data id="msg" expr='{"source_ids": ["user"], "target_ids": ["bot"], "content": "hello", "content_type": "text/plain", "extra": 1}'/>
-  <data id="m" expr="null"/>
+  <data id="l" expr="null"/>
+  <data id="msg" expr="({source_ids: ['alice'], target_ids: [], content: 'AAAA', content_type: 'Audio/PCM', extra: 1})"/>
 </datamodel>
 <state id="s0">
   <onentry>
-    <conversation:commit location="m" direction="inbound" event="'bot.ability.conversation.input'" message="msg" sequence="3"/>
+    <conversation:message_for_turn location="l" direction="inbound" event="'bot.ability.conversation.input'" message="msg" sequence="2"/>
   </onentry>
   <transition event="error.execution" conf:targetfail=""/>
-  <transition cond="m.sequence === 3 &amp;&amp; m.direction === 'inbound' &amp;&amp; m.source_ids[0] === 'user' &amp;&amp; m.target_ids[0] === 'bot' &amp;&amp; m.content === 'hello' &amp;&amp; m.content_type === 'text/plain' &amp;&amp; !('extra' in m) &amp;&amp; m.provenance.event === 'bot.ability.conversation.input'" conf:targetpass=""/>
+  <transition cond="l.sequence === 2 &amp;&amp; l.direction === 'inbound' &amp;&amp; l.content === null &amp;&amp; l.extra === undefined &amp;&amp; l.provenance.event === 'bot.ability.conversation.input' &amp;&amp; l.provenance.session_ref === 'relationship-{&quot;identity_groups&quot;:[[],[&quot;alice&quot;]]}'" conf:targetpass=""/>
   <transition conf:targetfail=""/>
 </state>
 <conf:pass/>

@@ -32,18 +32,28 @@
 //! * `schema` (optional): a JSON Schema (a JSON object, or a string holding
 //!   one) that satisfies its dialect's metaschema (2020-12 unless `$schema`
 //!   names another supported dialect) and references nothing outside itself.
-//!   With it the request asks for structured output (`response_format` of
-//!   type `json_schema`), and the reply must parse as JSON and satisfy the
-//!   schema **before** anything is returned. `schemaname` (a string matching
-//!   `[A-Za-z0-9_-]{1,64}`, [`DEFAULT_SCHEMA_NAME`] without it) and `strict`
-//!   (a boolean, `false` without it) are sent with it and require it. A
-//!   strict schema is sent as [`strict_schema`] normalizes it (the original's
-//!   OpenAI-compatible provider does the same): strict structured outputs
-//!   require every object property; the reply is still checked against the
-//!   schema as given.
+//!   With it the request offers one function tool, as the original's Chat
+//!   Completions provider offers its `dispatch` tool (decision D112; it
+//!   never sends `response_format`): the schema's root `description` is
+//!   the function's `description` and the rest of the schema its
+//!   `parameters`, and a call is required (`tool_choice` `required`). The
+//!   reply's calls are returned as the original's text generator returns
+//!   them, every call's `arguments` a JSON object, and every call is of
+//!   the function with arguments the schema admits **before** anything is
+//!   returned (a call of another name, or arguments it does not admit, fail
+//!   `schema-mismatch`, as the original's processing refuses a call that is
+//!   not its `dispatch`). A top-level field of the arguments that the
+//!   schema's root `properties` do not declare is dropped before the check
+//!   and is not returned (the original's processing reads only `events`);
+//!   nested objects are checked strictly. `schemaname` (a string matching
+//!   `[A-Za-z0-9_-]{1,64}`, [`DEFAULT_SCHEMA_NAME`] without it, requiring
+//!   a schema) is the function's `name`.
 //! * `reasoning_effort` (optional, one of `none`, `minimal`, `low`,
 //!   `medium`, `high`, `xhigh`): sent as `reasoning_effort`, and
-//!   [`DEFAULT_REASONING_EFFORT`] without it.
+//!   [`DEFAULT_REASONING_EFFORT`] without it. With a schema only `none` is
+//!   admitted and it is [`TOOLS_REASONING_EFFORT`] (`none`) without it, as
+//!   the original sends function tools on Chat Completions: reasoning models
+//!   reject them with any other effort.
 //! * `stream` (optional, a boolean, `false` without it): `true` asks for a
 //!   streamed reply (`"stream": true`, server-sent events); without it the
 //!   call is one non-streamed completion, as the original's `OpenAI`-compatible
@@ -89,12 +99,28 @@
 //! # Events
 //!
 //! `invoke` (the component's one export, an `async func`) writes exactly one
-//! event to the stream it returns, then resolves its result future with no
-//! data (the invoking session receives `done.invoke.<id>` after the event):
+//! result event to the stream it returns, then resolves its result future
+//! with no data (the invoking session receives `done.invoke.<id>` after the
+//! event):
 //!
-//! * [`RESULT_EVENT`] `{"text": T}` (no schema) or `{"json": V}` (with a
-//!   schema; `V` satisfies it).
+//! * [`RESULT_EVENT`] the original's text-generator output, `{"content":
+//!   C, "tool_calls": [{"id": I, "name": N, "args": A}]}`: `C` the reply's
+//!   content (never empty without a schema; empty when a call has none),
+//!   and every call of the reply in order (the original's `TextToolCall`,
+//!   `A` a JSON object; at least one with a schema, none without).
 //! * [`FAILED_EVENT`] `{"code": C}` with one closed [`FailureCode`].
+//!
+//! A call that may stream (`stream`, or the run's `stream` slot) first
+//! returns [`PROGRESS_EVENT`] `{"received": N}` (the reply's bytes received
+//! so far) while a streamed reply arrives ([`Progress`]): once when its body
+//! shows it is a server-sent-event stream ([`is_event_stream`]; the reply
+//! has started), then when a read brings new `data:` events ([`data_lines`];
+//! a gateway's keep-alive comments are not progress), at most once a second
+//! of the session's logical clock ([`progress_due`], decision D101), so an
+//! invoking document can bound the call by inactivity (a `<send delay>`
+//! armed by the first progress event and re-armed by each later one) rather
+//! than by its whole duration. A reply that is not streamed (one
+//! completion, whenever its head arrives) returns none.
 //!
 //! The invoking document describes both with `event:schema` on the
 //! transitions that take them (`bots/builder/builder.scxml`). The service
@@ -112,13 +138,15 @@
 //! ```json
 //! {"messages":[{"content":"…","role":"system"},{"content":"…","role":"user"}],
 //!  "model":"…",
-//!  "reasoning_effort":"low",
-//!  "response_format":{"json_schema":{"name":"result","schema":{…},"strict":false},"type":"json_schema"}}
+//!  "reasoning_effort":"none",
+//!  "tool_choice":"required",
+//!  "tools":[{"function":{"description":"…","name":"result","parameters":{…}},"type":"function"}]}
 //! ```
 //!
-//! The request never blocks the session: `outbound-http.fetch` is an
-//! `async func`, so awaiting it suspends only the invocation's own task
-//! while the session keeps running. Leaving the invoking state cancels the
+//! The request never blocks the session: `outbound-http.fetch` (and, for a
+//! streamed call, `outbound-http.send`, whose body arrives as the backend
+//! writes it) is an `async func`, so awaiting it suspends only the
+//! invocation's own task while the session keeps running. Leaving the invoking state cancels the
 //! invocation (SCXML 6.4): the host drops it and closes the request's
 //! connection at once.
 //!
@@ -134,17 +162,19 @@
 //! generation or billing (that is reported by its users, not guaranteed),
 //! and the prompt's tokens are billed whenever the request was accepted.
 //!
-//! The request sets no token limit (neither `max_tokens` nor
-//! `max_completion_tokens`), so the backend's own limit (by default the
-//! model's context left after the prompt) bounds the reasoning and the
-//! answer together. A reasoning model (such as
+//! The request sets no token limit unless the invocation gives
+//! `max_completion_tokens` (it never sends `max_tokens`), so by default the
+//! backend's own limit (the model's context left after the prompt) bounds
+//! the reasoning and the answer together; a reply cut at the limit fails
+//! `truncated`. A reasoning model (such as
 //! `Qwen/Qwen3.8-Flash-Next`) streams its reasoning first, as
 //! `delta.reasoning` or `delta.reasoning_content`, and only then the
 //! answer as `delta.content`: a small limit can go entirely to reasoning
 //! and leave no answer (a 20-token limit did). The time bound is the
 //! invoking state's `<send delay>`, not a token count.
 //!
-//! The request always sends `reasoning_effort`, `low` by default. The
+//! The request always sends `reasoning_effort`, `low` by default without
+//! a schema (`none` with one, as above). The
 //! maintainer's gateway (decision D25) held a reasoning model's reasoning back until its answer
 //! starts, so nothing reaches the connection while it reasons; without
 //! `reasoning_effort` the builder's design prompt reasoned past Cloudflare's
@@ -154,21 +184,32 @@
 //!
 //! # The reply
 //!
-//! A non-streamed reply is the completion's `choices[0].message.content`
-//! ([`completion_text`]); a refusal (`message.refusal`), a `finish_reason`
-//! of `length` or `content_filter`, an `error` object, no or empty content,
-//! or a body that is not such a completion is a failure. A streamed reply
-//! is the text the stream carries ([`reply_text`]): every
-//! `data:` event up to `data: [DONE]` is a chunk, and the
-//! `choices[0].delta.content` of the chunks are joined in order (a chunk
-//! without choices, such as a usage chunk, adds nothing, and a reasoning
-//! model's reasoning is never part of the reply). A refusal
-//! (`choices[0].delta.refusal`), a `finish_reason` of `length` or
-//! `content_filter`, an `error` chunk, a stream without `[DONE]` or without
-//! content (empty content counts as none: a reasoning model's stream opens
-//! with an empty `content`), or a body that is not such a stream is a failure. With a schema
-//! the whole text is parsed as JSON and checked against the compiled schema
-//! only once the whole reply arrived ([`structured_value`]).
+//! The reply is read as the original's Chat Completions provider reads it
+//! ([`Reply`]). A non-streamed reply is the completion's first choice
+//! ([`completion_reply`]): its `message.content`, its `message.tool_calls`
+//! (each a `function` call with a non-blank `id` and name and string
+//! `arguments`), and its `finish_reason`. A streamed reply is put back
+//! together into the same shape ([`stream_reply`]): every `data:` event up
+//! to `data: [DONE]` is a chunk; the choice of `index` 0 of each chunk adds
+//! its `delta.content` to the content and each `delta.tool_calls` fragment
+//! to the call its `index` names (its `id` and `function.name` when given,
+//! its `function.arguments` appended); a chunk without choices, such as a
+//! usage chunk, adds nothing, and a reasoning model's reasoning is never
+//! part of the reply. A refusal, an `error` object or chunk, a stream
+//! without `[DONE]` or a finish reason, or a body that is not such a
+//! completion or stream is a failure.
+//!
+//! Then ([`Reply::answer`]): a `finish_reason` of `length` or
+//! `content_filter` fails `truncated` or `filtered`; `tool_calls` with no
+//! call, or calls with another finish reason, is malformed. Without a
+//! schema the answer is the content, and tool calls or no content (empty
+//! counts as none: a reasoning model's stream opens with an empty
+//! `content`) are malformed. With a schema the answer is the content and
+//! every call, as the original's text generator checks them: a reply with
+//! no tool call ("did not include a required tool call") is malformed, and
+//! a call whose arguments are not a JSON object is not JSON, and a call of
+//! another function, or one whose arguments the compiled schema does not
+//! admit, is a schema mismatch (checked only once the whole reply arrived).
 //!
 //! # Bounds
 //!
@@ -214,12 +255,24 @@ pub const SERVICE_URI: &str = "https://github.com/stateforward/floppy/services/g
 pub const API_KEY_SLOT: &str = "apikey";
 /// The `env` slot of the API base URL (`env:baseurl`).
 pub const BASE_URL_SLOT: &str = "baseurl";
+/// The `env` slot of whether the backend streams (`env:stream`, `true` or
+/// `false`), substituted into the request's `stream` member (decision
+/// D101): a run sets it per backend, and without it a call is not streamed.
+pub const STREAM_SLOT: &str = "stream";
+/// Upper bound of `max_completion_tokens`.
+pub const MAX_COMPLETION_TOKENS: u32 = 1_048_576;
 /// The path appended to the base URL.
 pub const CHAT_COMPLETIONS_PATH: &str = "/chat/completions";
-/// `json_schema.name` when the invocation names none.
+/// `tool_choice` with a schema: a call of the one tool is required, as the
+/// original's Chat Completions provider asks.
+pub const TOOL_CHOICE: &str = "required";
+/// The function's `name` when the invocation names none.
 pub const DEFAULT_SCHEMA_NAME: &str = "result";
-/// `reasoning_effort` when the invocation names none.
+/// `reasoning_effort` when the invocation names none and gives no schema.
 pub const DEFAULT_REASONING_EFFORT: &str = "low";
+/// `reasoning_effort` with a schema (`tools`), the only one admitted there,
+/// as the original's Chat Completions provider sends it.
+pub const TOOLS_REASONING_EFFORT: &str = "none";
 /// The `reasoning_effort` values the Chat Completions API defines.
 pub const REASONING_EFFORTS: [&str; 6] = ["none", "minimal", "low", "medium", "high", "xhigh"];
 /// Upper bound on the bytes of a schema name (the `OpenAI` limit).
@@ -229,6 +282,14 @@ pub const MAX_SCHEMA_NAME_BYTES: usize = 64;
 pub const RESULT_EVENT: &str = "generate.result";
 /// The event that reports a failed generation.
 pub const FAILED_EVENT: &str = "generate.failed";
+/// The event a streamed generation returns while its reply arrives.
+pub const PROGRESS_EVENT: &str = "generate.progress";
+/// The least logical time between two [`PROGRESS_EVENT`]s, in nanoseconds
+/// (one second): the invoking documents' inactivity bounds are tens of
+/// seconds, so a second's resolution loses nothing, and a reply that streams
+/// a token at a time returns at most one event a second instead of one per
+/// read.
+pub const PROGRESS_INTERVAL_NS: u64 = 1_000_000_000;
 
 /// Upper bound on the conversation's bytes, the system message included
 /// (wasm builds only). Its JSON encoding stays inside the host's request-body
@@ -268,6 +329,28 @@ pub struct Request {
     pub headers: Vec<(String, Vec<Part>)>,
     /// The canonical JSON body.
     pub body: Vec<u8>,
+    /// The reference whose value (`true` or `false`) is the body's `stream`
+    /// member, when the run's `stream` slot decides it ([`STREAM_SLOT`]).
+    pub stream: Option<u32>,
+}
+
+impl Request {
+    /// The body as it is sent, in parts: the canonical body, with a
+    /// `stream` member whose value is [`Request::stream`]'s reference when
+    /// there is one. `stream` sorts after every other member the body has,
+    /// so it goes last and the body stays canonical.
+    #[must_use]
+    pub fn body_parts(&self) -> Vec<Part> {
+        let text = String::from_utf8_lossy(&self.body).into_owned();
+        match (self.stream, text.strip_suffix('}')) {
+            (Some(reference), Some(open)) => vec![
+                Part::Literal(format!("{open},\"stream\":")),
+                Part::Reference(reference),
+                Part::Literal("}".to_owned()),
+            ],
+            _ => vec![Part::Literal(text)],
+        }
+    }
 }
 
 /// The model service's answer.
@@ -370,16 +453,19 @@ pub enum ImageReadFailure {
     TooLarge,
 }
 
-/// The structured-output request of one invocation.
+/// The one function tool of one invocation: the schema's root
+/// `description` is the function's, and the rest of the schema its
+/// `parameters`.
 #[derive(Debug)]
 pub struct ResponseSchema {
-    /// `json_schema.name`.
+    /// The function's `name`.
     pub name: String,
-    /// `json_schema.strict`.
-    pub strict: bool,
-    /// The canonical resolved schema.
-    pub schema: Json,
-    /// The schema compiled for checking the reply.
+    /// The function's `description`: the schema's root `description`.
+    pub description: Option<String>,
+    /// The function's `parameters`: the canonical resolved schema without
+    /// its root `description`.
+    pub parameters: Json,
+    /// The schema compiled for checking each call's arguments.
     pub compiled: CompiledSchema,
 }
 
@@ -390,12 +476,14 @@ pub struct Generation {
     pub model: String,
     /// The conversation, the system message first.
     pub messages: Vec<Message>,
-    /// The structured-output request, when the invocation gave a schema.
+    /// The one function tool, when the invocation gave a schema.
     pub schema: Option<ResponseSchema>,
     /// `reasoning_effort`, one of [`REASONING_EFFORTS`].
     pub reasoning_effort: &'static str,
     /// Whether the reply is streamed (`stream`).
     pub stream: bool,
+    /// `max_completion_tokens`, when the invocation gave one.
+    pub max_completion_tokens: Option<u64>,
 }
 
 /// The closed failure codes of [`FAILED_EVENT`].
@@ -407,7 +495,8 @@ pub enum FailureCode {
     Transport,
     /// The model service answered with a non-2xx status.
     Status,
-    /// The answer is not a chat completion with text content, or exceeds
+    /// The answer is not a chat completion with text content (with a
+    /// schema, with a tool call), or exceeds
     /// the host's response bound.
     Malformed,
     /// The reply was cut short by its token limit.
@@ -416,9 +505,10 @@ pub enum FailureCode {
     Filtered,
     /// The model refused the request.
     Refusal,
-    /// The structured reply is not JSON.
+    /// A call's arguments are not a JSON object.
     NotJson,
-    /// The structured reply does not satisfy the requested schema.
+    /// A call names a function the request did not offer, or has arguments
+    /// its `parameters` do not admit.
     SchemaMismatch,
 }
 
@@ -458,6 +548,85 @@ impl Returned {
             name: FAILED_EVENT,
             data: canonical_json(&serde_json::json!({ "code": code.name() })),
         }
+    }
+
+    /// [`PROGRESS_EVENT`] with the reply's bytes received so far.
+    #[must_use]
+    pub fn progress(received: usize) -> Self {
+        Self {
+            name: PROGRESS_EVENT,
+            data: canonical_json(&serde_json::json!({ "received": received })),
+        }
+    }
+}
+
+/// The server-sent events of a streamed reply's body that carry data, in
+/// its complete lines from byte `from` on: their count and where the next
+/// incomplete line starts. Comments (`: ping`, a gateway's keep-alive) and
+/// blank lines are not progress: a backend that only keeps its connection
+/// alive while the model says nothing is not answering.
+#[must_use]
+pub fn data_lines(body: &[u8], from: usize) -> (usize, usize) {
+    let mut count = 0;
+    let mut start = from;
+    for (offset, byte) in body.iter().enumerate().skip(from) {
+        if *byte == b'\n' {
+            if body
+                .get(start..offset)
+                .is_some_and(|line| line.starts_with(b"data:"))
+            {
+                count += 1;
+            }
+            start = offset + 1;
+        }
+    }
+    (count, start)
+}
+
+/// What the reads of a reply that may stream report (decision D101): a
+/// [`PROGRESS_EVENT`] once the body shows it is a server-sent-event stream
+/// ([`is_event_stream`]), then one when new `data:` events arrived
+/// ([`data_lines`]) and [`progress_due`] says. A completion that is not
+/// streamed is never progress, however early its head or bytes arrive, so a
+/// document arms no inactivity bound for it.
+#[derive(Debug, Default)]
+pub struct Progress {
+    started: bool,
+    scanned: usize,
+    events: usize,
+    reported: usize,
+    last: Option<u64>,
+}
+
+impl Progress {
+    /// Whether the reply's body, now `body` (all of it so far), read at the
+    /// logical time `now` (nanoseconds), returns a [`PROGRESS_EVENT`].
+    pub fn read(&mut self, body: &[u8], now: u64) -> bool {
+        let (more, next) = data_lines(body, self.scanned);
+        self.events += more;
+        self.scanned = next;
+        let due = if self.started {
+            self.events > self.reported && progress_due(self.last, now)
+        } else {
+            self.started = is_event_stream(body);
+            self.started
+        };
+        if due {
+            self.reported = self.events;
+            self.last = Some(now);
+        }
+        due
+    }
+}
+
+/// Whether a read at the logical time `now` (nanoseconds) returns a
+/// [`PROGRESS_EVENT`]: the first read does, and then one at most every
+/// [`PROGRESS_INTERVAL_NS`] after the last one returned.
+#[must_use]
+pub const fn progress_due(last: Option<u64>, now: u64) -> bool {
+    match last {
+        None => true,
+        Some(last) => now.saturating_sub(last) >= PROGRESS_INTERVAL_NS,
     }
 }
 
@@ -667,84 +836,33 @@ pub fn data_url(bytes: &[u8]) -> Option<String> {
     Some(url)
 }
 
-/// Resolves and compiles one response schema from its source text.
+/// Resolves and checks one response schema from its source text: the
+/// function tool it becomes, its root `description` the function's.
 ///
 /// # Errors
 ///
 /// A static detail when the text is not a JSON Schema its dialect's
 /// metaschema admits, references anything outside itself, or exceeds the
 /// schema bound.
-pub fn response_schema(
-    source: &str,
-    name: Option<&str>,
-    strict: bool,
-) -> Result<ResponseSchema, &'static str> {
+pub fn response_schema(source: &str, name: Option<&str>) -> Result<ResponseSchema, &'static str> {
     const INVALID: &str = "generate schema is not a self-contained JSON Schema";
     let resolved =
         scxml_event_schema::resolve(source.trim().as_bytes(), None).map_err(|_| INVALID)?;
-    let schema: Json = serde_json::from_str(&resolved.schema).map_err(|_| INVALID)?;
     let compiled = CompiledSchema::new(&resolved.schema).map_err(|_| INVALID)?;
+    let mut parameters: Json = serde_json::from_str(&resolved.schema).map_err(|_| INVALID)?;
+    let description = match parameters
+        .as_object_mut()
+        .map(|root| root.remove("description"))
+    {
+        Some(Some(Json::String(description))) => Some(description),
+        _ => None,
+    };
     Ok(ResponseSchema {
         name: name.unwrap_or(DEFAULT_SCHEMA_NAME).to_owned(),
-        strict,
-        schema,
+        description,
+        parameters,
         compiled,
     })
-}
-
-/// `schema` as strict structured outputs take it (the original's
-/// `_normalize_openai_schema`): `default`, `examples` and `title` dropped,
-/// `oneOf` sent as `anyOf`, and every object schema closed
-/// (`additionalProperties: false`) with all its properties required, at
-/// every depth. An optional property is then always present: a nullable
-/// one answers `null`.
-#[must_use]
-pub fn strict_schema(schema: &Json) -> Json {
-    let Json::Object(map) = schema else {
-        return schema.clone();
-    };
-    let mut out = Map::new();
-    for (key, value) in map {
-        match (key.as_str(), value) {
-            ("default" | "examples" | "title", _) => {}
-            ("properties" | "$defs" | "definitions", Json::Object(members)) => {
-                let members = members
-                    .iter()
-                    .map(|(name, member)| (name.clone(), strict_schema(member)))
-                    .collect();
-                out.insert(key.clone(), Json::Object(members));
-            }
-            ("anyOf" | "oneOf", Json::Array(branches)) => {
-                out.insert("anyOf".into(), branches.iter().map(strict_schema).collect());
-            }
-            ("items", _) => {
-                out.insert(key.clone(), strict_schema(value));
-            }
-            _ => {
-                out.insert(key.clone(), value.clone());
-            }
-        }
-    }
-    let names: Option<Vec<Json>> = out
-        .get("properties")
-        .and_then(Json::as_object)
-        .map(|properties| properties.keys().cloned().map(Json::from).collect());
-    if names.is_some() || out.get("type").and_then(Json::as_str) == Some("object") {
-        // The declared required names keep their order; the rest follow.
-        let mut required: Vec<Json> = out
-            .get("required")
-            .and_then(Json::as_array)
-            .cloned()
-            .unwrap_or_default();
-        for name in names.unwrap_or_default() {
-            if !required.contains(&name) {
-                required.push(name);
-            }
-        }
-        out.insert("additionalProperties".into(), Json::Bool(false));
-        out.insert("required".into(), Json::Array(required));
-    }
-    Json::Object(out)
 }
 
 /// An optional boolean parameter's value.
@@ -760,10 +878,20 @@ fn boolean_parameter(
 }
 
 /// The `reasoning_effort` an invocation asks: one of [`REASONING_EFFORTS`],
-/// or [`DEFAULT_REASONING_EFFORT`] without the parameter.
-fn reasoning_effort_parameter(value: Option<&Data>) -> Result<&'static str, &'static str> {
+/// or [`DEFAULT_REASONING_EFFORT`] without the parameter. With a schema
+/// (`tools`), as the original does: `none` without the parameter, and any
+/// other value is refused, since reasoning models reject function tools on
+/// Chat Completions unless the effort is `none`.
+fn reasoning_effort_parameter(
+    value: Option<&Data>,
+    tools: bool,
+) -> Result<&'static str, &'static str> {
     match value {
+        None if tools => Ok(TOOLS_REASONING_EFFORT),
         None => Ok(DEFAULT_REASONING_EFFORT),
+        Some(Data::String(effort)) if tools && effort != TOOLS_REASONING_EFFORT => {
+            Err("generate reasoning_effort must be none with a schema")
+        }
         Some(Data::String(effort)) => REASONING_EFFORTS
             .into_iter()
             .find(|known| known == effort)
@@ -809,9 +937,9 @@ pub fn parse_parameters<'a>(
     let mut system = None;
     let mut schema = None;
     let mut schema_name = None;
-    let mut strict = None;
     let mut reasoning_effort = None;
     let mut stream = None;
+    let mut max_completion_tokens = None;
     for (name, value) in parameters {
         let slot = match name {
             "model" => &mut model,
@@ -820,9 +948,9 @@ pub fn parse_parameters<'a>(
             "system" => &mut system,
             "schema" => &mut schema,
             "schemaname" => &mut schema_name,
-            "strict" => &mut strict,
             "reasoning_effort" => &mut reasoning_effort,
             "stream" => &mut stream,
+            "max_completion_tokens" => &mut max_completion_tokens,
             _ => return Err("generate takes no parameter of that name"),
         };
         if slot.replace(value).is_some() {
@@ -868,31 +996,19 @@ pub fn parse_parameters<'a>(
     {
         return Err("generate conversation exceeds its bound");
     }
-    let schema_name = match schema_name {
-        None => None,
-        Some(Data::String(name))
-            if !name.is_empty()
-                && name.len() <= MAX_SCHEMA_NAME_BYTES
-                && name
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-') =>
-        {
-            Some(name.as_str())
-        }
-        Some(_) => return Err("generate schemaname must match [A-Za-z0-9_-]{1,64}"),
-    };
-    let strict = boolean_parameter(strict, "generate strict must be a boolean")?;
-    let reasoning_effort = reasoning_effort_parameter(reasoning_effort)?;
+    let schema_name = schema_name_parameter(schema_name)?;
+    let reasoning_effort = reasoning_effort_parameter(reasoning_effort, schema.is_some())?;
     let stream = boolean_parameter(stream, "generate stream must be a boolean")?.unwrap_or(false);
+    let max_completion_tokens = max_completion_tokens_parameter(max_completion_tokens)?;
     let schema = match schema {
         None => {
-            if schema_name.is_some() || strict.is_some() {
-                return Err("generate schemaname and strict require a schema");
+            if schema_name.is_some() {
+                return Err("generate schemaname requires a schema");
             }
             None
         }
         Some(Data::JsonObject(text) | Data::String(text)) => {
-            Some(response_schema(text, schema_name, strict.unwrap_or(false))?)
+            Some(response_schema(text, schema_name)?)
         }
         Some(_) => return Err("generate schema must be a JSON object or a string holding one"),
     };
@@ -902,7 +1018,45 @@ pub fn parse_parameters<'a>(
         schema,
         reasoning_effort,
         stream,
+        max_completion_tokens,
     })
+}
+
+/// `schemaname`: absent, or `[A-Za-z0-9_-]{1,64}`.
+fn schema_name_parameter(value: Option<&Data>) -> Result<Option<&str>, &'static str> {
+    match value {
+        None => Ok(None),
+        Some(Data::String(name))
+            if !name.is_empty()
+                && name.len() <= MAX_SCHEMA_NAME_BYTES
+                && name
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-') =>
+        {
+            Ok(Some(name.as_str()))
+        }
+        Some(_) => Err("generate schemaname must match [A-Za-z0-9_-]{1,64}"),
+    }
+}
+
+/// `max_completion_tokens`: absent, or a whole number from 1 to
+/// [`MAX_COMPLETION_TOKENS`].
+fn max_completion_tokens_parameter(value: Option<&Data>) -> Result<Option<u64>, &'static str> {
+    match value {
+        None => Ok(None),
+        Some(Data::Number(number))
+            if number.get().fract() == 0.0
+                && (1.0..=f64::from(MAX_COMPLETION_TOKENS)).contains(&number.get()) =>
+        {
+            #[allow(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "a whole number checked to lie in 1..=MAX_COMPLETION_TOKENS"
+            )]
+            Ok(Some(number.get() as u64))
+        }
+        Some(_) => Err("generate max_completion_tokens must be a whole number from 1 to 1048576"),
+    }
 }
 
 /// The invocation's endpoint, `(baseurl, apikey)`: the references the host
@@ -927,9 +1081,15 @@ pub const fn endpoint(
 /// the `baseurl` slot's reference) with the `apikey` slot's reference as a
 /// bearer key and a canonical JSON body: `messages`, `model`,
 /// `reasoning_effort`, `stream` (`true`) when streamed, and, with a
-/// schema, `response_format`.
+/// schema, `tools` (one function, the schema its `parameters`) and
+/// `tool_choice` forcing it.
 #[must_use]
-pub fn build_request(base_url: u32, api_key: u32, generation: &Generation) -> Request {
+pub fn build_request(
+    base_url: u32,
+    api_key: u32,
+    stream: Option<u32>,
+    generation: &Generation,
+) -> Request {
     let mut body = Map::new();
     body.insert(
         "messages".into(),
@@ -949,22 +1109,21 @@ pub fn build_request(base_url: u32, api_key: u32, generation: &Generation) -> Re
     if generation.stream {
         body.insert("stream".into(), Json::Bool(true));
     }
+    if let Some(tokens) = generation.max_completion_tokens {
+        body.insert("max_completion_tokens".into(), tokens.into());
+    }
     if let Some(schema) = &generation.schema {
+        let mut function = Map::new();
+        function.insert("name".into(), schema.name.clone().into());
+        if let Some(description) = &schema.description {
+            function.insert("description".into(), description.clone().into());
+        }
+        function.insert("parameters".into(), schema.parameters.clone());
         body.insert(
-            "response_format".into(),
-            serde_json::json!({
-                "type": "json_schema",
-                "json_schema": {
-                    "name": schema.name,
-                    "strict": schema.strict,
-                    "schema": if schema.strict {
-                        strict_schema(&schema.schema)
-                    } else {
-                        schema.schema.clone()
-                    },
-                },
-            }),
+            "tools".into(),
+            serde_json::json!([{"type": "function", "function": function}]),
         );
+        body.insert("tool_choice".into(), TOOL_CHOICE.into());
     }
     Request {
         url: vec![
@@ -985,6 +1144,8 @@ pub fn build_request(base_url: u32, api_key: u32, generation: &Generation) -> Re
                 vec![Part::Literal(
                     if generation.stream {
                         "text/event-stream"
+                    } else if stream.is_some() {
+                        "application/json, text/event-stream"
                     } else {
                         "application/json"
                     }
@@ -993,6 +1154,7 @@ pub fn build_request(base_url: u32, api_key: u32, generation: &Generation) -> Re
             ),
         ],
         body: canonical_json(&Json::Object(body)).into_bytes(),
+        stream: stream.filter(|_| !generation.stream),
     }
 }
 
@@ -1014,9 +1176,35 @@ fn content_json(content: &Content) -> Json {
     }
 }
 
-/// The reply text of a streamed Chat Completions result: the
-/// `choices[0].delta.content` of every `data:` chunk before `data: [DONE]`,
-/// joined in order.
+/// One completion's reply, as the original reads it: the first choice's
+/// content, its tool calls, and its finish reason.
+#[derive(Debug, Default, Eq, PartialEq)]
+pub struct Reply {
+    /// `message.content`, empty when absent or `null`.
+    pub content: String,
+    /// `message.tool_calls`, in order.
+    pub tool_calls: Vec<ToolCall>,
+    /// `finish_reason`.
+    pub finish_reason: Option<String>,
+}
+
+/// One tool call of a reply.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ToolCall {
+    /// Its `id`.
+    pub id: String,
+    /// `function.name`.
+    pub name: String,
+    /// `function.arguments`, a JSON object's text.
+    pub arguments: String,
+}
+
+/// The reply of a streamed Chat Completions result, put back together as
+/// the original's stream assembly does: the `choices` of `index` 0 of every
+/// `data:` chunk before `data: [DONE]`, their `delta.content` joined in
+/// order, each `delta.tool_calls` fragment folded into the call its `index`
+/// names (its `id` and `function.name` when given, its `function.arguments`
+/// appended), and the last `finish_reason`.
 ///
 /// The body is server-sent events: lines ending in `\n` (or `\r\n`), an
 /// event's `data:` lines joined with `\n`, a blank line ending the event;
@@ -1025,14 +1213,14 @@ fn content_json(content: &Content) -> Json {
 /// # Errors
 ///
 /// [`FailureCode::Malformed`] when the body is not such a stream (not
-/// UTF-8, a chunk that is not a JSON object, an `error` chunk, no
-/// `[DONE]`, or no content), [`FailureCode::Truncated`] or
-/// [`FailureCode::Filtered`] for a `finish_reason` of `length` or
-/// `content_filter`, and [`FailureCode::Refusal`] when the stream carries a
+/// UTF-8, a chunk that is not a JSON object, an `error` chunk, a tool call
+/// fragment without a non-negative `index`, no finish reason, or no
+/// `[DONE]`), and [`FailureCode::Refusal`] when the stream carries a
 /// refusal.
-pub fn reply_text(body: &[u8]) -> Result<String, FailureCode> {
+pub fn stream_reply(body: &[u8]) -> Result<Reply, FailureCode> {
     let text = std::str::from_utf8(body).map_err(|_| FailureCode::Malformed)?;
-    let mut content: Option<String> = None;
+    let mut content = String::new();
+    let mut calls: std::collections::BTreeMap<u64, ToolCall> = std::collections::BTreeMap::new();
     let mut refusal = String::new();
     let mut finish: Option<String> = None;
     let mut done = false;
@@ -1052,28 +1240,60 @@ pub fn reply_text(body: &[u8]) -> Result<String, FailureCode> {
             if !chunk.is_object() || chunk.get("error").is_some() {
                 return Err(FailureCode::Malformed);
             }
-            let Some(choice) = chunk
+            let choices = chunk
                 .get("choices")
                 .and_then(Json::as_array)
-                .and_then(|choices| choices.first())
-            else {
-                continue;
-            };
-            if let Some(reason) = choice.get("finish_reason").and_then(Json::as_str) {
-                finish = Some(reason.to_owned());
-            }
-            let delta = choice.get("delta");
-            if let Some(part) = delta
-                .and_then(|delta| delta.get("content"))
-                .and_then(Json::as_str)
-            {
-                content.get_or_insert_with(String::new).push_str(part);
-            }
-            if let Some(part) = delta
-                .and_then(|delta| delta.get("refusal"))
-                .and_then(Json::as_str)
-            {
-                refusal.push_str(part);
+                .into_iter()
+                .flatten();
+            for choice in choices {
+                if choice.get("index").and_then(Json::as_u64).unwrap_or(0) != 0 {
+                    continue;
+                }
+                if let Some(reason) = choice.get("finish_reason").and_then(Json::as_str) {
+                    finish = Some(reason.to_owned());
+                }
+                let Some(delta) = choice.get("delta") else {
+                    continue;
+                };
+                if let Some(part) = delta.get("content").and_then(Json::as_str) {
+                    content.push_str(part);
+                }
+                if let Some(part) = delta.get("refusal").and_then(Json::as_str) {
+                    refusal.push_str(part);
+                }
+                for piece in delta
+                    .get("tool_calls")
+                    .and_then(Json::as_array)
+                    .into_iter()
+                    .flatten()
+                {
+                    let index = piece
+                        .get("index")
+                        .and_then(Json::as_u64)
+                        .ok_or(FailureCode::Malformed)?;
+                    let call = calls.entry(index).or_default();
+                    if let Some(id) = piece
+                        .get("id")
+                        .and_then(Json::as_str)
+                        .filter(|id| !id.is_empty())
+                    {
+                        id.clone_into(&mut call.id);
+                    }
+                    let function = piece.get("function");
+                    if let Some(name) = function
+                        .and_then(|function| function.get("name"))
+                        .and_then(Json::as_str)
+                        .filter(|name| !name.is_empty())
+                    {
+                        name.clone_into(&mut call.name);
+                    }
+                    if let Some(arguments) = function
+                        .and_then(|function| function.get("arguments"))
+                        .and_then(Json::as_str)
+                    {
+                        call.arguments.push_str(arguments);
+                    }
+                }
             }
             continue;
         }
@@ -1088,33 +1308,30 @@ pub fn reply_text(body: &[u8]) -> Result<String, FailureCode> {
             }
         }
     }
-    if !done {
+    if !done || finish.is_none() {
         return Err(FailureCode::Malformed);
-    }
-    match finish.as_deref() {
-        Some("length") => return Err(FailureCode::Truncated),
-        Some("content_filter") => return Err(FailureCode::Filtered),
-        _ => {}
     }
     if !refusal.is_empty() {
         return Err(FailureCode::Refusal);
     }
-    content
-        .filter(|text| !text.is_empty())
-        .ok_or(FailureCode::Malformed)
+    Ok(Reply {
+        content,
+        tool_calls: calls.into_values().collect(),
+        finish_reason: finish,
+    })
 }
 
-/// The reply text of a non-streamed Chat Completions result: its
-/// `choices[0].message.content`.
+/// The reply of a non-streamed Chat Completions result: its first choice's
+/// `message.content`, `message.tool_calls`, and `finish_reason`.
 ///
 /// # Errors
 ///
 /// [`FailureCode::Malformed`] when the body is not such a completion (not a
-/// JSON object, an `error` object, or no or empty content),
-/// [`FailureCode::Truncated`] or [`FailureCode::Filtered`] for a
-/// `finish_reason` of `length` or `content_filter`, and
+/// JSON object, an `error` object, no choice, a legacy `function_call`, or
+/// `tool_calls` that is not a list of function calls each with a non-blank
+/// `id` and `function.name` and string `function.arguments`), and
 /// [`FailureCode::Refusal`] when the message carries a refusal.
-pub fn completion_text(body: &[u8]) -> Result<String, FailureCode> {
+pub fn completion_reply(body: &[u8]) -> Result<Reply, FailureCode> {
     let completion: Json = serde_json::from_slice(body).map_err(|_| FailureCode::Malformed)?;
     if !completion.is_object() || completion.get("error").is_some() {
         return Err(FailureCode::Malformed);
@@ -1124,44 +1341,149 @@ pub fn completion_text(body: &[u8]) -> Result<String, FailureCode> {
         .and_then(Json::as_array)
         .and_then(|choices| choices.first())
         .ok_or(FailureCode::Malformed)?;
-    match choice.get("finish_reason").and_then(Json::as_str) {
-        Some("length") => return Err(FailureCode::Truncated),
-        Some("content_filter") => return Err(FailureCode::Filtered),
-        _ => {}
-    }
-    let message = choice.get("message");
+    let message = choice.get("message").ok_or(FailureCode::Malformed)?;
     if message
-        .and_then(|message| message.get("refusal"))
+        .get("refusal")
         .and_then(Json::as_str)
         .is_some_and(|refusal| !refusal.is_empty())
     {
         return Err(FailureCode::Refusal);
     }
-    message
-        .and_then(|message| message.get("content"))
-        .and_then(Json::as_str)
-        .filter(|text| !text.is_empty())
-        .map(str::to_owned)
-        .ok_or(FailureCode::Malformed)
+    if message
+        .get("function_call")
+        .is_some_and(|call| !call.is_null())
+    {
+        return Err(FailureCode::Malformed);
+    }
+    let tool_calls = match message.get("tool_calls") {
+        None | Some(Json::Null) => Vec::new(),
+        Some(Json::Array(calls)) => calls
+            .iter()
+            .map(|call| {
+                let function = call.get("function");
+                let text = |value: Option<&Json>| value.and_then(Json::as_str).map(str::to_owned);
+                let (Some("function"), Some(id), Some(name), Some(arguments)) = (
+                    call.get("type").and_then(Json::as_str),
+                    text(call.get("id")).filter(|id| !id.trim().is_empty()),
+                    text(function.and_then(|function| function.get("name")))
+                        .filter(|name| !name.trim().is_empty()),
+                    text(function.and_then(|function| function.get("arguments"))),
+                ) else {
+                    return Err(FailureCode::Malformed);
+                };
+                Ok(ToolCall {
+                    id,
+                    name,
+                    arguments,
+                })
+            })
+            .collect::<Result<_, _>>()?,
+        Some(_) => return Err(FailureCode::Malformed),
+    };
+    Ok(Reply {
+        content: message
+            .get("content")
+            .and_then(Json::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        tool_calls,
+        finish_reason: choice
+            .get("finish_reason")
+            .and_then(Json::as_str)
+            .map(str::to_owned),
+    })
 }
 
-/// The structured reply: `text` parsed as JSON, admitted by `schema`.
-///
-/// # Errors
-///
-/// [`FailureCode::NotJson`] when `text` is not JSON (or holds a number
-/// outside the data model's range), [`FailureCode::SchemaMismatch`] when the
-/// value does not satisfy the schema.
-pub fn structured_value(text: &str, schema: &CompiledSchema) -> Result<Json, FailureCode> {
-    let value: Json = serde_json::from_str(text).map_err(|_| FailureCode::NotJson)?;
-    if !schema.admits(&json_data(&value)?) {
-        return Err(FailureCode::SchemaMismatch);
+impl Reply {
+    /// What the reply answers, as the original's Chat Completions text
+    /// generator returns it (its output's `content` and `tool_calls`):
+    /// `{"content": C, "tool_calls": [{"id", "name", "args"}]}`, every
+    /// call (the original's `TextToolCall`, its arguments a JSON object) in
+    /// order. With a tool (a schema, its call `required`) there is at least
+    /// one call; without, there is none and `C` is not empty.
+    ///
+    /// # Errors
+    ///
+    /// [`FailureCode::Truncated`] or [`FailureCode::Filtered`] for a
+    /// `finish_reason` of `length` or `content_filter`;
+    /// [`FailureCode::Malformed`] when the finish reason is `tool_calls`
+    /// with no call or another with calls, when a required call is missing
+    /// ("did not include a required tool call") or calls arrive without a
+    /// tool, when a stream's call has no `id` or name, or when there is no
+    /// content without a tool; [`FailureCode::NotJson`] when a call's
+    /// arguments are not a JSON object; [`FailureCode::SchemaMismatch`]
+    /// when a call names another function than the tool's, or has arguments
+    /// its schema does not admit (checked once the whole reply arrived,
+    /// every call before any is returned).
+    pub fn answer(self, tool: Option<&ResponseSchema>) -> Result<Json, FailureCode> {
+        match self.finish_reason.as_deref() {
+            Some("length") => return Err(FailureCode::Truncated),
+            Some("content_filter") => return Err(FailureCode::Filtered),
+            Some("tool_calls") if self.tool_calls.is_empty() => {
+                return Err(FailureCode::Malformed);
+            }
+            Some(reason) if reason != "tool_calls" && !self.tool_calls.is_empty() => {
+                return Err(FailureCode::Malformed);
+            }
+            _ => {}
+        }
+        if self
+            .tool_calls
+            .iter()
+            .any(|call| call.id.trim().is_empty() || call.name.trim().is_empty())
+        {
+            return Err(FailureCode::Malformed);
+        }
+        let Some(tool) = tool else {
+            if !self.tool_calls.is_empty() || self.content.is_empty() {
+                return Err(FailureCode::Malformed);
+            }
+            return Ok(serde_json::json!({ "content": self.content, "tool_calls": [] }));
+        };
+        if self.tool_calls.is_empty() {
+            return Err(FailureCode::Malformed);
+        }
+        let tool_calls = self
+            .tool_calls
+            .into_iter()
+            .map(|call| {
+                let mut args: Json =
+                    serde_json::from_str(&call.arguments).map_err(|_| FailureCode::NotJson)?;
+                let Some(fields) = args.as_object_mut() else {
+                    return Err(FailureCode::NotJson);
+                };
+                undeclared_dropped(fields, &tool.parameters);
+                let data = json_data(&args)?;
+                if call.name != tool.name || !tool.compiled.admits(&data) {
+                    return Err(FailureCode::SchemaMismatch);
+                }
+                Ok(serde_json::json!({ "id": call.id, "name": call.name, "args": args }))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(serde_json::json!({ "content": self.content, "tool_calls": tool_calls }))
     }
-    Ok(value)
+}
+
+/// Drops each top-level field of a call's arguments that the root
+/// `properties` of the tool's `parameters` do not declare, as the
+/// original's processing reads only the fields it knows (its dispatch
+/// parser reads `args.events` alone): a model's stray `reason` beside
+/// `events` is not the tool's. Only the root is touched; nested objects are
+/// checked as the schema says. Parameters whose root declares no
+/// `properties` object leave the arguments as they are.
+fn undeclared_dropped(fields: &mut serde_json::Map<String, Json>, parameters: &Json) {
+    let Some(declared) = parameters.get("properties").and_then(Json::as_object) else {
+        return;
+    };
+    fields.retain(|name, _| declared.contains_key(name));
 }
 
 /// The data value of one JSON value: objects and arrays as canonical JSON
 /// text, scalars as themselves.
+///
+/// # Errors
+///
+/// [`FailureCode::NotJson`] for a number outside the data model's range.
 fn json_data(value: &Json) -> Result<Data, FailureCode> {
     Ok(match value {
         Json::Null => Data::Null,
@@ -1178,8 +1500,22 @@ fn json_data(value: &Json) -> Result<Data, FailureCode> {
     })
 }
 
+/// Whether a reply's body is a server-sent-event stream (its first line a
+/// field or a comment) rather than one completion (a JSON object): the
+/// backend decides when the run's `stream` slot does, so the reply is read
+/// as it came.
+#[must_use]
+pub fn is_event_stream(body: &[u8]) -> bool {
+    let start = body.iter().position(|byte| !byte.is_ascii_whitespace());
+    start
+        .and_then(|start| body.get(start..))
+        .is_some_and(|rest| {
+            rest.starts_with(b":") || rest.starts_with(b"data:") || rest.starts_with(b"event:")
+        })
+}
+
 /// What one settled request becomes: [`RESULT_EVENT`] with the reply
-/// (`{"text": T}`, or `{"json": V}` with a schema, validated first), or
+/// ([`Reply::answer`]: `{"content": C, "tool_calls": [...]}`), or
 /// [`FAILED_EVENT`] with the failure's code.
 #[must_use]
 pub fn outcome(generation: &Generation, answered: Result<Response, TransportFailure>) -> Returned {
@@ -1191,21 +1527,14 @@ pub fn outcome(generation: &Generation, answered: Result<Response, TransportFail
     if !(200..300).contains(&response.status) {
         return Returned::failed(FailureCode::Status);
     }
-    let text = if generation.stream {
-        reply_text(&response.body)
+    let reply = if is_event_stream(&response.body) {
+        stream_reply(&response.body)
     } else {
-        completion_text(&response.body)
+        completion_reply(&response.body)
     };
-    let text = match text {
-        Ok(text) => text,
+    let data = match reply.and_then(|reply| reply.answer(generation.schema.as_ref())) {
+        Ok(data) => data,
         Err(code) => return Returned::failed(code),
-    };
-    let data = match &generation.schema {
-        None => serde_json::json!({ "text": text }),
-        Some(schema) => match structured_value(&text, &schema.compiled) {
-            Ok(value) => serde_json::json!({ "json": value }),
-            Err(code) => return Returned::failed(code),
-        },
     };
     Returned {
         name: RESULT_EVENT,
@@ -1235,6 +1564,7 @@ mod guest {
     };
 
     use super::{Generation, ImageReadFailure, Part, Response, Returned, TransportFailure};
+    use wasi::clocks::monotonic_clock;
 
     /// The invocation's result: `ok` (no done data), or its error.
     type Done = Result<Option<DataValue>, ComponentError>;
@@ -1329,7 +1659,7 @@ mod guest {
     /// to make first.
     enum Plan {
         Return(Returned),
-        Fetch(Generation, HttpRequest),
+        Fetch(Generation, HttpRequest, bool),
     }
 
     fn plan(request: InvokeRequest) -> Result<Plan, ComponentError> {
@@ -1355,7 +1685,15 @@ mod guest {
             Ok(endpoint) => endpoint,
             Err(code) => return Ok(Plan::Return(Returned::failed(code))),
         };
-        let built = super::build_request(base_url, api_key, &generation);
+        let built = super::build_request(
+            base_url,
+            api_key,
+            slot(&request.references, super::STREAM_SLOT),
+            &generation,
+        );
+        // Read as it arrives when the reply may stream: the invocation asked
+        // for it, or the run's `stream` slot decides.
+        let streamed = generation.stream || built.stream.is_some();
         let http = HttpRequest {
             method: "POST".into(),
             url: text_parts(&built.url),
@@ -1367,9 +1705,16 @@ mod guest {
                     value: text_parts(value),
                 })
                 .collect(),
-            body: vec![BodyPart::Bytes(built.body)],
+            body: built
+                .body_parts()
+                .into_iter()
+                .map(|part| match part {
+                    Part::Literal(text) => BodyPart::Bytes(text.into_bytes()),
+                    Part::Reference(reference) => BodyPart::Reference(reference),
+                })
+                .collect(),
         };
-        Ok(Plan::Fetch(generation, http))
+        Ok(Plan::Fetch(generation, http, streamed))
     }
 
     #[allow(
@@ -1400,17 +1745,22 @@ mod guest {
                 let reply = match plan {
                     Plan::Return(reply) => reply,
                     // Suspends only this task, never the invoking session.
-                    Plan::Fetch(generation, http) => {
-                        let answered = outbound_http::fetch(http)
-                            .await
-                            .map(|response| Response {
-                                status: response.status,
-                                body: response.body,
-                            })
-                            .map_err(|failure| match failure.code {
-                                ErrorCode::PayloadTooLarge => TransportFailure::TooLarge,
-                                _ => TransportFailure::Unavailable,
-                            });
+                    Plan::Fetch(generation, http, streamed) => {
+                        let answered = if streamed {
+                            match receive(http, &mut returned).await {
+                                Some(answered) => answered,
+                                // The invoking session stopped reading.
+                                None => return,
+                            }
+                        } else {
+                            outbound_http::fetch(http)
+                                .await
+                                .map(|response| Response {
+                                    status: response.status,
+                                    body: response.body,
+                                })
+                                .map_err(|failure| transport_failure(&failure))
+                        };
                         super::outcome(&generation, answered)
                     }
                 };
@@ -1433,6 +1783,58 @@ mod guest {
             });
             Ok((returned_reader, done_reader))
         }
+    }
+
+    /// Bytes of one read of a streamed reply's body.
+    const READ_BYTES: usize = 64 * 1024;
+
+    /// What a transport failure is for the reply.
+    fn transport_failure(failure: &ComponentError) -> TransportFailure {
+        match failure.code {
+            ErrorCode::PayloadTooLarge => TransportFailure::TooLarge,
+            _ => TransportFailure::Unavailable,
+        }
+    }
+
+    /// Sends a streamed request (`outbound-http.send`) and reads its reply
+    /// as it arrives, returning [`super::PROGRESS_EVENT`] on `returned` as
+    /// [`super::Progress`] says; the whole reply once its body ended, or
+    /// `None` when the invoking session stopped reading `returned`.
+    async fn receive(
+        http: HttpRequest,
+        returned: &mut wit_bindgen::StreamWriter<Event>,
+    ) -> Option<Result<Response, TransportFailure>> {
+        let (status, mut body, end) = match outbound_http::send(http).await {
+            Ok(opened) => opened,
+            Err(failure) => return Some(Err(transport_failure(&failure))),
+        };
+        let mut bytes = Vec::new();
+        let mut progress = super::Progress::default();
+        loop {
+            let (result, read) = body.read(Vec::with_capacity(READ_BYTES)).await;
+            if !read.is_empty() {
+                bytes.extend_from_slice(&read);
+                if progress.read(&bytes, monotonic_clock::now())
+                    && returned
+                        .write_one(event(&Returned::progress(bytes.len())))
+                        .await
+                        .is_some()
+                {
+                    return None;
+                }
+            }
+            if !matches!(result, wit_bindgen::StreamResult::Complete(_)) {
+                break;
+            }
+        }
+        drop(body);
+        Some(match end.await {
+            Ok(()) => Ok(Response {
+                status,
+                body: bytes,
+            }),
+            Err(failure) => Err(transport_failure(&failure)),
+        })
     }
 
     /// One call's closed telemetry: its outcome and one event (no attribute

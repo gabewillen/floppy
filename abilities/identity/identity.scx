@@ -31,12 +31,12 @@
   of the body's input abilities, so each environment.sound reaches it;
   with a name to look for, classifying invokes
   abilities/speech_decoding/speech_decoding.scx on the sound and
-  <bot:recognize> looks for the name in the transcript (no transcript
+  <identity:hears_name> looks for the name in the transcript (no transcript
   leaves the ability). A decoding failure answers the body with
   bot.ability.failed {message} (the original _fail_from_stage) and goes back to
   listening. Text (the original recognition.hears_name, decision D43): the
   body also relays each outside bot.ability.communication.input to this
-  ability. <bot:recognize> decides whether its text (a string content with
+  ability. <identity:hears_name> decides whether its text (a string content with
   a text/* content_type) names the bot: the name's case-folded
   letter-and-digit tokens appear as a whole run in the text's (so a bot
   named "Al" is not addressed by "always"). Addressed: the body gets
@@ -48,8 +48,9 @@
 
   Adoption: bot.ability.identity.adopt {name, reason?} is offered (as the
   model-callable act of taking a name) on every entry into knowing,
-  through <decision:choice events="bot.ability.identity.adopt">, compacted
-  by <decision:compact> ($schema, title and examples dropped), in
+  through <decision:choice events="bot.ability.identity.adopt">, made
+  model-facing by <processing:model_facing_schema> ($schema, title and
+  examples dropped), in
   bot.ability.offers {ability: "identity", choices}, from knowing's
   onentry (<decision:choice> reads knowing's own transitions there,
   before a child is entered); the first offers are the ability's
@@ -83,13 +84,14 @@
   error.execution in its sender, and input from outside the session that
   does not is refused, so no cond rechecks a payload.
 
-  Bindings: the bot and decision namespace packages and the memory ability's
+  Bindings: the bot, decision, identity and processing namespace packages and the memory ability's
   sql service package (a run grants it its directory: scx run's dir option).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       xmlns:identity="https://github.com/stateforward/floppy/namespaces/identity"
+       xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
        version="1.0" datamodel="ecmascript" name="identity" initial="recalling">
   <datamodel>
     <data id="name" expr="null"/>
@@ -102,15 +104,16 @@
     <!-- The offers. -->
     <data id="offered" expr="[]"/>
     <data id="offers_over" expr="false"/>
-    <data id="offer_names" expr="''"/>
     <!-- Memory: the database file (null: no memory) and the original's
          statements (identity/name.py). The SQL runs on both
          engines (SQLite and Postgres). A memory id is the next row count
          as 32 zero-padded digits (neither engine's randomness is unique
          across invocations in Wasm); JSON rows are told by their
-         content_format, oldest first by created_at, then memory_id. -->
+         content_format, the 50 most recent by created_at,
+         then memory_id (the insertion order), read oldest first (the original's
+         recent_select). -->
     <data id="database" expr="null"/>
-    <data id="name_select" expr="'SELECT content FROM bot_memory WHERE query_tags = ?1 AND subject_ref = ?2 AND content_format = \'application/json\' ORDER BY created_at, memory_id LIMIT 50'"/>
+    <data id="name_select" expr="'SELECT content FROM (SELECT content, created_at, memory_id FROM bot_memory WHERE query_tags = ?1 AND subject_ref = ?2 AND content_format = \'application/json\' ORDER BY created_at DESC, memory_id DESC LIMIT 50) AS recent ORDER BY created_at, memory_id'"/>
     <data id="name_insert" expr="'INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT substr(\'00000000000000000000000000000000\', 1, 32 - length(n)) || n FROM (SELECT CAST(COUNT(*) + 1 AS TEXT) AS n FROM bot_memory) AS c), ?1, NULL, ?2, ?3, ?4, ?5, ?6, ?7, ?8)'"/>
     <data id="recalled_name" expr="null"/>
     <data id="name_parameters" expr="[]"/>
@@ -140,13 +143,13 @@
         <param name="database" expr="database"/>
         <param name="statements" expr="nameSelectStatements()"/>
       </invoke>
-      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json">
+      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json">
         <assign location="recalled_name" expr="recalledNameFromMemory(_event)"/>
         <send event="bot.ability.identity.recalled" target="#_internal">
           <param name="name" expr="recalled_name"/>
         </send>
       </transition>
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json">
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json">
         <send event="bot.ability.failed" target="#_parent">
           <param name="message" expr="recallFailedMessage(_event)"/>
         </send>
@@ -155,16 +158,16 @@
         </send>
       </transition>
     </state>
-    <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json">
+    <transition event="bot.ability.communication.input" event:schema="../schemas/bot.ability.communication.input.json">
       <event:defer/>
     </transition>
-    <transition event="environment.sound" event:schema="schemas/environment.sound.json">
+    <transition event="environment.sound" event:schema="../schemas/environment.sound.json">
       <event:defer/>
     </transition>
-    <transition event="bot.ability.identity.adopt" event:schema="schemas/bot.ability.identity.adopt.json">
+    <transition event="bot.ability.identity.adopt" event:schema="../schemas/bot.ability.identity.adopt.json">
       <event:defer/>
     </transition>
-    <transition event="bot.ability.identity.recalled" event:schema="schemas/bot.ability.identity.recalled.json" target="knowing">
+    <transition event="bot.ability.identity.recalled" event:schema="../schemas/bot.ability.identity.recalled.json" target="knowing">
       <assign location="name" expr="recalledNameText(_event)"/>
       <log label="identity.name" expr="recalledNameLog()"/>
     </transition>
@@ -175,12 +178,11 @@
          transitions, since no child is entered yet. -->
     <onentry>
       <decision:choice location="offered" events="bot.ability.identity.adopt"/>
-      <decision:compact location="offered" bound="32768" overlocation="offers_over"/>
+      <processing:model_facing_schema location="offered" bound="32768" overlocation="offers_over"/>
       <if cond="offers_over">
         <log label="identity.offers.dropped" expr="'the offers are over 32768 bytes'"/>
       </if>
-      <decision:names location="offer_names" choices="offered"/>
-      <log label="identity.offers" expr="offer_names"/>
+      <log label="identity.offers" expr="offered"/>
       <send event="bot.ability.offers" target="#_parent">
         <param name="ability" expr="'identity'"/>
         <param name="choices" expr="offered"/>
@@ -188,17 +190,17 @@
     </onentry>
     <!-- Offered for the whole time the ability is knowing: a bot can be
          given a name mid-sentence. -->
-    <transition event="bot.ability.identity.adopt" event:schema="schemas/bot.ability.identity.adopt.json" target="adopting">
+    <transition event="bot.ability.identity.adopt" event:schema="../schemas/bot.ability.identity.adopt.json" target="adopting">
       <assign location="adopting_name" expr="_event.data.name"/>
     </transition>
 
     <state id="listening">
       <!-- A nameless bot hears words and nothing follows from them. -->
-      <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json"
+      <transition event="bot.ability.communication.input" event:schema="../schemas/bot.ability.communication.input.json"
                   cond="canRecognize()" target="recognized">
-        <bot:recognize location="addressed" name="name" text="heardText(_event.data)"/>
+        <identity:hears_name location="addressed" name="name" text="heardText(_event.data)"/>
       </transition>
-      <transition event="environment.sound" event:schema="schemas/environment.sound.json"
+      <transition event="environment.sound" event:schema="../schemas/environment.sound.json"
                   cond="canRecognize()" target="classifying">
         <assign location="heard" expr="_event.data"/>
       </transition>
@@ -207,10 +209,10 @@
     <!-- One recognition decision about one heard text or sound. -->
     <state id="recognizing" initial="recognized">
       <!-- Input that arrives meanwhile waits (the original defers it). -->
-      <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json">
+      <transition event="bot.ability.communication.input" event:schema="../schemas/bot.ability.communication.input.json">
         <event:defer/>
       </transition>
-      <transition event="environment.sound" event:schema="schemas/environment.sound.json">
+      <transition event="environment.sound" event:schema="../schemas/environment.sound.json">
         <event:defer/>
       </transition>
 
@@ -222,7 +224,7 @@
           <param name="media_type" expr="heard.media_type"/>
         </invoke>
         <transition event="done.invoke.speech_decoding" cond="hasTranscript(_event)" target="recognized">
-          <bot:recognize location="addressed" name="name" text="_event.data.text"/>
+          <identity:hears_name location="addressed" name="name" text="_event.data.text"/>
         </transition>
         <transition event="done.invoke.speech_decoding" target="listening">
           <log label="identity.recognition.failed" expr="recognitionFailedMessage(_event)"/>
@@ -240,7 +242,11 @@
       <state id="recognized">
         <transition cond="addressed" target="listening">
           <log label="identity.heard" expr="addressedLog()"/>
-          <bot:stimulus location="handoff" event="'bot.ability.identity.addressed'" data="({name: name})" source="'identity'"/>
+          <assign location="handoff" expr="({})"/>
+          <assign location="handoff.event" expr="'bot.ability.identity.addressed'"/>
+          <assign location="handoff.data" expr="({})"/>
+          <assign location="handoff.data.name" expr="name"/>
+          <assign location="handoff.source" expr="'identity'"/>
           <send event="bot.ability.cognition.input" target="#_parent">
             <param name="stimulus" expr="handoff"/>
           </send>
@@ -276,35 +282,35 @@
         <param name="database" expr="database"/>
         <param name="statements" expr="nameInsertStatements()"/>
       </invoke>
-      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json">
+      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json">
         <send event="bot.ability.identity.adopted" target="#_internal">
           <param name="name" expr="adoptedName()"/>
         </send>
       </transition>
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json">
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json">
         <send event="bot.ability.identity.adopt.failed" target="#_internal">
           <param name="message" expr="adoptFailedMessage(_event)"/>
         </send>
       </transition>
     </state>
-    <transition event="bot.ability.identity.adopted" event:schema="schemas/bot.ability.identity.adopted.json" target="knowing">
+    <transition event="bot.ability.identity.adopted" event:schema="../schemas/bot.ability.identity.adopted.json" target="knowing">
       <assign location="name" expr="_event.data.name.text"/>
       <log label="identity.name" expr="adoptedNameLog()"/>
     </transition>
-    <transition event="bot.ability.identity.adopt.failed" event:schema="schemas/bot.ability.identity.adopt.failed.json" target="knowing">
+    <transition event="bot.ability.identity.adopt.failed" event:schema="../schemas/bot.ability.identity.adopt.failed.json" target="knowing">
       <log label="identity.adopt.failed" expr="_event.data.message"/>
       <send event="bot.ability.failed" target="#_parent">
         <param name="message" expr="_event.data.message"/>
       </send>
     </transition>
     <!-- After adopt.failed: the adopt descriptor also matches it. -->
-    <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json">
+    <transition event="bot.ability.communication.input" event:schema="../schemas/bot.ability.communication.input.json">
       <event:defer/>
     </transition>
-    <transition event="environment.sound" event:schema="schemas/environment.sound.json">
+    <transition event="environment.sound" event:schema="../schemas/environment.sound.json">
       <event:defer/>
     </transition>
-    <transition event="bot.ability.identity.adopt" event:schema="schemas/bot.ability.identity.adopt.json">
+    <transition event="bot.ability.identity.adopt" event:schema="../schemas/bot.ability.identity.adopt.json">
       <event:defer/>
     </transition>
   </state>

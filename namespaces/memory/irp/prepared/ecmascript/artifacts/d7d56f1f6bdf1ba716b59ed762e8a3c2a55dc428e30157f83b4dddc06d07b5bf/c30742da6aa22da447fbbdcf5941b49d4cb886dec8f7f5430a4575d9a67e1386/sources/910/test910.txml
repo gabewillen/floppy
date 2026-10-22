@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- memory-2: the content is tagged and the identities are sorted, embeddings as Python floats. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory">
+<datamodel>
+  <data id="p" expr="null"/>
+  <data id="m" expr="({source_ids: ['zed', 'alice', [0.5, 1]], target_ids: ['bot'], content: {b: 1, a: [true, null, 1.5]}, content_type: 'application/json'})"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <memory:to_json location="p" message="m"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="p === '{&quot;content&quot;:{&quot;__stateforward_memory_content__&quot;:&quot;mapping&quot;,&quot;value&quot;:[[&quot;a&quot;,{&quot;__stateforward_memory_content__&quot;:&quot;list&quot;,&quot;value&quot;:[true,null,1.5]}],[&quot;b&quot;,1]]},&quot;content_type&quot;:&quot;application/json&quot;,&quot;source_ids&quot;:[&quot;alice&quot;,&quot;zed&quot;,[0.5,1.0]],&quot;target_ids&quot;:[&quot;bot&quot;]}'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

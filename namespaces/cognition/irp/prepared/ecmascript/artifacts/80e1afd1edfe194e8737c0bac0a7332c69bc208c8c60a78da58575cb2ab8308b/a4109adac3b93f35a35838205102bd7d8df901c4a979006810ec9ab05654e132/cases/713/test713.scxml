@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- cognition-2: the stimulus's device is not appended twice. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition" xmlns:conf="http://www.w3.org/2005/scxml-conformance" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="devices" expr="[&#34;kitchen&#34;]"/>
+  <data id="stimulus" expr="{&#34;event&#34;: &#34;bot.input&#34;, &#34;data&#34;: {&#34;target_device&#34;: &#34;kitchen&#34;}, &#34;source&#34;: null}"/>
+  <data id="candidates" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <cognition:attention_bias_for_turn location="candidates" stimulus="stimulus" devices="devices" focus="'kitchen'"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="candidates.length === 1 &amp;&amp; candidates[0] === 'kitchen'" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

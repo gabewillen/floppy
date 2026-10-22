@@ -9,7 +9,7 @@ function candidateName() {
   return candidates[0].name;
 }
 
-// The SCXML source of the first candidate.
+// The path of the first candidate's program (its source).
 function candidateSource() {
   return candidates[0].source;
 }
@@ -34,9 +34,9 @@ function candidateFailedLog(event) {
 
 // dispatching and recorded_failure
 
-// No selection of the handled candidate was rejected.
-function isAccepted() {
-  return rejection === null;
+// A dispatch that failed: the original's dispatch failure, with the error.
+function dispatchFailure(_event) {
+  return 'Autonomy behavior dispatch failed: ' + _event.name;
 }
 
 function isRejected() {
@@ -102,4 +102,10 @@ function unhandledOutput() {
 // The rest's output, with this runner's candidate first in tried.
 function passedOutput() {
   return Object.assign({}, rest_output, {tried: [candidateName()].concat(rest_output.tried)});
+}
+
+// The data a selection is sent with, as the original's dispatch_selected_events
+// takes it: its data object, else {} (no data, null, or a non-object).
+function selectionData(s) {
+  return s.data !== null && typeof s.data === 'object' && !Array.isArray(s.data) ? s.data : ({});
 }

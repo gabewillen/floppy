@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- cognition-2: devices that are not an array raise error.execution and assign nothing. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition">
+<datamodel>
+  <data id="stimulus" expr='{"event": "bot.input", "data": {}, "source": null}'/>
+  <data id="candidates" expr="'untouched'"/>
+  <data id="focus" expr="'untouched'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <cognition:attention_bias_for_turn location="candidates" focuslocation="focus" stimulus="stimulus" devices="'kitchen'" focus="null"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="candidates === 'untouched' &amp;&amp; focus === 'untouched'" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

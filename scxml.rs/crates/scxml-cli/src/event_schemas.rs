@@ -2,17 +2,23 @@
 //! (`https://github.com/stateforward/scxml.rs/namespaces/event`).
 //!
 //! `validate`, `compile`, `snapshot run`, and `run` read every referenced
-//! file relative to the document's directory before validating, and hand the
-//! bytes to the validator and compiler keyed by the reference as authored.
-//! `snapshot run` and `run` also read, before the session, the files of
-//! every literal `<invoke src>` document loaded from a `file:` URL, relative
-//! to that child's directory, for its compile ([`crate::documents`]).
+//! file before validating, each resolved against the document's base URI
+//! (its `file:` URL, RFC 3986 §5, as a `<script src>` or `<invoke src>` is),
+//! and hand the bytes to the validator and compiler keyed by the reference
+//! as authored.
+//! `snapshot run` and `run` also load the files of every `<invoke src>`
+//! document, relative to that child's own base URI, for its compile
+//! ([`crate::documents`]): a literal one's before the session, a `srcexpr`
+//! one's when its `<invoke>` runs. A child loaded from a `file:` URL has
+//! them read against its own `file:` URL as the root's are; one loaded from
+//! an `https:` URL has them fetched ([`fetch`]).
 //! Only a path the vocabulary accepts is read
 //! ([`scxml_event_schema::resource_problem`]): relative, without a scheme,
-//! query, or `.`/`..` segment, percent-decoded. A file that resolves outside
-//! the document's directory (through a symbolic link), is not a regular file,
-//! or cannot be read is left out, and the validator reports it (`EVENT004`).
-//! Nothing is fetched, and nothing is read while a document runs.
+//! query, or empty segment; its `.` and `..` segments resolve as in any
+//! relative URI, so a reference may name a file outside the document's
+//! directory, as `<script src="../lib/a.js">` does. A file that is not a
+//! regular file or cannot be read is left out, and the validator reports it
+//! (`EVENT004`).
 
 use std::fs;
 use std::io::Read as _;
@@ -32,11 +38,14 @@ pub(crate) fn load(document: &Path, source: &[u8]) -> Resources {
         return Resources::new();
     }
     let span = observe(Module::Cli, Operation::CliReadEventSchema);
-    let root = document_directory(document);
+    let base = document_directory(document);
     let mut resources = Resources::new();
     let mut missing = false;
     for reference in references {
-        let bytes = root.as_ref().and_then(|root| read_below(root, &reference));
+        let bytes = base
+            .as_ref()
+            .and_then(|base| base.join(&reference).ok())
+            .and_then(|url| read_file(&url));
         match bytes {
             Some(bytes) => {
                 resources.insert(reference, bytes);
@@ -53,18 +62,53 @@ pub(crate) fn load(document: &Path, source: &[u8]) -> Resources {
     resources
 }
 
-/// The canonical directory of the document at `document`, which its file
-/// references resolve against; `None` when it cannot be canonicalized.
-fn document_directory(document: &Path) -> Option<PathBuf> {
+/// Fetches every schema file `source` (the document at `document`, an
+/// `https:` URL) references, each resolved against that URL (RFC 3986 §5,
+/// `..` segments included) and fetched by `fetch`. A file `fetch` does not
+/// return is left out, and the validator reports it (`EVENT004`).
+pub(crate) fn fetch(
+    document: &url::Url,
+    source: &[u8],
+    mut fetch: impl FnMut(&url::Url) -> Option<Vec<u8>>,
+) -> Resources {
+    let references = references(source);
+    if references.is_empty() {
+        return Resources::new();
+    }
+    let span = observe(Module::Cli, Operation::CliReadEventSchema);
+    let mut resources = Resources::new();
+    let mut missing = false;
+    for reference in references {
+        match document.join(&reference).ok().and_then(|url| fetch(&url)) {
+            Some(bytes) => {
+                resources.insert(reference, bytes);
+            }
+            None => missing = true,
+        }
+    }
+    if missing {
+        span.event(SignalEvent::InputRejected);
+        span.fail(ErrorCategory::InputRead);
+    } else {
+        span.event(SignalEvent::ExternalReadCompleted);
+    }
+    resources
+}
+
+/// The `file:` URL of the canonical directory of the document at
+/// `document`, which its file references resolve against; `None` when it
+/// cannot be canonicalized.
+fn document_directory(document: &Path) -> Option<url::Url> {
     let directory = document
         .parent()
         .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
-    fs::canonicalize(if directory.as_os_str().is_empty() {
+    let directory = fs::canonicalize(if directory.as_os_str().is_empty() {
         Path::new(".")
     } else {
         &directory
     })
-    .ok()
+    .ok()?;
+    url::Url::from_directory_path(directory).ok()
 }
 
 /// The distinct resource parts of the document's `event:schema` references
@@ -100,18 +144,11 @@ fn references(source: &[u8]) -> Vec<String> {
     references
 }
 
-/// The bytes of `reference` (a checked relative URI path) below `root`, or
-/// `None` when it does not resolve to a regular file at or below `root`.
-fn read_below(root: &Path, reference: &str) -> Option<Vec<u8>> {
-    let mut path = root.to_path_buf();
-    for segment in reference.split('/') {
-        path.push(percent_decode(segment)?);
-    }
-    let resolved = fs::canonicalize(&path).ok()?;
-    if !resolved.starts_with(root) {
-        return None;
-    }
-    let (mut file, metadata) = crate::open_regular_file(&resolved).ok()??;
+/// The bytes of the file `url` (a `file:` URL, its dot segments already
+/// removed) names, or `None` when it names no readable regular file.
+fn read_file(url: &url::Url) -> Option<Vec<u8>> {
+    let path = url.to_file_path().ok()?;
+    let (mut file, metadata) = crate::open_regular_file(&path).ok()??;
     // The native CLI reads a file of any size: resource bounds apply to wasm
     // builds only.
     let mut bytes = Vec::with_capacity(usize::try_from(metadata.len()).ok()?);
@@ -119,36 +156,12 @@ fn read_below(root: &Path, reference: &str) -> Option<Vec<u8>> {
     Some(bytes)
 }
 
-/// One percent-decoded path segment; `None` when the encoding is invalid,
-/// not UTF-8, or decodes to a separator or a `.`/`..` segment.
-fn percent_decode(segment: &str) -> Option<String> {
-    let bytes = segment.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut index = 0;
-    while let Some(&byte) = bytes.get(index) {
-        if byte == b'%' {
-            let hex = segment.get(index + 1..index + 3)?;
-            out.push(u8::from_str_radix(hex, 16).ok()?);
-            index += 3;
-        } else {
-            out.push(byte);
-            index += 1;
-        }
-    }
-    let decoded = String::from_utf8(out).ok()?;
-    (!decoded.is_empty()
-        && decoded != "."
-        && decoded != ".."
-        && !decoded.contains(['/', '\\', '\0']))
-    .then_some(decoded)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn references_name_files_below_the_document() {
+    fn references_resolve_against_the_document_directory() {
         let directory =
             std::env::temp_dir().join(format!("scx-event-schemas-{}", std::process::id()));
         let schemas = directory.join("schemas");
@@ -163,16 +176,38 @@ mod tests {
         let resources = load(&document, source.as_bytes());
         assert_eq!(
             resources.keys().map(String::as_str).collect::<Vec<_>>(),
-            ["order%20one.json"]
+            ["../outside.json", "order%20one.json"]
         );
+        assert_eq!(resources["../outside.json"], b"{}");
         assert_eq!(resources["order%20one.json"], br#"{"type":"object"}"#);
-        assert_eq!(
-            percent_decode("a%2Fb"),
-            None,
-            "an encoded separator is no segment"
-        );
-        assert_eq!(percent_decode("%2e%2E"), None);
         fs::remove_dir_all(&directory).expect("the fixture directory is removed");
+    }
+
+    /// A remote document's references resolve against its own URL, each
+    /// fetched once; one the fetcher does not return is left out.
+    #[test]
+    fn a_remote_document_fetches_its_references_against_its_url() {
+        let document = url::Url::parse("https://example.com/kits/machine.scxml").expect("a URL");
+        let source = format!(
+            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="{EVENT_NAMESPACE_URI}" version="1.0"><state id="s"><transition event="a" event:schema="schemas/a.json#/$defs/a"/><transition event="b" event:schema="missing.json"/><transition event="c" event:schema="../outside.json"/></state></scxml>"#
+        );
+        let mut asked = Vec::new();
+        let resources = fetch(&document, source.as_bytes(), |url| {
+            asked.push(url.to_string());
+            (url.path() == "/kits/schemas/a.json").then(|| br#"{"$defs":{"a":{}}}"#.to_vec())
+        });
+        assert_eq!(
+            asked,
+            [
+                "https://example.com/outside.json",
+                "https://example.com/kits/missing.json",
+                "https://example.com/kits/schemas/a.json"
+            ]
+        );
+        assert_eq!(
+            resources.keys().map(String::as_str).collect::<Vec<_>>(),
+            ["schemas/a.json"]
+        );
     }
 
     /// A reference to a FIFO is not a regular file: it is left out (the

@@ -1,15 +1,16 @@
 <?xml version="1.0"?>
-<!-- conversation-1: a commit without a message raises error.execution and assigns nothing. -->
+<!-- conversation-1: a relationship_for_input without an indexlocation raises error.execution and assigns nothing. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation">
 <datamodel>
-  <data id="l" expr="'untouched'"/>
+  <data id="rs" expr="[]"/>
+  <data id="input" expr="({source_ids: ['a'], target_ids: []})"/>
 </datamodel>
 <state id="s0">
   <onentry>
-    <conversation:commit location="l" direction="inbound" event="'e'" sequence="0"/>
+    <conversation:relationship_for_input location="rs" input="input"/>
     <raise event="executed"/>
   </onentry>
-  <transition event="error.execution" cond="l === 'untouched'" conf:targetpass=""/>
+  <transition event="error.execution" cond="rs.length === 0" conf:targetpass=""/>
   <transition event="*" conf:targetfail=""/>
 </state>
 <conf:pass/>

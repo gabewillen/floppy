@@ -1,16 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  The floppy bot: the original's Bot body as the root SCXML session. It owns the
-  bot lifecycle and processing turns; its abilities are invoked children
+  The floppy bot: the original's Bot body as a participant its environment
+  invokes (environments/room/room.scx, decision D102). It owns the bot
+  lifecycle and processing turns; its abilities are invoked children
   (decision D6: invoke lifecycle replaces the original's attachment protocol).
 
-    inactive -bot.activate-> live { activating -> active { unfocused,
-      focused, processing, cancelling_processing } }
-    live -bot.deactivate-> deactivating -> inactive
+    live { activating -> active { unfocused, focused, processing,
+      cancelling_processing } }
+    live -bot.deactivate-> deactivating -> inactive (final)
     live -bot.reboot (the cognition asks for one)-> live (re-entered:
       every ability is cancelled and invoked again)
-    activating -bot.deactivate-> inactive (the original's activation_cleanup)
+    activating -bot.deactivate-> deactivating (the original's activation_cancelling)
     cancelling_processing -cancel timeout-> degraded (a final sink)
+
+  Joining (decision D107): the environment's <invoke> is the original's
+  attach. Its <param>s are the activation settings (model, bounds,
+  database, environment: the environment's id), and the body starts in
+  live and activates at once; nothing sends bot.activate. inactive is a
+  top-level final state: a failed activation and bot.deactivate end the
+  session there, which is its leave; rejoining is the environment invoking
+  it again.
 
   Abilities: live holds <invoke id="cognition">, <invoke
   id="communication"> (abilities/communication/communication.scx, which holds the
@@ -24,8 +33,22 @@
   sends its first bot.ability.offers; the body is active when every
   expected ability is ready. A run-tagged activation timer
   (activation_timeout_ms), an error event, or an ability ending while
-  activating fails the activation (bot.activating.failed) back to inactive;
-  an ability ending while active degrades the bot.
+  activating fails the activation (bot.activating.failed) and ends the
+  session in inactive; an ability ending while active degrades the bot.
+
+  Lifecycle answers (the original's a2cbaa8): the activator is the
+  environment that invoked the body, and every terminal goes to it, its
+  parent. Every bot.deactivate is answered once: from activating or
+  active by bot.deactivated (leaving live cancels the abilities at once,
+  so the original's activation_cancelling and its timeout have nothing to
+  wait on). The original stamps a terminal with its request's envelope id;
+  an SCXML <send> cannot take its id from an expression, and the only
+  requester is the parent, so nothing is stamped. The transition into
+  degraded on an unacknowledged cancel announces bot.degraded {stage:
+  "processing_cancel"}; the original's other stages are cleanups that
+  SCXML's synchronous invoke cancel never leaves unfinished, and an
+  ability ending while active, which floppy degrades on, has no stage in
+  the original, so it ends with its reason only.
 
   Communication: bot.ability.communication.input from outside, while
   active, goes to the communication, which admits it into its
@@ -40,15 +63,16 @@
   when the text names the bot, as the cognition hands over a routine's
   bot.behavior.tick (its routines).
 
-  Speaking: the communication relays speaking's playout, the efference
-  copy bot.ability.speaking.efference (sent on to each Listening ability
-  in listening, the original's Speaking listening peers) and then
-  environment.sound, which the body puts into the environment: a log
-  record labelled environment.sound (the root has no parent), and, as any
-  sound there, a stimulus for each input ability (the bot hears itself).
+  Speaking: the communication relays speaking's efference copy,
+  bot.ability.speaking.efference (sent on to each Listening ability in
+  listening, the original's Speaking listening peers); right after it, the
+  communication puts speaking's sound, environment.sound, into the
+  environment whose id the body passes it (decision D103, amended
+  2026-10-15: the copy reaches the listening first), and the sound comes
+  back to the body as any sound there does (the bot hears itself).
 
-  Environment: environment.sound (logged, as any sound in the
-  environment) and environment.visual from outside, while active, go to
+  Environment: environment.sound and environment.visual from the
+  environment, while active, go to
   each input ability (input, the original's Bot input: the invoke ids
   of the abilities that perceive raw stimuli; the identity and the
   listening), in
@@ -61,11 +85,14 @@
   Turns: bot.input, or an ability's bot.ability.cognition.input handoff
   (the original grants any ability product the turn, blind to its content), in
   unfocused or focused starts a processing turn; the stimulus is the
-  envelope {event, data, source} <bot:stimulus> writes for bot.input, or
-  the handoff's stimulus as given. The body counts the turn, computes the
-  turn's attention bias with <bot:attention> (focus, focus_candidates:
+  envelope {event, data, source} assigned for bot.input (its source null:
+  it reaches the body from outside its session, the environment or the
+  host), or the handoff's stimulus as given, with the participants its
+  producer stamped (none for bot.input: a device report names no one; the
+  original's f6c4e08 copies them forward unchanged). The body counts the turn, computes the
+  turn's attention bias with <cognition:attention_bias_for_turn> (focus, focus_candidates:
   the original's attention_bias_for_turn from device identity only), assembles the turn's choices (below), sends bot.ability.cognition.input
-  {turn, stimulus, focus, focus_candidates, choices} to the cognition, and
+  {turn, stimulus, focus, focus_candidates, participants, choices} to the cognition, and
   arms bot.processing.timed_out
   (processing_timeout_ms) for the turn. Replies count only when they carry
   the current turn. A timeout sends
@@ -77,111 +104,123 @@
   (scxml.rs namespaces/event) and start the next turns, in order, one per
   return to unfocused or focused, before any later event.
 
-  Choices (the original's per-turn dispatch inventory, assembled by decision
-  namespace elements): on processing entry the body reads its own choices
-  with <decision:choice location="body_choices" events="bot.focus_device
-  bot.clear_focus"> (the transitions on active, offered only while offering
-  is true: bot.focus_device when the turn has focus candidates,
-  bot.clear_focus when a device is focused), <decision:pin> pins
-  bot.focus_device's device to an enum of the turn's focus_candidates, and
-  <decision:assemble> appends each ability's latest bot.ability.offers
-  choices tagged with the ability's invoke id as target (the body's own
-  carry no target). Every schema is compacted ($schema, title and examples
-  dropped); when the choices are still over 32 KiB (phase 4 spike (b): a
-  relayed list of 48264 B, with its raw message, is over the 96 KiB event
-  bound, so its send raises error.execution in the sender) every description is
-  dropped too, and if they are still over the turn fails without reaching
-  the cognition.
+  Choices (the original's per-turn dispatch inventory,
+  collect_offered_events): on processing entry the body reads its own
+  choices with <decision:choice location="body_choices"
+  events="bot.focus_device bot.clear_focus"> (the transitions on active:
+  bot.focus_device when the turn has focus candidates, bot.clear_focus when
+  a device is focused), <decision:pin> pins bot.focus_device's device to an
+  enum of the turn's focus_candidates, and
+  <processing:collect_offered_events> tags every choice with the session id
+  of the session that offers it (the target a stage sends it to): the
+  body's own with its _sessionid, each ability's latest bot.ability.offers
+  choices with the ability's session id (<_sessionid>.<invoke id>, decision
+  D110), and, while a device is focused, the events its live session
+  accepts, read this turn with <device:snapshot> (decision D109), each
+  {event, schema: {type: object}} with the device's id (the device's own
+  event:schema decides its data on delivery). Every schema is made
+  model-facing ($schema, title and examples dropped); when the choices are
+  still over 32 KiB (phase 4 spike (b): a relayed list of 48264 B, with its
+  raw message, is over the 96 KiB event bound, so its send raises
+  error.execution in the sender) every description is dropped too, and if
+  they are still over the turn fails without reaching the cognition.
 
-  Routing: the cognition's output goes through routing, which checks every
-  selection before the turn's outcome is logged, as the original's cognition
-  does before it dispatches any (cognition.types.dispatch_selected_events):
-  <bot:verdict> removes the bot.ability.cognition.ignore selections (the
-  cognition's own terminal product, never dispatched) and applies the original's
-  attention_selection_error to the focus and clear selections (the turn's
-  focus and focus_candidates), then <decision:route> places each remaining
-  one on the target offering it in the turn's choices (the original
-  _resolve_target): an event the body offered to itself (#_internal),
-  else the ability whose invoke id is the selection's target, or the only
-  ability offering it when the selection names none (#_<id>). The body
-  also places a selected bot.ability.communication.input on itself (the original
-  dispatches the trusted SpeechHeard seed's selection to a declared event
-  of the bot), which takes it as outside communication input. A selection
-  that cannot be placed (refused by the attention policy, not offered this
-  turn, offered by another target, or offered by several when it names
-  none) fails the whole turn before anything is sent: bot.processing.failed
-  with the original's SelectionRejectionError message, never
-  bot.processing.completed (the reference bot.py: illegal selections fail the
-  turn instead of silently dropping). The cognition's stages make the same
-  checks before they answer (autonomy, intuition, reasoning), so this one
-  catches what reaches the body unchecked (the trusted seed's selection).
-  Otherwise bot.processing.completed is logged and each placed selection is
-  sent, in order. floppy.routed [floppy name], raised after the
-  selections, ends routing once every routed body event has been taken
-  (the internal queue is FIFO).
+  Dispatch: the cognition's stages send their own selections, each to the
+  session its target names (#_scxml_ + target, decision D104), as the
+  original's stages dispatch theirs (cognition.types.dispatch_selected_events):
+  a selection of the body's own bot.focus_device or bot.clear_focus reaches
+  the body during the turn and is taken by active's transitions, whose
+  conds are the original's guards (_ability_selected_configured_focus_device,
+  and a clear only while a device is focused). The schemas the generate
+  service and the decision service check a selection against (the focus
+  device's enum pinned to the turn's candidates, each target an enum of
+  the offering sessions) refuse what the original's attention policy
+  refused before anything is sent. On the turn's output the body logs
+  bot.processing.completed and sends itself the selections that name no
+  target: the trusted SpeechHeard seed's bot.ability.communication.input
+  (the original dispatches it to a declared event of the bot), which it
+  takes as outside communication input.
 
-  Outputs: the root has no parent, so each event the body emits is written
-  as <log label="EVENT" expr="JSON data">: bot.activated,
+  Outputs: each event the body emits is sent to its parent, the
+  environment, which logs it (decision D102): bot.activated,
   bot.activating.failed, bot.deactivated, bot.processing.completed,
-  bot.processing.failed, plus the communication's
-  bot.ability.speaking.output and bot.ability.communication.failed, the
-  listening's bot.ability.listening.failed, any ability's
-  bot.ability.failed that is not a turn's reply, and every
-  environment.sound;
+  bot.processing.failed, bot.processing.timed_out,
+  bot.processing.cancel.timed_out, bot.degraded, bot.reboot, plus the communication's
+  bot.ability.speaking.output, bot.ability.communication.failed,
+  bot.ability.conversation.failed and bot.ability.conversation.output, the
+  listening's bot.ability.listening.failed, and any ability's
+  bot.ability.failed that is not a turn's reply;
   floppy's own records are labelled floppy.* (not the original events):
   floppy.output the turn's selected events (one record per completed turn),
-  floppy.choices each turn's assembled
-  choices as event@target, floppy.route each routed selection, and floppy.focus
-  each focus change.
+  floppy.choices each turn's choices, and floppy.focus each focus change.
 
-  Contracts: every event the body takes references schemas/ by
-  event:schema: its own events, and byte-identical twins of the abilities'
-  events it receives (abilities/schemas/; a schema reference cannot leave
-  this directory). scxml.rs checks them where each event is created: an
+  Contracts: every event the body takes references its one schema file by
+  event:schema: its own events in schemas/, and the abilities' events it
+  receives in ../../abilities/schemas/. scxml.rs checks them where each event is created: an
   ability's send whose data a schema rejects is not routed and raises
-  error.execution in the ability, and standard input the schemas reject is
-  refused by scx run before it reaches the body. No cond asks who sent an
+  error.execution in the ability, and an environment's send the schemas
+  reject raises error.execution in the environment. No cond asks who sent an
   event: every event name the body takes has one meaning here, whoever
   sends it, so its name and the active state route it. Conds only
-  correlate (the turn, the run) and read routing state.
+  correlate (the turn, the run) and read the focus.
 
-  Running: scx run with an env file and this document, as for the builder
-  (bots/builder/README.md), then bot.activate and bot.input on standard
-  input. The cognition's stages need TYPESAFE_API_KEY (intuition's decision
+  Running: scx run with an env file and an environment that invokes this
+  document (environments/room/room.scx), then bot.input on standard input,
+  which the environment gives every bot. The cognition's stages need TYPESAFE_API_KEY (intuition's decision
   service) and FLOPPY_BASE_URL and FLOPPY_API_KEY (reasoning's generate
   service, no default backend); without them a turn fails.
+
+  Time bounds (decision D101): the bounds param may set the cognition's
+  child_operation_timeout_ms and child_operation_ceiling_ms (a stage's
+  inactivity bound and its backstop) and reflection's revising_timeout_ms
+  and revising_ceiling_ms (likewise for a revision through the builder),
+  [floppy fields]; the body passes those it was given to the cognition as
+  <param name="bounds">, and each one absent is the ability's default
+  (README.md, "Defaults").
 
   Memory (the original's sqlite_memory): the body passes its database (a file in
   the directory the run grants the sql service at /memory, scx run's
   dir option) to the cognition, the communication and the identity as
-  <param name="database">; reasoning recalls and retains cognitive
-  episodes, the identity its adopted names, and the conversation its
+  <param name="database">; reasoning recalls the cognitive episodes
+  reflection stores, the identity its adopted names, and the conversation its
   relationship memories (abilities/memory/memory.scx over services/sql, one
   SQLite transaction per invocation). A run without the grant is refused
   before it starts.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
+       xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
+       xmlns:device="https://github.com/stateforward/floppy/namespaces/device"
+       xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
-       version="1.0" datamodel="ecmascript" name="floppy" initial="inactive">
+       version="1.0" datamodel="ecmascript" name="floppy" initial="live">
   <datamodel>
-    <!-- Configuration. -->
+    <!-- Configuration: the activation settings, which the environment's
+         <invoke> may set as <param>s (decision D107). -->
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <!-- The time bounds for the cognition (its stages' inactivity and
+         backstop, and reflection's revising; decision D101): each absent one
+         is the ability's own default. -->
+    <data id="bounds" expr="({})"/>
     <!-- The memory database file (the original's sqlite_memory
          database), in the directory the run grants the service at /memory. -->
     <data id="database" expr="'/memory/floppy.sqlite'"/>
+    <!-- The environment's id (its root's _sessionid, decision D106), which
+         the environment gives as a <param>. -->
+    <data id="environment" expr="null"/>
     <data id="activation_timeout_ms" expr="30000"/>
     <data id="processing_timeout_ms" expr="300000"/>
-    <!-- Speaking's bounds, passed through the communication: the speech
-         backend is remote (Gemini by default, D94) and takes longer than
-         the original's local 5 s encoder bound (D96). -->
-    <data id="encoding_timeout_ms" expr="30000"/>
-    <data id="response_timeout_ms" expr="35000"/>
-    <!-- The configured devices (none until phase 6) and the live source id
-         each one reports from. -->
+    <!-- The devices the bot holds, which the environment gives as a
+         <param> (decision D105): reference to the device session's
+         _sessionid, its address; devices are their references, set on
+         each entry into live. -->
+    <data id="owned_devices" expr="({})"/>
     <data id="devices" expr="[]"/>
-    <data id="device_source_refs" expr="({})"/>
+    <!-- This turn's snapshots of the held devices (<device:snapshot>):
+         reference to {id, state, attributes, events}. -->
+    <data id="device_snapshots" expr="({})"/>
+    <!-- The device being read (the <foreach> item). -->
+    <data id="device" expr="null"/>
     <!-- Lifecycle: each entry into live is one run; the abilities expected
          and the offers each has sent this run. -->
     <data id="live_run" expr="0"/>
@@ -199,37 +238,29 @@
     <data id="turn" expr="0"/>
     <data id="focused_device" expr="null"/>
     <data id="stimulus" expr="null"/>
+    <!-- Who took part in the turn's stimulus, as its producer stamped them
+         (the original's f6c4e08); a device's bot.input names no one. -->
+    <data id="participants" expr="[]"/>
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
-    <!-- The turn's choices, its output, the selections dispatched, and
-         why they were rejected (null when placed). -->
-    <data id="offering" expr="false"/>
+    <!-- The turn's choices, its output, and the output selection being
+         sent (the <foreach> item). -->
     <data id="body_choices" expr="[]"/>
     <data id="choices" expr="[]"/>
-    <data id="choice_names" expr="''"/>
     <data id="choices_over" expr="false"/>
     <data id="choices_size" expr="0"/>
     <data id="selections" expr="[]"/>
-    <data id="dispatch_selections" expr="[]"/>
-    <data id="rejection" expr="null"/>
-    <data id="routing_selections" expr="false"/>
-    <data id="routed_selections" expr="[]"/>
-    <data id="route" expr="null"/>
+    <data id="s" expr="null"/>
     <data id="degraded_reason" expr="null"/>
   </datamodel>
   <script src="floppy.js"/>
-
-  <state id="inactive">
-    <transition event="bot.activate" event:schema="schemas/bot.activate.json" target="live">
-      <assign location="model" expr="activationModel(_event)"/>
-    </transition>
-  </state>
 
   <state id="live" initial="activating">
     <onentry>
       <assign location="live_run" expr="nextLiveRun()"/>
       <assign location="offers" expr="({})"/>
       <assign location="waiting" expr="expectedAbilities()"/>
+      <assign location="devices" expr="heldDevices()"/>
     </onentry>
     <onexit>
       <!-- The original _clear_focus on every reboot and deactivate. -->
@@ -237,12 +268,12 @@
     </onexit>
     <invoke id="cognition" type="scxml" src="../../abilities/cognition/cognition.scx">
       <param name="model" expr="model"/>
+      <param name="bounds" expr="bounds"/>
       <param name="database" expr="database"/>
     </invoke>
     <invoke id="communication" type="scxml" src="../../abilities/communication/communication.scx">
       <param name="database" expr="database"/>
-      <param name="encoding_timeout_ms" expr="encoding_timeout_ms"/>
-      <param name="response_timeout_ms" expr="response_timeout_ms"/>
+      <param name="environment" expr="environment"/>
     </invoke>
     <invoke id="identity" type="scxml" src="../../abilities/identity/identity.scx">
       <param name="database" expr="database"/>
@@ -250,7 +281,7 @@
     <invoke id="listening" type="scxml" src="../../abilities/listening/listening.scx"/>
 
     <!-- Each ability's latest offers; the first of a run is its readiness. -->
-    <transition event="bot.ability.offers" event:schema="schemas/bot.ability.offers.json">
+    <transition event="bot.ability.offers" event:schema="../../abilities/schemas/bot.ability.offers.json">
       <assign location="offers[_event.data.ability]" expr="_event.data.choices"/>
       <if cond="isWaiting(_event)">
         <assign location="waiting" expr="waitingWithout(_event)"/>
@@ -258,8 +289,10 @@
     </transition>
     <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json" target="deactivating"/>
     <!-- A reboot (the cognition asks for one): re-enter live. -->
-    <transition event="bot.reboot" event:schema="schemas/bot.reboot.json" target="live">
-      <log label="bot.reboot" expr="eventDataJson(_event)"/>
+    <transition event="bot.reboot" event:schema="../../abilities/schemas/bot.reboot.json" target="live">
+      <send event="bot.reboot" target="#_parent">
+        <content expr="_event.data"/>
+      </send>
     </transition>
 
     <state id="activating">
@@ -272,23 +305,32 @@
         <cancel sendid="activation-timer"/>
       </onexit>
       <transition cond="everyAbilityReady()" target="active">
-        <log label="bot.activated" expr="emptyDataJson()"/>
+        <send event="bot.activated" target="#_parent">
+          <content expr="emptyData()"/>
+        </send>
       </transition>
       <transition event="activating.after" cond="isCurrentRun(_event)" target="inactive">
         <log label="floppy.diagnostic" expr="activationTimeoutDiagnostic()"/>
-        <log label="bot.activating.failed" expr="emptyDataJson()"/>
+        <send event="bot.activating.failed" target="#_parent">
+          <content expr="emptyData()"/>
+        </send>
       </transition>
       <transition event="error.*" target="inactive">
         <log label="floppy.diagnostic" expr="activatingErrorDiagnostic(_event)"/>
-        <log label="bot.activating.failed" expr="emptyDataJson()"/>
+        <send event="bot.activating.failed" target="#_parent">
+          <content expr="emptyData()"/>
+        </send>
       </transition>
       <transition event="done.invoke" target="inactive">
         <log label="floppy.diagnostic" expr="activatingDoneDiagnostic(_event)"/>
-        <log label="bot.activating.failed" expr="emptyDataJson()"/>
+        <send event="bot.activating.failed" target="#_parent">
+          <content expr="emptyData()"/>
+        </send>
       </transition>
-      <!-- The original's activation_cleanup: back to inactive, with no
-           bot.deactivated (the bot never became active). -->
-      <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json" target="inactive"/>
+      <!-- The original's activation_cancelling (a2cbaa8): every accepted
+           bot.deactivate is answered, so leaving live cancels the
+           abilities and deactivating answers bot.deactivated. -->
+      <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json" target="deactivating"/>
     </state>
 
     <state id="active" initial="unfocused">
@@ -299,7 +341,7 @@
       <!-- Communication input from outside goes to the communication, whose
            conversation answers with a product (a turn's stimulus, below),
            and to the identity, which answers when it names the bot. -->
-      <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json">
+      <transition event="bot.ability.communication.input" event:schema="../../abilities/schemas/bot.ability.communication.input.json">
         <send event="bot.ability.communication.input" target="#_communication">
           <content expr="_event.data"/>
         </send>
@@ -307,11 +349,9 @@
           <content expr="_event.data"/>
         </send>
       </transition>
-      <!-- A sound in the environment, from outside or the bot's own
-           speech: the root has no parent, so it goes into the environment
-           as a log record, and to every input ability. -->
-      <transition event="environment.sound" event:schema="schemas/environment.sound.json">
-        <log label="environment.sound" expr="eventDataJson(_event)"/>
+      <!-- A sound the environment delivers (the bot's own speech
+           included): a stimulus for every input ability. -->
+      <transition event="environment.sound" event:schema="../../abilities/schemas/environment.sound.json">
         <foreach array="input" item="ability">
           <send event="environment.sound" targetexpr="abilityTarget(ability)">
             <content expr="_event.data"/>
@@ -328,7 +368,7 @@
       </transition>
       <!-- Speaking's playout: the efference copy goes only to Listening,
            before the sound (above). -->
-      <transition event="bot.ability.speaking.efference" event:schema="schemas/bot.ability.speaking.efference.json">
+      <transition event="bot.ability.speaking.efference" event:schema="../../abilities/schemas/bot.ability.speaking.efference.json">
         <foreach array="listening_abilities" item="ability">
           <send event="bot.ability.speaking.efference" targetexpr="abilityTarget(ability)">
             <content expr="_event.data"/>
@@ -336,29 +376,38 @@
         </foreach>
       </transition>
       <!-- What the communication said, and its failures. -->
-      <transition event="bot.ability.speaking.output" event:schema="schemas/bot.ability.speaking.output.json">
-        <log label="bot.ability.speaking.output" expr="eventDataJson(_event)"/>
+      <transition event="bot.ability.speaking.output" event:schema="../../abilities/schemas/bot.ability.speaking.output.json">
+        <send event="bot.ability.speaking.output" target="#_parent">
+          <content expr="_event.data"/>
+        </send>
       </transition>
-      <transition event="bot.ability.communication.failed" event:schema="schemas/bot.ability.communication.failed.json">
-        <log label="bot.ability.communication.failed" expr="eventDataJson(_event)"/>
+      <transition event="bot.ability.communication.failed" event:schema="../../abilities/schemas/bot.ability.communication.failed.json">
+        <send event="bot.ability.communication.failed" target="#_parent">
+          <content expr="_event.data"/>
+        </send>
       </transition>
-      <transition event="bot.ability.conversation.failed" event:schema="schemas/bot.ability.conversation.failed.json">
-        <log label="bot.ability.conversation.failed" expr="eventDataJson(_event)"/>
+      <transition event="bot.ability.conversation.failed" event:schema="../../abilities/schemas/bot.ability.conversation.failed.json">
+        <send event="bot.ability.conversation.failed" target="#_parent">
+          <content expr="_event.data"/>
+        </send>
       </transition>
       <!-- A conversation product that is not text (the original's bot grants no
            turn for it). -->
-      <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json">
-        <log label="bot.ability.conversation.output" expr="eventDataJson(_event)"/>
+      <transition event="bot.ability.conversation.output" event:schema="../../abilities/schemas/bot.ability.conversation.output.json">
+        <send event="bot.ability.conversation.output" target="#_parent">
+          <content expr="_event.data"/>
+        </send>
       </transition>
       <!-- What the listening could not hear. -->
-      <transition event="bot.ability.listening.failed" event:schema="schemas/bot.ability.listening.failed.json">
-        <log label="bot.ability.listening.failed" expr="eventDataJson(_event)"/>
+      <transition event="bot.ability.listening.failed" event:schema="../../abilities/schemas/bot.ability.listening.failed.json">
+        <send event="bot.ability.listening.failed" target="#_parent">
+          <content expr="_event.data"/>
+        </send>
       </transition>
       <!-- The body's own choices (the original: focus on active, clear only while
-           a device is focused), offered on processing entry and taken only
-           as routed selections of the turn (<bot:verdict> has checked
-           them; one that no longer applies, a second clear in one turn, is
-           ignored, as the original's guard ignores it). -->
+           a device is focused), offered on processing entry and taken as a
+           stage sends them (one that no longer applies, a second clear in
+           one turn, is ignored, as the original's guard ignores it). -->
       <transition event="bot.focus_device" event:schema="schemas/bot.focus_device.json"
                   cond="focusDeviceEnabled()">
         <if cond="isFocusCandidate(_event)">
@@ -367,11 +416,9 @@
         </if>
       </transition>
       <transition event="bot.clear_focus" event:schema="schemas/bot.clear_focus.json"
-                  cond="clearFocusEnabled()">
-        <if cond="hasFocusedDevice()">
-          <assign location="focused_device" expr="null"/>
-          <log label="floppy.focus" expr="'none'"/>
-        </if>
+                  cond="hasFocusedDevice()">
+        <assign location="focused_device" expr="null"/>
+        <log label="floppy.focus" expr="'none'"/>
       </transition>
 
       <state id="unfocused">
@@ -379,19 +426,29 @@
           <assign location="focused_device" expr="null"/>
         </onentry>
         <transition event="bot.input" event:schema="schemas/bot.input.json" target="processing">
-          <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
+          <assign location="stimulus" expr="({})"/>
+          <assign location="stimulus.event" expr="_event.name"/>
+          <assign location="stimulus.data" expr="_event.data"/>
+          <assign location="stimulus.source" expr="null"/>
+          <assign location="participants" expr="[]"/>
         </transition>
-        <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json" target="processing">
+        <transition event="bot.ability.cognition.input" event:schema="../../abilities/schemas/bot.ability.cognition.input.json" target="processing">
           <assign location="stimulus" expr="_event.data.stimulus"/>
+          <assign location="participants" expr="handoffParticipants(_event)"/>
         </transition>
       </state>
 
       <state id="focused">
         <transition event="bot.input" event:schema="schemas/bot.input.json" target="processing">
-          <bot:stimulus location="stimulus" event="_event.name" data="_event.data" source="_event.invokeid"/>
+          <assign location="stimulus" expr="({})"/>
+          <assign location="stimulus.event" expr="_event.name"/>
+          <assign location="stimulus.data" expr="_event.data"/>
+          <assign location="stimulus.source" expr="null"/>
+          <assign location="participants" expr="[]"/>
         </transition>
-        <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json" target="processing">
+        <transition event="bot.ability.cognition.input" event:schema="../../abilities/schemas/bot.ability.cognition.input.json" target="processing">
           <assign location="stimulus" expr="_event.data.stimulus"/>
+          <assign location="participants" expr="handoffParticipants(_event)"/>
         </transition>
       </state>
 
@@ -399,17 +456,28 @@
       <state id="processing">
         <onentry>
           <assign location="turn" expr="nextTurn()"/>
-          <bot:attention location="focus_candidates" focuslocation="focus" stimulus="stimulus"
-                         devices="devices" focus="focused_device" sources="device_source_refs"/>
-          <assign location="offering" expr="true"/>
+          <cognition:attention_bias_for_turn location="focus_candidates" focuslocation="focus"
+                                             stimulus="stimulus" devices="devices" focus="focused_device"/>
+          <assign location="device_snapshots" expr="({})"/>
+        </onentry>
+        <!-- The live state of every held device (decision D109): the
+             focused one's events are choices of this turn, and every read
+             is the turn's environment (decision D106). A device whose
+             session is not running is not read (<device:snapshot> assigns
+             nothing), so it is left out. -->
+        <onentry>
+          <foreach array="devices" item="device">
+            <device:snapshot location="device_snapshots[device]" target="deviceTarget(device)"/>
+          </foreach>
+        </onentry>
+        <onentry>
           <decision:choice location="body_choices" events="bot.focus_device bot.clear_focus"/>
-          <assign location="offering" expr="false"/>
           <decision:pin location="body_choices" event="bot.focus_device" property="device" values="focus_candidates"/>
           <!-- bound: 32 KiB, the failure message below names it. -->
-          <decision:assemble location="choices" choices="body_choices" offers="offers"
-                             bound="32768" overlocation="choices_over" sizelocation="choices_size"/>
-          <decision:names location="choice_names" choices="choices"/>
-          <log label="floppy.choices" expr="choice_names"/>
+          <processing:collect_offered_events location="choices" choices="body_choices" offers="offers"
+                                             devices="device_snapshots" focus="focused_device"
+                                             bound="32768" overlocation="choices_over" sizelocation="choices_size"/>
+          <log label="floppy.choices" expr="choices"/>
           <if cond="choicesFit()">
             <send event="bot.ability.cognition.input" target="#_cognition">
               <content expr="cognitionInput()"/>
@@ -424,20 +492,39 @@
         </onexit>
         <!-- The choices do not fit: the turn fails before the cognition. -->
         <transition cond="choices_over" target="returning">
-          <log label="bot.processing.failed" expr="choicesOverFailure()"/>
+          <send event="bot.processing.failed" target="#_parent">
+            <content expr="choicesOverFailure()"/>
+          </send>
         </transition>
-        <transition event="bot.ability.cognition.output" event:schema="schemas/bot.ability.cognition.output.json"
-                    cond="isCurrentTurn(_event)" target="routing">
+        <!-- The turn's output: its stages have sent their selections; the
+             body sends itself those that name no target (the trusted
+             seed's). -->
+        <transition event="bot.ability.cognition.output" event:schema="../../abilities/schemas/bot.ability.cognition.output.json"
+                    cond="isCurrentTurn(_event)" target="returning">
           <log label="floppy.output" expr="botOutput(_event)"/>
           <assign location="selections" expr="_event.data.output"/>
+          <send event="bot.processing.completed" target="#_parent">
+            <content expr="processingCompleted()"/>
+          </send>
+          <foreach array="selections" item="s">
+            <if cond="hasNoTarget(s)">
+              <send eventexpr="s.event" target="#_internal">
+                <content expr="selectionData(s)"/>
+              </send>
+            </if>
+          </foreach>
         </transition>
-        <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
+        <transition event="bot.ability.failed" event:schema="../../abilities/schemas/bot.ability.failed.json"
                     cond="isCurrentTurn(_event)" target="returning">
-          <log label="bot.processing.failed" expr="cognitionFailure(_event)"/>
+          <send event="bot.processing.failed" target="#_parent">
+            <content expr="cognitionFailure(_event)"/>
+          </send>
         </transition>
         <transition event="bot.processing.timed_out" event:schema="schemas/bot.processing.timed_out.json"
                     cond="isCurrentTurn(_event)" target="cancelling_processing">
-          <log label="bot.processing.timed_out" expr="turnJson()"/>
+          <send event="bot.processing.timed_out" target="#_parent">
+            <content expr="turnData()"/>
+          </send>
           <send event="bot.ability.cognition.cancel" target="#_cognition">
             <param name="turn" expr="turn"/>
           </send>
@@ -446,7 +533,7 @@
           <event:defer/>
           <log label="floppy.deferred" expr="_event.name"/>
         </transition>
-        <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json">
+        <transition event="bot.ability.cognition.input" event:schema="../../abilities/schemas/bot.ability.cognition.input.json">
           <event:defer/>
           <log label="floppy.deferred" expr="_event.name"/>
         </transition>
@@ -464,71 +551,40 @@
         <onexit>
           <cancel sendid="cancel-timer"/>
         </onexit>
-        <transition event="bot.ability.cognition.cancelled" event:schema="schemas/bot.ability.cognition.cancelled.json"
+        <transition event="bot.ability.cognition.cancelled" event:schema="../../abilities/schemas/bot.ability.cognition.cancelled.json"
                     cond="isCurrentTurn(_event)" target="returning">
-          <log label="bot.processing.failed" expr="cancelledFailure()"/>
+          <send event="bot.processing.failed" target="#_parent">
+            <content expr="cancelledFailure()"/>
+          </send>
         </transition>
-        <transition event="bot.ability.processing.cancelled" event:schema="schemas/bot.ability.processing.cancelled.json"
+        <transition event="bot.ability.processing.cancelled" event:schema="../../abilities/schemas/bot.ability.processing.cancelled.json"
                     cond="isCurrentTurn(_event)" target="returning">
-          <log label="bot.processing.failed" expr="cancelledFailure()"/>
+          <send event="bot.processing.failed" target="#_parent">
+            <content expr="cancelledFailure()"/>
+          </send>
         </transition>
         <transition event="bot.processing.cancel.timed_out" event:schema="schemas/bot.processing.cancel.timed_out.json"
                     cond="isCurrentTurn(_event)" target="degraded">
-          <log label="bot.processing.cancel.timed_out" expr="turnJson()"/>
-          <log label="bot.processing.failed" expr="cancelledFailure()"/>
+          <send event="bot.processing.cancel.timed_out" target="#_parent">
+            <content expr="turnData()"/>
+          </send>
+          <send event="bot.processing.failed" target="#_parent">
+            <content expr="cancelledFailure()"/>
+          </send>
+          <!-- The original's transition into degraded announces it. -->
+          <send event="bot.degraded" target="#_parent">
+            <param name="stage" expr="'processing_cancel'"/>
+          </send>
           <assign location="degraded_reason" expr="cancelUnacknowledgedReason()"/>
         </transition>
         <transition event="bot.input" event:schema="schemas/bot.input.json">
           <event:defer/>
           <log label="floppy.deferred" expr="_event.name"/>
         </transition>
-        <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json">
+        <transition event="bot.ability.cognition.input" event:schema="../../abilities/schemas/bot.ability.cognition.input.json">
           <event:defer/>
           <log label="floppy.deferred" expr="_event.name"/>
         </transition>
-      </state>
-
-      <!-- The turn's selections, checked, then each sent to its receiver;
-           the routed body events are taken (by active's transitions) before
-           floppy.routed. A selection that cannot be placed fails the turn
-           before anything is sent. -->
-      <state id="routing">
-        <onentry>
-          <assign location="routing_selections" expr="true"/>
-          <bot:verdict location="dispatch_selections" rejectionlocation="rejection" selections="selections"
-                       focus="focus" candidates="focus_candidates"/>
-          <if cond="isAccepted()">
-            <decision:route location="routed_selections" rejectionlocation="rejection" selections="dispatch_selections"
-                            choices="routeChoices()"/>
-          </if>
-          <if cond="isAccepted()">
-            <log label="bot.processing.completed" expr="processingCompleted()"/>
-            <foreach array="routed_selections" item="route">
-              <if cond="isBodyRoute(route)">
-                <log label="floppy.route" expr="bodyRouteLog(route)"/>
-                <send eventexpr="route.event" target="#_internal">
-                  <content expr="route.data"/>
-                </send>
-              <else/>
-                <log label="floppy.route" expr="abilityRouteLog(route)"/>
-                <send eventexpr="route.event" targetexpr="abilityTarget(route.target)">
-                  <content expr="route.data"/>
-                </send>
-              </if>
-            </foreach>
-          <else/>
-            <log label="bot.processing.failed" expr="rejectionFailure()"/>
-          </if>
-          <raise event="floppy.routed"/>
-        </onentry>
-        <onexit>
-          <assign location="routing_selections" expr="false"/>
-          <assign location="selections" expr="[]"/>
-          <assign location="dispatch_selections" expr="[]"/>
-          <assign location="rejection" expr="null"/>
-          <assign location="routed_selections" expr="[]"/>
-        </onexit>
-        <transition event="floppy.routed" target="returning"/>
       </state>
 
       <!-- Back to attention: focused when a device is focused. -->
@@ -543,8 +599,10 @@
       </transition>
       <!-- A failure that is no current turn's reply: the identity's, or
            the cognition's for another turn. -->
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json">
-        <log label="bot.ability.failed" expr="eventDataJson(_event)"/>
+      <transition event="bot.ability.failed" event:schema="../../abilities/schemas/bot.ability.failed.json">
+        <send event="bot.ability.failed" target="#_parent">
+          <content expr="_event.data"/>
+        </send>
       </transition>
     </state>
   </state>
@@ -552,9 +610,16 @@
   <!-- Leaving live cancelled every ability. -->
   <state id="deactivating">
     <transition target="inactive">
-      <log label="bot.deactivated" expr="emptyDataJson()"/>
+      <send event="bot.deactivated" target="#_parent">
+        <content expr="emptyData()"/>
+      </send>
     </transition>
   </state>
+
+  <!-- The bot left its environment (decision D107): a failed activation or
+       bot.deactivate ends its session here. Nothing activates it again;
+       rejoining is the environment invoking it again. -->
+  <final id="inactive"/>
 
   <!-- A sink: the cognition did not acknowledge a cancel, or ended while
        active. The bot takes no more turns. The original's degraded is a state

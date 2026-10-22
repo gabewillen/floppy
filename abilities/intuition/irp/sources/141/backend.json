@@ -9,19 +9,11 @@
         "answers": {
           "selection": {
             "type": "choice",
-            "choice": "bot.focus_device",
+            "choice": "bot.ability.cognition.ignore",
             "confidence": 0.9,
             "probabilities": {
-              "bot.focus_device": 0.9,
+              "bot.ability.cognition.ignore": 0.9,
               "__unhandled__": 0.1
-            }
-          },
-          "bot.focus_device::device": {
-            "type": "choice",
-            "choice": "garage",
-            "confidence": 1.0,
-            "probabilities": {
-              "garage": 1.0
             }
           }
         },

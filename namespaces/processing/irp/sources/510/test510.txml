@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- processing-2: the model-facing schema drops $schema, title and examples at every level, keeps property names, and reports not over. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing">
+<datamodel>
+  <data id="choices" expr='[{"event": "tool.a", "description": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "title": "A", "examples": [{}], "type": "object", "description": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "properties": {"title": {"type": "string", "title": "T"}}}}]'/>
+  <data id="over" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <processing:model_facing_schema location="choices" overlocation="over"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="over === false &amp;&amp; choices.length === 1 &amp;&amp; !('$schema' in choices[0].schema) &amp;&amp; !('title' in choices[0].schema) &amp;&amp; !('examples' in choices[0].schema) &amp;&amp; ('title' in choices[0].schema.properties) &amp;&amp; !('title' in choices[0].schema.properties.title) &amp;&amp; choices[0].description.length === 200" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

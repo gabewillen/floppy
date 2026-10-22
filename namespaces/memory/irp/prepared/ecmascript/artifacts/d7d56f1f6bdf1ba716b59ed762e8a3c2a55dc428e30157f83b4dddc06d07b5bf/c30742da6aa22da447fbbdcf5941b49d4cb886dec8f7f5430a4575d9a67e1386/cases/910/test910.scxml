@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- memory-2: the content is tagged and the identities are sorted, embeddings as Python floats. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="p" expr="null"/>
+  <data id="m" expr="({source_ids: ['zed', 'alice', [0.5, 1]], target_ids: ['bot'], content: {b: 1, a: [true, null, 1.5]}, content_type: 'application/json'})"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <memory:to_json location="p" message="m"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="p === '{&#34;content&#34;:{&#34;__stateforward_memory_content__&#34;:&#34;mapping&#34;,&#34;value&#34;:[[&#34;a&#34;,{&#34;__stateforward_memory_content__&#34;:&#34;list&#34;,&#34;value&#34;:[true,null,1.5]}],[&#34;b&#34;,1]]},&#34;content_type&#34;:&#34;application/json&#34;,&#34;source_ids&#34;:[&#34;alice&#34;,&#34;zed&#34;,[0.5,1.0]],&#34;target_ids&#34;:[&#34;bot&#34;]}'" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

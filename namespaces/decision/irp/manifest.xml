@@ -10,9 +10,6 @@
     <test id="401" conformance="mandatory" manual="false">
       <start uri="401/test401.txml"/>
     </test>
-    <test id="402" conformance="mandatory" manual="false">
-      <start uri="402/test402.txml"/>
-    </test>
     <test id="403" conformance="mandatory" manual="false">
       <start uri="403/test403.txml"/>
     </test>
@@ -36,18 +33,6 @@
     </test>
   </assert>
   <assert id="decision-4" specnum="4" specid="#decision-4">
-    <![CDATA[<decision:compact> drops $schema, title and examples at every schema level, keeping property names; over the bound it drops every description, and still over it writes [], with overlocation true exactly when it wrote [].]]>
-    <test id="420" conformance="mandatory" manual="false">
-      <start uri="420/test420.txml"/>
-    </test>
-    <test id="421" conformance="mandatory" manual="false">
-      <start uri="421/test421.txml"/>
-    </test>
-    <test id="422" conformance="mandatory" manual="false">
-      <start uri="422/test422.txml"/>
-    </test>
-  </assert>
-  <assert id="decision-5" specnum="5" specid="#decision-5">
     <![CDATA[<decision:pin> sets the values as the enum of the named property of every entry for the event, removes those entries when the values are empty, and raises error.execution, assigning nothing, for an entry whose schema has no such property.]]>
     <test id="430" conformance="mandatory" manual="false">
       <start uri="430/test430.txml"/>
@@ -59,55 +44,7 @@
       <start uri="432/test432.txml"/>
     </test>
   </assert>
-  <assert id="decision-6" specnum="6" specid="#decision-6">
-    <![CDATA[<decision:assemble> writes the document's own choices untagged, then each offer's choices in member-name order tagged with the member's name as target, compacted, with its size and whether it is over the bound.]]>
-    <test id="440" conformance="mandatory" manual="false">
-      <start uri="440/test440.txml"/>
-    </test>
-  </assert>
-  <assert id="decision-7" specnum="7" specid="#decision-7">
-    <![CDATA[<decision:route> places each selection on the target it names when that target offers the event, else on the event's only offerer (null for the document's own); a selection that cannot be placed fails all of them with the original's message and an empty placement.]]>
-    <test id="450" conformance="mandatory" manual="false">
-      <start uri="450/test450.txml"/>
-    </test>
-    <test id="451" conformance="mandatory" manual="false">
-      <start uri="451/test451.txml"/>
-    </test>
-    <test id="452" conformance="mandatory" manual="false">
-      <start uri="452/test452.txml"/>
-    </test>
-    <test id="453" conformance="mandatory" manual="false">
-      <start uri="453/test453.txml"/>
-    </test>
-  </assert>
-  <assert id="decision-8" specnum="8" specid="#decision-8">
-    <![CDATA[<decision:names> writes the choices' events, event@target for a targeted one, space separated.]]>
-    <test id="460" conformance="mandatory" manual="false">
-      <start uri="460/test460.txml"/>
-    </test>
-  </assert>
-  <assert id="decision-9" specnum="9" specid="#decision-9">
-    <![CDATA[<decision:selection> writes a strict schema {events: [anyOf one branch per offered event]}, each branch {event, data, reason, target?} with data the choice's schema without $schema, title and examples, the choice's description, and target an enum of the offering targets only when one has a target.]]>
-    <test id="470" conformance="mandatory" manual="false">
-      <start uri="470/test470.txml"/>
-    </test>
-  </assert>
-  <assert id="decision-10" specnum="10" specid="#decision-10">
-    <![CDATA[<decision:tuner> keeps the original's ConfidenceTuner state {mean, var, n}: anything else is replaced by the initial state, an observation moves it, and the threshold is the floor during the warmup, else max(floor/2, mean - k_sigma * deviation), as a probability; an observation that is not a number raises error.execution and assigns nothing.]]>
-    <test id="480" conformance="mandatory" manual="false">
-      <start uri="480/test480.txml"/>
-    </test>
-    <test id="481" conformance="mandatory" manual="false">
-      <start uri="481/test481.txml"/>
-    </test>
-    <test id="482" conformance="mandatory" manual="false">
-      <start uri="482/test482.txml"/>
-    </test>
-    <test id="483" conformance="mandatory" manual="false">
-      <start uri="483/test483.txml"/>
-    </test>
-  </assert>
-  <assert id="decision-11" specnum="11" specid="#decision-11">
+  <assert id="decision-5" specnum="5" specid="#decision-5">
     <![CDATA[A location that does not hold what the element reads raises error.execution and assigns nothing.]]>
     <test id="490" conformance="mandatory" manual="false">
       <start uri="490/test490.txml"/>

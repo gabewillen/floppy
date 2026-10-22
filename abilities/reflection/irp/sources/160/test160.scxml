@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- reflection-7: a revision that outlasts revising_timeout_ms fails the turn. -->
+<!-- reflection-7: a revision that outlasts revising_ceiling_ms fails the turn. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="reflection" type="scxml" src="../../../reflection.scx">
     <param name="database" expr="'/memory/floppy.sqlite'"/>
     <param name="select_timeout_ms" expr="300000"/>
-    <param name="revising_timeout_ms" expr="2000"/>
+    <param name="revising_ceiling_ms" expr="2000"/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>

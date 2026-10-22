@@ -151,6 +151,7 @@ fn speech(text: &str, sound: &Json) -> Json {
         "channels": sound.get("channels").cloned().unwrap_or(json!(1)),
         "media_type": "audio/pcm",
         "source_ids": [],
+        "participants": [],
         "parent": {"event": "environment.sound", "data": sound},
     })
 }
@@ -204,6 +205,35 @@ fn a_heard_utterance_is_decoded_into_a_speech_product() {
         vec![speech("what is the weather", &voiced)]
     );
     assert!(texts(&finished.all, "harness.failed").is_empty());
+}
+
+#[test]
+fn a_speech_product_carries_the_participants_stamped_on_its_sounds() {
+    let harness = layout(&[]);
+    let (mut run, _backend) = started(
+        &harness,
+        "a_speech_product_carries_the_participants_stamped_on_its_sounds",
+        &[
+            ("weather.wav", spoken_wav("what is the weather")),
+            ("silence.wav", silent_wav()),
+        ],
+    );
+    // Producers stamp, transformers copy (the original's f6c4e08): the
+    // product carries the ordered union of what was stamped on the sounds
+    // the utterance took, each once.
+    let caller = json!({"ref": "person-42", "role": "source"});
+    let bot = json!({"ref": "floppy", "role": "target"});
+    let voiced = sound("weather.wav", &json!({"participants": [caller]}));
+    let silent = sound("silence.wav", &json!({"participants": [caller, bot]}));
+    utter(&mut run, &voiced, &silent);
+    run.until(WAIT, label_is("harness.speech"));
+    let finished = close(
+        run,
+        "a_speech_product_carries_the_participants_stamped_on_its_sounds",
+    );
+    let mut expected = speech("what is the weather", &voiced);
+    expected["participants"] = json!([caller, bot]);
+    assert_eq!(json_texts(&finished.all, "harness.speech"), vec![expected]);
 }
 
 #[test]
@@ -452,9 +482,9 @@ fn the_efference_copy_opens_a_window_that_closes_itself() {
             ("silence.wav", silent_wav()),
         ],
     );
-    // While the mouth produces, an arrival that is not off it (the
-    // listening's stimulus names no source) is scored as unproduced: all of
-    // it survives.
+    // While the mouth produces, an arrival that is not off it (the sound
+    // names no source, so its stimulus names none) is scored as unproduced:
+    // all of it survives.
     run.event(
         "bot.ability.speaking.efference",
         &json!({"mouth": "mouth-1", "duration": 0.2}),
@@ -478,6 +508,51 @@ fn the_efference_copy_opens_a_window_that_closes_itself() {
     assert_eq!(
         json_texts(&finished.all, "harness.speech"),
         vec![speech("cut in", &cut_in), speech("after", &after)]
+    );
+    assert!(texts(&finished.all, "harness.failed").is_empty());
+}
+
+/// The bot's own speech, as speaking emits it (its source the mouth its
+/// efference copy names, no levels to compare), is scored against the
+/// prediction while the copy's window is open: it is still interpreted
+/// (the original runs the pipeline on its own voice), but fully predicted,
+/// its product is withheld. A sound from no source arriving in the same
+/// window is still heard.
+#[test]
+fn the_bots_own_speech_is_scored_as_the_mouths_and_withheld() {
+    let harness = layout(&[]);
+    let (mut run, backend) = started(
+        &harness,
+        "the_bots_own_speech_is_scored_as_the_mouths_and_withheld",
+        &[
+            ("own.wav", spoken_wav("own voice")),
+            ("cut-in.wav", spoken_wav("cut in")),
+            ("silence.wav", silent_wav()),
+        ],
+    );
+    run.event(
+        "bot.ability.speaking.efference",
+        &json!({"mouth": "speaking", "duration": 60}),
+    );
+    let own = sound("own.wav", &json!({"source": "speaking"}));
+    let own_silence = sound("silence.wav", &json!({"source": "speaking"}));
+    utter(&mut run, &own, &own_silence);
+    let cut_in = sound("cut-in.wav", &json!({}));
+    utter(&mut run, &cut_in, &sound("silence.wav", &json!({})));
+    run.until(WAIT, |record| {
+        label_is("harness.speech")(record)
+            && record["text"]
+                .as_str()
+                .is_some_and(|t| t.contains("cut in"))
+    });
+    let finished = close(
+        run,
+        "the_bots_own_speech_is_scored_as_the_mouths_and_withheld",
+    );
+    assert_eq!(backend.decoded(), vec!["own voice", "cut in"]);
+    assert_eq!(
+        json_texts(&finished.all, "harness.speech"),
+        vec![speech("cut in", &cut_in)]
     );
     assert!(texts(&finished.all, "harness.failed").is_empty());
 }
@@ -536,6 +611,7 @@ fn without_a_decoder_or_classifier_a_sound_without_voice_is_an_acoustic_product(
             "channels": 1,
             "media_type": "audio/pcm",
             "source_ids": [],
+            "participants": [],
             "parent": {"event": "environment.sound", "data": hum},
         })]
     );
@@ -560,6 +636,7 @@ fn segment(index: usize, text: &str, opened: &Json, embedding: Option<&Json>) ->
         "confidence": null,
         "voice_detection": {"segments": [{"start_seconds": 0, "end_seconds": end, "confidence": null}]},
         "source_ids": source_ids,
+        "participants": [],
         "voice_embedding": embedding,
         "parent": {"event": "environment.sound", "data": opened},
     })
@@ -664,6 +741,7 @@ fn without_diarization_the_opening_voice_is_identified_directly() {
             "channels": 1,
             "media_type": "audio/pcm",
             "source_ids": [embedding["embedding"]],
+            "participants": [],
             "voice_embedding": embedding,
             "parent": {"event": "environment.sound", "data": parent},
         })

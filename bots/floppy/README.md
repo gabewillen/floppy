@@ -13,11 +13,11 @@ confidence, gated by the original's self-tuning confidence tuner; low confidence
 hands out the environment actions and goes on to reasoning), and
 [reasoning](../../abilities/reasoning/reasoning.scx)
 (one structured model call over the turn's choices, prompted with the original's
-model-facing XML; it recalls and
-retains cognitive episodes through memory), with
+model-facing XML; it recalls the
+cognitive episodes reflection stored through memory), with
 [reflection](../../abilities/reflection/reflection.scx) (after each output it
 creates, changes or breaks a learned behavior through the builder bot and
-stores the turn's episode) and [routines](../../abilities/routines/routines.scx)
+stores the turn's one episode) and [routines](../../abilities/routines/routines.scx)
 (the ACTIVE persistent behaviors, whose ticks become turns) running beside
 the turns, and the [communication](../../abilities/communication/communication.scx),
 which holds the [conversation](../../abilities/conversation/conversation.scx) (the
@@ -31,48 +31,67 @@ by [vocal](../../abilities/vocal/vocal.scx) through the speech service, logged a
 Listening, and recorded in the conversation), and the
 [listening](../../abilities/listening/listening.scx), its input ability
 (the original's Listening, phase 6: see Sound below). Each turn the body
-assembles the choices (its own
-`bot.focus_device`, pinned to the turn's focus candidates, and
-`bot.clear_focus` while a device is focused, plus each ability's latest
-`bot.ability.offers`, tagged with the ability as `target`, compacted and
-held to 32 KiB) and routes each selected event of the turn's output to the
-body itself or to the ability that offered it. As in the original, an ignore
-selection is never dispatched, and a selection the body cannot place (a
-focus outside the turn's candidates, a clear with nothing focused, an
-event not offered this turn, a target that does not offer it, or several
-offerers and no target) fails the whole turn with
-`bot.processing.failed` (the original's `SelectionRejectionError` message)
-before anything is sent; the cognition's stages make the same checks
-before they answer. A selected
+collects the choices (its own `bot.focus_device`, pinned to the turn's
+focus candidates, and `bot.clear_focus` while a device is focused, plus
+each ability's latest `bot.ability.offers` and the focused device's
+events, each tagged with the session id of its offerer as `target`, made
+model-facing and held to 32 KiB, `<processing:collect_offered_events>`).
+As in the original, each stage of the cognition sends its own selections,
+each to the session its target names (`#_scxml_` + target); the schemas
+the services check a selection against (the pinned focus device, each
+target an enum of its offerers) refuse what the original's attention
+policy refused, before anything is sent, and an ignore goes to the
+cognition, which only logs it. A selected
 `bot.ability.communication.respond` is said through speaking and recorded
 in the conversation. Input addressed to the bot as
 `bot.ability.communication.input` is admitted into the conversation, whose
 updated history is the next turn's stimulus; so is a turn's selected
 `bot.ability.communication.input` (the original's SpeechHeard seed admits heard
-speech this way), which the body routes to itself. The full Contract, Topology, Bindings, and Proof sections come
+speech this way), which names no target, so the body sends it to itself. The full Contract, Topology, Bindings, and Proof sections come
 with the phase's saved live examples.
 
 ## Running
 
-Activate it, then give it inputs, on standard input:
+The bot runs in an environment that invokes it (decision D102): the room,
+[`environments/room/room.scx`](../../environments/room/room.scx), the root
+session, invokes it as its participant `floppy` and activates it on
+joining (decision D107). Give the room inputs on standard input; it routes
+`bot.input` and `bot.deactivate` to every bot, and
+`bot.ability.communication.input` to the participants its `target_ids`
+names (every bot when it names none):
 
 ```console
 # The locally built packages (the dev cache under target/).
-printf '%s\n' '{"name":"bot.activate","data":{}}' \
+printf '%s\n' \
   '{"name":"bot.input","data":{"observation":{"event":"text","data":"hello"}}}' |
   scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
-    --dir https://github.com/stateforward/floppy/services/speech=media::/media bots/floppy/floppy.scx
+    --dir https://github.com/stateforward/floppy/services/speech=media::/media --dir https://github.com/stateforward/floppy/services/files=behaviors::/behaviors \
+    --fuel 9223372036854775807 environments/room/room.scx
 # A conversation: text addressed to the bot, answered through floppy.say.
-printf '%s\n' '{"name":"bot.activate","data":{}}' \
+printf '%s\n' \
   '{"name":"bot.ability.communication.input","data":{"source_ids":["gabe"],"target_ids":["floppy"],"content":"Hi floppy!","content_type":"text/plain"}}' |
   scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
-    --dir https://github.com/stateforward/floppy/services/speech=media::/media bots/floppy/floppy.scx
+    --dir https://github.com/stateforward/floppy/services/speech=media::/media --dir https://github.com/stateforward/floppy/services/files=behaviors::/behaviors \
+    --fuel 9223372036854775807 environments/room/room.scx
 # floppy's latest release, once one is published (phase 7).
-printf '%s\n' '{"name":"bot.activate","data":{}}' \
+printf '%s\n' \
   '{"name":"bot.input","data":{"observation":{"event":"text","data":"hello"}}}' |
   scx run --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
-    --dir https://github.com/stateforward/floppy/services/speech=media::/media bots/floppy/floppy.scx
+    --dir https://github.com/stateforward/floppy/services/speech=media::/media --dir https://github.com/stateforward/floppy/services/files=behaviors::/behaviors \
+    --fuel 9223372036854775807 environments/room/room.scx
 ```
+
+The files service's grant is the `behaviors/` directory beside `bots/`
+and `abilities/` (create it first; it is ignored by git), where the builder
+reflection invokes writes a learned behavior's three documents and the
+candidates and routines runners load it by its path (decision D121).
+
+`--fuel 9223372036854775807` (2^63 - 1, the most fuel Wasmtime puts into a store at
+once) gives every host call the fuel a bot's start needs. Entering the room
+starts the bot and all of its abilities, about 20 sessions, on one host
+call's budget (scxml.rs docs/limits.md, "Fuel"), which two bots already
+exceed at `scx`'s default of 3 billion. It stays this high until average
+usage is measured (decision D111).
 
 The env file must set `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (the
 reasoning's `generate` service has no default backend, decision D31) and
@@ -80,8 +99,17 @@ reasoning's `generate` service has no default backend, decision D31) and
 is optional, `https://api.typesafe.ai` without it). Without the TypeSafe key
 every turn fails with `the decision failed (unconfigured)`; without the model endpoint a turn that reaches reasoning
 fails with `the reasoning failed (unconfigured)`.
-`bot.activate` may name the model (`{"model": "..."}`); the default is
-`Qwen/Qwen3.8-Flash-Next`. The memory ability (`abilities/memory/memory.scx`, the original's
+The environment's `<invoke>` gives the bot its activation settings as
+`<param>`s: `model` (the default is `Qwen/Qwen3.8-Flash-Next`),
+`database`, `environment` (the environment's id) and `bounds`, an object
+that may set the time bounds of the model-bound stages (decision D101),
+each in milliseconds:
+`child_operation_timeout_ms` (a cognition stage without progress; a
+streamed reasoning reply's progress starts it over),
+`child_operation_ceiling_ms` (a stage in all), `revising_timeout_ms`
+(reflection's revision through the builder without progress) and
+`revising_ceiling_ms` (a revision in all); absent, each is the ability's
+default (the root README's "Timeouts and bounds"). The memory ability (`abilities/memory/memory.scx`, the original's
 Memory) keeps the bot's database, `/memory/floppy.sqlite`, through the sql
 service (`services/sql`, SQLite), in the directory the run grants that
 service: `--dir
@@ -135,19 +163,25 @@ speech decoding calls `FLOPPY_SPEECH_BASE_URL` with `FLOPPY_SPEECH_API_KEY`;
 neither has a default backend. A sound that cannot be heard is logged as
 `bot.ability.listening.failed`.
 
-The root has no parent, so each event the body emits is a `log` record
-labelled with its name, its text the event's data as JSON: `bot.activated`,
-`bot.activating.failed`, `bot.deactivated`, `bot.reboot`,
+Each event the body emits goes to its environment, which writes it as a
+`log` record labelled with its name, its text the event's data as JSON:
+`bot.activated`, `bot.activating.failed`, `bot.deactivated`, `bot.reboot`,
 `bot.processing.completed`, `bot.processing.failed`,
-`bot.processing.timed_out`, `bot.processing.cancel.timed_out`, and, from
+`bot.processing.timed_out`, `bot.processing.cancel.timed_out`,
+`bot.degraded` (`{stage: "processing_cancel"}`, when an unacknowledged
+cancel degrades it), and, from
 the communication,
 `bot.ability.speaking.output` (what was said),
 `bot.ability.communication.failed`, `bot.ability.conversation.failed`
-and `environment.sound` (speaking's playout, by reference). floppy's own
+and `bot.ability.conversation.output`; the body logs `environment.sound`
+(speaking's playout, by reference) itself. The bot's session ends in
+`inactive` when its activation fails or it is deactivated, and in
+`degraded` when it degrades; the environment logs each as `done.invoke`
+with the bot's invoke id and its result. floppy's own
 records, which are not the original events, are labelled `floppy.*`:
 `floppy.output` is the turn's selected events, speaking logs the words as
-`floppy.say`, `floppy.choices` lists each turn's choices (`event` or `event@target`),
-`floppy.route` each routed selection, `floppy.focus` each focus
+`floppy.say`, `floppy.choices` is each turn's choices (JSON, each tagged
+with its offering session's id as `target`), `floppy.focus` each focus
 change, `floppy.deferred` each input deferred during a turn,
 `floppy.degraded` the reason the bot degraded, `floppy.stale` a reply to
 an earlier turn, `floppy.diagnostic` why activation failed, and
@@ -157,8 +191,8 @@ an earlier turn, `floppy.diagnostic` why activation failed, and
 
 - `cargo test -p floppy-tests --test body`: the lifecycle and turn matrix
   against a cognition double (`tests/fixtures/phase4/cognition_double.scx`),
-  and the choices and routing (the offer union, focus grounding, turns failed
-  by a selection that cannot be placed, ignore, the 32 KiB budget).
+  and the choices (the offers tagged with their sessions, focus grounding,
+  the body's guards on its own events, ignore, the 32 KiB budget).
 - `cargo test -p floppy-tests --test listening`: the listening under a
   harness, with the speech service decoding against a fake backend
   (`tests/tests/support/hearing.rs`): decoded speech, labelled non-speech,
@@ -173,7 +207,7 @@ an earlier turn, `floppy.diagnostic` why activation failed, and
   decision and model backends (each path, the tuner, failures, hop timeouts
   and reboot requests, cancels).
 - `cargo test -p floppy-tests --test communication`: the communication
-  path against the cognition double (a routed response said and recorded,
+  path against the cognition double (a sent response said and recorded,
   conversation input as a turn whose stimulus carries the history,
   a blank response, a response deferred behind one in flight and the hop
   timeout, malformed input, a child that cannot start), and one response
@@ -181,15 +215,16 @@ an earlier turn, `floppy.diagnostic` why activation failed, and
   copy reaching the listening before the sound.
 - `cargo test -p floppy-tests --test cognition` also runs the whole text
   path on fake backends: "say hi" escalates to reasoning, whose activate
-  and respond the body routes to the communication, which says it.
+  and respond reasoning sends to the communication, which says it.
 - `cargo test -p floppy-tests --test contracts`: every event reference and
   cross-document send of the body and its abilities.
 - `FLOPPY_LIVE_ENV_FILE=<paths> cargo test -p floppy-tests --test
   floppy_live -- --ignored live_cascade`: one live question turn that
-  escalates to reasoning, whose selection the body routes.
+  escalates to reasoning, which sends its selection to its target.
 - `... -- --ignored live_choices`: one live turn on a bot with a lamp: the
   choices are the body's focus (pinned to the lamp) and the cognition's and
-  communication's offers, and every selection is routed.
+  communication's offers, each tagged with its session id, and every
+  selection is sent to its target.
 - `... -- --ignored live_chat`: one live text turn through
   `bot.ability.communication.input`: the conversation's product is the
   stimulus, the reply is selected as `bot.ability.communication.respond`,

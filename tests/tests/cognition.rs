@@ -48,9 +48,12 @@ const FAKE_KEYS: &str = "FLOPPY_API_KEY=floppy-fake\nTYPESAFE_API_KEY=ts-floppy-
 const IGNORE: &str = "bot.ability.cognition.ignore";
 const RESPOND: &str = "bot.ability.communication.respond";
 const ADOPT: &str = "bot.ability.identity.adopt";
-/// The turn's choices as the body logs them: the cognition's offer, the
-/// communication's and the identity's.
-const CHOICES: &str = "bot.ability.cognition.ignore@cognition bot.ability.communication.respond@communication bot.ability.identity.adopt@identity";
+/// The turn's choices as the body collects them, each `event@target`: the
+/// cognition's offer, the communication's and the identity's, each tagged
+/// with its offering session's id.
+const CHOICES: &str = "bot.ability.cognition.ignore@session.floppy.cognition bot.ability.communication.respond@session.floppy.communication bot.ability.identity.adopt@session.floppy.identity";
+/// The cognition's session id in the body, the target of its ignore.
+const COGNITION: &str = "session.floppy.cognition";
 
 /// The decision backend's scripted answer.
 #[derive(Clone, Copy)]
@@ -89,18 +92,33 @@ enum Generation {
     OffChoice,
     /// A response for the communication to say.
     Respond,
+    /// The communication's respond with the text `hi`: the same action a
+    /// low-confidence intuition hands out for the stimulus `hi`.
+    Repeat,
     /// Answers 500.
     Fail,
     /// Never answers.
     Hang,
+    /// An ignore selection, streamed slowly but steadily: sixteen pieces a
+    /// second apart, sixteen seconds in all ([`support::answer_slowly`]).
+    Slow,
+    /// An ignore selection whose stream stops after its first piece.
+    Stall,
+    /// A stream of keep-alive comments only, as a gateway sends while its
+    /// model says nothing ([`support::answer_with_pings`]).
+    Pings,
 }
 
 impl Generation {
     const fn path(self) -> &'static str {
         match self {
+            Self::Slow => "gslow",
+            Self::Stall => "gstall",
+            Self::Pings => "gpings",
             Self::Ignore => "gignore",
             Self::OffChoice => "offchoice",
             Self::Respond => "grespond",
+            Self::Repeat => "grepeat",
             Self::Fail => "gfail",
             Self::Hang => "ghang",
         }
@@ -197,7 +215,11 @@ fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
             r#"{"error":{"message":"boom"}}"#.to_owned(),
         ))
     };
-    let selection = |events: Json| ok(completion(&json!({ "events": events }).to_string()));
+    let selection = |events: Json| {
+        ok(completion(
+            &json!({ "events": support::with_targets(body, &events) }).to_string(),
+        ))
+    };
     // Reflection's select after each output: an empty selection (no
     // behavior to revise), so reflection stores the turn's episode.
     if is_reflection(body) {
@@ -208,10 +230,13 @@ fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
         "/abstain/v1/systemone" => ok(decided(body, "__unhandled__", 0.8)?),
         "/low/v1/systemone" => ok(decided_with(body, IGNORE, 0.34, Some(0.33))?),
         "/gignore/v1/chat/completions" => selection(json!([
-            {"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"}
+            {"event": IGNORE, "data": {}, "reason": "nothing to say"}
         ])),
         "/grespond/v1/chat/completions" => selection(json!([
-            {"event": RESPOND, "data": {"text": "Hi! I am floppy."}, "reason": "greet", "target": "communication"}
+            {"event": RESPOND, "data": {"text": "Hi! I am floppy."}, "reason": "greet"}
+        ])),
+        "/grepeat/v1/chat/completions" => selection(json!([
+            {"event": RESPOND, "data": {"text": "hi"}, "reason": "answer"}
         ])),
         "/offchoice/v1/chat/completions" => selection(json!([
             {"event": "bot.focus_device", "data": {"device": "lamp"}, "reason": "look"}
@@ -247,7 +272,39 @@ fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
     }
     let target = request_line.split(' ').nth(1).unwrap_or("").to_owned();
     let body: Json = serde_json::from_slice(&body).unwrap_or(Json::Null);
-    let reply = answer(&target, &body);
+    if target == format!("/{}/v1/chat/completions", Generation::Pings.path())
+        && !is_reflection(&body)
+    {
+        log.lock().expect("the log lock").push(Received {
+            target,
+            body: body.clone(),
+        });
+        support::answer_with_pings(&mut stream, Duration::from_millis(500));
+        return;
+    }
+    for (generation, stall) in [(Generation::Slow, false), (Generation::Stall, true)] {
+        if target == format!("/{}/v1/chat/completions", generation.path()) && !is_reflection(&body)
+        {
+            log.lock().expect("the log lock").push(Received {
+                target,
+                body: body.clone(),
+            });
+            let ignore = json!({"events": support::with_targets(&body, &json!([
+                {"event": IGNORE, "data": {}, "reason": "nothing to say"}
+            ]))});
+            support::answer_slowly(
+                &mut stream,
+                &body,
+                &ignore.to_string(),
+                16,
+                Duration::from_secs(1),
+                stall,
+            );
+            return;
+        }
+    }
+    let reply = answer(&target, &body)
+        .map(|(status, text)| (status, support::answer_as_asked(&body, text)));
     log.lock()
         .expect("the log lock")
         .push(Received { target, body });
@@ -363,6 +420,14 @@ struct Bot {
     env: PathBuf,
 }
 
+/// The scratch root `bot` is laid out in.
+fn bot_layout(bot: &Bot) -> &Path {
+    bot.body
+        .ancestors()
+        .nth(3)
+        .expect("the body is <layout>/bots/floppy/floppy.scx")
+}
+
 /// Lays out the bot with `edits` (`(path under the scratch root, [(id,
 /// expr)])`) and an env file for `decision` and `generation`.
 fn layout(
@@ -399,16 +464,36 @@ fn layout(
     }
 }
 
+/// Sets the run's `FLOPPY_STREAM` to `true`: the backend streams, so each
+/// model call asks for a streamed reply (decision D101).
+fn streaming(bot: &Bot) {
+    set_stream(bot, "true");
+}
+
+/// Sets the run's `FLOPPY_STREAM` to `value`.
+fn set_stream(bot: &Bot, value: &str) {
+    let mut text = std::fs::read_to_string(&bot.env).expect("the env file is readable");
+    text.push_str("FLOPPY_STREAM=");
+    text.push_str(value);
+    text.push('\n');
+    std::fs::write(&bot.env, text).expect("the env file is writable");
+}
+
 fn start(bot: &Bot) -> Run {
-    let mut run = Run::start(
+    start_activated(bot, &[])
+}
+
+/// [`start`] with `params` as the bot's activation settings in the room
+/// that invokes it (decision D107); the bot activates on joining.
+fn start_activated(bot: &Bot, params: &[(&str, &str)]) -> Run {
+    let run = Run::start(
         &[
             "--env-file".to_owned(),
             bot.env.display().to_string(),
-            bot.body.display().to_string(),
+            support::environment_for(&bot.body, params),
         ],
         &[],
     );
-    run.event("bot.activate", &json!({}));
     run.until(WAIT, label_is("bot.activated"));
     run
 }
@@ -555,7 +640,7 @@ fn intuition_handles_an_ignore_without_reasoning() {
     let records = run.until(WAIT, label_is("bot.processing.completed"));
     assert_eq!(
         json_text(&records, "floppy.output"),
-        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}}]})
+        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "target": COGNITION}]})
     );
     assert_eq!(
         texts(&records, "cognition.stage"),
@@ -570,13 +655,11 @@ fn intuition_handles_an_ignore_without_reasoning() {
         texts(&records, "autonomy"),
         strings(&["turn 1: 0 matched for bot.input"])
     );
-    // An ignore is the turn's terminal product: never dispatched (the original
-    // without_ignore_selections).
-    assert!(texts(&records, "floppy.route").is_empty(), "{records:?}");
-    assert!(
-        texts(&records, "cognition.ignore").is_empty(),
-        "{records:?}"
-    );
+    // An ignore is the turn's terminal product, the cognition's only (the
+    // original's without_ignore_selections): intuition sends it to the
+    // cognition, its only offerer (the decision service names it), which
+    // logs it.
+    assert_eq!(texts(&records, "cognition.ignore"), strings(&["turn 1"]));
     // The decision offered the turn's choices it could fill (respond's
     // text and adopt's name have no grounded value); reasoning asked no
     // model.
@@ -595,7 +678,9 @@ fn intuition_handles_an_ignore_without_reasoning() {
     let mut all = records;
     all.extend(finished.records);
     assert!(
-        texts(&all, "cognition.offers").iter().all(|t| t == IGNORE),
+        texts(&all, "cognition.offers")
+            .iter()
+            .all(|t| support::choice_names(t) == IGNORE),
         "{all:?}"
     );
 }
@@ -603,7 +688,8 @@ fn intuition_handles_an_ignore_without_reasoning() {
 /// The memory path every inventory test gives the cognition.
 const DATABASE: &str = "/memory/floppy.sqlite";
 
-/// One learned behavior row: name, trigger, status, lifetime and source.
+/// One learned behavior row: name, trigger, status, and its program's
+/// text, which [`inventory`] writes as the builder does (decision D121).
 struct Learned<'a> {
     name: &'a str,
     trigger: &'a str,
@@ -667,18 +753,25 @@ fn transact(grant: &[String], database: &str, statements: &Json) -> Json {
 
 /// `database` holding `learned` as the original's inventory rows
 /// (`bot_behavior`, `bot_behavior_trigger`), in a fresh memory directory
-/// for [`DATABASE`]; returns the run's grant.
-fn inventory(database: &str, learned: &[Learned<'_>]) -> Vec<String> {
+/// for [`DATABASE`]; returns the run's grant. Each row's program is
+/// written as `<name>.scx` into the behaviors directory of `layout` (the
+/// scratch root holding `abilities/`), and its source is that file's path,
+/// `../../behaviors/<name>.scx`, as the builder writes one (decision D121).
+fn inventory(database: &str, layout: &Path, learned: &[Learned<'_>]) -> Vec<String> {
     let grant = if database == DATABASE {
         support::memory_grant()
     } else {
         support::pgsql_grant()
     };
+    let behaviors = layout.join("behaviors");
+    std::fs::create_dir_all(&behaviors).expect("the behaviors directory is creatable");
     let mut statements = Vec::new();
     for row in learned {
+        std::fs::write(behaviors.join(format!("{}.scx", row.name)), row.source)
+            .expect("the behavior is writable");
         statements.push(json!({
             "sql": "INSERT INTO bot_behavior (name, source, lifetime, status) VALUES (?, ?, 'turn', ?)",
-            "parameters": [row.name, row.source, row.status],
+            "parameters": [row.name, format!("../../behaviors/{}.scx", row.name), row.status],
         }));
         statements.push(json!({
             "sql": "INSERT INTO bot_behavior_trigger (behavior_name, \"trigger\") VALUES (?, ?)",
@@ -712,10 +805,9 @@ fn start_with(bot: &Bot, args: &[String]) -> Run {
     full.extend([
         "--env-file".to_owned(),
         bot.env.display().to_string(),
-        bot.body.display().to_string(),
+        support::environment_for(&bot.body, &[]),
     ]);
-    let mut run = Run::start(&full, &[]);
-    run.event("bot.activate", &json!({}));
+    let run = Run::start(&full, &[]);
     run.until(WAIT, label_is("bot.activated"));
     run
 }
@@ -764,8 +856,18 @@ fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
     let double =
         std::fs::read_to_string(workspace().join("tests/fixtures/phase4/behavior_double.scx"))
             .expect("the double is readable");
+    let bot = layout(
+        &mock,
+        Decision::Fail,
+        Generation::Fail,
+        &[(
+            "abilities/cognition/cognition.scx",
+            &[("database", format!("'{database}'").as_str())],
+        )],
+    );
     let grant = inventory(
         database,
+        bot_layout(&bot),
         &[
             Learned {
                 name: "Asilent",
@@ -805,16 +907,6 @@ fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
             },
         ],
     );
-    let memory = format!("'{database}'");
-    let bot = layout(
-        &mock,
-        Decision::Fail,
-        Generation::Fail,
-        &[(
-            "abilities/cognition/cognition.scx",
-            &[("database", memory.as_str())],
-        )],
-    );
     support::use_database(&bot.body, database);
     let mut run = start_with(&bot, &grant);
     say(&mut run, "background noise");
@@ -842,7 +934,7 @@ fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
     );
     assert_eq!(
         json_text(&records, "floppy.output"),
-        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "reason": "behavior: nothing to do", "target": "cognition"}]})
+        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "reason": "behavior: ignore", "target": COGNITION}]})
     );
     // Neither intuition nor reasoning ran: no backend but reflection's
     // was asked.
@@ -863,23 +955,14 @@ fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
 }
 
 /// The original's Autonomy dispatches a handled behavior's selections before it
-/// counts the use: one the turn cannot place (here an event nobody offers)
-/// marks the behavior failed, not used, and fails the turn with the original's
-/// `SelectionRejectionError` message; intuition never runs.
+/// counts the use: one that cannot be sent (here one that names no target)
+/// marks the behavior failed, not used, and fails the turn; intuition never
+/// runs.
 #[test]
-fn a_learned_behavior_whose_selection_cannot_be_placed_fails_the_turn() {
+fn a_learned_behavior_whose_selection_cannot_be_sent_fails_the_turn() {
     let mock = Mock::start();
     let unoffered = turn_behavior(
         "({turn: turn, handled: true, selected: [{event: 'bot.ability.reasoning.input', data: {}}]})",
-    );
-    let grant = inventory(
-        DATABASE,
-        &[Learned {
-            name: "Unoffered",
-            trigger: "bot.input",
-            status: "ACTIVE",
-            source: &unoffered,
-        }],
     );
     let memory = format!("'{DATABASE}'");
     let bot = layout(
@@ -891,11 +974,21 @@ fn a_learned_behavior_whose_selection_cannot_be_placed_fails_the_turn() {
             &[("database", memory.as_str())],
         )],
     );
+    let grant = inventory(
+        DATABASE,
+        bot_layout(&bot),
+        &[Learned {
+            name: "Unoffered",
+            trigger: "bot.input",
+            status: "ACTIVE",
+            source: &unoffered,
+        }],
+    );
     support::use_database(&bot.body, DATABASE);
     let mut run = start_with(&bot, &grant);
     say(&mut run, "background noise");
     let records = run.until(WAIT, turn_ended);
-    let message = "Processing selected unavailable event: bot.ability.reasoning.input.";
+    let message = "Autonomy behavior dispatch failed: error.communication";
     assert_eq!(
         texts(&records, "autonomy.candidate.failed"),
         strings(&[&format!("Unoffered ({message})")])
@@ -909,7 +1002,7 @@ fn a_learned_behavior_whose_selection_cannot_be_placed_fails_the_turn() {
     close(
         run,
         &mock,
-        "a_learned_behavior_whose_selection_cannot_be_placed_fails_the_turn",
+        "a_learned_behavior_whose_selection_cannot_be_sent_fails_the_turn",
     );
     assert_eq!(usage(&grant, DATABASE), json!([["Unoffered", "0", "1"]]));
 }
@@ -920,15 +1013,6 @@ fn a_learned_behavior_whose_selection_cannot_be_placed_fails_the_turn() {
 fn when_no_learned_behavior_handles_the_turn_intuition_runs() {
     let mock = Mock::start();
     let declines = turn_behavior("({turn: turn, handled: false})");
-    let grant = inventory(
-        DATABASE,
-        &[Learned {
-            name: "Declines",
-            trigger: "bot.input",
-            status: "ACTIVE",
-            source: &declines,
-        }],
-    );
     let memory = format!("'{DATABASE}'");
     let bot = layout(
         &mock,
@@ -939,6 +1023,16 @@ fn when_no_learned_behavior_handles_the_turn_intuition_runs() {
             &[("database", memory.as_str())],
         )],
     );
+    let grant = inventory(
+        DATABASE,
+        bot_layout(&bot),
+        &[Learned {
+            name: "Declines",
+            trigger: "bot.input",
+            status: "ACTIVE",
+            source: &declines,
+        }],
+    );
     let mut run = start_with(&bot, &grant);
     say(&mut run, "background noise");
     let records = run.until(WAIT, label_is("bot.processing.completed"));
@@ -948,7 +1042,7 @@ fn when_no_learned_behavior_handles_the_turn_intuition_runs() {
     );
     assert_eq!(
         json_text(&records, "floppy.output"),
-        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}}]})
+        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "target": COGNITION}]})
     );
     close(
         run,
@@ -956,6 +1050,14 @@ fn when_no_learned_behavior_handles_the_turn_intuition_runs() {
         "when_no_learned_behavior_handles_the_turn_intuition_runs",
     );
     assert_eq!(usage(&grant, DATABASE), json!([["Declines", "0", "0"]]));
+}
+
+/// The choices logged under `label`, each as `event@target` names.
+fn logged_choices(records: &[Json], label: &str) -> Vec<String> {
+    texts(records, label)
+        .iter()
+        .map(|text| support::choice_names(text))
+        .collect()
 }
 
 #[test]
@@ -967,16 +1069,17 @@ fn reasoning_selects_from_the_turns_choices() {
     let records = run.until(WAIT, label_is("bot.processing.completed"));
     assert_eq!(
         json_text(&records, "floppy.output"),
-        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"}]})
+        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "reason": "nothing to say", "target": COGNITION}]})
     );
-    // Reasoning selected from the body's assembled choices (the
-    // cognition's offer, tagged); an ignore is never dispatched.
-    assert_eq!(texts(&records, "floppy.choices"), strings(&[CHOICES]));
+    // Reasoning selected from the body's collected choices (the
+    // cognition's offer, tagged with its session id); the ignore goes to
+    // the cognition, which only logs it.
     assert_eq!(
-        texts(&records, "reasoning"),
-        strings(&[&format!("turn 1: {CHOICES}")])
+        logged_choices(&records, "floppy.choices"),
+        strings(&[CHOICES])
     );
-    assert!(texts(&records, "floppy.route").is_empty(), "{records:?}");
+    assert_eq!(logged_choices(&records, "reasoning"), strings(&[CHOICES]));
+    assert_eq!(texts(&records, "cognition.ignore"), strings(&["turn 1"]));
     assert_eq!(
         texts(&records, "cognition.stage"),
         strings(&[
@@ -988,24 +1091,40 @@ fn reasoning_selects_from_the_turns_choices() {
     // The body gives the cognition a database: reasoning recalls from
     // memory (no seam logs absent).
     assert!(texts(&records, "memory").is_empty(), "{records:?}");
-    // The model request: the dispatch schema of the choices, strict, and
+    // The model request: the original's dispatch tool of the choices, and
     // a prompt that carries the stimulus and what memory recalled (a fresh
     // database holds nothing).
     let requests = reasoning_requests(&mock);
     assert_eq!(requests.len(), 1);
     let body = &requests[0].body;
-    let format = &body["response_format"]["json_schema"];
+    let format = &body["tools"][0]["function"];
     assert_eq!(format["name"], "dispatch");
-    assert_eq!(format["strict"], true);
-    let branches = format["schema"]["properties"]["events"]["items"]["anyOf"]
+    assert!(
+        format["description"]
+            .as_str()
+            .is_some_and(|description| description
+                .starts_with("Dispatch all events necessary for the input. Call once.")),
+        "{format}"
+    );
+    assert_eq!(body["tool_choice"], "required");
+    let branches = format["parameters"]["properties"]["events"]["items"]["anyOf"]
         .as_array()
         .expect("one branch per choice");
     let pinned: Vec<String> = branches
         .iter()
         .map(|branch| {
+            // The original's branch: event and target required, data when
+            // its schema requires a field, reason optional.
+            let data_required = branch["properties"]["data"]["required"]
+                .as_array()
+                .is_some_and(|required| !required.is_empty());
             assert_eq!(
                 branch["required"],
-                json!(["event", "data", "reason", "target"]),
+                if data_required {
+                    json!(["event", "data", "target"])
+                } else {
+                    json!(["event", "target"])
+                },
                 "{branch}"
             );
             assert_eq!(branch["additionalProperties"], false);
@@ -1015,11 +1134,11 @@ fn reasoning_selects_from_the_turns_choices() {
                 .expect("a pinned event")
                 .to_owned();
             let target = if event == IGNORE {
-                "cognition"
+                COGNITION
             } else if event == ADOPT {
-                "identity"
+                "session.floppy.identity"
             } else {
-                "communication"
+                "session.floppy.communication"
             };
             assert_eq!(branch["properties"]["target"]["enum"], json!([target]));
             event
@@ -1059,7 +1178,7 @@ fn reasoning_selects_from_the_turns_choices() {
 }
 
 /// The whole text path on fake backends: "say hi" escalates to reasoning,
-/// which selects the communication's respond; the body routes it to the
+/// which selects the communication's respond and sends it to the
 /// communication, which says the response through speaking
 /// and records it in its conversation.
 #[test]
@@ -1079,10 +1198,6 @@ fn a_reasoned_response_is_said_through_the_communication() {
             "intuition unhandled (empty_product)",
             "reasoning handled"
         ])
-    );
-    assert_eq!(
-        texts(&records, "floppy.route"),
-        strings(&["bot.ability.communication.respond -> communication"])
     );
     assert_eq!(
         texts(&records, "floppy.say"),
@@ -1121,8 +1236,63 @@ fn prompts(mock: &Mock) -> Vec<String> {
         .collect()
 }
 
-/// The original's Reasoning recall: the reflection stores a reasoned turn's
-/// episode, and the next turn's prompt carries it.
+/// Tells the bot `content` as gabe, through the communication, once
+/// reflection has settled every earlier output (as [`say`]).
+fn tell(run: &mut Run, content: &str) {
+    settle_reflection(run);
+    run.event(
+        "bot.ability.communication.input",
+        &json!({
+            "source_ids": ["gabe"],
+            "target_ids": ["floppy"],
+            "content": content,
+            "content_type": "text/plain"
+        }),
+    );
+}
+
+/// The original renders a conversation's messages (models) into the
+/// prompt: a turn the conversation hands reasoning carries its history, so
+/// the next turn's prompt holds what the user said before and what the bot
+/// said back (decision D99), beside the one episode reflection stored.
+#[test]
+fn a_conversation_turn_carries_its_history_to_reasoning() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Respond, &[]);
+    support::use_database(&bot.body, DATABASE);
+    let mut run = start(&bot);
+    tell(&mut run, "My favorite color is green.");
+    run.until(WAIT, turn_ended);
+    tell(&mut run, "What is my favorite color?");
+    run.until(WAIT, turn_ended);
+    let prompts = prompts(&mock);
+    assert_eq!(prompts.len(), 2, "{prompts:?}");
+    for said in [
+        "My favorite color is green.",
+        "Hi! I am floppy.",
+        "What is my favorite color?",
+    ] {
+        assert!(
+            prompts[1].contains(&format!("<entry key=\"content\" value=\"{said}\" />")),
+            "{said}: {}",
+            prompts[1]
+        );
+    }
+    assert!(
+        prompts[1].contains("\n  <prior_episodes count=\"1\">\n"),
+        "{}",
+        prompts[1]
+    );
+    close(
+        run,
+        &mock,
+        "a_conversation_turn_carries_its_history_to_reasoning",
+    );
+}
+
+/// The original's Reasoning recall: a reasoned turn's episode, which
+/// reflection stores (decision D97), is the one the next turn's prompt
+/// carries: each turn records one episode.
 #[test]
 fn a_reasoned_turn_is_recalled_by_the_next() {
     reasoned_turns_recalled(DATABASE, Some("a_reasoned_turn_is_recalled_by_the_next"));
@@ -1147,8 +1317,8 @@ fn reasoned_turns_recalled(database: &str, test: Option<&str>) {
     let mut run = start(&bot);
     say(&mut run, "remember this");
     run.until(WAIT, turn_ended);
-    // Only the reflection stores the turn's episode (decision D97; the
-    // original's Reasoning `_retain_activity` inserted one too); `say` waits
+    // Reflection stores the turn's episode (the original Reflection
+    // `_store_activity`; reasoning retains none, decision D97); `say` waits
     // for it, so the next turn's recall is fixed.
     say(&mut run, "and this");
     run.until(WAIT, turn_ended);
@@ -1159,10 +1329,10 @@ fn reasoned_turns_recalled(database: &str, test: Option<&str>) {
         "{}",
         prompts[0]
     );
-    // The reflection's episode, a cognition:cognitive_episode (the original
-    // episodes.CognitiveEpisode).
+    // The first turn's one episode, a cognition:cognitive_episode (the
+    // original episodes.CognitiveEpisode).
     let episode = format!(
-        "    <cognition:cognitive_episode stimulus_name=\"bot.input\">\n      <focus_candidates count=\"0\" />\n      <output count=\"1\">\n        <cognition:event target=\"cognition\" event=\"{IGNORE}\" reason=\"nothing to say\">\n          <data />\n        </cognition:event>\n      </output>\n    </cognition:cognitive_episode>\n"
+        "    <cognition:cognitive_episode stimulus_name=\"bot.input\">\n      <focus_candidates count=\"0\" />\n      <output count=\"1\">\n        <cognition:event target=\"session.floppy.cognition\" event=\"{IGNORE}\" reason=\"nothing to say\">\n          <data />\n        </cognition:event>\n      </output>\n    </cognition:cognitive_episode>\n"
     );
     assert!(
         prompts[1].contains(&format!(
@@ -1204,10 +1374,10 @@ fn low_confidence_is_observed_by_the_tuner_and_escalates() {
     let second = run.until(WAIT, turn_ended);
     for (records, n) in [(&first, 1), (&second, 2)] {
         // The tuner observes the selections' least confidence first; during
-        // the warmup the threshold is then the floor, 35.
+        // the warmup the threshold is then the floor, 35, so 34 escalates.
         assert_eq!(
             texts(records, "intuition")[0],
-            format!("turn {n}: {IGNORE} (confidence 34, threshold 0.35)")
+            format!("turn {n}: {IGNORE} (confidence 34, escalate true)")
         );
         assert_eq!(
             texts(records, "cognition.stage")[1],
@@ -1233,45 +1403,34 @@ fn after_the_warmup_the_threshold_follows_the_tuner() {
     let mock = Mock::start();
     let bot = layout(
         &mock,
-        Decision::Low,
+        Decision::Ignore,
         Generation::Ignore,
         &[(
             "abilities/cognition/cognition.scx",
-            &[("tuner", "({mean: 70, var: 100, n: 8})")],
+            &[("confidence_tuner", "({mean: 95, var: 100, n: 8})")],
         )],
     );
     let mut run = start(&bot);
-    // The threshold a turn's intuition log reports.
-    let threshold = |records: &[Json], n: u64| -> f64 {
-        texts(records, "intuition")[0]
-            .strip_prefix(&format!("turn {n}: {IGNORE} (confidence 34, threshold "))
-            .and_then(|rest| rest.strip_suffix(')'))
-            .and_then(|value| value.parse().ok())
-            .expect("a threshold")
-    };
     say(&mut run, "one");
     let first = run.until(WAIT, turn_ended);
-    // The original observes before it compares: delta = 34 - 70; mean = 70 +
-    // 0.08 * delta; variance = max(100, 0.92 * 100 + 0.08 * delta^2); the
-    // threshold is then max(35 / 2, mean - sqrt(variance)), about 53.1.
+    // The original observes before it compares: delta = 80 - 95; mean = 95
+    // + 0.08 * delta = 93.8; variance = max(100, 0.92 * 100 + 0.08 *
+    // delta^2) = 110; the threshold is then max(35 / 2, mean -
+    // sqrt(variance)), about 83.3, so a confidence of 80, well over the
+    // warmup's floor of 35, escalates.
     let tuner = json_text(&first, "cognition.tuner");
     let number = |key: &str| tuner[key].as_f64().expect("a number");
-    assert!((number("mean") - 67.12).abs() < 1e-9, "{tuner}");
-    assert!((number("var") - 195.68).abs() < 1e-9, "{tuner}");
+    assert!((number("mean") - 93.8).abs() < 1e-9, "{tuner}");
+    assert!((number("var") - 110.0).abs() < 1e-9, "{tuner}");
     assert_eq!(tuner["n"], 9);
-    let expected = (67.12 - 195.68_f64.sqrt()) / 100.0;
-    assert!((threshold(&first, 1) - expected).abs() < 1e-9);
+    assert_eq!(
+        texts(&first, "intuition")[0],
+        format!("turn 1: {IGNORE} (confidence 80, escalate true)")
+    );
     assert_eq!(
         texts(&first, "cognition.stage")[1],
         "intuition unhandled (low_confidence)"
     );
-    say(&mut run, "two");
-    let second = run.until(WAIT, turn_ended);
-    let delta: f64 = 34.0 - 67.12;
-    let mean = 67.12 + 0.08 * delta;
-    let variance = (0.92 * 195.68 + 0.08 * delta * delta).max(100.0);
-    let expected = (mean - variance.sqrt()) / 100.0;
-    assert!((threshold(&second, 2) - expected).abs() < 1e-9);
     close(
         run,
         &mock,
@@ -1298,10 +1457,10 @@ fn offered_schema(event: &str) -> Json {
 /// under the floor 35 with respond (ignore is no environment action); the
 /// cognition routes respond first, then reasoning's selection. Reasoning's
 /// prompt is the original's model-facing XML of its `ProcessorInput`.
-#[test]
-fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
-    let mock = Mock::start();
-    let bot = layout(&mock, Decision::Low, Generation::Ignore, &[]);
+/// Runs one `hi` turn, offering ignore and respond, through the cognition
+/// harness of `bot` (which offers respond itself) and returns its records
+/// up to the harness's output.
+fn low_confidence_turn(bot: &Bot) -> (Run, Vec<Json>) {
     let abilities = bot
         .body
         .parent()
@@ -1332,16 +1491,24 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
             "focus": null,
             "focus_candidates": [],
             "choices": [
-                {"event": IGNORE, "schema": offered_schema(IGNORE), "target": "cognition"},
-                {"event": RESPOND, "schema": offered_schema(RESPOND), "target": "communication"},
+                {"event": IGNORE, "schema": offered_schema(IGNORE), "target": "session.cognition"},
+                {"event": RESPOND, "schema": offered_schema(RESPOND), "target": "session"},
             ],
         }),
     );
     let records = run.until(WAIT, label_is("harness.output"));
+    (run, records)
+}
+
+#[test]
+fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Low, Generation::Ignore, &[]);
+    let (run, records) = low_confidence_turn(&bot);
     assert_eq!(
         texts(&records, "intuition"),
         strings(&[&format!(
-            "turn 1: {IGNORE} {RESPOND} (confidence 33, threshold 0.35)"
+            "turn 1: {IGNORE} {RESPOND} (confidence 33, escalate true)"
         )])
     );
     assert_eq!(
@@ -1352,11 +1519,16 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
             "reasoning handled"
         ])
     );
+    // The escalating intuition sent its environment action (respond's
+    // grounded "hi") before reasoning ran; the output is reasoning's.
+    assert_eq!(
+        texts(&records, "harness.sent"),
+        strings(&[r#"{"text":"hi"}"#])
+    );
     assert_eq!(
         json_text(&records, "harness.output"),
         json!({"turn": 1, "output": [
-            {"event": RESPOND, "data": {"text": "hi"}},
-            {"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "cognition"},
+            {"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "session.cognition"},
         ]})
     );
     // The TypeSafe state is the original's turn document, and respond's text is
@@ -1386,6 +1558,41 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
         run,
         &mock,
         "low_confidence_hands_out_the_environment_actions_before_reasoning",
+    );
+}
+
+/// Each stage sends its own selections, as the original's do: when
+/// reasoning selects the very action the escalated intuition already sent
+/// (respond with `hi`, intuition's environment action), it is sent again,
+/// after it, as the original's reasoning dispatches it again; the output
+/// is reasoning's.
+#[test]
+fn reasoning_sends_its_selections_after_the_environment_actions() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Low, Generation::Repeat, &[]);
+    let (run, records) = low_confidence_turn(&bot);
+    assert_eq!(
+        texts(&records, "cognition.stage"),
+        strings(&[
+            "autonomy unhandled (no-behaviors)",
+            "intuition unhandled (low_confidence)",
+            "reasoning handled"
+        ])
+    );
+    assert_eq!(
+        texts(&records, "harness.sent"),
+        strings(&[r#"{"text":"hi"}"#, r#"{"text":"hi"}"#])
+    );
+    assert_eq!(
+        json_text(&records, "harness.output"),
+        json!({"turn": 1, "output": [
+            {"event": RESPOND, "data": {"text": "hi"}, "reason": "answer", "target": "session"},
+        ]})
+    );
+    close(
+        run,
+        &mock,
+        "reasoning_sends_its_selections_after_the_environment_actions",
     );
 }
 
@@ -1474,29 +1681,195 @@ fn reboots_on_a_silent_stage(
     stage: &str,
     hop_ms: &str,
 ) {
+    // A reasoning reply that does not stream (the default) is bounded by the
+    // stage's backstop alone; the stages before it by inactivity from their
+    // start (decision D101).
+    let (bound, timed_out) = if stage == "reasoning" {
+        (
+            "child_operation_ceiling_ms",
+            format!("turn 1: {stage} after {hop_ms} ms in all"),
+        )
+    } else {
+        (
+            "child_operation_timeout_ms",
+            format!("turn 1: {stage} after {hop_ms} ms without progress"),
+        )
+    };
     let mock = Mock::start();
     let bot = layout(
         &mock,
         decision,
         generation,
-        &[(
-            "abilities/cognition/cognition.scx",
-            &[("child_operation_timeout_ms", hop_ms)],
-        )],
+        &[("abilities/cognition/cognition.scx", &[(bound, hop_ms)])],
     );
     let mut run = start(&bot);
     say(&mut run, "hello");
     let records = run.until(WAIT, label_is("bot.activated"));
-    assert_eq!(
-        texts(&records, "cognition.hop.timed_out"),
-        [format!("turn 1: {stage} after {hop_ms} ms")]
-    );
+    assert_eq!(texts(&records, "cognition.hop.timed_out"), [timed_out]);
     assert_eq!(
         texts(&records, "bot.reboot"),
         strings(&[r#"{"reason":"cognition_child_teardown_failed"}"#])
     );
     assert!(texts(&records, "floppy.output").is_empty());
     close(run, &mock, test);
+}
+
+/// Reasoning's reply streams (decision D101): a model that keeps answering
+/// is never cut off, however long the whole reply takes. Its stream,
+/// sixteen seconds in all, outlasts the 8 s bound of a stage without
+/// progress (long enough for the earlier stages on a loaded machine), and
+/// the turn is reasoned.
+#[test]
+fn a_reasoning_reply_that_keeps_streaming_outlasts_the_inactivity_bound() {
+    let mock = Mock::start();
+    let bot = layout(
+        &mock,
+        Decision::Abstain,
+        Generation::Slow,
+        &[(
+            "abilities/cognition/cognition.scx",
+            &[("child_operation_timeout_ms", "8000")],
+        )],
+    );
+    streaming(&bot);
+    let mut run = start(&bot);
+    say(&mut run, "hello");
+    let records = run.until(WAIT, turn_ended);
+    assert_eq!(
+        texts(&records, "cognition.stage"),
+        strings(&[
+            "autonomy unhandled (no-behaviors)",
+            "intuition unhandled (empty_product)",
+            "reasoning handled"
+        ]),
+        "{records:?}"
+    );
+    assert!(texts(&records, "cognition.hop.timed_out").is_empty());
+    assert!(texts(&records, "bot.reboot").is_empty());
+    let request = &reasoning_requests(&mock)[0].body;
+    assert_eq!(request["stream"], true, "reasoning streams its reply");
+    drop(run.close(WAIT));
+}
+
+/// A reply that is not streamed (the run's `FLOPPY_STREAM` is unset, the
+/// default) reports no progress, so no inactivity bound applies to it: a
+/// sixteen-second reply outlasts the 8 s bound and the turn is reasoned,
+/// bounded by the stage's backstop alone (decision D101).
+#[test]
+fn a_reasoning_reply_that_is_not_streamed_is_bounded_by_the_backstop_alone() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Slow, &[]);
+    let mut run = start_activated(&bot, &[("bounds", "({child_operation_timeout_ms: 8000})")]);
+    say(&mut run, "hello");
+    let records = run.until(WAIT, turn_ended);
+    assert_eq!(
+        texts(&records, "cognition.stage")
+            .last()
+            .map(String::as_str),
+        Some("reasoning handled"),
+        "{records:?}"
+    );
+    assert!(texts(&records, "cognition.hop.timed_out").is_empty());
+    let request = &reasoning_requests(&mock)[0].body;
+    assert_eq!(request.get("stream"), None, "the call is not streamed");
+    drop(run.close(WAIT));
+}
+
+/// A run whose `FLOPPY_STREAM` is `false` asks for a reply that is not
+/// streamed, and the backend's head arrives at once while its completion
+/// takes sixteen seconds: neither is progress, so the 8 s inactivity bound
+/// never arms and the turn is reasoned, bounded by the stage's backstop
+/// alone (decision D101).
+#[test]
+fn a_reasoning_reply_the_run_does_not_stream_is_bounded_by_the_backstop_alone() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Slow, &[]);
+    set_stream(&bot, "false");
+    let mut run = start_activated(&bot, &[("bounds", "({child_operation_timeout_ms: 8000})")]);
+    say(&mut run, "hello");
+    let records = run.until(WAIT, turn_ended);
+    assert_eq!(
+        texts(&records, "cognition.stage")
+            .last()
+            .map(String::as_str),
+        Some("reasoning handled"),
+        "{records:?}"
+    );
+    assert!(texts(&records, "cognition.hop.timed_out").is_empty());
+    let request = &reasoning_requests(&mock)[0].body;
+    assert_eq!(
+        request["stream"], false,
+        "the run says the call is not streamed"
+    );
+    drop(run.close(WAIT));
+}
+
+/// A reasoning reply that stops arriving ends the stage at the inactivity
+/// bound (decision D101), here the bot's `bounds` param: the cognition asks the
+/// body for a reboot.
+#[test]
+fn a_reasoning_reply_that_stalls_reboots_at_the_inactivity_bound() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Stall, &[]);
+    streaming(&bot);
+    let mut run = start_activated(&bot, &[("bounds", "({child_operation_timeout_ms: 8000})")]);
+    say(&mut run, "hello");
+    let records = run.until(WAIT, label_is("bot.activated"));
+    assert_eq!(
+        texts(&records, "cognition.hop.timed_out"),
+        ["turn 1: reasoning after 8000 ms without progress"]
+    );
+    assert_eq!(
+        texts(&records, "bot.reboot"),
+        strings(&[r#"{"reason":"cognition_child_teardown_failed"}"#])
+    );
+    drop(run.close(WAIT));
+}
+
+/// Keep-alive comments are not progress (decision D101): a backend that
+/// only keeps its connection alive while its model says nothing ends the
+/// stage at the inactivity bound.
+#[test]
+fn a_reasoning_reply_of_keep_alive_comments_only_reboots_at_the_inactivity_bound() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Pings, &[]);
+    streaming(&bot);
+    let mut run = start_activated(&bot, &[("bounds", "({child_operation_timeout_ms: 8000})")]);
+    say(&mut run, "hello");
+    let records = run.until(WAIT, label_is("bot.activated"));
+    assert_eq!(
+        texts(&records, "cognition.hop.timed_out"),
+        ["turn 1: reasoning after 8000 ms without progress"]
+    );
+    drop(run.close(WAIT));
+}
+
+/// The backstop (decision D101): a stage that keeps making progress still
+/// ends once it has run `child_operation_ceiling_ms` in all.
+#[test]
+fn a_reasoning_reply_that_streams_past_the_ceiling_reboots() {
+    let mock = Mock::start();
+    let bot = layout(
+        &mock,
+        Decision::Abstain,
+        Generation::Slow,
+        &[(
+            "abilities/cognition/cognition.scx",
+            &[
+                ("child_operation_timeout_ms", "8000"),
+                ("child_operation_ceiling_ms", "10000"),
+            ],
+        )],
+    );
+    streaming(&bot);
+    let mut run = start(&bot);
+    say(&mut run, "hello");
+    let records = run.until(WAIT, label_is("bot.activated"));
+    assert_eq!(
+        texts(&records, "cognition.hop.timed_out"),
+        ["turn 1: reasoning after 10000 ms in all"]
+    );
+    drop(run.close(WAIT));
 }
 
 #[test]
@@ -1804,9 +2177,17 @@ fn the_speech_heard_seed_admits_identified_speech_as_communication_input() {
 fn autonomy_runs_the_seeds_before_the_learned_behaviors() {
     let double =
         std::fs::read_to_string(workspace().join("tests/fixtures/phase4/behavior_double.scx"))
-            .expect("the double is readable");
+            .expect("the double is readable")
+            // The harness stands in for the cognition: the double's
+            // selection goes to it.
+            .replace("'session.floppy.cognition'", "'session'");
+    let harness = autonomy_harness(&format!("'{DATABASE}'"));
     let grant = inventory(
         DATABASE,
+        harness
+            .parent()
+            .and_then(Path::parent)
+            .expect("the harness is <layout>/abilities/harness.scx"),
         &[Learned {
             name: "Double",
             trigger: SPEECH,
@@ -1814,7 +2195,6 @@ fn autonomy_runs_the_seeds_before_the_learned_behaviors() {
             source: &double,
         }],
     );
-    let harness = autonomy_harness(&format!("'{DATABASE}'"));
     let mut args = grant.clone();
     args.push(harness.display().to_string());
     let mut run = Run::start(&args, &[]);
@@ -1827,7 +2207,7 @@ fn autonomy_runs_the_seeds_before_the_learned_behaviors() {
         json!({
             "turn": 2,
             "handled": true,
-            "selected": [{"event": IGNORE, "data": {}, "reason": "behavior: nothing to do", "target": "cognition"}],
+            "selected": [{"event": IGNORE, "data": {}, "reason": "behavior: ignore", "target": "session"}],
             "candidates": ["SpeechHeard", "Double"],
             "reason": "behavior",
         })
@@ -1851,4 +2231,81 @@ fn autonomy_runs_the_seeds_before_the_learned_behaviors() {
         &[],
     );
     assert_eq!(usage(&grant, DATABASE), json!([["Double", "1", "0"]]));
+}
+
+/// Reasoning's prompt carries the environment block (decision D106): the
+/// structured environment the body sends, rendered by its prompt renderer
+/// (D99) as XML elements, values escaped. The bot holds the lamp the
+/// room runs.
+#[test]
+fn reasonings_prompt_carries_the_environment_block() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Ignore, &[]);
+    let layout_dir = bot
+        .body
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .expect("the layout's root")
+        .to_path_buf();
+    let room = support::environment_with_devices(
+        &layout_dir,
+        &["floppy"],
+        &["lamp"],
+        &[("floppy", &["lamp"])],
+        &[],
+    );
+    let lamp = layout_dir.join("environments/room/lamp/lamp.scx");
+    let text = std::fs::read_to_string(&lamp).expect("the lamp copy is readable");
+    std::fs::write(
+        &lamp,
+        text.replace(
+            r#"<data id="click_db" expr="60"/>"#,
+            r#"<data id="click_db" expr="60"/><data id="label" expr="'desk &lt;lamp&gt; &amp; co'"/>"#,
+        ),
+    )
+    .expect("the lamp copy is writable");
+    let mut run = Run::start(
+        &[
+            "--env-file".to_owned(),
+            bot.env.display().to_string(),
+            room.display().to_string(),
+        ],
+        &[],
+    );
+    run.until(WAIT, label_is("bot.activated"));
+    say(&mut run, "what is the capital of France?");
+    run.until(WAIT, label_is("bot.processing.completed"));
+    settle_reflection(&run);
+    drop(run.close(WAIT));
+    let prompts = prompts(&mock);
+    assert_eq!(prompts.len(), 1, "{prompts:?}");
+    let prompt = &prompts[0];
+    // The original's nesting: <environment id><self state><owned_devices>
+    // <device ref id state> with the device's attributes.
+    let start = prompt.find("<environment ").expect("the environment block");
+    let block = &prompt[start..];
+    let block = &block[..block.find("</environment>").expect("its end") + "</environment>".len()];
+    assert!(
+        block.starts_with(r#"<environment id="session">"#),
+        "{block}"
+    );
+    let lines: Vec<&str> = block.lines().map(str::trim).collect();
+    assert_eq!(lines[1], r#"<self state="processing">"#, "{block}");
+    assert_eq!(lines[2], "<owned_devices>", "{block}");
+    // ref, id and state are the device's only XML attributes; each of its
+    // snapshot attributes is a child element, a string as its escaped
+    // text, a number as its JSON text.
+    assert_eq!(
+        lines[3], r#"<device ref="lamp" id="session.lamp" state="off">"#,
+        "{block}"
+    );
+    for element in [
+        "<brightness>0</brightness>",
+        "<click_db>60</click_db>",
+        "<label>desk &lt;lamp&gt; &amp; co</label>",
+    ] {
+        assert!(lines.contains(&element), "{element} in {block}");
+    }
+    assert!(!block.contains("<entry"), "{block}");
 }

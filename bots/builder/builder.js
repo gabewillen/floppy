@@ -43,7 +43,7 @@ function firstDiagnosticSummary() {
 
 // Whether the builder.request data satisfies schemas/builder.request.json.
 function satisfiesBuilderRequest(_event) {
-  return _event.data !== null && typeof _event.data === 'object' && !Array.isArray(_event.data) && Object.keys(_event.data).every(function (k) { return ['spec', 'constraints', 'max_attempts', 'model', 'generate_timeout_ms', 'min_every_ms', 'turn_after_bound_ms'].indexOf(k) >= 0; }) && isOptionalBound(_event.data.min_every_ms) && isOptionalBound(_event.data.turn_after_bound_ms) && typeof _event.data.spec === 'string' && _event.data.spec.trim().length > 0 && (_event.data.constraints === undefined || (Array.isArray(_event.data.constraints) && _event.data.constraints.length <= 32 && _event.data.constraints.every(function (c) { return typeof c === 'string'; }))) && (_event.data.max_attempts === undefined || (Number.isInteger(_event.data.max_attempts) && _event.data.max_attempts >= 1 && _event.data.max_attempts <= 8)) && (_event.data.model === undefined || (typeof _event.data.model === 'string' && _event.data.model.length > 0)) && (_event.data.generate_timeout_ms === undefined || (Number.isInteger(_event.data.generate_timeout_ms) && _event.data.generate_timeout_ms >= 1 && _event.data.generate_timeout_ms <= 3600000));
+  return _event.data !== null && typeof _event.data === 'object' && !Array.isArray(_event.data) && Object.keys(_event.data).every(function (k) { return ['spec', 'name', 'constraints', 'max_attempts', 'model', 'generate_timeout_ms', 'generate_ceiling_ms', 'min_every_ms', 'turn_after_bound_ms'].indexOf(k) >= 0; }) && isOptionalBound(_event.data.min_every_ms) && isOptionalBound(_event.data.turn_after_bound_ms) && typeof _event.data.spec === 'string' && _event.data.spec.trim().length > 0 && (_event.data.name === undefined || (typeof _event.data.name === 'string' && _event.data.name.length > 0)) && (_event.data.constraints === undefined || (Array.isArray(_event.data.constraints) && _event.data.constraints.length <= 32 && _event.data.constraints.every(function (c) { return typeof c === 'string'; }))) && (_event.data.max_attempts === undefined || (Number.isInteger(_event.data.max_attempts) && _event.data.max_attempts >= 1 && _event.data.max_attempts <= 8)) && (_event.data.model === undefined || (typeof _event.data.model === 'string' && _event.data.model.length > 0)) && isOptionalGenerateBound(_event.data.generate_timeout_ms) && isOptionalGenerateBound(_event.data.generate_ceiling_ms);
 }
 
 // An absent lifetime bound, or one of 1 ms to 1 day.
@@ -54,6 +54,10 @@ function isOptionalBound(value) {
 // A lifetime bound of the request, else null (not checked).
 function requestBound(value) {
   return value === undefined ? null : value;
+}
+
+function requestName(_event) {
+  return _event.data.name === undefined ? null : _event.data.name;
 }
 
 function requestConstraints(_event) {
@@ -70,6 +74,15 @@ function requestModel(_event) {
 
 function requestGenerateTimeoutMs(_event) {
   return _event.data.generate_timeout_ms === undefined ? generate_timeout_ms : _event.data.generate_timeout_ms;
+}
+
+function requestGenerateCeilingMs(_event) {
+  return _event.data.generate_ceiling_ms === undefined ? generate_ceiling_ms : _event.data.generate_ceiling_ms;
+}
+
+// A request's optional generation bound: absent, or 1 ms to 1 h.
+function isOptionalGenerateBound(value) {
+  return value === undefined || (Number.isInteger(value) && value >= 1 && value <= 3600000);
 }
 
 function invalidRequestDiagnostics() {
@@ -92,7 +105,17 @@ function generationFailedDiagnostics(stage, product) {
 }
 
 function generationTimeoutDiagnostics(stage) {
-  return [{kind: 'timeout', code: stage + '-timeout', message: 'the ' + stage + ' generation did not answer within ' + generate_timeout_ms + ' ms and was cancelled'}];
+  return [{kind: 'timeout', code: stage + '-timeout', message: 'the ' + stage + ' generation made no progress for ' + generate_timeout_ms + ' ms or ran past ' + generate_ceiling_ms + ' ms in all, and was cancelled'}];
+}
+
+// Whether the builder reports its progress to an invoker (progress_target).
+function reportsProgress() {
+  return progress_target !== null;
+}
+
+// builder.progress's data: the stage the build is in.
+function progressData(stage) {
+  return ({stage: stage});
 }
 
 function generationStartFailedDiagnostics(stage) {
@@ -118,6 +141,14 @@ function designPrompt() {
   return JSON.stringify({task: 'design', spec: spec, constraints: constraints, previous_plan: previous_plan, diagnostics: diagnostics});
 }
 
+// The arguments of a generate.result's first call of the function
+// named, else null (D41: the service's events are unchecked).
+function namedArgs(_event, name) {
+  var calls = Object(_event.data).tool_calls;
+  var call = Array.isArray(calls) ? calls.filter(function (call) { return Object(call).name === name; })[0] : undefined;
+  return call === undefined ? null : Object(call).args;
+}
+
 function planGenerated(_event) {
   return _event.invokeid === gen_id && plan !== null;
 }
@@ -128,55 +159,68 @@ function authorLog() {
   return mode + ' draft, attempt ' + attempt;
 }
 
-function previousTests() {
-  return draft === null ? null : draft.tests;
+// The previous draft's field, before author forgets it (null: none).
+function previousDraft(field) {
+  return draft === null ? null : draft[field];
 }
 
 function authorPrompt() {
-  return JSON.stringify({task: mode, spec: spec, constraints: constraints, plan: plan, previous_scxml: mode === 'repair' ? scxml_text : null, previous_tests: mode === 'repair' ? previous_tests : null, diagnostics: diagnostics});
+  var repair = mode === 'repair';
+  return JSON.stringify({task: mode, name: fileName(), spec: spec, constraints: constraints, plan: plan, previous_scxml: repair ? scxml_text : null, previous_schemas: repair ? previous_schemas : null, previous_script: repair ? previous_script : null, previous_tests: repair ? previous_tests : null, diagnostics: diagnostics});
 }
 
 function draftGenerated(_event) {
   return _event.invokeid === gen_id && draft !== null;
 }
 
+// A generated draft whose scxml has no scxml element.
+function draftWithoutDocument(_event) {
+  return draftGenerated(_event) && draft.scxml.indexOf('<scxml') < 0;
+}
+
+function noDocumentDiagnostics() {
+  return [{kind: 'draft', code: 'no-document', message: 'the draft\'s scxml holds no scxml element (it was ' + JSON.stringify(draft.scxml.slice(0, 80)) + '): scxml is the whole document text, from its root element to its end, and a repair returns all of it, not only what changed'}];
+}
+
+// writing (decision D121): the draft's three documents, beside each other.
+
+// The name its documents are written under: the request's, else the plan's,
+// with every run of other characters than letters, digits, _ and - as _, so
+// it is one plain file name and a relative URI as it stands.
+function fileName() {
+  return String(name !== null ? name : plan.name).replace(/[^A-Za-z0-9_-]+/g, '_');
+}
+
+function draftFile(extension) {
+  return fileName() + extension;
+}
+
+// The path of its .scx, relative to this document and to every document
+// that invokes a learned behavior: each sits two levels below the layout
+// root, whose behaviors directory the run grants the files service.
+function draftPath() {
+  return '../../behaviors/' + draftFile('.scx');
+}
+
+function schemasText() {
+  return JSON.stringify(draft.schemas);
+}
+
+function writeFailedDiagnostics() {
+  return [{kind: 'draft', code: 'write-failed', message: 'the draft could not be written as ' + draftFile('.scx') + ', .json and .js (error.execution: no directory granted to the files service, or a name it refuses)'}];
+}
+
 // validate
 
-// The JSON value of a schemas entry's text, or null when it does not parse.
-function parseSchemaText(text) {
-  var value = null;
-  try { value = JSON.parse(text); } catch (e) { value = null; }
-  return value;
-}
-
-function isSchemaValue(value) {
-  return !(value === null || (typeof value !== 'object' && typeof value !== 'boolean') || Array.isArray(value));
-}
-
-function schemaErrors(schemas) {
-  var errors = [];
-  schemas.forEach(function (s) {
-    if (!isSchemaValue(parseSchemaText(s.schema))) {
-      errors.push({kind: 'draft', code: 'schema-not-json', message: 'the schemas entry of ' + JSON.stringify(s.event) + ' is not a JSON Schema object as JSON text: ' + JSON.stringify(String(s.schema).slice(0, 200))});
-    }
-  });
-  return errors;
-}
-
-function parsedSchemas(schemas) {
-  return schemas.map(function (s) { return {event: s.event, schema: parseSchemaText(s.schema)}; });
-}
-
-function hasSchemaErrors() {
-  return report !== null && schema_errors.length > 0;
-}
-
-function schemaErrorDiagnostics() {
-  return schema_errors.slice(0, 20);
+// The validator's errors but EVENT004: it is not given the draft's schema
+// file (scx:eventschema names a literal file), which writing wrote and the
+// simulation's compile reads.
+function validatorErrors() {
+  return report.validator.diagnostics.filter(function (d) { return d.severity === 'error' && d.code !== 'EVENT004'; });
 }
 
 function isValidatorClean() {
-  return report !== null && report.validator.counts.errors === 0;
+  return report !== null && validatorErrors().length === 0;
 }
 
 function hasTestsWithinBounds() {
@@ -191,6 +235,59 @@ function testsOutOfBoundsDiagnostics() {
   return [{kind: 'draft', code: 'tests-out-of-bounds', message: 'the draft must carry one to eight test scripts of at most 32 events each'}];
 }
 
+// The draft's script checks (decision D123): a script that is not empty is
+// loaded by <script src="NAME.js">, and every function a cond or expr calls
+// by its bare name is declared by the script, or is In or an ECMAScript
+// global. A cond that throws (its function undeclared) on an eventless
+// transition is retried every microstep, and scxml.rs ends the whole run
+// there, not only the simulated child.
+function scriptErrors() {
+  var errors = [];
+  if (draft.script.trim() !== '' && scxml_text.indexOf('src="' + draftFile('.js') + '"') < 0) {
+    errors.push({kind: 'draft', code: 'script-not-loaded', message: 'script is not empty, but the document has no <script src="' + draftFile('.js') + '"/> as the first child of its root after datamodel, so none of its functions is defined'});
+  }
+  var undeclared = calledFunctions().filter(function (name) { return declaredFunctions().indexOf(name) < 0 && ECMASCRIPT_GLOBALS.indexOf(name) < 0; });
+  if (undeclared.length > 0) {
+    errors.push({kind: 'draft', code: 'undeclared-function', message: 'the document calls ' + undeclared.join(', ') + ', which script does not declare: declare each as a function in script, or call none'});
+  }
+  return errors;
+}
+
+var ECMASCRIPT_GLOBALS = ['In', 'Array', 'Boolean', 'Date', 'Error', 'Number', 'Object', 'RegExp', 'String', 'decodeURIComponent', 'encodeURIComponent', 'isFinite', 'isNaN', 'parseFloat', 'parseInt'];
+
+// The distinct bare names the document's cond and *expr attributes call.
+function calledFunctions() {
+  var names = [];
+  scxml_text.replace(/\s(?:cond|[a-z]*expr)\s*=\s*("[^"]*"|'[^']*')/g, function (attribute, quoted) {
+    unescapedAttribute(quoted.slice(1, -1)).replace(/(^|[^.\w$])([A-Za-z_$][\w$]*)\s*\(/g, function (call, before, name) {
+      if (names.indexOf(name) < 0 && ['function', 'if', 'return', 'typeof', 'while', 'for', 'switch', 'catch'].indexOf(name) < 0) {
+        names.push(name);
+      }
+      return call;
+    });
+    return attribute;
+  });
+  return names;
+}
+
+function unescapedAttribute(value) {
+  return value.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+}
+
+// The names script declares: function declarations and var, let or const.
+function declaredFunctions() {
+  var names = [];
+  draft.script.replace(/(?:function\s+|(?:var|let|const)\s+)([A-Za-z_$][\w$]*)/g, function (declaration, name) {
+    names.push(name);
+    return declaration;
+  });
+  return names;
+}
+
+function hasScriptErrors() {
+  return isReadyToSimulate() && script_errors.length > 0;
+}
+
 function hasMachineApplicableFixes() {
   return report !== null && typeof fixed === 'string' && fixed !== scxml_text && fix_passes < 2;
 }
@@ -199,8 +296,47 @@ function isValidated() {
   return report !== null;
 }
 
+// Each error with rendered, the form scx validate prints it in (rustc's):
+// a repair is told the line and column of what it names, not only its code.
 function validateDiagnostics() {
-  return report.validator.diagnostics.filter(function (d) { return d.severity === 'error'; }).slice(0, 20).map(function (d) { return {kind: 'validate', code: d.code, label: d.primary.message ? d.primary.message : d.message, message: d.help ? d.message + ' Help: ' + d.help : d.message}; });
+  return validatorErrors().slice(0, 20).map(function (d) { var at = sourceAt(d.primary.span); return {kind: 'validate', code: d.code, label: d.primary.message ? d.primary.message : d.message, line: at.text.trim(), message: d.help ? d.message + ' Help: ' + d.help : d.message, rendered: renderedDiagnostic(d, at)}; });
+}
+
+// The character index of the UTF-8 byte offset of the report's source text
+// (the report's spans count bytes).
+function charIndexOfByte(text, byte) {
+  var bytes = 0;
+  var i = 0;
+  while (i < text.length && bytes < byte) {
+    var c = text.codePointAt(i);
+    bytes += c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4;
+    i += c >= 0x10000 ? 2 : 1;
+  }
+  return i;
+}
+
+// Where a span starts in the report's source text: its line and column
+// (from 1), the text of that line, and how many characters of it the span
+// covers (at least one).
+function sourceAt(span) {
+  var text = report.validator.source_text;
+  var start = charIndexOfByte(text, span.start);
+  var end = charIndexOfByte(text, span.end);
+  var lineStart = text.lastIndexOf('\n', start - 1) + 1;
+  var lineEnd = text.indexOf('\n', start);
+  var line = text.slice(lineStart, lineEnd < 0 ? text.length : lineEnd);
+  return {line: text.slice(0, lineStart).split('\n').length, column: start - lineStart + 1, text: line, width: Math.max(1, Math.min(end, lineStart + line.length) - start)};
+}
+
+// A validator diagnostic as scx validate renders it: the code and message,
+// --> file:line:column, the source line (at most 160 characters around the
+// span) with the span marked and its label, then its notes, help and fixes.
+function renderedDiagnostic(d, at) {
+  var from = Math.max(0, at.column - 81);
+  var shown = at.text.slice(from, from + 160);
+  var gutter = ' '.repeat(String(at.line).length);
+  var caret = ' '.repeat(at.column - 1 - from) + '^'.repeat(Math.max(1, Math.min(at.width, shown.length - (at.column - 1 - from))));
+  return ['error[' + d.code + ']: ' + d.message, gutter + '--> ' + draftFile('.scx') + ':' + at.line + ':' + at.column, gutter + ' |', at.line + ' | ' + shown, gutter + ' | ' + caret + ' ' + d.primary.message].concat(d.notes.map(function (n) { return gutter + ' = note: ' + n; }), d.help ? [gutter + ' = help: ' + d.help] : [], d.fixes.map(function (f) { return gutter + ' = suggestion: ' + f.message; })).join('\n');
 }
 
 function validatorFailedDiagnostics() {
@@ -208,87 +344,10 @@ function validatorFailedDiagnostics() {
 }
 
 // validate: the original check()'s lifetime bounds (instance._lifetime_errors,
-// E0009), checked only when the request names them.
-
-// The start tags <name ...> of text: their attributes, where they start
-// and end, and whether they close themselves.
-function startTags(text, name) {
-  var tags = [];
-  var pattern = new RegExp('<' + name + '\\b((?:[^>"\']|"[^"]*"|\'[^\']*\')*)>', 'g');
-  var match = pattern.exec(text);
-  while (match !== null) {
-    var attributes = {};
-    var attribute = /([A-Za-z_][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
-    var found = attribute.exec(match[1]);
-    while (found !== null) {
-      attributes[found[1]] = found[2] !== undefined ? found[2] : found[3];
-      found = attribute.exec(match[1]);
-    }
-    tags.push({attributes: attributes, start: match.index, end: match.index + match[0].length, empty: /\/\s*$/.test(match[1])});
-    match = pattern.exec(text);
-  }
-  return tags;
-}
-
-// A CSS2 time (SCXML delay) in ms, or null.
-function delayMs(value) {
-  var match = /^\s*(\d*\.?\d+)\s*(ms|s)\s*$/.exec(value);
-  return match === null ? null : Number(match[1]) * (match[2] === 's' ? 1000 : 1);
-}
-
-// The original lifetime: persistent when the document sends bot.behavior.tick
-// (the persistent routine contract, decision D61), else turn.
-function draftLifetime(text) {
-  return text.indexOf('bot.behavior.tick') >= 0 ? 'persistent' : 'turn';
-}
-
-// Each delayed send of text: a send of an event that a transition sending
-// bot.behavior.tick takes is a schedule (every, at), any other an after.
-function delayedSends(text) {
-  var ticking = startTags(text, 'transition').filter(function (t) { return !t.empty && text.slice(t.end, text.indexOf('</transition>', t.end)).indexOf('bot.behavior.tick') >= 0; }).map(function (t) { return (t.attributes.event || '').split(/\s+/); }).reduce(function (all, e) { return all.concat(e); }, []);
-  return startTags(text, 'send').filter(function (s) { return s.attributes.delay !== undefined || s.attributes.delayexpr !== undefined; }).map(function (s) {
-    return {event: s.attributes.event, delay: s.attributes.delay === undefined ? null : delayMs(s.attributes.delay), schedule: ticking.indexOf(s.attributes.event) >= 0};
-  });
-}
-
-// The events of text's schedules, in document order, each once.
-function scheduleEvents(text) {
-  return delayedSends(text).filter(function (s) { return s.schedule; }).map(function (s) { return s.event; }).filter(function (e, i, all) { return all.indexOf(e) === i; });
-}
+// E0009, <behavior:lifetime_errors>), checked only when the request names them.
 
 function isLifetimeChecked() {
   return min_every_ms !== null || turn_after_bound_ms !== null;
-}
-
-function seconds(ms) {
-  return (ms / 1000) + 's';
-}
-
-// The original diagnostic help for E0009.
-function lifetimeHelp() {
-  return ' Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine\'s every interval must be at least the minimum the check names.';
-}
-
-// The original instance._lifetime_errors on the draft, as diagnostics.
-function lifetimeErrors(text) {
-  if (!isLifetimeChecked()) {
-    return [];
-  }
-  var lifetime = draftLifetime(text);
-  var sends = delayedSends(text);
-  var errors = [];
-  sends.forEach(function (s) {
-    if (s.delay !== null && s.schedule && min_every_ms !== null && min_every_ms > s.delay) {
-      errors.push({kind: 'lifetime', code: 'E0009', message: 'every (the ' + s.event + ' delay of ' + seconds(s.delay) + ') is shorter than the ' + (min_every_ms / 1000) + '-second minimum routine interval.' + lifetimeHelp()});
-    }
-    if (s.delay !== null && !s.schedule && lifetime === 'turn' && turn_after_bound_ms !== null && s.delay > turn_after_bound_ms) {
-      errors.push({kind: 'lifetime', code: 'E0009', message: 'after (the ' + s.event + ' delay of ' + seconds(s.delay) + ') never fires in a turn behavior, which is silenced ' + seconds(turn_after_bound_ms) + ' after it starts; shorten it or make the behavior a persistent routine.' + lifetimeHelp()});
-    }
-  });
-  if (lifetime === 'persistent' && !sends.some(function (s) { return s.schedule; })) {
-    errors.push({kind: 'lifetime', code: 'E0009', message: 'a persistent routine must schedule at least one transition with every or at: a delayed send of an event whose transition sends bot.behavior.tick.' + lifetimeHelp()});
-  }
-  return errors.slice(0, 20);
 }
 
 function hasLifetimeErrors() {
@@ -301,7 +360,7 @@ function hasLifetimeErrors() {
 // forced by delivering its first schedule's event at once (the original's timer
 // clock fires its first schedule wait at once), within the original's 2 s.
 function simTests() {
-  return isLifetimeChecked() && draftLifetime(scxml_text) === 'persistent' && schedules.length > 0 ? draft.tests.concat([{name: 'first tick', events: [{name: schedules[0], data: '', delay_ms: 0}], settle_ms: 2000, expect_events: ['bot.behavior.tick'], expect_done: false, tick: true}]) : draft.tests;
+  return isLifetimeChecked() && lifetime === 'persistent' && schedules.length > 0 ? draft.tests.concat([{name: 'first tick', events: [{name: schedules[0], data: '', delay_ms: 0}], settle_ms: 2000, expect_events: ['bot.behavior.tick'], expect_done: false, tick: true}]) : draft.tests;
 }
 
 function simulateLog() {
@@ -359,40 +418,13 @@ function isOwnOrCandidateEvent(_event) {
 // sim_results with the current test's result: expect_events in order
 // (other outputs may come between), and expect_done.
 function nextSimResults() {
-  return sim_results.concat([(function (t) { var next = 0; var apply = applyErrors(t); observed.forEach(function (name) { if (next < t.expect_events.length && name === t.expect_events[next]) { next += 1; } }); return {name: t.name, invokeid: candidate_id, passed: sim_error === null && next === t.expect_events.length && child_done === t.expect_done && apply.length === 0, observed: observed, expected: t.expect_events, done: child_done, expect_done: t.expect_done, error: sim_error, apply: apply}; })(currentTest())]);
+  return sim_results.concat([(function (t) { var next = 0; observed.forEach(function (name) { if (next < t.expect_events.length && name === t.expect_events[next]) { next += 1; } }); return {name: t.name, invokeid: candidate_id, passed: sim_error === null && next === t.expect_events.length && child_done === t.expect_done && apply.length === 0, observed: observed, expected: t.expect_events, done: child_done, expect_done: t.expect_done, error: sim_error, apply: apply}; })(currentTest())]);
 }
 
-// The original verify._verify_tick on the forced tick: the routine ticked, and
-// its output selects at least one event whose data reads the tick's own
-// values (the original _selection_binding_errors), else E0008 messages.
-function applyErrors(test) {
-  if (test.tick !== true) {
-    return [];
-  }
-  if (ticks.length === 0) {
-    return ['persistent routine did not emit a tick for its first schedule.'];
-  }
-  var tick = Object(ticks[0]);
-  if (typeof tick.name !== 'string' || tick.name.length === 0 || ['every', 'at'].indexOf(tick.trigger) < 0 || typeof tick.scheduled_at !== 'string' || typeof tick.fired_at !== 'string') {
-    return ['persistent routine tick must carry name, trigger (every or at), scheduled_at and fired_at.'];
-  }
-  if (!Array.isArray(tick.output) || !tick.output.every(function (s) { return s !== null && typeof s === 'object' && typeof s.event === 'string'; })) {
-    return ['behavior output must be a cognition event selection object (or list of them).'];
-  }
-  if (tick.output.length === 0) {
-    return ['behavior output must select at least one event for the observed pattern.'];
-  }
-  var live = {name: tick.name, trigger: tick.trigger, scheduled_at: tick.scheduled_at, fired_at: tick.fired_at};
-  var errors = [];
-  tick.output.forEach(function (s) {
-    var data = s.data !== null && typeof s.data === 'object' && !Array.isArray(s.data) ? s.data : {};
-    Object.keys(data).forEach(function (key) {
-      if (live[key] !== undefined && data[key] !== live[key]) {
-        errors.push('selection data[' + JSON.stringify(key) + ']=' + JSON.stringify(data[key]) + ' does not match live event value ' + JSON.stringify(live[key]) + '; read identifiers from the tick at runtime.');
-      }
-    });
-  });
-  return errors;
+// Whether the current test is a routine's forced tick, whose ticks
+// <behavior:verify_tick> checks (the original verify._verify_tick, E0008).
+function isTickTest() {
+  return currentTest().tick === true;
 }
 
 // sim_verdict
@@ -402,20 +434,56 @@ function allTestsPassed() {
 }
 
 function simulateDiagnostics() {
-  return sim_results.filter(function (r) { return !r.passed; }).map(function (r) { return r.apply.length > 0 ? r.apply.map(function (m) { return {kind: 'apply', code: 'E0008', message: m}; }) : [{kind: 'simulate', code: 'test-failed', message: 'test ' + r.name + ' expected the outputs ' + JSON.stringify(r.expected) + ' in order and done=' + r.expect_done + ', observed ' + JSON.stringify(r.observed) + ' and done=' + r.done + (r.error === null ? '' : ', error ' + r.error)}]; }).reduce(function (all, d) { return all.concat(d); }, []);
+  return sim_results.filter(function (r) { return !r.passed; }).map(function (r) { return r.apply.length > 0 ? r.apply.map(function (m) { return {kind: 'apply', code: 'E0008', message: m}; }) : [{kind: 'simulate', code: 'test-failed', message: 'test ' + r.name + ' expected the outputs ' + JSON.stringify(r.expected) + ' in order and done=' + r.expect_done + ', observed ' + JSON.stringify(r.observed) + ' and done=' + r.done + (r.error === null ? '' : ', error ' + simError(r)) + doneMismatch(r)}]; }).reduce(function (all, d) { return all.concat(d); }, []);
+}
+
+// A test's error event name without the candidate's generated invoke id
+// (error.communication.<invokeid>): the id is new on every run, so with it
+// the same test failing with the same error would never be the same failure.
+function simError(r) {
+  var suffix = '.' + r.invokeid;
+  return typeof r.invokeid === 'string' && r.error.slice(-suffix.length) === suffix ? r.error.slice(0, -suffix.length) : r.error;
+}
+
+// What a test's done mismatch means for a machine the simulation invokes
+// with no param and sends only the test's events.
+function doneMismatch(r) {
+  return r.done === r.expect_done ? '' : r.done ? ' (it reached a top-level final state the test did not expect)' : !hasTopLevelFinal() ? ' (it has no top-level final state: each of its final elements is inside a state, which it only completes; a final that ends the machine is a child of scxml itself)' : ' (it reached no top-level final state: invoked with no param, each data item keeps its own expr, and it waited for an event the test never sent, or cycled)';
+}
+
+// Whether the draft (well-formed: it validated) has a final element that is
+// a child of its root, found by the depth of each tag outside comments.
+function hasTopLevelFinal() {
+  var depth = 0;
+  var found = false;
+  scxml_text.replace(/<!--[\s\S]*?-->|<!\[CDATA\[[\s\S]*?\]\]>/g, '').replace(/<(\/?)([A-Za-z_][\w:.-]*)((?:\s+[^\s=\/>]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(\/?)>/g, function (tag, close, name, attributes, empty) {
+    if (close) {
+      depth -= 1;
+    } else {
+      found = found || (depth === 1 && name.split(':').pop() === 'final');
+      depth += empty ? 0 : 1;
+    }
+    return tag;
+  });
+  return found;
 }
 
 // retry_gate
 
-// The sorted, distinct kind|code|identity of the diagnostics.
+// The sorted, distinct identities of the failure's diagnostics: kind|code
+// and, for a validate diagnostic, its primary label (not the line it marks:
+// the same mistake moves around between drafts), else its message (a
+// simulate message names the test, its expected and observed outputs, its
+// done and its error; the rest are the builder's own or a namespace's).
 function diagnosticsFingerprint() {
-  return JSON.stringify(diagnostics.map(function (d) { return d.kind + '|' + d.code + '|' + (d.kind === 'validate' ? d.label : d.message); }).sort().filter(function (key, i, keys) { return i === 0 || key !== keys[i - 1]; }));
+  return diagnostics.map(function (d) { return d.kind + '|' + d.code + '|' + (d.kind === 'validate' ? d.label : d.message); }).sort().filter(function (key, i, keys) { return i === 0 || key !== keys[i - 1]; });
 }
 
 // The last draft a check rejected (validate, lifetime, simulate, apply),
 // else rejected unchanged: the original drafts the rejected source.
+// One that could not be written is not.
 function rejectedDraft() {
-  return diagnostics.length > 0 && ['draft', 'validate', 'lifetime', 'simulate', 'apply'].indexOf(diagnostics[0].kind) >= 0 && typeof scxml_text === 'string' ? scxml_text : rejected;
+  return diagnostics.length > 0 && ['draft', 'validate', 'lifetime', 'simulate', 'apply'].indexOf(diagnostics[0].kind) >= 0 && diagnostics[0].code !== 'write-failed' && typeof scxml_text === 'string' ? scxml_text : rejected;
 }
 
 function nextAttemptLog() {
@@ -426,8 +494,15 @@ function retryGateLog() {
   return 'failure ' + failures + (max_attempts === null ? '' : ' of ' + max_attempts) + firstDiagnosticSummary();
 }
 
+// A diagnostic an earlier failure of this build already had, consecutive
+// or not: the same failure more than once ends the build (decision D124).
 function isNoProgress() {
-  return fingerprint === previous_fingerprint;
+  return fingerprint.some(function (key) { return fingerprints.indexOf(key) >= 0; });
+}
+
+// The identities of every failure so far, this one's included.
+function nextFingerprints() {
+  return fingerprints.concat(fingerprint);
 }
 
 function isAttemptsExhausted() {
@@ -455,7 +530,7 @@ function doneLog() {
 }
 
 function doneData() {
-  return {scxml: scxml_text, schemas: parsed_schemas, tests: draft.tests, report: {attempts: attempt, failures: failures, fixes_applied: fixes_applied, warnings: warnings, plan: plan, decisions: decisions, history: attempt_log, simulation: sim_results}};
+  return {scxml: scxml_text, schemas: draft.schemas, script: draft.script, path: draftPath(), tests: draft.tests, report: {attempts: attempt, failures: failures, fixes_applied: fixes_applied, warnings: warnings, plan: plan, decisions: decisions, history: attempt_log, simulation: sim_results}};
 }
 
 // failed
@@ -469,6 +544,7 @@ function failedData() {
   var data = {reason: failure_reason, diagnostics: diagnostics.map(function (d) { return {kind: d.kind, code: d.code, message: d.message}; }), history: attempt_log};
   if (rejected !== null) {
     data.scxml = rejected;
+    data.path = draftPath();
   }
   return data;
 }

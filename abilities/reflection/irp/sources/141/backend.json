@@ -12,7 +12,7 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "{\"events\": [{\"event\": \"bot.behavior.create\", \"data\": {\"event\": \"bot.behavior.create\", \"name\": \"GreetOnKnock\", \"triggers\": [\"phone.incoming_call\", \"environment.sound\"], \"description\": \"Say hello when a knock sound arrives.\", \"reason\": \"Same knock and greeting pattern across recent episodes.\", \"source\": null}, \"reason\": \"a repeated pattern\"}]}"
+              "content": "{\"events\": [{\"event\": \"bot.behavior.create\", \"target\": \"session.reflection\", \"data\": {\"event\": \"bot.behavior.create\", \"name\": \"GreetOnKnock\", \"triggers\": [\"phone.incoming_call\", \"environment.sound\"], \"description\": \"Say hello when a knock sound arrives.\", \"reason\": \"Same knock and greeting pattern across recent episodes.\", \"source\": null}, \"reason\": \"a repeated pattern\"}]}"
             }
           }
         ]
@@ -46,7 +46,7 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "{\"scxml\": \"<scxml xmlns=\\\"http://www.w3.org/2005/07/scxml\\\" version=\\\"1.0\\\" datamodel=\\\"ecmascript\\\" name=\\\"GreetOnKnock\\\" initial=\\\"answering\\\">\\n  <datamodel>\\n    <data id=\\\"turn\\\" expr=\\\"0\\\"/>\\n    <data id=\\\"input\\\" expr=\\\"null\\\"/>\\n  </datamodel>\\n  <state id=\\\"answering\\\">\\n    <transition target=\\\"answered\\\"/>\\n  </state>\\n  <final id=\\\"answered\\\">\\n    <donedata>\\n      <content expr=\\\"({turn: turn, handled: true, selected: [{event: 'bot.ability.communication.respond', data: {text: 'Hello!'}, reason: 'a knock'}]})\\\"/>\\n    </donedata>\\n  </final>\\n</scxml>\", \"schemas\": [], \"tests\": [{\"name\": \"answers its turn\", \"events\": [], \"settle_ms\": 2000, \"expect_events\": [], \"expect_done\": true}]}"
+              "content": "{\"scxml\": \"<scxml xmlns=\\\"http://www.w3.org/2005/07/scxml\\\" version=\\\"1.0\\\" datamodel=\\\"ecmascript\\\" name=\\\"GreetOnKnock\\\" initial=\\\"answering\\\">\\n  <datamodel>\\n    <data id=\\\"turn\\\" expr=\\\"0\\\"/>\\n    <data id=\\\"input\\\" expr=\\\"null\\\"/>\\n  </datamodel>\\n  <state id=\\\"answering\\\">\\n    <transition target=\\\"answered\\\"/>\\n  </state>\\n  <final id=\\\"answered\\\">\\n    <donedata>\\n      <content expr=\\\"({turn: turn, handled: true, selected: [{event: 'bot.ability.communication.respond', data: {text: 'Hello!'}, reason: 'a knock'}]})\\\"/>\\n    </donedata>\\n  </final>\\n</scxml>\", \"schemas\": {\"$defs\": {}}, \"script\": \"\", \"tests\": [{\"name\": \"answers its turn\", \"events\": [], \"settle_ms\": 2000, \"expect_events\": [], \"expect_done\": true}]}"
             }
           }
         ]
@@ -63,7 +63,7 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "{\"events\": [{\"event\": \"bot.behavior.change\", \"data\": {\"event\": \"bot.behavior.change\", \"name\": \"GreetOnKnock\", \"triggers\": [\"environment.sound\"], \"description\": \"Say hello twice.\", \"reason\": \"It should greet warmly.\", \"source\": null}, \"reason\": \"revise it\"}]}"
+              "content": "{\"events\": [{\"event\": \"bot.behavior.change\", \"target\": \"session.reflection\", \"data\": {\"event\": \"bot.behavior.change\", \"name\": \"GreetOnKnock\", \"triggers\": [\"environment.sound\"], \"description\": \"Say hello twice.\", \"reason\": \"It should greet warmly.\", \"source\": null}, \"reason\": \"revise it\"}]}"
             }
           }
         ]
@@ -97,7 +97,7 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "{\"scxml\": \"<scxml xmlns=\\\"http://www.w3.org/2005/07/scxml\\\" version=\\\"1.0\\\" datamodel=\\\"ecmascript\\\" name=\\\"GreetOnKnock\\\" initial=\\\"answering\\\">\\n  <datamodel>\\n    <data id=\\\"turn\\\" expr=\\\"0\\\"/>\\n    <data id=\\\"input\\\" expr=\\\"null\\\"/>\\n  </datamodel>\\n  <state id=\\\"answering\\\">\\n    <transition target=\\\"answered\\\"/>\\n  </state>\\n  <final id=\\\"answered\\\">\\n    <donedata>\\n      <content expr=\\\"({turn: turn, handled: true, selected: [{event: 'bot.ability.communication.respond', data: {text: 'Hello!'}, reason: 'a knock'}]})\\\"/>\\n    </donedata>\\n  </final>\\n</scxml>\", \"schemas\": [], \"tests\": [{\"name\": \"answers its turn\", \"events\": [], \"settle_ms\": 2000, \"expect_events\": [], \"expect_done\": true}]}"
+              "content": "{\"scxml\": \"<scxml xmlns=\\\"http://www.w3.org/2005/07/scxml\\\" version=\\\"1.0\\\" datamodel=\\\"ecmascript\\\" name=\\\"GreetOnKnock\\\" initial=\\\"answering\\\">\\n  <datamodel>\\n    <data id=\\\"turn\\\" expr=\\\"0\\\"/>\\n    <data id=\\\"input\\\" expr=\\\"null\\\"/>\\n  </datamodel>\\n  <state id=\\\"answering\\\">\\n    <transition target=\\\"answered\\\"/>\\n  </state>\\n  <final id=\\\"answered\\\">\\n    <donedata>\\n      <content expr=\\\"({turn: turn, handled: true, selected: [{event: 'bot.ability.communication.respond', data: {text: 'Hello!'}, reason: 'a knock'}]})\\\"/>\\n    </donedata>\\n  </final>\\n</scxml>\", \"schemas\": {\"$defs\": {}}, \"script\": \"\", \"tests\": [{\"name\": \"answers its turn\", \"events\": [], \"settle_ms\": 2000, \"expect_events\": [], \"expect_done\": true}]}"
             }
           }
         ]

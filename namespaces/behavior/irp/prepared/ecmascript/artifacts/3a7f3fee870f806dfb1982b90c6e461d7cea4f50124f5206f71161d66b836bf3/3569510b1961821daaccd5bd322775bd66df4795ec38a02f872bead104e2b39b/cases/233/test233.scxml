@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- behavior-4: a text that does not parse has no diagnostics and is a turn behavior. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior" xmlns:conf="http://www.w3.org/2005/scxml-conformance" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="e" expr="null"/>
+  <data id="l" expr="null"/>
+  <data id="c" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <behavior:lifetime_errors location="e" scxml="'&lt;scxml&gt;&lt;send event=&#34;bot.behavior.tick&#34; delay=&#34;1s&#34;&gt;'" min_every="60000" lifetimelocation="l" scheduleslocation="c"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="e.length === 0 &amp;&amp; l === 'turn' &amp;&amp; c.length === 0" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

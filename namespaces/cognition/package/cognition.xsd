@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  XML Schema of floppy's `cognition` extension namespace
+  (namespaces/cognition), the original's cognition module. It governs
+  structure only; the extension component governs what the element does.
+  Bind it with the prefix `cognition` by convention.
+
+  cognition:attention_bias_for_turn
+                   location (required): receives the turn's focus
+                   candidates (the original's attention_bias_for_turn):
+                   the focus, then the stimulus's configured target device.
+                   focuslocation (optional): receives the focus.
+                   stimulus, devices, focus (required): expressions.
+  cognition:model_facing_content
+                   location (required): receives the model-facing text of
+                   the turn's input (the original's model_facing_content of
+                   its ProcessorInput) under the original's budgets.
+                   failurelocation (optional): receives the original's
+                   message when a budget is exceeded.
+                   stimulus, prior_episodes, standing_directives
+                   (required), environment, instructions, schema
+                   (optional): expressions.
+                   Neither takes another attribute or content.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="https://github.com/stateforward/floppy/namespaces/cognition"
+           elementFormDefault="qualified">
+  <xs:element name="attention_bias_for_turn">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="focuslocation" type="xs:string" use="optional"/>
+      <xs:attribute name="stimulus" type="xs:string" use="required"/>
+      <xs:attribute name="devices" type="xs:string" use="required"/>
+      <xs:attribute name="focus" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="model_facing_content">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="failurelocation" type="xs:string" use="optional"/>
+      <xs:attribute name="stimulus" type="xs:string" use="required"/>
+      <xs:attribute name="prior_episodes" type="xs:string" use="required"/>
+      <xs:attribute name="standing_directives" type="xs:string" use="required"/>
+      <xs:attribute name="environment" type="xs:string" use="optional"/>
+      <xs:attribute name="instructions" type="xs:string" use="optional"/>
+      <xs:attribute name="schema" type="xs:string" use="optional"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

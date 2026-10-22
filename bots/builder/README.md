@@ -8,10 +8,10 @@ request on standard input:
 ```console
 # The locally built packages (the dev cache under target/).
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button"}}' |
-  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx
+  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --dir "https://github.com/stateforward/floppy/services/files=$PWD/behaviors::/behaviors" bots/builder/builder.scx
 # floppy's latest release, once one is published (phase 7).
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button"}}' |
-  scx run --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx
+  scx run --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --dir "https://github.com/stateforward/floppy/services/files=$PWD/behaviors::/behaviors" bots/builder/builder.scx
 ```
 
 or invoke it as a child and send it the request; it ends with one of two
@@ -30,9 +30,9 @@ final states and its parent receives that state's done data as
 
 | What | How | Data ([`schemas/`](schemas)) |
 | --- | --- | --- |
-| `builder.request` | an event to the builder (standard input when run directly) | `{spec, constraints?, max_attempts?, model?, generate_timeout_ms?, min_every_ms?, turn_after_bound_ms?}`: the specification, extra constraints (strings), an optional failure cap (1 to 8, no default: without it only the no-progress rule ends the loop), the generate service's model (default `Qwen/Qwen3.8-Flash-Next`, a reasoning model), the time each generation may take before `builder.timeout` cancels it (1 ms to 1 h, default 300000), and the reference `check()`'s lifetime bounds (1 ms to 1 day each, no default: without them neither the lifetime check nor the forced tick runs; reflection sends 60000 and 1000, the original's `ROUTINE_MIN_EVERY` and `TURN_SILENCE_BOUND`) |
-| final state `done` | its `<donedata>` ([`schemas/done.json`](schemas/done.json)) | `{scxml, schemas, tests, report}`: the built document, its input event schemas (`{event, schema}`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
-| final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics, history, scxml?}`: `invalid-request`, `unconfigured` (the run holds no `FLOPPY_BASE_URL` or no `FLOPPY_API_KEY`; the first generation ends the build at once), `no-progress` (the same failure twice in a row), `attempts-exhausted` (the request's cap), or `abandoned`, with the last diagnostics (`{kind, code, message}`), the failure history (every failure's attempt and diagnostics, as in `done`'s report), and `scxml`, the last draft a check (`validate`, the lifetime check, `simulate`) rejected, absent when no draft was rejected (the original's revision drafts the rejected source) |
+| `builder.request` | an event to the builder (standard input when run directly) | `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?}`: the specification, the name the draft's documents are written under (default the plan's; each run of characters other than letters, digits, `_` and `-` becomes `_`; reflection sends the behavior's), extra constraints (strings), an optional failure cap (1 to 8, no default: without it only the no-progress rule ends the loop), the generate service's model (default `Qwen/Qwen3.8-Flash-Next`, a reasoning model), the time each streamed generation may go without progress, and each generation may take in all, before `builder.timeout` cancels it (1 ms to 1 h each, defaults 30000 and 1200000), and the reference `check()`'s lifetime bounds (1 ms to 1 day each, no default: without them neither the lifetime check nor the forced tick runs; reflection sends 60000 and 1000, the original's `ROUTINE_MIN_EVERY` and `TURN_SILENCE_BOUND`) |
+| final state `done` | its `<donedata>` ([`schemas/done.json`](schemas/done.json)) | `{scxml, schemas, script, path, tests, report}`: the built document's three parts (its SCXML, its input event schemas as one object with `$defs` keyed by event, and its ECMAScript, `""` for none), the path of the `.scx` they were written as (`../../behaviors/<name>.scx`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
+| final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics, history, scxml?, path?}`: `invalid-request`, `unconfigured` (the run holds no `FLOPPY_BASE_URL` or no `FLOPPY_API_KEY`; the first generation ends the build at once), `no-progress` (a diagnostic an earlier failure of the build already had, consecutive or not; decision D124), `attempts-exhausted` (the request's cap), or `abandoned`, with the last diagnostics (`{kind, code, message}`), the failure history (every failure's attempt and diagnostics, as in `done`'s report), and `scxml`, the last draft a check (`validate`, the lifetime check, `simulate`) rejected, with `path`, where it was written, both absent when no draft was rejected (the original's revision drafts the rejected source) |
 
 The builder answers exactly once, by finishing. Run directly, `scx run`
 prints the done data in its `done` record and exits 0; invoked, the parent
@@ -46,7 +46,7 @@ error event ended it). `intake` has
 no timeout: the invoker owns the builder's lifetime (cancel the invoke to
 stop it).
 
-`builder.scx` carries the contracts as inline `event:schema` attributes
+`builder.scx` itself carries the contracts as inline `event:schema` attributes
 (on the transitions that take an event, and on each final state's
 `<donedata>`): an invoked child is compiled at run time and receives no
 schema files (a schema reference would reject it), so `schemas/*.json` are
@@ -59,15 +59,35 @@ invoker's send of one raises `error.execution` in the invoker. A request
 that satisfies the schema but whose `cond` fails (a blank `spec`) ends in
 `failed` (`invalid-request`).
 
+## Three documents
+
+A draft is three documents beside each other, so the model never escapes
+one inside another (decision D121): the `author` tool call returns
+`scxml` (structure only), `schemas` (a JSON object, `$defs` keyed by input
+event) and `script` (plain ECMAScript, or empty), and `writing` writes
+them as `<name>.scx`, `<name>.json` and `<name>.js` through the files
+service ([`services/files`](../../services/files/README.md)) into the
+directory the run grants it, `behaviors/` beside `bots/` and `abilities/`
+(`--dir "https://github.com/stateforward/floppy/services/files=$PWD/behaviors::/behaviors"`;
+create `behaviors/` first; it is ignored by git). The chart references
+them by relative URI: `event:schema="<name>.json#/$defs/<event>"` on the
+transitions that take an input event and, when there is a script, one
+root `<script src="<name>.js"/>`. The simulation, and every later invoker
+of a learned behavior, loads it by `<invoke srcexpr>` on its path,
+`../../behaviors/<name>.scx`, which resolves the same from this document
+and from every document that invokes a learned behavior (each two levels
+below the layout root); scxml.rs loads its schema file and script against
+its own base URI, as they are when it is invoked.
+
 ## Topology
 
 ```
-intake -> design -> author -> validate -> simulate -> done
-                       ^          |  ^        |
-                       |     apply_fixes      |
-                       |          v           v
-                       +--- triage <- retry_gate -> failed
-                            fallback
+intake -> design -> author -> writing -> validate -> simulate -> done
+                       ^          ^          |           |
+                       |          +-- apply_fixes        |
+                       |                     v           v
+                       +--------- triage <- retry_gate -> failed
+                                  fallback
 ```
 
 * `design`: invokes the generate service
@@ -82,16 +102,47 @@ intake -> design -> author -> validate -> simulate -> done
   diagnostics; a redesign whose generation failed keeps that plan for the
   next one.
 * `author`: invokes the generate service the same way with the
-  `scxml_draft` schema: the document (plain
-  SCXML with inline `event:schema` on its input transitions), the input event
-  schemas as JSON text, and one to eight test scripts (input events with
+  `scxml_draft` schema: the three documents (above), told the `name` they
+  reference, and one to eight test scripts (input events with
   delays, a settle time, the outputs expected in order, and whether the
-  machine finishes). A repair sees the failed draft, its tests, and the
-  diagnostics; `unconfigured` ends the build in `failed` as in `design`.
-* `validate`: its schemas must parse; `scx:validate` with
-  `applyfixes="machine-applicable"`; when the fixes change the text,
-  `apply_fixes` takes them and validates again (at most 2 passes per draft);
-  otherwise the error diagnostics feed back to `author`. With the
+  machine finishes). A repair sees the failed draft, its schemas, its
+  script, its tests, and the diagnostics; `unconfigured` ends the build in
+  `failed` as in `design`. A draft whose `scxml` holds no `<scxml`
+  element (empty, or a placeholder a model's stub call holds) is a `draft`
+  diagnostic, `no-document`, quoting what it held, before anything is
+  written (decision D123). The author's rules keep every `cond` and `expr`
+  beyond a literal, an identifier or a dotted path a call of a function of
+  `script` (as decision D65 keeps floppy's own documents), so no attribute
+  holds `&`, `<` or `>`; they say the constraints win where they differ
+  from the builder's rules (a turn behavior sends nothing to its invoker,
+  so its tests expect no outputs), and ask for exactly one call of
+  `scxml_draft`.
+* `writing`: three invocations of the files service write the three
+  documents; one that fails (no grant, a name the service refuses) is a
+  `draft` diagnostic, `write-failed`.
+* `validate`: `scx:validate` with
+  `applyfixes="machine-applicable"`, waiving `EVENT004` (it is given no
+  schema file: `<scx:eventschema uri>` names a literal file, and the name
+  is the draft's; the simulation's compile reads the file); when the fixes
+  change the text, `apply_fixes` takes them and writes and validates again
+  (at most 2 passes per draft);
+  a clean draft whose `script` is not empty but whose document has no
+  `<script src="NAME.js"/>` (`script-not-loaded`), or whose `cond` and
+  `*expr` attributes call a bare function name `script` does not declare
+  and that is neither `In` nor an ECMAScript global (`undeclared-function`,
+  naming them), is a `draft` diagnostic before it is simulated (decision
+  D123): such a cond throws, and on an eventless transition scxml.rs
+  retries it every microstep until the whole run fails, not only the
+  simulated child;
+  otherwise the error diagnostics feed back to `author`, each with
+  `line` (the trimmed source line its primary span starts on) and
+  `rendered`, the form `scx validate` prints it in: `error[CODE]: message`,
+  `--> NAME.scx:line:column`, that line (at most 160 characters around
+  the span) with the span marked by `^` and its label, then its notes,
+  help and fixes (decision D123). A simulate diagnostic whose `done`
+  differs from the test's says what that means (the machine reached no
+  top-level final state, invoked with no param and sent only the test's
+  events, or reached one the test did not expect). With the
   request's `min_every_ms` and `turn_after_bound_ms`, a clean draft is then
   checked against the reference `check()`'s lifetime bounds (`instance.py`
   `_lifetime_errors`, diagnostics of kind `lifetime`, code `E0009`): a
@@ -103,7 +154,8 @@ intake -> design -> author -> validate -> simulate -> done
   a literal `delay` longer than `turn_after_bound_ms` is rejected, since
   autonomy silences a turn behavior then. A `delayexpr` is not judged.
 * `simulate`: each test script runs the draft as a fresh invoked child
-  (`<invoke idlocation="candidate_id" type="scxml"><content expr="scxml_text"/></invoke>`,
+  (`<invoke idlocation="candidate_id" type="scxml" srcexpr="draftPath()"/>`,
+  loaded from its path with its schema file and script,
   so each test has its own generated invoke id and nothing a cancelled
   earlier child left on the queue counts), sends the script's events through
   `#_<candidate_id>` with their delays, collects every event that child
@@ -131,25 +183,26 @@ intake -> design -> author -> validate -> simulate -> done
 * `done`: a final state whose `<donedata>` carries the result.
 * `retry_gate`: every failure (generation, draft, validation, simulation,
   timeout) passes through it. It counts the failure and takes its
-  fingerprint, which the datamodel keeps (`fingerprint`, and the previous
-  failure's in `previous_fingerprint`), and a guarded transition
-  (`fingerprint === previous_fingerprint`) ends the build in `failed` with
-  the reason `no-progress` and the repeated diagnostics: the same failure
-  twice in a row means the repair loop is making no progress. A request's
-  optional `max_attempts` also ends it (`attempts-exhausted`). A fingerprint
-  is the sorted, distinct list of each diagnostic's kind, code, and
-  identity, taken from the canonical report rather than prose: a validator
-  diagnostic's identity is its primary label (the report gives no element
-  path, and byte spans shift between drafts), so two drafts fail the same
-  way when they have the same set of codes with the same primary labels; a
-  simulation diagnostic's identity is its message, which names the failing
-  test, its expected and observed outputs, its expected and observed
-  `done`, and its error, so the same test failing with the same mismatch is
-  the same failure; any other diagnostic (a generation failure, a timeout, a
-  draft schema that is not JSON) is identified by its message, which the
-  builder writes. A primary label often says only what kind of thing is
-  wrong (`SCXML005`'s is "unknown target identifier"), so a draft that
-  replaces one unknown target with another counts as the same failure.
+  fingerprint, the sorted, distinct identities of its diagnostics, which
+  the datamodel keeps (`fingerprint`, and those of every earlier failure
+  of the build in `fingerprints`), and a guarded transition ends the build
+  in `failed` with the reason `no-progress` and the repeated diagnostics as
+  soon as any diagnostic of the failure is one an earlier failure already
+  had, consecutive or not (decision D124, the maintainer's rule: "if it
+  gets the same failure more than once it should end"). A request's
+  optional `max_attempts` also ends it (`attempts-exhausted`). A
+  diagnostic's identity is its kind and code and, taken from the canonical
+  report rather than prose, for a validator diagnostic its primary label
+  (not the source line it marks: the same mistake moves around between
+  drafts, so the same code and label on another line is the same failure),
+  and for any other its message: a simulation diagnostic's names the
+  failing test, its expected and observed outputs, its expected and
+  observed `done`, and its error without the candidate's generated invoke
+  id (which is new on every run), so the same test failing with the same
+  mismatch is the same failure and two different test failures are not;
+  any other diagnostic (a generation failure, a timeout, a write failure,
+  a draft check, `E0009`, `E0008`) is identified by the message the
+  builder or its namespace writes.
 * `triage`: `decision:choice` (synchronous executable content) writes the
   state's enabled `event:schema` transitions as the canonical choices:
   `triage.repair` (guarded by `plan !== null`, so it is among the choices only
@@ -167,9 +220,18 @@ intake -> design -> author -> validate -> simulate -> done
 Model calls are invoked services, never executable content: each runs
 while the session keeps processing events, and every bound on time lives in
 the topology. `design` and `author` each arm `builder.timeout` after
-`generate_timeout_ms` (default 300 s; the request may lower it) and
-`triage` after `decision_timeout_ms` (60 s), tagged with the stage run
-(`stage_run`) and cancelled on exit. A timeout that fires while the call is
+`generate_ceiling_ms` in all (default 1200 s) and, once their reply streams
+(the run's `FLOPPY_STREAM` is `true`), after `generate_timeout_ms` without
+progress (default 30 s; the first `generate.progress` arms it, each later
+one re-arms it), the request may set either; each reply is bounded by
+`max_completion_tokens` (8192, reasoning included); and `triage` arms it
+after `decision_timeout_ms` (60 s), tagged with the stage run
+(`stage_run`) and cancelled on exit (decision D101). Invoked with the
+`<param>` `progress_target` `'#_parent'` (reflection does), the builder
+sends its invoker `builder.progress {stage}` as it enters `design`,
+`author`, `validate`, each simulation run and `triage`, and passes on each
+`generate.progress {received}` of a streamed generation, so the invoker can
+bound a streamed generation by inactivity. A timeout that fires while the call is
 in flight leaves the state, which cancels the invocation: the service is
 cancelled, the host closes the request's streaming connection at once (so
 the backend stops sending tokens), and no answer reaches anyone. `scx`
@@ -196,7 +258,7 @@ reaches it during its simulation like the builder does.
 Everything a run needs is in the document:
 
 * Its `decision` namespace and its `<invoke type>`s (`generate`,
-  `decision`) are tagless repository URIs
+  `decision`, `files`) are tagless repository URIs
   (`https://github.com/stateforward/floppy/namespaces/<name>`,
   `.../services/<name>`), which name floppy's latest release: `scx`
   resolves them from that release, or, with `--offline --cache-dir
@@ -215,6 +277,10 @@ Everything a run needs is in the document:
   "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media"`
   (create `media/` first; it is ignored by git): `scx run` refuses a run
   that binds the service without it. The builder sends no images.
+* The `files` service imports `wasi:filesystem` too, so the run grants it
+  the behaviors directory,
+  `--dir "https://github.com/stateforward/floppy/services/files=$PWD/behaviors::/behaviors"`
+  (above).
 * `scx:validate` is scxml.rs's `scx` namespace
   (`https://github.com/stateforward/scxml.rs/namespaces/scx`), which `scx`
   embeds, so it needs no package and no fetch, and it runs within the
@@ -250,10 +316,10 @@ From the repository root, after `sh scripts/build-components.sh` and with
 ```console
 # The locally built packages (the dev cache under target/).
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button"}}' |
-  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx
+  scx run --offline --cache-dir target/components/package-cache --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --dir "https://github.com/stateforward/floppy/services/files=$PWD/behaviors::/behaviors" bots/builder/builder.scx
 # floppy's latest release, once one is published (phase 7).
 echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestrian button"}}' |
-  scx run --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx
+  scx run --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --dir "https://github.com/stateforward/floppy/services/files=$PWD/behaviors::/behaviors" bots/builder/builder.scx
 ```
 
 Standard output carries one JSON record per line: `log` records with the
@@ -268,8 +334,12 @@ Chat Completions and `system_one` backend on 127.0.0.1: an invalid first
 draft (`SCXML005`) goes back to `author` through `triage.repair`, the second
 draft's only error is fixed by its machine-applicable fix, and the fixed
 draft runs its two test scripts as two invoked children (distinct invoke
-ids) before the builder ends in `done`; the repair request carries the failed draft and
-its tests. Other cases cover a redesign that sends the plan it replaces,
+ids), loaded from the path it was written to, before the builder ends in
+`done`; the repair request carries the failed draft, its schemas, its
+script and its tests. Each case runs the builder in a scratch layout of
+its own (`bots/builder/` and `behaviors/`), so the documents it writes are
+never shared; one case checks the three files written under the
+request's name, a draft with a script. Other cases cover a redesign that sends the plan it replaces,
 a failed redesign keeping that plan, a design generation that fails at
 once keeping its cause (`status`) in its `retry_gate` log and in the
 `failed` history after a later failure ends the build, `triage.repair` not being offered

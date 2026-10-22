@@ -664,10 +664,13 @@ fn a_run_tagged_timer_guard_survives_self_reentry_of_a_state_holding_invokes() {
         .filter(|record| record["label"] == "member.exit")
         .filter_map(|record| record["session"].as_str())
         .collect();
+    // A child's `_sessionid` is `<parent _sessionid>.<invokeid>`: the new
+    // member, invoked again under the same invoke id, has the first one's
+    // address (the `entered` labels above tell the two apart).
     assert_eq!(
         members,
-        ["session.1", "session.2"],
-        "re-entry cancels the first member and invokes a new one"
+        ["session.member", "session.member"],
+        "re-entry cancels the first member and invokes a new one at the same address"
     );
 }
 

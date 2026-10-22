@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!-- cognition-2: a focus that is not a device is null, and a device that is not configured is not a candidate. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition">
+<datamodel>
+  <data id="devices" expr='["kitchen"]'/>
+  <data id="stimulus" expr='{"event": "bot.input", "data": {"target_device": "garage"}, "source": null}'/>
+  <data id="candidates" expr="null"/>
+  <data id="focus" expr="'unset'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <cognition:attention_bias_for_turn location="candidates" focuslocation="focus" stimulus="stimulus" devices="devices" focus="'garage'"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="focus === null &amp;&amp; candidates.length === 0" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

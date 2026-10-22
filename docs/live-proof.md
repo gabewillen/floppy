@@ -7,25 +7,530 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
-## 2026-10-12 (later), the fixes and listening, model `gabe-codex-1/gpt-6-luna`
+## 2026-10-21, D124's no-progress on the lab's mosfet stack, model `gemma-4-26b-a4b`
 
-The same relays as the run below, plus `scripts/vad-server.py` (Silero VAD
-v5 from the `silero-vad` wheel) at `http://127.0.0.1:8790/v1` as
-`FLOPPY_VOICE_BASE_URL`, so voice detection ran for the first time. The
-fixes: the bot passes speaking a 30 s bound (D96), only the reflection
-stores episodes (D97), the cognition drops reasoning's repeats of
-intuition's environment actions (D98), revision is bounded by 180 s
-(D99), reasoning's prompt shows the conversation's messages (D100: it
-showed `<value count="N" />` with none, so the bot never saw history), and
-the builder is told the input a turn behavior really gets (the stimulus's
-data with focus and focus_candidates, not the envelope) with this turn's
-input as an example.
+The first runs on the maintainer's lab, the original's (mosfet's) stack:
+the model is `gemma-4-26b-a4b` on the lab's vLLM (`192.168.2.2:8100`,
+`/v1`; vLLM 0.32.0rc1, `max_model_len` 262144) and the decision service is
+the lab's systemone server (`192.168.2.2:8102`, `POST /v1/systemone`,
+model `pplx-decider-flash-v1.2`, run by mosfet with a 2048-token context).
+The lab's servers take no key. The runs used floppy commit `6b6dec1215`
+(D124), `FLOPPY_LIVE_MODEL=gemma-4-26b-a4b`, `FLOPPY_LIVE_ENV_FILE` naming
+`env.speech` and `env.lab` (`FLOPPY_BASE_URL`, `FLOPPY_API_KEY`,
+`TYPESAFE_BASE_URL`, `TYPESAFE_API_KEY`, the keys placeholders; no `.env`,
+so no maintainer key reached the lab), and `cargo test -p floppy-tests
+--locked --test floppy_live -- --ignored --nocapture --test-threads=1
+--exact <test>`. No code was changed for them. Before them, one chat
+completion and one systemone call (one `choice` question) were answered
+200. floppy's wire formats match the model and decision servers (the
+generate service's base URL with `/v1`, the decision service's origin
+without it). The lab's speech and voice servers do not match floppy's:
+speech-to-text (`:8001`, `/v1/audio/transcriptions`) and text-to-speech
+(`:8002`, `/v1/audio/speech`) are on two origins where the speech service
+takes one base URL for both, and voiceprint (`:8003`, `/v1/embed`) and
+diarization (`:8005`, `/v1/diarize`) are not LocalAI's `/vad`,
+`/audio/diarization` and `/voice/embed`; so speech stayed on `env.speech`
+(Gemini), and no voice backend was configured (every voice detection
+failed `the backend is not configured`, which neither test checks).
 
 | Run | Result | Note |
 | --- | --- | --- |
-| `live_cascade`, `live_chat`, `live_identity`, `live_choices` | pass | `live_choices` now focuses the lamp once |
-| `live_listening` (new) | pass | 61 s; "Hey floppy, what is the capital of France?" (Gemini TTS, `tests/fixtures/live/question-24k.pcm`) then a second of silence: VAD found the voice, Gemini decoded it, the SpeechHeard seed and reasoning answered "The capital of France is Paris." aloud |
-| `live_conversation`, 3 runs | pass | recall answered "green" in all 3; reflection created the ping behavior in 1 of 3 (the model's choice), and that one handled "ping" itself (`autonomy handled`, "pong") and left the color question unhandled |
+| `floppy_live` `live_conversation`, run 1 | fail (292 s) | `4 completed, 0 failed`, no run ended early, but no behavior was learned by turn 2: every revision was abandoned with `no-progress`, three of the four on a diagnostic an earlier, non-consecutive failure of the same build had (D124). Turn 1 created `UserFavoriteColorMemory`: 2 attempts, both `author-failed` (`truncated`: the 8192-token bound). Turn 2 created `PingPongRule`: `XML001` (an attribute `+` on `<send>`), `truncated`, `XML001` again, ended; the row stayed DRAFT. Turn 3 changed it: `XML001`, `no-document` (`"type:"`), `XML001` again, ended. Turn 4 changed it: `XML001`, `XSD-cvc-complex-type.3.2.2` (`<assign>` with `name`), `script-not-loaded`, the `<assign>` again, ended. Reasoning answered turns 1, 2 and 4 (turn 4 "Your favorite color is green."); on turn 3, the "ping", the lab's decision server chose the ignore (intuition handled, confidence 57) |
+| `floppy_live` `live_conversation`, run 2 | fail (339 s) | `4 completed, 0 failed`, no run ended early, no behavior learned by turn 2; every revision abandoned with `no-progress` on a repeat (D124). Turn 1 created `RememberFavoriteColor`: `XSD-cvc-complex-type.3.2.2` (`<assign>` with `name`), `no-document` (a fragment of the draft schema), `truncated`, `XML001` (an attribute `event:bot.ability.conversation.input#$defs`), `truncated` again, ended. Turn 2 created `PingPongGame`: `truncated`, `SCXML008` (`<cancel>`), then `schema` on `<transition>` and `<assign>` inside `<send>`, ended as a repeat though its first diagnostic was new (the log names only each failure's first diagnostic, so the one repeated from failure 2 is not recorded); the row stayed DRAFT. Turn 3 changed it: the same `schema` diagnostic twice, ended. Turn 4 changed it: `<assign>` inside `<send>` twice, ended. Reasoning answered turns 1, 2 and 4 ("Your favorite color is green!"); on turn 3 the decision server chose the ignore (confidence 59) |
+| `floppy_live` `live_cascade` | pass (20 s) | autonomy unhandled (`no-behaviors`), intuition unhandled (`empty_product`, the lab's decision server abstained), reasoning handled. 2026-10-20 on the Qwen vLLM: pass |
+
+## 2026-10-20, a cond that always throws ends only its session (scxml.rs `cf8f293a`), on vLLM 0.30.0, model `Qwen/Qwen3.8-Flash-Next`
+
+scxml.rs `cf8f293a` stops a transition condition that fails on every
+evaluation at the per-call command bound instead of running out of fuel,
+so an invoked session doing so is ended as D122 ends a runaway and the run
+goes on (D123's run 1 below). The runs used floppy commit `5870a5f7f7`,
+`FLOPPY_LIVE_ENV_FILE` naming `.env`, `env.speech` and `env.voice`, the
+same vLLM 0.30.0 server as the entries below, and `cargo test -p
+floppy-tests --locked --test floppy_live -- --ignored --nocapture
+--test-threads=1 --exact <test>`. No code was changed for them. LocalAI
+was not running, so voice detection failed as before, which neither test
+checks.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_conversation`, run 1 | fail (38 s) | `4 completed, 0 failed`, but reflection selected nothing on any turn, so the builder received no request and no draft was written. Reasoning answered every turn (turn 2 "Understood, Gabe. Say 'ping' and I'll reply 'pong'.", turn 3 "pong", turn 4 "Green, Gabe. That's the one you told me to remember.") |
+| `floppy_live` `live_conversation`, run 2 | fail (390 s) | `4 completed, 0 failed`, no run ended early; a behavior was learned, but on turn 4, not by turn 2. Turn 2 created `PingPongResponder`: 10 drafts, 0 simulated, abandoned (`no-progress`) on `E0009` (lifetime: a delayed send with no `bot.behavior.tick` schedule, 4 times); the others failed `SCXML014` (both `delay` and `delayexpr`, or `event` and `eventexpr`, 3), `undeclared-function` (2) and `SCXML013` (1), and the row stayed DRAFT. Turn 3 changed it: 13 drafts, abandoned on `no-document` (`"placeholder"`, twice); 4 reached the simulation and failed `test-failed` with `done=false` (3 of them with `error error.execution`; none ended the run), and the others failed `undeclared-function` (2), `XML001` (2), `XSD-cvc-elt.1` (a `<region>`), `SCXML005` and `SCXML031`. Turn 4 changed it again: built in 4 attempts (one `test-failed` with `error error.communication`, two `undeclared-function`) and accepted (`ACTIVE turn ["bot.ability.conversation.output"]`). Reasoning answered turns 1, 2 and 4 (turn 4 "Your favorite color is green, Gabe. ...") and chose the ignore on turn 3, the "ping" |
+| `floppy_live` `live_cascade` | pass (19 s) | autonomy unhandled (`no-behaviors`), intuition unhandled (`empty_product`), reasoning handled. D122's run: pass |
+
+## 2026-10-20, builder diagnostics a repair can act on (D123), on vLLM 0.30.0, model `Qwen/Qwen3.8-Flash-Next`
+
+The builder renders each validate diagnostic as `scx validate` does (line,
+column, the marked source line, notes, help, fixes) and fingerprints it by
+label and line; its author rules no longer contradict the turn behavior
+contract, keep expressions in the script, and ask for one call; and it
+rejects a draft with no document, a script not loaded, or a call no script
+declares before simulating it, and says when a draft has no top-level
+`final`. The runs used floppy commit `0233b7e315` with the D123 changes in
+the working tree (each run's state below; run 3's is the committed one),
+`FLOPPY_LIVE_ENV_FILE` naming `.env`, `env.speech` and `env.voice`, the same
+vLLM 0.30.0 server as the entries below, and `cargo test -p floppy-tests
+--locked --test floppy_live -- --ignored --nocapture --test-threads=1
+--exact live_conversation`. LocalAI was not running, so voice detection
+failed as before, which the test does not check. Before them, the builder
+was run alone (`scx run` of `bots/builder/builder.scx`, a scratch layout)
+on reflection's turn-3 `builder.request`, rebuilt from `reflection.scx`
+and `reflection.js`, about ten times, some through a local relay that
+saved the request and reply bodies (no headers): that found the causes in
+D123, among them `tool_choice: required` answered with up to 13 parallel
+`scxml_draft` calls (stub calls first) and, with `minLength` on `scxml`,
+replies cut at `length` (3 of 3 replays; 0 of 3 without it).
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `live_conversation`, run 1 | fail (59 s) | before the script checks: reflection created `PingPongReply` on turn 2 (earlier than on any run below); its repaired draft carried a script but no `<script src="PingPongReply.js"/>`, so its eventless `cond="isExactPing(input)"` threw in every microstep, and its simulation ended the whole run with `machine session failed: protocol` (the scxml.rs bug in D123; a six-line document reproduces it as `host-failure`); the harness then failed writing turn 3's input (`Broken pipe`) | (resolved by scxml.rs `cf8f293a`: such a cond now ends only the draft's invoked session, `error.execution`, and its test fails; see the entry above)
+| `live_conversation`, run 2 | fail (260 s) | `4 completed, 0 failed`, with the script checks: no run-ending failure (two drafts were told `undeclared-function` instead of being simulated), but no behavior was learned by turn 2: `PingPongReply`, created on turn 2 and changed on turns 3 and 4, kept failing `test-failed` with `done=false` (each draft's only `final` inside a state) or a test expecting a `respond` output, and each revision was abandoned after no progress. Reasoning chose the ignore on turns 1, 3 and 4 and answered turn 2 |
+| `live_conversation`, run 3 | pass (255 s) | `4 completed, 0 failed`, with the top-level `final` message and rules (the committed D123): reflection created `GabePingPongRoutine` on turn 2, whose draft failed `SCXML014` once and was built in 2 attempts and accepted (`ACTIVE turn ["bot.ability.conversation.output"]`); on turn 3 autonomy matched it (`1 matched`) and the turn answered "pong"; turn 4 answered "Your favorite color is green." Turn 3's change was built in 8 attempts and accepted; turn 4's change failed (`test-failed`, its test expecting a `respond` output, twice) and left the row DRAFT, its draft the rejected one. Across the run the builder still received 3 drafts with no document (`""`, `"placeholder"` twice) and wrote tests expecting outputs; reasoning chose the ignore on turn 1 |
+
+## 2026-10-20, a runaway invoked session ends only itself (D122), on vLLM 0.30.0, model `Qwen/Qwen3.8-Flash-Next`
+
+scxml.rs `f920cb47` ends an invoked session whose call stops at the
+per-call command bound as a cancelled invocation is (`error.execution` for
+a start, `error.communication.<invokeid>` for a later call), so a builder
+draft whose simulation runs away fails its test instead of ending the run.
+The runs used floppy commit `3b9507e5d5`, `FLOPPY_LIVE_ENV_FILE` naming
+`.env`, `env.speech` and `env.voice`, the same vLLM 0.30.0 server as the
+entries below, and `cargo test -p floppy-tests --locked --test floppy_live
+-- --ignored --nocapture --test-threads=1 --exact <test>`, once each. No
+code was changed for them. The local LocalAI behind `env.voice` was not
+running, so every voice detection failed (`the backend is unreachable`),
+which neither test checks.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_cascade` | pass (22 s) | autonomy unhandled (`no-behaviors`), intuition unhandled (`empty_product`), reasoning handled. 2026-10-19 (D121): pass |
+| `floppy_live` `live_conversation` | fail (124 s) | `4 completed, 0 failed`, and the run was not ended by any draft (no `command-bound`; none of this run's drafts ran away, so D122's path was not reached live), but no behavior was learned by turn 2: reflection selected nothing on turns 1 and 2, created `FollowStandingRules` on turn 3 and changed it on turn 4, and each revision was abandoned after the same diagnostic twice, so the row stayed DRAFT. Of the 7 failed drafts, 4 failed `XML001` in the chart (turn 3: an unescaped `&`, twice; turn 4: no root element, twice), 1 `XSD-cvc-complex-type.4` (a `<foreach>` without `item`), 1 `SCXML012` (an atomic state with an `initial`), and 1 reached the simulation and failed `test-failed` (its test expected `done=true` with no input; the draft did not finish). Reasoning answered turn 1 ("Hi Gabe! Got it, green is your favorite color. I'll remember that."), chose the ignore on turn 2, said "pong" on turn 3 and "Your favorite color is green, Gabe." on turn 4 |
+
+## 2026-10-19, multi-document learned behaviors (D121), on vLLM 0.30.0, model `Qwen/Qwen3.8-Flash-Next`
+
+The builder's author call returns `scxml`, `schemas` and `script`, which it
+writes as `<name>.scx`, `<name>.json` and `<name>.js` through the files
+service into the layout's `behaviors/` (the live tests grant it) and
+simulates by `srcexpr` on the path; scxml.rs `c8bb69a8` loads the child's
+schema file and script against its own base URI. The runs used floppy
+commit `8dccba2ae4`, `FLOPPY_LIVE_ENV_FILE` naming `.env`, `env.speech`
+and `env.voice`, the same vLLM 0.30.0 server as the entry below, and
+`cargo test -p floppy-tests --locked --test floppy_live -- --ignored
+--nocapture --test-threads=1 --exact <test>`. No code was changed for
+them.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_cascade` | pass (22 s) | autonomy unhandled (`no-behaviors`), intuition abstained (`declined`, `empty_product`), reasoning handled. Tonight (D120): pass |
+| `floppy_live` `live_conversation`, run 1 | fail (335 s) | `4 completed, 0 failed`, but no behavior was learned by turn 2: reflection created `PingPongResponse` on turn 2 and changed it on turns 3 and 4; each revision was abandoned after no progress and the row stayed DRAFT, its source `../../behaviors/PingPongResponse.scx`. Of 23 drafts, 14 failed their simulation (`test-failed`: the turn behavior waited for an input event, or the test expected the selection as an output sent to `#_parent`, instead of finishing with it in its donedata), 3 failed `XML001` (all on turn 4, in the chart itself: no root element, an unclosed `datamodel` value, an attribute without `=`), 2 `XSD-cvc-elt.1` (a `<region>` element), 2 `PKG005` (`ecmaescript`, `ecmaSCRIPT`), 1 `SCXML005` and 1 `XSD-cvc-complex-type.2.4`. Tonight's run (D120) had every draft fail the same `XML001` after its fix, an unclosed attribute value or a regular expression written as an attribute, inside the one SCXML text that carried the schemas and expressions; here no failure came from a schema or a script, the documents were written apart (the last chart, `PingPongResponse.json` and a 1.3 KiB `PingPongResponse.js` of the functions its conds call), and most drafts validated and reached the simulation. Reasoning answered every turn (turn 3 "pong", turn 4 "Your favorite color is green, Gabe.") |
+| `floppy_live` `live_conversation`, run 2 | fail (124 s) | the run ended on turn 4 with `scx`'s fatal `command-bound` error ("a machine call stopped at its per-call command bound before a stable configuration"): reflection's change of `Preference Recall` (created earlier and stayed DRAFT, files `Preference_Recall.*`) simulated a draft whose compound initial state raises `decide` on entry and takes it to its own children, which exits and re-enters it, so the raise repeats in one macrostep without end. A simulated draft runs in the run (D28), so its runaway ended the whole run; turns 1 to 3 had settled. Its drafts failed `XSD-cvc-datatype-valid` (`name="Preference Recall"`, not an NMTOKEN) and then `simulate` `test-failed`; no `XML001` |
+
+## 2026-10-18, Q8's decision kinds (D120) and gap 13's `image/*` branch, on vLLM 0.30.0, model `Qwen/Qwen3.8-Flash-Next`
+
+The decision service's kinds are `choice`, `predicate` and `score`
+(intuition asks `predicate` with its `choices` and `stimulus`, the service
+leaving out the deliberative handoff and building the state), and the turn
+detector no longer takes an image as content. The model server changed
+engine since the runs below: the same model at the same base URL is now
+served by vLLM 0.30.0, which accepts `response_format` and decodes
+`tool_choice: "required"` to the tools' schemas, where tonight's earlier
+runs (every 2026-10-18 entry below) were on the tensorfold engine, which
+did not constrain decoding. The runs used floppy commit `78dd64526a`,
+`FLOPPY_LIVE_ENV_FILE` naming `.env`, `env.speech` and `env.voice` (Gemini
+speech, the local LocalAI for voices), no relay, and `cargo test -p
+floppy-tests --locked --test <file> -- --ignored --nocapture
+--test-threads=1 --exact <test>`, once each. No code was changed for them.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_cascade` | pass (25 s) | autonomy unhandled, intuition abstained (`declined`, `empty_product`), reasoning handled. Tensorfold tonight: pass |
+| `floppy_live` `live_choices` | fail (26 s) | reasoning's `dispatch` call is now valid (`bot.focus_device` with `data: {device: "lamp"}`, `target: "session.floppy"`), where on tensorfold it put `device` beside `event` and failed `schema-mismatch`; the turn completed (`bot.processing.completed`, turn 1). Intuition (TypeSafe, through `predicate`) chose `bot.focus_device` and `bot.ability.cognition.ignore` with confidence 14 and escalated, sending both as its environment actions, and reasoning then sent the focus again, so `floppy.focus` is logged twice (`lamp`, `lamp`) and the test's one-focus check fails. That is D113's removal of D87's dedupe (J12: the original dispatches the environment actions before reasoning and has no dedupe), which the test still expects; neither was changed |
+| `floppy_live` `live_choices` (rerun) | pass (21 s) | after its expectation became the original's (the lamp focused at least once, every focus on the lamp; [To review (step 1)](plans/original-domains.md#to-review-step-1), item 13), test change only. Intuition chose `bot.focus_device` and the ignore (confidence 13) and escalated, sending the focus (`floppy.focus` `lamp`, once); reasoning chose the ignore, so the double focus did not occur in this run |
+| `floppy_live` `live_chat` | pass (29 s) | reasoning answered "Hi Gabe! Nice to meet you. I'm floppy." and speaking said it through Gemini. Tensorfold tonight: pass, after its outage |
+| `floppy_live` `live_identity` | pass (30 s) | turn 1 addressed as Floppy and answered by reasoning; on turn 2 intuition chose the ignore and `bot.ability.identity.adopt` (confidence 6) and escalated, the identity adopted "Floppy" and the bot said "I'm Floppy! Nice to meet you, Gabe." Tensorfold tonight (D115): pass |
+| `floppy_live` `live_conversation` | fail (631 s) | `4 completed, 0 failed`, but no behavior was learned by turn 2: reflection created `RememberUserPreference` on turn 1 and changed it on turns 2 and 4, and every draft failed `scx:validate` with the same `XML001` after its fix (an unclosed attribute value; on turn 4 a regular expression written as an attribute), so each revision was abandoned and it stayed DRAFT. Reasoning chose the ignore on turns 1 to 3 (no "pong" on turn 3) and answered turn 4 "Your favorite color is green!", recalling turn 1. Tensorfold tonight: the same outcome (no behavior learned; drafts failed their simulation), so constrained decoding did not change the drafts' quality |
+| `environment_live` `live_two_participants` | pass (34 s) | `a` answered "The window is open." through reasoning and said it through Gemini; `b` heard it and intuition handled it with the ignore (confidence 62). Tensorfold (2026-10-17): pass |
+
+## 2026-10-18, parity gaps 3, 5 and 4 (D117 to D119), model `Qwen/Qwen3.8-Flash-Next`
+
+Recalled context trims to the prompt budget (D117), lifecycle requests are
+answered and `bot.degraded` announced (D118), and stimuli and cognition
+inputs carry producer-stamped `participants` (D119). The runs used floppy
+commit `5a7ef2618f`, the same env files, backends and model as the entries
+below (`FLOPPY_LIVE_ENV_FILE` naming `.env`, `env.speech` and `env.voice`),
+and `cargo test -p floppy-tests --locked --test floppy_live -- --ignored
+--nocapture --test-threads=1 --exact <test>`. The first round of the three
+ran while the vLLM was refusing connections, so each test ran again once
+it answered; every run is listed, in order.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_cascade` | fail (52 s) | `the reasoning failed (transport)`: intuition abstained, and reasoning's call could not connect |
+| `floppy_live` `live_chat` | fail (43 s) | the same `transport` failure on turn 1 |
+| `floppy_live` `live_conversation` | fail (49 s) | the same `transport` failure on all four turns |
+| `floppy_live` `live_cascade` (relay) | pass (49 s) | through a local relay in front of the vLLM that saved each request and reply body (no headers): both calls answered |
+| `floppy_live` `live_cascade` | pass (51 s) | autonomy unhandled, intuition unhandled (`empty_product`), reasoning handled |
+| `floppy_live` `live_chat` | fail (37 s) | `transport` again; through the relay the next run showed the cause, `Connection refused` from the vLLM, which then refused every request for about two minutes before answering again |
+| `floppy_live` `live_conversation` | fail (40 s) | `transport` on every turn, during the same outage |
+| `floppy_live` `live_chat` | pass (34 s) | after the vLLM answered again |
+| `floppy_live` `live_conversation` | fail (177 s) | `4 completed, 0 failed`, but no behavior was learned by turn 2: reflection created `PingPongReply` on turn 2, and its draft failed its simulation twice with the same diagnostic (`test-failed`: `done=false`), so the revision was abandoned; turn 3 broke it and turn 4's change failed the same way. Reasoning acknowledged turn 2 ("Got it, Gabe. Green is on file, and ping gets pong.") and chose `bot.ability.cognition.ignore` on turns 3 and 4. The conversation stamped and the body copied the turn's participants (`gabe` source, `floppy` target); nothing reads them yet. The reflection failures are the model's, the same kind as the D114 and D115 runs below |
+
+## 2026-10-18, the behavior and autonomy namespaces (D116), model `Qwen/Qwen3.8-Flash-Next`
+
+The reflection now reads its inventory with
+`<behavior:instances_from_behavior_results>`, stores a create's draft and an
+accepted change with `<behavior:replace_behavior_clauses>` and tells the
+builder this turn's input with `<autonomy:behavior_input_payload>`; the
+builder checks a draft's lifetime with `<behavior:lifetime_errors>` and a
+routine's forced tick with `<behavior:verify_tick>`; autonomy runs its
+candidates with `<autonomy:behavior_input_payload>`; and every stimulus
+envelope is assigned with plain `<assign>`s (no `bot` namespace). The runs
+used floppy commit `40cb897863` (code at `f30e15ab6a`), the same env files,
+backends and model as the entries below (`FLOPPY_LIVE_ENV_FILE` naming
+`.env`, `env.speech` and `env.voice`), no relay, and `cargo test -p
+floppy-tests --locked --test floppy_live -- --ignored --nocapture
+--test-threads=1 --exact <test>`, once each.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_cascade` | pass (30 s) | |
+| `floppy_live` `live_conversation` | pass (130 s) | `4 completed, 0 failed`; the behavior learned by turn 2 is `IgnoreConversationTurn` (`ACTIVE turn []`, accepted on turn 1's reflection, so it matches no stimulus); `ReplyPongToPing` (`ACTIVE turn ["bot.ability.conversation.output"]`) was accepted only after turn 4 had completed, so autonomy matched nothing on turn 3 (`0 matched for bot.ability.conversation.output`) and reasoning answered "pong"; turn 4 recalled green ("Your favorite color is green, Gabe!"). The runs on D114 and D115 learned no behavior (the model's choices) |
+
+## 2026-10-18, the identity, conversation and memory namespaces (D115), model `Qwen/Qwen3.8-Flash-Next`
+
+The identity ability now hears its name with `<identity:hears_name>`, the
+conversation keeps its relationships, turns and messages with the
+conversation namespace's elements, orders its sources with
+`<identity:sorted_identities>` and remembers with `<memory:to_json>`, the
+turn detector assembles and closes its turns with
+`<conversation:ingest_content>` and `<conversation:on_end>`, and reasoning
+reads its recalled rows with `<memory:contents>`. The runs used floppy
+commit `847bfc3bde` (code at `9eff0785a2`), the same env files, backends
+and model as the entries below (`FLOPPY_LIVE_ENV_FILE` naming `.env`,
+`env.speech` and `env.voice`), no relay, and `cargo test -p floppy-tests
+--locked --test floppy_live -- --ignored --nocapture --test-threads=1
+--exact <test>`, once each.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_identity` | pass (26 s) | the conversation committed the input (`inbound 0 from ["gabe"] (1 in its relationship)`), the identity logged `addressed as Floppy`, and reasoning answered the addressed turn ("I don't have a name yet, Gabe. Would you like to give me one?"), committed as `outbound 1` |
+| `floppy_live` `live_conversation` | fail (178 s) | `4 completed, 0 failed`, but no behavior was learned by turn 2: reflection created `IgnoreConversationTurn` on turn 1 and `PingPongReply` on turn 2, and each draft failed its simulation twice with the same diagnostic (`test-failed`: no `behavior.donedata`; then `XML001` for an unescaped `&`), so both revisions were abandoned and stayed DRAFT; turn 4's reflection select failed `malformed`. The conversation remembered every input and recalled the relationship's earlier ones (`recalled 0` to `recalled 3`, each `remembered 1`, through `<memory:to_json>`), one relationship throughout (1 to 4 messages in it). Reasoning answered every turn: turn 3 "pong" and turn 4 "Your favorite color is green, Gabe!", recalling turn 1. The reflection failures are the model's, the same kind as the run below |
+
+## 2026-10-18, the intuition and cognition namespaces (D114), model `Qwen/Qwen3.8-Flash-Next`
+
+Intuition now tunes its confidence with `<intuition:observe>` and
+`<intuition:escalate>`, the body takes its attention bias with
+`<cognition:attention_bias_for_turn>`, and reasoning builds its prompt
+with `<cognition:model_facing_content>`. The runs used floppy commit
+`0b2edc91ee` (code at `1f331106b9`), the same env files, backends and
+model as the entries below (`FLOPPY_LIVE_ENV_FILE` naming `.env`,
+`env.speech` and `env.voice`), no relay, and `cargo test -p floppy-tests
+--locked --test floppy_live -- --ignored --nocapture --test-threads=1
+--exact <test>`, once each.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_cascade` | pass (31 s) | autonomy left the question unhandled, intuition abstained (`empty_product`, so the tuner observed nothing), and reasoning, prompted by `<cognition:model_facing_content>`, answered it |
+| `floppy_live` `live_conversation` | fail (100 s) | `4 completed, 0 failed`, but no behavior was learned by turn 2: on turn 1 reflection created `IgnoreConversationTurn`, whose draft failed its simulation twice with the same diagnostic (`test-failed`: `done=false`), so the revision was abandoned and stayed DRAFT; on turn 2 reflection's select failed `schema-mismatch` and on turn 3 `malformed`. Reasoning answered every turn: turn 3 "pong" and turn 4 "Your favorite color is green, Gabe!", recalling turn 1. The reflection failures are the model's, the same kind as the 2026-10-18 run below; the reflection path does not use the changed elements |
+
+## 2026-10-18, `live_choices` through the relay, and a selection without data sent with `{}`, model `Qwen/Qwen3.8-Flash-Next`
+
+A selection with no data is now sent with `{}`, as the original's
+`dispatch_selected_events` sends it. The runs used floppy commit
+`f8a759d09c`, the same env files, backends and model as the entry below,
+with one more env file setting `FLOPPY_BASE_URL` to a local relay in front
+of the vLLM that saved each request and reply body (no headers), and
+`cargo test -p floppy-tests --locked --test floppy_live -- --ignored
+--nocapture --test-threads=1 --exact <test>`, once each.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_choices` | fail (19 s) | as before: intuition sent its focus and ignore (confidence 14) and escalated, and reasoning failed `schema-mismatch`. The relay shows the refused part: the model's `dispatch` call put `bot.focus_device`'s `device` beside `event` (`{"device": "lamp", "event": "bot.focus_device", "reason": ..., "target": "session.floppy"}`), with no `data`, which the branch requires; its `target`s were right, and its respond branch was valid |
+| `floppy_live` `live_cascade` | pass (19 s) | |
+
+The schema matches the original's `dispatch_tool`: `target` is present
+when the event has an offerer and is then a required one-value enum with
+the original's description, and `data` is required when its schema
+requires a field. What differs from the original are the `target` values
+(session ids, a deliberate difference Q3 accepted; the original's are
+actor keys), and before D113 the body's own events offered no `target` at
+all. Sending the captured request again to the vLLM directly, twice for
+each variant, with only the `target`s changed:
+
+| Variant | The model's `bot.focus_device` selection |
+| --- | --- |
+| as sent (session ids, `bot.focus_device` targeted at `session.floppy`) | `device` beside `event`, no `data` (refused) |
+| `bot.focus_device` with no `target` (as before D113) | `data: {device: "lamp"}` (valid) |
+| the original's actor keys (`bot`, `cognition`, `communication`, `identity`) | `data: {device: "lamp"}`, `target: "bot"` (valid) |
+
+So this model fills the original's schema correctly with the original's
+actor keys and gets it wrong with session ids in the same places. The
+fault is the model's against a schema of the original's shape, but it is
+triggered by Q3's session-id targets: the fix (offering actor keys and
+sending to their sessions) reopens Q3 and is left to the maintainer.
+
+## 2026-10-18, the processing namespace and every stage's sends (D113), model `Qwen/Qwen3.8-Flash-Next`
+
+Each choice is now tagged with its offerer's session id, and each stage
+sends its own selections to `#_scxml_` + target (the body no longer
+routes). The runs used floppy commit `911cac09bb` (code at `89063fe603`),
+the same env files, backends and model as the entry below, no relay, and
+`cargo test -p floppy-tests --locked --test floppy_live -- --ignored
+--nocapture --test-threads=1 --exact <test>`, once each.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_cascade` | pass (26 s) | autonomy and intuition left the question unhandled, and reasoning's selection, sent to its target, answered it |
+| `floppy_live` `live_choices` | fail (25 s) | the body's choices were `bot.focus_device@session.floppy bot.ability.cognition.ignore@session.floppy.cognition bot.ability.communication.respond@session.floppy.communication bot.ability.identity.adopt@session.floppy.identity`, as the test expects. Intuition (TypeSafe) chose `bot.focus_device` and `bot.ability.cognition.ignore` with confidence 14, under the warmup floor, so it sent both as its environment actions (the body took the focus: `floppy.focus` `lamp`; the cognition logged the ignore) and escalated; reasoning then failed `schema-mismatch`, so the turn failed (`bot.processing.failed`). The arguments were not saved in this run (no relay capture), so which part of the call the dispatch schema refused is not known; the session-id `target` enum the model now fills is the new part of that schema |
+
+## 2026-10-18, undeclared top-level argument fields dropped before the check (D112, amended), model `Qwen/Qwen3.8-Flash-Next`
+
+`generate` now drops each top-level field of a call's arguments that the
+tool's root `properties` do not declare (a stray `reason` beside
+`events`) before the strict check, as the original's dispatch parser
+reads only `args.events`; nested objects are still checked strictly. The
+runs used floppy commit `10e4424412`, the same env files, backends and
+model as the 2026-10-17 entries below, no relay, and `cargo test -p
+floppy-tests --locked --test floppy_live -- --ignored --nocapture
+--test-threads=1 --exact <test>`, one test at a time.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_cascade` | pass (28 s) | autonomy and intuition left the question unhandled and reasoning answered it |
+| `floppy_live` `live_identity` | pass (32 s) | turn 1 answered "I'm Floppy — your little companion robot. Good to meet you, Gabe."; turn 2 selected `bot.ability.identity.adopt` with a reply |
+| `floppy_live` `live_conversation` | fail (100 s) | `4 completed, 0 failed`: reflection's select still failed `schema-mismatch` on turns 1 and 2, so no behavior was learned by turn 2. The arguments were not saved in this run; the 2026-10-17 relay capture of the same turns showed mismatches inside an event (`bot.behavior.create`'s fields beside `event` with no `data`, an unoffered `lifetime` in `data`), which the amendment leaves strict. Turn 3 created `GabePingPong`, but its drafts failed `XML001` (an unescaped `&`) after a repair, so it stayed DRAFT. Turn 3 still answered "pong" and turn 4 "Green, Gabe." through reasoning |
+
+## 2026-10-17, `live_two_participants` with the silence that ends the utterance, model `Qwen/Qwen3.8-Flash-Next`
+
+`live_two_participants` now sends `environment.sound` `media/silence.wav`
+(0.1 s of 16 kHz silence written into the shared media directory) once
+the room logs `a`'s `bot.ability.speaking.output`, as the deterministic
+`a_bots_speech_reaches_the_other_participant` does, so the open-speech
+window closes on a sound without voice (the original's VAD End). The run
+used floppy commit `d68fbda862`, the same env files, backends and model as
+the entry below, and `cargo test -p floppy-tests --locked --test
+environment_live -- --ignored --nocapture --test-threads=1` (27 s).
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `environment_live` `live_two_participants` | pass (26 s) | `a` answered "The window is open." through reasoning and said it through Gemini; the room delivered the speech and then the silence to both bots; LocalAI answered every `/v1/vad` call `200`; `b` heard it as `bot.ability.listening.speech.output` and took its turn, which intuition handled with `bot.ability.cognition.ignore` (TypeSafe, confidence 65); `a` took no turn on its own speech |
+
+## 2026-10-17, `generate.result` `{content, tool_calls}` and the original's dispatch tool (D112, amended) on the local vLLM, model `Qwen/Qwen3.8-Flash-Next`
+
+`generate` now returns every tool call and checks each one against the
+`parameters` it was sent with (`schema-mismatch`, all or nothing), and
+`<decision:selection>` builds the original's dispatch tool (`reason`
+optional, `data` required only when its schema requires a field). The
+runs used floppy commit `1fc03645f9`, env files
+`FLOPPY_LIVE_ENV_FILE=$PWD/.env:<scratch>/env.speech:<scratch>/env.voice`
+(the vLLM's `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` and `TYPESAFE_API_KEY`
+from `.env`; Gemini's OpenAI-compatible API as `FLOPPY_SPEECH_BASE_URL`
+and `FLOPPY_SPEECH_API_KEY`; a local LocalAI on `127.0.0.1:8089` as
+`FLOPPY_VOICE_BASE_URL` and `FLOPPY_VOICE_API_KEY`; no `FLOPPY_STREAM`, so
+no call streamed), `FLOPPY_LIVE_MODEL=Qwen/Qwen3.8-Flash-Next`, `cargo
+test -p floppy-tests --locked --test floppy_live -- --ignored --nocapture
+--test-threads=1` (186 s) and `--test environment_live` the same way
+(925 s). LocalAI's `pyannote-diarization` model serves NVIDIA Streaming
+Sortformer v2 (`diar_streaming_sortformer_4spk-v2`, on its
+`nemo-speech-cpp` backend), not pyannote; no run here reached
+diarization. The diagnosis reruns of `live_cascade`, `live_identity` and
+`live_conversation` went through a local relay that saved each request
+and reply body (no headers).
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_cascade` | fail | reasoning failed `schema-mismatch`: the model's `dispatch` call put a `reason` beside `events` at the root of its arguments, which the tool's `parameters` (`additionalProperties: false`, only `events`) do not admit; its one event branch (`bot.ability.communication.respond`, "The capital of France is Paris.") was valid. The rerun failed the same way |
+| `floppy_live` `live_choices` | pass | |
+| `floppy_live` `live_chat` | pass | speaking went through Gemini |
+| `floppy_live` `live_identity` | fail | turn 1's reasoning failed `schema-mismatch` for the same root `reason` (its branch, "I'm Floppy ...", was valid), so the addressed bot never answered. The rerun failed the same way |
+| `floppy_live` `live_conversation` | fail | `4 completed, 0 failed`: reflection's select failed `schema-mismatch` on turns 1 and 2, a behavior (`GabePingPong`) was learned ACTIVE only on turn 3, and turn 4 still recalled "green" through reasoning. In the relay rerun, select's calls on turns 1 and 2 put `bot.behavior.create`'s fields beside `event` with no `data` (which the branch requires) and put an unoffered `lifetime` in `data`; turns 3 and 4 selected a create and a change whose drafts failed the builder's simulation (`test-failed`), so nothing was learned |
+| `environment_live` `live_two_participants` | fail | `a` took its turn and said "The window is open." through Gemini, and the room delivered the sound to both bots. LocalAI answered one `/v1/vad` call from each bot (`200`) and got nothing more in the 15 minutes. The open-speech window closes only on a later sound without voice (the original's VAD End), and the test sends none after `a`'s speech (the deterministic `a_bots_speech_reaches_the_other_participant` sends `media/silence.wav`), so `b` never decoded the speech or took a turn. This is a gap in the test, not the model's doing, and it was not changed |
+
+Every `schema-mismatch` above is the model's output disagreeing with the
+schema it was sent: this server does not constrain decoding to the
+tool's `parameters`, and D112 refuses a call the schema does not admit
+instead of reading only `events` from it. During `floppy_live`, LocalAI
+answered two of its five `/v1/vad` calls `500`. `live_chat` passed
+regardless.
+
+## 2026-10-16, generate's forced tool call (D112) on the local vLLM, model `Qwen/Qwen3.8-Flash-Next`
+
+`generate` now asks for schema-shaped output through one forced tool call
+(`tools`, `tool_choice`) instead of `response_format`, which this server
+answers `400` ("structured output (response_format and the guided_*
+fields) is not supported by this engine yet"); before the change every
+`floppy_live` test failed `the reasoning failed (status)` there. The runs
+used floppy commit `2c733f2ebc`, env file `FLOPPY_LIVE_ENV_FILE=$PWD/.env`
+only (the vLLM's `FLOPPY_BASE_URL` and `FLOPPY_API_KEY`, and
+`TYPESAFE_API_KEY`; no `FLOPPY_STREAM`, so no call streamed; no speech or
+voice backend), `FLOPPY_LIVE_MODEL=Qwen/Qwen3.8-Flash-Next`, `cargo test
+-p floppy-tests --locked --test floppy_live -- --ignored --nocapture
+--test-threads=1` (468 s). The diagnosis runs after it went through a
+local relay that saved each request and reply body (no headers).
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `generate_service` `live_generate_through_an_env_file` | pass | strict schema through the forced call, `generate.result` (27 s) |
+| `floppy_live` `live_cascade` | pass | |
+| `floppy_live` `live_choices` | pass | |
+| `floppy_live` `live_chat` | fail | reasoning answered through the forced call ("Hi Gabe! Hello! It's nice to meet you.") and the turn completed, but speaking failed `Speech encoding failed: the backend is not configured.`, so no `bot.ability.speaking.output` came within 6 minutes |
+| `floppy_live` `live_identity` | fail | turn 1's reasoning failed `schema-mismatch`: the call's arguments did not satisfy the dispatch schema (the server does not constrain decoding, so `strict` is advisory there; the arguments were not saved). Three reruns completed both turns and then waited the full 6 minutes for speaking's output, as in `live_chat` |
+| `floppy_live` `live_conversation` | fail | `4 completed, 0 failed`: turn 3 answered "pong" and turn 4 recalled "green" (both through reasoning), but no behavior was learned by turn 2 |
+
+Why `live_conversation` learned nothing: reflection selected
+`bot.behavior.create` on turn 2, and its revision failed
+`error.execution` before the builder made a model call. Since
+`52d00a84af`, `floppy_live` lays out a scratch copy of `bots/floppy` and
+`abilities` only, so reflection's `<invoke src="../../bots/builder/builder.scx">`
+names a document that isn't there. That is outside D112 and was not
+changed. With a local, uncommitted edit that copies `bots/builder` too, the
+same test (684 s) learned `PingPongResponder` ACTIVE on turn 2 through the
+builder's `topology_plan` and `scxml_draft` forced calls (three of its
+nine author calls stopped at the 8192-token bound, `length`), and
+autonomy handled turns 3 and 4. But the drafted behavior answered "pong"
+to turn 4's question too, so the test failed its "green" assertion: the
+model's draft, not the transport.
+
+Across these runs the server sometimes ignored the forced `tool_choice` on
+reflection's select call and answered in prose with no tool call (for
+example "Empty selection. No clear repeated pattern..."). That reply is
+`malformed` (`Reflection select failed (malformed)`), as D112 says; the
+turn still completes.
+
+## 2026-10-16, the bot under its environment (D102 to D111), model `gabe-codex-1/gpt-6-luna`
+
+The bot now runs as a participant of `environments/room/room.scx` (the
+room logs its events; `--fuel 9223372036854775807`, D111). Env files
+`FLOPPY_LIVE_ENV_FILE=$PWD/.env:$PWD/.env.cpa` (the CPA gateway's
+`FLOPPY_BASE_URL` and `FLOPPY_API_KEY` from `.env.cpa`, `TYPESAFE_API_KEY`
+from `.env`; no vLLM call: `.env.cpa` overrides both of `.env`'s model
+variables), `FLOPPY_LIVE_MODEL=gabe-codex-1/gpt-6-luna`, `cargo test
+--locked -p floppy-tests --test floppy_live -- --ignored --test-threads 1`
+(79 s in all) and `--test environment_live -- --ignored`.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_cascade` | fail | the bot activated in the room, autonomy and intuition left the turn unhandled (intuition `abstained (declined)` through TypeSafe), and reasoning failed `the reasoning failed (status)`: the CPA gateway answered 502 (a direct request to its `/models` and `/chat/completions` answered `502`, `error code: 502`, at the time of the run) |
+| `floppy_live` `live_chat`, `live_choices`, `live_identity` | fail | the same 502 at reasoning |
+| `floppy_live` `live_conversation` | fail | `0 completed, 4 failed`: the same 502 |
+| `environment_live` `live_two_participants` | not run (precondition) | `the env files set no value for ["FLOPPY_SPEECH_BASE_URL", "FLOPPY_SPEECH_API_KEY", "FLOPPY_VOICE_BASE_URL", "FLOPPY_VOICE_API_KEY"]`: no speech or voice backend is configured in this checkout (`.env.gemini` and `.env.local` are gone), and without voice detection the listening hands over no product (D98) |
+
+Nothing reached a model, so these runs prove only that the bot activates
+and takes its turns under the room against live TypeSafe; the live
+proofs wait for the gateway and for a speech and a voice backend.
+
+A rerun later the same day, after the gateway was reported back up,
+failed the same way: five tests in 78 s, each turn ending `the reasoning
+failed (status)`, and direct requests to the gateway's `/models` and
+`/chat/completions` just before it still answered `502`. The failures
+are the backend's, not floppy's (the requests never got a model's
+answer), so a run at the pre-environment commit `1a60144e3a` would meet
+the same 502 and was not made.
+
+## 2026-10-12, `live_conversation` with the per-backend streaming switch and the builder's token bound (D101)
+
+Streaming is set per backend (`FLOPPY_STREAM`, unset by default), an
+inactivity bound arms only on a streamed reply's first progress, and the
+builder's design and author calls carry `max_completion_tokens` 8192.
+`cargo test -p floppy-tests --locked --test floppy_live -- --ignored
+--test-threads=1 live_conversation`, transcripts read from
+`target/floppy-live/live_conversation.txt`.
+
+| Run | Backend | Streaming | Turns 1-4 | Result |
+| --- | --- | --- | --- | --- |
+| switch CPA | CPA gateway, `gabe-codex-1/gpt-6-luna` (`.env:.env.cpa`) | off (unset) | turn 2 created `ExactPingReply` ACTIVE; turn 3 "pong" from autonomy; turn 4 "Your favorite color is green." | pass (54 s); no call streamed, no bound fired |
+| switch local 1 | vLLM, `Qwen/Qwen3.8-Flash-Next` (`.env` and `FLOPPY_STREAM=true`) | on | turn 1 reflection created a behavior for the favorite color and turn 3 one for ping/pong; every author generation (four) failed `truncated` at 8192 tokens, so both builds ended `no-progress`; turn 3 "pong" (reasoning), turn 4 "Your favorite color is green!" | fails the behavior assertion (1833 s); no stage hit an inactivity bound |
+| switch local 2 | the same, through the logging relay | on | reflection selected nothing on turns 1 and 2; turn 3 "pong" (reasoning) and a create accepted ACTIVE (its author reply 14.7 thousand characters of reasoning and 1.7 thousand of content, under the bound); turn 4 "Your favorite color is green, Gabe!" | fails the behavior assertion (234 s: learned on turn 3, not 2); all 10 calls streamed, longest gap 2.9 s, longest wait for the first chunk 4.8 s |
+
+On the vLLM the behavior assertion depends on the model's choices, as in
+the runs below (local 2 and 3 failed it too). The token bound turned run 1's
+author generations into failures of about 30 thousand characters of reasoning
+each instead of replies that ran to the backstop; whether any of them would
+have answered is not known (no relay ran then). The answered author replies
+logged on this backend so far reasoned at most 14.7 thousand characters.
+
+## 2026-10-12, `live_conversation` with streamed model calls bounded by inactivity (D101)
+
+The runs used floppy with scxml.rs's `outbound-http.send` (subtree pull
+`33ee9dc2`): reasoning, reflection's select and the builder's generations
+stream their replies, and each stage's bound is one of inactivity with a
+backstop. A local relay passed each response through as it arrived and
+logged each chunk's arrival time.
+
+On the CPA gateway (`gabe-codex-1/gpt-6-luna`, `.env:.env.cpa`), a streamed
+request is answered with `: ping` keep-alive comments every 20 s and no
+content (also without a schema, without `reasoning_effort`, with
+`stream_options`, and for `gabe-codex-1/gpt-5.6-sol`); the one run there
+(`stream 1`) counted those bytes as progress, so reasoning ran to the 240 s
+backstop and the bot rebooted. The generate service now counts only `data:`
+events as progress. The other runs used the maintainer's vLLM (`.env`
+only, `Qwen/Qwen3.8-Flash-Next`), which streams at once.
+
+| Run | Backend | Bounds | Turns 1-4 | Longest gap between chunks | Longest wait for the first chunk | Note |
+| --- | --- | --- | --- | --- | --- | --- |
+| stream 1 | CPA gateway | inactivity 60 s (counting bytes), stage backstop 240 s | turn 1 rebooted at the backstop | 20 s (pings only) | - | |
+| local 1 | vLLM | stage 60 s / 240 s, revising 60 s / 600 s | empty outputs on turns 1-3; turn 3's create authored one draft that streamed for 555 s | 4.7 s | 4.0 s | the test's 10 min wait for reflection ran out first |
+| local 2 | vLLM | the same | turn 3 "pong" (reasoning), turn 4 "Your favorite color is green!" | 4.3 s | 2.4 s | reflection selected nothing: fails the behavior assertion |
+| local 3 | vLLM | stage 30 s / 240 s, revising 150 s / 600 s | turn 3 "pong", turn 4 "Your favorite color is green!"; the turn 2 create and turn 3 change ran to the 600 s revising backstop while still streaming, the turn 4 change was accepted ACTIVE | 6.2 s | 4.3 s | no stage timed out without progress; fails the behavior assertion (learned on turn 4, not 2) |
+
+No reasoning stage hit its inactivity bound in the vLLM runs (33 calls).
+The local model writes very long replies (an author generation of 814 KB
+over 548 s), so its builds outlast fixed totals while never pausing; the
+backstops were raised to 1200 s (a builder generation) and 1800 s (a
+revision) after these runs, and `bot.activate` sets the stage's and the
+revision's bounds per run.
+
+## 2026-10-12, `live_conversation` learning the ping/pong behavior (D100, D101, D96), model `gabe-codex-1/gpt-6-luna`
+
+The same relay, now logging each call's start and end. Two measuring runs
+had both bounds raised to 600 s, to see the calls whole; the two final
+runs used the shipped bounds (120 s). Times are from each run's first
+model call.
+
+| Run | Result | Reasoning calls | Revision (select's end to the last draft's end) | Turn 3 | Turn 4 |
+| --- | --- | --- | --- | --- | --- |
+| measure 1 | fail ("green") | 1.9 to 4.2 s, and 113.1 s on turn 1 | 38.6 s: plan 10.7 s, drafts 9.6, 8.7, 8.5 s | `ExactPingPong` answered "pong" | `ExactPingPong` answered "pong" again: it tested whether any inbound message in `messages` was "ping" |
+| measure 2 | pass | 2.3 to 2.7 s | 26.9 s: plan 6.2 s, drafts 9.7, 10.6 s | `PingPongExactReply` answered "pong" | the behavior was unhandled; reasoning: "Your favorite color is green." |
+| final 1 | pass | 2.2 to 16.4 s | 28.2 s: plan 7.1 s, drafts 10.6, 10.1 s | `ExactPingPong` answered "pong" | unhandled; reasoning: "Your favorite color is green." |
+| final 2 | pass | 2.1 to 2.5 s | 17.4 s: plan 7.8 s, draft 9.4 s | `ExactPingPong` answered "pong" | unhandled; reasoning: "Your favorite color is green." |
+
+Every run's reflection selected `bot.behavior.create` on turn 2 and stored
+the behavior ACTIVE under `bot.ability.conversation.output` (its select
+offered only create: the inventory was empty, D100), and autonomy ran it
+on turn 3: the D96 contract held live. Measure 1's 113 s call would have
+timed out the 30 s stage and rebooted the bot, one revision outlasted the
+30 s bound and another came within 2 s of it (D101). After
+measure 1 the turn behavior contract names `parent.data` as the message a
+conversation turn answers (D96); both final runs' behaviors left turn 4
+unhandled.
+
+## 2026-10-12, `live_conversation` on `main` and on `fix/e2e-live-findings`, model `gabe-codex-1/gpt-6-luna`
+
+Each run went through a local logging relay in front of the CPA gateway
+(an extra env file set `FLOPPY_BASE_URL` to it; it logged request and
+response bodies, never headers), so every reasoning and reflection prompt
+was read. No speech backend was configured, so each reply's speaking
+failed ("the backend is not configured"), as expected.
+
+| Run | Commit | Turn 4 answer | Behavior learned by turn 2 | Episodes recalled by reflection | Note |
+| --- | --- | --- | --- | --- | --- |
+| main 1 | `2ddb8968` | "I don't know yet" | no (selected nothing every turn) | 1, 3, 5, 7 | turn 4's prompt held "I'll remember that your favorite color is green" twice in its episodes |
+| main 2 | `2ddb8968` | "You told me your favorite color is green." | no (`bot.behavior.create` on turn 3, revision timed out at 30 s) | 1, 3, 5, 6 | |
+| branch 1 | `80f85c4f` | none: reasoning timed out at 30 s and the body rebooted | no (turn 2 selected `bot.behavior.break` of an unknown `PingPong` and failed) | 0, 1, 1 | the failed reflection stored no episode, so turn 3 recalled only turn 1's; turn 4's reply, which came after the hop, said "I don't know your favorite color yet" because "the prior response only claimed green without evidence" |
+| fixed 1 | D99 and D97 amended | "Your favorite color is green." | no (`bot.behavior.create`; the revision timed out at 30 s) | 0, 1, 2, 3 | test fails on the new behavior assertion |
+| fixed 2 | D99 and D97 amended | "Your favorite color is green." | no (`bot.behavior.break` of an unknown `PingPong` on turns 2 and 3, both failed) | 0, 1, 2, 3 | the failed turns' episodes were kept; test fails on the new behavior assertion |
+
+The earlier branch run's "I don't know yet" was not a regression of D96
+to D98: `main` answers the same way. Reasoning's episodes (reflection's
+since D97, the same shape as reasoning's before) carry only the bot's own
+selections, and the conversation's history, which the conversation hands
+reasoning in `messages`, rendered as `<value count="N" />` only (D99), so
+the model saw its own claim "I'll remember that your favorite color is
+green" and nothing the user said. With D99 both runs answered from the
+history. Learning the ping/pong request stays model-dependent: reflection
+selected nothing, selected a break of a behavior the inventory does not
+hold, or selected a create whose revision outlasted `revising_timeout_ms`
+(30 s), in every run here.
 
 ## 2026-10-12, the whole bot over four turns, model `gabe-codex-1/gpt-6-luna`
 
@@ -61,14 +566,25 @@ SQLite, reflection with the builder, routines, speaking on Gemini):
    'bot.ability.communication.input'` while the turn's stimulus is
    `bot.ability.conversation.output`. Reasoning answered "pong", and
    reflection then broke the behavior ("the inventory trigger is
-   conversation output, and it has not been used").
+   conversation output, and it has not been used"). The turn behavior
+   contract had told the builder that `input` holds the stimulus;
+   decision D96 makes it name the behavior's triggers and its actual
+   input, after this run.
 4. "What is my favorite color?" Reasoning recalled memory and answered
    "Your favorite color is green."
 
 Each turn the listening heard the bot's own speech and failed at voice
-detection (no LocalAI), as on 2026-10-11. Reflection's recalled episode
+detection (no LocalAI), as on 2026-10-11. Decision D98 (after this run,
+not rerun live) fixes two of these: speaking's encoding bound is 30 s
+(floppy's side of an utterance measured 0.06 to 0.17 s against a fake
+backend, so the 5 s went to Gemini's unstreamed synthesis), and the bot's own sound now names its source,
+so its product is withheld instead of scored as an outside sound. Voice
+detection still runs on it and fails without a voice backend, by design.
+Reflection's recalled episode
 count grew by two per turn (1, 3, 5, 7), since reasoning and reflection
-both insert a `cognitive_episode` row.
+both insert a `cognitive_episode` row. Decision D97 fixed it: reflection alone stores
+the turn's episode, and `a_reasoned_turn_is_recalled_by_the_next` pins one
+episode per turn on the fake backends.
 
 ## 2026-10-11, speaking and speech decoding on the Gemini API (decision D94)
 

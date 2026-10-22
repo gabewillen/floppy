@@ -229,3 +229,143 @@ fn the_readme_states_every_timeout_and_bound_the_documents_ship() {
         }
     }
 }
+
+/// One `<data>` of a document, as milliseconds.
+fn millis(path: &str, id: &str) -> u64 {
+    data(&read(Path::new(path)))
+        .get(id)
+        .unwrap_or_else(|| panic!("{path}: a {id} <data>"))
+        .parse()
+        .unwrap_or_else(|_| panic!("{path}: {id} is a whole number of milliseconds"))
+}
+
+/// The time bounds the bot's `bounds` param may set (decision D101): its
+/// `*_ms` members are exactly the cognition's stage bounds and reflection's
+/// revising bounds, each a `<data>` of its document that the document's
+/// script reads from `bounds` first.
+const ACTIVATION_BOUNDS: [(&str, &str); 4] = [
+    (
+        "abilities/cognition/cognition.scx",
+        "child_operation_timeout_ms",
+    ),
+    (
+        "abilities/cognition/cognition.scx",
+        "child_operation_ceiling_ms",
+    ),
+    ("abilities/reflection/reflection.scx", "revising_timeout_ms"),
+    ("abilities/reflection/reflection.scx", "revising_ceiling_ms"),
+];
+
+#[test]
+fn the_bounds_param_sets_exactly_the_bounds_the_documents_declare() {
+    for (document, id) in ACTIVATION_BOUNDS {
+        assert!(
+            data(&read(Path::new(document))).contains_key(id),
+            "{document} declares <data id=\"{id}\">"
+        );
+        let script = document.replace(".scx", ".js");
+        assert!(
+            read(Path::new(&script)).contains(&format!("bounds.{id}")),
+            "{script} reads {id} from bounds"
+        );
+    }
+    assert!(
+        read(Path::new("bots/floppy/floppy.scx"))
+            .contains(r#"<param name="bounds" expr="bounds"/>"#),
+        "the body passes its bounds on to the cognition"
+    );
+}
+
+/// Each inactivity bound has a backstop above it, and a turn's stages fit
+/// inside the body's turn bound, so the turn's bound never cuts off a stage
+/// that is still within its own (decision D101).
+#[test]
+fn every_inactivity_bound_has_a_backstop_and_the_stages_nest_in_the_turn() {
+    for (document, inactivity, ceiling) in [
+        (
+            "abilities/cognition/cognition.scx",
+            "child_operation_timeout_ms",
+            "child_operation_ceiling_ms",
+        ),
+        (
+            "abilities/reflection/reflection.scx",
+            "select_timeout_ms",
+            "select_ceiling_ms",
+        ),
+        (
+            "abilities/reflection/reflection.scx",
+            "revising_timeout_ms",
+            "revising_ceiling_ms",
+        ),
+        (
+            "bots/builder/builder.scx",
+            "generate_timeout_ms",
+            "generate_ceiling_ms",
+        ),
+    ] {
+        assert!(
+            millis(document, inactivity) < millis(document, ceiling),
+            "{document}: {inactivity} is below its backstop {ceiling}"
+        );
+    }
+    // The stages before reasoning answer inside the stage's inactivity bound.
+    let stage = millis(
+        "abilities/cognition/cognition.scx",
+        "child_operation_timeout_ms",
+    );
+    assert!(millis("abilities/autonomy/autonomy.scx", "memory_timeout_ms") < stage);
+    assert!(millis("abilities/intuition/intuition.scx", "decision_timeout_ms") < stage);
+    // Autonomy's memory, the intuition's decision and reasoning's stage at
+    // its backstop, one after another, end before the body times the turn
+    // out.
+    let turn = millis("bots/floppy/floppy.scx", "processing_timeout_ms");
+    let cascade = millis("abilities/autonomy/autonomy.scx", "memory_timeout_ms")
+        + millis("abilities/intuition/intuition.scx", "decision_timeout_ms")
+        + millis(
+            "abilities/cognition/cognition.scx",
+            "child_operation_ceiling_ms",
+        );
+    assert!(
+        cascade < turn,
+        "the cascade ({cascade} ms) ends inside the turn ({turn} ms)"
+    );
+}
+
+/// Streaming is per backend (decision D101): every model call that is bounded
+/// by inactivity lets the run's `FLOPPY_STREAM` decide (the generate
+/// package's `stream` slot), and no document asks for a stream itself, so a
+/// run that does not set it streams nothing (the default README.md states).
+#[test]
+fn the_runs_stream_setting_alone_decides_whether_a_call_streams() {
+    let manifest = read(Path::new("services/generate/package/generate.service.json"));
+    assert!(
+        manifest.contains(r#""env-slots": ["apikey", "baseurl", "stream"]"#),
+        "{manifest}"
+    );
+    for document in [
+        "abilities/reasoning/reasoning.scx",
+        "abilities/reflection/reflection.scx",
+        "bots/builder/builder.scx",
+    ] {
+        let text = read(Path::new(document));
+        let invokes = text
+            .matches(r#"type="https://github.com/stateforward/floppy/services/generate""#)
+            .count();
+        assert!(invokes > 0, "{document} calls the model");
+        assert_eq!(
+            text.matches(r#"env:stream="FLOPPY_STREAM""#).count(),
+            invokes,
+            "{document}: every model call lets the run decide"
+        );
+        assert!(
+            !text.contains(r#"<param name="stream""#),
+            "{document} never asks for a stream itself"
+        );
+    }
+    let readme = read(Path::new("README.md"));
+    assert!(
+        readme.contains("| `FLOPPY_STREAM` |")
+            && readme.contains("unset (the default), no call is streamed"),
+        "README.md states the default"
+    );
+}

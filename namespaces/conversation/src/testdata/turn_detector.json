@@ -1,0 +1,554 @@
+[
+ {
+  "name": "text_parts_are_stripped_and_joined",
+  "stimuli": [
+   {
+    "kind": "text",
+    "content": "  hello "
+   },
+   {
+    "kind": "text",
+    "content": "   "
+   },
+   {
+    "kind": "text",
+    "content": "world"
+   }
+  ],
+  "states": [
+   {
+    "audio": [],
+    "audio_channels": null,
+    "audio_sample_rate_hz": null,
+    "content": null,
+    "content_type": null,
+    "text_parts": [
+     "hello"
+    ]
+   },
+   {
+    "audio": [],
+    "audio_channels": null,
+    "audio_sample_rate_hz": null,
+    "content": null,
+    "content_type": null,
+    "text_parts": [
+     "hello"
+    ]
+   },
+   {
+    "audio": [],
+    "audio_channels": null,
+    "audio_sample_rate_hz": null,
+    "content": null,
+    "content_type": null,
+    "text_parts": [
+     "hello",
+     "world"
+    ]
+   }
+  ],
+  "closed": {
+   "turn": {
+    "audio": [],
+    "channels": null,
+    "content": "hello world",
+    "content_type": "text/plain",
+    "conversation_ref": "relationship-x",
+    "participant_ref": "alice",
+    "sample_rate_hz": null,
+    "self_participant_ref": "alice",
+    "source_participant_ref": "alice",
+    "text": "hello world",
+    "turn_ref": "input-1:turn:alice"
+   }
+  }
+ },
+ {
+  "name": "audio_takes_the_first_rate_and_channels",
+  "stimuli": [
+   {
+    "kind": "audio",
+    "content": "a.pcm",
+    "sample_rate_hz": 16000
+   },
+   {
+    "kind": "audio",
+    "content": "b.pcm",
+    "sample_rate_hz": 8000,
+    "channels": 2
+   },
+   {
+    "kind": "audio",
+    "content": ""
+   }
+  ],
+  "states": [
+   {
+    "audio": [
+     "a.pcm"
+    ],
+    "audio_channels": null,
+    "audio_sample_rate_hz": 16000,
+    "content": null,
+    "content_type": null,
+    "text_parts": []
+   },
+   {
+    "audio": [
+     "a.pcm",
+     "b.pcm"
+    ],
+    "audio_channels": 2,
+    "audio_sample_rate_hz": 16000,
+    "content": null,
+    "content_type": null,
+    "text_parts": []
+   },
+   {
+    "audio": [
+     "a.pcm",
+     "b.pcm"
+    ],
+    "audio_channels": 2,
+    "audio_sample_rate_hz": 16000,
+    "content": null,
+    "content_type": null,
+    "text_parts": []
+   }
+  ],
+  "closed": {
+   "turn": {
+    "audio": [
+     "a.pcm",
+     "b.pcm"
+    ],
+    "channels": 2,
+    "content": [
+     "a.pcm",
+     "b.pcm"
+    ],
+    "content_type": "audio/pcm",
+    "conversation_ref": "relationship-x",
+    "participant_ref": "alice",
+    "sample_rate_hz": 16000,
+    "self_participant_ref": "alice",
+    "source_participant_ref": "alice",
+    "text": "",
+    "turn_ref": "input-1:turn:alice"
+   }
+  }
+ },
+ {
+  "name": "content_replaces_content",
+  "stimuli": [
+   {
+    "kind": "content",
+    "content": {
+     "a": 1
+    },
+    "content_type": "application/json"
+   },
+   {
+    "kind": "content",
+    "content": [
+     1
+    ],
+    "content_type": "application/x"
+   }
+  ],
+  "states": [
+   {
+    "audio": [],
+    "audio_channels": null,
+    "audio_sample_rate_hz": null,
+    "content": {
+     "a": 1
+    },
+    "content_type": "application/json",
+    "text_parts": []
+   },
+   {
+    "audio": [],
+    "audio_channels": null,
+    "audio_sample_rate_hz": null,
+    "content": [
+     1
+    ],
+    "content_type": "application/x",
+    "text_parts": []
+   }
+  ],
+  "closed": {
+   "turn": {
+    "audio": [],
+    "channels": null,
+    "content": [
+     1
+    ],
+    "content_type": "application/x",
+    "conversation_ref": "relationship-x",
+    "participant_ref": "alice",
+    "sample_rate_hz": null,
+    "self_participant_ref": "alice",
+    "source_participant_ref": "alice",
+    "text": "",
+    "turn_ref": "input-1:turn:alice"
+   }
+  }
+ },
+ {
+  "name": "an_image_is_no_content",
+  "stimuli": [
+   {
+    "kind": "image",
+    "content": "media/i.png"
+   }
+  ],
+  "states": [
+   {
+    "audio": [],
+    "audio_channels": null,
+    "audio_sample_rate_hz": null,
+    "content": null,
+    "content_type": null,
+    "text_parts": []
+   }
+  ],
+  "closed": {
+   "failure": {
+    "conversation_ref": "relationship-x",
+    "message": "Turn closed with neither text, audio, nor modality-neutral content.",
+    "participant_ref": "alice",
+    "source_participant_ref": "alice",
+    "stage": "turn",
+    "turn_ref": "input-1:turn:alice"
+   }
+  }
+ },
+ {
+  "name": "an_event_is_event_content",
+  "stimuli": [
+   {
+    "kind": "event",
+    "event": "bot.x",
+    "payload": {
+     "k": 1
+    }
+   },
+   {
+    "kind": "event",
+    "event": "bot.y"
+   }
+  ],
+  "states": [
+   {
+    "audio": [],
+    "audio_channels": null,
+    "audio_sample_rate_hz": null,
+    "content": {
+     "event": "bot.x",
+     "payload": {
+      "k": 1
+     }
+    },
+    "content_type": "application/event",
+    "text_parts": []
+   },
+   {
+    "audio": [],
+    "audio_channels": null,
+    "audio_sample_rate_hz": null,
+    "content": {
+     "event": "bot.y",
+     "payload": {}
+    },
+    "content_type": "application/event",
+    "text_parts": []
+   }
+  ],
+  "closed": {
+   "turn": {
+    "audio": [],
+    "channels": null,
+    "content": {
+     "event": "bot.y",
+     "payload": {}
+    },
+    "content_type": "application/event",
+    "conversation_ref": "relationship-x",
+    "participant_ref": "alice",
+    "sample_rate_hz": null,
+    "self_participant_ref": "alice",
+    "source_participant_ref": "alice",
+    "text": "",
+    "turn_ref": "input-1:turn:alice"
+   }
+  }
+ },
+ {
+  "name": "nothing_closes_as_a_failure",
+  "stimuli": [
+   {
+    "kind": "text",
+    "content": "  "
+   }
+  ],
+  "states": [
+   {
+    "audio": [],
+    "audio_channels": null,
+    "audio_sample_rate_hz": null,
+    "content": null,
+    "content_type": null,
+    "text_parts": []
+   }
+  ],
+  "closed": {
+   "failure": {
+    "conversation_ref": "relationship-x",
+    "message": "Turn closed with neither text, audio, nor modality-neutral content.",
+    "participant_ref": "alice",
+    "source_participant_ref": "alice",
+    "stage": "turn",
+    "turn_ref": "input-1:turn:alice"
+   }
+  }
+ },
+ {
+  "name": "text_and_audio_close_as_a_failure",
+  "stimuli": [
+   {
+    "kind": "text",
+    "content": "hi"
+   },
+   {
+    "kind": "audio",
+    "content": "a.pcm",
+    "sample_rate_hz": 16000,
+    "channels": 1
+   }
+  ],
+  "states": [
+   {
+    "audio": [],
+    "audio_channels": null,
+    "audio_sample_rate_hz": null,
+    "content": null,
+    "content_type": null,
+    "text_parts": [
+     "hi"
+    ]
+   },
+   {
+    "audio": [
+     "a.pcm"
+    ],
+    "audio_channels": 1,
+    "audio_sample_rate_hz": 16000,
+    "content": null,
+    "content_type": null,
+    "text_parts": [
+     "hi"
+    ]
+   }
+  ],
+  "closed": {
+   "failure": {
+    "conversation_ref": "relationship-x",
+    "message": "Turn product cannot contain both text and audio.",
+    "participant_ref": "alice",
+    "source_participant_ref": "alice",
+    "stage": "turn",
+    "turn_ref": "input-1:turn:alice"
+   }
+  }
+ },
+ {
+  "name": "no_stimulus_leaves_the_turn",
+  "stimuli": [
+   null,
+   null
+  ],
+  "states": [
+   {
+    "audio": [],
+    "audio_channels": null,
+    "audio_sample_rate_hz": null,
+    "content": null,
+    "content_type": null,
+    "text_parts": []
+   },
+   {
+    "audio": [],
+    "audio_channels": null,
+    "audio_sample_rate_hz": null,
+    "content": null,
+    "content_type": null,
+    "text_parts": []
+   }
+  ],
+  "closed": {
+   "failure": {
+    "conversation_ref": "relationship-x",
+    "message": "Turn closed with neither text, audio, nor modality-neutral content.",
+    "participant_ref": "alice",
+    "source_participant_ref": "alice",
+    "stage": "turn",
+    "turn_ref": "input-1:turn:alice"
+   }
+  }
+ },
+ {
+  "name": "text_wins_over_content",
+  "stimuli": [
+   {
+    "kind": "content",
+    "content": "x",
+    "content_type": "text/x"
+   },
+   {
+    "kind": "text",
+    "content": "words"
+   }
+  ],
+  "states": [
+   {
+    "audio": [],
+    "audio_channels": null,
+    "audio_sample_rate_hz": null,
+    "content": "x",
+    "content_type": "text/x",
+    "text_parts": []
+   },
+   {
+    "audio": [],
+    "audio_channels": null,
+    "audio_sample_rate_hz": null,
+    "content": "x",
+    "content_type": "text/x",
+    "text_parts": [
+     "words"
+    ]
+   }
+  ],
+  "closed": {
+   "turn": {
+    "audio": [],
+    "channels": null,
+    "content": "words",
+    "content_type": "text/plain",
+    "conversation_ref": "relationship-x",
+    "participant_ref": "alice",
+    "sample_rate_hz": null,
+    "self_participant_ref": "alice",
+    "source_participant_ref": "alice",
+    "text": "words",
+    "turn_ref": "input-1:turn:alice"
+   }
+  }
+ },
+ {
+  "name": "audio_wins_over_content",
+  "stimuli": [
+   {
+    "kind": "content",
+    "content": "x",
+    "content_type": "text/x"
+   },
+   {
+    "kind": "audio",
+    "content": "a.pcm",
+    "sample_rate_hz": null,
+    "channels": 1
+   }
+  ],
+  "states": [
+   {
+    "audio": [],
+    "audio_channels": null,
+    "audio_sample_rate_hz": null,
+    "content": "x",
+    "content_type": "text/x",
+    "text_parts": []
+   },
+   {
+    "audio": [
+     "a.pcm"
+    ],
+    "audio_channels": 1,
+    "audio_sample_rate_hz": null,
+    "content": "x",
+    "content_type": "text/x",
+    "text_parts": []
+   }
+  ],
+  "closed": {
+   "turn": {
+    "audio": [
+     "a.pcm"
+    ],
+    "channels": 1,
+    "content": [
+     "a.pcm"
+    ],
+    "content_type": "audio/pcm",
+    "conversation_ref": "relationship-x",
+    "participant_ref": "alice",
+    "sample_rate_hz": null,
+    "self_participant_ref": "alice",
+    "source_participant_ref": "alice",
+    "text": "",
+    "turn_ref": "input-1:turn:alice"
+   }
+  }
+ },
+ {
+  "name": "unknown_kinds_are_ignored",
+  "stimuli": [
+   {
+    "kind": "smell",
+    "content": "x"
+   },
+   {
+    "kind": "text",
+    "content": "ok"
+   }
+  ],
+  "states": [
+   {
+    "audio": [],
+    "audio_channels": null,
+    "audio_sample_rate_hz": null,
+    "content": null,
+    "content_type": null,
+    "text_parts": []
+   },
+   {
+    "audio": [],
+    "audio_channels": null,
+    "audio_sample_rate_hz": null,
+    "content": null,
+    "content_type": null,
+    "text_parts": [
+     "ok"
+    ]
+   }
+  ],
+  "closed": {
+   "turn": {
+    "audio": [],
+    "channels": null,
+    "content": "ok",
+    "content_type": "text/plain",
+    "conversation_ref": "relationship-x",
+    "participant_ref": "alice",
+    "sample_rate_hz": null,
+    "self_participant_ref": "alice",
+    "source_participant_ref": "alice",
+    "text": "ok",
+    "turn_ref": "input-1:turn:alice"
+   }
+  }
+ }
+]

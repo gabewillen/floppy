@@ -138,7 +138,7 @@ pub use snapshot::{
     CheckpointSnapshot, CheckpointSnapshotFailure, SnapshotExport, SnapshotFailure, SnapshotPoints,
     SnapshotRequest,
 };
-pub(crate) use snapshot::{ExtensionImage, ExtensionState, extension_document};
+pub(crate) use snapshot::{ExtensionImage, ExtensionState, extension_document, target_document};
 
 use crate::basichttp_types::{HttpRequest, HttpResponse};
 use crate::{
@@ -268,7 +268,11 @@ pub trait SessionEmbedder {
     fn document(&self, kind: DocumentKind, uri: &str) -> Option<EmbeddedDocument>;
 
     /// The external-script capability of one new session (root or child).
-    fn scripts(&self) -> MachineScripts;
+    /// `base_uri` is the base URI of the document the session runs
+    /// ([`EmbeddedDocument::base_uri`], also for an inline `<content>`
+    /// session below one), `None` for the host's: a relative `<script src>`
+    /// of that document names a script relative to it (RFC 3986 §5.1).
+    fn scripts(&self, base_uri: Option<&str>) -> MachineScripts;
 }
 
 /// One external event the embedder injects into the root session (a batch
@@ -410,8 +414,9 @@ pub struct SessionOutcome {
 pub enum RunFailure {
     /// The shared command budget was exhausted.
     CommandBudget,
-    /// A machine call stopped at its per-call command bound without
-    /// reaching a stable configuration.
+    /// A machine call of the root session stopped at its per-call command
+    /// bound without reaching a stable configuration (an invoked session's
+    /// stop there ends only that session, SCXML 6.4).
     CommandBound,
     /// A machine session failed; the closed WIT code label and the
     /// component's bounded static detail.
@@ -463,7 +468,7 @@ impl std::fmt::Display for SessionHostError {
         match &self.failure {
             RunFailure::CommandBudget => formatter.write_str("the run exhausted its command budget"),
             RunFailure::CommandBound => formatter.write_str(
-                "a machine call stopped at its per-call command bound before a stable configuration",
+                "a root machine call stopped at its per-call command bound before a stable configuration",
             ),
             RunFailure::Machine { code, .. } => write!(formatter, "machine session failed: {code}"),
             RunFailure::Harness { code, message } => write!(formatter, "[{code}] {message}"),
@@ -549,15 +554,16 @@ pub(crate) struct HostCore {
     pub(crate) invoke_limits: InvokeLimits,
 }
 
-/// One HTTP response an invoked service received, as a live session records
-/// it ([`InputRecord::HttpResponse`]).
+/// One answer an invoked service's request received, as a live session
+/// records it ([`InputRecord::HttpResponse`], [`InputRecord::HttpResponsePart`]).
 pub(crate) struct RecordedResponse {
     /// The invoke ids from the root to the invocation.
     pub(crate) path: Vec<String>,
     /// The request's number within its invocation.
     pub(crate) request: u64,
-    /// The response, or the transport's failure.
-    pub(crate) outcome: Result<crate::ExtensionHttpResponse, crate::ExtensionHttpFailure>,
+    /// A `fetch`'s response or one part of a `send`'s, or the transport's
+    /// failure.
+    pub(crate) answer: crate::ExtensionHttpAnswer,
 }
 
 /// A started invocation and the report of its start, or the component's

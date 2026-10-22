@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- intuition-5: an event several targets offer, selected without a target, is rejected by the route. -->
+<!-- intuition-5: an event several sessions offer names no target, so it reaches none; the turn is still handled. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="intuition" type="scxml" src="../../../intuition.scx">
@@ -14,7 +14,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.intuition" cond="_event.data.turn === 8 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === &quot;Selection rejected: Processing selected unavailable event: tool.go.&quot; &amp;&amp; typeof _event.data.tuner === 'object' &amp;&amp; _event.data.failed === true &amp;&amp; _event.data.tuner.n === 1" target="step1"/>
+    <transition event="done.invoke.intuition" cond="_event.data.turn === 8 &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.reason === &quot;none&quot; &amp;&amp; typeof _event.data.confidence_tuner === 'object' &amp;&amp; _event.data.selected.length === 1 &amp;&amp; _event.data.selected[0].target === undefined" target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

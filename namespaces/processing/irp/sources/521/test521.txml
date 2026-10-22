@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!-- processing-3: with devices and focus, the focused device's events are offered under its reference's place in name order, tagged with its id. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing">
+<datamodel>
+  <data id="own" expr="[]"/>
+  <data id="offers" expr='{"zeta": [{"event": "z.go", "schema": {"type": "object"}}]}'/>
+  <data id="devices" expr='{"lamp": {"id": "room.lamp", "state": "off", "attributes": {}, "events": ["lamp.on"]}, "fan": {"id": "room.fan", "state": "off", "attributes": {}, "events": ["fan.on"]}}'/>
+  <data id="focus" expr="'lamp'"/>
+  <data id="choices" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <processing:collect_offered_events location="choices" choices="own" offers="offers" devices="devices" focus="focus"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="choices.map(function (c) { return c.event + '@' + c.target; }).join(',') === 'lamp.on@room.lamp,z.go@' + _sessionid + '.zeta' &amp;&amp; choices[0].schema.type === 'object'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

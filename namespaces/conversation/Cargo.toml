@@ -1,6 +1,6 @@
 [package]
 name = "floppy-conversation"
-description = "The `conversation` namespace: `<conversation:commit>`, one committed conversation message (sequence, model-safe content, provenance, relationship reference) and its relationship context reference, as a Wasm extension component"
+description = "The `conversation` namespace: the original's conversation module and its turn detector (`<conversation:message_for_turn>`, `<conversation:relationship_for_input>`, `<conversation:participant_for_source>`, `<conversation:fail_turn>`, `<conversation:detector_refs>`, `<conversation:new_track_ref>`, `<conversation:content_for_detector>`, `<conversation:complete_turn>`, `<conversation:ingest_content>`, `<conversation:on_end>`), as a Wasm extension component"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

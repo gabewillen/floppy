@@ -21,20 +21,22 @@
   they began. Input without targets shares the first relationship without
   targets (the ambient one). Other input takes the best scoring
   relationship, ties by session_ref: an ambient one whose participants
-  include a target scores the original's similarity_threshold (0.85); any other
+  include a target scores the original's similarity threshold (0.85); any other
   scores the lower of its source and target groups' match, in either
   direction (sources to sources and targets to targets, or swapped), the
   higher direction counting. Two groups match one to one, names equal and
-  embeddings at least similarity_threshold alike by cosine, refused when
-  another assignment comes within similarity_margin (0.05); the score is
-  the mean. With no match the input begins a relationship of its own:
-  context_ref is its relationship context reference, which
-  <conversation:commit keylocation> writes (the reference relationship_context_ref,
-  {"identity_groups":[...]}, the same in either direction), and session_ref
-  "relationship-" and that. A source becomes a participant once its
-  detector is ready and stops being one when its turn fails (a failed
-  remember drops the participants this input added), as the original keeps a
-  participant while it has a detector. The original also matches an embedding
+  embeddings at least the threshold alike by cosine, refused when another
+  assignment comes within the original's margin (0.05); the score is the
+  mean. With no match the input begins a relationship of its own:
+  context_ref is its relationship context reference (the original's
+  _stable_context_ref, {"identity_groups":[...]}, the same in either
+  direction), and session_ref "relationship-" and that. All of this is
+  <conversation:relationship_for_input>. A source becomes a participant
+  once its detector is ready (<conversation:participant_for_source>) and
+  stops being one when its turn fails (<conversation:fail_turn>); a failed
+  remember restores the participants the relationship had before the input
+  (the original's rollback to original_participants), as the original keeps
+  a participant while it has a detector. The original also matches an embedding
   source to an earlier participant's voice centroid; that inference is not
   ported, so each embedding is its own participant.
 
@@ -46,11 +48,11 @@
   context_ref, oldest first, at most 50, the original
   conversation_memory_recall_input), and as "remember", after them, with
   the input (kind conversation, the reference conversation_memory_insert_input)
-  as the original's Memory.to_json writes it: {content, content_type, source_ids,
-  target_ids} with sorted keys and compact separators, the identities in
-  the original's order without repeats (embedding components as Python floats),
-  arrays and objects in the content tagged collision-safe
-  (__stateforward_memory_content__ list and mapping). The recalled
+  as the original's Memory.to_json writes it (<memory:to_json>: {content,
+  content_type, source_ids, target_ids} with sorted keys and compact
+  separators, the identities in the original's order without repeats
+  (embedding components as Python floats), arrays and objects in the content
+  tagged collision-safe, __stateforward_memory_content__ list and mapping). The recalled
   memories are host-only (the original excludes them from the output) and are
   logged by count only, once remembered. Each is bounded by
   memory_timeout_ms (the original's 5 s); a memory failure or timeout answers
@@ -60,17 +62,17 @@
 
   Turns (the original Conversation's turn_detector stage): each input is
   one turn per source identity, in the original's identity order (names sorted,
-  then embeddings by their JSON), each exchanged with a turn detector
+  then embeddings by their JSON; <identity:sorted_identities>), each exchanged with a turn detector
   (abilities/turn_detector/turn_detector.scx) invoked as "turn_detector"
   for that participant: its participant_ref is the participant's track
-  (the name itself, or for an embedding "track-" and its unit vector as
+  (<conversation:new_track_ref>: the name itself, or for an embedding "track-" and its unit vector as
   JSON) and its conversation_ref the relationship's session_ref. Once it is ready
   (bot.ability.turn_detector.ready) the conversation sends it
   bot.ability.turn_detector.turn.start {conversation_ref, turn_ref,
   self_participant_ref, source_participant_ref, content} and
   bot.ability.turn_detector.turn.end; turn_ref is
   "input-<n>:turn:<track>", n counting this conversation's inputs. The
-  content is the original's _content_for_detector: text/plain text as a text
+  content is the original's _content_for_detector (<conversation:content_for_detector>): text/plain text as a text
   stimulus, audio/* content as an audio stimulus with its rate and
   channels, anything else as a content stimulus. Readiness and the turn
   are each bounded by the original's 5 s (turn_timeout_ms). A detector failure
@@ -78,7 +80,7 @@
   cannot take (an error.* here: a start its schema refuses) answers
   bot.ability.conversation.failed {stage: "turn_detector", message} and
   commits nothing. The turns' product is what is committed (the original
-  _complete_turn): the turns' texts joined by spaces as text/plain when
+  _complete_turn, <conversation:complete_turn>): the turns' texts joined by spaces as text/plain when
   any has text, each distinct text once (D79); else no content for audio;
   else the input's content. The committed provenance's turn_ref is the
   first turn's and its session_ref the relationship's; audio/* content is
@@ -98,7 +100,7 @@
   any state, answers bot.ability.conversation.snapshot.output
   {request_ref, detector_refs}: [session_ref, source] of every
   participant, ordered by relationship and then identity (the original
-  detector_refs; floppy invokes a detector per turn, so a participant
+  detector_refs, <conversation:detector_refs>; floppy invokes a detector per turn, so a participant
   stands for its detector).
 
   Output: every commit's product is bot.ability.conversation.output
@@ -106,57 +108,65 @@
   commit (an envelope {event, data}), and messages is the committed
   history in causal order. An inbound commit of text (string content,
   content_type text/*) hands it to the parent as a stimulus,
-  bot.ability.cognition.input {stimulus} (the product's envelope with
-  source "conversation", the original's text contribution handoff); every other
+  bot.ability.cognition.input {stimulus, participants} (the product's
+  envelope with source "conversation", the original's text contribution
+  handoff; participants as <conversation:turn_participants> stamps them
+  for the turn, the original's f6c4e08: its string source_ids and
+  target_ids, then whatever its parent's data carries); every other
   commit sends the product itself, history only.
 
   Readiness: the session's start sends bot.ability.offers
   {ability: "conversation", choices: []} to the parent; it offers nothing
   (the original's conversation input is not a tool event).
 
-  Commits: <conversation:commit> (the conversation namespace) builds each
-  committed message; the document appends it to history and the inbound
+  Commits: <conversation:complete_turn> builds each inbound message and
+  <conversation:message_for_turn> each outbound one (the original
+  _message_for_turn); the document appends it to history and the inbound
   ones' sequences to their relationship.
 
-  Bindings: the bot and conversation namespace packages and the memory ability's
-  sql service package (a run grants it its directory: scx run's dir option).
+  Bindings: the bot, conversation, identity and memory namespace packages and
+  the memory ability's sql service package (a run grants it its directory:
+  scx run's dir option).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       xmlns:identity="https://github.com/stateforward/floppy/namespaces/identity"
+       xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory"
        version="1.0" datamodel="ecmascript" name="conversation" initial="conversation">
   <datamodel>
     <!-- The original's 5 s bound on each memory operation. -->
     <data id="memory_timeout_ms" expr="5000"/>
     <!-- Turns: the original's 5 s turn detector bound, the inputs taken so far,
-         this input's sources in order, the one in hand, the completed
-         turns, the turn timer, and the turns' product to commit. -->
+         this input's sources in order, the one in hand, its track and the
+         stimulus that opens its turn, the completed turns, and the turn
+         timer. -->
     <data id="turn_timeout_ms" expr="5000"/>
     <data id="inputs" expr="0"/>
     <data id="turn_sources" expr="[]"/>
     <data id="turn_index" expr="0"/>
+    <data id="track_ref" expr="null"/>
+    <data id="turn_content" expr="null"/>
     <data id="turns" expr="[]"/>
     <data id="timer" expr="null"/>
-    <data id="turn_product" expr="null"/>
     <!-- Input that arrived while one was in hand ({input, parent}), in
          order. -->
     <data id="history" expr="[]"/>
     <!-- Relationships (the original _RelationshipProfile), in the order they
          began: {session_ref, context_ref, source_ids, target_ids,
-         participants, sequences}; the original's similarity threshold and
-         margin for matching embeddings; the input's own context_ref, the
-         relationship in hand, and the participants this input added. -->
+         participants, sequences}; the relationship in hand, its
+         participants before this input (the original's
+         original_participants), and the snapshot's detector references. -->
     <data id="relationships" expr="[]"/>
-    <data id="similarity_threshold" expr="0.85"/>
-    <data id="similarity_margin" expr="0.05"/>
-    <data id="context_ref" expr="null"/>
     <data id="relationship_index" expr="-1"/>
-    <data id="added" expr="[]"/>
+    <data id="participants" expr="[]"/>
+    <data id="detector_refs" expr="[]"/>
     <!-- The product's stimulus envelope, for the handoff. -->
     <data id="product" expr="null"/>
     <data id="parent" expr="null"/>
     <data id="input" expr="null"/>
+    <!-- The participants the turn's cognition handoff stamps. -->
+    <data id="turn_participants" expr="[]"/>
     <!-- The message in hand. -->
     <data id="message" expr="null"/>
     <!-- Memory: the database file (null: no memory) and the original's
@@ -164,12 +174,16 @@
          engines (SQLite and Postgres). A memory id is the next row count
          as 32 zero-padded digits (neither engine's randomness is unique
          across invocations in Wasm); JSON rows are told by their
-         content_format, oldest first by created_at, then memory_id. The
+         content_format, the 50 most recent by created_at,
+         then memory_id (the insertion order), read oldest first (the original's
+         recent_select). The
          count recalled, for the log. -->
     <data id="database" expr="null"/>
-    <data id="memory_select" expr="'SELECT content FROM bot_memory WHERE query_tags = ?1 AND context_ref = ?2 ORDER BY created_at, memory_id LIMIT 50'"/>
+    <data id="memory_select" expr="'SELECT content FROM (SELECT content, created_at, memory_id FROM bot_memory WHERE query_tags = ?1 AND context_ref = ?2 ORDER BY created_at DESC, memory_id DESC LIMIT 50) AS recent ORDER BY created_at, memory_id'"/>
     <data id="memory_insert" expr="'INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT substr(\'00000000000000000000000000000000\', 1, 32 - length(n)) || n FROM (SELECT CAST(COUNT(*) + 1 AS TEXT) AS n FROM bot_memory) AS c), ?1, ?2, NULL, ?3, ?4, ?5, ?6, ?7, ?8)'"/>
     <data id="recalled" expr="0"/>
+    <!-- The input as the original's Memory.to_json writes it, to remember. -->
+    <data id="memory_payload" expr="null"/>
   </datamodel>
   <script src="conversation.js"/>
 
@@ -182,12 +196,12 @@
     </onentry>
 
     <state id="inactive">
-      <transition event="bot.ability.conversation.routed_input" event:schema="schemas/bot.ability.conversation.routed_input.json"
+      <transition event="bot.ability.conversation.routed_input" event:schema="../schemas/bot.ability.conversation.routed_input.json"
                   target="running">
         <assign location="input" expr="_event.data.parent.data"/>
         <assign location="parent" expr="_event.data.parent"/>
       </transition>
-      <transition event="bot.ability.conversation.input" event:schema="schemas/bot.ability.conversation.input.json"
+      <transition event="bot.ability.conversation.input" event:schema="../schemas/bot.ability.conversation.input.json"
                   target="running">
         <assign location="input" expr="_event.data"/>
         <assign location="parent" expr="inputEnvelope()"/>
@@ -196,12 +210,12 @@
 
     <state id="active" initial="waiting">
       <state id="waiting">
-        <transition event="bot.ability.conversation.routed_input" event:schema="schemas/bot.ability.conversation.routed_input.json"
+        <transition event="bot.ability.conversation.routed_input" event:schema="../schemas/bot.ability.conversation.routed_input.json"
                     target="running">
           <assign location="input" expr="_event.data.parent.data"/>
           <assign location="parent" expr="_event.data.parent"/>
         </transition>
-        <transition event="bot.ability.conversation.input" event:schema="schemas/bot.ability.conversation.input.json"
+        <transition event="bot.ability.conversation.input" event:schema="../schemas/bot.ability.conversation.input.json"
                     target="running">
           <assign location="input" expr="_event.data"/>
           <assign location="parent" expr="inputEnvelope()"/>
@@ -213,25 +227,20 @@
            commit the turns' product. -->
       <state id="running" initial="recalling_from">
         <onentry>
-          <conversation:commit location="message" keylocation="context_ref" direction="inbound"
-                               event="parent.event" message="input" sequence="history.length"/>
-          <assign location="relationship_index" expr="relationshipIndexFor(input)"/>
-          <if cond="isNewRelationship()">
-            <assign location="relationships" expr="relationshipsWithInput()"/>
-            <assign location="relationship_index" expr="lastRelationshipIndex()"/>
-          </if>
-          <assign location="added" expr="[]"/>
+          <conversation:relationship_for_input location="relationships" indexlocation="relationship_index"
+                                               input="input"/>
+          <assign location="participants" expr="relationship().participants"/>
           <assign location="inputs" expr="inputs + 1"/>
-          <assign location="turn_sources" expr="sortedIdentities(input.source_ids)"/>
+          <identity:sorted_identities location="turn_sources" ids="input.source_ids"/>
           <assign location="turn_index" expr="0"/>
           <assign location="turns" expr="[]"/>
         </onentry>
         <!-- Input that arrives meanwhile waits (the original defers it). -->
-        <transition event="bot.ability.conversation.routed_input" event:schema="schemas/bot.ability.conversation.routed_input.json">
+        <transition event="bot.ability.conversation.routed_input" event:schema="../schemas/bot.ability.conversation.routed_input.json">
           <event:defer/>
           <log label="conversation.deferred" expr="_event.name"/>
         </transition>
-        <transition event="bot.ability.conversation.input" event:schema="schemas/bot.ability.conversation.input.json">
+        <transition event="bot.ability.conversation.input" event:schema="../schemas/bot.ability.conversation.input.json">
           <event:defer/>
           <log label="conversation.deferred" expr="_event.name"/>
         </transition>
@@ -253,10 +262,10 @@
             <param name="database" expr="database"/>
             <param name="statements" expr="memoryRecallStatements()"/>
           </invoke>
-          <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="turn_exchange">
+          <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="turn_exchange">
             <assign location="recalled" expr="recalledCount(_event)"/>
           </transition>
-          <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="waiting">
+          <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="waiting">
             <send event="bot.ability.conversation.failed" target="#_parent">
               <param name="stage" expr="'memory'"/>
               <param name="message" expr="memoryFailedMessage(_event)"/>
@@ -271,8 +280,12 @@
         </state>
         <!-- One turn per source, each with its own detector. -->
         <state id="turn_exchange" initial="readiness">
+          <!-- The source's track (null once every source has had its turn). -->
+          <onentry>
+            <conversation:new_track_ref location="track_ref" source="turn_sources[turn_index]"/>
+          </onentry>
           <invoke id="turn_detector" type="scxml" src="../turn_detector/turn_detector.scx">
-            <param name="participant_ref" expr="trackRef(turn_sources[turn_index])"/>
+            <param name="participant_ref" expr="track_ref"/>
             <param name="conversation_ref" expr="relationshipRef()"/>
           </invoke>
           <state id="readiness">
@@ -282,11 +295,11 @@
             <onexit>
               <cancel sendidexpr="timer"/>
             </onexit>
-            <transition event="bot.ability.turn_detector.ready" event:schema="schemas/bot.ability.turn_detector.ready.json" target="exchange">
-              <if cond="isNewParticipant()">
-                <assign location="added" expr="addedWithSource()"/>
-                <assign location="relationships" expr="relationshipsWithParticipant()"/>
-              </if>
+            <transition event="bot.ability.turn_detector.ready" event:schema="../schemas/bot.ability.turn_detector.ready.json" target="exchange">
+              <conversation:participant_for_source location="relationships[relationship_index]"
+                                                   source="turn_sources[turn_index]"/>
+              <conversation:content_for_detector location="turn_content" input="input"
+                                                 source="turn_sources[turn_index]"/>
               <send event="bot.ability.turn_detector.turn.start" target="#_turn_detector">
                 <content expr="turnStart()"/>
               </send>
@@ -309,13 +322,14 @@
               <cancel sendidexpr="timer"/>
             </onexit>
             <transition event="bot.ability.turn_detector.turn.complete"
-                        event:schema="schemas/bot.ability.turn_detector.turn.complete.json"
+                        event:schema="../schemas/bot.ability.turn_detector.turn.complete.json"
                         cond="isExchangedTurn(_event)" target="turn_exchange">
               <assign location="turns" expr="turnsWith(_event)"/>
               <assign location="turn_index" expr="turn_index + 1"/>
             </transition>
             <transition event="exchange.after" cond="isTimer(_event)" target="waiting">
-              <assign location="relationships" expr="relationshipsWithoutSource()"/>
+              <conversation:fail_turn location="relationships[relationship_index]"
+                                      source="turn_sources[turn_index]"/>
               <send event="bot.ability.conversation.failed" target="#_parent">
                 <param name="stage" expr="'turn_detector'"/>
                 <param name="message" expr="timedOutMessage('Turn detector turn')"/>
@@ -324,15 +338,17 @@
           </state>
           <!-- Every source has its turn: on to memory. -->
           <transition cond="hasAllTurns()" target="remembering_from"/>
-          <transition event="bot.ability.turn_detector.failed" event:schema="schemas/bot.ability.turn_detector.failed.json" target="waiting">
-            <assign location="relationships" expr="relationshipsWithoutSource()"/>
+          <transition event="bot.ability.turn_detector.failed" event:schema="../schemas/bot.ability.turn_detector.failed.json" target="waiting">
+            <conversation:fail_turn location="relationships[relationship_index]"
+                                    source="turn_sources[turn_index]"/>
             <send event="bot.ability.conversation.failed" target="#_parent">
               <param name="stage" expr="'turn_detector'"/>
               <param name="message" expr="_event.data.message"/>
             </send>
           </transition>
           <transition event="error.*" target="waiting">
-            <assign location="relationships" expr="relationshipsWithoutSource()"/>
+            <conversation:fail_turn location="relationships[relationship_index]"
+                                    source="turn_sources[turn_index]"/>
             <send event="bot.ability.conversation.failed" target="#_parent">
               <param name="stage" expr="'turn_detector'"/>
               <param name="message" expr="turnErrorMessage(_event)"/>
@@ -347,6 +363,7 @@
         <state id="remembering_memory">
           <onentry>
             <send id="remember-after" event="remembering_memory.after" delayexpr="memoryTimeoutDelay()"/>
+            <memory:to_json location="memory_payload" message="input"/>
           </onentry>
           <onexit>
             <cancel sendid="remember-after"/>
@@ -355,18 +372,18 @@
             <param name="database" expr="database"/>
             <param name="statements" expr="memoryInsertStatements()"/>
           </invoke>
-          <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="committing">
+          <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="committing">
             <log label="conversation.memories" expr="memoriesLog(_event)"/>
           </transition>
-          <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="waiting">
-            <assign location="relationships" expr="relationshipsWithoutAdded()"/>
+          <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="waiting">
+            <assign location="relationships[relationship_index].participants" expr="participants"/>
             <send event="bot.ability.conversation.failed" target="#_parent">
               <param name="stage" expr="'memory'"/>
               <param name="message" expr="memoryFailedMessage(_event)"/>
             </send>
           </transition>
           <transition event="remembering_memory.after" target="waiting">
-            <assign location="relationships" expr="relationshipsWithoutAdded()"/>
+            <assign location="relationships[relationship_index].participants" expr="participants"/>
             <send event="bot.ability.conversation.failed" target="#_parent">
               <param name="stage" expr="'memory'"/>
               <param name="message" expr="'Conversation memory remember timed out.'"/>
@@ -376,20 +393,25 @@
         <state id="committing">
           <!-- The turns' product, committed in place of the input. -->
           <onentry>
-            <assign location="turn_product" expr="turnProduct()"/>
-            <conversation:commit location="message" direction="inbound"
-                                 event="parent.event" message="turn_product" provenance="turnProvenance()"
-                                 sequence="history.length"/>
+            <conversation:complete_turn location="message" event="parent.event" input="input" turns="turns"
+                                        session_ref="relationshipRef()" sequence="history.length"/>
           </onentry>
           <transition target="waiting">
             <assign location="history" expr="historyWithMessage()"/>
-            <assign location="relationships" expr="relationshipsWithMessage()"/>
+            <assign location="relationships[relationship_index].sequences[relationships[relationship_index].sequences.length]"
+                    expr="message.sequence"/>
             <log label="conversation" expr="inboundCommitLog()"/>
             <if cond="isTextMessage()">
-              <bot:stimulus location="product" event="'bot.ability.conversation.output'"
-                            data="({parent: parent, messages: history})" source="'conversation'"/>
+              <assign location="product" expr="({})"/>
+              <assign location="product.event" expr="'bot.ability.conversation.output'"/>
+              <assign location="product.data" expr="({})"/>
+              <assign location="product.data.parent" expr="parent"/>
+              <assign location="product.data.messages" expr="history"/>
+              <assign location="product.source" expr="'conversation'"/>
+              <conversation:turn_participants location="turn_participants" input="input" parent="parent"/>
               <send event="bot.ability.cognition.input" target="#_parent">
                 <param name="stimulus" expr="product"/>
+                <param name="participants" expr="turn_participants"/>
               </send>
             <else/>
               <send event="bot.ability.conversation.output" target="#_parent">
@@ -404,14 +426,14 @@
 
     <!-- An outbound record, in either state, committed once; answered
          either way. -->
-    <transition event="bot.ability.conversation.append" event:schema="schemas/bot.ability.conversation.append.json"
+    <transition event="bot.ability.conversation.append" event:schema="../schemas/bot.ability.conversation.append.json"
                 cond="isOutboundAppend(_event)">
       <if cond="isCommittedAppend(_event)">
         <log label="conversation" expr="alreadyCommittedLog(_event)"/>
       <else/>
-        <conversation:commit location="message" direction="outbound"
-                             event="_event.name" message="_event.data.message"
-                             provenance="_event.data.message.provenance" sequence="history.length"/>
+        <conversation:message_for_turn location="message" direction="outbound"
+                                       event="_event.name" message="_event.data.message"
+                                       provenance="_event.data.message.provenance" sequence="history.length"/>
         <assign location="history" expr="historyWithMessage()"/>
         <log label="conversation" expr="outboundCommitLog()"/>
       </if>
@@ -421,10 +443,11 @@
       </send>
     </transition>
     <!-- The participants' detectors, in any state. -->
-    <transition event="bot.ability.conversation.snapshot.request" event:schema="schemas/bot.ability.conversation.snapshot.request.json">
+    <transition event="bot.ability.conversation.snapshot.request" event:schema="../schemas/bot.ability.conversation.snapshot.request.json">
+      <conversation:detector_refs location="detector_refs" relationships="relationships"/>
       <send event="bot.ability.conversation.snapshot.output" target="#_parent">
         <param name="request_ref" expr="_event.data.request_ref"/>
-        <param name="detector_refs" expr="detectorRefs()"/>
+        <param name="detector_refs" expr="detector_refs"/>
       </send>
     </transition>
     <transition event="bot.ability.conversation.*">

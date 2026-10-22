@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- conversation-7: a turn with nothing, or with text and audio, closes as a failure. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="t" expr="null"/>
+  <data id="empty" expr="null"/>
+  <data id="both" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:on_end location="empty" turn="t" participant_ref="'alice'" conversation_ref="'c'" turn_ref="'t1'" source_participant_ref="'alice'"/>
+    <conversation:ingest_content location="t" content="({kind: 'text', content: 'hi'})"/>
+    <conversation:ingest_content location="t" content="({kind: 'audio', content: 'a.pcm'})"/>
+    <conversation:on_end location="both" turn="t" participant_ref="'alice'" conversation_ref="'c'" turn_ref="'t1'" source_participant_ref="'alice'"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="empty.failure.stage === 'turn' &amp;&amp; empty.failure.message === 'Turn closed with neither text, audio, nor modality-neutral content.' &amp;&amp; both.failure.message === 'Turn product cannot contain both text and audio.' &amp;&amp; both.failure.turn_ref === 't1'" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

@@ -44,9 +44,11 @@ scx compile namespaces/event/examples/order.scx --output order.scxml-ir.json
   - **inline JSON**: the first non-white-space character is `{`, or the value
     is exactly `true` or `false` (the boolean schemas). In a double-quoted
     XML attribute write `"` as `&quot;`, or quote the attribute with `'`; or
-  - **a reference**: a path relative to the document, at or below its
-    directory (no scheme, absolute path, query, backslash, or empty, `.`, or
-    `..` segment; percent-encoded like any URI path), optionally with a JSON
+  - **a reference**: a relative URI path resolved against the document's
+    base URI, as `<script src>` and `<invoke src>` are (RFC 3986 §5: `.` and
+    `..` segments resolve, so `../schemas/order.json` names a file beside
+    the document's directory; no scheme, absolute path, query, backslash, or
+    empty segment; percent-encoded like any URI path), optionally with a JSON
     Pointer fragment (RFC 6901, percent-encoded as a URI fragment):
     `schemas/order.json#/$defs/Order` selects member `Order` of member
     `$defs` of the file. A plain-name fragment (`#Order`) is not supported.
@@ -253,8 +255,8 @@ of `18446744073709551616`) is read, compared, and embedded as the nearest
 - `EVENT002`: both `event:schema` and `event:schemaexpr` on one element.
 - `EVENT003`: the schema is not UTF-8 JSON (an inline schema at the exact
   byte, a file with its line and column).
-- `EVENT004`: a referenced file is not available (not a relative path at
-  or below the document's directory, or it could not be read).
+- `EVENT004`: a referenced file is not available (not a relative path,
+  or it could not be read).
 - `EVENT005`: the fragment is not a JSON Pointer, or names no value.
 - `EVENT006`: the schema violates its dialect's metaschema or does not
   compile (an inline schema at the offending value; a misspelled `type`
@@ -292,9 +294,10 @@ own implementation report plan ([`irp/`](irp/README.md), below).
   is an inline JSON schema; one that is not UTF-8 JSON is rejected
   (`EVENT003`).
 - <a id="event-4"></a>**event-4** (schema files). Any other value references
-  a file relative to the document, at or below its directory, optionally
-  with a JSON Pointer fragment selecting a value of the file: an unavailable
-  file, or a path outside the document's directory, is rejected
+  a file by a relative URI resolved against the document's base URI (`..`
+  segments included, so the file may be outside the document's directory),
+  optionally with a JSON Pointer fragment selecting a value of the file: an
+  unavailable file, or a reference that is not a relative path, is rejected
   (`EVENT004`); a file that is not UTF-8 JSON (`EVENT003`); a fragment that
   is not a JSON Pointer or names no value (`EVENT005`).
 - <a id="event-5"></a>**event-5** (dialects). The dialect is the selected
@@ -362,13 +365,14 @@ that it behaves the same under each. Both data models pass 31 of 31
 
 - A reference to a repository-namespace resource or any absolute URI: only
   files relative to the document.
-- Schema files for documents compiled without the CLI's file access. A
-  literal `<invoke src>` child loaded from a `file:` URL gets its own files:
-  `snapshot run` and `run` read them relative to the child's directory
-  before the session and the Wasmtime host hands them to its compile
+- Schema files for documents compiled without the CLI's file access. An
+  `<invoke src>` child (literal or `srcexpr`, `file:` or `https:`) gets its
+  own files: `snapshot run` and `run` load them against the child's own base
+  URI (a literal child's before the session, a `srcexpr` child's when its
+  `<invoke>` runs) and the Wasmtime host hands them to its compile
   (`EmbeddedDocument::event_schemas`). Every other child document a host
-  compiles when it is invoked (inline `<content>`, a remote or `srcexpr`
-  `<invoke src>`, and every child the browser host compiles) gets no schema
+  compiles when it is invoked (inline `<content>`, and every child the
+  browser host compiles) gets no schema
   files, so it may use inline schemas and `event:schemaexpr` only (a
   reference rejects the document). A browser page supplies a document's
   schema files to the validator and compiler (`eventSchemas`).

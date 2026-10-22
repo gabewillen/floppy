@@ -1,5 +1,5 @@
 //! floppy's namespace implementation report plans
-//! (`namespaces/<name>/irp`, decision, bot, conversation and migration), in
+//! (`namespaces/<name>/irp`, one per floppy namespace), in
 //! the format and through the pipeline of scxml.rs's own namespace suites
 //! (`scxml.rs/docs/conformance.md`, "Namespace suites").
 //!
@@ -37,7 +37,19 @@ use serde_json::Value as Json;
 use support::{components, output, scratch, sha256_file, workspace};
 
 /// The namespaces that have a suite: every floppy namespace.
-const SUITES: [&str; 4] = ["decision", "bot", "conversation", "migration"];
+const SUITES: [&str; 11] = [
+    "decision",
+    "conversation",
+    "migration",
+    "device",
+    "processing",
+    "intuition",
+    "cognition",
+    "identity",
+    "memory",
+    "behavior",
+    "autonomy",
+];
 
 /// Whether this host is the one the baselines are measured on.
 const BASELINE_HOST: bool = cfg!(all(target_os = "linux", target_arch = "x86_64"));
@@ -240,11 +252,6 @@ fn decision_suite_passes() {
 }
 
 #[test]
-fn bot_suite_passes() {
-    run_suite("bot");
-}
-
-#[test]
 fn conversation_suite_passes() {
     run_suite("conversation");
 }
@@ -252,6 +259,46 @@ fn conversation_suite_passes() {
 #[test]
 fn migration_suite_passes() {
     run_suite("migration");
+}
+
+#[test]
+fn device_suite_passes() {
+    run_suite("device");
+}
+
+#[test]
+fn processing_suite_passes() {
+    run_suite("processing");
+}
+
+#[test]
+fn intuition_suite_passes() {
+    run_suite("intuition");
+}
+
+#[test]
+fn cognition_suite_passes() {
+    run_suite("cognition");
+}
+
+#[test]
+fn identity_suite_passes() {
+    run_suite("identity");
+}
+
+#[test]
+fn memory_suite_passes() {
+    run_suite("memory");
+}
+
+#[test]
+fn behavior_suite_passes() {
+    run_suite("behavior");
+}
+
+#[test]
+fn autonomy_suite_passes() {
+    run_suite("autonomy");
 }
 
 /// A namespace with no suite would leave its elements untested here.

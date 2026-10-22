@@ -6,7 +6,7 @@
     <param name="turn" expr="12"/>
     <param name="stimulus" expr='{"event": "bot.input", "data": {"observation": {"event": "text", "data": "hello"}}, "source": "body"}'/>
     <param name="focus" expr="null"/>
-    <param name="choices" expr='[{"event": "bot.say", "schema": {}, "target": "speaking"}]'/>
+    <param name="choices" expr='[{"event": "bot.say", "schema": {}, "target": "session"}]'/>
     <param name="decision_timeout_ms" expr="150000"/>
   </invoke>
   <state id="boot">
@@ -14,7 +14,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.intuition" cond="_event.data.turn === 12 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === &quot;the decision failed (malformed)&quot; &amp;&amp; typeof _event.data.tuner === 'object' &amp;&amp; _event.data.failed === true &amp;&amp; true" target="step1"/>
+    <transition event="done.invoke.intuition" cond="_event.data.turn === 12 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === &quot;the decision failed (malformed)&quot; &amp;&amp; typeof _event.data.confidence_tuner === 'object' &amp;&amp; _event.data.failed === true &amp;&amp; true" target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

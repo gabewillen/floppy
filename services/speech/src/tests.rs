@@ -533,7 +533,7 @@ fn every_event_satisfies_its_published_schema() {
         "../schemas/bot.ability.hearing.speech.decoding.output.json"
     ));
     let encoded = compile(include_str!(
-        "../schemas/bot.ability.vocal.speech.encoding.output.json"
+        "../../../abilities/schemas/bot.ability.vocal.speech.encoding.output.json"
     ));
     let failed = compile(include_str!(
         "../../../abilities/schemas/bot.ability.failed.json"

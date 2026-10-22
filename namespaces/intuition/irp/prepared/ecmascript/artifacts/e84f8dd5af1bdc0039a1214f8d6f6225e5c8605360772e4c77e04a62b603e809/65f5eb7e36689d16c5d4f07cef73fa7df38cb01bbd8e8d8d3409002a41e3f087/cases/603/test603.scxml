@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- intuition-1: an escalate with an undeclared attribute raises error.execution and assigns nothing. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:intuition="https://github.com/stateforward/floppy/namespaces/intuition" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="e" expr="'untouched'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <intuition:escalate location="e" confidence="50" tuner="null" thresholdlocation="x"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="e === 'untouched'" target="pass"/>
+  <transition event="*" target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

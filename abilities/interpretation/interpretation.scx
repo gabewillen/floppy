@@ -96,6 +96,13 @@
     environment.sound's envelope (source "listening", the ability it hands
     off for), as the original's interpretation hands it to the cognition.
 
+  Participants (the original's f6c4e08): every scored sound taken adds the
+  participants stamped on it to active_participants, their ordered union
+  (each {ref, role} once, at most 32), cleared with the open speech; every
+  speech product carries them, and the labelled-sound handoff carries them
+  as its participants. The interpretation never works out who someone is;
+  it only carries what the device stamped.
+
   Files are written in the directory of the sound's audio reference, the
   directory the run grants the speech service.
 
@@ -112,12 +119,10 @@
   <donedata>, which scxml.rs does not check, so their shape is checked by
   cond.
 
-  Bindings: the bot namespace package (<bot:stimulus>) and the speech
-  service for the append step (no backend); the stages bind their own
-  services.
+  Bindings: the speech service for the append step (no backend); the
+  stages bind their own services.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="interpretation" initial="initializing">
   <datamodel>
@@ -145,6 +150,9 @@
     <data id="open_sensed" expr="null"/>
     <data id="active_source_ids" expr="[]"/>
     <data id="active_voice_embedding" expr="null"/>
+    <!-- The ordered union of the participants stamped on the sound taken
+         into the open utterance (the original's _active_participants). -->
+    <data id="active_participants" expr="[]"/>
     <data id="open_wav" expr="false"/>
     <data id="utterance" expr="null"/>
     <!-- HandingOff's working values. -->
@@ -181,21 +189,27 @@
         <assign location="open_sensed" expr="null"/>
         <assign location="active_source_ids" expr="[]"/>
         <assign location="active_voice_embedding" expr="null"/>
+        <assign location="active_participants" expr="[]"/>
         <assign location="utterance" expr="null"/>
         <assign location="stage" expr="null"/>
       </onentry>
-      <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json" target="DetectingVoice">
+      <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json" target="DetectingVoice">
         <assign location="sensed" expr="_event.data"/>
+        <foreach array="soundParticipants(sensed)" item="participant">
+          <if cond="isNewParticipant(participant)">
+            <assign location="active_participants[active_participants.length]" expr="participant"/>
+          </if>
+        </foreach>
       </transition>
     </state>
 
     <!-- One busy region: the deferral and the stage failure policy live
          once, not on every stage. -->
     <state id="Working" initial="DetectingVoice">
-      <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json">
+      <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json">
         <event:defer/>
       </transition>
-      <transition event="bot.ability.listening.stage.failed" event:schema="schemas/bot.ability.listening.stage.failed.json"
+      <transition event="bot.ability.listening.stage.failed" event:schema="../schemas/bot.ability.listening.stage.failed.json"
                   cond="isCurrentStageFailure(_event)" target="Idle">
         <send event="bot.ability.listening.failed" target="#_parent">
           <content expr="_event.data"/>
@@ -276,13 +290,19 @@
           <assign location="audible" expr="streamsFrame()"/>
           <if cond="streamsPcmFrame()">
             <assign location="product" expr="frameProduct()"/>
+            <assign location="product.participants" expr="active_participants"/>
             <send event="bot.ability.listening.speech.output" target="#_parent">
               <content expr="product"/>
             </send>
           </if>
         </onentry>
-        <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json" target="FeedingSpeech">
+        <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json" target="FeedingSpeech">
           <assign location="sensed" expr="_event.data"/>
+          <foreach array="soundParticipants(sensed)" item="participant">
+            <if cond="isNewParticipant(participant)">
+              <assign location="active_participants[active_participants.length]" expr="participant"/>
+            </if>
+          </foreach>
         </transition>
       </state>
 
@@ -342,6 +362,7 @@
           <assign location="audible" expr="streamsFrame()"/>
           <if cond="streamsPcmFrame()">
             <assign location="product" expr="frameProduct()"/>
+            <assign location="product.participants" expr="active_participants"/>
             <send event="bot.ability.listening.speech.output" target="#_parent">
               <content expr="product"/>
             </send>
@@ -362,7 +383,7 @@
           <param name="output" expr="utteranceOutput()"/>
           <param name="wav" expr="open_wav"/>
         </invoke>
-        <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json">
+        <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json">
           <send event="bot.ability.listening.stage.failed" target="#_internal">
             <content expr="childFailure(_event)"/>
           </send>
@@ -568,6 +589,7 @@
         <!-- Decoding rewrites this observation: it becomes words. -->
         <transition cond="isDecoding()" target="Idle">
           <assign location="product" expr="decodedProduct()"/>
+          <assign location="product.participants" expr="active_participants"/>
           <send event="bot.ability.listening.speech.output" target="#_parent">
             <content expr="product"/>
           </send>
@@ -593,6 +615,7 @@
             <foreach array="completion.segments" item="segment" index="index">
               <assign location="result" expr="segmentEmbedding()"/>
               <assign location="product" expr="segmentProduct()"/>
+              <assign location="product.participants" expr="active_participants"/>
               <send event="bot.ability.listening.speech.output" target="#_parent">
                 <content expr="product"/>
               </send>
@@ -604,13 +627,18 @@
                     target="Idle">
           <if cond="hasSampleRate(completion.sensed.sound)">
             <assign location="product" expr="silenceProduct()"/>
+            <assign location="product.participants" expr="active_participants"/>
             <send event="bot.ability.listening.speech.output" target="#_parent">
               <content expr="product"/>
             </send>
           <else/>
-            <bot:stimulus location="product" event="'environment.sound'" data="completion.sensed.sound" source="'listening'"/>
+            <assign location="product" expr="({})"/>
+            <assign location="product.event" expr="'environment.sound'"/>
+            <assign location="product.data" expr="completion.sensed.sound"/>
+            <assign location="product.source" expr="'listening'"/>
             <send event="bot.ability.cognition.input" target="#_parent">
               <param name="stimulus" expr="product"/>
+              <param name="participants" expr="active_participants"/>
             </send>
           </if>
         </transition>
@@ -618,9 +646,13 @@
              completion's sound, normalized to PCM where detection did so
              (the original hands off the completion chain's sensed sound). -->
         <transition target="Idle">
-          <bot:stimulus location="product" event="'environment.sound'" data="completion.sensed.sound" source="'listening'"/>
+          <assign location="product" expr="({})"/>
+          <assign location="product.event" expr="'environment.sound'"/>
+          <assign location="product.data" expr="completion.sensed.sound"/>
+          <assign location="product.source" expr="'listening'"/>
           <send event="bot.ability.cognition.input" target="#_parent">
             <param name="stimulus" expr="product"/>
+            <param name="participants" expr="active_participants"/>
           </send>
         </transition>
       </state>

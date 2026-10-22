@@ -1,0 +1,48 @@
+{
+  "basic": {
+    "stimulus": {"event": "bot.input", "data": {"observation": {"event": "text", "data": "say hi"}}, "source": "gabe"},
+    "prior_episodes": [], "standing_directives": [], "environment": null,
+    "instructions": "You are floppy.", "schema": {"type": "object", "properties": {"events": {"type": "array"}}}
+  },
+  "envelope": {
+    "stimulus": {"event": "bot.ability.conversation.output", "data": "a <b> & 'c' \"d\"\n\ttab\r", "source": "", "target": "lamp", "id": "e-1"},
+    "prior_episodes": [], "standing_directives": [{"text": "Be brief."}, {"text": "Speak <softly>", "kind": "preference"}, {"text": "x", "kind": null}],
+    "environment": null, "instructions": null, "schema": null
+  },
+  "null_stimulus": {
+    "stimulus": null, "prior_episodes": [], "standing_directives": [], "environment": null, "instructions": "", "schema": {}
+  },
+  "values": {
+    "stimulus": {"event": "bot.input", "data": {"int": 3, "neg": -12, "zero": 0, "float": 1.5, "tiny": 0.00001, "small": 0.0005, "huge": 1e22, "big": 12345678901234567890, "third": 0.3333333333333333, "t": true, "f": false, "n": null, "s": "", "list": [1, 2.5, "x", true, null, {"k": "v"}, [1, []], []], "empty": {}, "nested": {"b": {"c": [0.1]}}}, "source": null},
+    "prior_episodes": [], "standing_directives": [], "environment": null, "instructions": "i", "schema": {"a": 1}
+  },
+  "episodes": {
+    "stimulus": {"event": "bot.input", "data": {"text": "again"}, "source": "gabe"},
+    "prior_episodes": [
+      {"focus": "lamp", "focus_candidates": ["lamp", "fan"], "stimulus_name": "bot.input", "output": [{"event": "bot.ability.communication.respond", "data": {"text": "hi"}, "reason": "greet", "target": "session.communication"}, {"event": "bot.focus_device"}], "behavior": {"event": "bot.behavior.create", "name": "ping", "triggers": ["ping"], "description": "answer pong", "reason": "asked", "source": "<scxml/>"}},
+      {"focus": null, "focus_candidates": "nope", "stimulus_name": "bot.input", "output": "nope", "behavior": {"event": "bot.behavior.break", "name": "ping", "reason": "stop", "triggers": ["x"]}},
+      {"stimulus_name": "x", "behavior": {"name": "noevent"}},
+      {"behavior": {"event": "bot.behavior.change", "name": "n", "triggers": [], "description": "d"}, "output": [7, null]},
+      {"behavior": [1]}
+    ],
+    "standing_directives": [{"text": "Remember green."}], "environment": null, "instructions": "sys", "schema": {"x": "y"}
+  },
+  "environment": {
+    "stimulus": {"event": "bot.input", "data": {"target_device": "lamp"}, "source": "lamp"},
+    "prior_episodes": [], "standing_directives": [],
+    "environment": {"id": "room", "self": {"state": "processing", "mood": "calm", "level": 1.5, "count": 3, "awake": true, "pos": {"x": 0, "y": 2.25, "z": {"w": "deep"}}, "tags": ["a", "b"], "gone": null, "9lives": "cat", "a b": "space", ".dot": "d", "-dash": "e", "émoji😀": "u", "big": 1e21, "tiny": 0.0000001, "owned_devices": {"lamp": {"ref": "lamp", "id": "session.lamp", "state": "on", "attributes": {"brightness": 80, "color": "warm", "on": true}}, "fan": {"ref": "fan", "id": "session.fan", "state": "off"}}}},
+    "instructions": "sys", "schema": {"x": 1}
+  },
+  "environment_sparse": {
+    "stimulus": {"event": "bot.input", "data": {}, "source": "gabe"},
+    "prior_episodes": [], "standing_directives": [],
+    "environment": {"id": 7, "self": {}},
+    "instructions": "sys", "schema": null
+  },
+  "environment_no_self": {
+    "stimulus": {"event": "bot.input", "data": {}, "source": "gabe"},
+    "prior_episodes": [], "standing_directives": [],
+    "environment": {"self": 5, "id": null},
+    "instructions": "sys", "schema": null
+  }
+}

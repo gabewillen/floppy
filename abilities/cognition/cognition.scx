@@ -23,34 +23,38 @@
   abilities/reasoning/reasoning.scx, in sibling directories) with the turn as <param>s; it answers through its top-level
   final state's <donedata>, received here as done.invoke.<stage> (the
   invoke ids are the stage names; the substates are running_<stage>):
-  {turn, handled, selected?, reason?, tuner?, failed?}. Leaving a stage's
+  {turn, handled, selected?, reason?, confidence_tuner?, failed?}. Leaving a stage's
   substate cancels it (SCXML 6.4), which replaces the original's stage cancel
   tokens. Handled ends the turn with the stage's selections as the output;
   unhandled goes on to the next stage (autonomy always does without
   a database: it gets the stimulus and the database, and runs the learned
   behaviors the stimulus triggers);
   failed (or an error.* from the stage) answers bot.ability.failed. The
-  intuition tuner state is passed in by <param> and kept from the donedata.
+  intuition's confidence tuner state (the original's ConfidenceTuner) is
+  passed in by <param> and kept from the donedata.
 
-  Environment actions: an intuition that escalates for low confidence (or
-  a deliberate handoff) still hands out its environment actions (the original
-  _environment_actions, which the original's intuition dispatches before the
-  turn goes on to reasoning) as the selected of its unhandled donedata.
-  The cognition keeps them and puts them first in the turn's output, before
-  reasoning's own selections, so the body routes them first, and drops
-  reasoning's selections that repeat one of them (same event and data;
-  decision D98, where the original routes both); the turn's
-  one answer stays one bot.ability.cognition.output. The reflection gets
-  reasoning's selections only (the original's cognition output is reasoning's
-  terminal). A turn whose reasoning fails or is cancelled routes none of
-  them (the original would already have dispatched them).
+  Dispatch: each stage sends its own selections, as the original's stages
+  dispatch theirs (cognition.types.dispatch_selected_events): an
+  intuition that escalates for low confidence (or a deliberate handoff)
+  sends its environment actions before the turn goes on to reasoning (the
+  original _environment_actions). The turn's output, and the reflection's
+  cognition_output, is the handling stage's selections (the original's
+  cognition output is its terminal stage's).
 
-  Hop timeouts: each stage substate arms
-  bot.ability.cognition.child.hop.timed_out (child_operation_timeout_ms,
-  the original's child_operation_timeout, 30 s)
-  and cancels it on exit; the transition takes only the timer of the stage
-  in hand (_event.sendid, SCXML 5.10.1). A timeout goes to rebooting, which
-  sends bot.reboot {reason: "cognition_child_teardown_failed"} to the body.
+  Hop timeouts (decision D101): each stage substate arms two
+  bot.ability.cognition.child.hop.timed_out timers and cancels both on
+  exit: one of inactivity (child_operation_timeout_ms, the original's
+  child_operation_timeout) and a backstop (child_operation_ceiling_ms)
+  for the stage as a whole. Autonomy and the intuition make no streamed
+  call, so their inactivity timer is armed on entry; reasoning's is armed
+  by the first generate.progress it sends on while its streamed reply
+  arrives and re-armed by each one after, so a slow model that keeps
+  answering is never cut off, and a reply that is not streamed (the run's
+  FLOPPY_STREAM is not true) is bounded by the backstop alone. Both are <param>s
+  the body passes from its bounds param. The transition takes only the timers
+  of the stage in hand (_event.sendid, SCXML 5.10.1). A timeout goes to
+  rebooting, which sends bot.reboot {reason:
+  "cognition_child_teardown_failed"} to the body.
 
   Cancel: bot.ability.cognition.cancel for the turn in hand moves to
   cancelling/<stage>; leaving the stage's substate already cancelled it, so
@@ -62,8 +66,9 @@
   Ignore: bot.ability.cognition.ignore is this ability's offer: its
   transitions (in idle and processing, which only log) are what
   <decision:choice> offers. A selected ignore is the turn's terminal
-  product and is never dispatched (the reference without_ignore_selections), so
-  neither the stages nor the body send it here.
+  product, which only the cognition takes (the reference
+  without_ignore_selections: "cognition only"): the stage that selects it
+  sends it here, to its target, and the transition logs it.
 
   Reflection: a reflection region invokes abilities/reflection/reflection.scx
   as the long-lived child "reflection" (the original composes Reflection beside
@@ -88,21 +93,19 @@
 
   Readiness: every entry into idle sends bot.ability.offers {ability,
   choices} to the parent: the choices <decision:choice events=...> reads,
-  bot.ability.cognition.ignore, compacted by <decision:compact> ($schema,
-  title and examples dropped; over 32 KiB descriptions dropped too; still
-  over, the offer is empty and logged). The stages are per-turn children
+  bot.ability.cognition.ignore, made model-facing by
+  <processing:model_facing_schema> ($schema, title and examples dropped;
+  over 32 KiB descriptions dropped too; still over, the offer is empty and
+  logged). The stages are per-turn children
   that offer nothing, so there are no descendant offers to relay.
 
-  Choices: each turn's input carries the body's assembled choices (its own
-  and every ability's offers, tagged with their target); they go to
-  autonomy (which checks a learned behavior's selections against them),
-  intuition (the decision service's enabled transitions) and reasoning,
-  and the body routes the handling stage's selections. Each stage checks
-  its selections as the original's does before it dispatches them (the ignore
-  selections removed, the attention policy, a target offering each), and
-  one it cannot place fails the stage with the original's
-  SelectionRejectionError message, which this ability answers as
-  bot.ability.failed.
+  Choices: each turn's input carries the body's collected choices (its own
+  and every ability's offers, each tagged with the session id of its
+  offerer); they go to intuition (the decision service's enabled transitions) and
+  reasoning (its dispatch tool; autonomy's learned behaviors name their
+  targets themselves), and each stage sends its selections to their
+  targets. A send a stage cannot make (an autonomy candidate's)
+  fails the stage, which this ability answers as bot.ability.failed.
 
   Contracts: the events it takes reference abilities/schemas/ by
   event:schema (never inline). scxml.rs checks them where each event is
@@ -113,36 +116,43 @@
   own child's failure by name. The stages' donedata is not checked by scxml.rs, so the
   done.invoke conds also check its turn and shape.
 
-  Bindings: the bot and decision namespace packages; the stages bind their own
+  Bindings: the bot, decision and processing namespace packages; the stages bind their own
   services (intuition: decision with TYPESAFE_API_KEY and
   TYPESAFE_BASE_URL; reasoning: generate with FLOPPY_API_KEY and
   FLOPPY_BASE_URL). The model is the body's (a <param> of the body's
   invoke), else the default below, and goes to reasoning.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:bot="https://github.com/stateforward/floppy/namespaces/bot"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
        version="1.0" datamodel="ecmascript" name="cognition" initial="alive">
   <datamodel>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
     <!-- The memory database file, for autonomy, reasoning, reflection and routines (null: no memory). -->
     <data id="database" expr="null"/>
+    <!-- A stage's inactivity bound and its backstop (decision D101). -->
     <data id="child_operation_timeout_ms" expr="30000"/>
+    <data id="child_operation_ceiling_ms" expr="240000"/>
+    <!-- The bounds the body's bounds param overrides (its <param>): these two
+         and reflection's revising_timeout_ms and revising_ceiling_ms. -->
+    <data id="bounds" expr="({})"/>
     <!-- The turn in hand. -->
     <data id="turn" expr="0"/>
     <data id="stimulus" expr="null"/>
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
     <data id="choices" expr="[]"/>
-    <!-- The intuition's confidence tuner (the reference ConfidenceTuner). -->
-    <data id="tuner" expr="({mean: 70, var: 100, n: 0})"/>
-    <!-- The stage in hand: its name, hop timer, and answer. -->
+    <!-- The bot's environment this turn (decision D106), for reasoning's
+         prompt and the intuition's instructions. -->
+    <data id="environment" expr="null"/>
+    <!-- The intuition's confidence tuner (the original's ConfidenceTuner). -->
+    <data id="confidence_tuner" expr="({mean: 70, var: 100, n: 0})"/>
+    <!-- The stage in hand: its name, hop timers, and answer. -->
     <data id="stage" expr="null"/>
     <data id="hop_timer" expr="null"/>
+    <data id="ceiling_timer" expr="null"/>
     <data id="selected" expr="[]"/>
-    <!-- An escalated intuition's environment actions, routed first. -->
-    <data id="environment_actions" expr="[]"/>
     <data id="failure" expr="null"/>
     <data id="reboot_reason" expr="null"/>
     <!-- A routine tick's stimulus envelope, for the handoff. -->
@@ -151,7 +161,6 @@
     <data id="offering" expr="false"/>
     <data id="offered" expr="[]"/>
     <data id="offers_over" expr="false"/>
-    <data id="offer_names" expr="''"/>
   </datamodel>
   <script src="cognition.js"/>
 
@@ -163,32 +172,32 @@
       <assign location="offering" expr="true"/>
       <decision:choice location="offered" events="bot.ability.cognition.ignore"/>
       <assign location="offering" expr="false"/>
-      <decision:compact location="offered" bound="32768" overlocation="offers_over"/>
+      <processing:model_facing_schema location="offered" bound="32768" overlocation="offers_over"/>
       <if cond="offers_over">
         <log label="cognition.offers.dropped" expr="'the offers are over 32768 bytes'"/>
       </if>
-      <decision:names location="offer_names" choices="offered"/>
-      <log label="cognition.offers" expr="offer_names"/>
+      <log label="cognition.offers" expr="offered"/>
       <send event="bot.ability.offers" target="#_parent">
         <param name="ability" expr="'cognition'"/>
         <param name="choices" expr="offered"/>
       </send>
     </onentry>
-    <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json"
+    <transition event="bot.ability.cognition.input" event:schema="../schemas/bot.ability.cognition.input.json"
                 target="processing">
       <assign location="turn" expr="_event.data.turn"/>
       <assign location="stimulus" expr="_event.data.stimulus"/>
       <assign location="focus" expr="inputFocus(_event)"/>
       <assign location="focus_candidates" expr="inputFocusCandidates(_event)"/>
       <assign location="choices" expr="inputChoices(_event)"/>
+      <assign location="environment" expr="inputEnvironment(_event)"/>
     </transition>
     <!-- Nothing in flight: acknowledge at once. -->
-    <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json">
+    <transition event="bot.ability.cognition.cancel" event:schema="../schemas/bot.ability.cognition.cancel.json">
       <send event="bot.ability.cognition.cancelled" target="#_parent">
         <param name="turn" expr="_event.data.turn"/>
       </send>
     </transition>
-    <transition event="bot.ability.cognition.ignore" event:schema="schemas/bot.ability.cognition.ignore.json">
+    <transition event="bot.ability.cognition.ignore" event:schema="../schemas/bot.ability.cognition.ignore.json">
       <log label="cognition.ignore" expr="'idle'"/>
     </transition>
   </state>
@@ -197,17 +206,16 @@
   <state id="processing" initial="running_autonomy">
     <onentry>
       <assign location="selected" expr="[]"/>
-      <assign location="environment_actions" expr="[]"/>
       <assign location="failure" expr="null"/>
       <log label="cognition" expr="processingLog()"/>
     </onentry>
-    <transition event="bot.ability.cognition.ignore" event:schema="schemas/bot.ability.cognition.ignore.json">
+    <transition event="bot.ability.cognition.ignore" event:schema="../schemas/bot.ability.cognition.ignore.json">
       <log label="cognition.ignore" expr="turnLog()"/>
     </transition>
     <!-- A stage that does not answer in time: ask the body for a reboot. -->
-    <transition event="bot.ability.cognition.child.hop.timed_out" event:schema="schemas/bot.ability.cognition.child.hop.timed_out.json"
+    <transition event="bot.ability.cognition.child.hop.timed_out" event:schema="../schemas/bot.ability.cognition.child.hop.timed_out.json"
                 cond="isChildHopTimeout(_event)" target="rebooting">
-      <log label="cognition.hop.timed_out" expr="hopTimeoutLog()"/>
+      <log label="cognition.hop.timed_out" expr="hopTimeoutLog(_event)"/>
       <assign location="reboot_reason" expr="'cognition_child_teardown_failed'"/>
     </transition>
 
@@ -217,18 +225,21 @@
         <send idlocation="hop_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="hopDelay()">
           <param name="turn" expr="turn"/>
         </send>
+        <send idlocation="ceiling_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="ceilingDelay()">
+          <param name="turn" expr="turn"/>
+        </send>
       </onentry>
       <onexit>
         <cancel sendidexpr="hop_timer"/>
+        <cancel sendidexpr="ceiling_timer"/>
       </onexit>
       <invoke id="autonomy" type="scxml" src="../autonomy/autonomy.scx">
         <param name="turn" expr="turn"/>
         <param name="input" expr="processingInput()"/>
         <param name="stimulus" expr="stimulus"/>
-        <param name="choices" expr="choices"/>
         <param name="database" expr="database"/>
       </invoke>
-      <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
+      <transition event="bot.ability.cognition.cancel" event:schema="../schemas/bot.ability.cognition.cancel.json"
                   cond="isCurrentTurn(_event)" target="cancelling_autonomy"/>
       <transition event="done.invoke.autonomy" cond="isHandled(_event)" target="completing">
         <log label="cognition.stage" expr="'autonomy handled'"/>
@@ -251,9 +262,13 @@
         <send idlocation="hop_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="hopDelay()">
           <param name="turn" expr="turn"/>
         </send>
+        <send idlocation="ceiling_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="ceilingDelay()">
+          <param name="turn" expr="turn"/>
+        </send>
       </onentry>
       <onexit>
         <cancel sendidexpr="hop_timer"/>
+        <cancel sendidexpr="ceiling_timer"/>
       </onexit>
       <invoke id="intuition" type="scxml" src="../intuition/intuition.scx">
         <param name="turn" expr="turn"/>
@@ -261,24 +276,24 @@
         <param name="focus" expr="focus"/>
         <param name="focus_candidates" expr="focus_candidates"/>
         <param name="choices" expr="choices"/>
-        <param name="tuner" expr="tuner"/>
+        <param name="environment" expr="environment"/>
+        <param name="confidence_tuner" expr="confidence_tuner"/>
       </invoke>
-      <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
+      <transition event="bot.ability.cognition.cancel" event:schema="../schemas/bot.ability.cognition.cancel.json"
                   cond="isCurrentTurn(_event)" target="cancelling_intuition"/>
       <transition event="done.invoke.intuition" cond="isHandled(_event)" target="completing">
-        <assign location="tuner" expr="intuitionTuner(_event)"/>
+        <assign location="confidence_tuner" expr="intuitionTuner(_event)"/>
         <log label="cognition.tuner" expr="tunerLog()"/>
         <log label="cognition.stage" expr="stageLog('intuition handled', _event)"/>
         <assign location="selected" expr="_event.data.selected"/>
       </transition>
       <transition event="done.invoke.intuition" cond="isUnhandled(_event)" target="running_reasoning">
-        <assign location="tuner" expr="intuitionTuner(_event)"/>
-        <assign location="environment_actions" expr="environmentActions(_event)"/>
+        <assign location="confidence_tuner" expr="intuitionTuner(_event)"/>
         <log label="cognition.tuner" expr="tunerLog()"/>
         <log label="cognition.stage" expr="stageLog('intuition unhandled', _event)"/>
       </transition>
       <transition event="done.invoke.intuition" cond="matchesStageOutput(_event)" target="failing">
-        <assign location="tuner" expr="intuitionTuner(_event)"/>
+        <assign location="confidence_tuner" expr="intuitionTuner(_event)"/>
         <log label="cognition.tuner" expr="tunerLog()"/>
         <assign location="failure" expr="intuitionFailure(_event)"/>
       </transition>
@@ -290,12 +305,17 @@
     <state id="running_reasoning">
       <onentry>
         <assign location="stage" expr="'reasoning'"/>
-        <send idlocation="hop_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="hopDelay()">
+        <!-- Reasoning's inactivity bound starts with its streamed reply's
+             first progress (below): until then, and for a reply that is not
+             streamed, only the backstop applies (decision D101). -->
+        <assign location="hop_timer" expr="'unarmed'"/>
+        <send idlocation="ceiling_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="ceilingDelay()">
           <param name="turn" expr="turn"/>
         </send>
       </onentry>
       <onexit>
         <cancel sendidexpr="hop_timer"/>
+        <cancel sendidexpr="ceiling_timer"/>
       </onexit>
       <invoke id="reasoning" type="scxml" src="../reasoning/reasoning.scx">
         <param name="turn" expr="turn"/>
@@ -303,11 +323,20 @@
         <param name="focus" expr="focus"/>
         <param name="focus_candidates" expr="focus_candidates"/>
         <param name="choices" expr="choices"/>
+        <param name="environment" expr="environment"/>
         <param name="model" expr="model"/>
         <param name="database" expr="database"/>
       </invoke>
-      <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
+      <transition event="bot.ability.cognition.cancel" event:schema="../schemas/bot.ability.cognition.cancel.json"
                   cond="isCurrentTurn(_event)" target="cancelling_reasoning"/>
+      <!-- Reasoning's streamed reply is arriving: the inactivity bound
+           starts, or starts over (decision D101). -->
+      <transition event="generate.progress">
+        <cancel sendidexpr="hop_timer"/>
+        <send idlocation="hop_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="hopDelay()">
+          <param name="turn" expr="turn"/>
+        </send>
+      </transition>
       <transition event="done.invoke.reasoning" cond="isHandled(_event)" target="completing">
         <log label="cognition.stage" expr="'reasoning handled'"/>
         <assign location="selected" expr="_event.data.selected"/>
@@ -325,7 +354,7 @@
       <onentry>
         <send event="bot.ability.cognition.output" target="#_parent">
           <param name="turn" expr="turn"/>
-          <param name="output" expr="turnOutput()"/>
+          <param name="output" expr="selected"/>
         </send>
         <send event="bot.ability.reflection.input" target="#_reflection">
           <param name="turn" expr="turn"/>
@@ -381,21 +410,22 @@
       <invoke id="reflection" type="scxml" src="../reflection/reflection.scx">
         <param name="database" expr="database"/>
         <param name="model" expr="model"/>
+        <param name="bounds" expr="bounds"/>
       </invoke>
-      <transition event="bot.ability.reflection.output" event:schema="schemas/bot.ability.reflection.output.json">
+      <transition event="bot.ability.reflection.output" event:schema="../schemas/bot.ability.reflection.output.json">
         <log label="bot.ability.reflection.output" expr="turnLog()"/>
         <send event="bot.ability.routines.reconcile" target="#_routines">
           <content expr="({})"/>
         </send>
       </transition>
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json">
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json">
         <log label="cognition.reflection.failed" expr="_event.data.message"/>
         <send event="bot.ability.routines.reconcile" target="#_routines">
           <content expr="({})"/>
         </send>
       </transition>
       <!-- The original _forward_reflection_reboot: the body restarts this ability. -->
-      <transition event="bot.reboot" event:schema="schemas/bot.reboot.json" target="rebooting">
+      <transition event="bot.reboot" event:schema="../schemas/bot.reboot.json" target="rebooting">
         <assign location="reboot_reason" expr="_event.data.reason"/>
       </transition>
       <transition event="error.communication.reflection" target="reflection_stopped">
@@ -412,8 +442,11 @@
       <invoke id="routines" type="scxml" src="../routines/routines.scx">
         <param name="database" expr="database"/>
       </invoke>
-      <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json">
-        <bot:stimulus location="tick" event="_event.name" data="_event.data" source="'routines'"/>
+      <transition event="bot.behavior.tick" event:schema="../schemas/bot.behavior.tick.json">
+        <assign location="tick" expr="({})"/>
+        <assign location="tick.event" expr="_event.name"/>
+        <assign location="tick.data" expr="_event.data"/>
+        <assign location="tick.source" expr="'routines'"/>
         <send event="bot.ability.cognition.input" target="#_parent">
           <param name="stimulus" expr="tick"/>
         </send>
@@ -434,7 +467,7 @@
       </send>
     </onentry>
     <!-- The turn is lost: acknowledge a cancel for it at once. -->
-    <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json">
+    <transition event="bot.ability.cognition.cancel" event:schema="../schemas/bot.ability.cognition.cancel.json">
       <send event="bot.ability.cognition.cancelled" target="#_parent">
         <param name="turn" expr="_event.data.turn"/>
       </send>

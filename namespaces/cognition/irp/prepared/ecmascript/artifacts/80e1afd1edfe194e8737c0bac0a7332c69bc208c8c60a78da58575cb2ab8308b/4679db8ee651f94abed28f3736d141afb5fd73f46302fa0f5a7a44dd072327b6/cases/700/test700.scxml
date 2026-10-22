@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- cognition-1: an attention bias without devices raises error.execution and assigns nothing. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition" xmlns:conf="http://www.w3.org/2005/scxml-conformance" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="l" expr="'untouched'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <cognition:attention_bias_for_turn location="l" stimulus="s" focus="null"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="l === 'untouched'" target="pass"/>
+  <transition event="*" target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

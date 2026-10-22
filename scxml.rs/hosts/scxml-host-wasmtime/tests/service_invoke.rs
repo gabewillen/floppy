@@ -28,12 +28,13 @@ use std::time::{Duration, Instant};
 use scxml_host_wasmtime::scxml_snapshot::Options;
 use scxml_host_wasmtime::{
     ArtifactError, ArtifactKind, AuthenticatedComponent, DocumentKind, EmbeddedDocument,
-    EnvVariable, ExtensionEnvironment, ExtensionHttp, ExtensionHttpFailure, ExtensionHttpRequest,
-    ExtensionHttpResponse, HostError, InputRecord, LiveClock, LiveHttp, LiveSession, LiveStatus,
-    MachineScripts, RunFailure, ScriptedEvent, ServiceComponents, ServicePackage, SessionEmbedder,
-    SessionHost, SessionHostComponents, SessionOpen, SessionOutput, SnapshotFailure,
-    TelemetryProviders, TrustedComponentDigest, TrustedManifestDigest, WasiOptions,
-    WasmtimeHostConfig, authenticate_component, authenticate_service_component,
+    EnvVariable, ExtensionEnvironment, ExtensionHttp, ExtensionHttpFailure, ExtensionHttpPart,
+    ExtensionHttpRequest, ExtensionHttpResponse, HostError, InputRecord, LiveClock, LiveHttp,
+    LiveSession, LiveStatus, MachineScripts, RunFailure, ScriptedEvent, ServiceComponents,
+    ServicePackage, SessionEmbedder, SessionHost, SessionHostComponents, SessionOpen,
+    SessionOutput, SnapshotFailure, TelemetryProviders, TrustedComponentDigest,
+    TrustedManifestDigest, WasiOptions, WasmtimeHostConfig, authenticate_component,
+    authenticate_service_component,
 };
 use sha2::{Digest as _, Sha256};
 
@@ -192,7 +193,7 @@ impl SessionEmbedder for NoResources {
         None
     }
 
-    fn scripts(&self) -> MachineScripts {
+    fn scripts(&self, _base_uri: Option<&str>) -> MachineScripts {
         MachineScripts::none()
     }
 }
@@ -717,7 +718,8 @@ impl ExtensionHttp for TestHttp {
 
 /// `s` invokes the echo service binding its `endpoint` slot as `invoke`
 /// says (with a 1 s timer of its own); `fetch` makes the service GET the
-/// slot's URL, `ping` is echoed, and `leave` exits `s`.
+/// slot's URL, `send` GET it streamed (each body read is logged as
+/// `received`), `ping` is echoed, and `leave` exits `s`.
 fn endpoint_document(invoke: &str) -> String {
     format!(
         r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:env="{env}" version="1.0" datamodel="ecmascript" initial="s">
@@ -725,8 +727,10 @@ fn endpoint_document(invoke: &str) -> String {
     <onentry><send event="timer" delay="1s"/></onentry>
     {invoke}
     <transition event="fetch"><send event="fetch" target="#_echo"/></transition>
+    <transition event="send"><send event="send" target="#_echo"/></transition>
     <transition event="ping"><send event="ping" target="#_echo"/></transition>
     <transition event="echo.ping"><log label="ping" expr="_event.invokeid"/></transition>
+    <transition event="echo.received"><log label="received" expr="_event.data"/></transition>
     <transition event="echo.fetched"><log label="fetched" expr="_event.data"/></transition>
     <transition event="timer"><log label="timer" expr="'fired'"/></transition>
     <transition event="error.execution" target="refused"/>
@@ -1071,6 +1075,202 @@ fn a_recorded_http_response_replays_without_the_network() {
     replay.close().expect("the replay closes");
 }
 
+/// A transport that answers every `send` with `parts`, each held until the
+/// test releases it: a response that streams in as the test says.
+#[derive(Debug)]
+struct Stepped {
+    parts: Vec<Result<ExtensionHttpPart, ExtensionHttpFailure>>,
+    released: Mutex<usize>,
+    wake: Condvar,
+    sent: AtomicUsize,
+}
+
+impl Stepped {
+    fn new(parts: Vec<Result<ExtensionHttpPart, ExtensionHttpFailure>>) -> Arc<Self> {
+        Arc::new(Self {
+            parts,
+            released: Mutex::new(0),
+            wake: Condvar::new(),
+            sent: AtomicUsize::new(0),
+        })
+    }
+
+    /// Releases the next part.
+    fn release_one(&self) {
+        *self
+            .released
+            .lock()
+            .expect("the release count is not poisoned") += 1;
+        self.wake.notify_all();
+    }
+}
+
+impl ExtensionHttp for Stepped {
+    fn fetch(
+        &self,
+        _request: &ExtensionHttpRequest,
+    ) -> Result<ExtensionHttpResponse, ExtensionHttpFailure> {
+        Err(ExtensionHttpFailure::Transport)
+    }
+
+    fn send(
+        &self,
+        _request: &ExtensionHttpRequest,
+        part: &mut dyn FnMut(Result<ExtensionHttpPart, ExtensionHttpFailure>),
+    ) {
+        self.sent.fetch_add(1, Ordering::AcqRel);
+        for (index, next) in self.parts.iter().enumerate() {
+            let mut released = self
+                .released
+                .lock()
+                .expect("the release count is not poisoned");
+            while *released <= index {
+                released = self
+                    .wake
+                    .wait(released)
+                    .expect("the release count is not poisoned");
+            }
+            drop(released);
+            part(next.clone());
+        }
+    }
+}
+
+fn stepped_host(http: &Arc<Stepped>) -> SessionHost {
+    host_with(
+        ServiceComponents::new()
+            .with_values(
+                ExtensionEnvironment::new([EnvVariable::new(
+                    "ENDPOINT",
+                    "http://127.0.0.1:9/stream",
+                    [ECHO.to_owned()],
+                )])
+                .expect("valid values"),
+            )
+            .with_outbound_http(Arc::clone(http) as _)
+            .bind(package(ECHO), component(ArtifactKind::ServiceExample))
+            .expect("the example service binds"),
+    )
+}
+
+/// `outbound-http.send`: the status, each body part, and the end reach the
+/// service as inputs of its invocation as they arrive, so it reports
+/// progress while the response is still streaming; a recording session
+/// records each part, and a replay delivers them without the network.
+#[test]
+fn a_streamed_response_reaches_the_service_part_by_part_and_replays() {
+    let http = Stepped::new(vec![
+        Ok(ExtensionHttpPart::Status(200)),
+        Ok(ExtensionHttpPart::Body(b"ab".to_vec())),
+        Ok(ExtensionHttpPart::Body(b"cde".to_vec())),
+        Ok(ExtensionHttpPart::End),
+    ]);
+    let host = stepped_host(&http);
+    let notified = Arc::new(AtomicUsize::new(0));
+    let mut session = open_with(
+        &host,
+        &endpoint_document(BOUND),
+        true,
+        None,
+        counted(&notified),
+    )
+    .expect("the session opens");
+    session
+        .send(&ScriptedEvent::named("send"))
+        .expect("send is processed");
+    let mut recorded_logs = Vec::new();
+    for (step, expected) in [
+        (1, Vec::<&str>::new()),
+        (2, vec!["received: 2"]),
+        (3, vec!["received: 3"]),
+        (4, vec!["fetched: 200"]),
+    ] {
+        assert!(session.awaiting_http_responses(), "step {step}");
+        http.release_one();
+        arrived(&notified, step);
+        session
+            .deliver_http_responses()
+            .expect("the part is delivered")
+            .expect("one part arrived");
+        let logged = logs(&mut session);
+        assert_eq!(logged, expected, "step {step}");
+        recorded_logs.extend(logged);
+    }
+    assert!(!session.awaiting_http_responses(), "the body ended");
+    let records = session.take_recorded();
+    session.close().expect("the session closes");
+    let parts: Vec<_> = records
+        .iter()
+        .filter_map(|record| match record {
+            InputRecord::HttpResponsePart {
+                path,
+                request: 0,
+                part,
+                ..
+            } if path == &["echo".to_owned()] => Some(part.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(parts, http.parts, "each part is a recorded input");
+    let mut replay = open_with(
+        &host,
+        &endpoint_document(BOUND),
+        false,
+        Some(&records),
+        LiveHttp::default(),
+    )
+    .expect("the replay opens");
+    let mut replayed = Vec::new();
+    for record in &records {
+        replay.apply(record).expect("the record applies");
+        replayed.extend(logs(&mut replay));
+    }
+    assert_eq!(replayed, recorded_logs);
+    assert_eq!(
+        http.sent.load(Ordering::Acquire),
+        1,
+        "a replay sends no request"
+    );
+    replay.close().expect("the replay closes");
+}
+
+/// A streamed response that fails after its status fails the invocation
+/// (its body's future resolves `err`, which the service returns), after the
+/// parts that arrived.
+#[test]
+fn a_streamed_response_that_fails_midway_fails_the_invocation() {
+    let http = Stepped::new(vec![
+        Ok(ExtensionHttpPart::Status(200)),
+        Ok(ExtensionHttpPart::Body(b"ab".to_vec())),
+        Err(ExtensionHttpFailure::Transport),
+    ]);
+    let host = stepped_host(&http);
+    let notified = Arc::new(AtomicUsize::new(0));
+    let mut session = open_with(
+        &host,
+        &endpoint_document(BOUND),
+        false,
+        None,
+        counted(&notified),
+    )
+    .expect("the session opens");
+    session
+        .send(&ScriptedEvent::named("send"))
+        .expect("send is processed");
+    for step in 1..=3 {
+        http.release_one();
+        arrived(&notified, step);
+        session
+            .deliver_http_responses()
+            .expect("the part is delivered")
+            .expect("one part arrived");
+    }
+    assert_eq!(logs(&mut session), ["received: 2"]);
+    assert_eq!(session.configuration().expect("configuration"), ["failed"]);
+    assert!(!session.awaiting_http_responses());
+    session.close().expect("the session closes");
+}
+
 /// A loopback model server that streams its answer slowly: it reads one
 /// request head, answers a chunked `text/event-stream` head, writes one SSE
 /// chunk every 20 ms until a write fails, and reports when it saw the client
@@ -1288,5 +1488,111 @@ fn a_slow_streaming_response_is_read_to_its_end() {
         .expect("one response arrived");
     assert_eq!(logs(&mut session), ["fetched: 200"]);
     server.join().expect("the server ends");
+    session.close().expect("the session closes");
+}
+
+/// `ExtensionHttpClient`'s `send` streams a response as it is read: a
+/// loopback server that answers one chunk every 100 ms reaches the service
+/// read by read, before the server has finished, and then its end.
+#[cfg(feature = "http")]
+#[test]
+fn a_streamed_response_arrives_while_the_server_still_writes() {
+    use std::io::{Read as _, Write as _};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port binds");
+    let port = listener
+        .local_addr()
+        .expect("the listener has an address")
+        .port();
+    let (finished_tx, finished) = std::sync::mpsc::channel();
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("the client connects");
+        let mut head = Vec::new();
+        let mut byte = [0_u8; 1];
+        while !head.ends_with(b"\r\n\r\n") {
+            assert_eq!(stream.read(&mut byte).expect("the head is read"), 1);
+            head.push(byte[0]);
+        }
+        stream
+            .write_all(
+                b"HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ntransfer-encoding: chunked\r\n\r\n",
+            )
+            .expect("the response head is written");
+        let chunk = b"data: {\"choices\":[{\"delta\":{\"content\":\"token\"}}]}\n\n";
+        let framed = [format!("{:x}\r\n", chunk.len()).as_bytes(), chunk, b"\r\n"].concat();
+        for _ in 0..10 {
+            stream.write_all(&framed).expect("a chunk is written");
+            stream.flush().expect("the chunk is flushed");
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        stream.write_all(b"0\r\n\r\n").expect("the stream ends");
+        finished_tx.send(()).expect("the test listens");
+        chunk.len() * 10
+    });
+    let host = host_with(
+        ServiceComponents::new()
+            .with_values(
+                ExtensionEnvironment::new([EnvVariable::new(
+                    "ENDPOINT",
+                    format!("http://127.0.0.1:{port}/stream"),
+                    [ECHO.to_owned()],
+                )])
+                .expect("valid values"),
+            )
+            .with_outbound_http(Arc::new(scxml_host_wasmtime::ExtensionHttpClient::new()))
+            .bind(package(ECHO), component(ArtifactKind::ServiceExample))
+            .expect("the example service binds"),
+    );
+    let notified = Arc::new(AtomicUsize::new(0));
+    let mut session = open_with(
+        &host,
+        &endpoint_document(BOUND),
+        false,
+        None,
+        counted(&notified),
+    )
+    .expect("the session opens");
+    session
+        .send(&ScriptedEvent::named("send"))
+        .expect("send is processed");
+    // The status and the first reads arrive while the server still writes.
+    arrived(&notified, 2);
+    session
+        .deliver_http_responses()
+        .expect("the parts are delivered")
+        .expect("parts arrived");
+    let early = logs(&mut session);
+    assert!(
+        finished.try_recv().is_err(),
+        "delivered before the server finished: {early:?}"
+    );
+    let mut logged = early;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !logged.iter().any(|line| line.starts_with("fetched")) {
+        assert!(Instant::now() < deadline, "the body ends: {logged:?}");
+        std::thread::sleep(Duration::from_millis(20));
+        if session
+            .deliver_http_responses()
+            .expect("the parts are delivered")
+            .is_some()
+        {
+            logged.extend(logs(&mut session));
+        }
+    }
+    let total = server.join().expect("the server ends");
+    let received: usize = logged
+        .iter()
+        .filter_map(|line| line.strip_prefix("received: "))
+        .map(|count| count.parse::<usize>().expect("a byte count"))
+        .sum();
+    assert_eq!(received, total, "every byte arrived: {logged:?}");
+    assert_eq!(logged.last().map(String::as_str), Some("fetched: 200"));
+    assert!(
+        logged
+            .iter()
+            .filter(|line| line.starts_with("received"))
+            .count()
+            > 1,
+        "the body arrived in more than one read: {logged:?}"
+    );
     session.close().expect("the session closes");
 }

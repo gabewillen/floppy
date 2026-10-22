@@ -66,7 +66,7 @@
 
     <!-- Nothing is being produced: all of the arrival survives. -->
     <state id="quiet">
-      <transition event="bot.ability.listening.sensitivity.score" event:schema="schemas/bot.ability.listening.sensitivity.score.json">
+      <transition event="bot.ability.listening.sensitivity.score" event:schema="../schemas/bot.ability.listening.sensitivity.score.json">
         <assign location="stimulus" expr="_event.data.stimulus"/>
         <assign location="sound" expr="stimulus.data"/>
         <assign location="perceived" expr="receivedLevel(sound)"/>
@@ -74,7 +74,7 @@
           <content expr="scoreOutput(sound, stimulus, perceived)"/>
         </send>
       </transition>
-      <transition event="bot.ability.speaking.efference" event:schema="schemas/bot.ability.speaking.efference.json"
+      <transition event="bot.ability.speaking.efference" event:schema="../schemas/bot.ability.speaking.efference.json"
                   target="producing">
         <assign location="sensitivity_playout_seconds" expr="_event.data.duration"/>
         <assign location="sensitivity_producing_mouth" expr="_event.data.mouth"/>
@@ -91,7 +91,7 @@
       <onexit>
         <cancel sendid="producing-after"/>
       </onexit>
-      <transition event="bot.ability.listening.sensitivity.score" event:schema="schemas/bot.ability.listening.sensitivity.score.json">
+      <transition event="bot.ability.listening.sensitivity.score" event:schema="../schemas/bot.ability.listening.sensitivity.score.json">
         <assign location="stimulus" expr="_event.data.stimulus"/>
         <assign location="sound" expr="stimulus.data"/>
         <if cond="isOffProducingMouth(stimulus, sensitivity_producing_mouth)">
@@ -111,7 +111,7 @@
           <content expr="scoreOutput(sound, stimulus, perceived)"/>
         </send>
       </transition>
-      <transition event="bot.ability.speaking.efference" event:schema="schemas/bot.ability.speaking.efference.json"
+      <transition event="bot.ability.speaking.efference" event:schema="../schemas/bot.ability.speaking.efference.json"
                   target="producing">
         <assign location="sensitivity_playout_seconds" expr="_event.data.duration"/>
         <assign location="sensitivity_producing_mouth" expr="_event.data.mouth"/>

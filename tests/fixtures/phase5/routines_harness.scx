@@ -1,17 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Test harness of abilities/routines/routines.scx (tests/tests/routines.rs). It
-  stores four rows in behavior inventory through the Memory ability (memory.scx)
+  stores five rows in behavior inventory through the Memory ability (memory.scx)
   (Alpha and Beta: ACTIVE persistent routines; Gamma: a BROKEN persistent
   routine; Delta: an ACTIVE turn behavior; Epsilon: an ACTIVE persistent
-  routine whose source is not SCXML), then invokes the routines as
+  routine whose program is not SCXML), each row's source the path of its
+  program, ../../behaviors/<name>.scx (decision D121), which the test wrote
+  (revision one), then invokes the routines as
   its child "routines" with the database path as <param name="database">.
 
   Each routine ticks every 60 s (a <send delay> loop) with its name and an
   output whose text names its revision. The harness logs the first tick of
   each routine and revision it sees (harness.tick, "<name> <text>"). Once
-  Alpha and Beta have ticked it changes Alpha's source (revision two),
-  deletes Beta, and asks the routines to reconcile; after the next three
+  Alpha and Beta have ticked it writes Alpha's program again through the
+  files service (revision two: the same path, as a revision the builder
+  writes), marks its row updated (updated_at), deletes Beta, and asks the
+  routines to reconcile; after the next three
   ticks of Alpha's revision two it logs any other tick it saw since
   (harness.stale) and ends in done. A tick of Gamma or Delta is logged as
   harness.unexpected.
@@ -20,7 +24,7 @@
   <datamodel>
     <data id="database" expr="'/memory/floppy.sqlite'"/>
     <data id="insert">INSERT INTO bot_behavior (name, source, status, lifetime) VALUES (?, ?, ?, ?)</data>
-    <data id="update">UPDATE bot_behavior SET source = ? WHERE name = ?</data>
+    <data id="update">UPDATE bot_behavior SET updated_at = 'revision two' WHERE name = ?</data>
     <data id="remove">DELETE FROM bot_behavior WHERE name = ?</data>
     <data id="routine">&lt;scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="waiting"&gt;&lt;state id="waiting"&gt;&lt;onentry&gt;&lt;send event="every" delay="60s"/&gt;&lt;/onentry&gt;&lt;transition event="every" target="waiting"&gt;&lt;send event="bot.behavior.tick" target="#_parent"&gt;&lt;content expr="({name: 'NAME', trigger: 'every', scheduled_at: '2026-10-05T08:00:00-04:00', fired_at: '2026-10-05T08:00:00-04:00', output: [{event: 'bot.speaking.say', data: {text: 'TEXT'}}]})"/&gt;&lt;/send&gt;&lt;/transition&gt;&lt;/state&gt;&lt;/scxml&gt;</data>
     <data id="seen" expr="[]"/>
@@ -31,7 +35,7 @@
   <state id="seeding">
     <invoke id="seed" type="scxml" src="memory/memory.scx">
       <param name="database" expr="database"/>
-      <param name="statements" expr="['Alpha one', 'Beta one', 'Gamma one', 'Delta one', 'Epsilon one'].map(t =&gt; ({sql: insert, parameters: [t.split(' ')[0], t[0] === 'E' ? 'not scxml' : routine.replace('NAME', t.split(' ')[0]).replace('TEXT', t.split(' ')[1]), t[0] === 'G' ? 'BROKEN' : 'ACTIVE', t[0] === 'D' ? 'turn' : 'persistent']}))"/>
+      <param name="statements" expr="['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon'].map(n =&gt; ({sql: insert, parameters: [n, '../../behaviors/' + n + '.scx', n === 'Gamma' ? 'BROKEN' : 'ACTIVE', n === 'Delta' ? 'turn' : 'persistent']}))"/>
     </invoke>
     <transition event="bot.ability.memory.output" cond="_event.invokeid === 'seed'" target="live"/>
     <transition event="bot.ability.failed error.*" target="failed">
@@ -60,9 +64,17 @@
       </state>
 
       <state id="changing">
+        <invoke id="rewrite" type="https://github.com/stateforward/floppy/services/files">
+          <param name="name" expr="'Alpha.scx'"/>
+          <param name="text" expr="routine.replace('NAME', 'Alpha').replace('TEXT', 'two')"/>
+        </invoke>
+        <transition event="done.invoke.rewrite" target="updating"/>
+      </state>
+
+      <state id="updating">
         <invoke id="change" type="scxml" src="memory/memory.scx">
           <param name="database" expr="database"/>
-          <param name="statements" expr="[{sql: update, parameters: [routine.replace('NAME', 'Alpha').replace('TEXT', 'two'), 'Alpha']}, {sql: remove, parameters: ['Beta']}]"/>
+          <param name="statements" expr="[{sql: update, parameters: ['Alpha']}, {sql: remove, parameters: ['Beta']}]"/>
         </invoke>
         <transition event="bot.ability.memory.output" cond="_event.invokeid === 'change'" target="second">
           <send event="bot.ability.routines.reconcile" target="#_routines">

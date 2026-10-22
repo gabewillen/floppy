@@ -18,18 +18,19 @@ invoked service). The decisions behind this plan are in
 
 | The original | floppy |
 | --- | --- |
-| `the original.Bot` (body + cognition) | One root SCXML document per bot under `bots/<name>/`, run as a live session by scxml.rs's `scx run` (floppy has no runtime of its own, decision D14) |
+| `the original.Bot` (body + cognition) | One SCXML document per bot under `bots/<name>/`, invoked by its environment, which `scx run` runs as the live root session (floppy has no runtime of its own, decision D14; the bot is a participant, decision D102) |
+| `Environment` (a context: membership, holdings, placement, broadcast) | An environment document, `environments/<name>/<name>.scx` (today `environments/room/room.scx`), run as the root session; its invoked children are its participants, joining when the invoke starts and leaving when it ends; it routes host input by its payload (D108), broadcasts every `environment.sound` and `environment.visual` to the participants that perceive it (placement, the free-field law and thresholds, D103), and logs the events its bots send it (decisions D102 to D111) |
 | hsm state machines | SCXML documents (table below) |
 | Abilities (listening, speaking, cognition, memory, ...) | Invoked children, one `.scx` per the original machine in the flat `abilities/` directory: `<invoke id="<name>" type="scxml" src="../../abilities/<name>.scx">` from the body (a stage or sub-ability from its ability: `src="<name>.scx"`), literal `id` and `src`, talking to the parent through `#_parent` and to the child through `#_<invokeid>` (decisions D33, D34) |
 | Ability attachment protocol (`attachment.*`, `attachment.group.*`, `bot.ability.attachment.terminal`, yamux) | Not ported, and none of these names has a schema: `<invoke>` lifecycle is attach (start on state entry) and detach (cancel on state exit, `done.invoke.<id>` on completion); a group's attach is the body's parallel `<invoke>`s joined on each member's first `bot.ability.offers` (decision D6) |
-| Devices (phone, audio, smart phone) | Invoked services: `<invoke type="https://github.com/stateforward/floppy/services/<device>@<tag>">` (out of scope for now; phase 6 ported none) |
+| Devices (phone, audio, smart phone) | SCXML documents an environment invokes (`devices/<name>/<name>.scx`), any real I/O inside them an invoked service; a bot holds them through the environment's `holdings` and `owned_devices`, reads them with `<device:snapshot>` and acts on them at their address (decisions D105, D109, D110); none is ported yet (the tests use the lamp fixture) |
 | Providers (SDK owners) | Invoked services (`services/`) for every effect: anything asynchronous, I/O-bound, or long-running (decision D13); extension namespaces (`namespaces/`) only for synchronous, quick executable content (table below) |
 | Starlark behaviors (compiled, stored, cached) | Validator-gated SCXML: the builder bot authors the behavior as an SCXML document, `scx:validate` gates it, and a simulation as an invoked child proves it before it is stored; a matched behavior runs as an invoked child |
 | Persistent routines (`hsm.every` / `hsm.at` across turns) | Long-lived invoked children whose schedules are self-rescheduling `<send delay>` loops; each tick is an event to the parent, which decides on it in a new turn |
 | pydantic event data models | JSON Schema files referenced by `event:schema` on the transitions that take the event; scxml.rs checks them where the event is created (`<send>`, `<raise>`, a send between sessions) and on host input (decision D41) |
 | Hand-written payload validators (`model_validate`, field checks) | `event:schema` only; a `cond` correlates (which child, which turn, which timer) and never checks a payload's shape (decision D42) |
-| Helper functions (attention bias, envelopes, choice assembly and compaction, routing, confidence tuner, message commit) | floppy namespace elements that write to a `location` (`namespaces/bot`, `namespaces/conversation`, `namespaces/decision`; decision D40) |
-| Model-facing event choice lists and payload filling (Intuition, Processor) | `<decision:choice>` (the `decision` namespace) writes the enabled transitions with their `event:schema`, read through `session-snapshot-host`, as canonical choices; the `decision` service, invoked with it, asks a backend, fills the offered events' data to their schemas and validates it; `choose` emits the chosen event, `select` (the original's TypeSafe `Processor.process`, which intuition uses) emits `decision.selected` with every groundable event and its own confidence |
+| Helper functions (attention bias, envelopes, choice assembly and compaction, routing, confidence tuner, message commit) | floppy namespace elements that write to a `location` (`namespaces/conversation`, `namespaces/decision`, `namespaces/processing`, `namespaces/intuition`, `namespaces/cognition`, `namespaces/identity`, `namespaces/memory`, `namespaces/behavior`, `namespaces/autonomy`; decisions D40, D113, D114, D115, D116) |
+| Model-facing event choice lists and payload filling (Intuition, Processor) | `<decision:choice>` (the `decision` namespace) writes the enabled transitions with their `event:schema`, read through `session-snapshot-host`, as canonical choices; the `decision` service, invoked with it, asks a backend, fills the offered events' data to their schemas and validates it; its kinds are OpenAI Decisions API's question types (D120): `choice` emits the chosen event (or, over `labels`, `decision.classified`), `predicate` (the original's TypeSafe `Processor.process`, which intuition uses, with the stimulus as a param and the deliberative handoff never offered) emits `decision.selected` with every groundable event and its own confidence, and `score` emits `decision.ranked` |
 | Event names `bot.*`, `bot.ability.*`, `phone.*` | Unchanged, byte for byte |
 | Telemetry (`telemetry`) | scxml.rs's OpenTelemetry facade (guests through the telemetry WIT; the native runtime, `scx`, through scxml.rs's own) |
 
@@ -46,7 +47,7 @@ has to cover.
 | `hsm.final` (15) | `<final id>`, with `<donedata>` for a result |
 | `hsm.transition(...)` (725) with `hsm.target` (649) | `<transition event="..." target="...">`; a targetless transition is internal (`type="internal"` where the source is compound) |
 | `hsm.guard` (574) | `cond` (ECMAScript data model) |
-| `hsm.effect` (567) | executable content (synchronous and quick): `<assign>`, `<raise>`, `<send>`, `<log>`, `<foreach>`, `<if>`, and extension elements (`decision:*`, `bot:*`, `conversation:*`, `scx:validate`); never `<script>` in a floppy document (decision D39); an effect that does I/O becomes an `<invoke>` of a service |
+| `hsm.effect` (567) | executable content (synchronous and quick): `<assign>`, `<raise>`, `<send>`, `<log>`, `<foreach>`, `<if>`, and extension elements (`decision:*`, `processing:*`, `conversation:*`, `behavior:*`, `scx:validate`); never `<script>` in a floppy document (decision D39); an effect that does I/O becomes an `<invoke>` of a service |
 | `hsm.entry` (20) / `hsm.exit` (13) | `<onentry>` / `<onexit>` |
 | `hsm.activity` (138) | `<invoke>`: started on entry, cancelled on exit, `done.invoke.<id>` and `error.*` on completion or failure; every model call (the `generate` and `decision` services) is one |
 | `hsm.defer` (104) | `<event:defer/>` (scxml.rs `namespaces/event`, decision D93): in a deferring state, a targetless transition on E holds the event; it comes back unchanged, in order, on the internal queue once the state is exited or a state inside it that handles E is entered (see [Phase 4 conventions](#phase-4-conventions)) |
@@ -90,11 +91,11 @@ in the gitignored `.env`), `decision` uses TypeSafe through its own
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 0 | scxml.rs invoked services: slice 1 (`invoked-service` world, host and CLI binding, echo example) and slice 2 (WASI permissions and grants, event contracts, env slots on `<invoke>`, repository services), and unbound invoke types failing at invocation start; floppy repository scaffold (subtree, workspace, an embedder and its smoke test, namespace skeletons, rules, this plan; decision D14 deleted the embedder, and the smoke test now drives `scx run`) | Done. Services are now one async `invoke` export on WASI 0.3 that awaits `outbound-http.fetch` (decision D15, which deleted the `outbound-http.begin`/`take`/`wake` API), with no host time limit on their I/O: the invoking state's `<send delay>` bounds it, and leaving the state cancels the invocation and closes its connection (SCXML 6.4). Extension components get no WASI, by rule (decision D13), not as a gap |
-| 1 | Namespaces and services: `scxml` (now scxml.rs's embedded `scx` namespace, decision D17: `scx:validate` wrapping the validator component, returning canonical diagnostics and fixes), `generate` (OpenAI text and structured output), `decision` (enabled-transition candidates, TypeSafe ranking, schema fill and validation before emit) | `scxml` namespace implemented, then moved to scxml.rs as `scx` (`scx:validate`); `services/generate` implemented (one Chat Completions call per `<invoke>`, text or schema-validated structured output, `generate.result`/`generate.failed`, never blocking the session; `env:apikey`/`env:baseurl`); `decision` split per D13: the namespace's `decision:choice` (snapshot choices of `event:schema` transitions whose guards evaluate to true) and `services/decision` (request kinds `choose`, `rank`, `classify`; grounded per-member fill, validation against the choices' schema before emit, `decision.abstain`, `decision.failed`; TypeSafe `system_one` backend behind the `Backend` trait, `env:apikey`/`env:baseurl`) |
+| 1 | Namespaces and services: `scxml` (now scxml.rs's embedded `scx` namespace, decision D17: `scx:validate` wrapping the validator component, returning canonical diagnostics and fixes), `generate` (OpenAI text and structured output), `decision` (enabled-transition candidates, TypeSafe ranking, schema fill and validation before emit) | `scxml` namespace implemented, then moved to scxml.rs as `scx` (`scx:validate`); `services/generate` implemented (one Chat Completions call per `<invoke>`, text or the calls of one function tool (asked for with `"tool_choice": "required"` and returned as the original's text generator returns them, not `response_format`, decision D112), `generate.result`/`generate.failed`, never blocking the session; `env:apikey`/`env:baseurl`); `decision` split per D13: the namespace's `decision:choice` (snapshot choices of `event:schema` transitions whose guards evaluate to true) and `services/decision` (request kinds `choice`, `predicate`, `score`, D120; grounded per-member fill, validation against the choices' schema before emit, `decision.abstain`, `decision.failed`; TypeSafe `system_one` backend behind the `Backend` trait, `env:apikey`/`env:baseurl`) |
 | 2 | Builder bot: `bots/builder/` SCXML (intake, design, author, `scx:validate`, fix or regenerate with bounded retries as states, simulate the draft as an invoked child via `#_<invokeid>`, ending in the final states `done`/`failed` whose `<donedata>` carries the result), run with `scx run` | `bots/builder/builder.scx` implemented (contract schemas in `bots/builder/schemas`; design and author invoke the generate service and triage invokes the decision service on the `decision:choice` choices, each with `<finalize>`/`done.invoke` and a `builder.timeout` that preempts and cancels the call; cond-based fallback; simulation as an invoked child); runs with `scx run --env-file .env bots/builder/builder.scx` (decisions D14, D16; [bots/builder/README.md](../bots/builder/README.md#running)); deterministic harness in `tests/tests/builder_bot.rs`, which runs that command (including a timeout firing while a generation is in flight); live results in [live-proof.md](live-proof.md) |
-| 3 | Memory service on SQLite | Done: `services/sql` (`floppy_service_sql`), one SQLite transaction of the original's `Statement`s per `<invoke>` on a database file in a directory the run grants (`--dir URI=HOST::/memory`), answering `sql.result` or `sql.failed`; the original's Memory ability as `abilities/memory/memory.scx`, which migrates the original's schema and applies statements through it, answering `bot.ability.memory.output` or `bot.ability.failed`; reasoning recalls and retains cognitive episodes and standing directives, the identity recalls and remembers its adopted name, and the conversation recalls and remembers a relationship's memories (decisions D44 to D47, [plan](plans/phase3-memory.mdscript.md)). Reflection and behaviors use it in phase 5 |
+| 3 | Memory service on SQLite | Done: `services/sql` (`floppy_service_sql`), one SQLite transaction of the original's `Statement`s per `<invoke>` on a database file in a directory the run grants (`--dir URI=HOST::/memory`), answering `sql.result` or `sql.failed`; the original's Memory ability as `abilities/memory/memory.scx`, which migrates the original's schema and applies statements through it, answering `bot.ability.memory.output` or `bot.ability.failed`; reasoning recalls cognitive episodes and standing directives (it retained each turn's episode until D97 left that to reflection), the identity recalls and remembers its adopted name, and the conversation recalls and remembers a relationship's memories (decisions D44 to D47, [plan](plans/phase3-memory.mdscript.md)). Reflection and behaviors use it in phase 5 |
 | 4 | Bot core: body and cognition as SCXML, abilities as invoked children, the original's pydantic event models as `event:schema` JSON Schemas, `bot.*` names unchanged | Done through the script-validator cutover: the body `bots/floppy/floppy.scx`; `abilities/` cognition (autonomy seam, intuition, reasoning), communication (conversation, speaking in text mode); the `bot` and `conversation` namespaces and the decision elements; event contracts and runtime `event:schema` checks; no `<script>` (decisions D33 to D43, [Phase 4 conventions](#phase-4-conventions)). Identity, the phase 5 seams, and the saved live examples finish it ([plan](plans/phase4-bot-core.mdscript.md)) |
-| 5 | Behaviors and routines: learned behaviors authored by the builder bot, validated, simulated, stored in memory, invoked when matched; routines as long-lived children | Done. The cognition runs reflection and routines beside its turns in every bot run (D80; with no database each logs `absent`). Autonomy runs the SpeechHeard seed and then the ACTIVE turn behaviors the stimulus triggers, each source by `<content expr>` under a 1 s silence bound, and records usage; reflection recalls the episodes and the inventory, selects at most one of `bot.behavior.create`, `change`, `break` through its enabled transitions, revises a behavior with the builder bot (which checks the reference `check()`'s lifetime bounds and forces a routine's first tick) and stores it ACTIVE (or the rejected source DRAFT `validation`), and stores the turn's episode; routines reconciles the ACTIVE persistent rows into a chain of runners that passes `bot.behavior.tick` up. All of it is kept by the Memory ability (decisions D60 to D64, D73 to D75, D80, [plan](plans/phase5-behaviors.mdscript.md)) |
+| 5 | Behaviors and routines: learned behaviors authored by the builder bot, validated, simulated, stored in memory, invoked when matched; routines as long-lived children | Done. The cognition runs reflection and routines beside its turns in every bot run (D80; with no database each logs `absent`). Autonomy runs the SpeechHeard seed and then the ACTIVE turn behaviors the stimulus triggers, each by `<invoke srcexpr>` on its row's path (D121) under a 1 s silence bound, and records usage; reflection recalls the episodes and the inventory, selects at most one of `bot.behavior.create`, `change`, `break` through its enabled transitions, revises a behavior with the builder bot (which checks the reference `check()`'s lifetime bounds and forces a routine's first tick) and stores it ACTIVE (or the rejected source DRAFT `validation`), and stores the turn's episode; routines reconciles the ACTIVE persistent rows into a chain of runners that passes `bot.behavior.tick` up. All of it is kept by the Memory ability (decisions D60 to D64, D73 to D75, D80, [plan](plans/phase5-behaviors.mdscript.md)) |
 | 6 | Speech, vision, and devices as services (`speech`, `vision`, `phone`, audio) | Done for speech and vision; devices are out of scope. `services/speech` (`floppy_service_speech`) decodes and encodes speech on OpenAI-compatible audio APIs and detects, diarizes and identifies voices on LocalAI's voice APIs (decisions D57, D66); the generate service reads images (D58). The original's hearing leaves, Listening (`Perceiving{Listening, Sensing}`, Sensitivity, Interpretation with the open-speech window; decision D67) and the SpeechHeard seed turn `environment.sound` into the turn's `bot.ability.listening.speech.output` stimulus and then `bot.ability.communication.input`; vocal and Speaking speak audio (D59, superseding D38); vision and Reading are ported, invoked by nothing yet as in the original ([Phase 6 conventions](#phase-6-conventions), [plan](plans/phase6-speech-vision.mdscript.md)) |
 | 7 | Defaults and release: PGlite memory, tagged releases with `SHA256SUMS` for repository namespaces and services (releases wait for going public) | Done except publishing. Memory on Postgres: `services/pgsql` behind the unchanged Memory ability, selected by its `database` (a `postgresql://` URI), migrating the original's full head schema in the Postgres dialect through the Alembic-style migration ability, with every ability's SQL portable to both engines and tested on Postgres 16; PGlite is reached over its socket server, not compiled into a component (decisions D48 to D51, D69 to D72). Defaults: README.md's [Defaults](../README.md#defaults) and `.env.example`, checked by `tests/tests/defaults.rs`; there is no default backend, so every run names its endpoint with `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (decision D31). Releases: canonical Linux builds, `SHA256SUMS` and a dry run of the release layout, prepared and checked locally ([release.md](release.md)); no tag, release or upload until the repositories are public ([plan](plans/phase7-pglite-defaults.mdscript.md)) |
 
@@ -106,18 +107,13 @@ extracted from the original's own pydantic models
 body events in `bots/floppy/schemas/`, ability events in
 `abilities/schemas/`, and the full list of the original's domain event names in
 `abilities/schemas/floppy-event-names.json`. Documents reference these files
-(`event:schema="schemas/<event>.json"`); they never carry inline copies. A
-schema reference is relative to its document and cannot leave the
-document's directory (no `..`), so an ability document lives directly in
-`abilities/` (`abilities/<ability>.scx`) and the body in `bots/floppy/`.
-The ability events the body receives (`bot.ability.offers`,
-`bot.ability.cognition.{input,output,cancelled}`, `bot.ability.failed`,
-`bot.ability.processing.cancelled`,
-`bot.ability.communication.{input,failed}`,
-`bot.ability.conversation.failed`, `bot.ability.speaking.output`,
-`bot.reboot`) are copied byte for byte into `bots/floppy/schemas/` as
-twins (decision D37); `bot.reboot` lives with the abilities' events
-because the cognition takes it from the reflection too.
+(`event:schema="schemas/<event>.json"`, or
+`../../abilities/schemas/<event>.json` from another directory); they never
+carry inline copies. A schema reference resolves against its document's
+base URI like any relative URI, so each event has exactly one schema file
+(decision D125, which replaced the byte-identical twins of D33, D37 and
+D65); `bot.reboot` lives with the abilities' events because the cognition
+takes it from the reflection too.
 
 The extraction script runs with the original's interpreter; it is kept outside
 this repository, with the floppy plans, as
@@ -154,8 +150,9 @@ Mapping rules (the byte-for-byte rule covers event names, not data shapes):
   `choices`, the turn's choices the body assembled (its own and each
   ability's `bot.ability.offers`, tagged with the offering ability's
   `target`; the original built its dispatch inventory from live actor
-  snapshots); `bot.activate` takes an optional `model` the body hands to
-  its model-backed abilities.
+  snapshots), and `environment`, the bot's environment block (D106); the
+  bot's `model` (an activation `<param>` its environment gives, D107) goes
+  to its model-backed abilities.
 - Media is a reference: `environment.sound`'s `audio` and
   `environment.visual`'s `image` are `uri-reference` strings, not base64
   bytes. `timedelta` would map to integer milliseconds and other `bytes` to
@@ -174,7 +171,8 @@ service results, never offered as choices, so an ability needs no schema on
 the transitions taking them (scxml.rs does not check an invoked service's
 events, so their transitions keep a short shape cond such as
 `Object(_event.data).reason`). `tests/tests/contracts.rs` checks the set,
-the rules, the twins, and every `.scx` under `abilities/` and
+the rules, that every reference resolves to its event's one schema file,
+and every `.scx` under `abilities/` and
 `bots/floppy/` against the document structure rule (decision D39).
 
 ## Phase 4 conventions
@@ -192,34 +190,37 @@ D33 to D43.
   `bot.ability.offers` [floppy name] reaches the body; the body activates
   when no expected ability is left in its `waiting` list, and an expected
   ability that ends while active degrades the bot. Each offer is the
-  ability's `<decision:choice>` filtered to its own events and compacted
-  with `<decision:compact>` (decision D35).
-- **Choices as data.** On each `processing` entry the body assembles the
-  turn's choices (its own `bot.focus_device`, pinned to the turn's focus
-  candidates, and `bot.clear_focus`, plus each ability's latest offers
-  tagged with its `target`), holds them to 32 KiB, and sends them as
-  `bot.ability.cognition.input.choices` [floppy field]. Reasoning selects
-  only from them; the body's `routing` state checks every selection
-  (`<bot:verdict>`, then `<decision:route>`) and, when all can be placed,
-  logs `bot.processing.completed` and delivers each to `#_internal` or
-  `#_<target>` with a visible `<foreach>`/`<send>` (logging `floppy.route`);
-  one that cannot be placed fails the turn (`bot.processing.failed` with
-  the original's `SelectionRejectionError` message). Autonomy, intuition and
-  reasoning make the same checks before they answer, where the original
-  dispatches.
+  ability's `<decision:choice>` filtered to its own events and made
+  model-facing with `<processing:model_facing_schema>` (decisions D35,
+  D113).
+- **Choices as data.** On each `processing` entry the body collects the
+  turn's choices with `<processing:collect_offered_events>` (its own
+  `bot.focus_device`, pinned to the turn's focus candidates, and
+  `bot.clear_focus`, plus each ability's latest offers and the focused
+  device's events, each tagged with its offerer's session id as
+  `target`), holds them to 32 KiB, and sends them as
+  `bot.ability.cognition.input.choices` [floppy field]. Each stage that
+  dispatches in the original (autonomy, intuition, reasoning) sends its own
+  selections to their targets with a visible `<foreach>`/`<send
+  targetexpr="'#_scxml_' + s.target">` (decision D113); the body logs
+  `bot.processing.completed` and sends itself only the selections that
+  name no target (the trusted seed's).
 - **Per-turn stage children.** The cognition invokes each stage (autonomy,
   intuition, reasoning) per turn with `<param>`s named after the original
   input event's fields and takes its result as `done.invoke.<stage>`
   `<donedata>`; leaving the stage cancels it, which replaces the original's
   cancel-token protocol. State a stage keeps across turns (the intuition's
-  tuner) is passed in by `<param>` and returned in `<donedata>`.
+  `confidence_tuner`) is passed in by `<param>` and returned in `<donedata>`.
 - **Partial selections.** A stage that leaves the turn unhandled may still
   hand out selections (the intuition's environment actions on
   `low_confidence` or `deliberative_input`, the reference `_environment_actions`)
   as the `selected` of its unhandled `<donedata>`. The cognition keeps them
   and puts them first in the turn's one `bot.ability.cognition.output`,
   before the handling stage's selections, so the body routes them first;
-  the reflection gets the handling stage's selections only.
+  a handling-stage selection that repeats one of them (the same event and
+  data) is not put in again, since the original had dispatched it before
+  reasoning ran, so a turn acts once; the reflection gets the handling
+  stage's selections only.
 - **Deferral.** A deferring state holds the event with a targetless
   transition whose content is `<event:defer/>` (and any `<log>`); the
   state that handles it takes it by the same transition as on arrival, in
@@ -257,27 +258,37 @@ D33 to D43.
 | --- | --- | --- |
 | `bot.py` Bot body | `bots/floppy/floppy.scx` | bot root `.scx` |
 | `bot.py` attachment Group, `_AttachmentOperation`, `_ProcessingOperation` | the body's `<invoke>`s in `live`, its offers bookkeeping and its delayed `<send>`/`<cancel>` | composition inside the body |
-| `attention_bias_for_turn`, `_interrupt_reference`, `_target_device_reference` | `<bot:attention>` | `namespaces/bot` element |
-| stimulus envelope | `<bot:stimulus>` | `namespaces/bot` element |
-| `without_ignore_selections`, `attention_selection_error` | `<bot:verdict>` | `namespaces/bot` element |
-| `model_facing_event_json_schema` and the 32 KiB bound | `<decision:compact>` | `namespaces/decision` element |
-| `collect_offered_events`, `_dispatch_bot_processing` | `<decision:assemble>` | `namespaces/decision` element |
+| `attention_bias_for_turn`, `_interrupt_reference`, `_target_device_reference` | `<cognition:attention_bias_for_turn>` (D114) | `namespaces/cognition` element |
+| stimulus envelope | assigned member by member with `<assign>` before its `<send>` (was `<bot:stimulus>`, D116) | plain SCXML |
+| `without_ignore_selections`, `attention_selection_error` | the ignore sent to the cognition, the focus device's pinned enum and the body's guards (D113) | plain SCXML |
+| `model_facing_event_json_schema` and the 32 KiB bound | `<processing:model_facing_schema>` | `namespaces/processing` element |
+| `collect_offered_events`, `_dispatch_bot_processing` | `<processing:collect_offered_events>` | `namespaces/processing` element |
 | focus pinning | `<decision:pin>` | `namespaces/decision` element |
-| `_resolve_target`, `fill_unique_selection_targets`, `SelectionRejectionError` | `<decision:route>` (the body's `<foreach>`/`<send>` delivers) | `namespaces/decision` element |
-| choice-name logs | `<decision:names>` | `namespaces/decision` element |
-| `_selection_item_branch`, `dispatch_tool` | `<decision:selection>` | `namespaces/decision` element |
-| `ConfidenceTuner` | `<decision:tuner>` | `namespaces/decision` element |
-| `model_facing_xml`, `InputData.model_facing_payload` (reasoning's `ProcessorInput` prompt and its budgets) | `promptProjection()` in `abilities/reasoning/reasoning.js` | ability script |
-| `_message_for_turn`, `_model_safe_content`, `_stable_identity_basis`, `_stable_context_ref`, `relationship_context_ref`, `MessageProvenance` | `<conversation:commit>` (its `keylocation` receives the relationship context reference) | `namespaces/conversation` element |
+| `dispatch_selected_events`, `_resolve_target`, `fill_unique_selection_targets` | each stage's `<foreach>`/`<send targetexpr="'#_scxml_' + s.target">`, every choice tagged with its offerer's session id (D113) | plain SCXML |
+| `_selection_item_branch`, `dispatch_tool` | `<processing:send>` | `namespaces/processing` element |
+| `normalize_confidence`, `selection_confidence` | `<processing:selection_confidence>` | `namespaces/processing` element |
+| `ConfidenceTuner` (`observe`, `should_escalate`) | `<intuition:observe>`, `<intuition:escalate>` over the `confidence_tuner` datum (D114) | `namespaces/intuition` elements |
+| `model_facing_content`, `InputData.model_facing_content` (reasoning's `ProcessorInput` prompt, its environment block and its budgets) | `<cognition:model_facing_content>` (D114) | `namespaces/cognition` element |
+| `_message_for_turn`, `_model_safe_content`, `MessageProvenance` | `<conversation:message_for_turn>` (was `<conversation:commit>`, D115) | `namespaces/conversation` element |
+| `Conversation._relationship_for_input` (its identity collection score), `_stable_context_ref`, `_new_relationship_ref` | `<conversation:relationship_for_input>` (D115) | `namespaces/conversation` element |
+| `Conversation._participant_for_source`, `_fail_turn`'s participants, `detector_refs`, `_new_track_ref` | `<conversation:participant_for_source>`, `<conversation:fail_turn>`, `<conversation:detector_refs>`, `<conversation:new_track_ref>` (D115) | `namespaces/conversation` elements |
+| `_content_for_detector`, `Conversation._complete_turn` | `<conversation:content_for_detector>`, `<conversation:complete_turn>` (D115) | `namespaces/conversation` elements |
+| `TurnDetector._ingest_content`, `TurnDetector._on_end` | `<conversation:ingest_content>`, `<conversation:on_end>` over the detector's `turn_content` datum (D115) | `namespaces/conversation` elements |
+| `identity/recognition.py` `hears_name`, `identity/value.py` `sorted_identities` | `<identity:hears_name>` (was `<bot:recognize>`), `<identity:sorted_identities>` (D115) | `namespaces/identity` elements |
+| memory `Memory.to_json` (`_encode_content`, `value.identities_json`), `OutputData.contents` | `<memory:to_json>`, `<memory:contents>` (D115) | `namespaces/memory` elements |
+| behavior `storage.instances_from_behavior_results`, `storage.replace_behavior_clauses` (`inventory.load_behavior`, `store_behavior`) | `<behavior:instances_from_behavior_results>`, `<behavior:replace_behavior_clauses>` (D116) | `namespaces/behavior` elements |
+| behavior `instance._lifetime_errors` and the lifetime, `verify._verify_tick`, `_selection_binding_errors` | `<behavior:lifetime_errors>`, `<behavior:verify_tick>` (D116) | `namespaces/behavior` elements |
+| behavior `schedule.At.next_after` | `next_after` in `abilities/reflection/reflection.js`, carried by a routine as data (a draft cannot use a namespace element: `<scx:validate>` binds no package, D116) | routine ECMAScript |
+| autonomy `behavior_input_payload` | `<autonomy:behavior_input_payload>` (D116) | `namespaces/autonomy` element |
 | `cognition.py` Cognition | `abilities/cognition/cognition.scx` | ability `.scx` child |
-| `autonomy.py` Autonomy | `abilities/autonomy/autonomy.scx` (phase 5: the inventory's ACTIVE turn behaviors the stimulus triggers run as `<content expr>` children of the chain `abilities/candidates_runner/candidates_runner.scx`, D93) | stage `.scx` child |
+| `autonomy.py` Autonomy | `abilities/autonomy/autonomy.scx` (phase 5: the inventory's ACTIVE turn behaviors the stimulus triggers run as `<invoke srcexpr>` children of the chain `abilities/candidates_runner/candidates_runner.scx`, D93, each by its row's path, D121) | stage `.scx` child |
 | `intuition.py` Intuition | `abilities/intuition/intuition.scx` invoking `services/decision` | stage `.scx` child and service |
 | `reasoning.py` Reasoning | `abilities/reasoning/reasoning.scx` invoking `services/generate` | stage `.scx` child and service |
 | `communication.py` Communication | `abilities/communication/communication.scx` | ability `.scx` child |
 | `conversation.py` Conversation | `abilities/conversation/conversation.scx` | ability `.scx` child |
 | `speaking.py` Speaking | `abilities/speaking/speaking.scx` (`idle` → `encoding` → `playing` → `recording`, decision D59) | ability `.scx` child |
 | `vocal/speech/encoding.py` SpeechEncoding | `abilities/vocal/vocal.scx`, speaking's child, invoking `services/speech` `encode` | ability `.scx` child and service |
-| `identity/identity.py` Identity, `identity/recognition.py` SpeechNameRecognizer | `abilities/identity/identity.scx`, one of the body's input abilities: each `environment.sound` is decoded by `abilities/speech_decoding/speech_decoding.scx` and the transcript matched by `<bot:recognize>`; text input is matched too (D43); adoption and recall through `abilities/memory/memory.scx` (decisions D43, D44) | ability `.scx` child |
+| `identity/identity.py` Identity, `identity/recognition.py` SpeechNameRecognizer | `abilities/identity/identity.scx`, one of the body's input abilities: each `environment.sound` is decoded by `abilities/speech_decoding/speech_decoding.scx` and the transcript matched by `<identity:hears_name>`; text input is matched too (D43); adoption and recall through `abilities/memory/memory.scx` (decisions D43, D44) | ability `.scx` child |
 | Reflection, Routines | `abilities/reflection/reflection.scx` (revising through `bots/builder/builder.scx`), `abilities/routines/routines.scx` over the chain `abilities/routines_runner/routines_runner.scx`; long-lived children of every cognition (D80) | ability `.scx` child |
 | Behaviors (Starlark) | builder-built `.scx` documents | generated `.scx` |
 | Memory and its providers | `abilities/memory/memory.scx` over `services/sql` (SQLite, phase 3) or `services/pgsql` (Postgres, phase 7), migrated by `abilities/migration/migration.scx` with `<migration:plan>` | ability `.scx` child + service |
@@ -293,21 +304,26 @@ D33 to D43.
 
 ### Builder output
 
-A builder-produced behavior or routine document is stored as its
-inventory row's `bot_behavior.source` and runs as an SCXML child invoked
-from that text (`<invoke id><content expr="source"/></invoke>`, phase 5),
-the one exception to the literal relative `src` rule. scxml.rs reads
-`event:schema` files only for a literal `<invoke src>` child; an invoked
-source gets none, and a schema-file reference rejects it when it is
-invoked (`error.execution`). So builder output carries no `event:schema`
-reference (and, like every floppy document, no inline schema and no
-`<script>`): its host checks what it answers. `abilities/autonomy/autonomy.scx`
+A builder-produced behavior or routine is three documents beside each
+other (decision D121): `<name>.scx` (its structure), `<name>.json` (its
+input events' schemas, `$defs` keyed by event) and `<name>.js` (its
+ECMAScript, or empty), which the builder writes through `services/files`
+into the run's behaviors directory (`behaviors/`, beside `bots/` and
+`abilities/`). Its inventory row's `bot_behavior.source` is the path of
+the `.scx`, `../../behaviors/<name>.scx`, and it runs as an SCXML child
+invoked by that path (`<invoke id srcexpr="source">`), the one exception
+to the literal relative `src` rule. scxml.rs loads a `srcexpr` child's
+schema files and scripts against its own base URI, as it is when invoked,
+so builder output references `<name>.json#/$defs/<event>` and carries at
+most its one root `<script src="<name>.js"/>`; its host checks what it
+answers. `abilities/autonomy/autonomy.scx`
 runs the ACTIVE turn behaviors the stimulus triggers with `turn` and
 `input` and answers with the first one's `<donedata>` `handled` and
 `selected` (the phase 5 plan's "Turn Behavior Contract").
 `tests/fixtures/phase4/behavior_double.scx` stands in for one;
 `tests/tests/contracts.rs` checks the rule on it and
-`tests/tests/cognition.rs` runs it from a memory inventory.
+`tests/tests/cognition.rs` writes it into a layout's behaviors directory
+and runs it by path from a memory inventory.
 
 ## Phase 6 conventions
 
@@ -432,8 +448,8 @@ decisions are D76 to D79.
   relationship in either direction, and an ambient relationship whose
   participants include a target matches at the similarity threshold);
   a new one takes the input's `relationship_context_ref`
-  (`{"identity_groups":[...]}`, which `<conversation:commit keylocation>`
-  writes) and the `session_ref` `relationship-` and that. The memory is
+  (`{"identity_groups":[...]}`) and the `session_ref` `relationship-` and
+  that (all of it `<conversation:relationship_for_input>`, D115). The memory is
   kept under the relationship's `context_ref`: `recalling_memory` recalls
   it before the turns and `remembering_memory` remembers the input, as
   the original's `Memory.to_json` writes it, after them, each its own invocation
@@ -451,6 +467,38 @@ decisions are D76 to D79.
   `tests/tests/communication.rs` runs the conversation's turns
   (`the_conversation_commits_each_message_into_its_history`,
   `a_turn_its_detector_cannot_close_fails_the_input_and_commits_nothing`).
+
+## Environment conventions
+
+- **Running.** A bot runs as a participant of its environment:
+  `scx run --env-file <file> --fuel 9223372036854775807
+  environments/room/room.scx` (D102, D111). The room passes each bot its
+  `environment` (the root's `_sessionid`, D106) and `owned_devices`
+  (D105) as `<param>`s, and the bot activates on joining (D107).
+- **Broadcast.** Every `environment.sound` and `environment.visual` the
+  room receives, from a participant or the host, is logged and delivered
+  to every participant that perceives it, the emitter included. A bot's
+  speech reaches the room through its communication, which sends the
+  sound to `#_scxml_` + the environment's id right after the efference
+  copy to the body (D103, amended), so the bot's listening has the copy
+  first and withholds its own words (D98). A device sends to `#_parent`.
+- **Placement.** `placements[<id>]` is `{position: {x, y, z}, threshold_db}`;
+  a sound's `received_level_db` at a participant is `amplitude_db -
+  20 log10(max(d, 0.01) / 1)` from the sender's placement (only a placed
+  child is an origin), filled per recipient; a participant below its
+  threshold, or a sound too quiet for everyone, receives nothing; without
+  an amplitude, an origin or a placement the sound is unmeasured and
+  heard (D103). A visual reaches everyone.
+- **Devices.** A bot reads every held device on processing entry with
+  `<device:snapshot>` into `device_snapshots` (a device that is not
+  running is not read, D109); the focused device's events are the turn's
+  choices, and a selection for it is sent straight to its address (D105).
+- **The environment block.** The body sends `environment` `{id, self:
+  {state, owned_devices: {<ref>: {ref, id, state, attributes}}}}` on
+  `bot.ability.cognition.input`; reasoning renders it as the original's
+  `<environment id><self state><owned_devices><device ref id state>`
+  block, each snapshot attribute a child element under a sanitized tag,
+  and intuition gets it as JSON (D106).
 
 ## Known gaps carried from phase 0
 

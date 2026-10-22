@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!-- behavior-4: a persistent routine with no schedule is an E0009; with no bounds nothing is checked. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior">
+<datamodel>
+  <data id="e" expr="null"/>
+  <data id="n" expr="null"/>
+  <data id="doc" expr="'&lt;scxml xmlns=&quot;http://www.w3.org/2005/07/scxml&quot;&gt;&lt;state id=&quot;w&quot;&gt;&lt;transition event=&quot;go&quot;&gt;&lt;send event=&quot;bot.behavior.tick&quot; target=&quot;#_parent&quot;/&gt;&lt;/transition&gt;&lt;/state&gt;&lt;/scxml&gt;'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <behavior:lifetime_errors location="e" scxml="doc" min_every="60000"/>
+    <behavior:lifetime_errors location="n" scxml="doc"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="e.length === 1 &amp;&amp; e[0].message.indexOf('a persistent routine must schedule at least one transition with every or at') === 0 &amp;&amp; n.length === 0" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

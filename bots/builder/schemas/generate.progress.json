@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "generate.progress",
+  "description": "The reply of a streamed generation is arriving: received counts its bytes so far.",
+  "type": "object",
+  "properties": {
+    "received": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "received"
+  ],
+  "additionalProperties": false
+}

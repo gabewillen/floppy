@@ -410,9 +410,21 @@ fn executable_content_documents_hold_one_busy_session_without_children_or_previe
         encode(&busy, &checkpoint).map_err(|error| error.code),
         Err(SnapshotErrorCode::NotStable)
     );
+    // One session of a run alone may be an invoked one at a checkpoint too
+    // (another session's document, `session-snapshot-host.snapshot` with a
+    // target); a document of a whole run starts at its root, which no
+    // session invoked.
+    let document = decode(&encode(&invoked, &checkpoint).expect("encodes"))
+        .expect("a one-session checkpoint document of an invoked session decodes");
+    assert!(document.snapshot.root.invoked_by.is_some());
+    let mut whole_run = capture();
+    whole_run.sessions[0].machine.invoked_by = Some(InvokedBy {
+        parent_session_id: "parent".into(),
+        invoke_id: "i9".into(),
+    });
     assert_eq!(
-        encode(&invoked, &checkpoint).map_err(|error| error.code),
-        Err(SnapshotErrorCode::Inconsistent)
+        encode(&whole_run, &Options::default()).map_err(|error| error.pointer),
+        Err(Some("/snapshot/root/invoked_by".into()))
     );
     for exclude in [vec![Section::Previews], vec![Section::Invocations]] {
         let partial = Options {

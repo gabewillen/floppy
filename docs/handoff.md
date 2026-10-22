@@ -7,11 +7,275 @@ history lives in [decisions.md](decisions.md) (numbered decisions),
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
-Last updated: 2026-10-10.
+Last updated: 2026-10-21.
 
 ## Current state (2026-10-09) — resume here
 
-- **Selections the body can't place (audit item 4, 2026-10-10):** a turn
+- **One schema file per event (2026-10-21, D125):** scxml.rs
+  `5bc75e72` resolves an `event:schema` reference against its
+  document's base URI like any relative URI, `..` included, so the twin
+  directories are gone: abilities reference `../schemas/<event>.json`, the
+  body and the room `../../abilities/schemas/<event>.json` (and the room
+  `../../bots/floppy/schemas/<event>.json`); 240 schema files became 109.
+  `contracts.rs` checks every reference resolves to its event's one file
+  and no schema file name occurs twice. The builder references its
+  `schemas/*.json` instead of inlining them. A test that lays documents
+  out in a scratch directory must copy `abilities/schemas/` (and, for the
+  body's events, `bots/floppy/schemas/`) beside them, as
+  `support::copy_ability` and `support::environment_with_devices` do.
+- **The same failure more than once ends the build (2026-10-20, D124):**
+  the maintainer's rule, "if it gets the same failure more than once it
+  should end". `retry_gate` ends with `no-progress` as soon as any
+  diagnostic of a failure is one an earlier failure of the same build had,
+  consecutive or not: `fingerprints` (every identity seen in the build)
+  replaces `previous_fingerprint`. A validate diagnostic's identity is
+  kind|code plus its label (no line: the same mistake moves around), any
+  other's kind|code plus its message; a `test-failed` message now names its
+  error without the candidate's generated invoke id, which made every
+  `error.communication` failure look new. `max_attempts` stays. This
+  catches the live run 2's `E0009`, repeated four times among other
+  diagnostics. Live (2026-10-21, docs/live-proof.md), on the maintainer's
+  lab (mosfet's stack: `gemma-4-26b-a4b` on the vLLM at
+  `192.168.2.2:8100`, the systemone decision server at
+  `192.168.2.2:8102`): `live_cascade` passes; `live_conversation` failed
+  both runs with no run ended early and no behavior learned, every
+  revision ended `no-progress` by D124 on a repeated diagnostic (most
+  non-consecutive; repeats of `XML001`, `<assign>` misuse and the
+  8192-token `truncated`), and the decision server chose the ignore on
+  turn 3's "ping". The lab's model and decision servers match floppy's
+  wire formats; its speech and voice servers do not (speech-to-text and
+  text-to-speech on two origins, voice not LocalAI's API), so speech stayed
+  on Gemini and voice was unconfigured.
+- **A cond that always throws ends only its session (2026-10-20,
+  scxml.rs `cf8f293a`):** a transition condition that fails on every
+  evaluation now costs one command per failure and stops at the per-call
+  command bound instead of running out of fuel; the root then fails with
+  `command-bound`, and an invoked session is ended as D122 ends a runaway
+  (`error.execution` for a start, `error.communication.<invokeid>` later).
+  This resolves D123's open eventless-cond failure (`live_conversation`
+  run 1's `machine session failed: protocol`): a simulated draft whose
+  eventless cond throws fails its test with `error error.execution` and is
+  repaired, which `tests/tests/builder_bot.rs`'s `/throwing` route proves
+  with no builder change. Live (2026-10-20, docs/live-proof.md):
+  `live_cascade` passes; `live_conversation` failed both runs with no run
+  ended early (run 1: reflection selected nothing on any turn, no drafts;
+  run 2: `PingPongResponder` was abandoned on turns 2 and 3, on `E0009`
+  lifetime and `no-document`, and accepted only on turn 4, after the
+  turn-2 deadline; reasoning chose the ignore on turn 3's "ping").
+- **Builder diagnostics a repair can act on; `live_conversation`
+  passes (2026-10-20, D123):** each validate diagnostic carries `line`
+  and `rendered` (`scx validate`'s form: `--> NAME.scx:line:column`, the
+  marked line, notes, help, fixes) and was fingerprinted by label and
+  line (D124 drops the line);
+  the author rules say the constraints win (a turn behavior's tests expect
+  no outputs), keep every non-trivial `cond`/`expr` a call of `script`
+  (no `&` in XML), need a top-level `final`, and ask for one call; a draft
+  with no document (`no-document`, a model's stub call), a script not
+  loaded (`script-not-loaded`) or a call no script declares
+  (`undeclared-function`) is rejected before its simulation. Live:
+  `live_conversation` passes (`GabePingPongRoutine` learned on turn 2,
+  answered turn 3). An eventless transition whose cond
+  throws ended the whole run (`host-failure` or `machine session failed:
+  protocol`), an scxml.rs bug resolved upstream by `cf8f293a` (above).
+  Open (D123): the model still sends stub calls and writes tests expecting
+  outputs now and then; `parallel_tool_calls` and `minLength` were not
+  used (D123 says why).
+- **A runaway invoked session ends only itself (2026-10-20, D122):**
+  scxml.rs `f920cb47` (now under `cf8f293a`): an invoked session whose call stops at the
+  per-call command bound is ended as a cancelled invocation is (a start
+  that stopped there fails its `<invoke>` with `error.execution`, a later
+  call queues `error.communication.<invokeid>`); only the root's own stop
+  still fails the run with `command-bound`. A builder draft whose
+  simulation runs away (the 2026-10-19 `live_conversation` run 2) now
+  fails its test (`test-failed`, `error error.execution` or
+  `error error.communication.<invokeid>`) and is repaired; the builder
+  needed no change (`sim_run`'s `error.*` transition already took both),
+  and `tests/tests/builder_bot.rs` proves both cases. Live (2026-10-20,
+  docs/live-proof.md): `live_cascade` passes; `live_conversation` still
+  learns no behavior (its drafts failed `XML001` in the chart and other
+  validation codes; none ran away, so D122 was not reached live).
+- **Multi-document learned behaviors (2026-10-18, D121):** the builder's
+  author tool call returns `scxml`, `schemas` (`$defs` by input event) and
+  `script`, and the builder writes them as `<name>.scx`, `<name>.json` and
+  `<name>.js` through the new `services/files` (scxml.rs's files example's
+  `name`/`text`/`seed`) into the run's `behaviors/` grant
+  (`--dir https://github.com/stateforward/floppy/services/files=HOST::/behaviors`;
+  every bot and builder run needs it now, and the test harness grants the
+  layout's `behaviors/`). The chart references `<name>.json#/$defs/<event>`
+  and one root `<script src="<name>.js"/>`; it is validated with
+  `EVENT004` waived and simulated by `srcexpr` on
+  `../../behaviors/<name>.scx`. A behavior row's `source` is that path;
+  reflection reads a stored program back with `seed` for a change; the
+  candidates and routines runners invoke by `srcexpr`. scxml.rs
+  `c8bb69a8` (a `srcexpr` child's schema files and scripts load against
+  its own base URI, fetched each time it is invoked) came with it. Open: D121's "To
+  review" list under "Open decisions" below.
+- **Parity gap 13's small part (2026-10-18,
+  [parity-gaps](plans/parity-gaps.md)):** `<conversation:ingest_content>`
+  no longer takes an image stimulus as `image/*` content, as the original's
+  `0d0f5e2` deletes that branch; until the turn attachments are ported (the
+  rest of gap 13), an image adds nothing to a turn, and a turn of images
+  alone fails as empty. The conversation namespace IRP was re-prepared and
+  its baseline re-measured on macOS arm64.
+- **Q8: the decision service's kinds are OpenAI Decisions API's question
+  types, with J16 and J17 (2026-10-18, D120,
+  [plan](plans/original-domains.md#to-review-q8)):** `choice` (the default;
+  was `choose`, and `classify` when given `labels`), `predicate` (was
+  `select`, its behavior unchanged: each event's confidence is still its
+  share of the one `selection` question) and `score` (was `rank`); the
+  events keep their names and TypeSafe's `/v1/systemone` stays the backend.
+  The service now never offers `bot.ability.reasoning.input` and builds the
+  original's `{"turn": {"envelope", "data"}}` state from a `stimulus` param,
+  so intuition passes its `choices` and `stimulus` as they are. Open: the
+  plan's "To review (Q8)" list.
+- **Parity gaps 3, 5 and 4 ported; gap 6 stopped (2026-10-18, D117 to
+  D119, [parity-gaps](plans/parity-gaps.md)):** recalled context trims to
+  the prompt budget instead of failing the turn (D117; open: on wasm the
+  data model's 64 KiB value bound refuses a prompt before it is big enough
+  to trim, so the maintainer lowers the budget or the bound is raised
+  upstream); a `bot.deactivate` while activating answers
+  `bot.deactivated`, and an unacknowledged cancel announces `bot.degraded
+  {stage: "processing_cancel"}` (D118); stimuli and cognition inputs carry
+  producer-stamped `participants`, the conversation stamping with
+  `<conversation:turn_participants>` (D119). Gap 6
+  (`bot.ability.speaking.stop`) waits on decision 6 and gap 11: the
+  original's stop is built on `c88b6cd`'s streamed utterance and its
+  `OutputData` (`voice_id`, `spoken`, `unspoken`).
+- **The behavior and autonomy namespaces, and no bot namespace (2026-10-18,
+  D116, [plan](plans/original-domains.md) step 4, the last):**
+  `namespaces/behavior` (`<behavior:instances_from_behavior_results>`,
+  `<behavior:replace_behavior_clauses>`, `<behavior:lifetime_errors>`,
+  `<behavior:verify_tick>`) and `namespaces/autonomy`
+  (`<autonomy:behavior_input_payload>`) replace the reflection's,
+  the builder's and autonomy's behavior JavaScript; a create's draft is
+  stored as an accepted change is, by `replace_behavior_clauses`.
+  `<bot:stimulus>` is plain `<assign>`s and `namespaces/bot` is gone, so
+  `decision` keeps only `choice` and `pin`. Open: J7 (`next_after` stays
+  JavaScript: `<scx:validate>` binds no extension package, so a routine
+  draft cannot use a namespace element; an scxml.rs change), the plan's
+  "To review (step 4)" list and its [Map status](plans/original-domains.md#map-status);
+  the behavior and autonomy namespace IRP baselines were measured on macOS
+  arm64. On macOS, `scripts/namespace-irp.sh prepare` fails at
+  `cache-create` (its `mktemp -d` is under the `/var` symlink); prepare
+  with `scx conformance prepare` and a `--cache` in the scratchpad.
+- **The identity, conversation and memory namespaces (2026-10-18, D115,
+  [plan](plans/original-domains.md) step 3):** `namespaces/identity`
+  (`<identity:hears_name>`, was `<bot:recognize>`;
+  `<identity:sorted_identities>`), `namespaces/memory` (`<memory:to_json>`,
+  `<memory:contents>`) and the `conversation` namespace's ten elements
+  (`<conversation:message_for_turn>`, was `<conversation:commit>`, and
+  the original's `_relationship_for_input`, `_participant_for_source`,
+  `_fail_turn`, `detector_refs`, `_new_track_ref`, `_content_for_detector`,
+  `_complete_turn` and the turn detector's `_ingest_content` and `_on_end`)
+  replace the conversation's, the turn detector's and reasoning's row
+  JavaScript, writing what it wrote. `isCommittedAppend` stays JavaScript
+  (it searches the history). Next in Q10's order: `behavior`. Open: the
+  plan's "To review (step 3)" list; the bot, conversation, identity and
+  memory namespace IRP baselines were measured on macOS arm64.
+- **The intuition and cognition namespaces (2026-10-18, D114,
+  [plan](plans/original-domains.md) step 2):** `namespaces/intuition`
+  (`<intuition:observe>`, `<intuition:escalate>`, the original's
+  `ConfidenceTuner`, its state the `confidence_tuner` datum) replaces
+  `<decision:tuner>`; `namespaces/cognition`
+  (`<cognition:attention_bias_for_turn>`,
+  `<cognition:model_facing_content failurelocation?>`) replaces
+  `<bot:attention>` and reasoning's prompt JavaScript, rendering the same
+  bytes. `<decision:pin>` stays (Q11); `autonomy` is a later step. Next in
+  Q10's order: `identity`, `conversation` and `memory`. Open: the plan's
+  "To review (step 2)" list; the four namespace IRP baselines touched were
+  measured on macOS arm64.
+- **The processing namespace and every stage's sends (2026-10-18, D113,
+  [plan](plans/original-domains.md) step 1):** `namespaces/processing`
+  (`<processing:model_facing_schema>`, `<processing:collect_offered_events>`,
+  `<processing:send max?>`, `<processing:selection_confidence>`) replaces
+  `<decision:compact>`, `<decision:assemble>`, `<decision:selection>` and
+  intuition's confidence JavaScript; `<decision:route>`, `<decision:names>`,
+  `<bot:verdict>`, the body's `routing` state, the reasoning and reflection
+  `.js` merges and D87's dedupe are gone. Every choice is tagged with its
+  offerer's session id, and each stage sends its own selections with
+  `<foreach>` + `<send targetexpr="'#_scxml_' + s.target">`; the decision
+  service names each selection's only offerer. Next in Q10's order:
+  `intuition` and `cognition`. Open: the plan's "To review (step 1)" list;
+  the decision, bot and processing namespace IRP baselines were measured
+  on macOS arm64.
+- **Tools, not structured output (2026-10-16, D112, amended
+  2026-10-17 and 2026-10-18):** the generate service asks for schema-shaped output as the
+  original does on Chat Completions: one function tool (the `schemaname`,
+  the schema's root `description` as the function's, the rest of the
+  schema as its `parameters`, no `strict`), `"tool_choice": "required"`,
+  and `reasoning_effort` `none`. `generate.result` is always
+  `{content, tool_calls: [{id, name, args}]}`, each call of the function
+  checked against the schema before any is returned (`schema-mismatch`),
+  after its top-level fields the schema's root `properties` do not
+  declare are dropped (the original reads only `args.events`; nested
+  objects stay strict); `strict` is gone. Reasoning and reflection send
+  the `dispatch` calls' events with nested `<foreach>` (D113), the builder
+  takes its call by name, and `<processing:send>` builds the original's
+  dispatch tool exactly. The maintainer's mapping of floppy's domains onto
+  the original's modules is [plans/original-domains.md](plans/original-domains.md);
+  its step 1 is done (above).
+
+- **The environment (2026-10-16, D102 to D111,
+  [plan](plans/environment.mdscript.md)):** the bot runs as a participant of
+  `environments/room/room.scx`, the root session, and activates on joining
+  (no `bot.activate`; `inactive` is its final). The room routes host input,
+  broadcasts sound and visuals with the original's placement and loudness,
+  and logs the bot's events; the communication puts speaking's sound into
+  the room after the efference copy (D103, amended). Devices are documents
+  the room invokes, held through `holdings` and `owned_devices`, read with
+  the new `namespaces/device` (`<device:snapshot>`) and acted on at their
+  address; the cognition input's `environment` field is rendered by
+  reasoning as the original's environment block. Every environment run
+  passes `--fuel 9223372036854775807` until average usage is measured
+  (D111). scxml.rs is at `5bc75e72` (D125's `..` in `event:schema`), on top of `cf8f293a` (D123's eventless-cond fix), on top of `f920cb47` (D122), on top of `c8bb69a8` (D121) and `b59f8111` (D104, D109, D110). Speech and voice
+  backends exist now, each through an env file in the session scratchpad
+  (outside the repository) named in `FLOPPY_LIVE_ENV_FILE` with `.env`:
+  `env.speech` (Gemini's OpenAI-compatible API, `FLOPPY_SPEECH_*`) and
+  `env.voice` (a local LocalAI on `127.0.0.1:8089`, `FLOPPY_VOICE_*`,
+  started by the scratchpad's `localai/start.sh`; its
+  `pyannote-diarization` model serves NVIDIA Streaming Sortformer v2).
+  `environment_live`'s `live_two_participants` passed on them with the
+  vLLM on 2026-10-17 (docs/live-proof.md). Open: the bot and device
+  namespace IRP baselines were measured on macOS arm64 (regenerate on
+  Linux x86_64).
+
+- **Behavior learning proven live (2026-10-12, D100, D101, D96):** reflection
+  offers change and break only for inventory names (neither on an empty
+  inventory); the cascade stage, reflection's select and revising, and the
+  builder's generations are bounded by inactivity while their reply streams
+  and by a backstop always (decision D101). Streaming is per backend:
+  `FLOPPY_STREAM=true` (unset by default; the CPA gateway cannot stream, the
+  vLLM can); scxml.rs's `outbound-http.send` delivers a streamed body as it
+  arrives, the generate service returns `generate.progress` (a reply that
+  is not streamed returns none, so only its backstop bounds it), and the
+  builder passes it on to reflection with `builder.progress` for each stage;
+  the builder caps its replies at 8192 tokens. Live (docs/live-proof.md):
+  CPA with streaming off passed; the vLLM with streaming on completed every
+  turn but failed the learned-by-turn-2 assertion twice (the model's
+  choices; one run's author replies all hit the token bound).
+  The stage and revision bounds are configurable through `bot.activate`; the
+  turn behavior contract names `parent.data` as a
+  conversation turn's message. Two `live_conversation` runs passed: the
+  behavior was learned on turn 2, answered "pong" on turn 3 through
+  autonomy, and left turn 4 to reasoning, which recalled "green".
+- **Conversation history in reasoning's prompt (2026-10-12, D99, D97):**
+  reasoning's prompt renders object items of JSON arrays, so the
+  conversation's `messages` (the history, replies included) reach the
+  model; before, only `<value count="N" />` did, and the fourth
+  `live_conversation` turn could not recall the first turn's fact on main
+  or this branch. Reflection now stores a failed turn's episode (behavior
+  null), so a turn whose reflection fails is not lost to the next turn's
+  recall. `live_conversation` now asserts a behavior learned by turn 2 and
+  "green" in turn 4's answer (model-dependent).
+- **Speaking bound and self-hearing (2026-10-12, D98):** speaking's
+  `encoding_timeout_ms` is 30 s (the communication passes 30 s and bounds
+  a response by 36 s), since Gemini's unstreamed synthesis of a sentence
+  outlasted the original's 5 s; `environment.sound` carries an optional
+  `source` [floppy field], which speaking stamps with its mouth, so the
+  listening's sensitivity scores the bot's own sound against the efference
+  copy and the interpretation withholds its product. Voice detection still
+  runs on it and fails without `FLOPPY_VOICE_BASE_URL`, as designed.
+- **Selections the body can't place (audit item 4, 2026-10-10; superseded by D113, 2026-10-18):** a turn
   whose selections cannot all be placed fails with `bot.processing.failed`
   and the original's `SelectionRejectionError` message, never
   `bot.processing.completed`; `floppy.route.dropped` is gone. `<bot:verdict>`
@@ -20,7 +284,7 @@ Last updated: 2026-10-10.
   run where the original dispatches: in autonomy before a learned behavior's use
   is counted (a rejected one is counted failed and fails the turn),
   intuition ("Selection rejected: ...", without the original's one retry),
-  reasoning (before retaining), and in the body's `routing` before it logs
+  reasoning (before returning its selections), and in the body's `routing` before it logs
   the outcome (which catches the trusted seed's selection).
   `<decision:assemble>` lost `routeslocation`.
 - **Phase 7 (2026-10-10):** done except publishing
@@ -51,10 +315,9 @@ Last updated: 2026-10-10.
 - **Layout (2026-10-10, D65):** every bot and ability is
   `<name>/<name>.scx` with its ECMAScript in `<name>/<name>.js` beside it
   (one root `<script src="<name>.js"/>`; conds and exprs call its
-  functions). Abilities are `abilities/<ability>/<ability>.scx`, each with
-  byte-identical twins of the schemas it references in
-  `abilities/<ability>/schemas/` (canonical files stay in
-  `abilities/schemas/`). Tests lay abilities out with
+  functions). Abilities are `abilities/<ability>/<ability>.scx`, each referencing
+  `abilities/schemas/` as `../schemas/<event>.json` (D125; the
+  `abilities/<ability>/schemas/` twins are gone). Tests lay abilities out with
   `support::copy_ability`. `scx validate` reads each document's `.js`
   (scxml.rs `98fd120`, `Validator::with_script_resources`), so a cond or
   `<log expr>` calling its functions is judged by their bodies and every
@@ -64,9 +327,9 @@ Last updated: 2026-10-10.
   Phase 4 is done through "Replace Script Validators With Event Schemas":
   no phase 4 document has a `<script>`, payload checks are `event:schema`
   only, conds only correlate, and `tests/tests/contracts.rs` enforces the
-  structure rule (no `function`, cond/expr at most 160 characters, body
-  twins byte-identical to their ability schemas, literal SCXML invoke ids
-  and srcs). The first identity attempt is on branch `wip/identity-slice`
+  structure rule (no `function`, cond/expr at most 160 characters, every
+  schema reference resolving to its event's one file (D125), literal SCXML
+  invoke ids and srcs). The first identity attempt is on branch `wip/identity-slice`
   (reference only). Phase 4's docs are closed: decisions D33 to D43,
   port-plan's [Phase 4 conventions](port-plan.md#phase-4-conventions), and
   the AGENTS.md layout and no-`<script>` rules.
@@ -87,21 +350,24 @@ Last updated: 2026-10-10.
 
 ## Intuition contract and reasoning prompt (2026-10-10)
 
-- **Intuition** uses the decision service's new kind `select` (the original's
-  TypeSafe `Processor.process`): `decision.selected {selections: [{event,
+- **Intuition** uses the decision service's kind `predicate` (`select`
+  until D120; the original's TypeSafe `Processor.process`): `decision.selected {selections: [{event,
   data, confidence}]}`, every groundable event with its own probability.
-  Intuition observes their least confidence (0-100) with `<decision:tuner>`
-  first, then compares it with the updated threshold (the original
-  `_tune_confidence`). `low_confidence` and `deliberative_input` hand out
-  the environment actions in the unhandled donedata's `selected`; the
-  cognition routes them first in the turn's output. The service's pass
+  Intuition observes their least confidence (0-100) with
+  `<intuition:observe>` first, then `<intuition:escalate>` compares it with
+  the updated threshold (the original's `_tune_confidence`, D114). `low_confidence` and `deliberative_input` send
+  the environment actions before the turn escalates (D113; the
+  2026-10-11 dedupe is gone). The service's pass
   criterion is the original's `__unhandled__`, its state document the original's
-  `{"turn": {"envelope": {"name"}, "data"}}`, and data grounds from the
-  non-null stimulus value then the enum (no `const`). `choose` lost its
-  `threshold` (and `below-threshold`).
+  `{"turn": {"envelope": {"name"}, "data"}}` (built by the service from
+  the `stimulus` param since D120), and data grounds from the
+  non-null stimulus value then the enum (no `const`). `choice` (`choose`
+  until D120) lost its `threshold` (and `below-threshold`).
 - **Reasoning** sends the original's `model_facing_xml(ProcessorInput)` under
-  the original's budgets (`promptProjection()` in reasoning.js), checked
-  byte-for-byte against the original's renderer on sample inputs. The reasoning
+  the original's budgets (`<cognition:model_facing_content>`, D114; it was
+  `promptProjection()` in reasoning.js, checked byte-for-byte against the
+  original's renderer on sample inputs, and the element renders what that
+  JavaScript rendered). The reasoning
   and intuition system prompts still describe floppy's old inputs (gap 9,
   the maintainer's).
 - **Tests in worktrees:** a `target/` copied from another checkout keeps
@@ -152,7 +418,9 @@ Last updated: 2026-10-10.
 - **Seams on (2026-10-10, D80):** the cognition always runs reflection and
   routines (no gates, as the original composes them); with no database each logs
   `absent`. Every bot turn with memory now ends with reflection's select
-  call and the turn's episode.
+  call and the turn's episode, which reflection alone stores (D97: reasoning
+  retains none, so each turn records one episode, a failed reflection's
+  included).
 
 ## Conversation memory (2026-10-10)
 
@@ -210,8 +478,9 @@ Last updated: 2026-10-10.
   (2026-10-10), and on the Gemini API (D94) the speech round trip
   (speaking's encoder and hearing's decoder) and `floppy_live`'s
   `live_chat` with real spoken audio passed (2026-10-11,
-  [live-proof.md](live-proof.md)); the listening has not run live, since
-  its voice detection needs LocalAI (`FLOPPY_VOICE_BASE_URL`).
+  [live-proof.md](live-proof.md)); the listening ran live end to end on
+  2026-10-17 (`environment_live`'s `live_two_participants`, voice
+  detection on a local LocalAI at `FLOPPY_VOICE_BASE_URL`).
 
 ## Repositories
 
@@ -255,7 +524,7 @@ Last updated: 2026-10-10.
 - Build floppy's components: `scripts/build-components.sh` (publishes a dev
   package cache under `target/components/package-cache`).
 - Run the builder bot (dev, until floppy has a release):
-  `scx run --offline --cache-dir target/components/package-cache --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" bots/builder/builder.scx`
+  `scx run --offline --cache-dir target/components/package-cache --env-file .env --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --dir "https://github.com/stateforward/floppy/services/files=$PWD/behaviors::/behaviors" bots/builder/builder.scx`
   with a `builder.request` event on stdin (see `bots/builder/README.md`).
 - Live tests: `FLOPPY_LIVE_ENV_FILE` (colon-separated env files) and
   `FLOPPY_LIVE_MODEL`.
@@ -546,6 +815,41 @@ The remaining the original port runs as one ultracode run with these grants:
 ## Open decisions (waiting on the user)
 
 1. Send the gateway report (reasoning buffering, keep-alives, abort on disconnect).
+2. D121, to review (choices made closest to the design where it left a
+   question open):
+   - The path is `../../behaviors/<name>.scx`, written in `builder.js`: it
+     resolves the same from the builder and from the candidates and
+     routines runners only because each sits two levels below the layout
+     root. A path given to the builder (a request field or `<param>`)
+     would free that, at the cost of a new name.
+   - The files service's guest directory is fixed at `/behaviors`, as the
+     example's is at `/workspace`.
+   - `<scx:validate>` waives `EVENT004`: `<scx:eventschema uri>` is a
+     literal, and the draft's file name is not known until run time, so
+     the validator never sees the schema file (the simulation's compile
+     does). A `uriexpr` upstream would close it; it was not added (no
+     ceremony in scxml.rs).
+   - scxml.rs fetches a `srcexpr` document (and its schema files and
+     scripts) each time its `<invoke>` runs, never from the run's memo,
+     so a repaired draft written under the same name loads as written.
+   - A row's `source` column holds the path (no migration of the
+     original's schema); routines tell a revision by `updated_at` (second
+     resolution), since a revised program keeps its path.
+   - The builder writes every draft before validating it, so a change
+     being built overwrites the stored program's files at once, and a
+     failed change leaves its rejected draft there, as its DRAFT row says;
+     it always writes `<name>.js` (empty for no script) so a read back
+     finds all three.
+   - The builder makes a name one plain file name (each run of characters
+     other than letters, digits, `_` and `-` becomes `_`), so two names
+     can share a file; a read back that fails fails the revision.
+   - `SessionEmbedder::scripts` takes the session's base URI (a host API
+     change in scxml.rs), and the CLI keys scripts by URL.
+   - Live (2026-10-19, docs/live-proof.md): no `XML001` came from a schema
+     or a script any more, but no behavior was learned either (the drafts
+     fail their simulation on the turn behavior contract). (Resolved by
+     D122: the draft whose simulation looped no longer ends the run; it
+     fails its test and is repaired.)
 
 ## Backlog (agreed, not started)
 
@@ -561,14 +865,11 @@ The remaining the original port runs as one ultracode run with these grants:
   web components + hsm.ts, marketplace of packages, a Mindstorms-style
   workshop whose pieces are inferred from element XSDs, live highlighting
   of running bots.
-- Live listening runs end to end with `scripts/vad-server.py` (Silero VAD,
-  LocalAI's `/vad`) as `FLOPPY_VOICE_BASE_URL` (`live_listening`,
-  live-proof.md, 2026-10-12). Diarization and voice identification still
-  need LocalAI; the floppy bot configures neither.
-- Learned behaviors are only as good as the builder's guard: the builder's
-  simulation drives no input, so nothing checks a turn behavior against a
-  stimulus it should handle (the original's verify_apply only dry-runs the
-  creating turn).
+- Live listening: voice detection (every sound) runs on a local LocalAI
+  at `FLOPPY_VOICE_BASE_URL` (the session scratchpad's `env.voice`), and
+  speech decoding and speaking on Gemini (`env.speech`); the listening
+  ran live end to end on 2026-10-17 (live-proof.md). Diarization and
+  voice identification have not run live.
 - Going public: CI, publishing the prepared releases with `SHA256SUMS`
   ([release.md](release.md)), per-platform `scx` binaries, IRP identity
   regeneration on Linux CI.

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- decision-4: an entry whose schema has no such property raises error.execution and assigns nothing. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="source" expr="[{&#34;event&#34;: &#34;bot.focus_device&#34;, &#34;schema&#34;: {&#34;type&#34;: &#34;object&#34;, &#34;properties&#34;: {&#34;device&#34;: {&#34;type&#34;: &#34;string&#34;}}}}, {&#34;event&#34;: &#34;bot.say&#34;, &#34;schema&#34;: {&#34;type&#34;: &#34;object&#34;}}]"/>
+  <data id="choices" expr="'untouched'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <decision:pin location="choices" event="bot.say" property="device" values="['kitchen']"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="choices === 'untouched'" target="pass"/>
+  <transition event="*" target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

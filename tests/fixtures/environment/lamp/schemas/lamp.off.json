@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lamp.off",
+  "description": "Turn the lamp off.",
+  "properties": {},
+  "additionalProperties": false,
+  "type": "object",
+  "examples": [
+    {}
+  ]
+}

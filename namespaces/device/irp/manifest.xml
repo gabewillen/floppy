@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!-- The device namespace's implementation report plan: each assertion is a
+     numbered statement of namespaces/device/README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/namespaces/device/irp/sources">
+  <assert id="device-1" specnum="1" specid="#device-1">
+    <![CDATA[<device:snapshot> takes exactly location and target, both present and not empty, and no content, and the namespace has no other element: a malformed element raises error.execution and assigns nothing (its schema, package/device.xsd, rejects it before any run under scx validate).]]>
+    <test id="300" conformance="mandatory" manual="false">
+      <start uri="300/test300.txml"/>
+    </test>
+    <test id="301" conformance="mandatory" manual="false">
+      <start uri="301/test301.txml"/>
+    </test>
+  </assert>
+  <assert id="device-2" specnum="2" specid="#device-2">
+    <![CDATA[<device:snapshot> writes {id, state, attributes, events} of the session its target names: its _sessionid (for an invoked child, <parent _sessionid>.<invokeid>), its active atomic states in document order separated by one space, its data model by <data> id, and the event names its active transitions accept, each once, a descriptor * naming none.]]>
+    <test id="310" conformance="mandatory" manual="false">
+      <start uri="310/test310.txml"/>
+    </test>
+    <test id="311" conformance="mandatory" manual="false">
+      <start uri="311/test311.txml"/>
+    </test>
+  </assert>
+  <assert id="device-3" specnum="3" specid="#device-3">
+    <![CDATA[A target that no running session of the run answers assigns nothing and raises nothing: location keeps its value.]]>
+    <test id="320" conformance="mandatory" manual="false">
+      <start uri="320/test320.txml"/>
+    </test>
+  </assert>
+</assertions>

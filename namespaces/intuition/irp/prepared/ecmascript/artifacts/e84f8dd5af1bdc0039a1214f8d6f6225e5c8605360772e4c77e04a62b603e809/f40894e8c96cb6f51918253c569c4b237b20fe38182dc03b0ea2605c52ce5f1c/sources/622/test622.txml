@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!-- intuition-3: the threshold is never under half the floor. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:intuition="https://github.com/stateforward/floppy/namespaces/intuition">
+<datamodel>
+  <data id="t" expr='{"mean": 20, "var": 100, "n": 20}'/>
+  <data id="below" expr="null"/>
+  <data id="above" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <intuition:escalate location="below" confidence="17" tuner="t"/>
+    <intuition:escalate location="above" confidence="18" tuner="t"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="below === true &amp;&amp; above === false" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

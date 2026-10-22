@@ -1,18 +1,17 @@
 <?xml version="1.0"?>
-<!-- conversation-2: inbound audio content is null; outbound content is kept as given. -->
+<!-- conversation-2: a provenance's strings are taken, anything else is null, and its turn_ref as given. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation">
 <datamodel>
-  <data id="msg" expr='{"source_ids": ["user"], "target_ids": ["bot"], "content": "media/said.wav", "content_type": "Audio/WAV"}'/>
-  <data id="i" expr="null"/>
-  <data id="o" expr="null"/>
+  <data id="l" expr="null"/>
+  <data id="msg" expr="({source_ids: ['bot'], target_ids: [], content: 'hi', content_type: 'text/plain'})"/>
+  <data id="p" expr="({id: 'r-1', source: 7, target: 'q', session_ref: 's1', turn_ref: 't1'})"/>
 </datamodel>
 <state id="s0">
   <onentry>
-    <conversation:commit location="i" direction="inbound" event="'e'" message="msg" sequence="0"/>
-    <conversation:commit location="o" direction="outbound" event="'e'" message="msg" sequence="1"/>
+    <conversation:message_for_turn location="l" direction="outbound" event="'bot.ability.conversation.append'" message="msg" sequence="0" provenance="p"/>
   </onentry>
   <transition event="error.execution" conf:targetfail=""/>
-  <transition cond="i.content === null &amp;&amp; o.content === 'media/said.wav'" conf:targetpass=""/>
+  <transition cond="l.content === 'hi' &amp;&amp; l.provenance.id === 'r-1' &amp;&amp; l.provenance.source === null &amp;&amp; l.provenance.target === 'q' &amp;&amp; l.provenance.session_ref === 's1' &amp;&amp; l.provenance.turn_ref === 't1'" conf:targetpass=""/>
   <transition conf:targetfail=""/>
 </state>
 <conf:pass/>

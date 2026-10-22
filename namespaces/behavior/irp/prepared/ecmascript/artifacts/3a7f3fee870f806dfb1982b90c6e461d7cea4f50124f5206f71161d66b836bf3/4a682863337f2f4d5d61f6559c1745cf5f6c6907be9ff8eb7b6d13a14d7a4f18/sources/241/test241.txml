@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- behavior-5: no tick, or one without its fields, is one message. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior">
+<datamodel>
+  <data id="a" expr="null"/>
+  <data id="b" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <behavior:verify_tick location="a" ticks="[]"/>
+    <behavior:verify_tick location="b" ticks="[{name: 'M', trigger: 'hourly', scheduled_at: 'a', fired_at: 'b', output: []}]"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="a[0] === 'persistent routine did not emit a tick for its first schedule.' &amp;&amp; b[0] === 'persistent routine tick must carry name, trigger (every or at), scheduled_at and fired_at.'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

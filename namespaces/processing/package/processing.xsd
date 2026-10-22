@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  XML Schema of floppy's `processing` extension namespace
+  (namespaces/processing), the original's processing module. It governs
+  structure only; the extension component governs what the element does.
+  Bind it with the prefix `processing` by convention.
+
+  processing:model_facing_schema
+                   location (required): the choice array it rewrites in
+                   place for a model: $schema, title and examples dropped
+                   from every schema (property names kept); over bound
+                   bytes, descriptions dropped too; still over, [].
+                   bound (optional): a decimal integer, default 32768.
+                   overlocation (optional): receives whether the choices
+                   were still over the bound.
+  processing:collect_offered_events
+                   location (required): receives the turn's offered
+                   events, each tagged with the session id of its offerer
+                   as target: the choices expression's (the document's
+                   _sessionid), each offers member's (<_sessionid>.<invoke
+                   id>), and the focused device's events (its id), made
+                   model-facing as processing:model_facing_schema does but
+                   kept when still over bound.
+                   choices (required), offers (optional): expressions.
+                   devices, focus (optional, together): expressions of the
+                   device reads and the focused device's reference.
+                   bound (optional): a decimal integer, default 32768.
+                   overlocation, sizelocation (optional): receive whether
+                   the choices are over the bound, and their size in bytes.
+  processing:send  location (required): receives the original's dispatch
+                   tool schema ({events: [anyOf one branch per offered
+                   event]}, each branch {event, data, reason?, target?},
+                   the tool's description its root description) of the
+                   choices. choices (required): an expression.
+                   max (optional): a decimal integer, events' maxItems.
+  processing:selection_confidence
+                   location (required): receives the least normalized
+                   confidence of the selections (0-100), or null.
+                   selections (required): an expression.
+                   None of them takes another attribute or content.
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="https://github.com/stateforward/floppy/namespaces/processing"
+           elementFormDefault="qualified">
+  <xs:element name="model_facing_schema">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="bound" use="optional">
+        <xs:simpleType>
+          <xs:restriction base="xs:nonNegativeInteger">
+            <xs:pattern value="[0-9]+"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:attribute name="overlocation" type="xs:string" use="optional"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="collect_offered_events">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="choices" type="xs:string" use="required"/>
+      <xs:attribute name="offers" type="xs:string" use="optional"/>
+      <xs:attribute name="devices" type="xs:string" use="optional"/>
+      <xs:attribute name="focus" type="xs:string" use="optional"/>
+      <xs:attribute name="bound" use="optional">
+        <xs:simpleType>
+          <xs:restriction base="xs:nonNegativeInteger">
+            <xs:pattern value="[0-9]+"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+      <xs:attribute name="overlocation" type="xs:string" use="optional"/>
+      <xs:attribute name="sizelocation" type="xs:string" use="optional"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="send">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="choices" type="xs:string" use="required"/>
+      <xs:attribute name="max" use="optional">
+        <xs:simpleType>
+          <xs:restriction base="xs:nonNegativeInteger">
+            <xs:pattern value="[0-9]+"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="selection_confidence">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="selections" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

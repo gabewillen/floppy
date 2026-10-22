@@ -2,13 +2,21 @@
 members = [
     "tests",
     "namespaces/decision",
-    "namespaces/bot",
     "namespaces/conversation",
     "namespaces/migration",
+    "namespaces/device",
+    "namespaces/processing",
+    "namespaces/intuition",
+    "namespaces/cognition",
+    "namespaces/identity",
+    "namespaces/memory",
+    "namespaces/behavior",
+    "namespaces/autonomy",
     "services/generate",
     "services/generate/validator",
     "services/decision",
     "services/sql",
+    "services/files",
     "services/speech",
     "services/pgsql",
     "tests/spikes/pglite",
@@ -37,6 +45,9 @@ publish = false
 opentelemetry = { version = "0.33.0", default-features = false, features = ["trace"] }
 serde = { version = "1.0.228", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "1.0.145", default-features = false, features = ["std"] }
+# The XML parser of scxml.rs's syntax crate, the same pin: the behavior
+# namespace reads a draft's sends with it.
+quick-xml = { version = "0.41.0", default-features = false }
 sha2 = { version = "0.10.9", default-features = false }
 # wit-bindgen generated ABI glue of the namespace components (the same pin as
 # scxml.rs's components).

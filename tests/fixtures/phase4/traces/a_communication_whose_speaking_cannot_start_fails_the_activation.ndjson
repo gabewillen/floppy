@@ -1,4 +1,5 @@
-{"label":"communication.degraded","parent":"session","session":"session.2","text":"a child could not start (error.execution)","type":"log"}
-{"label":"double.exit","parent":"session","session":"session.1","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
-{"label":"floppy.diagnostic","session":"session","text":"the ability communication ended while activating","type":"log"}
+{"label":"communication.degraded","parent":"session.floppy","session":"session.floppy.communication","text":"a child could not start (error.execution)","type":"log"}
+{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
+{"label":"floppy.diagnostic","parent":"session","session":"session.floppy","text":"the ability communication ended while activating","type":"log"}
 {"label":"bot.activating.failed","session":"session","text":"{}","type":"log"}
+{"label":"done.invoke","session":"session","text":"{\"invokeid\":\"floppy\"}","type":"log"}

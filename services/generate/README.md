@@ -28,7 +28,7 @@ URI reference (no scheme, query, fragment, or `.`/`..` segment) resolved
 against the guest root, so `media/page.png` names `/media/page.png`. The
 service reads it from the directory the run grants and sends it as an
 `image_url` part with a `data:` URL (PNG, JPEG, GIF, or WebP, by its
-signature). The reply is the usual `generate.result` `{"text": T}`.
+signature). The reply is the usual `generate.result` `{"content": T, "tool_calls": []}`.
 
 A reference that names no readable file in a granted directory (a symlink
 out of it included), a file that is not such an image, or images over

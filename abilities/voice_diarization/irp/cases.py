@@ -3,6 +3,9 @@
 import json
 
 S = suite
+# utterance.wav and utterance.raw: 1 s of 8 kHz mono 16-bit PCM, constant
+# non-zero samples (WAV container, raw).
+S.media({"utterance.wav": wav(1000, 1, 8000), "utterance.raw": pcm(1000, 1, 8000)})
 DONE = "done.invoke.voice_diarization"
 DIARIZE = "/v1/audio/diarization"
 WAV = [("audio", "'media/utterance.wav'"), ("media_type", "'audio/wav'"), ("output", "'media/segment'")]

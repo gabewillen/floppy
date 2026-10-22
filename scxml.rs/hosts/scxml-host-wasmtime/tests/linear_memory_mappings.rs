@@ -165,7 +165,7 @@ impl SessionEmbedder for Chain {
         Some(scxml(&body).into())
     }
 
-    fn scripts(&self) -> MachineScripts {
+    fn scripts(&self, _base_uri: Option<&str>) -> MachineScripts {
         MachineScripts::none()
     }
 }
