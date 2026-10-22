@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.vision.detection.output",
+  "description": "The objects found in one image, by descending confidence (unrated last); empty when the detector found nothing.",
+  "additionalProperties": false,
+  "properties": {
+    "objects": {
+      "description": "The objects found, by descending confidence with unrated objects last.",
+      "items": {
+        "additionalProperties": false,
+        "description": "One object found in the image: its label as the detector produced it, and where it is.",
+        "examples": [
+          {
+            "label": "cup",
+            "confidence": 0.87,
+            "box": {
+              "x": 0.4,
+              "y": 0.5,
+              "width": 0.1,
+              "height": 0.15
+            }
+          }
+        ],
+        "properties": {
+          "label": {
+            "description": "What the detector called the object, exactly as it produced it.",
+            "examples": [
+              "cup",
+              "person"
+            ],
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How sure the detector was, 0..1; null when it does not rate its findings.",
+            "examples": [
+              0.87,
+              null
+            ],
+            "title": "Confidence"
+          },
+          "box": {
+            "additionalProperties": false,
+            "description": "Where the object is, in normalized image coordinates: as fractions of the image's width and height, x and y the top-left corner (0,0 is the image's top-left), width and height the box's size.",
+            "examples": [
+              {
+                "x": 0.25,
+                "y": 0.1,
+                "width": 0.2,
+                "height": 0.35
+              }
+            ],
+            "properties": {
+              "x": {
+                "description": "Left edge, as a fraction of the image width.",
+                "examples": [
+                  0.25
+                ],
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "title": "X",
+                "type": "number"
+              },
+              "y": {
+                "description": "Top edge, as a fraction of the image height.",
+                "examples": [
+                  0.1
+                ],
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "title": "Y",
+                "type": "number"
+              },
+              "width": {
+                "description": "Box width, as a fraction of the image width.",
+                "examples": [
+                  0.2
+                ],
+                "exclusiveMinimum": 0.0,
+                "maximum": 1.0,
+                "title": "Width",
+                "type": "number"
+              },
+              "height": {
+                "description": "Box height, as a fraction of the image height.",
+                "examples": [
+                  0.35
+                ],
+                "exclusiveMinimum": 0.0,
+                "maximum": 1.0,
+                "title": "Height",
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y",
+              "width",
+              "height"
+            ],
+            "title": "Box",
+            "type": "object"
+          }
+        },
+        "required": [
+          "label",
+          "confidence",
+          "box"
+        ],
+        "title": "DetectedObject",
+        "type": "object"
+      },
+      "maxItems": 32,
+      "title": "Objects",
+      "type": "array"
+    }
+  },
+  "required": [
+    "objects"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "objects": [
+        {
+          "label": "cup",
+          "confidence": 0.87,
+          "box": {
+            "x": 0.4,
+            "y": 0.5,
+            "width": 0.1,
+            "height": 0.15
+          }
+        }
+      ]
+    },
+    {
+      "objects": []
+    }
+  ]
+}

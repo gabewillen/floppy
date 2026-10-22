@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.vision.description.input",
+  "description": "One encoded image file, exactly as its producer captured or received it, to describe.",
+  "additionalProperties": false,
+  "properties": {
+    "image": {
+      "description": "Reference (a URI reference) to the encoded image file in the media directory the run grants, standing for the original's image bytes; floppy passes media by reference, never as bytes [floppy field].",
+      "examples": [
+        "media/image-1"
+      ],
+      "format": "uri-reference",
+      "minLength": 1,
+      "title": "Image",
+      "type": "string"
+    },
+    "media_type": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Media type of the encoded bytes, such as image/png, image/jpeg or image/webp; null when the source did not name it.",
+      "examples": [
+        "image/png",
+        "image/jpeg"
+      ],
+      "title": "Media Type"
+    }
+  },
+  "required": [
+    "image"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "image": "media/image-1",
+      "media_type": "image/png"
+    }
+  ]
+}

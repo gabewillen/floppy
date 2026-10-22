@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.vision.detection.input",
+  "description": "One encoded image to find objects in.",
+  "additionalProperties": false,
+  "properties": {
+    "image": {
+      "description": "The image, exactly as its source encoded it: a reference (a URI reference) to the image file in the media directory the run grants, never bytes [floppy field].",
+      "examples": [
+        "media/image-1"
+      ],
+      "format": "uri-reference",
+      "minLength": 1,
+      "title": "Image",
+      "type": "string"
+    },
+    "media_type": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Media type of the encoded bytes, such as image/png, image/jpeg or image/webp; null when the source did not name it. The original carries it inside its image [floppy field].",
+      "examples": [
+        "image/jpeg",
+        "image/png"
+      ],
+      "title": "Media Type"
+    }
+  },
+  "required": [
+    "image"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "image": "media/image-1",
+      "media_type": "image/jpeg"
+    }
+  ]
+}

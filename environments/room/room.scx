@@ -221,7 +221,7 @@
         </if>
       </foreach>
     </transition>
-    <transition event="environment.visual" event:schema="../../bots/floppy/schemas/environment.visual.json">
+    <transition event="environment.visual" event:schema="../../abilities/schemas/environment.visual.json">
       <log label="environment.visual" expr="eventDataJson(_event)"/>
       <foreach array="participants" item="participant">
         <send event="environment.visual" targetexpr="participantTarget(participant)">

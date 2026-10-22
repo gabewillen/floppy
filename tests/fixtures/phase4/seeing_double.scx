@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A seeing double for the seeing switch tests (tests/tests/seeing.rs): the
+  body's child "seeing" without an eye. tests/tests/seeing.rs copies it to
+  abilities/seeing/seeing.scx beside a copy of the body, so the body's
+  literal <invoke id="seeing"> reaches it.
+
+  On start it sends bot.ability.offers {ability: "seeing", choices: []}
+  (its readiness) unless mode is 'silent' (the test rewrites mode's expr),
+  in which case it never offers. The first environment.visual it is sent
+  ends it, and when mode is 'ending' it ends at once, right after its
+  offers: it logs double.end ("seeing") and enters its final state, so
+  the body gets done.invoke.seeing.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" name="seeing_double" initial="perceiving">
+  <datamodel>
+    <data id="mode" expr="'ready'"/>
+  </datamodel>
+  <state id="perceiving">
+    <onentry>
+      <if cond="mode !== 'silent'">
+        <send event="bot.ability.offers" target="#_parent">
+          <param name="ability" expr="'seeing'"/>
+          <param name="choices" expr="[]"/>
+        </send>
+      </if>
+    </onentry>
+    <transition cond="mode === 'ending'" target="ended">
+      <log label="double.end" expr="'seeing'"/>
+    </transition>
+    <transition event="environment.visual" target="ended">
+      <log label="double.end" expr="'seeing'"/>
+    </transition>
+  </state>
+  <final id="ended"/>
+</scxml>

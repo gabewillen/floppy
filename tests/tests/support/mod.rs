@@ -269,10 +269,11 @@ impl Run {
     /// A run of an environment document (`environments/<name>/<name>.scx`)
     /// gets `--fuel` [`FUEL`] unless it names its own.
     ///
-    /// A run whose document tree binds the sql, the generate or the speech
-    /// service (decided by [`binds`]) and that grants it no directory gets
-    /// a fresh one ([`memory_grant`], [`media_grant`],
-    /// [`speech_media_grant`]): each imports `wasi:filesystem`, and a run
+    /// A run whose document tree binds the sql, the generate, the speech or
+    /// the vision service (decided by [`binds`]) and that grants it no
+    /// directory gets a fresh one ([`memory_grant`], [`media_grant`],
+    /// [`speech_media_grant`], [`vision_media_grant`]): each imports
+    /// `wasi:filesystem`, and a run
     /// that binds one without a `--dir` grant is refused. One that binds the
     /// files service gets the behaviors directory of its layout
     /// ([`behaviors_grant`]). One that binds the pgsql service gets the network
@@ -296,6 +297,7 @@ impl Run {
             ("sql", memory_grant as fn() -> Vec<String>),
             ("generate", media_grant),
             ("speech", speech_media_grant),
+            ("vision", vision_media_grant),
             ("pgsql", pgsql_grant),
         ] {
             let uri = service_uri(name);
@@ -585,6 +587,19 @@ pub fn speech_media_grant() -> Vec<String> {
             "{}={}::/media",
             service_uri("speech"),
             unique_scratch("speech-media").display()
+        ),
+    ]
+}
+
+/// `--dir` granting the vision service a fresh scratch directory at
+/// `/media`, where the images it measures are read.
+pub fn vision_media_grant() -> Vec<String> {
+    vec![
+        "--dir".to_owned(),
+        format!(
+            "{}={}::/media",
+            service_uri("vision"),
+            unique_scratch("vision-media").display()
         ),
     ]
 }
@@ -924,8 +939,8 @@ pub fn environment_for(body: &Path, params: &[(&str, &str)]) -> String {
 /// script, and any data beside them) into `abilities`, with the
 /// abilities' schemas (`abilities/schemas/`, which it references as
 /// `../schemas/<event>.json`), and returns the path of its copied document. The memory ability comes
-/// with the migration ability it invokes, and the conversation with its
-/// turn detector.
+/// with the migration ability it invokes, the conversation with its
+/// turn detector, and seeing with its stage children.
 pub fn copy_ability(name: &str, abilities: &Path) -> PathBuf {
     copy_tree(
         &workspace().join("abilities/schemas"),
@@ -943,6 +958,10 @@ pub fn copy_ability(name: &str, abilities: &Path) -> PathBuf {
     }
     if name == "autonomy" {
         copy_ability("candidates_runner", abilities);
+    }
+    if name == "seeing" {
+        copy_ability("object_detection", abilities);
+        copy_ability("description", abilities);
     }
     abilities.join(name).join(format!("{name}.scx"))
 }

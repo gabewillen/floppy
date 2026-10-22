@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A vision service double for the seeing tests (tests/tests/seeing.rs): a
+  measurement that never answers. tests/tests/seeing.rs copies it beside a
+  copy of abilities/seeing/seeing.scx whose vision <invoke> it rewrites to
+  invoke it, so measuring's measure_timeout_ms passes first.
+
+  It takes the vision service's parameters (measure, image, previous),
+  logs double.measure (the measure) on start, and never ends.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" name="vision_double" initial="measuring">
+  <datamodel>
+    <data id="measure" expr="null"/>
+    <data id="image" expr="null"/>
+    <data id="previous" expr="null"/>
+  </datamodel>
+  <state id="measuring">
+    <onentry>
+      <log label="double.measure" expr="measure"/>
+    </onentry>
+  </state>
+</scxml>

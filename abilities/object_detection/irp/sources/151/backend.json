@@ -1,0 +1,22 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "[]        "
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
