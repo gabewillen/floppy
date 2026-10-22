@@ -61,6 +61,8 @@
  "bot.ability.cognition.ignore",
  "bot.ability.cognition.input",
  "bot.ability.cognition.output",
+ "bot.ability.cognition.step.failed",
+ "bot.ability.cognition.step.timed_out",
  "bot.ability.communication.activate",
  "bot.ability.communication.failed",
  "bot.ability.communication.input",

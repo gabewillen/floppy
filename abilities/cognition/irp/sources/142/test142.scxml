@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- cognition-5: a reasoning selection outside the choices fails the turn. -->
+<!-- cognition-5: a reasoning selection outside the choices fails the turn, and the failure is handed back. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="cognition" type="scxml" src="../../../cognition.scx">
@@ -19,6 +19,9 @@
     <transition event="bot.ability.failed" cond='_event.data.turn === 1 &amp;&amp; _event.data.message === "the reasoning failed (schema-mismatch)" &amp;&amp; _event.data.input.focus === null &amp;&amp; _event.data.input.focus_candidates.length === 0' target="step2"/>
   </state>
   <state id="step2">
+    <transition event="bot.ability.cognition.input" cond='_event.data.stimulus.event === "bot.ability.cognition.step.failed" &amp;&amp; _event.data.stimulus.data.turn === 1 &amp;&amp; _event.data.stimulus.data.stage === "reasoning"' target="step3"/>
+  </state>
+  <state id="step3">
     <transition target="pass"/>
   </state>
   <transition event="bot.ability.offers"/>

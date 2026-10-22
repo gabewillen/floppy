@@ -314,13 +314,13 @@ fn every_inactivity_bound_has_a_backstop_and_the_stages_nest_in_the_turn() {
         "child_operation_timeout_ms",
     );
     assert!(millis("abilities/autonomy/autonomy.scx", "memory_timeout_ms") < stage);
-    assert!(millis("abilities/intuition/intuition.scx", "decision_timeout_ms") < stage);
-    // Autonomy's memory, the intuition's decision and reasoning's stage at
+    assert!(millis("abilities/cognition/cognition.scx", "decision_timeout_ms") < stage);
+    // Autonomy's memory, the decision layer's decision and reasoning's stage at
     // its backstop, one after another, end before the body times the turn
     // out.
     let turn = millis("bots/floppy/floppy.scx", "processing_timeout_ms");
     let cascade = millis("abilities/autonomy/autonomy.scx", "memory_timeout_ms")
-        + millis("abilities/intuition/intuition.scx", "decision_timeout_ms")
+        + millis("abilities/cognition/cognition.scx", "decision_timeout_ms")
         + millis(
             "abilities/cognition/cognition.scx",
             "child_operation_ceiling_ms",

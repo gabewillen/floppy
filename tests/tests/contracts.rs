@@ -95,7 +95,7 @@ const BODY_EVENTS: [&str; 13] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 75] = [
+const ABILITY_EVENTS: [&str; 77] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -104,6 +104,9 @@ const ABILITY_EVENTS: [&str; 75] = [
     "bot.ability.cognition.cancelled",
     "bot.ability.cognition.ignore",
     "bot.ability.cognition.child.hop.timed_out",
+    // A failed or timed-out step, handed back to be perceived.
+    "bot.ability.cognition.step.failed",
+    "bot.ability.cognition.step.timed_out",
     "bot.ability.processing.cancelled",
     "bot.ability.autonomy.input",
     "bot.ability.autonomy.output",
@@ -185,7 +188,7 @@ const ABILITY_EVENTS: [&str; 75] = [
 /// The correlated events of one processing turn: each requires `turn`.
 /// Tool events (the ones a model chooses, such as
 /// `bot.ability.cognition.ignore`) never do: their data is the model's.
-const CORRELATED: [&str; 16] = [
+const CORRELATED: [&str; 18] = [
     "bot.processing.completed",
     "bot.processing.failed",
     "bot.processing.timed_out",
@@ -194,6 +197,8 @@ const CORRELATED: [&str; 16] = [
     "bot.ability.cognition.cancel",
     "bot.ability.cognition.cancelled",
     "bot.ability.cognition.child.hop.timed_out",
+    "bot.ability.cognition.step.failed",
+    "bot.ability.cognition.step.timed_out",
     "bot.ability.processing.cancelled",
     "bot.ability.autonomy.input",
     "bot.ability.autonomy.output",

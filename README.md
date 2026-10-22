@@ -188,9 +188,10 @@ them). Both directions therefore call the Gemini API, so
 | `bots/builder/builder.scx` | `sim_test_cap_ms` | `120000` | each test script's simulation run |
 | `bots/floppy/floppy.scx` | `activation_timeout_ms` | `30000` | activation until every ability offers (the original's 30 s attachment timeout) |
 | `bots/floppy/floppy.scx` | `processing_timeout_ms` | `300000` | one turn (the original's 5 min processing timeout) |
-| `abilities/cognition/cognition.scx` | `child_operation_timeout_ms` | `30000` | each cascade stage without progress (the original's 30 s): autonomy's and the intuition's from their start, reasoning's once its reply streams (the first progress arms it, each later one re-arms it); live streamed replies had at most 6.2 s between chunks (decision D101; the bot's `bounds` param's `child_operation_timeout_ms` overrides it) |
+| `abilities/cognition/cognition.scx` | `child_operation_timeout_ms` | `30000` | each cascade stage without progress (the original's 30 s): autonomy's and the decision layer's from their start, reasoning's once its reply streams (the first progress arms it, each later one re-arms it); live streamed replies had at most 6.2 s between chunks (decision D101; the bot's `bounds` param's `child_operation_timeout_ms` overrides it) |
 | `abilities/cognition/cognition.scx` | `child_operation_ceiling_ms` | `240000` | each cascade stage in all, the backstop and the only bound of a reasoning reply that is not streamed, inside the body's `processing_timeout_ms` with the stages before reasoning (decision D101; the bot's `bounds` param's `child_operation_ceiling_ms` overrides it) |
-| `abilities/intuition/intuition.scx` | `decision_timeout_ms` | `20000` | the intuition's decision |
+| `abilities/cognition/cognition.scx` | `decision_timeout_ms` | `20000` | the decision layer's own bound on its decision, passed to it as its `decision_timeout_ms` param; a decision not made in time cascades the turn to reasoning (the reference's D-R-36; the bot's `bounds` param's `reflex_timeout_ms` overrides it) |
+| `abilities/intuition/intuition.scx` | `decision_timeout_ms` | `20000` | the decision layer's decision when its invoker passes no bound |
 | `abilities/autonomy/autonomy.scx` | `silence_ms` | `1000` | a behavior's answer (the original's `TURN_SILENCE_BOUND`) |
 | `abilities/autonomy/autonomy.scx` | `memory_timeout_ms` | `10000` | one memory transaction |
 | `abilities/candidates_runner/candidates_runner.scx` | `memory_timeout_ms` | `10000` | one candidate's memory transaction (autonomy passes its own) |
@@ -209,6 +210,14 @@ them). Both directions therefore call the Gemini API, so
 | `abilities/listening/listening.scx` | `sensitivity_timeout_ms` | `30000` | scoring one sound (the original's 30 s stage operation timeout) |
 | `abilities/interpretation/interpretation.scx` | `stage_timeout_ms` | `30000` | each interpretation stage (the original's 30 s) |
 | `abilities/interpretation/interpretation.scx` | `product_threshold_db` | `3.0` | the perceived level a listening product needs (the original's 3 dB) |
+
+The bot's `bounds` param may also bound a cognition tier's step on its own (the reference's
+`_tier_timeouts`, [floppy fields]): `reflex_timeout_ms` bounds the learned behaviors and the decision
+layer (and replaces the decision layer's `decision_timeout_ms`), `intuition_timeout_ms` the chat tier,
+and `reasoning_timeout_ms` reasoning, each as both the step's inactivity bound and its backstop; a tier
+with none takes `child_operation_timeout_ms` and `child_operation_ceiling_ms`. A step that runs out of
+time or fails fails only its turn, which is handed back to the cognition as a
+`bot.ability.cognition.step.timed_out` or `bot.ability.cognition.step.failed` stimulus.
 
 The cognition always runs reflection and routines beside its turns, as
 The original's bots compose them. The floppy bot's `database` is
