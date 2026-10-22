@@ -7,10 +7,27 @@ history lives in [decisions.md](decisions.md) (numbered decisions),
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
-Last updated: 2026-10-21.
+Last updated: 2026-10-22.
 
 ## Current state (2026-10-09) — resume here
 
+- **Learned behaviors are repaired, run on their live turn and built
+  from a template (2026-10-22, D130 to D132):** reflection repairs a
+  select call the generate service refuses (D126's `rejection`) at most
+  twice with the original's feedback, failing at once on the same
+  rejection and then with `Selection rejected: <message>` (D130). The
+  builder runs a turn behavior once on the live turn it is learned from
+  (`builder.request`'s `apply`, which reflection always sends) and
+  checks the run with `<behavior:verify_apply>` (D131); a routine keeps
+  its forced tick. A turn behavior is built from the fixed template
+  `namespaces/behavior/templates/turn.scx` (`template` `'turn'`,
+  `<behavior:turn_program>`), so the model writes only its script,
+  `applies(input)` and `selections(input, turn)`, with at most seven test
+  inputs; a script whose `lifetime` is persistent falls back once to a
+  whole document, and a whole document's author call is bounded by
+  `document_max_completion_tokens` (16384) (D132). The build-time half
+  of "nothing tests learned behaviors on real input" is done by D131;
+  the runtime half is pending (gap L5).
 - **One schema file per event (2026-10-21, D125):** scxml.rs
   `5bc75e72` resolves an `event:schema` reference against its
   document's base URI like any relative URI, `..` included, so the twin

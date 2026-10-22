@@ -760,7 +760,7 @@ fn more_than_one_selection_is_refused_twice_and_fails_on(database: &str) {
     assert_eq!(json_log(&records, "inventory")[0]["status"], "ACTIVE");
 }
 
-/// The original's select repair (`MAX_SELECTION_REPAIRS`, 615bacc;
+/// The original's select repair (at most two repairs;
 /// decision D130): the live run's create without `data`, which the
 /// generate service refuses as schema-mismatch, is asked again with the
 /// same system prompt and the original's feedback after the select input,
@@ -1057,8 +1057,8 @@ fn the_builder_is_told_the_triggers_and_the_input_the_behavior_runs_with() {
     );
 }
 
-/// The original's `_check` runs a turn behavior once on the live turn
-/// (`verify_apply`, decision D131): a script that answers only a knock and
+/// The original's live-turn check runs a turn behavior once on the live
+/// turn (decision D131): a script that answers only a knock and
 /// reads its label from `input` agrees with this turn only on its input, so
 /// its ACTIVE row proves reflection sent the turn and its input and the
 /// builder ran the script with them.

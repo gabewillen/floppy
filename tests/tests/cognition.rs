@@ -1053,8 +1053,8 @@ fn when_no_learned_behavior_handles_the_turn_intuition_runs() {
 }
 
 /// A behavior whose run names an error (the turn template's script that
-/// threw, decision D132) is recorded as failed, as the original's behavior
-/// `failed_event` is, and the cascade goes on to intuition.
+/// threw, decision D132) is recorded as failed, as the original records a
+/// behavior run that fails, and the cascade goes on to intuition.
 #[test]
 fn a_learned_behavior_whose_script_threw_is_recorded_as_failed() {
     let mock = Mock::start();

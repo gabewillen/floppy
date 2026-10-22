@@ -55,9 +55,9 @@
     {
       "namespace_uri": "https://github.com/stateforward/floppy/namespaces/behavior",
       "package_version": "0.1.0",
-      "manifest_sha256": "748b33a83e4f78a6358fc57ae20ad9bb7d0b901db2c09319eeb974155f06902f",
-      "schema_sha256": "6d2f6158fe06cb13122aebfe3e9682548111a7231f9b1a637e96a46521c2051a",
-      "component_sha256": "5a6311e55e071e3457ccf1e62a895cb58ab535118e0ce8c8a2f5f74a4576bd0e"
+      "manifest_sha256": "63d71629ee1f5a81d225d256d188671f27908e04b78eea80f1773d78433be8f5",
+      "schema_sha256": "1f8b84412f43f965955bc04793116dec6da1506fe33e012556b1a8abc539cb59",
+      "component_sha256": "36cabb362b7ed6159845ba78cae08a6737ec7ada6166fd729534bc1c9c74509d"
     }
   ],
   "ir_version": 5,
@@ -70,7 +70,7 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "c77e09b378b45df536fa677e0271425d96f8daa3bed7e1a95b331ceedcfd241c",
+  "identity_digest": "ac58ce3f70caab4548a5831501aa536b6c97ed83c95ae7b69ffd1db979d56318",
   "summary": {
     "total_selected": 27,
     "applicable_selected": 27,

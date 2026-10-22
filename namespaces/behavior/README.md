@@ -19,8 +19,8 @@ no I/O.
 | `<behavior:replace_behavior_clauses location instance>` | `storage.replace_behavior_clauses` (`delete_behavior_clauses`, `insert_behavior_clauses`) | the statements `[{sql, parameters}]` that replace the behavior |
 | `<behavior:lifetime_errors location scxml min_every? turn_after_bound? lifetimelocation? scheduleslocation?>` | `instance._lifetime_errors` (E0009), the instance's `lifetime` | the diagnostics (`location`), the lifetime (`lifetimelocation`) and the schedules' events (`scheduleslocation`) |
 | `<behavior:verify_tick location ticks>` | `verify._verify_tick`, `_selection_binding_errors` (E0008) | the forced tick's messages |
-| `<behavior:verify_apply location done turn input targets handled? error?>` | `verify.verify_apply` on a turn behavior (`_apply_once`, `_live_binding_values`, `_selection_binding_errors`, E0008) | the messages of a turn behavior's run on its live turn or on an input it must not answer |
-| `<behavior:turn_program location script>` | `source.py` `STARLARK_API` (the one program shape of a behavior) | the turn behavior template ([`templates/turn.scx`](templates/turn.scx)) naming the behavior's script |
+| `<behavior:verify_apply location done turn input targets handled? error?>` | the live-turn check of a turn behavior (one run, its selections' data checked against the live values, E0008) | the messages of a turn behavior's run on its live turn or on an input it must not answer |
+| `<behavior:turn_program location script>` | the one program shape of a behavior | the turn behavior template ([`templates/turn.scx`](templates/turn.scx)) naming the behavior's script |
 
 The exact semantics and failures are in [`src/lib.rs`](src/lib.rs); the
 structure is in [`package/behavior.xsd`](package/behavior.xsd), whose digest the
@@ -36,7 +36,8 @@ reads the written document's lifetime with `lifetime_errors`; the builder
 draft with `lifetime_errors`, a routine's forced tick with
 `verify_tick`, and a turn behavior's run on its live turn with
 `verify_apply` (decision D131), and writes a turn behavior's chart with
-`turn_program`, so the model writes only its script (decision D132). The original's `At.next_after` stays in the reflection's
+`turn_program`, so the model writes only its script (decision D132). The original's
+next-run time of an `at` schedule stays in the reflection's
 ECMAScript, which a routine carries as data: a builder draft that used a
 namespace element would fail `<scx:validate>`, which binds no extension
 package.

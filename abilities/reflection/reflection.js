@@ -52,8 +52,8 @@ function selectCeilingDelay() {
   return select_ceiling_ms + 'ms';
 }
 
-// The reference SelectInput, with the original's repair feedback last when
-// this attempt repairs a rejection (with_selection_feedback).
+// The reference select input, with the original's repair feedback last when
+// this attempt repairs a rejection.
 function selectPrompt() {
   return selectInputJson() + selectFeedback();
 }
@@ -94,7 +94,7 @@ function isSelectRejection(_event) {
   return isGenerate(_event) && gen_rejection !== null;
 }
 
-// The original selection_rejection_message.
+// The original's message for a rejected selection.
 function rejectionMessage(r) {
   return 'Selection rejected: ' + r.message;
 }
@@ -127,7 +127,7 @@ function selectTimedOutMessage() {
 
 // routing_rejection
 
-// The original _is_same_select_rejection: this hop's rejection is the one
+// The original's same-rejection check: this hop's rejection is the one
 // it repaired. The original compares its whole normalized diagnostic; a
 // D126 key names only where the arguments first fail, so its message is
 // compared too.
@@ -135,7 +135,7 @@ function isSameSelectRejection() {
   return select_rejection !== null && select_rejection.key === gen_rejection.key && select_rejection.message === gen_rejection.message;
 }
 
-// The original _can_repair_select.
+// Another repair is allowed: at most max_selection_repairs, as in the original.
 function canRepairSelect() {
   return select_attempt < max_selection_repairs;
 }
@@ -244,8 +244,8 @@ function usesTurnTemplate() {
   return existing_behavior.lifetime !== 'persistent';
 }
 
-// The live turn the builder runs a turn behavior on (the reference _check's
-// verify_apply): this turn, its behavior_input as autonomy builds it, and the
+// The live turn the builder runs a turn behavior on (the original's live-turn
+// check): this turn, its behavior_input as autonomy builds it, and the
 // sessions its output names (a learned behavior names its targets, D104).
 function liveTurn() {
   return ({turn: turn, input: behavior_input, targets: outputTargets()});

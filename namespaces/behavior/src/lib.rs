@@ -11,7 +11,7 @@
 //! replace one behavior's row and triggers, the schedule bounds a
 //! behavior's lifetime implies, the check of a persistent routine's
 //! forced tick, the check of a turn behavior's run on its live turn, and
-//! the one program shape of a turn behavior (`behavior/source.py`).
+//! the one program shape of a turn behavior.
 //! The memory ability applies the statements through the sql service and
 //! the builder simulates the routine; these elements only build and read
 //! values, so they are synchronous executable content.
@@ -99,8 +99,8 @@
 //!
 //! # `<behavior:verify_apply location="L" done="D" turn="T" input="I" targets="G" handled="H"? error="E"?/>`
 //!
-//! The original's `verify_apply` on a turn behavior (`verify._apply_once`
-//! with `_live_binding_values` and `_selection_binding_errors`): the
+//! The original's live-turn check of a turn behavior (one run, then its
+//! selections' data checked against the live values): the
 //! behavior ran once, invoked with the params `turn` and `input` of the
 //! turn it is learned from. `done` (required) evaluates to the run's
 //! donedata, `null` when it reached no top-level final state; `turn`
@@ -116,8 +116,8 @@
 //! among `targets` (floppy's check, decision D104: the candidates runner
 //! sends each selection to its target, so an empty `targets` refuses every
 //! selection) and data whose members agree with the string, number and
-//! boolean members of `input` of the same names (JSON equality, so `true`
-//! is not `1`); else why, an error or no donedata first.
+//! boolean members of `input` of the same names (compared as JSON
+//! values); else why, an error or no donedata first.
 //!
 //! Two checks serve the turn template (decision D132): a donedata whose
 //! `error` is a string (`script` when the script did not load, else the
@@ -132,7 +132,7 @@
 //! # `<behavior:turn_program location="L" script="S"/>`
 //!
 //! The original's one program shape of a turn behavior
-//! (`behavior/source.py` `STARLARK_API`, decision D132): `location`
+//! (decision D132): `location`
 //! (required) receives [`TURN_TEMPLATE`], the text of
 //! `templates/turn.scx`, with its `<script src="turn.js"/>` naming the
 //! file `script` (required) evaluates to instead, a plain `.js` file name
@@ -1263,7 +1263,7 @@ pub fn verify_tick(ticks: &[Json]) -> Vec<String> {
     selection_binding_errors(selections, &live, "the tick")
 }
 
-/// The original's `_selection_binding_errors` after its shape checks: one
+/// The original's binding check after its shape checks: one
 /// message for each selection data member whose live value differs, in
 /// order; `source` names where the behavior reads the live values.
 fn selection_binding_errors(
@@ -1296,7 +1296,7 @@ fn selection_binding_errors(
 /// The most messages `<behavior:verify_apply>` writes.
 const MAX_APPLY_ERRORS: usize = 20;
 
-/// The original's message for an output that selects nothing (verify.py).
+/// The original's message for an output that selects nothing.
 const NO_SELECTION: &str =
     "behavior output must select at least one event for the observed pattern.";
 
@@ -1441,7 +1441,7 @@ pub struct Applied<'a> {
     pub error: Option<&'a str>,
 }
 
-/// The original's `verify_apply` on a turn behavior with floppy's donedata
+/// The original's live-turn check of a turn behavior with floppy's donedata
 /// contract (the candidates runner's) and target check (decision D104), and
 /// the turn template's checks (decision D132); see the crate documentation,
 /// `<behavior:verify_apply>`.
@@ -1551,7 +1551,7 @@ fn unanswered_errors(done: Option<&Json>) -> Vec<String> {
 }
 
 /// The turn behavior template (decision D132; the original's one program
-/// shape, `behavior/source.py` `STARLARK_API`).
+/// shape).
 pub const TURN_TEMPLATE: &str = include_str!("../templates/turn.scx");
 
 /// The script reference the template carries, which `turn_program` names
@@ -1624,7 +1624,7 @@ fn turn_program_element<H: BehaviorHost>(
     Ok(Executed::Handled)
 }
 
-/// The original's `_live_binding_values` of a data object: its string,
+/// The live values of a data object, as the original binds them: its string,
 /// number and boolean members (not `null`, arrays or objects).
 fn live_binding_values(data: &Map<String, Json>) -> Map<String, Json> {
     data.iter()

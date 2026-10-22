@@ -83,7 +83,7 @@ its own base URI, as they are when it is invoked.
 
 A request with `template` `'turn'` builds a turn behavior from one fixed
 document, as the original builds every behavior as one program of fixed
-shape (`behavior/source.py` `STARLARK_API`; decision D132), so the model
+shape (decision D132), so the model
 never writes SCXML for it: the 2026-10-21 lab runs lost nearly every
 revision to document syntax (`XML001`, XSD errors, `no-document`,
 `truncated`), not to behavior logic. `routing` skips `design` (the plan is
@@ -219,8 +219,8 @@ intake -> routing -> design -> author -> writing -> validate -> simulate -> done
   by inactivity (`revising_timeout_ms`) and its ceiling
   (`revising_ceiling_ms`, decision D101). With the request's `apply`, a
   turn behavior (any draft that does not send `bot.behavior.tick`) also
-  runs one more test, `live turn` (the reference `verify_apply` on a turn
-  behavior, `revision._check`, decision D131), in its own state
+  runs one more test, `live turn` (the original's live-turn check of a
+  turn behavior, decision D131), in its own state
   `sim_apply`: a fresh child invoked as the candidates runner invokes it,
   with the params `turn` and `input` of that live turn, is sent nothing and
   must reach a top-level final state within min(`turn_after_bound_ms`,

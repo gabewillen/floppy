@@ -81,7 +81,7 @@
     </invoke>
     <!-- A run whose donedata names an error (the turn template's script
          that did not load or threw, decision D132) failed, as the
-         original's behavior failed_event does. -->
+         original records a behavior run that fails. -->
     <transition event="done.invoke.candidate" cond="isBehaviorFailed(_event)" target="recording_failure">
       <log label="autonomy.candidate.failed" expr="candidateThrewLog(_event)"/>
     </transition>

@@ -450,7 +450,7 @@ function hasLifetimeErrors() {
 
 // simulate
 
-// The reference verify_apply: a persistent routine is checked by one forced tick
+// The original's behavior checks: a persistent routine is checked by one forced tick
 // (D84); a turn behavior, given the request's live turn, by one run on that turn
 // (D131); a turn script by the live turn, then one run on each test input (D132).
 function simTests() {

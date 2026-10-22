@@ -2,7 +2,7 @@
 <!--
   The turn behavior template (docs/decisions.md D132): the one program shape
   of a learned turn behavior, as the original's behavior program is one
-  Starlark program of fixed shape (behavior/source.py STARLARK_API).
+  program of fixed shape.
   <behavior:turn_program> writes it with the behavior's script in place of
   turn.js; the model writes only that script, which declares applies(input)
   and selections(input, turn). Its invoker sets turn and input with

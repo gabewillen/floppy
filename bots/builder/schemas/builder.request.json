@@ -15,7 +15,7 @@
     "turn_after_bound_ms": {"type": "integer", "minimum": 1, "maximum": 86400000},
     "apply": {
       "type": "object",
-      "description": "The live turn a turn behavior is run on before it is built (the reference verify_apply's input): the turn, the behavior input as autonomy builds it, and the sessions that turn's output names [floppy field].",
+      "description": "The live turn a turn behavior is run on before it is built (the input of the original's live-turn check): the turn, the behavior input as autonomy builds it, and the sessions that turn's output names [floppy field].",
       "properties": {
         "turn": {"type": "integer", "minimum": 1},
         "input": {"type": "object"},
