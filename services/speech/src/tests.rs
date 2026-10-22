@@ -921,8 +921,8 @@ fn malformed_parts_reject_the_start() {
     // At the bound, null members are absent and other cues are read past.
     let at_bound = encode_parts(
         &json!([
-            {"words": "a".repeat(MAX_WORDS_CHARS), "expression": null},
-            {"words": null, "expression": {"sound": "laugh", "sound_at": "after"}},
+            {"words": "a".repeat(MAX_WORDS_CHARS)},
+            {"expression": {"sound": "laugh", "sound_at": "after"}},
             {"expression": {"instructions": "softly", "pace": 9, "pause": null, "sound": null}, "words": "b"},
         ]),
         "audio/mpeg",

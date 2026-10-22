@@ -72,7 +72,7 @@
     </test>
   </assert>
   <assert id="interpretation-8" specnum="8" specid="#interpretation-8">
-    <![CDATA[Voice identification without diarization identifies the opening voice span directly: its one embedding is the window's source identity, carried by every streamed frame; a sound that is not PCM with a sample rate cannot be identified and fails the `voice_identification` stage. Identification waits for its voices at most `stage_timeout_ms` + `recognize_timeout_ms` (the original's `_identify_delay`, 2 s past the stage bound by default); past that, or with no opening embedding, it completes with nobody identified (the original's `_identify_nobody`): the window opens with no source identity, or each diarized segment is handed off with no embedding.]]>
+    <![CDATA[Voice identification without diarization identifies the opening voice span directly: its one embedding is the window's source identity, carried by every streamed frame; a sound that is not PCM with a sample rate cannot be identified and fails the `voice_identification` stage. Identification waits for its voices at most `stage_timeout_ms` + `recognize_timeout_ms` (the original's identification deadline, 2 s past the stage bound by default); past that, or with no opening embedding, it completes with nobody identified (the original's identifying nobody): the window opens with no source identity, or each diarized segment is handed off with no embedding.]]>
     <test id="170" conformance="mandatory" manual="false">
       <start uri="170/test170.scxml"/>
     </test>

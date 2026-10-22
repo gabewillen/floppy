@@ -60,7 +60,7 @@ const STALLED_REASONING_BOUNDS: &str =
     "({child_operation_timeout_ms: 8000, reflex_timeout_ms: 30000})";
 /// A model context whose budget (three bytes a token) holds the first
 /// turn's prompt but not the second's with its recalled episode.
-const FITTED_TOKENS: u32 = 3_525;
+const FITTED_TOKENS: u32 = 3_300;
 /// The model a bot composing the intuition tier gives it.
 const INTUITION_MODEL: &str = "chat-model";
 const ADOPT: &str = "bot.ability.identity.adopt";

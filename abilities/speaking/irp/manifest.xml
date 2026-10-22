@@ -12,7 +12,7 @@
     </test>
   </assert>
   <assert id="speaking-2" specnum="2" specid="#speaking-2">
-    <![CDATA[`bot.ability.speaking.input` `{parts}` (the original's InputData: 1 to 64 parts `{expression?, words?}`) is encoded by the vocal child, which gets the parts, with the speaking's `provider`, `model`, `voice` and `media_type` (by default the original's gemini encoder, `audio/pcm`), written to `output_prefix` + the utterance's number + `.` + the media subtype (`media/speaking-<n>.pcm`); the utterance's text of record is the parts' words joined exactly as written (the original's `said`, nothing stripped).]]>
+    <![CDATA[`bot.ability.speaking.input` `{parts}` (the original's input: 1 to 64 parts `{expression?, words?}`) is encoded by the vocal child, which gets the parts, with the speaking's `provider`, `model`, `voice` and `media_type` (by default the original's gemini encoder, `audio/pcm`), written to `output_prefix` + the utterance's number + `.` + the media subtype (`media/speaking-<n>.pcm`); the utterance's text of record is the parts' words joined exactly as written (the original's joined words, nothing stripped).]]>
     <test id="110" conformance="mandatory" manual="false">
       <start uri="110/test110.scxml"/>
     </test>
@@ -81,7 +81,7 @@
     </test>
   </assert>
   <assert id="speaking-8" specnum="8" specid="#speaking-8">
-    <![CDATA[Input for another utterance that arrives outside `idle` is held (`<event:defer/>`), up to `held_utterances_bound` (16, a `<param>`), and taken, in order, on the return to `idle`; past that bound it is refused with `bot.ability.failed` `{message: "Speaking is holding too many utterances; this one is refused."}` (the original's `_hold`).]]>
+    <![CDATA[Input for another utterance that arrives outside `idle` is held (`<event:defer/>`), up to `held_utterances_bound` (16, a `<param>`), and taken, in order, on the return to `idle`; past that bound it is refused with `bot.ability.failed` `{message: "Speaking is holding too many utterances; this one is refused."}` (as the original holds them).]]>
     <test id="170" conformance="mandatory" manual="false">
       <start uri="170/test170.scxml"/>
     </test>
@@ -90,7 +90,7 @@
     </test>
   </assert>
   <assert id="speaking-9" specnum="9" specid="#speaking-9">
-    <![CDATA[An utterance's id is its input's sendid (none when the sender names none). A finished utterance's id is kept among the last `finished_utterances_bound` (16) finished ids, and an input with a finished id, or another copy of the utterance in hand or of a held one, is dropped (logged `speaking.late`): nothing is said or answered for it (the original's `_is_new_input`), and a re-sent held id takes no second slot toward `held_utterances_bound` (the first copy is kept, where the original keeps the newer).]]>
+    <![CDATA[An utterance's id is its input's sendid (none when the sender names none). A finished utterance's id is kept among the last `finished_utterances_bound` (16) finished ids, and an input with a finished id, or another copy of the utterance in hand or of a held one, is dropped (logged `speaking.late`): nothing is said or answered for it (the original's new-input check), and a re-sent held id takes no second slot toward `held_utterances_bound` (the first copy is kept, where the original keeps the newer).]]>
     <test id="180" conformance="mandatory" manual="false">
       <start uri="180/test180.scxml"/>
     </test>

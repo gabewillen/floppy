@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's vocal SpeechEncoding ability (the reference abilities/vocal/speech/
-  encoding.py SpeechEncoding): a reply's parts to speech through the speech service
+  floppy's vocal SpeechEncoding ability (the reference's speech encoding):
+  a reply's parts to speech through the speech service
   (services/speech, operation encode). Speaking
   (abilities/speaking/speaking.scx) invokes it as its child "vocal" from
   its encoding state, so leaving encoding (an answer, a failure or

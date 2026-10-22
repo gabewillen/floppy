@@ -21,7 +21,7 @@ function said(parts) {
   return parts.map(function (part) { return typeof part.words === 'string' ? part.words : ''; }).join('');
 }
 
-// An input for an utterance already said (the original's _is_new_input):
+// An input for an utterance already said (the original's new-input check):
 // only one whose sender named its id can be one.
 function isFinishedUtterance(_event) {
   return !!_event.sendid && finished_utterances.indexOf(_event.sendid) >= 0;
@@ -71,7 +71,7 @@ function finishedUtterances() {
   return ids.slice(Math.max(0, ids.length - finished_utterances_bound));
 }
 
-// A reply that says something (the original's InputData and Part
+// A reply that says something (the original's input and part
 // validators): every part has words (not blank), a sound or a pause, every
 // expression directs a cue (sound_at only with a sound), and the words,
 // joined exactly as written, are not blank.

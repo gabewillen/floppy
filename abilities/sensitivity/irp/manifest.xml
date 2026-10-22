@@ -42,7 +42,7 @@
     </test>
   </assert>
   <assert id="sensitivity-6" specnum="6" specid="#sensitivity-6">
-    <![CDATA[A silent copy, `bot.ability.speaking.efference` with `duration` 0 (the mouth has nothing left to play, the original's `_has_silent_copy`), closes an open window at once, and in quiet opens none: an arrival from the mouth after it is scored as quiet.]]>
+    <![CDATA[A silent copy, `bot.ability.speaking.efference` with `duration` 0 (the mouth has nothing left to play, the original's silent copy), closes an open window at once, and in quiet opens none: an arrival from the mouth after it is scored as quiet.]]>
     <test id="550" conformance="mandatory" manual="false">
       <start uri="550/test550.scxml"/>
     </test>

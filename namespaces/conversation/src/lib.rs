@@ -5,7 +5,7 @@
 //!
 //! | Element | The original |
 //! | --- | --- |
-//! | `<conversation:message_for_turn>` | `_message_for_turn`, `_model_safe_content`, `MessageProvenance` |
+//! | `<conversation:message_for_turn>` | message for a turn, `MessageProvenance` |
 //! | `<conversation:relationship_for_input>` | `Conversation._relationship_for_input` (its identity collection score), `_stable_context_ref`, `_new_relationship_ref` |
 //! | `<conversation:participant_for_source>` | `Conversation._participant_for_source` |
 //! | `<conversation:fail_turn>` | `Conversation._fail_turn`'s participants |
@@ -33,7 +33,7 @@
 //! Two identities are the same when their sort keys are (a name's text,
 //! an embedding's compact Python JSON). A relationship is an object
 //! `{session_ref, context_ref, source_ids, target_ids, participants}` (the
-//! original's `_RelationshipProfile`); its other members are kept as they
+//! original's relationship profile); its other members are kept as they
 //! are.
 //!
 //! # `<conversation:message_for_turn location="L" direction="D" event="E" message="M" provenance="P"/>`
@@ -49,7 +49,7 @@
 //! not committed. `provenance`
 //! (optional) evaluates to an object (`null` or `undefined` is none) whose
 //! `id`, `session_ref` and `turn_ref` the provenance takes. `location`
-//! (required) receives the committed message (the original's `Message`),
+//! (required) receives the committed message (as the original's),
 //! `{direction, source_ids, target_ids, content, content_type,
 //! participants, provenance: {event, id, source, target, session_ref,
 //! turn_ref}}`:
@@ -122,7 +122,7 @@
 //! content; the provenance's `turn_ref` the first turn's and its
 //! `session_ref` the string `R`; and its participants `P` (optional, as a
 //! message's `participants`: the ones `<conversation:turn_participants>`
-//! stamps for the turn, the original's `_message_for_turn`).
+//! stamps for the turn, the original's message for a turn).
 //!
 //! # `<conversation:ingest_content location="L" content="C"/>`
 //!
@@ -586,7 +586,7 @@ pub fn committed_message<E>(
     Ok((committed, context_ref))
 }
 
-/// A message's participants (the original's `Message.participants`): at
+/// A message's participants (the original's message participants): at
 /// most [`MAX_PARTICIPANTS`], each `{ref, role}` with an optional boolean
 /// `own` and an optional `resembles` ([`is_resembles`]), its ref non-empty and at most [`MAX_PARTICIPANT_REF_CHARACTERS`]
 /// characters, its role `source` or `target`; `None` otherwise.
@@ -620,7 +620,7 @@ fn message_participants(participants: &Json) -> Option<Vec<Json>> {
         .collect()
 }
 
-/// A participant's `resembles` (the original's `Resemblance` list): at
+/// A participant's `resembles` (the original's resemblances): at
 /// most [`MAX_RESEMBLANCES`] `{ref, similarity}`, each ref non-empty and at
 /// most [`MAX_PARTICIPANT_REF_CHARACTERS`] characters and each similarity
 /// a number from -1 to 1.
@@ -2212,7 +2212,7 @@ pub const MAX_PARTICIPANTS: usize = 32;
 pub const MAX_PARTICIPANT_REF_CHARACTERS: usize = 200;
 
 /// The most identities a participant resembles (the original's
-/// `Participant.resembles`, `max_length=3`).
+/// participant's resembles, at most 3).
 pub const MAX_RESEMBLANCES: usize = 3;
 
 /// `<conversation:turn_participants>`'s detail for an input of the wrong

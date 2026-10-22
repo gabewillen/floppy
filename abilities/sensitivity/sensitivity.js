@@ -15,7 +15,7 @@ function scoreOutput(sound, stimulus, perceived, producing) {
 }
 
 // A copy with sound still to come from the mouth (the original
-// _has_efference_copy); one of duration 0 is silent.
+// efference copy); one of duration 0 is silent.
 function hasSoundToCome(_event) {
   return _event.data.duration > 0;
 }

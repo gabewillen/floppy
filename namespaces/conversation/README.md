@@ -9,7 +9,7 @@ model; they never send, never hold the exchange, and do no I/O.
 
 | Element | The original | Writes |
 | --- | --- | --- |
-| `<conversation:message_for_turn location direction event message provenance?>` | `_message_for_turn`, `_model_safe_content`, `MessageProvenance` | the committed message |
+| `<conversation:message_for_turn location direction event message provenance?>` | message for a turn, `MessageProvenance` | the committed message |
 | `<conversation:relationship_for_input location indexlocation input>` | `Conversation._relationship_for_input`, `_stable_context_ref`, `_new_relationship_ref` | the relationships, a new one appended, and the input's index (`indexlocation`) |
 | `<conversation:participant_for_source location source>` | `Conversation._participant_for_source` | the relationship with the source a participant |
 | `<conversation:fail_turn location source>` | `Conversation._fail_turn` (its participants) | the relationship without the source |

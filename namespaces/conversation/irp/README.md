@@ -38,7 +38,7 @@ sh scripts/namespace-irp.sh baselines conversation
 The current baseline (manifest SHA-256 `d76bb9d773be777d54859d3111b6122c036619de9509da8b465eed6fa15306d7`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
 measured on Linux x86_64, the host `tests/tests/namespace_irp.rs` compares
-fuel on, when the namespace took the original's `Message.participants` (with
+fuel on, when the namespace took the original's message participants (with
 `resembles`) and dropped `sequence`, 2026-10-22) measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |

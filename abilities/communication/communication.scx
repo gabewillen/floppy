@@ -21,7 +21,7 @@
 
   Input: bot.ability.communication.input {source_ids, target_ids, content,
   content_type, ...} in active or responding (hearing goes on while a
-  response is said, the original's _hearing) goes to the conversation as
+  response is said, the original's hearing while responding) goes to the conversation as
   bot.ability.conversation.routed_input {parent} (the original's routed input to
   the active conversation; parent is the input event as an envelope). The
   conversation hands a text product over as bot.ability.cognition.input
@@ -55,7 +55,7 @@
   held one (held_ids), is dropped and logged (communication.late). Other responses that arrive
   while one is in hand are held by <event:defer/>, up to
   held_responses_bound (16); past that one is refused with
-  bot.ability.communication.failed (the original's _hold_response). Held
+  bot.ability.communication.failed (the original's holding a response). Held
   responses come back, in order, on the return to active, where they are
   taken as on arrival; a response in inactive is not taken (the original's
   inactive has no transition for it).
@@ -203,7 +203,7 @@
       </send>
     </transition>
     <!-- Hearing goes on whatever is being said: input in active or
-         responding goes to the conversation (the original's _hearing, taken
+         responding goes to the conversation (the original's hearing while responding, taken
          in both); inactive holds it. -->
     <transition event="bot.ability.communication.input" event:schema="../schemas/bot.ability.communication.input.json">
       <send event="bot.ability.conversation.routed_input" target="#_conversation">

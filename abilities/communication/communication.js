@@ -54,7 +54,7 @@ function hasRespond(_event) {
   return offering || isSpokenReply(_event.data.parts);
 }
 
-// A reply that says something (the original's RespondData and Part
+// A reply that says something (the original's respond and Part
 // validators): every part has words (not blank), a sound or a pause, every
 // expression directs a cue (sound_at only with a sound), and the words,
 // joined exactly as written, are not blank.
@@ -87,7 +87,7 @@ function said(parts) {
 }
 
 // A respond for a response that already finished (the original's
-// _is_late_response): only a respond whose sender named its id can be one.
+// late-response check): only a respond whose sender named its id can be one.
 function isClosedResponse(_event) {
   return !offering && !!_event.sendid && closed_responses.indexOf(_event.sendid) >= 0;
 }
@@ -145,7 +145,7 @@ function heldOverMessage() {
 }
 
 // The finished ids with the one in hand, the oldest dropped past the
-// bound (the original's _close_response).
+// bound (the original's closing of a response).
 function closedResponses() {
   var ids = response_id === null ? closed_responses : closed_responses.concat([response_id]);
   return ids.slice(Math.max(0, ids.length - closed_responses_bound));

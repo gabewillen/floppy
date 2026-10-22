@@ -28,7 +28,7 @@ S.statement(2, "Every arrival scored (`bot.ability.listening.sensitivity.score` 
 S.statement(3, "`bot.ability.speaking.efference` `{mouth, duration}` with sound still to come (`duration` > 0) opens a producing window on that mouth, or re-arms the open one on the new duration; inside it, an arrival from another source is scored by its `received_level_db`.")
 S.statement(4, "Inside the window, an arrival from the producing mouth is scored against the prediction: with no levels to compare, 0; with no learned path gain yet, the observed gain (`received_level_db - amplitude_db`) is learned and the level is 0; afterwards the level is `|observed - learned|`, and the learned gain is never retaught.")
 S.statement(5, "The window lasts the command's duration: once it has passed, an arrival from the mouth is scored as quiet.")
-S.statement(6, "A silent copy, `bot.ability.speaking.efference` with `duration` 0 (the mouth has nothing left to play, the original's `_has_silent_copy`), closes an open window at once, and in quiet opens none: an arrival from the mouth after it is scored as quiet.")
+S.statement(6, "A silent copy, `bot.ability.speaking.efference` with `duration` 0 (the mouth has nothing left to play, the original's silent copy), closes an open window at once, and in quiet opens none: an arrival from the mouth after it is scored as quiet.")
 
 S.case(500, 1, "the sensitivity offers nothing on start.", [READY])
 S.case(510, 2, "a quiet arrival comes back whole, at its received level.",

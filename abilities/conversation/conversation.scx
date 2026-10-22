@@ -108,7 +108,7 @@
   exchange, [the inbound message], and its input becomes the exchange's
   parent; each outbound commit joins it; the next inbound replaces it.
   Nothing earlier is carried (what was said before is memory's). Every
-  message carries participants (the original's Message.participants,
+  message carries participants (the original's message participants,
   stamped by its producer and never inferred): an inbound one the
   participants <conversation:turn_participants> stamps for its turn (the
   original's turn_participants: its string source_ids and target_ids, then
@@ -116,7 +116,7 @@
   stamped on the append (speaking stamps the bot's own voice once it has
   one, own true). A message's provenance, source_ids and target_ids are
   correlation, left out of what a model is shown (the original's
-  __model_facing_excluded_fields__: the cognition renderer drops them).
+  model-facing exclusion: the cognition renderer drops them).
   An append is answered with the exchange's own parent, even while
   another input is in flight.
 
@@ -135,7 +135,7 @@
 
   Commits: <conversation:complete_turn> builds each inbound message and
   <conversation:message_for_turn> each outbound one (the original
-  _message_for_turn); the document opens the exchange with an inbound one
+  message for a turn); the document opens the exchange with an inbound one
   and appends an outbound one to it.
 
   Bindings: the bot, conversation, identity and memory namespace packages and
@@ -168,7 +168,7 @@
          and the input that opened it (its parent; null before one). -->
     <data id="exchange" expr="[]"/>
     <data id="exchange_parent" expr="null"/>
-    <!-- Relationships (the original _RelationshipProfile), in the order they
+    <!-- Relationships (the original relationship profile), in the order they
          began: {session_ref, context_ref, source_ids, target_ids,
          participants}; the relationship in hand, its
          participants before this input (the original's

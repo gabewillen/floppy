@@ -483,7 +483,7 @@ fn a_response_waits_for_the_one_in_flight_and_each_hop_times_out() {
 }
 
 /// Hearing goes on while a response is said, and every response that
-/// finished stays finished (the original's `_hearing` in `responding`, its
+/// finished stays finished (the original's hearing while responding in `responding`, its
 /// ring of closed response ids, and its bound on held responses).
 #[test]
 fn communication_hears_while_responding_and_never_reopens_a_finished_response() {
@@ -587,8 +587,8 @@ const SPEAKING_HARNESS: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
 
 /// One utterance at a time: another copy of the one in hand, or of one
 /// already said, is dropped, and past the bound of held utterances a new
-/// one is refused (the original's `_FINISHED_UTTERANCES` and
-/// `_HELD_UTTERANCES`).
+/// one is refused (the original's bounds on finished and held
+/// utterances).
 #[test]
 fn speaking_never_reopens_a_finished_utterance_and_bounds_the_ones_it_holds() {
     let dir = unique_scratch("speaking-alone");

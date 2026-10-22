@@ -785,7 +785,7 @@ const SENSITIVITY_HARNESS: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
 /// Every scored arrival says whether the body was producing, and only a
 /// copy with sound still to come opens the window: a silent copy (duration
 /// 0) closes it, and opens nothing (the original's `producing`,
-/// `_has_efference_copy` and `_has_silent_copy`).
+/// efference copy and silent copy).
 #[test]
 fn a_scored_sound_says_whether_the_body_was_producing_and_a_silent_copy_closes_the_window() {
     let dir = unique_scratch("sensitivity").join("abilities");
@@ -836,8 +836,8 @@ fn a_scored_sound_says_whether_the_body_was_producing_and_a_silent_copy_closes_t
 }
 
 /// Nobody identified in time: the opening voice's identification
-/// completes with no voice (the original's `_identify_nobody` after
-/// `_identify_delay`), and the window opens and streams its frames with no
+/// completes with no voice (the original's identifying nobody after
+/// identification deadline), and the window opens and streams its frames with no
 /// source identity instead of failing the listening.
 #[test]
 fn an_opening_voice_nobody_identifies_in_time_is_heard_unidentified() {
@@ -888,7 +888,7 @@ fn an_opening_voice_nobody_identifies_in_time_is_heard_unidentified() {
 }
 
 /// Diarized segments nobody identifies in time are each handed off with
-/// no source and no embedding (the original's `_identify_nobody`).
+/// no source and no embedding (the original's identifying nobody).
 #[test]
 fn diarized_segments_nobody_identifies_in_time_are_heard_unidentified() {
     let harness = layout(&[(
@@ -952,7 +952,7 @@ const NO_EMBEDDING_IDENTIFICATION: &str = r#"<?xml version="1.0" encoding="UTF-8
 
 /// An opening voice identified with no embedding opens the window with
 /// nobody identified, and no stage fails (the original's
-/// `_identify_nobody`).
+/// identifying nobody).
 #[test]
 fn an_opening_voice_with_no_embedding_is_heard_unidentified() {
     let harness = layout(&[(

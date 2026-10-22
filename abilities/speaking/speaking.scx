@@ -13,7 +13,7 @@
   encoding invokes the vocal SpeechEncoding (abilities/vocal/vocal.scx, its
   child "vocal", which invokes the speech service) and, once vocal is ready (its
   first bot.ability.offers), sends it bot.ability.vocal.speech.encoding.input
-  {parts}: the input's parts (the original's InputData: 1 to 64 parts
+  {parts}: the input's parts (the original's input: 1 to 64 parts
   {expression?, words?}), whose words, joined exactly as written, are the
   utterance's text of record (the original's said). Input that does not
   say something (a part with neither words, a sound nor a pause, an
@@ -70,7 +70,7 @@
   Input for another utterance that arrives while one is in hand is held by
   <event:defer/> (scxml.rs namespaces/event), up to held_utterances_bound
   (16), and past that is refused with bot.ability.failed (the original's
-  _hold); held input is taken, in order, on the return to idle.
+  holding); held input is taken, in order, on the return to idle.
 
   Contracts: the input's contract is schemas/bot.ability.speaking.input.json:
   a send whose data it rejects is never routed here and raises
@@ -115,8 +115,7 @@
     <data id="timer" expr="null"/>
     <!-- The ids of the last finished_utterances_bound utterances said, so a
          late copy of one never reopens it, and how many other utterances
-         wait while one is said (the original's _FINISHED_UTTERANCES and
-         _HELD_UTTERANCES). -->
+         wait while one is said (the original's bounds on finished and held utterances). -->
     <data id="finished_utterances_bound" expr="16"/>
     <data id="finished_utterances" expr="[]"/>
     <data id="held_utterances_bound" expr="16"/>
@@ -163,7 +162,7 @@
     </onexit>
     <!-- A late copy of a finished utterance, or another copy of this one or
          of a held one, is dropped; another utterance waits its turn (the
-         original's _hold), up to held_utterances_bound, and past that is
+         original's holding), up to held_utterances_bound, and past that is
          refused. -->
     <transition event="bot.ability.speaking.input" event:schema="../schemas/bot.ability.speaking.input.json"
                 cond="isLateUtterance(_event)">
