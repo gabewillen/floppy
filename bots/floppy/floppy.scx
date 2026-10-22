@@ -154,10 +154,9 @@
   floppy.output the turn's selected events (one record per completed turn),
   floppy.choices each turn's choices, and floppy.focus each focus change.
 
-  Contracts: every event the body takes references schemas/ by
-  event:schema: its own events, and byte-identical twins of the abilities'
-  events it receives (abilities/schemas/; a schema reference cannot leave
-  this directory). scxml.rs checks them where each event is created: an
+  Contracts: every event the body takes references its one schema file by
+  event:schema: its own events in schemas/, and the abilities' events it
+  receives in ../../abilities/schemas/. scxml.rs checks them where each event is created: an
   ability's send whose data a schema rejects is not routed and raises
   error.execution in the ability, and an environment's send the schemas
   reject raises error.execution in the environment. No cond asks who sent an
@@ -282,7 +281,7 @@
     <invoke id="listening" type="scxml" src="../../abilities/listening/listening.scx"/>
 
     <!-- Each ability's latest offers; the first of a run is its readiness. -->
-    <transition event="bot.ability.offers" event:schema="schemas/bot.ability.offers.json">
+    <transition event="bot.ability.offers" event:schema="../../abilities/schemas/bot.ability.offers.json">
       <assign location="offers[_event.data.ability]" expr="_event.data.choices"/>
       <if cond="isWaiting(_event)">
         <assign location="waiting" expr="waitingWithout(_event)"/>
@@ -290,7 +289,7 @@
     </transition>
     <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json" target="deactivating"/>
     <!-- A reboot (the cognition asks for one): re-enter live. -->
-    <transition event="bot.reboot" event:schema="schemas/bot.reboot.json" target="live">
+    <transition event="bot.reboot" event:schema="../../abilities/schemas/bot.reboot.json" target="live">
       <send event="bot.reboot" target="#_parent">
         <content expr="_event.data"/>
       </send>
@@ -342,7 +341,7 @@
       <!-- Communication input from outside goes to the communication, whose
            conversation answers with a product (a turn's stimulus, below),
            and to the identity, which answers when it names the bot. -->
-      <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json">
+      <transition event="bot.ability.communication.input" event:schema="../../abilities/schemas/bot.ability.communication.input.json">
         <send event="bot.ability.communication.input" target="#_communication">
           <content expr="_event.data"/>
         </send>
@@ -352,7 +351,7 @@
       </transition>
       <!-- A sound the environment delivers (the bot's own speech
            included): a stimulus for every input ability. -->
-      <transition event="environment.sound" event:schema="schemas/environment.sound.json">
+      <transition event="environment.sound" event:schema="../../abilities/schemas/environment.sound.json">
         <foreach array="input" item="ability">
           <send event="environment.sound" targetexpr="abilityTarget(ability)">
             <content expr="_event.data"/>
@@ -369,7 +368,7 @@
       </transition>
       <!-- Speaking's playout: the efference copy goes only to Listening,
            before the sound (above). -->
-      <transition event="bot.ability.speaking.efference" event:schema="schemas/bot.ability.speaking.efference.json">
+      <transition event="bot.ability.speaking.efference" event:schema="../../abilities/schemas/bot.ability.speaking.efference.json">
         <foreach array="listening_abilities" item="ability">
           <send event="bot.ability.speaking.efference" targetexpr="abilityTarget(ability)">
             <content expr="_event.data"/>
@@ -377,30 +376,30 @@
         </foreach>
       </transition>
       <!-- What the communication said, and its failures. -->
-      <transition event="bot.ability.speaking.output" event:schema="schemas/bot.ability.speaking.output.json">
+      <transition event="bot.ability.speaking.output" event:schema="../../abilities/schemas/bot.ability.speaking.output.json">
         <send event="bot.ability.speaking.output" target="#_parent">
           <content expr="_event.data"/>
         </send>
       </transition>
-      <transition event="bot.ability.communication.failed" event:schema="schemas/bot.ability.communication.failed.json">
+      <transition event="bot.ability.communication.failed" event:schema="../../abilities/schemas/bot.ability.communication.failed.json">
         <send event="bot.ability.communication.failed" target="#_parent">
           <content expr="_event.data"/>
         </send>
       </transition>
-      <transition event="bot.ability.conversation.failed" event:schema="schemas/bot.ability.conversation.failed.json">
+      <transition event="bot.ability.conversation.failed" event:schema="../../abilities/schemas/bot.ability.conversation.failed.json">
         <send event="bot.ability.conversation.failed" target="#_parent">
           <content expr="_event.data"/>
         </send>
       </transition>
       <!-- A conversation product that is not text (the original's bot grants no
            turn for it). -->
-      <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json">
+      <transition event="bot.ability.conversation.output" event:schema="../../abilities/schemas/bot.ability.conversation.output.json">
         <send event="bot.ability.conversation.output" target="#_parent">
           <content expr="_event.data"/>
         </send>
       </transition>
       <!-- What the listening could not hear. -->
-      <transition event="bot.ability.listening.failed" event:schema="schemas/bot.ability.listening.failed.json">
+      <transition event="bot.ability.listening.failed" event:schema="../../abilities/schemas/bot.ability.listening.failed.json">
         <send event="bot.ability.listening.failed" target="#_parent">
           <content expr="_event.data"/>
         </send>
@@ -433,7 +432,7 @@
           <assign location="stimulus.source" expr="null"/>
           <assign location="participants" expr="[]"/>
         </transition>
-        <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json" target="processing">
+        <transition event="bot.ability.cognition.input" event:schema="../../abilities/schemas/bot.ability.cognition.input.json" target="processing">
           <assign location="stimulus" expr="_event.data.stimulus"/>
           <assign location="participants" expr="handoffParticipants(_event)"/>
         </transition>
@@ -447,7 +446,7 @@
           <assign location="stimulus.source" expr="null"/>
           <assign location="participants" expr="[]"/>
         </transition>
-        <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json" target="processing">
+        <transition event="bot.ability.cognition.input" event:schema="../../abilities/schemas/bot.ability.cognition.input.json" target="processing">
           <assign location="stimulus" expr="_event.data.stimulus"/>
           <assign location="participants" expr="handoffParticipants(_event)"/>
         </transition>
@@ -500,7 +499,7 @@
         <!-- The turn's output: its stages have sent their selections; the
              body sends itself those that name no target (the trusted
              seed's). -->
-        <transition event="bot.ability.cognition.output" event:schema="schemas/bot.ability.cognition.output.json"
+        <transition event="bot.ability.cognition.output" event:schema="../../abilities/schemas/bot.ability.cognition.output.json"
                     cond="isCurrentTurn(_event)" target="returning">
           <log label="floppy.output" expr="botOutput(_event)"/>
           <assign location="selections" expr="_event.data.output"/>
@@ -515,7 +514,7 @@
             </if>
           </foreach>
         </transition>
-        <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json"
+        <transition event="bot.ability.failed" event:schema="../../abilities/schemas/bot.ability.failed.json"
                     cond="isCurrentTurn(_event)" target="returning">
           <send event="bot.processing.failed" target="#_parent">
             <content expr="cognitionFailure(_event)"/>
@@ -534,7 +533,7 @@
           <event:defer/>
           <log label="floppy.deferred" expr="_event.name"/>
         </transition>
-        <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json">
+        <transition event="bot.ability.cognition.input" event:schema="../../abilities/schemas/bot.ability.cognition.input.json">
           <event:defer/>
           <log label="floppy.deferred" expr="_event.name"/>
         </transition>
@@ -552,13 +551,13 @@
         <onexit>
           <cancel sendid="cancel-timer"/>
         </onexit>
-        <transition event="bot.ability.cognition.cancelled" event:schema="schemas/bot.ability.cognition.cancelled.json"
+        <transition event="bot.ability.cognition.cancelled" event:schema="../../abilities/schemas/bot.ability.cognition.cancelled.json"
                     cond="isCurrentTurn(_event)" target="returning">
           <send event="bot.processing.failed" target="#_parent">
             <content expr="cancelledFailure()"/>
           </send>
         </transition>
-        <transition event="bot.ability.processing.cancelled" event:schema="schemas/bot.ability.processing.cancelled.json"
+        <transition event="bot.ability.processing.cancelled" event:schema="../../abilities/schemas/bot.ability.processing.cancelled.json"
                     cond="isCurrentTurn(_event)" target="returning">
           <send event="bot.processing.failed" target="#_parent">
             <content expr="cancelledFailure()"/>
@@ -582,7 +581,7 @@
           <event:defer/>
           <log label="floppy.deferred" expr="_event.name"/>
         </transition>
-        <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json">
+        <transition event="bot.ability.cognition.input" event:schema="../../abilities/schemas/bot.ability.cognition.input.json">
           <event:defer/>
           <log label="floppy.deferred" expr="_event.name"/>
         </transition>
@@ -600,7 +599,7 @@
       </transition>
       <!-- A failure that is no current turn's reply: the identity's, or
            the cognition's for another turn. -->
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json">
+      <transition event="bot.ability.failed" event:schema="../../abilities/schemas/bot.ability.failed.json">
         <send event="bot.ability.failed" target="#_parent">
           <content expr="_event.data"/>
         </send>

@@ -14,9 +14,9 @@
   a check rejected, when there is one, and path where it was written). Run directly, scx run prints that data in its done
   record; invoked, the parent receives it as done.invoke.<id> (SCXML 6.4).
   Progress goes to <log>, labelled with the stage. The event:schema
-  contracts below are inline copies of schemas/*.json (an invoked child is
-  compiled at run time and gets no schema files); the builder_bot test
-  (tests/tests/builder_bot.rs) keeps them equal.
+  contracts below reference schemas/<event>.json (a final state's donedata
+  schemas/<final state id>.json), which scx reads against this document's
+  base URI whether it runs as the root or as a literal <invoke src> child.
   The events of the generate and decision services (generate.result,
   generate.failed, decision.abstain, decision.failed) are described here
   too, on the transitions that take them: a service package declares no
@@ -202,7 +202,7 @@
 
   <!-- Waits for builder.request; no timeout: the invoker owns the lifetime. -->
   <state id="intake">
-    <transition event="builder.request" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"builder.request","description":"Ask the builder bot to build one SCXML machine from a natural-language specification.","type":"object","properties":{"spec":{"type":"string","minLength":1},"name":{"type":"string","minLength":1},"constraints":{"type":"array","items":{"type":"string"},"maxItems":32},"max_attempts":{"type":"integer","minimum":1,"maximum":8},"model":{"type":"string","minLength":1},"generate_timeout_ms":{"type":"integer","minimum":1,"maximum":3600000},"generate_ceiling_ms":{"type":"integer","minimum":1,"maximum":3600000},"min_every_ms":{"type":"integer","minimum":1,"maximum":86400000},"turn_after_bound_ms":{"type":"integer","minimum":1,"maximum":86400000}},"required":["spec"],"additionalProperties":false}'
+    <transition event="builder.request" event:schema="schemas/builder.request.json"
                 cond="satisfiesBuilderRequest(_event)"
                 target="design">
       <assign location="spec" expr="_event.data.spec"/>
@@ -258,7 +258,7 @@
     </invoke>
     <!-- A streamed reply's progress starts the inactivity bound, or starts
          it over, and is passed on (decision D101). -->
-    <transition event="generate.progress" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.progress","description":"The reply of a streamed generation is arriving: received counts its bytes so far.","type":"object","properties":{"received":{"type":"integer","minimum":0}},"required":["received"],"additionalProperties":false}' cond="isFrom(_event, gen_id)">
+    <transition event="generate.progress" event:schema="schemas/generate.progress.json" cond="isFrom(_event, gen_id)">
       <cancel sendidexpr="generate_timer"/>
       <send idlocation="generate_timer" event="builder.timeout" delayexpr="delay(generate_timeout_ms)">
         <param name="run" expr="stage_run"/>
@@ -271,10 +271,10 @@
     </transition>
     <!-- The two events of this call of the generate service, each recorded
          (gen_id: a late event of an earlier attempt's call is not this one). -->
-    <transition event="generate.result" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.result","description":"The reply of the generate service as the original text generator returns it: its content and every tool call, each with its id, name and JSON-object arguments.","type":"object","properties":{"content":{"type":"string"},"tool_calls":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"args":{"type":"object"}},"required":["id","name","args"],"additionalProperties":false}}},"required":["content","tool_calls"],"additionalProperties":false}' cond="isFrom(_event, gen_id)">
+    <transition event="generate.result" event:schema="schemas/generate.result.json" cond="isFrom(_event, gen_id)">
       <assign location="plan" expr="namedArgs(_event, 'topology_plan')"/>
     </transition>
-    <transition event="generate.failed" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.failed","description":"The generation failed; code names why (closed).","type":"object","properties":{"code":{"enum":["unconfigured","transport","status","malformed","truncated","filtered","refusal","not-json","schema-mismatch"]}},"required":["code"],"additionalProperties":false}' cond="isFrom(_event, gen_id)">
+    <transition event="generate.failed" event:schema="schemas/generate.failed.json" cond="isFrom(_event, gen_id)">
       <assign location="gen_failure" expr="_event.data.code"/>
     </transition>
     <transition event="done.invoke" cond="planGenerated(_event)" target="author">
@@ -338,7 +338,7 @@
       <param name="schemaname" expr="'scxml_draft'"/>
       <param name="max_completion_tokens" expr="max_completion_tokens"/>
     </invoke>
-    <transition event="generate.progress" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.progress","description":"The reply of a streamed generation is arriving: received counts its bytes so far.","type":"object","properties":{"received":{"type":"integer","minimum":0}},"required":["received"],"additionalProperties":false}' cond="isFrom(_event, gen_id)">
+    <transition event="generate.progress" event:schema="schemas/generate.progress.json" cond="isFrom(_event, gen_id)">
       <cancel sendidexpr="generate_timer"/>
       <send idlocation="generate_timer" event="builder.timeout" delayexpr="delay(generate_timeout_ms)">
         <param name="run" expr="stage_run"/>
@@ -351,10 +351,10 @@
     </transition>
     <!-- The two events of this call of the generate service, each recorded
          (gen_id: a late event of an earlier attempt's call is not this one). -->
-    <transition event="generate.result" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.result","description":"The reply of the generate service as the original text generator returns it: its content and every tool call, each with its id, name and JSON-object arguments.","type":"object","properties":{"content":{"type":"string"},"tool_calls":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"args":{"type":"object"}},"required":["id","name","args"],"additionalProperties":false}}},"required":["content","tool_calls"],"additionalProperties":false}' cond="isFrom(_event, gen_id)">
+    <transition event="generate.result" event:schema="schemas/generate.result.json" cond="isFrom(_event, gen_id)">
       <assign location="draft" expr="namedArgs(_event, 'scxml_draft')"/>
     </transition>
-    <transition event="generate.failed" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"generate.failed","description":"The generation failed; code names why (closed).","type":"object","properties":{"code":{"enum":["unconfigured","transport","status","malformed","truncated","filtered","refusal","not-json","schema-mismatch"]}},"required":["code"],"additionalProperties":false}' cond="isFrom(_event, gen_id)">
+    <transition event="generate.failed" event:schema="schemas/generate.failed.json" cond="isFrom(_event, gen_id)">
       <assign location="gen_failure" expr="_event.data.code"/>
     </transition>
     <!-- A draft whose scxml holds no SCXML document (empty, a placeholder)
@@ -640,7 +640,7 @@
       <param name="state" expr="decisionState()"/>
       <param name="instructions" expr="triage_instructions"/>
     </invoke>
-    <transition event="triage.repair" cond="hasPlan()" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"triage.repair","description":"Repair the current draft: author it again from the same plan with the diagnostics of the failed attempt.","type":"object","additionalProperties":false}' target="author">
+    <transition event="triage.repair" cond="hasPlan()" event:schema="schemas/triage.repair.json" target="author">
       <assign location="mode" expr="'repair'"/>
       <assign location="decisions" expr="appended(decisions, 'triage.repair')"/>
     </transition>
@@ -649,17 +649,17 @@
     <transition event="triage.repair" target="design">
       <assign location="decisions" expr="appended(decisions, 'triage.repair')"/>
     </transition>
-    <transition event="triage.redesign" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"triage.redesign","description":"Redesign: plan the topology again, then author a new draft, because the plan itself looks wrong.","type":"object","additionalProperties":false}' target="design">
+    <transition event="triage.redesign" event:schema="schemas/triage.redesign.json" target="design">
       <assign location="decisions" expr="appended(decisions, 'triage.redesign')"/>
     </transition>
-    <transition event="triage.abandon" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"triage.abandon","description":"Give up: the specification cannot be built as an SCXML machine, so end in the final state failed.","type":"object","additionalProperties":false}' target="failed">
+    <transition event="triage.abandon" event:schema="schemas/triage.abandon.json" target="failed">
       <assign location="failure_reason" expr="'abandoned'"/>
       <assign location="decisions" expr="appended(decisions, 'triage.abandon')"/>
     </transition>
-    <transition event="decision.abstain" cond="isDecisionEvent(_event)" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"decision.abstain","description":"The decision service took no event: nothing was offered, or the backend chose the pass criterion.","type":"object","properties":{"reason":{"enum":["no-candidates","declined"]},"confidence":{"type":"number","minimum":0,"maximum":1}},"required":["reason"],"additionalProperties":false}' target="fallback">
+    <transition event="decision.abstain" cond="isDecisionEvent(_event)" event:schema="schemas/decision.abstain.json" target="fallback">
       <assign location="decisions" expr="appended(decisions, 'fallback:abstain')"/>
     </transition>
-    <transition event="decision.failed" cond="isDecisionEvent(_event)" event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"decision.failed","description":"The decision failed; code names why (closed).","type":"object","properties":{"code":{"enum":["unconfigured","transport","status","malformed","schema-mismatch"]}},"required":["code"],"additionalProperties":false}' target="fallback">
+    <transition event="decision.failed" cond="isDecisionEvent(_event)" event:schema="schemas/decision.failed.json" target="fallback">
       <assign location="decisions" expr="appended(decisions, 'fallback:unavailable')"/>
     </transition>
     <transition event="builder.timeout" cond="isOwnEvent(_event, stage_run)" target="fallback">
@@ -688,7 +688,7 @@
     <onentry>
       <log label="done" expr="doneLog()"/>
     </onentry>
-    <donedata event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"done","description":"The donedata of the final state done of the builder bot: an SCXML machine that validates and passes its own simulation, as its three documents and the path of the one invoked.","type":"object","properties":{"scxml":{"type":"string","minLength":1},"schemas":{"type":"object"},"script":{"type":"string"},"path":{"type":"string","minLength":1},"tests":{"type":"array","items":{"type":"object"}},"report":{"type":"object","properties":{"attempts":{"type":"integer","minimum":1},"failures":{"type":"integer","minimum":0},"fixes_applied":{"type":"integer","minimum":0},"warnings":{"type":"integer","minimum":0},"plan":{"type":"object"},"decisions":{"type":"array","items":{"type":"string"}},"history":{"type":"array","items":{"type":"object"}},"simulation":{"type":"array","items":{"type":"object"}}},"required":["attempts","failures","fixes_applied","warnings","plan","decisions","history","simulation"],"additionalProperties":false}},"required":["scxml","schemas","script","path","tests","report"],"additionalProperties":false}'>
+    <donedata event:schema="schemas/done.json">
       <content expr="doneData()"/>
     </donedata>
   </final>
@@ -697,7 +697,7 @@
     <onentry>
       <log label="failed" expr="failedLog()"/>
     </onentry>
-    <donedata event:schema='{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"failed","description":"The donedata of the final state failed of the builder bot: why it could not build a machine that validates and passes its simulation, and the last draft a check rejected, when there is one.","type":"object","properties":{"reason":{"enum":["invalid-request","unconfigured","no-progress","attempts-exhausted","abandoned"]},"diagnostics":{"type":"array","items":{"type":"object","properties":{"kind":{"enum":["request","generate","draft","validate","lifetime","simulate","apply","timeout"]},"code":{"type":"string"},"message":{"type":"string"}},"required":["kind","code","message"],"additionalProperties":false}},"history":{"type":"array","items":{"type":"object"}},"scxml":{"type":"string","minLength":1},"path":{"type":"string","minLength":1}},"required":["reason","diagnostics","history"],"additionalProperties":false}'>
+    <donedata event:schema="schemas/failed.json">
       <content expr="failedData()"/>
     </donedata>
   </final>

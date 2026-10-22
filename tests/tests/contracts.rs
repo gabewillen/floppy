@@ -1,11 +1,13 @@
 //! Phase 4 event contracts: one canonical JSON Schema file per event,
 //! extracted from the original's pydantic models (docs/port-plan.md, "Phase 4
 //! event contracts"). Body events live in `bots/floppy/schemas/`, ability
-//! events in `abilities/schemas/`: an `event:schema` file reference is
-//! relative to its document and cannot leave the document's directory, so
-//! each ability references twins of these files in its own
-//! `abilities/<ability>/schemas/` (`schemas/<event>.json`) and never
-//! carries inline copies.
+//! events in `abilities/schemas/`, each in exactly one file: an
+//! `event:schema` file reference resolves against its document's base URI
+//! like any relative URI, so an ability references
+//! `../schemas/<event>.json`, and the body and the environments
+//! `../../abilities/schemas/<event>.json` or
+//! `../../bots/floppy/schemas/<event>.json`; no document carries an inline
+//! copy.
 //!
 //! Checked here, over the schema set:
 //!
@@ -32,8 +34,7 @@
 //! * the layout rule (decision D65): the document is `<name>/<name>.scx`,
 //!   its only `<script>` is the root `<script src="<name>.js"/>` naming the
 //!   `<name>.js` beside it, and the document itself has no `function`
-//!   token; each schema it references is a byte-identical twin of its
-//!   `abilities/schemas/` source;
+//!   token;
 //! * payload checks are `event:schema` (scxml.rs checks them where an
 //!   event is created), and a transition taking one contract event carries
 //!   its `event:schema`;
@@ -53,12 +54,9 @@
 //! `tests/fixtures/phase4/behavior_double.scx`, the stand-in for one, is
 //! checked here.
 //!
-//! The body's twins (`bots/floppy/schemas/` copies of the ability events
-//! the body takes, which it cannot reference across directories) are
-//! byte-identical to their `abilities/schemas/` sources, and an
-//! environment's twins (`environments/<name>/schemas/`) to theirs: the
-//! ability events' `abilities/schemas/` files and the body events'
-//! `bots/floppy/schemas/` files.
+//! Every reference of those documents resolves to its event's one schema
+//! file in `abilities/schemas/` or `bots/floppy/schemas/`, and no schema
+//! file name occurs twice in the workspace's `schemas/` directories.
 
 #![allow(
     missing_docs,
@@ -221,25 +219,6 @@ const RUNTIME_ONLY: [&str; 8] = [
 
 const NAMES_FILE: &str = "floppy-event-names.json";
 
-/// The ability events the body takes, twinned into `bots/floppy/schemas/`.
-const BODY_TWINS: [&str; 15] = [
-    "bot.reboot",
-    "bot.ability.offers",
-    "bot.ability.communication.input",
-    "bot.ability.communication.failed",
-    "bot.ability.speaking.output",
-    "bot.ability.speaking.efference",
-    "environment.sound",
-    "bot.ability.cognition.output",
-    "bot.ability.cognition.cancelled",
-    "bot.ability.processing.cancelled",
-    "bot.ability.failed",
-    "bot.ability.cognition.input",
-    "bot.ability.conversation.output",
-    "bot.ability.conversation.failed",
-    "bot.ability.listening.failed",
-];
-
 /// The longest `cond` or (outside `<data>`) `expr` a phase 4 document may
 /// carry, in characters [floppy rule].
 const MAX_EXPRESSION_CHARS: usize = 160;
@@ -289,9 +268,6 @@ fn all_schemas() -> BTreeMap<String, Json> {
     let mut all = BTreeMap::new();
     for dir in [body_schemas(), ability_schemas()] {
         for (event, path) in schema_files(&dir) {
-            if dir == body_schemas() && BODY_TWINS.contains(&event.as_str()) {
-                continue;
-            }
             assert!(
                 all.insert(event.clone(), read_json(&path)).is_none(),
                 "{event} has one schema file"
@@ -387,11 +363,7 @@ fn the_schema_set_is_exactly_the_phase4_events_split_body_and_abilities() {
     let abilities: BTreeSet<String> = schema_files(&ability_schemas()).into_keys().collect();
     assert_eq!(
         body,
-        BODY_EVENTS
-            .iter()
-            .chain(BODY_TWINS.iter())
-            .map(|&name| name.to_owned())
-            .collect()
+        BODY_EVENTS.iter().map(|&name| name.to_owned()).collect()
     );
     assert_eq!(
         abilities,
@@ -399,103 +371,87 @@ fn the_schema_set_is_exactly_the_phase4_events_split_body_and_abilities() {
     );
 }
 
-#[test]
-fn the_bodys_twins_are_byte_identical_to_their_ability_schemas() {
-    for event in BODY_TWINS {
-        let file = format!("{event}.json");
-        let twin = std::fs::read(body_schemas().join(&file)).expect("the twin is readable");
-        let source = std::fs::read(ability_schemas().join(&file)).expect("the source is readable");
-        assert!(
-            twin == source,
-            "bots/floppy/schemas/{file} differs from abilities/schemas/{file}"
-        );
-    }
-}
-
-#[test]
-fn each_abilitys_twins_are_byte_identical_and_exactly_what_it_references() {
-    for document in documents_under(&workspace().join("abilities")) {
-        let dir = document.parent().expect("a document has a directory");
-        let referenced: BTreeSet<String> = Parsed::read(&document).with(|root| {
-            let mut referenced = BTreeSet::new();
-            root.visit(&mut |element| {
-                for attribute in element.attributes.iter().filter(|a| is_schema_attribute(a)) {
-                    if let Some(file) = attribute.value.strip_prefix("schemas/") {
-                        referenced.insert(file.split('#').next().unwrap_or(file).to_owned());
-                    }
-                }
-            });
-            referenced
-        });
-        let twins: BTreeSet<String> = match std::fs::read_dir(dir.join("schemas")) {
-            Ok(entries) => entries
-                .map(|entry| {
-                    entry
-                        .expect("a directory entry")
-                        .file_name()
-                        .into_string()
-                        .expect("a UTF-8 file name")
-                })
-                .collect(),
-            Err(_) => BTreeSet::new(),
+/// Every `schemas/` directory's JSON files under `dir`, recursively,
+/// skipping build output (`target/`).
+fn schema_files_under(dir: &Path) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    let mut pending = vec![dir.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
         };
-        assert_eq!(twins, referenced, "{}", dir.display());
-        for file in twins {
-            let twin =
-                std::fs::read(dir.join("schemas").join(&file)).expect("the twin is readable");
-            let source =
-                std::fs::read(ability_schemas().join(&file)).expect("the source is readable");
-            assert!(
-                twin == source,
-                "{}/schemas/{file} differs from abilities/schemas/{file}",
-                dir.display()
-            );
+        for entry in entries {
+            let path = entry.expect("a directory entry").path();
+            if path.is_dir() {
+                if path.file_name().is_some_and(|name| name != "target") {
+                    pending.push(path);
+                }
+            } else if path
+                .extension()
+                .is_some_and(|extension| extension == "json")
+                && dir.file_name().is_some_and(|name| name == "schemas")
+            {
+                found.push(path);
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
+#[test]
+fn every_schema_file_has_one_copy() {
+    let mut seen: BTreeMap<String, PathBuf> = BTreeMap::new();
+    for top in ["abilities", "bots", "environments", "devices", "services"] {
+        for path in schema_files_under(&workspace().join(top)) {
+            let name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .expect("a UTF-8 file name")
+                .to_owned();
+            if let Some(first) = seen.insert(name.clone(), path.clone()) {
+                panic!(
+                    "{name} has two copies: {} and {}",
+                    first.display(),
+                    path.display()
+                );
+            }
         }
     }
 }
 
 #[test]
-fn each_environments_twins_are_byte_identical_and_exactly_what_it_references() {
-    for document in documents_under(&workspace().join("environments")) {
+fn every_reference_resolves_to_its_events_one_schema_file() {
+    let body = std::fs::canonicalize(body_schemas()).expect("the body's schemas exist");
+    let abilities = std::fs::canonicalize(ability_schemas()).expect("the abilities' schemas exist");
+    for document in phase4_documents() {
         let dir = document.parent().expect("a document has a directory");
-        let referenced: BTreeSet<String> = Parsed::read(&document).with(|root| {
-            let mut referenced = BTreeSet::new();
+        Parsed::read(&document).with(|root| {
             root.visit(&mut |element| {
                 for attribute in element.attributes.iter().filter(|a| is_schema_attribute(a)) {
-                    if let Some(file) = attribute.value.strip_prefix("schemas/") {
-                        referenced.insert(file.split('#').next().unwrap_or(file).to_owned());
-                    }
+                    let scxml_event_schema::Source::Reference { resource, .. } =
+                        scxml_event_schema::source(&attribute.value)
+                    else {
+                        continue;
+                    };
+                    let resolved = std::fs::canonicalize(dir.join(resource)).unwrap_or_else(|_| {
+                        panic!("{}: {resource} does not resolve", document.display())
+                    });
+                    let file = resolved.file_name().expect("a file name");
+                    let canonical = if abilities.join(file).is_file() {
+                        abilities.join(file)
+                    } else {
+                        body.join(file)
+                    };
+                    assert_eq!(
+                        resolved,
+                        canonical,
+                        "{}: {resource} is not its event's schema file",
+                        document.display()
+                    );
                 }
             });
-            referenced
         });
-        let twins: BTreeSet<String> = std::fs::read_dir(dir.join("schemas"))
-            .expect("an environment has schema twins")
-            .map(|entry| {
-                entry
-                    .expect("a directory entry")
-                    .file_name()
-                    .into_string()
-                    .expect("a UTF-8 file name")
-            })
-            .collect();
-        assert_eq!(twins, referenced, "{}", dir.display());
-        for file in twins {
-            let twin =
-                std::fs::read(dir.join("schemas").join(&file)).expect("the twin is readable");
-            let ability = ability_schemas().join(&file);
-            let source = if ability.is_file() {
-                ability
-            } else {
-                body_schemas().join(&file)
-            };
-            assert!(
-                twin == std::fs::read(&source).expect("the source is readable"),
-                "{}/schemas/{file} differs from {}",
-                dir.display(),
-                source.display()
-            );
-        }
     }
 }
 
@@ -585,7 +541,7 @@ fn runtime_only_fields_are_gone_and_media_is_a_reference() {
         ("environment.sound", "audio"),
         ("environment.visual", "image"),
     ] {
-        let schema = read_json(&body_schemas().join(format!("{event}.json")));
+        let schema = &all_schemas()[event];
         assert_eq!(
             schema
                 .pointer(&format!("/properties/{field}/format"))

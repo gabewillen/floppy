@@ -102,7 +102,7 @@
     <invoke id="vision" type="scxml" src="../vision/vision.scx"/>
 
     <state id="Unfocused">
-      <transition event="bot.ability.reading.input" event:schema="schemas/bot.ability.reading.input.json"
+      <transition event="bot.ability.reading.input" event:schema="../schemas/bot.ability.reading.input.json"
                   target="Focused">
         <assign location="input" expr="_event.data"/>
         <log label="reading.focused" expr="input.kind"/>
@@ -110,10 +110,10 @@
     </state>
 
     <state id="Focused" initial="Classifying">
-      <transition event="bot.ability.reading.input" event:schema="schemas/bot.ability.reading.input.json">
+      <transition event="bot.ability.reading.input" event:schema="../schemas/bot.ability.reading.input.json">
         <event:defer/>
       </transition>
-      <transition event="bot.ability.reading.stage.failed" event:schema="schemas/bot.ability.reading.stage.failed.json"
+      <transition event="bot.ability.reading.stage.failed" event:schema="../schemas/bot.ability.reading.stage.failed.json"
                   target="Unfocused">
         <log label="reading.failed" expr="stageFailureLog(_event)"/>
         <send event="bot.ability.reading.failed" target="#_parent">
@@ -137,13 +137,13 @@
             <cancel sendidexpr="stage_timer"/>
           </onexit>
           <transition event="bot.ability.vision.classification.output"
-                      event:schema="schemas/bot.ability.vision.classification.output.json">
+                      event:schema="../schemas/bot.ability.vision.classification.output.json">
             <send event="bot.ability.reading.classification.completed" target="#_internal">
               <param name="input" expr="input"/>
               <param name="classification" expr="_event.data"/>
             </send>
           </transition>
-          <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json">
+          <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json">
             <send event="bot.ability.reading.stage.failed" target="#_internal">
               <param name="stage" expr="'classification'"/>
               <param name="message" expr="_event.data.message"/>
@@ -156,7 +156,7 @@
             </send>
           </transition>
           <transition event="bot.ability.reading.classification.completed"
-                      event:schema="schemas/bot.ability.reading.classification.completed.json" target="Classified">
+                      event:schema="../schemas/bot.ability.reading.classification.completed.json" target="Classified">
             <assign location="classified" expr="_event.data"/>
           </transition>
         </state>
@@ -185,7 +185,7 @@
             <param name="confidence" expr="classified.classification.confidence"/>
           </send>
         </onentry>
-        <transition event="bot.ability.reading.text.decoded" event:schema="schemas/bot.ability.reading.text.decoded.json"
+        <transition event="bot.ability.reading.text.decoded" event:schema="../schemas/bot.ability.reading.text.decoded.json"
                     target="EncodingOutput">
           <assign location="candidate" expr="_event.data"/>
         </transition>
@@ -232,7 +232,7 @@
             <param name="message" expr="imageDecodingCouldNotRunMessage(_event)"/>
           </send>
         </transition>
-        <transition event="bot.ability.reading.image.decoded" event:schema="schemas/bot.ability.reading.image.decoded.json"
+        <transition event="bot.ability.reading.image.decoded" event:schema="../schemas/bot.ability.reading.image.decoded.json"
                     target="EncodingOutput">
           <assign location="candidate" expr="_event.data"/>
         </transition>
@@ -248,7 +248,7 @@
           </send>
         </onentry>
         <transition event="bot.ability.reading.unreadable.output.ready"
-                    event:schema="schemas/bot.ability.reading.unreadable.output.ready.json" target="EncodingOutput">
+                    event:schema="../schemas/bot.ability.reading.unreadable.output.ready.json" target="EncodingOutput">
           <assign location="candidate" expr="_event.data"/>
         </transition>
       </state>
@@ -260,7 +260,7 @@
             <content expr="candidate"/>
           </send>
         </onentry>
-        <transition event="bot.ability.reading.output.encoded" event:schema="schemas/bot.ability.reading.output.encoded.json"
+        <transition event="bot.ability.reading.output.encoded" event:schema="../schemas/bot.ability.reading.output.encoded.json"
                     target="Unfocused">
           <log label="reading.output" expr="_event.data.source_kind"/>
           <send event="bot.ability.reading.output" target="#_parent">

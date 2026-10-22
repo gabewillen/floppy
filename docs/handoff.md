@@ -11,6 +11,18 @@ Last updated: 2026-10-21.
 
 ## Current state (2026-10-09) — resume here
 
+- **One schema file per event (2026-10-21, D125):** scxml.rs
+  `5bc75e72` resolves an `event:schema` reference against its
+  document's base URI like any relative URI, `..` included, so the twin
+  directories are gone: abilities reference `../schemas/<event>.json`, the
+  body and the room `../../abilities/schemas/<event>.json` (and the room
+  `../../bots/floppy/schemas/<event>.json`); 240 schema files became 109.
+  `contracts.rs` checks every reference resolves to its event's one file
+  and no schema file name occurs twice. The builder references its
+  `schemas/*.json` instead of inlining them. A test that lays documents
+  out in a scratch directory must copy `abilities/schemas/` (and, for the
+  body's events, `bots/floppy/schemas/`) beside them, as
+  `support::copy_ability` and `support::environment_with_devices` do.
 - **The same failure more than once ends the build (2026-10-20, D124):**
   the maintainer's rule, "if it gets the same failure more than once it
   should end". `retry_gate` ends with `no-progress` as soon as any
@@ -215,7 +227,7 @@ Last updated: 2026-10-21.
   address; the cognition input's `environment` field is rendered by
   reasoning as the original's environment block. Every environment run
   passes `--fuel 9223372036854775807` until average usage is measured
-  (D111). scxml.rs is at `cf8f293a` (D123's eventless-cond fix), on top of `f920cb47` (D122), on top of `c8bb69a8` (D121) and `b59f8111` (D104, D109, D110). Speech and voice
+  (D111). scxml.rs is at `5bc75e72` (D125's `..` in `event:schema`), on top of `cf8f293a` (D123's eventless-cond fix), on top of `f920cb47` (D122), on top of `c8bb69a8` (D121) and `b59f8111` (D104, D109, D110). Speech and voice
   backends exist now, each through an env file in the session scratchpad
   (outside the repository) named in `FLOPPY_LIVE_ENV_FILE` with `.env`:
   `env.speech` (Gemini's OpenAI-compatible API, `FLOPPY_SPEECH_*`) and
@@ -303,10 +315,9 @@ Last updated: 2026-10-21.
 - **Layout (2026-10-10, D65):** every bot and ability is
   `<name>/<name>.scx` with its ECMAScript in `<name>/<name>.js` beside it
   (one root `<script src="<name>.js"/>`; conds and exprs call its
-  functions). Abilities are `abilities/<ability>/<ability>.scx`, each with
-  byte-identical twins of the schemas it references in
-  `abilities/<ability>/schemas/` (canonical files stay in
-  `abilities/schemas/`). Tests lay abilities out with
+  functions). Abilities are `abilities/<ability>/<ability>.scx`, each referencing
+  `abilities/schemas/` as `../schemas/<event>.json` (D125; the
+  `abilities/<ability>/schemas/` twins are gone). Tests lay abilities out with
   `support::copy_ability`. `scx validate` reads each document's `.js`
   (scxml.rs `98fd120`, `Validator::with_script_resources`), so a cond or
   `<log expr>` calling its functions is judged by their bodies and every
@@ -316,9 +327,9 @@ Last updated: 2026-10-21.
   Phase 4 is done through "Replace Script Validators With Event Schemas":
   no phase 4 document has a `<script>`, payload checks are `event:schema`
   only, conds only correlate, and `tests/tests/contracts.rs` enforces the
-  structure rule (no `function`, cond/expr at most 160 characters, body
-  twins byte-identical to their ability schemas, literal SCXML invoke ids
-  and srcs). The first identity attempt is on branch `wip/identity-slice`
+  structure rule (no `function`, cond/expr at most 160 characters, every
+  schema reference resolving to its event's one file (D125), literal SCXML
+  invoke ids and srcs). The first identity attempt is on branch `wip/identity-slice`
   (reference only). Phase 4's docs are closed: decisions D33 to D43,
   port-plan's [Phase 4 conventions](port-plan.md#phase-4-conventions), and
   the AGENTS.md layout and no-`<script>` rules.

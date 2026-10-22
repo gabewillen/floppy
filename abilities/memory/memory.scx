@@ -77,8 +77,8 @@
       <param name="database" expr="database"/>
       <param name="revisions" expr="engineRevisions()"/>
     </invoke>
-    <transition event="bot.ability.migration.output" event:schema="schemas/bot.ability.migration.output.json" target="applying"/>
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="failing">
+    <transition event="bot.ability.migration.output" event:schema="../schemas/bot.ability.migration.output.json" target="applying"/>
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failing">
       <assign location="failure" expr="_event.data.message"/>
     </transition>
     <transition event="error.*" target="failing">

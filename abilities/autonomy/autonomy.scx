@@ -161,12 +161,12 @@
       <param name="database" expr="database"/>
       <param name="statements" expr="behaviorSelectStatements()"/>
     </invoke>
-    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json">
+    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json">
       <assign location="rows" expr="behaviorsFromMemoryOutput(_event)"/>
     </transition>
     <transition event="done.invoke.load" target="matched"/>
     <!-- the reference _on_load_behaviors_failure: a failed load is a warning, and the turn goes on with no inventory rows. -->
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="matched">
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="matched">
       <log label="autonomy.behaviors.load.failed" expr="loadFailedReason(_event.data.message)"/>
       <assign location="rows" expr="[]"/>
     </transition>

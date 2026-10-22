@@ -67,7 +67,7 @@
 
   <!-- Any failure ends the detection with the original's FailureData. -->
   <state id="detecting" initial="normalizing">
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="applied">
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="applied">
       <assign location="result" expr="failedResult(_event)"/>
     </transition>
     <transition event="error.*" target="applied">
@@ -109,7 +109,7 @@
         <assign location="result" expr="undetectedResult()"/>
       </transition>
       <!-- Failures here, as in detecting, before the catch-all below. -->
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="applied">
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="applied">
         <assign location="result" expr="failedResult(_event)"/>
       </transition>
       <transition event="error.*" target="applied">

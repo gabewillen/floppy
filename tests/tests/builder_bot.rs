@@ -33,7 +33,7 @@
 
 mod support;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{BufRead as _, BufReader, Read as _, Write as _};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
@@ -1074,12 +1074,12 @@ fn builder_validates_clean_with_its_repository_packages() {
     );
 }
 
-/// Every `event:schema` of builder.scx is an inline copy of
-/// `schemas/<event>.json` (an event taken in two states carries the same
-/// copy in both) or, on a final state's `<donedata>`, of
-/// `schemas/<final state id>.json`, and every schema file is used.
+/// Every `event:schema` of builder.scx references `schemas/<event>.json`
+/// (an event taken in two states references the same file in both) or, on
+/// a final state's `<donedata>`, `schemas/<final state id>.json`, and every
+/// schema file is referenced.
 #[test]
-fn builder_inline_event_schemas_equal_the_schema_files() {
+fn builder_event_schemas_reference_the_schema_files() {
     let source = builder_source();
     let document = scxml_syntax::parse_xml(scxml_syntax::SourceText::new(
         scxml_syntax::SourceId::new(1),
@@ -1087,12 +1087,19 @@ fn builder_inline_event_schemas_equal_the_schema_files() {
         source.as_str(),
     ))
     .expect("builder.scx is XML");
-    let mut inline = BTreeMap::new();
+    let schema_of = |element: &scxml_syntax::Element| {
+        element
+            .attributes
+            .iter()
+            .find(|attribute| {
+                attribute.name.namespace_uri.as_deref()
+                    == Some(scxml_event_schema::EVENT_NAMESPACE_URI)
+                    && attribute.name.local_name == scxml_event_schema::SCHEMA_ATTRIBUTE
+            })
+            .map(|attribute| attribute.value.clone())
+    };
+    let mut referenced = BTreeSet::new();
     document.root.visit(&mut |element| {
-        let schema = element.attributes.iter().find(|attribute| {
-            attribute.name.namespace_uri.as_deref() == Some(scxml_event_schema::EVENT_NAMESPACE_URI)
-                && attribute.name.local_name == scxml_event_schema::SCHEMA_ATTRIBUTE
-        });
         let event = element
             .attributes
             .iter()
@@ -1100,12 +1107,9 @@ fn builder_inline_event_schemas_equal_the_schema_files() {
                 attribute.name.namespace_uri.is_none() && attribute.name.local_name == "event"
             })
             .map(|attribute| attribute.value.clone());
-        if let (Some(schema), Some(event)) = (schema, event) {
-            let value: Json =
-                serde_json::from_str(&schema.value).expect("every inline schema is JSON");
-            if let Some(previous) = inline.insert(event.clone(), value.clone()) {
-                assert_eq!(previous, value, "one schema per event: {event}");
-            }
+        if let (Some(schema), Some(event)) = (schema_of(element), event) {
+            assert_eq!(schema, format!("schemas/{event}.json"), "{event}");
+            referenced.insert(event);
         }
         if element.name.local_name == "final"
             && let Some(id) = element.attribute("id")
@@ -1117,35 +1121,26 @@ fn builder_inline_event_schemas_equal_the_schema_files() {
                 if donedata.name.local_name != "donedata" {
                     continue;
                 }
-                let schema = donedata
-                    .attributes
-                    .iter()
-                    .find(|attribute| {
-                        attribute.name.namespace_uri.as_deref()
-                            == Some(scxml_event_schema::EVENT_NAMESPACE_URI)
-                            && attribute.name.local_name == scxml_event_schema::SCHEMA_ATTRIBUTE
-                    })
-                    .expect("each final state's donedata carries its schema");
-                let value: Json =
-                    serde_json::from_str(&schema.value).expect("every inline schema is JSON");
-                inline.insert(id.value.clone(), value);
+                let schema =
+                    schema_of(donedata).expect("each final state's donedata carries its schema");
+                assert_eq!(schema, format!("schemas/{}.json", id.value), "{}", id.value);
+                referenced.insert(id.value.clone());
             }
         }
     });
-    let mut files = BTreeMap::new();
-    for entry in std::fs::read_dir(builder_dir().join("schemas")).expect("schemas/ is listable") {
-        let path = entry.expect("a directory entry").path();
-        let name = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .and_then(|name| name.strip_suffix(".json"))
-            .expect("every schema file is <event>.json")
-            .to_owned();
-        let value: Json = serde_json::from_slice(&std::fs::read(&path).expect("readable"))
-            .expect("every schema file is JSON");
-        files.insert(name, value);
-    }
-    assert_eq!(inline, files);
+    let files: BTreeSet<String> = std::fs::read_dir(builder_dir().join("schemas"))
+        .expect("schemas/ is listable")
+        .map(|entry| {
+            entry
+                .expect("a directory entry")
+                .file_name()
+                .to_str()
+                .and_then(|name| name.strip_suffix(".json"))
+                .expect("every schema file is <event>.json")
+                .to_owned()
+        })
+        .collect();
+    assert_eq!(referenced, files);
 }
 
 /// The bots live runs built (bots/builder/examples) still validate.

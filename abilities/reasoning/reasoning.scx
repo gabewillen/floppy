@@ -177,7 +177,7 @@
         <param name="database" expr="database"/>
         <param name="statements" expr="statements"/>
       </invoke>
-      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json">
+      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json">
         <memory:contents location="prior_episodes" result="_event.data.results[0]"/>
         <memory:contents location="standing_directives" result="_event.data.results[1]"/>
         <send event="bot.ability.reasoning.recalled" target="#_internal">
@@ -189,19 +189,19 @@
           <param name="input" expr="focusInput()"/>
         </send>
       </transition>
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="done">
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="done">
         <assign location="result" expr="recallFailedResult(_event.data.message)"/>
       </transition>
       <transition event="error.*" target="done">
         <assign location="result" expr="recallFailedResult(_event.name)"/>
       </transition>
     </state>
-    <transition event="bot.ability.reasoning.recalled" event:schema="schemas/bot.ability.reasoning.recalled.json"
+    <transition event="bot.ability.reasoning.recalled" event:schema="../schemas/bot.ability.reasoning.recalled.json"
                 cond="hasRecalledWithoutChoices(_event)"
                 target="done">
       <assign location="result" expr="noChoicesResult()"/>
     </transition>
-    <transition event="bot.ability.reasoning.recalled" event:schema="schemas/bot.ability.reasoning.recalled.json"
+    <transition event="bot.ability.reasoning.recalled" event:schema="../schemas/bot.ability.reasoning.recalled.json"
                 cond="isCurrentTurn(_event)"
                 target="applying"/>
   </state>

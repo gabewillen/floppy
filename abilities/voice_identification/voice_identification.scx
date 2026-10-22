@@ -59,7 +59,7 @@
   <script src="voice_identification.js"/>
 
   <state id="identifying" initial="clipping">
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="applied">
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="applied">
       <assign location="result" expr="failedResult(_event)"/>
     </transition>
     <transition event="error.*" target="applied">
@@ -78,7 +78,7 @@
         <param name="end_seconds" expr="end_seconds"/>
         <param name="output" expr="output"/>
       </invoke>
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="applied">
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="applied">
         <assign location="result" expr="clipFailedResult(_event)"/>
       </transition>
       <transition event="done.invoke.clipper" cond="isClippedSegment(_event)" target="applying">
@@ -104,7 +104,7 @@
         <assign location="result" expr="unidentifiedResult()"/>
       </transition>
       <!-- Failures here, as in identifying, before the catch-all below. -->
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="applied">
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="applied">
         <assign location="result" expr="failedResult(_event)"/>
       </transition>
       <transition event="error.*" target="applied">

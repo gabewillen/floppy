@@ -119,19 +119,19 @@
       <param name="encoding_timeout_ms" expr="encoding_timeout_ms"/>
     </invoke>
 
-    <transition event="bot.ability.offers" event:schema="schemas/bot.ability.offers.json">
+    <transition event="bot.ability.offers" event:schema="../schemas/bot.ability.offers.json">
       <assign location="ready[_event.data.ability]" expr="true"/>
     </transition>
     <!-- Conversation products go on to the body: a text product as its
          stimulus handoff, any other whose latest message is inbound as
          the output itself; the rest is history. -->
-    <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json">
+    <transition event="bot.ability.cognition.input" event:schema="../schemas/bot.ability.cognition.input.json">
       <log label="communication.product" expr="productSequence(_event)"/>
       <send event="bot.ability.cognition.input" target="#_parent">
         <content expr="_event.data"/>
       </send>
     </transition>
-    <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json">
+    <transition event="bot.ability.conversation.output" event:schema="../schemas/bot.ability.conversation.output.json">
       <log label="communication.history" expr="historyLength(_event)"/>
       <if cond="isInboundProduct(_event)">
         <send event="bot.ability.conversation.output" target="#_parent">
@@ -141,12 +141,12 @@
     </transition>
     <!-- A snapshot of the conversation's participants (the communication
          requests none). -->
-    <transition event="bot.ability.conversation.snapshot.output" event:schema="schemas/bot.ability.conversation.snapshot.output.json">
+    <transition event="bot.ability.conversation.snapshot.output" event:schema="../schemas/bot.ability.conversation.snapshot.output.json">
       <log label="communication.snapshot" expr="_event.data.request_ref"/>
     </transition>
     <!-- A conversation that could not take an input fails it (the original's
          conversation failed terminal, forwarded unchanged). -->
-    <transition event="bot.ability.conversation.failed" event:schema="schemas/bot.ability.conversation.failed.json">
+    <transition event="bot.ability.conversation.failed" event:schema="../schemas/bot.ability.conversation.failed.json">
       <log label="communication.rejected" expr="conversationFailedLog(_event)"/>
       <send event="bot.ability.conversation.failed" target="#_parent">
         <content expr="_event.data"/>
@@ -164,17 +164,17 @@
          sent them, so the copy is in the body's queue before the
          environment can deliver the sound back (decision D103, amended
          2026-10-15). -->
-    <transition event="bot.ability.conversation.append" event:schema="schemas/bot.ability.conversation.append.json">
+    <transition event="bot.ability.conversation.append" event:schema="../schemas/bot.ability.conversation.append.json">
       <send event="bot.ability.conversation.append" target="#_conversation">
         <content expr="_event.data"/>
       </send>
     </transition>
-    <transition event="bot.ability.speaking.efference" event:schema="schemas/bot.ability.speaking.efference.json">
+    <transition event="bot.ability.speaking.efference" event:schema="../schemas/bot.ability.speaking.efference.json">
       <send event="bot.ability.speaking.efference" target="#_parent">
         <content expr="_event.data"/>
       </send>
     </transition>
-    <transition event="environment.sound" event:schema="schemas/environment.sound.json">
+    <transition event="environment.sound" event:schema="../schemas/environment.sound.json">
       <send event="environment.sound" targetexpr="environmentTarget()">
         <content expr="_event.data"/>
       </send>
@@ -191,11 +191,11 @@
       <transition event="error.*" target="degraded">
         <assign location="failure" expr="childStartFailure(_event)"/>
       </transition>
-      <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json">
+      <transition event="bot.ability.communication.input" event:schema="../schemas/bot.ability.communication.input.json">
         <event:defer/>
         <log label="communication.deferred" expr="_event.name"/>
       </transition>
-      <transition event="bot.ability.communication.activate" event:schema="schemas/bot.ability.communication.activate.json">
+      <transition event="bot.ability.communication.activate" event:schema="../schemas/bot.ability.communication.activate.json">
         <log label="communication.activate" expr="'conversation'"/>
       </transition>
     </state>
@@ -215,17 +215,17 @@
           <param name="choices" expr="offered"/>
         </send>
       </onentry>
-      <transition event="bot.ability.communication.respond" event:schema="schemas/bot.ability.communication.respond.json"
+      <transition event="bot.ability.communication.respond" event:schema="../schemas/bot.ability.communication.respond.json"
                   cond="hasRespond(_event)" target="preparing_response">
         <assign location="response" expr="_event.data.text"/>
       </transition>
-      <transition event="bot.ability.communication.respond" event:schema="schemas/bot.ability.communication.respond.json">
+      <transition event="bot.ability.communication.respond" event:schema="../schemas/bot.ability.communication.respond.json">
         <log label="communication.rejected" expr="'bot.ability.communication.respond needs one non-blank text'"/>
         <send event="bot.ability.communication.failed" target="#_parent">
           <param name="message" expr="'Communication response text must be non-blank.'"/>
         </send>
       </transition>
-      <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json">
+      <transition event="bot.ability.communication.input" event:schema="../schemas/bot.ability.communication.input.json">
         <send event="bot.ability.conversation.routed_input" target="#_conversation">
           <param name="parent" expr="routedParent(_event)"/>
         </send>
@@ -260,17 +260,17 @@
       <onexit>
         <cancel sendidexpr="hop_timer"/>
       </onexit>
-      <transition event="bot.ability.speaking.output" event:schema="schemas/bot.ability.speaking.output.json" target="active">
+      <transition event="bot.ability.speaking.output" event:schema="../schemas/bot.ability.speaking.output.json" target="active">
         <send event="bot.ability.speaking.output" target="#_parent">
           <content expr="_event.data"/>
         </send>
       </transition>
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="active">
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="active">
         <send event="bot.ability.communication.failed" target="#_parent">
           <param name="message" expr="_event.data.message"/>
         </send>
       </transition>
-      <transition event="bot.ability.communication.response.hop.timed_out" event:schema="schemas/bot.ability.communication.response.hop.timed_out.json"
+      <transition event="bot.ability.communication.response.hop.timed_out" event:schema="../schemas/bot.ability.communication.response.hop.timed_out.json"
                   cond="isResponseHopTimeout(_event)" target="active">
         <log label="communication.hop.timed_out" expr="hopTimedOutMessage()"/>
         <send event="bot.ability.communication.failed" target="#_parent">

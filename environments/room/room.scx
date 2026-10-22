@@ -57,10 +57,10 @@
   that is an array of numbers is written as <biometric:VoiceEmbedding>, as
   the original's capture writes its VoiceEmbedding.
 
-  Contracts: every event the room takes references a byte-identical twin
-  in schemas/ (of bots/floppy/schemas/ for the body's events, of
-  abilities/schemas/ for the abilities'); scx run refuses host input they
-  reject (machine-invalid-input).
+  Contracts: every event the room takes references its one schema file
+  (../../bots/floppy/schemas/ for the body's events,
+  ../../abilities/schemas/ for the abilities'); scx run refuses host input
+  they reject (machine-invalid-input).
 
   Running: scx run with an env file and this document (bots/floppy/README.md
   gives the grants and variables the bot needs).
@@ -104,14 +104,14 @@
     </transition>
 
     <!-- Host input. -->
-    <transition event="bot.ability.communication.input" event:schema="schemas/bot.ability.communication.input.json">
+    <transition event="bot.ability.communication.input" event:schema="../../abilities/schemas/bot.ability.communication.input.json">
       <foreach array="addressees(_event.data.target_ids)" item="participant">
         <send event="bot.ability.communication.input" targetexpr="participantTarget(participant)">
           <content expr="_event.data"/>
         </send>
       </foreach>
     </transition>
-    <transition event="environment.sound" event:schema="schemas/environment.sound.json">
+    <transition event="environment.sound" event:schema="../../abilities/schemas/environment.sound.json">
       <log label="environment.sound" expr="eventDataJson(_event)"/>
       <foreach array="participants" item="participant">
         <if cond="hears(participant, _event)">
@@ -121,7 +121,7 @@
         </if>
       </foreach>
     </transition>
-    <transition event="environment.visual" event:schema="schemas/environment.visual.json">
+    <transition event="environment.visual" event:schema="../../bots/floppy/schemas/environment.visual.json">
       <log label="environment.visual" expr="eventDataJson(_event)"/>
       <foreach array="participants" item="participant">
         <send event="environment.visual" targetexpr="participantTarget(participant)">
@@ -129,7 +129,7 @@
         </send>
       </foreach>
     </transition>
-    <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json">
+    <transition event="bot.deactivate" event:schema="../../bots/floppy/schemas/bot.deactivate.json">
       <foreach array="bots()" item="participant">
         <send event="bot.deactivate" targetexpr="participantTarget(participant)">
           <content expr="_event.data"/>
@@ -140,7 +140,7 @@
          target_device stamped as the device's reference; from the host,
          to every bot. The recipients and the stamp are chosen from
          _event.invokeid in exprs (decision D108). -->
-    <transition event="bot.input" event:schema="schemas/bot.input.json">
+    <transition event="bot.input" event:schema="../../bots/floppy/schemas/bot.input.json">
       <foreach array="inputRecipients(_event)" item="participant">
         <send event="bot.input" targetexpr="participantTarget(participant)">
           <content expr="inputData(_event)"/>
@@ -149,49 +149,49 @@
     </transition>
 
     <!-- What the bots emit. -->
-    <transition event="bot.activated" event:schema="schemas/bot.activated.json">
+    <transition event="bot.activated" event:schema="../../bots/floppy/schemas/bot.activated.json">
       <log label="bot.activated" expr="eventDataJson(_event)"/>
     </transition>
-    <transition event="bot.activating.failed" event:schema="schemas/bot.activating.failed.json">
+    <transition event="bot.activating.failed" event:schema="../../bots/floppy/schemas/bot.activating.failed.json">
       <log label="bot.activating.failed" expr="eventDataJson(_event)"/>
     </transition>
-    <transition event="bot.deactivated" event:schema="schemas/bot.deactivated.json">
+    <transition event="bot.deactivated" event:schema="../../bots/floppy/schemas/bot.deactivated.json">
       <log label="bot.deactivated" expr="eventDataJson(_event)"/>
     </transition>
-    <transition event="bot.processing.completed" event:schema="schemas/bot.processing.completed.json">
+    <transition event="bot.processing.completed" event:schema="../../bots/floppy/schemas/bot.processing.completed.json">
       <log label="bot.processing.completed" expr="eventDataJson(_event)"/>
     </transition>
-    <transition event="bot.processing.failed" event:schema="schemas/bot.processing.failed.json">
+    <transition event="bot.processing.failed" event:schema="../../bots/floppy/schemas/bot.processing.failed.json">
       <log label="bot.processing.failed" expr="eventDataJson(_event)"/>
     </transition>
-    <transition event="bot.processing.timed_out" event:schema="schemas/bot.processing.timed_out.json">
+    <transition event="bot.processing.timed_out" event:schema="../../bots/floppy/schemas/bot.processing.timed_out.json">
       <log label="bot.processing.timed_out" expr="eventDataJson(_event)"/>
     </transition>
-    <transition event="bot.processing.cancel.timed_out" event:schema="schemas/bot.processing.cancel.timed_out.json">
+    <transition event="bot.processing.cancel.timed_out" event:schema="../../bots/floppy/schemas/bot.processing.cancel.timed_out.json">
       <log label="bot.processing.cancel.timed_out" expr="eventDataJson(_event)"/>
     </transition>
-    <transition event="bot.degraded" event:schema="schemas/bot.degraded.json">
+    <transition event="bot.degraded" event:schema="../../bots/floppy/schemas/bot.degraded.json">
       <log label="bot.degraded" expr="eventDataJson(_event)"/>
     </transition>
-    <transition event="bot.reboot" event:schema="schemas/bot.reboot.json">
+    <transition event="bot.reboot" event:schema="../../abilities/schemas/bot.reboot.json">
       <log label="bot.reboot" expr="eventDataJson(_event)"/>
     </transition>
-    <transition event="bot.ability.speaking.output" event:schema="schemas/bot.ability.speaking.output.json">
+    <transition event="bot.ability.speaking.output" event:schema="../../abilities/schemas/bot.ability.speaking.output.json">
       <log label="bot.ability.speaking.output" expr="eventDataJson(_event)"/>
     </transition>
-    <transition event="bot.ability.communication.failed" event:schema="schemas/bot.ability.communication.failed.json">
+    <transition event="bot.ability.communication.failed" event:schema="../../abilities/schemas/bot.ability.communication.failed.json">
       <log label="bot.ability.communication.failed" expr="eventDataJson(_event)"/>
     </transition>
-    <transition event="bot.ability.conversation.failed" event:schema="schemas/bot.ability.conversation.failed.json">
+    <transition event="bot.ability.conversation.failed" event:schema="../../abilities/schemas/bot.ability.conversation.failed.json">
       <log label="bot.ability.conversation.failed" expr="eventDataJson(_event)"/>
     </transition>
-    <transition event="bot.ability.conversation.output" event:schema="schemas/bot.ability.conversation.output.json">
+    <transition event="bot.ability.conversation.output" event:schema="../../abilities/schemas/bot.ability.conversation.output.json">
       <log label="bot.ability.conversation.output" expr="eventDataJson(_event)"/>
     </transition>
-    <transition event="bot.ability.listening.failed" event:schema="schemas/bot.ability.listening.failed.json">
+    <transition event="bot.ability.listening.failed" event:schema="../../abilities/schemas/bot.ability.listening.failed.json">
       <log label="bot.ability.listening.failed" expr="eventDataJson(_event)"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json">
+    <transition event="bot.ability.failed" event:schema="../../abilities/schemas/bot.ability.failed.json">
       <log label="bot.ability.failed" expr="eventDataJson(_event)"/>
     </transition>
   </state>

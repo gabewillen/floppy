@@ -127,10 +127,10 @@
       <param name="statements" expr="usedPersistenceStatements()"/>
     </invoke>
     <!-- The update's results: nothing to keep. -->
-    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"/>
+    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json"/>
     <transition event="done.invoke.usage" target="answered"/>
     <!-- the original: persistence_failed takes the same effect as persisted. -->
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="answered">
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="answered">
       <log label="autonomy.behavior_usage.persistence_failed" expr="usageFailedReason(_event.data.message)"/>
     </transition>
     <transition event="error.*" target="answered">
@@ -152,10 +152,10 @@
       <param name="database" expr="database"/>
       <param name="statements" expr="failedPersistenceStatements()"/>
     </invoke>
-    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"/>
+    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json"/>
     <transition event="done.invoke.failure" target="recorded_failure"/>
     <!-- the original: persistence_failed takes the same effect as persisted. -->
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="recorded_failure">
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="recorded_failure">
       <log label="autonomy.behavior_usage.persistence_failed" expr="usageFailedReason(_event.data.message)"/>
     </transition>
     <transition event="error.*" target="recorded_failure">

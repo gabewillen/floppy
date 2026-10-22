@@ -421,7 +421,7 @@ fn malformed_communication_input_is_refused_before_the_body() {
         "bot.ability.communication.input",
         &json!({"source_ids": [], "target_ids": [], "content": "x", "content_type": "text/plain"}),
     );
-    // The body's transition carries the input's schema (its twin), so scx
+    // The body's transition carries the input's schema, so scx
     // run refuses the event before the session sees it.
     let records = run.until(WAIT, |record| {
         record["type"] == "error" && record["code"] == "machine-invalid-input"

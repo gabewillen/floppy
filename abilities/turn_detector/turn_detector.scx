@@ -113,7 +113,7 @@
         <assign location="closed" expr="null"/>
       </onentry>
       <transition event="bot.ability.listening.speech.output"
-                  event:schema="schemas/bot.ability.listening.speech.output.json"
+                  event:schema="../schemas/bot.ability.listening.speech.output.json"
                   cond="hasVoice(_event)" target="open">
         <assign location="voice_turns" expr="voice_turns + 1"/>
         <assign location="turn_ref" expr="voiceTurnRef()"/>
@@ -121,7 +121,7 @@
         <conversation:ingest_content location="turn_content" content="voiceStimulus(_event)"/>
       </transition>
       <transition event="bot.ability.turn_detector.turn.start"
-                  event:schema="schemas/bot.ability.turn_detector.turn.start.json"
+                  event:schema="../schemas/bot.ability.turn_detector.turn.start.json"
                   cond="hasStart(_event)" target="open">
         <assign location="turn_ref" expr="_event.data.turn_ref"/>
         <assign location="active_conversation_ref" expr="conversationRef(_event)"/>
@@ -141,27 +141,27 @@
         <cancel sendidexpr="timer"/>
       </onexit>
       <transition event="bot.ability.listening.speech.output"
-                  event:schema="schemas/bot.ability.listening.speech.output.json"
+                  event:schema="../schemas/bot.ability.listening.speech.output.json"
                   cond="hasVoice(_event)" target="open">
         <conversation:ingest_content location="turn_content" content="voiceStimulus(_event)"/>
       </transition>
       <transition event="bot.ability.listening.speech.output"
-                  event:schema="schemas/bot.ability.listening.speech.output.json"
+                  event:schema="../schemas/bot.ability.listening.speech.output.json"
                   target="paused"/>
       <transition event="bot.ability.turn_detector.turn.update"
-                  event:schema="schemas/bot.ability.turn_detector.turn.update.json"
+                  event:schema="../schemas/bot.ability.turn_detector.turn.update.json"
                   cond="isActiveTurn(_event)" target="open">
         <assign location="source_participant_ref" expr="sourceRef(_event)"/>
         <conversation:ingest_content location="turn_content" content="_event.data.content"/>
       </transition>
       <transition event="bot.ability.turn_detector.turn.start"
-                  event:schema="schemas/bot.ability.turn_detector.turn.start.json"
+                  event:schema="../schemas/bot.ability.turn_detector.turn.start.json"
                   cond="hasStart(_event)" target="open">
         <assign location="source_participant_ref" expr="sourceRef(_event)"/>
         <conversation:ingest_content location="turn_content" content="_event.data.content"/>
       </transition>
       <transition event="bot.ability.turn_detector.turn.end"
-                  event:schema="schemas/bot.ability.turn_detector.turn.end.json"
+                  event:schema="../schemas/bot.ability.turn_detector.turn.end.json"
                   cond="isActiveTurn(_event)" target="normalizing">
         <assign location="source_participant_ref" expr="sourceRef(_event)"/>
         <conversation:ingest_content location="turn_content" content="_event.data.content"/>
@@ -170,7 +170,7 @@
                              source_participant_ref="source_participant_ref"/>
       </transition>
       <transition event="bot.ability.turn_detector.turn.pause"
-                  event:schema="schemas/bot.ability.turn_detector.turn.pause.json"
+                  event:schema="../schemas/bot.ability.turn_detector.turn.pause.json"
                   cond="isActiveTurn(_event)" target="paused"/>
       <transition event="open.after" cond="isTimer(_event)" target="closing"/>
     </state>
@@ -183,24 +183,24 @@
         <cancel sendidexpr="timer"/>
       </onexit>
       <transition event="bot.ability.listening.speech.output"
-                  event:schema="schemas/bot.ability.listening.speech.output.json"
+                  event:schema="../schemas/bot.ability.listening.speech.output.json"
                   cond="hasVoice(_event)" target="open">
         <conversation:ingest_content location="turn_content" content="voiceStimulus(_event)"/>
       </transition>
       <transition event="bot.ability.turn_detector.turn.update"
-                  event:schema="schemas/bot.ability.turn_detector.turn.update.json"
+                  event:schema="../schemas/bot.ability.turn_detector.turn.update.json"
                   cond="isActiveTurn(_event)" target="open">
         <assign location="source_participant_ref" expr="sourceRef(_event)"/>
         <conversation:ingest_content location="turn_content" content="_event.data.content"/>
       </transition>
       <transition event="bot.ability.turn_detector.turn.start"
-                  event:schema="schemas/bot.ability.turn_detector.turn.start.json"
+                  event:schema="../schemas/bot.ability.turn_detector.turn.start.json"
                   cond="hasStart(_event)" target="open">
         <assign location="source_participant_ref" expr="sourceRef(_event)"/>
         <conversation:ingest_content location="turn_content" content="_event.data.content"/>
       </transition>
       <transition event="bot.ability.turn_detector.turn.end"
-                  event:schema="schemas/bot.ability.turn_detector.turn.end.json"
+                  event:schema="../schemas/bot.ability.turn_detector.turn.end.json"
                   cond="isActiveTurn(_event)" target="normalizing">
         <assign location="source_participant_ref" expr="sourceRef(_event)"/>
         <conversation:ingest_content location="turn_content" content="_event.data.content"/>
@@ -209,7 +209,7 @@
                              source_participant_ref="source_participant_ref"/>
       </transition>
       <transition event="bot.ability.turn_detector.turn.pause"
-                  event:schema="schemas/bot.ability.turn_detector.turn.pause.json"
+                  event:schema="../schemas/bot.ability.turn_detector.turn.pause.json"
                   cond="isActiveTurn(_event)" target="paused"/>
       <transition event="paused.after" cond="isTimer(_event)" target="closing"/>
     </state>

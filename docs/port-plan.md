@@ -107,18 +107,13 @@ extracted from the original's own pydantic models
 body events in `bots/floppy/schemas/`, ability events in
 `abilities/schemas/`, and the full list of the original's domain event names in
 `abilities/schemas/floppy-event-names.json`. Documents reference these files
-(`event:schema="schemas/<event>.json"`); they never carry inline copies. A
-schema reference is relative to its document and cannot leave the
-document's directory (no `..`), so an ability document lives directly in
-`abilities/` (`abilities/<ability>.scx`) and the body in `bots/floppy/`.
-The ability events the body receives (`bot.ability.offers`,
-`bot.ability.cognition.{input,output,cancelled}`, `bot.ability.failed`,
-`bot.ability.processing.cancelled`,
-`bot.ability.communication.{input,failed}`,
-`bot.ability.conversation.failed`, `bot.ability.speaking.output`,
-`bot.reboot`) are copied byte for byte into `bots/floppy/schemas/` as
-twins (decision D37); `bot.reboot` lives with the abilities' events
-because the cognition takes it from the reflection too.
+(`event:schema="schemas/<event>.json"`, or
+`../../abilities/schemas/<event>.json` from another directory); they never
+carry inline copies. A schema reference resolves against its document's
+base URI like any relative URI, so each event has exactly one schema file
+(decision D125, which replaced the byte-identical twins of D33, D37 and
+D65); `bot.reboot` lives with the abilities' events because the cognition
+takes it from the reflection too.
 
 The extraction script runs with the original's interpreter; it is kept outside
 this repository, with the floppy plans, as
@@ -176,7 +171,8 @@ service results, never offered as choices, so an ability needs no schema on
 the transitions taking them (scxml.rs does not check an invoked service's
 events, so their transitions keep a short shape cond such as
 `Object(_event.data).reason`). `tests/tests/contracts.rs` checks the set,
-the rules, the twins, and every `.scx` under `abilities/` and
+the rules, that every reference resolves to its event's one schema file,
+and every `.scx` under `abilities/` and
 `bots/floppy/` against the document structure rule (decision D39).
 
 ## Phase 4 conventions

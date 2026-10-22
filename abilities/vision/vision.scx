@@ -41,7 +41,7 @@
 
   <state id="Unclassified">
     <transition event="bot.ability.vision.classification.input"
-                event:schema="schemas/bot.ability.vision.classification.input.json" target="Classifying">
+                event:schema="../schemas/bot.ability.vision.classification.input.json" target="Classifying">
       <assign location="kind" expr="_event.data.kind"/>
       <assign location="content" expr="_event.data.content"/>
     </transition>
@@ -63,7 +63,7 @@
       </send>
     </onentry>
     <transition event="bot.ability.vision.classification.apply.completed"
-                event:schema="schemas/bot.ability.vision.classification.apply.completed.json" target="Unclassified">
+                event:schema="../schemas/bot.ability.vision.classification.apply.completed.json" target="Unclassified">
       <log label="vision.classification" expr="_event.data.kind"/>
       <send event="bot.ability.vision.classification.output" target="#_parent">
         <content expr="_event.data"/>

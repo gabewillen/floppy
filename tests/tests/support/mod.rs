@@ -723,8 +723,9 @@ const ROOM_PARTICIPANTS: &str = r#"<assign location="participants" expr="['flopp
 /// The holdings `environments/room/room.scx` declares.
 const ROOM_HOLDINGS: &str = r#"<data id="holdings" expr="({floppy: []})"/>"#;
 
-/// Lays `environments/room/` (its document, script and schema twins) into
-/// the scratch layout `dir`, whose `bots/floppy/` it invokes, and returns
+/// Lays `environments/room/` (its document and script, with the
+/// `abilities/schemas/` and `bots/floppy/schemas/` files it references)
+/// into the scratch layout `dir`, whose `bots/floppy/` it invokes, and returns
 /// the path of its document. The room invokes one floppy bot per id in
 /// `bots` (each a participant), each with `params` (`(name, ECMAScript
 /// expression)`) after its `environment` and `owned_devices`: the test's
@@ -748,6 +749,14 @@ pub fn environment_with_devices(
 ) -> PathBuf {
     let room = dir.join("environments/room");
     copy_tree(&workspace().join("environments/room"), &room);
+    copy_tree(
+        &workspace().join("abilities/schemas"),
+        &dir.join("abilities/schemas"),
+    );
+    copy_tree(
+        &workspace().join("bots/floppy/schemas"),
+        &dir.join("bots/floppy/schemas"),
+    );
     for device in devices {
         // A device the test laid out beside the room itself has no fixture.
         let fixture = workspace().join("tests/fixtures/environment").join(device);
@@ -848,11 +857,16 @@ pub fn environment_for(body: &Path, params: &[(&str, &str)]) -> String {
 }
 
 /// Copies the ability `name` (`abilities/<name>/`: its document, its
-/// script, its schema twins, and any data beside them) into `abilities`,
-/// and returns the path of its copied document. The memory ability comes
+/// script, and any data beside them) into `abilities`, with the
+/// abilities' schemas (`abilities/schemas/`, which it references as
+/// `../schemas/<event>.json`), and returns the path of its copied document. The memory ability comes
 /// with the migration ability it invokes, and the conversation with its
 /// turn detector.
 pub fn copy_ability(name: &str, abilities: &Path) -> PathBuf {
+    copy_tree(
+        &workspace().join("abilities/schemas"),
+        &abilities.join("schemas"),
+    );
     copy_tree(
         &workspace().join("abilities").join(name),
         &abilities.join(name),

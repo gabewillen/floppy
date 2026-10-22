@@ -196,12 +196,12 @@
     </onentry>
 
     <state id="inactive">
-      <transition event="bot.ability.conversation.routed_input" event:schema="schemas/bot.ability.conversation.routed_input.json"
+      <transition event="bot.ability.conversation.routed_input" event:schema="../schemas/bot.ability.conversation.routed_input.json"
                   target="running">
         <assign location="input" expr="_event.data.parent.data"/>
         <assign location="parent" expr="_event.data.parent"/>
       </transition>
-      <transition event="bot.ability.conversation.input" event:schema="schemas/bot.ability.conversation.input.json"
+      <transition event="bot.ability.conversation.input" event:schema="../schemas/bot.ability.conversation.input.json"
                   target="running">
         <assign location="input" expr="_event.data"/>
         <assign location="parent" expr="inputEnvelope()"/>
@@ -210,12 +210,12 @@
 
     <state id="active" initial="waiting">
       <state id="waiting">
-        <transition event="bot.ability.conversation.routed_input" event:schema="schemas/bot.ability.conversation.routed_input.json"
+        <transition event="bot.ability.conversation.routed_input" event:schema="../schemas/bot.ability.conversation.routed_input.json"
                     target="running">
           <assign location="input" expr="_event.data.parent.data"/>
           <assign location="parent" expr="_event.data.parent"/>
         </transition>
-        <transition event="bot.ability.conversation.input" event:schema="schemas/bot.ability.conversation.input.json"
+        <transition event="bot.ability.conversation.input" event:schema="../schemas/bot.ability.conversation.input.json"
                     target="running">
           <assign location="input" expr="_event.data"/>
           <assign location="parent" expr="inputEnvelope()"/>
@@ -236,11 +236,11 @@
           <assign location="turns" expr="[]"/>
         </onentry>
         <!-- Input that arrives meanwhile waits (the original defers it). -->
-        <transition event="bot.ability.conversation.routed_input" event:schema="schemas/bot.ability.conversation.routed_input.json">
+        <transition event="bot.ability.conversation.routed_input" event:schema="../schemas/bot.ability.conversation.routed_input.json">
           <event:defer/>
           <log label="conversation.deferred" expr="_event.name"/>
         </transition>
-        <transition event="bot.ability.conversation.input" event:schema="schemas/bot.ability.conversation.input.json">
+        <transition event="bot.ability.conversation.input" event:schema="../schemas/bot.ability.conversation.input.json">
           <event:defer/>
           <log label="conversation.deferred" expr="_event.name"/>
         </transition>
@@ -262,10 +262,10 @@
             <param name="database" expr="database"/>
             <param name="statements" expr="memoryRecallStatements()"/>
           </invoke>
-          <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="turn_exchange">
+          <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="turn_exchange">
             <assign location="recalled" expr="recalledCount(_event)"/>
           </transition>
-          <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="waiting">
+          <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="waiting">
             <send event="bot.ability.conversation.failed" target="#_parent">
               <param name="stage" expr="'memory'"/>
               <param name="message" expr="memoryFailedMessage(_event)"/>
@@ -295,7 +295,7 @@
             <onexit>
               <cancel sendidexpr="timer"/>
             </onexit>
-            <transition event="bot.ability.turn_detector.ready" event:schema="schemas/bot.ability.turn_detector.ready.json" target="exchange">
+            <transition event="bot.ability.turn_detector.ready" event:schema="../schemas/bot.ability.turn_detector.ready.json" target="exchange">
               <conversation:participant_for_source location="relationships[relationship_index]"
                                                    source="turn_sources[turn_index]"/>
               <conversation:content_for_detector location="turn_content" input="input"
@@ -322,7 +322,7 @@
               <cancel sendidexpr="timer"/>
             </onexit>
             <transition event="bot.ability.turn_detector.turn.complete"
-                        event:schema="schemas/bot.ability.turn_detector.turn.complete.json"
+                        event:schema="../schemas/bot.ability.turn_detector.turn.complete.json"
                         cond="isExchangedTurn(_event)" target="turn_exchange">
               <assign location="turns" expr="turnsWith(_event)"/>
               <assign location="turn_index" expr="turn_index + 1"/>
@@ -338,7 +338,7 @@
           </state>
           <!-- Every source has its turn: on to memory. -->
           <transition cond="hasAllTurns()" target="remembering_from"/>
-          <transition event="bot.ability.turn_detector.failed" event:schema="schemas/bot.ability.turn_detector.failed.json" target="waiting">
+          <transition event="bot.ability.turn_detector.failed" event:schema="../schemas/bot.ability.turn_detector.failed.json" target="waiting">
             <conversation:fail_turn location="relationships[relationship_index]"
                                     source="turn_sources[turn_index]"/>
             <send event="bot.ability.conversation.failed" target="#_parent">
@@ -372,10 +372,10 @@
             <param name="database" expr="database"/>
             <param name="statements" expr="memoryInsertStatements()"/>
           </invoke>
-          <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="committing">
+          <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="committing">
             <log label="conversation.memories" expr="memoriesLog(_event)"/>
           </transition>
-          <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="waiting">
+          <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="waiting">
             <assign location="relationships[relationship_index].participants" expr="participants"/>
             <send event="bot.ability.conversation.failed" target="#_parent">
               <param name="stage" expr="'memory'"/>
@@ -426,7 +426,7 @@
 
     <!-- An outbound record, in either state, committed once; answered
          either way. -->
-    <transition event="bot.ability.conversation.append" event:schema="schemas/bot.ability.conversation.append.json"
+    <transition event="bot.ability.conversation.append" event:schema="../schemas/bot.ability.conversation.append.json"
                 cond="isOutboundAppend(_event)">
       <if cond="isCommittedAppend(_event)">
         <log label="conversation" expr="alreadyCommittedLog(_event)"/>
@@ -443,7 +443,7 @@
       </send>
     </transition>
     <!-- The participants' detectors, in any state. -->
-    <transition event="bot.ability.conversation.snapshot.request" event:schema="schemas/bot.ability.conversation.snapshot.request.json">
+    <transition event="bot.ability.conversation.snapshot.request" event:schema="../schemas/bot.ability.conversation.snapshot.request.json">
       <conversation:detector_refs location="detector_refs" relationships="relationships"/>
       <send event="bot.ability.conversation.snapshot.output" target="#_parent">
         <param name="request_ref" expr="_event.data.request_ref"/>

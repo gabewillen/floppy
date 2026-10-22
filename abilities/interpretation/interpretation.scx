@@ -193,7 +193,7 @@
         <assign location="utterance" expr="null"/>
         <assign location="stage" expr="null"/>
       </onentry>
-      <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json" target="DetectingVoice">
+      <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json" target="DetectingVoice">
         <assign location="sensed" expr="_event.data"/>
         <foreach array="soundParticipants(sensed)" item="participant">
           <if cond="isNewParticipant(participant)">
@@ -206,10 +206,10 @@
     <!-- One busy region: the deferral and the stage failure policy live
          once, not on every stage. -->
     <state id="Working" initial="DetectingVoice">
-      <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json">
+      <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json">
         <event:defer/>
       </transition>
-      <transition event="bot.ability.listening.stage.failed" event:schema="schemas/bot.ability.listening.stage.failed.json"
+      <transition event="bot.ability.listening.stage.failed" event:schema="../schemas/bot.ability.listening.stage.failed.json"
                   cond="isCurrentStageFailure(_event)" target="Idle">
         <send event="bot.ability.listening.failed" target="#_parent">
           <content expr="_event.data"/>
@@ -296,7 +296,7 @@
             </send>
           </if>
         </onentry>
-        <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json" target="FeedingSpeech">
+        <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json" target="FeedingSpeech">
           <assign location="sensed" expr="_event.data"/>
           <foreach array="soundParticipants(sensed)" item="participant">
             <if cond="isNewParticipant(participant)">
@@ -383,7 +383,7 @@
           <param name="output" expr="utteranceOutput()"/>
           <param name="wav" expr="open_wav"/>
         </invoke>
-        <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json">
+        <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json">
           <send event="bot.ability.listening.stage.failed" target="#_internal">
             <content expr="childFailure(_event)"/>
           </send>

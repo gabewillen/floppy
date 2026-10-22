@@ -106,7 +106,7 @@
         <param name="choices" expr="[]"/>
       </send>
     </onentry>
-    <transition event="bot.ability.speaking.input" event:schema="schemas/bot.ability.speaking.input.json"
+    <transition event="bot.ability.speaking.input" event:schema="../schemas/bot.ability.speaking.input.json"
                 target="encoding">
       <assign location="text" expr="spokenText(_event.data.text)"/>
     </transition>
@@ -136,24 +136,24 @@
       <param name="voice" expr="voice"/>
       <param name="media_type" expr="media_type"/>
     </invoke>
-    <transition event="bot.ability.offers" event:schema="schemas/bot.ability.offers.json">
+    <transition event="bot.ability.offers" event:schema="../schemas/bot.ability.offers.json">
       <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal">
         <param name="text" expr="text"/>
       </send>
     </transition>
-    <transition event="bot.ability.vocal.speech.encoding.output" event:schema="schemas/bot.ability.vocal.speech.encoding.output.json" target="playing">
+    <transition event="bot.ability.vocal.speech.encoding.output" event:schema="../schemas/bot.ability.vocal.speech.encoding.output.json" target="playing">
       <assign location="encoded" expr="encodedSpeech(_event)"/>
       <assign location="encoded.sample_rate_hz" expr="encodedSampleRate()"/>
       <assign location="encoded.channels" expr="encodedChannels()"/>
       <assign location="encoded.media_type" expr="encodedMediaType()"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="idle">
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="idle">
       <assign location="message" expr="_event.data.message"/>
       <send event="bot.ability.failed" target="#_parent">
         <param name="message" expr="message"/>
       </send>
     </transition>
-    <transition event="bot.ability.speaking.apply.failed" event:schema="schemas/bot.ability.speaking.apply.failed.json"
+    <transition event="bot.ability.speaking.apply.failed" event:schema="../schemas/bot.ability.speaking.apply.failed.json"
                 cond="isTimer(_event)" target="idle">
       <log label="speaking.timed_out" expr="encodingTimedOutLog()"/>
       <send event="bot.ability.failed" target="#_parent">
@@ -166,7 +166,7 @@
       </send>
     </transition>
     <!-- Input that arrives meanwhile waits (the original defers it). -->
-    <transition event="bot.ability.speaking.input" event:schema="schemas/bot.ability.speaking.input.json">
+    <transition event="bot.ability.speaking.input" event:schema="../schemas/bot.ability.speaking.input.json">
       <event:defer/>
       <log label="speaking.deferred" expr="_event.name"/>
     </transition>
@@ -203,7 +203,7 @@
     </transition>
     <!-- Input still waits (the original defers it here too); it was logged
          when it arrived. -->
-    <transition event="bot.ability.speaking.input" event:schema="schemas/bot.ability.speaking.input.json">
+    <transition event="bot.ability.speaking.input" event:schema="../schemas/bot.ability.speaking.input.json">
       <event:defer/>
     </transition>
   </state>
@@ -230,7 +230,7 @@
         <content expr="product"/>
       </send>
     </transition>
-    <transition event="bot.ability.speaking.apply.failed" event:schema="schemas/bot.ability.speaking.apply.failed.json"
+    <transition event="bot.ability.speaking.apply.failed" event:schema="../schemas/bot.ability.speaking.apply.failed.json"
                 cond="isTimer(_event)" target="idle">
       <log label="speaking.timed_out" expr="recordingTimedOutLog()"/>
       <send event="bot.ability.failed" target="#_parent">
@@ -244,7 +244,7 @@
     </transition>
     <!-- Input still waits (the original defers it here too); it was logged
          when it arrived. -->
-    <transition event="bot.ability.speaking.input" event:schema="schemas/bot.ability.speaking.input.json">
+    <transition event="bot.ability.speaking.input" event:schema="../schemas/bot.ability.speaking.input.json">
       <event:defer/>
     </transition>
   </state>

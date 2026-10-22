@@ -64,7 +64,7 @@
 
   <parallel id="active">
     <state id="inventory" initial="reconciling">
-      <transition event="bot.ability.routines.reconcile" event:schema="schemas/bot.ability.routines.reconcile.json"
+      <transition event="bot.ability.routines.reconcile" event:schema="../schemas/bot.ability.routines.reconcile.json"
                   type="internal" target="reconciling"/>
 
       <state id="reconciling" initial="recalling">
@@ -78,7 +78,7 @@
             <param name="database" expr="database"/>
             <param name="statements" expr="routinesSelectStatements()"/>
           </invoke>
-          <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json">
+          <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json">
             <assign location="desired" expr="routinesFromMemoryOutput(_event)"/>
           </transition>
           <transition event="done.invoke.recall" target="running">
@@ -86,7 +86,7 @@
             <assign location="routines" expr="desired"/>
             <raise event="bot.ability.routines.reconciled"/>
           </transition>
-          <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="running">
+          <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="running">
             <log label="bot.ability.routines.reconcile.failed" expr="reconcileFailedLog(_event.data.message)"/>
           </transition>
           <transition event="error.*" target="running">
@@ -124,12 +124,12 @@
         <invoke id="runner" type="scxml" src="../routines_runner/routines_runner.scx">
           <param name="routines" expr="routines"/>
         </invoke>
-        <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
+        <transition event="bot.behavior.tick" event:schema="../schemas/bot.behavior.tick.json"
                     cond="In('reconciling')">
           <assign location="ticks" expr="ticks.concat([_event.data])"/>
           <log label="routines.deferred" expr="_event.data.name"/>
         </transition>
-        <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json">
+        <transition event="bot.behavior.tick" event:schema="../schemas/bot.behavior.tick.json">
           <send event="bot.behavior.tick" target="#_parent">
             <content expr="_event.data"/>
           </send>

@@ -47,7 +47,7 @@
   <parallel id="running">
     <!-- A tick from the chain (the routine's, or the rest's): one
          transition here, so a tick goes up once whichever region is on. -->
-    <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json"
+    <transition event="bot.behavior.tick" event:schema="../schemas/bot.behavior.tick.json"
                 cond="isRoutineTick(_event)">
       <send event="bot.behavior.tick" target="#_parent">
         <content expr="_event.data"/>

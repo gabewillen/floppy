@@ -4,7 +4,8 @@
 //! `scx run` on the logical clock.
 //!
 //! Each test lays out a scratch `abilities/` with the harness and copies of
-//! `reading/` and `vision/` (documents, scripts and schema twins).
+//! `reading/` and `vision/` (documents and scripts) and the abilities'
+//! schemas they reference.
 //! The harness invokes reading as its child "reading", sends it each input
 //! once it is invoked, logs every answer (`harness`, the event name and its
 //! JSON), and ends after one answer per input.

@@ -85,7 +85,7 @@
     <invoke id="sensitivity" type="scxml" src="../sensitivity/sensitivity.scx"/>
     <invoke id="interpretation" type="scxml" src="../interpretation/interpretation.scx"/>
 
-    <transition event="bot.ability.offers" event:schema="schemas/bot.ability.offers.json">
+    <transition event="bot.ability.offers" event:schema="../schemas/bot.ability.offers.json">
       <assign location="ready[_event.data.ability]" expr="true"/>
     </transition>
     <!-- A child that cannot run, or ends, degrades the ability. -->
@@ -103,7 +103,7 @@
       <transition event="error.*" target="degraded">
         <log label="listening.degraded" expr="childCouldNotStartLog(_event)"/>
       </transition>
-      <transition event="environment.sound" event:schema="schemas/environment.sound.json">
+      <transition event="environment.sound" event:schema="../schemas/environment.sound.json">
         <event:defer/>
       </transition>
     </state>
@@ -117,14 +117,14 @@
       </onentry>
       <!-- The body's report of what it is producing reaches the
            prediction from wherever perception happens to be. -->
-      <transition event="bot.ability.speaking.efference" event:schema="schemas/bot.ability.speaking.efference.json">
+      <transition event="bot.ability.speaking.efference" event:schema="../schemas/bot.ability.speaking.efference.json">
         <send event="bot.ability.speaking.efference" target="#_sensitivity">
           <content expr="_event.data"/>
         </send>
       </transition>
       <!-- The interpretation's products and failures, out through this
            ability's own. -->
-      <transition event="bot.ability.listening.speech.output" event:schema="schemas/bot.ability.listening.speech.output.json">
+      <transition event="bot.ability.listening.speech.output" event:schema="../schemas/bot.ability.listening.speech.output.json">
         <assign location="product" expr="({})"/>
         <assign location="product.event" expr="_event.name"/>
         <assign location="product.data" expr="_event.data"/>
@@ -135,19 +135,19 @@
           <param name="participants" expr="productParticipants(_event)"/>
         </send>
       </transition>
-      <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json">
+      <transition event="bot.ability.cognition.input" event:schema="../schemas/bot.ability.cognition.input.json">
         <send event="bot.ability.cognition.input" target="#_parent">
           <content expr="_event.data"/>
         </send>
       </transition>
-      <transition event="bot.ability.listening.failed" event:schema="schemas/bot.ability.listening.failed.json">
+      <transition event="bot.ability.listening.failed" event:schema="../schemas/bot.ability.listening.failed.json">
         <send event="bot.ability.listening.failed" target="#_parent">
           <content expr="_event.data"/>
         </send>
       </transition>
 
       <state id="Listening">
-        <transition event="environment.sound" event:schema="schemas/environment.sound.json" target="Sensing">
+        <transition event="environment.sound" event:schema="../schemas/environment.sound.json" target="Sensing">
           <assign location="sound" expr="_event.data"/>
         </transition>
       </state>
@@ -165,15 +165,15 @@
         <onexit>
           <cancel sendid="sensing-timer"/>
         </onexit>
-        <transition event="environment.sound" event:schema="schemas/environment.sound.json">
+        <transition event="environment.sound" event:schema="../schemas/environment.sound.json">
           <event:defer/>
         </transition>
-        <transition event="bot.ability.listening.sensitivity.output" event:schema="schemas/bot.ability.listening.sensitivity.output.json" target="Listening">
+        <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json" target="Listening">
           <send event="bot.ability.listening.sensitivity.output" target="#_interpretation">
             <content expr="_event.data"/>
           </send>
         </transition>
-        <transition event="bot.ability.listening.sensitivity.failed" event:schema="schemas/bot.ability.listening.sensitivity.failed.json" target="Listening">
+        <transition event="bot.ability.listening.sensitivity.failed" event:schema="../schemas/bot.ability.listening.sensitivity.failed.json" target="Listening">
           <send event="bot.ability.listening.failed" target="#_parent">
             <content expr="_event.data"/>
           </send>

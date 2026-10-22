@@ -255,7 +255,7 @@
       <assign location="failure" expr="null"/>
       <assign location="episode" expr="null"/>
     </transition>
-    <transition event="bot.ability.reflection.input" event:schema="schemas/bot.ability.reflection.input.json"
+    <transition event="bot.ability.reflection.input" event:schema="../schemas/bot.ability.reflection.input.json"
                 target="recalling">
       <assign location="turn" expr="_event.data.turn"/>
       <assign location="cognition_input" expr="_event.data.cognition_input"/>
@@ -270,7 +270,7 @@
 
   <!-- The prior episodes and the whole inventory, in one transaction. -->
   <state id="recalling">
-    <transition event="bot.ability.reflection.input" event:schema="schemas/bot.ability.reflection.input.json">
+    <transition event="bot.ability.reflection.input" event:schema="../schemas/bot.ability.reflection.input.json">
       <assign location="deferred" expr="deferred.concat([_event.data])"/>
     </transition>
     <onentry>
@@ -288,13 +288,13 @@
       <param name="database" expr="database"/>
       <param name="statements" expr="statements"/>
     </invoke>
-    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="processing">
+    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="processing">
       <assign location="prior_episodes" expr="recalledEpisodes(_event)"/>
       <behavior:instances_from_behavior_results location="behaviors"
           behaviors="_event.data.results[1]" triggers="_event.data.results[2]"/>
       <log label="reflection" expr="recalledLog()"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="failing">
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failing">
       <assign location="failure" expr="recallFailedMessage(_event.data.message)"/>
     </transition>
     <transition event="error.*" target="failing">
@@ -305,7 +305,7 @@
   <!-- The select step: one structured model call over the enabled
        transitions for the inventory events. -->
   <state id="processing">
-    <transition event="bot.ability.reflection.input" event:schema="schemas/bot.ability.reflection.input.json">
+    <transition event="bot.ability.reflection.input" event:schema="../schemas/bot.ability.reflection.input.json">
       <assign location="deferred" expr="deferred.concat([_event.data])"/>
     </transition>
     <onentry>
@@ -361,15 +361,15 @@
     </transition>
 
     <!-- The inventory events (the reference behavior_events()). -->
-    <transition event="bot.behavior.create" event:schema="schemas/bot.behavior.create.json" target="revising">
+    <transition event="bot.behavior.create" event:schema="../schemas/bot.behavior.create.json" target="revising">
       <assign location="create_intent" expr="_event.data"/>
       <assign location="intent" expr="_event.data"/>
     </transition>
-    <transition event="bot.behavior.change" event:schema="schemas/bot.behavior.change.json" target="revising">
+    <transition event="bot.behavior.change" event:schema="../schemas/bot.behavior.change.json" target="revising">
       <assign location="create_intent" expr="null"/>
       <assign location="intent" expr="_event.data"/>
     </transition>
-    <transition event="bot.behavior.break" event:schema="schemas/bot.behavior.break.json" target="breaking">
+    <transition event="bot.behavior.break" event:schema="../schemas/bot.behavior.break.json" target="breaking">
       <assign location="behavior" expr="_event.data"/>
     </transition>
 
@@ -391,7 +391,7 @@
 
   <!-- The original _apply_break: status BROKEN, the row kept. -->
   <state id="breaking">
-    <transition event="bot.ability.reflection.input" event:schema="schemas/bot.ability.reflection.input.json">
+    <transition event="bot.ability.reflection.input" event:schema="../schemas/bot.ability.reflection.input.json">
       <assign location="deferred" expr="deferred.concat([_event.data])"/>
     </transition>
     <onentry>
@@ -401,14 +401,14 @@
       <param name="database" expr="database"/>
       <param name="statements" expr="statements"/>
     </invoke>
-    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json"
+    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json"
                 cond="hasBrokenBehavior(_event)" target="storing">
       <log label="reflection.inventory" expr="brokenLog()"/>
     </transition>
-    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="failing">
+    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="failing">
       <assign location="failure" expr="unknownBreakMessage()"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="failing">
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failing">
       <assign location="failure" expr="breakFailedMessage(_event.data.message)"/>
     </transition>
     <transition event="error.*" target="failing">
@@ -419,7 +419,7 @@
   <!-- The original Revision: author and check one create or change with the
        builder bot, then store the result. -->
   <state id="revising" initial="preparing">
-    <transition event="bot.ability.reflection.input" event:schema="schemas/bot.ability.reflection.input.json">
+    <transition event="bot.ability.reflection.input" event:schema="../schemas/bot.ability.reflection.input.json">
       <assign location="deferred" expr="deferred.concat([_event.data])"/>
     </transition>
     <onentry>
@@ -460,12 +460,12 @@
         <param name="database" expr="database"/>
         <param name="statements" expr="statements"/>
       </invoke>
-      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="reading">
+      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="reading">
         <behavior:instances_from_behavior_results location="prepared"
             behaviors="_event.data.results.at(-2)" triggers="_event.data.results.at(-1)"/>
         <assign location="existing_behavior" expr="preparedBehavior()"/>
       </transition>
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="failing">
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failing">
         <assign location="failure" expr="revisionFailedMessage(_event.data.message)"/>
       </transition>
       <transition event="error.*" target="failing">
@@ -574,10 +574,10 @@
         <param name="database" expr="database"/>
         <param name="statements" expr="statements"/>
       </invoke>
-      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="storing">
+      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="storing">
         <log label="reflection.inventory" expr="acceptedLog()"/>
       </transition>
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="failing">
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failing">
         <assign location="failure" expr="revisionFailedMessage(_event.data.message)"/>
       </transition>
       <transition event="error.*" target="failing">
@@ -595,17 +595,17 @@
         <param name="database" expr="database"/>
         <param name="statements" expr="statements"/>
       </invoke>
-      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="failing">
+      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="failing">
         <log label="reflection.inventory" expr="draftLog()"/>
       </transition>
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="failing"/>
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failing"/>
       <transition event="error.*" target="failing"/>
     </state>
   </state>
 
   <!-- The original _store_activity: this turn's episode. -->
   <state id="storing">
-    <transition event="bot.ability.reflection.input" event:schema="schemas/bot.ability.reflection.input.json">
+    <transition event="bot.ability.reflection.input" event:schema="../schemas/bot.ability.reflection.input.json">
       <assign location="deferred" expr="deferred.concat([_event.data])"/>
     </transition>
     <onentry>
@@ -616,11 +616,11 @@
       <param name="database" expr="database"/>
       <param name="statements" expr="statements"/>
     </invoke>
-    <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="idle">
+    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="idle">
       <log label="reflection.stored" expr="storedLog()"/>
       <send event="bot.ability.reflection.output" target="#_parent"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="failing">
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failing">
       <assign location="failure" expr="episodeStoreFailedMessage(_event.data.message)"/>
     </transition>
     <transition event="error.*" target="failing">
@@ -632,7 +632,7 @@
        after the turn's episode is stored with no behavior when storing has
        not been tried (decision D97: reflection alone records the turn). -->
   <state id="failing" initial="failing_from">
-    <transition event="bot.ability.reflection.input" event:schema="schemas/bot.ability.reflection.input.json">
+    <transition event="bot.ability.reflection.input" event:schema="../schemas/bot.ability.reflection.input.json">
       <assign location="deferred" expr="deferred.concat([_event.data])"/>
     </transition>
     <state id="failing_from">
@@ -648,10 +648,10 @@
         <param name="database" expr="database"/>
         <param name="statements" expr="statements"/>
       </invoke>
-      <transition event="bot.ability.memory.output" event:schema="schemas/bot.ability.memory.output.json" target="failing_reported">
+      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="failing_reported">
         <log label="reflection.stored" expr="storedLog()"/>
       </transition>
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="failing_reported"/>
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failing_reported"/>
       <transition event="error.*" target="failing_reported"/>
     </state>
     <state id="failing_reported">

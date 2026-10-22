@@ -62,7 +62,7 @@
                 cond="hasSegments(_event)" target="applied">
       <assign location="result" expr="diarizedResult(_event)"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json" target="applied">
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="applied">
       <assign location="result" expr="failedResult(_event)"/>
     </transition>
     <transition event="done.invoke.diarizer" target="applied">

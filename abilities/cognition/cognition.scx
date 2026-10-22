@@ -182,7 +182,7 @@
         <param name="choices" expr="offered"/>
       </send>
     </onentry>
-    <transition event="bot.ability.cognition.input" event:schema="schemas/bot.ability.cognition.input.json"
+    <transition event="bot.ability.cognition.input" event:schema="../schemas/bot.ability.cognition.input.json"
                 target="processing">
       <assign location="turn" expr="_event.data.turn"/>
       <assign location="stimulus" expr="_event.data.stimulus"/>
@@ -192,12 +192,12 @@
       <assign location="environment" expr="inputEnvironment(_event)"/>
     </transition>
     <!-- Nothing in flight: acknowledge at once. -->
-    <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json">
+    <transition event="bot.ability.cognition.cancel" event:schema="../schemas/bot.ability.cognition.cancel.json">
       <send event="bot.ability.cognition.cancelled" target="#_parent">
         <param name="turn" expr="_event.data.turn"/>
       </send>
     </transition>
-    <transition event="bot.ability.cognition.ignore" event:schema="schemas/bot.ability.cognition.ignore.json">
+    <transition event="bot.ability.cognition.ignore" event:schema="../schemas/bot.ability.cognition.ignore.json">
       <log label="cognition.ignore" expr="'idle'"/>
     </transition>
   </state>
@@ -209,11 +209,11 @@
       <assign location="failure" expr="null"/>
       <log label="cognition" expr="processingLog()"/>
     </onentry>
-    <transition event="bot.ability.cognition.ignore" event:schema="schemas/bot.ability.cognition.ignore.json">
+    <transition event="bot.ability.cognition.ignore" event:schema="../schemas/bot.ability.cognition.ignore.json">
       <log label="cognition.ignore" expr="turnLog()"/>
     </transition>
     <!-- A stage that does not answer in time: ask the body for a reboot. -->
-    <transition event="bot.ability.cognition.child.hop.timed_out" event:schema="schemas/bot.ability.cognition.child.hop.timed_out.json"
+    <transition event="bot.ability.cognition.child.hop.timed_out" event:schema="../schemas/bot.ability.cognition.child.hop.timed_out.json"
                 cond="isChildHopTimeout(_event)" target="rebooting">
       <log label="cognition.hop.timed_out" expr="hopTimeoutLog(_event)"/>
       <assign location="reboot_reason" expr="'cognition_child_teardown_failed'"/>
@@ -239,7 +239,7 @@
         <param name="stimulus" expr="stimulus"/>
         <param name="database" expr="database"/>
       </invoke>
-      <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
+      <transition event="bot.ability.cognition.cancel" event:schema="../schemas/bot.ability.cognition.cancel.json"
                   cond="isCurrentTurn(_event)" target="cancelling_autonomy"/>
       <transition event="done.invoke.autonomy" cond="isHandled(_event)" target="completing">
         <log label="cognition.stage" expr="'autonomy handled'"/>
@@ -279,7 +279,7 @@
         <param name="environment" expr="environment"/>
         <param name="confidence_tuner" expr="confidence_tuner"/>
       </invoke>
-      <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
+      <transition event="bot.ability.cognition.cancel" event:schema="../schemas/bot.ability.cognition.cancel.json"
                   cond="isCurrentTurn(_event)" target="cancelling_intuition"/>
       <transition event="done.invoke.intuition" cond="isHandled(_event)" target="completing">
         <assign location="confidence_tuner" expr="intuitionTuner(_event)"/>
@@ -327,7 +327,7 @@
         <param name="model" expr="model"/>
         <param name="database" expr="database"/>
       </invoke>
-      <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json"
+      <transition event="bot.ability.cognition.cancel" event:schema="../schemas/bot.ability.cognition.cancel.json"
                   cond="isCurrentTurn(_event)" target="cancelling_reasoning"/>
       <!-- Reasoning's streamed reply is arriving: the inactivity bound
            starts, or starts over (decision D101). -->
@@ -412,20 +412,20 @@
         <param name="model" expr="model"/>
         <param name="bounds" expr="bounds"/>
       </invoke>
-      <transition event="bot.ability.reflection.output" event:schema="schemas/bot.ability.reflection.output.json">
+      <transition event="bot.ability.reflection.output" event:schema="../schemas/bot.ability.reflection.output.json">
         <log label="bot.ability.reflection.output" expr="turnLog()"/>
         <send event="bot.ability.routines.reconcile" target="#_routines">
           <content expr="({})"/>
         </send>
       </transition>
-      <transition event="bot.ability.failed" event:schema="schemas/bot.ability.failed.json">
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json">
         <log label="cognition.reflection.failed" expr="_event.data.message"/>
         <send event="bot.ability.routines.reconcile" target="#_routines">
           <content expr="({})"/>
         </send>
       </transition>
       <!-- The original _forward_reflection_reboot: the body restarts this ability. -->
-      <transition event="bot.reboot" event:schema="schemas/bot.reboot.json" target="rebooting">
+      <transition event="bot.reboot" event:schema="../schemas/bot.reboot.json" target="rebooting">
         <assign location="reboot_reason" expr="_event.data.reason"/>
       </transition>
       <transition event="error.communication.reflection" target="reflection_stopped">
@@ -442,7 +442,7 @@
       <invoke id="routines" type="scxml" src="../routines/routines.scx">
         <param name="database" expr="database"/>
       </invoke>
-      <transition event="bot.behavior.tick" event:schema="schemas/bot.behavior.tick.json">
+      <transition event="bot.behavior.tick" event:schema="../schemas/bot.behavior.tick.json">
         <assign location="tick" expr="({})"/>
         <assign location="tick.event" expr="_event.name"/>
         <assign location="tick.data" expr="_event.data"/>
@@ -467,7 +467,7 @@
       </send>
     </onentry>
     <!-- The turn is lost: acknowledge a cancel for it at once. -->
-    <transition event="bot.ability.cognition.cancel" event:schema="schemas/bot.ability.cognition.cancel.json">
+    <transition event="bot.ability.cognition.cancel" event:schema="../schemas/bot.ability.cognition.cancel.json">
       <send event="bot.ability.cognition.cancelled" target="#_parent">
         <param name="turn" expr="_event.data.turn"/>
       </send>

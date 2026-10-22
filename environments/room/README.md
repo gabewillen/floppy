@@ -34,6 +34,8 @@ What it does (the original's behavior, decisions D103, D105, D108):
 Each bot gets `environment` (the room's `_sessionid`, D106) and
 `owned_devices` (each held device's reference to its address,
 `<_sessionid>.<invoke id>`, D110) as `<param>`s. The schemas it takes are
-byte-identical twins in [`schemas/`](schemas). Run it as
+referenced where they live, in
+[`bots/floppy/schemas/`](../../bots/floppy/schemas) and
+[`abilities/schemas/`](../../abilities/schemas). Run it as
 [`bots/floppy/README.md`](../../bots/floppy/README.md) says, with
 `--fuel 9223372036854775807` (D111).
