@@ -1105,7 +1105,7 @@ fn the_bot_sends_its_environment_to_the_cognition() {
         environments(&records),
         [json!({
             "id": "session",
-            "self": {"state": "processing", "owned_devices": {"lamp": {
+            "self": {"state": "processing", "held_percepts": 0, "owned_devices": {"lamp": {
                 "ref": "lamp",
                 "id": "session.lamp",
                 "state": "off",
