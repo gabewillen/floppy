@@ -869,6 +869,12 @@ The remaining the original port runs as one ultracode run with these grants:
 
 ## Backlog (agreed, not started)
 
+- scxml.rs: check a service's WASI grant only when an invocation of it
+  starts (or let a run declare a grant optional). `scx run` resolves every
+  service the bound document tree names before the session starts, even one
+  in a state never entered, so the floppy bot's every run grants the vision
+  service its media directory though seeing is off by default (D185, PR #8).
+  With the check moved, the default run would need no vision grant.
 - Browser parity slice 2 (services, resolution, WASI shims, element trace).
 - `scx compile --target native`: one self-contained executable per platform;
   top-level `<data>` ids are the arguments, `<donedata>` JSON on stdout,
