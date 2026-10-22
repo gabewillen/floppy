@@ -1,0 +1,83 @@
+{
+  "category": "reflex",
+  "intent": "The user teaches a greeting reflex: whenever anyone says good morning, answer 'Good morning, sunshine!'. Probes check the exact trigger, a natural variation, and a near miss that must not trigger it.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "say": "Whenever anyone says 'good morning' to you, always answer with 'Good morning, sunshine!'"
+        },
+        {
+          "say": "good morning"
+        },
+        {
+          "say": "Good morning! How are you today?",
+          "source": "sam"
+        },
+        {
+          "say": "good night"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "learned",
+      "by": [
+        0,
+        0
+      ],
+      "lifetime": "turn",
+      "weight": 3
+    },
+    {
+      "check": "reflex",
+      "at": [
+        0,
+        1
+      ],
+      "weight": 2
+    },
+    {
+      "check": "says",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "sunshine",
+      "weight": 1
+    },
+    {
+      "check": "reflex",
+      "at": [
+        0,
+        2
+      ],
+      "weight": 1
+    },
+    {
+      "check": "says",
+      "at": [
+        0,
+        2
+      ],
+      "pattern": "sunshine",
+      "weight": 1
+    },
+    {
+      "check": "not_says",
+      "at": [
+        0,
+        3
+      ],
+      "pattern": "sunshine",
+      "weight": 1
+    }
+  ],
+  "criteria": {
+    "learning": "The greeting rule becomes a learned behavior on the teaching turn.",
+    "firing": "'good morning' and a natural variation from another person get 'Good morning, sunshine!'.",
+    "precision": "'good night' does not get the morning greeting."
+  }
+}

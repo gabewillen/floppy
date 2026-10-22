@@ -1,0 +1,65 @@
+{
+  "category": "routine",
+  "intent": "The user asks for a reminder to drink water every minute. The bot should learn a persistent routine, remind on its own with no input while the clock runs, stop when asked, and stay quiet afterwards.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "say": "Please remind me to drink water every minute."
+        },
+        {
+          "wait_s": 200
+        },
+        {
+          "say": "Thanks, you can stop the water reminders now."
+        },
+        {
+          "wait_s": 150
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "learned",
+      "by": [
+        0,
+        0
+      ],
+      "lifetime": "persistent",
+      "weight": 3
+    },
+    {
+      "check": "ticks",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "water",
+      "min": 2,
+      "weight": 3
+    },
+    {
+      "check": "broken",
+      "by": [
+        0,
+        2
+      ],
+      "weight": 2
+    },
+    {
+      "check": "no_ticks",
+      "at": [
+        0,
+        3
+      ],
+      "weight": 2
+    }
+  ],
+  "criteria": {
+    "learning": "The request becomes a persistent routine on the turn it is asked.",
+    "schedule": "Water reminders arrive about once a minute with no input.",
+    "stopping": "Asked to stop, the bot stops the routine and no more reminders come."
+  }
+}

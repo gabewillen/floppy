@@ -1,0 +1,99 @@
+{
+  "category": "name",
+  "intent": "The bot starts with no name. The user gives it the name Juniper (not floppy, which its prompts already say), then addresses it by that name, checks it knows the name, addresses it by a different name, and restarts it to see the name survives.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "say": "Hi there! I'd like to give you a name. From now on, your name is Juniper."
+        },
+        {
+          "say": "Juniper, what's your name?"
+        },
+        {
+          "say": "Pixel, can you hear me?"
+        }
+      ]
+    },
+    {
+      "steps": [
+        {
+          "say": "Juniper, are you awake?"
+        },
+        {
+          "say": "What is your name?"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "adopted_name",
+      "at": [
+        0,
+        0
+      ],
+      "name": "Juniper",
+      "weight": 3
+    },
+    {
+      "check": "addressed",
+      "at": [
+        0,
+        1
+      ],
+      "name": "Juniper",
+      "weight": 2
+    },
+    {
+      "check": "says",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "juniper",
+      "weight": 1
+    },
+    {
+      "check": "not_addressed",
+      "at": [
+        0,
+        2
+      ],
+      "weight": 1
+    },
+    {
+      "check": "recalled_name",
+      "at": [
+        1,
+        0
+      ],
+      "name": "Juniper",
+      "weight": 2
+    },
+    {
+      "check": "addressed",
+      "at": [
+        1,
+        0
+      ],
+      "name": "Juniper",
+      "weight": 1
+    },
+    {
+      "check": "says",
+      "at": [
+        1,
+        1
+      ],
+      "pattern": "juniper",
+      "weight": 2
+    }
+  ],
+  "criteria": {
+    "adoption": "When given the name Juniper, the bot takes it as its own name (not just acknowledging it in words).",
+    "addressing": "The bot answers to Juniper and does not treat 'Pixel' as its name.",
+    "persistence": "After the restart the bot still knows and answers to Juniper."
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "category": "routine",
+  "intent": "The user asks the bot to say 'stretch break' every minute. The routine should run, and keep running after the bot restarts, with no new request.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "say": "Every minute, say 'stretch break' to me."
+        },
+        {
+          "wait_s": 150
+        }
+      ]
+    },
+    {
+      "steps": [
+        {
+          "wait_s": 150
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "learned",
+      "by": [
+        0,
+        0
+      ],
+      "lifetime": "persistent",
+      "weight": 3
+    },
+    {
+      "check": "ticks",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "stretch",
+      "min": 2,
+      "weight": 2
+    },
+    {
+      "check": "ticks",
+      "at": [
+        1,
+        0
+      ],
+      "pattern": "stretch",
+      "min": 2,
+      "weight": 3
+    }
+  ],
+  "criteria": {
+    "learning": "The request becomes a persistent routine on the turn it is asked.",
+    "schedule": "'stretch break' is said about once a minute with no input.",
+    "persistence": "After the restart the routine keeps running without being asked again."
+  }
+}
