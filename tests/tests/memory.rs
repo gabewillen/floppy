@@ -74,8 +74,13 @@ fn harness_on(database: &str, engine: &str, before: Option<&str>, statements: &s
 }
 
 /// Runs `document` beside a copy of the memory ability, granting the sql
-/// service `directory`.
+/// service `directory`, on the logical clock.
 fn run(directory: &Path, document: &str) -> Finished {
+    run_on(directory, document, "logical")
+}
+
+/// [`run`] on `clock` (`logical` or `wall`).
+fn run_on(directory: &Path, document: &str, clock: &str) -> Finished {
     let dir = unique_scratch("memory-ability");
     support::copy_ability("memory", &dir);
     let path = support::write(&dir, "harness.scx", document);
@@ -88,7 +93,7 @@ fn run(directory: &Path, document: &str) -> Finished {
                 directory.display()
             ),
             "--clock".to_owned(),
-            "logical".to_owned(),
+            clock.to_owned(),
             path.display().to_string(),
         ],
         &[],
@@ -231,20 +236,23 @@ fn statements_the_service_refuses_fail_as_invalid_input() {
 
 #[test]
 fn an_operation_over_its_timeout_fails_as_timeout() {
-    // The original's operation timeout, set as the invoker's <param>.
+    // The original's operation timeout, set as the invoker's <param>, on
+    // the wall clock (the logical clock does not move while a service
+    // works).
     let document = harness(None, "[{sql: 'SELECT 1'}]");
     let statements = r#"<param name="statements" expr="[{sql: 'SELECT 1'}]"/>"#;
     assert!(
         document.contains(statements),
         "the harness passes statements"
     );
-    let finished = run(
+    let finished = run_on(
         &unique_scratch("memory"),
         &document.replacen(
             statements,
             &format!(r#"{statements}<param name="operation_timeout_ms" expr="1"/>"#),
             1,
         ),
+        "wall",
     );
     assert_eq!(
         logs(&finished.records),
