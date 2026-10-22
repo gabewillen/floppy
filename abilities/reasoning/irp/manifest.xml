@@ -30,7 +30,7 @@
     </test>
   </assert>
   <assert id="reasoning-4" specnum="4" specid="#reasoning-4">
-    <![CDATA[A generate call that fails fails the turn with reason `the reasoning failed (<code>)`, the generate service's failure code: `status` for an error status, `schema-mismatch` for a selection outside the choices, `truncated` for a reply cut short, `malformed` for an answer that is no chat completion.]]>
+    <![CDATA[A generate call that fails fails the turn with reason `the reasoning failed (<code>)`, the generate service's failure code: `status` for an error status, `truncated` for a reply cut short, `malformed` for an answer that is no chat completion. A selection the dispatch tool refuses (`schema-mismatch`, or `not-json`) is repaired first (decision D142): the call is made again with the rejection as the prompt's feedback, at most twice, and the same rejection twice running, or one once the repairs are spent, fails the turn with reason `Selection rejected: <message>` (the rejection's message, else its code).]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>
@@ -39,6 +39,9 @@
     </test>
     <test id="132" conformance="mandatory" manual="false">
       <start uri="132/test132.scxml"/>
+    </test>
+    <test id="135" conformance="mandatory" manual="false">
+      <start uri="135/test135.scxml"/>
     </test>
     <test id="133" conformance="mandatory" manual="false">
       <start uri="133/test133.scxml"/>
@@ -81,6 +84,18 @@
     <![CDATA[Its model call streams its reply when the run's `FLOPPY_STREAM` is `true`, and each `generate.progress` the generate service returns while the reply arrives is sent on to the parent unchanged, so the cognition can bound the stage by inactivity (decision D101).]]>
     <test id="170" conformance="mandatory" manual="false">
       <start uri="170/test170.scxml"/>
+    </test>
+  </assert>
+  <assert id="reasoning-9" specnum="9" specid="#reasoning-9">
+    <![CDATA[As the intuition tier (the `<param>` tier `intuition`, decision D144) it may select the deliberative handoff, `bot.ability.reasoning.input`, among its choices: the handoff is never sent, the other selections are sent in order, and it ends `{turn, handled: false, reason: "handoff", acted}`, acted what was sent; a selection without the handoff is handled as reasoning's is, and its failures name the tier (`the intuition failed (<code>)`).]]>
+    <test id="180" conformance="mandatory" manual="false">
+      <start uri="180/test180.scxml"/>
+    </test>
+    <test id="181" conformance="mandatory" manual="false">
+      <start uri="181/test181.scxml"/>
+    </test>
+    <test id="182" conformance="mandatory" manual="false">
+      <start uri="182/test182.scxml"/>
     </test>
   </assert>
 </assertions>

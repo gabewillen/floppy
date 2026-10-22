@@ -14,8 +14,9 @@
     cancelling_processing -cancel timeout-> degraded (a final sink)
 
   Joining (decision D107): the environment's <invoke> is the original's
-  attach. Its <param>s are the activation settings (model, bounds, traits,
-  database, environment: the environment's id), and the body starts in
+  attach. Its <param>s are the activation settings (model,
+  intuition_model, bounds, traits, database, environment: the environment's
+  id), and the body starts in
   live and activates at once; nothing sends bot.activate. inactive is a
   top-level final state: a failed activation and bot.deactivate end the
   session there, which is its leave; rejoining is the environment invoking
@@ -248,7 +249,11 @@
 
   Time bounds (decision D101): the bounds param may set the cognition's
   child_operation_timeout_ms and child_operation_ceiling_ms (a stage's
-  inactivity bound and its backstop) and reflection's revising_timeout_ms
+  inactivity bound and its backstop), its per-tier reflex_timeout_ms,
+  intuition_timeout_ms and reasoning_timeout_ms (one tier's step bound,
+  the reference's _tier_timeouts), reasoning's max_context_tokens and
+  completion_reserve_tokens (its model's context fit, decision D143) and
+  reflection's revising_timeout_ms
   and revising_ceiling_ms (likewise for a revision through the builder),
   [floppy fields]; the body passes those it was given to the cognition as
   <param name="bounds">, and each one absent is the ability's default
@@ -277,6 +282,9 @@
     <!-- Configuration: the activation settings, which the environment's
          <invoke> may set as <param>s (decision D107). -->
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <!-- The cognition's chat tier's model (decision D144): null composes
+         none. -->
+    <data id="intuition_model" expr="null"/>
     <!-- The time bounds for the cognition (its stages' inactivity and
          backstop, and reflection's revising; decision D101): each absent one
          is the ability's own default. -->
@@ -384,6 +392,7 @@
     </onexit>
     <invoke id="cognition" type="scxml" src="../../abilities/cognition/cognition.scx">
       <param name="model" expr="model"/>
+      <param name="intuition_model" expr="intuition_model"/>
       <param name="bounds" expr="bounds"/>
       <param name="database" expr="database"/>
     </invoke>

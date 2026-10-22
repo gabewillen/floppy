@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- reasoning-9: intuition selecting no handoff handles the turn with its selections. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="reasoning" type="scxml" src="../../../reasoning.scx">
+    <param name="turn" expr="1"/>
+    <param name="stimulus" expr='{"event": "bot.input", "data": {"observation": {"event": "text", "data": "say hi"}}, "source": "gabe"}'/>
+    <param name="focus" expr="null"/>
+    <param name="focus_candidates" expr="[]"/>
+    <param name="choices" expr='[{"event": "bot.ability.cognition.ignore", "schema": {"type": "object", "properties": {}, "additionalProperties": false}, "description": "Ignore the stimulus.", "target": "session.reasoning"}, {"event": "bot.ability.communication.respond", "schema": {"type": "object", "properties": {"text": {"type": "string", "minLength": 1}}, "required": ["text"], "additionalProperties": false}, "description": "Say something.", "target": "session"}, {"event": "bot.focus_device", "schema": {"type": "object", "properties": {"device": {"type": "string", "minLength": 1}}, "required": ["device"], "additionalProperties": false}, "description": "Look at a device.", "target": "session"}, {"event": "bot.clear_focus", "schema": {"type": "object", "properties": {}, "additionalProperties": false}, "description": "Stop looking at the device.", "target": "session"}, {"event": "bot.ability.reasoning.input", "schema": {"type": "object", "properties": {}, "additionalProperties": false}, "description": "Hand this turn to reasoning.", "target": "session.reasoning"}]'/>
+    <param name="model" expr="'mock-model'"/>
+    <param name="tier" expr="'intuition'"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.communication.respond" cond="_event.data.text === 'Hi! I am floppy.'" target="step1"/>
+  </state>
+  <state id="step1">
+    <transition event="done.invoke.reasoning" cond="_event.data.handled === true &amp;&amp; _event.data.selected.length === 1" target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="generate.progress"/>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

@@ -12,7 +12,7 @@
     </test>
   </assert>
   <assert id="cognition-2" specnum="2" specid="#cognition-2">
-    <![CDATA[A `bot.ability.cognition.input` `{turn, stimulus, focus?, focus_candidates?, choices?}` runs one turn of the cascade: autonomy (without a database it leaves the turn unhandled), then intuition, whose confident decision handles the turn: `bot.ability.cognition.output` `{turn, output}`, the output intuition's selections, which intuition has sent to their targets.]]>
+    <![CDATA[A `bot.ability.cognition.input` `{turn, stimulus, focus?, focus_candidates?, choices?}` runs one turn of the cascade: autonomy (without a database it leaves the turn unhandled), then the decision layer, whose confident decision handles the turn: `bot.ability.cognition.output` `{turn, output}`, the output the decision layer's selections, which it has sent to their targets.]]>
     <test id="110" conformance="mandatory" manual="false">
       <start uri="110/test110.scxml"/>
     </test>
@@ -21,7 +21,7 @@
     </test>
   </assert>
   <assert id="cognition-3" specnum="3" specid="#cognition-3">
-    <![CDATA[When intuition leaves the turn unhandled (its decision abstains), reasoning (the generate service, schema `dispatch`) handles it, and the output is reasoning's selections; with a database (the `<param>` `database`) autonomy and reasoning use the memory and the turn is answered the same way.]]>
+    <![CDATA[When the decision layer leaves the turn unhandled (its decision abstains), reasoning (the generate service, schema `dispatch`) handles it, and the output is reasoning's selections; with a database (the `<param>` `database`) autonomy and reasoning use the memory and the turn is answered the same way.]]>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>
@@ -30,7 +30,7 @@
     </test>
   </assert>
   <assert id="cognition-4" specnum="4" specid="#cognition-4">
-    <![CDATA[An intuition that escalates for low confidence sends its environment actions (its selections) before the turn goes on to reasoning; the output is reasoning's selections, which reasoning sends after them, a repeat of an environment action included.]]>
+    <![CDATA[A decision layer that escalates for low confidence sends its environment actions (its selections) before the turn goes on to reasoning; the output is reasoning's selections, which reasoning sends after them, a repeat of an environment action included.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>
@@ -39,7 +39,7 @@
     </test>
   </assert>
   <assert id="cognition-5" specnum="5" specid="#cognition-5">
-    <![CDATA[A stage that fails answers the turn with `bot.ability.failed` `{message, turn, input: {focus, focus_candidates}}`, the message the stage's reason (`the decision failed (status)`, `the reasoning failed (status)`, `the reasoning failed (schema-mismatch)`).]]>
+    <![CDATA[A decision layer that fails (`the decision failed (status)`, or no decision within `decision_timeout_ms`) does not fail the turn: the cognition logs `cognition.cascaded` and reasoning answers it (the reference's D-R-36). A reasoning stage that fails answers the turn with `bot.ability.failed` `{message, turn, input: {focus, focus_candidates}}`, the message the stage's reason (`the reasoning failed (status)`, or `Selection rejected: schema-mismatch` once a refused selection is not repaired), then hands the failure back to its parent as a `bot.ability.cognition.input` whose stimulus is `bot.ability.cognition.step.failed` `{message: "Cognition's reasoning step failed, so the turn failed: <reason>", stage: "reasoning", turn}`.]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>
@@ -49,9 +49,12 @@
     <test id="142" conformance="mandatory" manual="false">
       <start uri="142/test142.scxml"/>
     </test>
+    <test id="143" conformance="mandatory" manual="false">
+      <start uri="143/test143.scxml"/>
+    </test>
   </assert>
   <assert id="cognition-6" specnum="6" specid="#cognition-6">
-    <![CDATA[A stage that makes no progress for `child_operation_timeout_ms` (from its start for autonomy and the intuition; for reasoning from its streamed reply's first `generate.progress`, each later one starting it over), or runs `child_operation_ceiling_ms` in all (the `<param>` `bounds` overriding either, decision D101), ends the turn without an answer: the cognition sends `bot.reboot` `{reason: "cognition_child_teardown_failed"}` to its parent and waits in `rebooting`, where it acknowledges any `bot.ability.cognition.cancel` `{turn}` at once with `bot.ability.cognition.cancelled` `{turn}`.]]>
+    <![CDATA[A step that makes no progress for `child_operation_timeout_ms` (from its start for autonomy and the decision layer; for reasoning from its streamed reply's first `generate.progress`, each later one starting it over), or runs `child_operation_ceiling_ms` in all (the `<param>` `bounds` overriding either, decision D101, and its `reflex_timeout_ms`, `intuition_timeout_ms` or `reasoning_timeout_ms` bounding one tier), fails only its turn: `bot.ability.failed` `{message: "Cognition's <stage> step took longer than <seconds> seconds, so the turn failed.", turn, input}`, then the failure handed back to its parent as a `bot.ability.cognition.input` whose stimulus is `bot.ability.cognition.step.timed_out` `{message, stage, timeout_seconds, turn}`; the cognition is idle again (it offers). A turn whose stimulus is a handed-back failure hands nothing back when it fails too.]]>
     <test id="150" conformance="mandatory" manual="false">
       <start uri="150/test150.scxml"/>
     </test>
@@ -75,6 +78,24 @@
     </test>
     <test id="171" conformance="mandatory" manual="false">
       <start uri="171/test171.scxml"/>
+    </test>
+  </assert>
+  <assert id="cognition-11" specnum="11" specid="#cognition-11">
+    <![CDATA[Until it is told the bot's name (`bot.ability.identity.named`), every return to `idle` sends `bot.ability.identity.ask` `{}` to its parent after its offers (the reference's `_ask_name`); once told, it asks no more.]]>
+    <test id="200" conformance="mandatory" manual="false">
+      <start uri="200/test200.scxml"/>
+    </test>
+  </assert>
+  <assert id="cognition-10" specnum="10" specid="#cognition-10">
+    <![CDATA[With an `intuition_model` (the `<param>`; none by default composes no intuition tier, decision D144), a turn the decision layer leaves unhandled goes to the intuition tier first, offered the deliberative handoff `bot.ability.reasoning.input` as the cognition's own: its selections handle the turn, or, when they hold the handoff, the others are sent first and the turn goes on to reasoning, whose output follows them. An intuition that fails hands the same turn on to reasoning (`cognition.cascaded`).]]>
+    <test id="190" conformance="mandatory" manual="false">
+      <start uri="190/test190.scxml"/>
+    </test>
+    <test id="191" conformance="mandatory" manual="false">
+      <start uri="191/test191.scxml"/>
+    </test>
+    <test id="192" conformance="mandatory" manual="false">
+      <start uri="192/test192.scxml"/>
     </test>
   </assert>
   <assert id="cognition-9" specnum="9" specid="#cognition-9">

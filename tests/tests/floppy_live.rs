@@ -129,7 +129,7 @@ fn model() -> String {
 }
 
 /// One question turn through the full cascade: autonomy's seam leaves it
-/// unhandled, intuition (the decision service on `TypeSafe`) hands it to
+/// unhandled, the decision layer (the decision service on `TypeSafe`) hands it to
 /// reasoning or abstains, and reasoning (the model) selects from the
 /// body's collected choices and sends each selection to its target
 /// (`live_chat` checks what is said). The env files must also hold `TYPESAFE_API_KEY`.
@@ -166,7 +166,7 @@ fn live_cascade() {
     let pass = stages.first().map(String::as_str) == Some("autonomy unhandled (no-behaviors)")
         && stages
             .get(1)
-            .is_some_and(|stage| stage.starts_with("intuition unhandled"))
+            .is_some_and(|stage| stage.starts_with("decision unhandled"))
         && stages.get(2).map(String::as_str) == Some("reasoning handled")
         && responded;
     println!("live cascade: {}", if pass { "pass" } else { "fail" });
@@ -181,7 +181,7 @@ fn live_cascade() {
 /// the cognition's and the communication's offers, each tagged with its
 /// offering session's id; whatever the cascade selects is sent to its
 /// target (a focus on the lamp moves the body's attention there, at least
-/// once: intuition's environment action and reasoning may both focus it),
+/// once: the decision layer's environment action and reasoning may both focus it),
 /// and the turn completes.
 #[test]
 #[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
@@ -214,7 +214,7 @@ fn live_choices() {
         .and_then(|text| serde_json::from_str::<Json>(&text).ok());
     let reasoned = names(texts(&all, "reasoning"));
     // Every focus is on the lamp, and an output that focuses it has focused
-    // it at least once: as in the original, intuition's environment action
+    // it at least once: as in the original, the decision layer's environment action
     // and reasoning may both send `bot.focus_device` in one turn, with no
     // dedupe (D113, J12), so the lamp may be focused twice.
     let focuses = texts(&all, "floppy.focus");
