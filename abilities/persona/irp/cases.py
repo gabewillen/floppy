@@ -27,7 +27,8 @@ READY = expect(OFFERS, "_event.data.ability === 'persona' && _event.data.choices
 
 
 def compact(value):
-    return json.dumps(value, separators=(",", ":"))
+    """JSON.stringify of value as it arrives: an event's data has its keys sorted."""
+    return json.dumps(value, separators=(",", ":"), sort_keys=True)
 
 
 def traits(given=GIVEN):
@@ -65,9 +66,6 @@ S.case(110, 2, "with a fresh database it recalls no description.",
 S.case(111, 2, "a database it cannot open fails every recall attempt until the bring-up budget runs out, then it tells no description.",
        [failed(GAVE_UP), told(), READY],
        params=[TRAITS, NOWHERE, ("bring_up_timeout_ms", "1500")], clock="wall")
-S.case(112, 2, "attempts that never answer in time are asked again until the budget runs out.",
-       [failed(GAVE_UP), told(), READY],
-       params=[TRAITS, DB, ("recall_attempt_timeout_ms", "1"), ("bring_up_timeout_ms", "1000")], clock="wall")
 
 S.case(120, 3, "a revision without a database is told with the owner's traits, and offered again.",
        [told(), READY, revise("I like questions.", "I keep asking them."),

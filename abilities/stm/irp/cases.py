@@ -53,7 +53,7 @@ S.statement(3, "Each record evicts, in its own transaction, every record beyond 
 S.statement(4, "`bot.ability.memory.stm.reinforce` `{stm_ids}` stamps those records' `last_accessed_at` (no reply), which moves their effective clock forward for reads and eviction.")
 S.statement(5, "`bot.ability.memory.stm.turn` `{id, direction, speakers, text, cut, conversation}` is written with no reply, and `bot.ability.memory.stm.recent_turns` `{limit?, within?}` answers `bot.ability.memory.stm.recent_turns.output` `{turns}`: the newest turns, at most `limit`, oldest first, each `{id, at, direction, speakers, text, cut, conversation}` with `at` UTC (Z).")
 S.statement(6, "A turn that puts the register over `turn_capacity` sheds the older half at once, in the same transaction: the newest `turn_capacity - floor(turn_capacity / 2)` stay.")
-S.statement(7, "A turn's words longer than 2048 UTF-8 bytes are cut at a whole word and its `cut` is true.")
+S.statement(7, "A turn's words longer than 2048 UTF-8 bytes are cut at a whole word and its `cut` is true; words that cut to nothing (only white space before the bound) are not written.")
 S.statement(8, "The turns' window is `turn_window_ms`, or `within` (milliseconds) when that is shorter; its floor moves in whole steps of half the window, so a turn is read for at least the window and at most one and a half windows.")
 S.statement(9, "Requests and notifications are applied one at a time, in arrival order: what arrives while it is opening or applying waits, so a read sees every write sent before it.")
 S.statement(10, "A database it cannot open leaves it degraded, without an offer: it sends `bot.ability.failed` `{message: \"unavailable: StmMemory is degraded.\"}`, answers every request the same way, and drops every notification.")
@@ -125,6 +125,11 @@ S.case(160, 7, "words over 2048 bytes are cut at a whole word and marked cut.",
 S.case(161, 7, "a turn its producer already cut stays marked cut.",
        [READY, turn("t1", "said", "the beginning", cut=True), recent_turns(),
         expect(RECENT_TURNS_OUTPUT, "_event.data.turns[0].cut === true && _event.data.turns[0].text === 'the beginning'")],
+       params=[DB], clock="wall")
+
+S.case(162, 7, "words that cut to nothing are not written; the turns after them are.",
+       [READY, send(TURN, "({id: 't1', direction: 'heard', speakers: [], text: ' '.repeat(2049) + 'word', cut: false, conversation: 'listening'})"),
+        turn("t2", "heard", "after"), recent_turns(), expect(RECENT_TURNS_OUTPUT, texts("after"))],
        params=[DB], clock="wall")
 
 S.case(170, 8, "a turn older than one and a half windows is not read.",

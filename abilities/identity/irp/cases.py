@@ -50,7 +50,7 @@ def transcript(text):
 
 
 S.statement(1, "Without a database it recalls the name it was started with (the `<param>` `name`, else none) and is ready: on entering knowing it sends `bot.ability.offers` `{ability: \"identity\", choices}`, choices the one model-callable `bot.ability.identity.adopt` with its schema compacted (no `$schema`, title or examples) and the schema's description, no target.")
-S.statement(2, "With a database it recalls the last adopted name from memory, else the name it was started with, and is ready with the same offer; a recall attempt that fails or does not answer within `recall_attempt_timeout_ms` is asked again after `recall_retry_delay_ms`, and when the bring-up budget (`bring_up_timeout_ms`) runs out first it answers `bot.ability.failed` `{message: \"Identity could not recall a name: memory did not answer within the bring-up budget.\"}` and then recalls the name it was started with.")
+S.statement(2, "With a database it recalls the last adopted name from memory (a row that does not decode as a name is skipped), else the name it was started with, and is ready with the same offer; a recall attempt that fails or does not answer within `recall_attempt_timeout_ms` is asked again after `recall_retry_delay_ms`, and when the bring-up budget (`bring_up_timeout_ms`) runs out first it answers `bot.ability.failed` `{message: \"Identity could not recall a name: memory did not answer within the bring-up budget.\"}` and then recalls the name it was started with.")
 S.statement(3, "A named identity that hears its name in `bot.ability.communication.input` text (string content of a `text/*` content_type; the name's words, split at white space, case-folded and keeping only their letters and digits, appear as a whole run of the text's) hands the body `bot.ability.cognition.input` `{stimulus}`, the stimulus `{event: \"bot.ability.identity.addressed\", data: {name}, source: \"identity\"}`.")
 S.statement(4, "Nothing else it hears produces anything: text that does not name it (the name only as part of a word included), content that is not `text/*`, and anything heard while it has no name.")
 S.statement(5, "`bot.ability.identity.adopt` `{name, reason?}` takes the name and re-enters knowing, offering again; without a database nothing is written, with one the name is written to memory before it is taken. From then on it answers to that name. A write that fails answers `bot.ability.failed` `{message: \"Identity could not remember the name it took: ...\"}` and re-enters knowing with the old name.")
@@ -71,6 +71,12 @@ S.case(111, 2, "a database it cannot open fails every recall attempt until the b
        [expect(FAILED, f"_event.data.message === {js(GAVE_UP)}"),
         READY, send(INPUT, said("hey floppy")), expect(HANDOFF, addressed("Floppy"))],
        params=[("database", "'/nowhere/floppy.sqlite'"), named("Floppy"), ("bring_up_timeout_ms", "1500")], clock="wall")
+# Stored rows stand in for memory's: the newest is not JSON, the one
+# before it holds no name, the oldest is a good one.
+DAMAGED = ("name_select", js('SELECT content FROM (SELECT 1 AS n, \'{"text": "Pip", "kind": "fact"}\' AS content UNION ALL SELECT 2, \'{"text": "\' UNION ALL SELECT 3, \'{"text": "", "kind": "fact"}\') AS stored WHERE ?1 = \'self_name\' AND ?2 = \'self\' ORDER BY n'))
+S.case(113, 2, "rows that do not decode as a name are skipped, so the name adopted before them is recalled.",
+       [READY, send(INPUT, said("hey pip")), expect(HANDOFF, addressed("Pip"))],
+       params=[DB, DAMAGED], clock="wall")
 S.case(120, 3, "its name in text addresses it.",
        [READY, send(INPUT, said("hey floppy, what's your name?")), expect(HANDOFF, addressed("Floppy"))],
        params=[named("Floppy")])

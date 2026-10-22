@@ -12,6 +12,13 @@ function delay(ms) {
   return ms + 'ms';
 }
 
+// The identity's and the persona's bring-up budget: half the activation
+// timeout, so a memory that never answers leaves them awake on their
+// fallbacks before the activation gives up on them.
+function bringUpTimeout() {
+  return Math.floor(activation_timeout_ms / 2);
+}
+
 function abilityTarget(id) {
   return '#_' + id;
 }

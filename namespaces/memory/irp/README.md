@@ -35,12 +35,11 @@ SAXON='java -jar /opt/saxon/saxon-he-12.8.jar' sh scripts/namespace-irp.sh prepa
 sh scripts/namespace-irp.sh baselines memory
 ```
 
-The current baseline (manifest SHA-256 `55aeabfe653d01b05dfeba6f2b26c0f1219a65597c91aa02ea2a1f9add8d5d3c`,
+The current baseline (manifest SHA-256 `502a5ff0c40220b70783865bd1964d33aad869a6197fb650b70d0c3c4897c879`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
-measured on macOS arm64 when the namespace was added; regenerate it on
-Linux x86_64, the host `tests/tests/namespace_irp.rs` compares fuel on)
-measures:
+measured on Linux x86_64, the host `tests/tests/namespace_irp.rs` compares
+fuel on) measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 9 / 9 | 0 | `cd4a9d34397855e73d2831a7aed18ee827a059d46c600f850469f56ced4a2af3` | `563b806e0b3b0c1033cee5c009db778fc02cc0595a31a090967230c2ccc86c69` |
+| ECMAScript | 17 / 17 | 0 | `e5dfc0af0c5549b9cd043a6ba924ad363357cbd4b3ef88a40ba5b2f4ad3dae83` | `c752fe3a5d9e6f64991deaf1b363465e90eb21a628288186fa8d28a58909aa44` |
