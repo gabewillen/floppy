@@ -29,6 +29,9 @@ step is one of
 
 and the case passes when every expect was met in order. Any other event
 the harness receives (error.* included) fails it, logging the event.
+A case's `logs={label: [text, ...]}` (written as irp/sources/<id>/logs.json)
+also requires the run's logs of each label to be exactly those texts, in
+order.
 
 A suite's learned behaviors are programs `S.behavior(text)` writes as
 irp/behaviors/<digest>.scxml (the extension of test documents, which keeps
@@ -96,11 +99,11 @@ def wav(sample=0, seconds=0.1, rate=16000, channels=1):
             + b"data" + struct.pack("<I", len(data)) + data)
 
 
-def png(width=1, height=1):
-    """A white 8-bit RGB PNG."""
+def png(width=1, height=1, shade=0xff):
+    """An 8-bit RGB PNG whose every pixel is the gray `shade` (white by default)."""
     def chunk(kind, body):
         return struct.pack(">I", len(body)) + kind + body + struct.pack(">I", zlib.crc32(kind + body))
-    rows = b"".join(b"\x00" + b"\xff" * (3 * width) for _ in range(height))
+    rows = b"".join(b"\x00" + bytes([shade]) * (3 * width) for _ in range(height))
     return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
             + chunk(b"IDAT", zlib.compress(rows, 9)) + chunk(b"IEND", b""))
 
@@ -128,10 +131,10 @@ class Suite:
         self.statements.append((f"{self.name}-{number}", text))
 
     def case(self, test_id, number, comment, steps, data=(), params=(), ignore=(), backend=None, clock=None,
-             stream=False):
+             stream=False, logs=None):
         self.cases.append(dict(id=test_id, assertion=f"{self.name}-{number}", comment=comment, steps=steps,
                                data=data, params=params, ignore=ignore, backend=backend, clock=clock,
-                               stream=stream))
+                               stream=stream, logs=logs))
 
     # ------------------------------------------------------------ writing
     def document(self, case):
@@ -249,6 +252,13 @@ class Suite:
                     out.write("\n")
             elif os.path.exists(script):
                 os.remove(script)
+            logs = os.path.join(directory, "logs.json")
+            if case["logs"] is not None:
+                with open(logs, "w") as out:
+                    json.dump(case["logs"], out, indent=2)
+                    out.write("\n")
+            elif os.path.exists(logs):
+                os.remove(logs)
             self.write_media(case, os.path.join(directory, "media"), document)
         for stale in set(os.listdir(sources)) - listed:
             raise SystemExit(f"{sources}/{stale} is no case of cases.py")

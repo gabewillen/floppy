@@ -49,6 +49,24 @@
       ],
       "title": "Kind"
     },
+    "source": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional visual source: the transducer this view came off (a camera, a screen capture), as its emitter stamps it. The original carries it as the visual event's source; an SCXML event relayed through the body keeps only its data, so floppy carries it in the view [floppy field]. Seeing holds the newest view of each source and drops a view without one.",
+      "examples": [
+        "camera-1",
+        "screen"
+      ],
+      "title": "Source"
+    },
     "participants": {
       "default": [],
       "description": "Who produced this stimulus, stamped by the device that emitted it. Empty when the device knows no one (ambient sound, an unattended camera).",
@@ -120,6 +138,12 @@
     {
       "image": "media/image-1",
       "media_type": "image/png"
+    },
+    {
+      "image": "media/frame-7.jpg",
+      "media_type": "image/jpeg",
+      "kind": "camera",
+      "source": "camera-1"
     }
   ]
 }

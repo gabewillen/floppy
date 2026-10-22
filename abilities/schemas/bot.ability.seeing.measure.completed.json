@@ -1,0 +1,289 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.seeing.measure.completed",
+  "description": "A measured view: the stimulus it came from, when it arrived, and the measurement.",
+  "additionalProperties": false,
+  "properties": {
+    "source": {
+      "description": "Transducer the view came off.",
+      "examples": [
+        "camera-1"
+      ],
+      "minLength": 1,
+      "title": "Source",
+      "type": "string"
+    },
+    "visual": {
+      "description": "The measured stimulus, as it was when its measurement started.",
+      "properties": {
+        "image": {
+          "description": "Reference (a URI reference) to the image this stimulus carries; floppy passes media by reference, never as bytes [floppy field].",
+          "examples": [
+            "media/image-1"
+          ],
+          "format": "uri-reference",
+          "minLength": 1,
+          "title": "Image",
+          "type": "string"
+        },
+        "media_type": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional media type for the image bytes, such as image/png or image/jpeg.",
+          "examples": [
+            "image/png",
+            "image/jpeg"
+          ],
+          "title": "Media Type"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional low-cardinality visual provenance hint (for example camera, screen).",
+          "examples": [
+            "camera",
+            "screen"
+          ],
+          "title": "Kind"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional visual source: the transducer this view came off (a camera, a screen capture), as its emitter stamps it. The original carries it as the visual event's source; an SCXML event relayed through the body keeps only its data, so floppy carries it in the view [floppy field]. Seeing holds the newest view of each source and drops a view without one.",
+          "examples": [
+            "camera-1",
+            "screen"
+          ],
+          "title": "Source"
+        },
+        "participants": {
+          "default": [],
+          "description": "Who produced this stimulus, stamped by the device that emitted it. Empty when the device knows no one (ambient sound, an unattended camera).",
+          "examples": [
+            [
+              {
+                "ref": "person-42",
+                "role": "source"
+              }
+            ]
+          ],
+          "items": {
+            "additionalProperties": false,
+            "description": "Someone who took part in a stimulus: an opaque, producer-stable identity reference and the role it played (source: who produced it; target: who it was addressed to).",
+            "examples": [
+              {
+                "ref": "+15555550100",
+                "role": "source"
+              },
+              {
+                "ref": "person-42",
+                "role": "target"
+              }
+            ],
+            "properties": {
+              "ref": {
+                "description": "Opaque, producer-stable identity such as a phone number, an app person id, or a chat handle. Never a display name chosen by the bot.",
+                "examples": [
+                  "+15555550100",
+                  "person-42",
+                  "caller"
+                ],
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Ref",
+                "type": "string"
+              },
+              "role": {
+                "description": "source: who produced the stimulus (speaker, sender). target: who it was addressed to.",
+                "enum": [
+                  "source",
+                  "target"
+                ],
+                "examples": [
+                  "source",
+                  "target"
+                ],
+                "title": "Role",
+                "type": "string"
+              }
+            },
+            "required": [
+              "ref",
+              "role"
+            ],
+            "title": "Participant",
+            "type": "object"
+          },
+          "maxItems": 32,
+          "title": "Participants",
+          "type": "array"
+        }
+      },
+      "required": [
+        "image"
+      ],
+      "type": "object"
+    },
+    "received_at": {
+      "description": "When the view arrived, on Seeing's clock, in milliseconds since the epoch (the original's timezone-aware datetime; floppy reads the session clock, Date.now()) [floppy field].",
+      "examples": [
+        1441065600000
+      ],
+      "minimum": 0,
+      "title": "Received At",
+      "type": "integer"
+    },
+    "measurement": {
+      "additionalProperties": false,
+      "description": "What the change measure answered: how much the view changed since the previous signature, and its own signature.",
+      "examples": [
+        {
+          "change": 0.42,
+          "signature": {
+            "measure": "frame_diff",
+            "values": [
+              0.25,
+              0.5
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "change": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How much the view changed, 0 (same) to 1 (entirely different); null when there was no previous signature.",
+          "examples": [
+            0.42,
+            null
+          ],
+          "title": "Change"
+        },
+        "signature": {
+          "additionalProperties": false,
+          "description": "An opaque per-measure reference to a previously perceived view; never a product, prompt or telemetry value: a byte_identity signature carries its digest, a frame_diff signature its grid of values.",
+          "examples": [
+            {
+              "measure": "byte_identity",
+              "digest": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+            },
+            {
+              "measure": "frame_diff",
+              "values": [
+                0.25,
+                0.5
+              ]
+            }
+          ],
+          "properties": {
+            "measure": {
+              "description": "Name of the measure that produced this signature; a measure compares only its own signatures.",
+              "enum": [
+                "byte_identity",
+                "frame_diff"
+              ],
+              "examples": [
+                "byte_identity",
+                "frame_diff"
+              ],
+              "title": "Measure",
+              "type": "string"
+            },
+            "values": {
+              "description": "Finite numbers the measure compares, such as a downscaled grayscale grid.",
+              "examples": [
+                [
+                  0.25,
+                  0.5
+                ]
+              ],
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 65536,
+              "title": "Values",
+              "type": "array"
+            },
+            "digest": {
+              "description": "A content digest the measure compares for equality, such as a SHA-256 hex digest.",
+              "examples": [
+                "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+              ],
+              "maxLength": 128,
+              "title": "Digest",
+              "type": "string"
+            }
+          },
+          "required": [
+            "measure"
+          ],
+          "title": "Signature",
+          "type": "object"
+        }
+      },
+      "required": [
+        "change",
+        "signature"
+      ],
+      "title": "Measurement",
+      "type": "object"
+    }
+  },
+  "required": [
+    "source",
+    "visual",
+    "received_at",
+    "measurement"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "source": "camera-1",
+      "visual": {
+        "image": "media/frame-7.jpg",
+        "media_type": "image/jpeg",
+        "source": "camera-1"
+      },
+      "received_at": 1441065600000,
+      "measurement": {
+        "change": null,
+        "signature": {
+          "measure": "byte_identity",
+          "digest": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+        }
+      }
+    }
+  ]
+}

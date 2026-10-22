@@ -7,10 +7,26 @@ history lives in [decisions.md](decisions.md) (numbered decisions),
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
-Last updated: 2026-10-21.
+Last updated: 2026-10-22.
 
 ## Current state (2026-10-09) — resume here
 
+- **Seeing (2026-10-22, D185 to D189):** `abilities/seeing/seeing.scx`
+  is the original's eye: it holds the newest `environment.visual` of each
+  `source` (a new [floppy field]; the schema moved to `abilities/schemas/`),
+  measures change through the new `vision` service (`byte_identity`,
+  `frame_diff`), looks when the model selects `bot.ability.seeing.look`, and
+  hands each sight to the body as `bot.ability.cognition.input`; object
+  detection and description are its per-view stage children over generate.
+  The body invokes it always, and its `seeing_enabled` switch (off by
+  default) decides whether it is expected, fed and offered; every bot run
+  now grants the vision service a media directory. Faces wait on decision 6.
+  `frame_diff` decodes as the original's OpenCV 5.0.0 build does (its own
+  JPEG DC decoder, libpng's gray and gamma, `image-webp`, Exif
+  orientation), checked against OpenCV fixtures in
+  `services/vision/src/testdata/`; Cargo.lock carries `miniz_oxide` 0.8.9
+  for `png` beside scxml.rs's 0.9 (D185). A document IRP case may now
+  require its run's logs (`logs=` in cases.py, `logs.json`).
 - **One schema file per event (2026-10-21, D125):** scxml.rs
   `5bc75e72` resolves an `event:schema` reference against its
   document's base URI like any relative URI, `..` included, so the twin

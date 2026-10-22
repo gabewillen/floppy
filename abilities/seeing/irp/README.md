@@ -1,0 +1,29 @@
+# `seeing` implementation report plan
+
+The implementation report plan of [`seeing.scx`](../seeing.scx): the W3C SCXML IRP's
+manifest format and `Outcome` oracle over the document's numbered
+statements below, one assertion each in [`manifest.xml`](manifest.xml),
+tested by the harness documents in [`sources/`](sources). Each harness
+invokes the document as its child, drives it, and ends in `pass` (logging
+`Outcome` `pass`) or `fail`. `tests/tests/document_irp.rs` runs every case
+through `scx run` with the real invoked services (a case's
+`backend.json` scripts the fake HTTP backend they reach), and
+`tests/irp/harness.py` writes the cases from [`cases.py`](cases.py).
+
+## Statements
+
+- <a id="seeing-1"></a>**seeing-1**. On start it sends its parent `bot.ability.offers` `{ability: "seeing", choices}`, choices the one model-callable `bot.ability.seeing.look` with its schema compacted (no `$schema`, title or examples; `{}` with no other property), no target; it offers once.
+- <a id="seeing-2"></a>**seeing-2**. An `environment.visual` with a `source` is held as that source's view and, as the source's first view, measured and handed on: the parent gets `bot.ability.cognition.input` `{stimulus: {event: "bot.ability.seeing.sight", data: {cause: "change", views: [view], participants}, source: <the view's source>}, participants}`, the view `{image, media_type, kind, participants, change: null, age_ms, objects: null, description: null}` copied from the stimulus (`media_type` and `kind` null when it names none) and `participants` the view's stamped participants.
+- <a id="seeing-3"></a>**seeing-3**. An `environment.visual` without a `source` is dropped: nothing is held, measured or handed on, and a look then sees nothing (`{cause: "look", views: [], participants: []}`, source `"seeing"`).
+- <a id="seeing-4"></a>**seeing-4**. A later view of a source is measured against the signature of the last view of that source handed on, by `measure` (`byte_identity` by default: 0 for the same bytes, 1 for others; or `frame_diff`, the mean difference of the views' blurred 32x32 grays): a change of at least `change_threshold` (0.1) is handed on with its change; a smaller change is not.
+- <a id="seeing-5"></a>**seeing-5**. A view whose change is below the threshold keeps the signature handed on before, so drift accumulates against it: views that each differ from the one before by less than the threshold are handed on once they differ enough from the last view handed on.
+- <a id="seeing-6"></a>**seeing-6**. `bot.ability.seeing.look` `{}` hands on every fresh view, newest first (views that arrived together in the order they arrived), each with `change: null` and its `age_ms`, as `{cause: "look", views, participants}` from source `"seeing"`; `participants` are the views' stamped participants, first occurrence first.
+- <a id="seeing-7"></a>**seeing-7**. A look is served at the next opportunity, ahead of any measurement, and every sight, change or look, is followed by a full `settle_after_ms` (5000): a look that arrives while the eye measures, interprets or settles waits for that, and looks waiting for the same opportunity are one look.
+- <a id="seeing-8"></a>**seeing-8**. At most one measurement runs per `measure_every_ms` (500): after a measurement that hands nothing on the eye paces, and a frame that arrives meanwhile is measured when the pace ends; a look while pacing is served at once.
+- <a id="seeing-9"></a>**seeing-9**. Sources are measured round robin: of the sources with an unmeasured fresh view, the least recently measured goes first, a source never measured before all others, ties to the oldest arrival.
+- <a id="seeing-10"></a>**seeing-10**. Each source's newest view replaces its older one (latest wins); at most four views are held, the least recently received evicted past four; a view older than `max_view_age_ms` (60000) is not fresh (a look does not see it, nothing measures it) and is forgotten with its signature at the next hold, so that source's next view is a first view again.
+- <a id="seeing-11"></a>**seeing-11**. A view the vision service cannot measure (an unreadable reference, or for `frame_diff` a file OpenCV cannot decode, no PNG, JPEG or WebP it reads) is not handed on and no other measure is asked; it counts as measured, the eye paces, and a look still sees the view.
+- <a id="seeing-12"></a>**seeing-12**. A measurement is bounded by `measure_timeout_ms` (2000): when it passes first nothing is handed on and the eye paces.
+- <a id="seeing-13"></a>**seeing-13**. With `detect` on, each view handed on is given to the object detection child (abilities/object_detection, with the view's image and media type and the model), and its `bot.ability.vision.detection.output` fills the view's `objects`; with `describe` on the description child's `bot.ability.vision.description.output` fills its `description`. A view's objects stage runs before its description stage, and a sight's views are interpreted one after another, in order.
+- <a id="seeing-14"></a>**seeing-14**. A stage that fails (its child answers `bot.ability.failed`) or does not answer within `stage_timeout_ms` (30000) leaves only its own field null; the sight is still handed on.
+- <a id="seeing-15"></a>**seeing-15**. A stimulus its schema refuses is never routed here: an `environment.visual` without an image, or a look with data, raises `error.execution` in the sender.

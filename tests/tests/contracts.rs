@@ -78,7 +78,7 @@ const FLOPPY_NAME: &str = "[floppy name]";
 const DIALECT: &str = "https://json-schema.org/draft/2020-12/schema";
 
 /// The body's events (`bots/floppy/schemas/`).
-const BODY_EVENTS: [&str; 13] = [
+const BODY_EVENTS: [&str; 12] = [
     "bot.deactivate",
     "bot.input",
     "bot.focus_device",
@@ -91,11 +91,10 @@ const BODY_EVENTS: [&str; 13] = [
     "bot.processing.timed_out",
     "bot.processing.cancel.timed_out",
     "bot.degraded",
-    "environment.visual",
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 75] = [
+const ABILITY_EVENTS: [&str; 84] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -180,6 +179,18 @@ const ABILITY_EVENTS: [&str; 75] = [
     "bot.ability.turn_detector.turn.complete",
     "bot.ability.turn_detector.failed",
     "bot.ability.turn_detector.ready",
+    // Seeing (the original's Seeing), the stimulus it takes, and its stage
+    // children's object detection and description (decisions D185 to
+    // D189).
+    "environment.visual",
+    "bot.ability.seeing.sight",
+    "bot.ability.seeing.look",
+    "bot.ability.seeing.measure.completed",
+    "bot.ability.seeing.measure.failed",
+    "bot.ability.vision.detection.input",
+    "bot.ability.vision.detection.output",
+    "bot.ability.vision.description.input",
+    "bot.ability.vision.description.output",
 ];
 
 /// The correlated events of one processing turn: each requires `turn`.
