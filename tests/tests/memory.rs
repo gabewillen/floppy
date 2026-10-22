@@ -65,6 +65,7 @@ fn harness_on(database: &str, engine: &str, before: Option<&str>, statements: &s
     </transition>
     <transition event="bot.ability.failed" target="done">
       <log label="failed" expr="_event.data.message"/>
+      <log label="kind" expr="_event.data.kind"/>
     </transition>
   </state>
   <final id="done"/>
@@ -112,7 +113,7 @@ fn a_fresh_database_is_migrated_to_the_original_head_schema() {
         [(
             "output".to_owned(),
             format!(
-                r#"{{"results":[{{"rowcount":1,"rows":[{{"columns":["group_concat(name)"],"values":["{columns}"]}}]}},{{"rowcount":1,"rows":[{{"columns":["name"],"values":["lifetime"]}}]}},{{"rowcount":1,"rows":[{{"columns":["version_num"],"values":["0002"]}}]}}]}}"#
+                r#"{{"results":[{{"rowcount":1,"rows":[{{"columns":["group_concat(name)"],"values":["{columns}"]}}]}},{{"rowcount":1,"rows":[{{"columns":["name"],"values":["lifetime"]}}]}},{{"rowcount":1,"rows":[{{"columns":["version_num"],"values":["0003"]}}]}}]}}"#
             )
         )],
         "{}",
@@ -136,23 +137,44 @@ fn a_fresh_database_is_migrated_to_the_original_head_schema() {
 }
 
 #[test]
+fn the_head_schema_keeps_the_short_term_turns() {
+    // Decision D126: the original's 0002_stm_turns, floppy's 0003.
+    let directory = unique_scratch("memory");
+    let finished = run(
+        &directory,
+        &harness(
+            None,
+            "[{sql: 'SELECT group_concat(name) FROM pragma_table_info(\\'bot_stm_turn\\')'}, {sql: 'SELECT name FROM sqlite_master WHERE type = \\'index\\' AND tbl_name = \\'bot_stm_turn\\''}]",
+        ),
+    );
+    assert_eq!(
+        logs(&finished.records),
+        output(
+            r#"[{"rowcount":1,"rows":[{"columns":["group_concat(name)"],"values":["seq,turn_id,at,direction,speakers_json,text,cut,conversation"]}]},{"rowcount":1,"rows":[{"columns":["name"],"values":["bot_stm_turn_at_idx"]}]}]"#
+        ),
+        "{}",
+        finished.stderr
+    );
+}
+
+#[test]
 fn a_database_newer_than_the_ability_is_refused_untouched() {
     let directory = unique_scratch("memory");
     let finished = run(
         &directory,
         &harness(
             Some(
-                "[{sql: 'CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)'}, {sql: 'INSERT INTO alembic_version VALUES (\\'0003\\')'}]",
+                "[{sql: 'CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)'}, {sql: 'INSERT INTO alembic_version VALUES (\\'0004\\')'}]",
             ),
             "[{sql: 'SELECT 1'}]",
         ),
     );
     assert_eq!(
         logs(&finished.records),
-        [(
-            "failed".to_owned(),
-            "Migration could not plan from 0003 to head".to_owned()
-        )],
+        support::labelled(&[
+            ("failed", "Migration could not plan from 0004 to head"),
+            ("kind", "unavailable"),
+        ]),
         "{}",
         finished.stderr
     );
@@ -170,10 +192,13 @@ fn a_failing_statement_fails_the_memory_and_commits_nothing() {
     );
     assert_eq!(
         logs(&finished.records),
-        [(
-            "failed".to_owned(),
-            "no such column: nope in SELECT nope FROM bot_memory at offset 7".to_owned()
-        )],
+        support::labelled(&[
+            (
+                "failed",
+                "no such column: nope in SELECT nope FROM bot_memory at offset 7"
+            ),
+            ("kind", "store_failed"),
+        ]),
         "{}",
         finished.stderr
     );
@@ -187,6 +212,48 @@ fn a_failing_statement_fails_the_memory_and_commits_nothing() {
             "output".to_owned(),
             r#"{"results":[{"rowcount":1,"rows":[{"columns":["n"],"values":[0]}]}]}"#.to_owned()
         )]
+    );
+}
+
+#[test]
+fn statements_the_service_refuses_fail_as_invalid_input() {
+    let finished = run(
+        &unique_scratch("memory"),
+        &harness(None, "[{sql: ''}]"),
+    );
+    assert_eq!(
+        logs(&finished.records),
+        support::labelled(&[
+            ("failed", "Memory could not run (error.execution)"),
+            ("kind", "invalid_input"),
+        ]),
+        "{}",
+        finished.stderr
+    );
+}
+
+#[test]
+fn an_operation_over_its_timeout_fails_as_timeout() {
+    // The original's operation timeout, set as the invoker's <param>.
+    let document = harness(None, "[{sql: 'SELECT 1'}]");
+    let statements = r#"<param name="statements" expr="[{sql: 'SELECT 1'}]"/>"#;
+    assert!(document.contains(statements), "the harness passes statements");
+    let finished = run(
+        &unique_scratch("memory"),
+        &document.replacen(
+            statements,
+            &format!(r#"{statements}<param name="operation_timeout_ms" expr="1"/>"#),
+            1,
+        ),
+    );
+    assert_eq!(
+        logs(&finished.records),
+        support::labelled(&[
+            ("failed", "Memory did not finish within 0.001s."),
+            ("kind", "timeout"),
+        ]),
+        "{}",
+        finished.stderr
     );
 }
 
@@ -214,7 +281,7 @@ fn postgres_a_fresh_database_is_migrated_to_the_original_head_schema() {
     assert_eq!(
         logs(&finished.records),
         output(&format!(
-            r#"[{{"rowcount":1,"rows":[{{"columns":["columns"],"values":["{columns}"]}}]}},{{"rowcount":1,"rows":[{{"columns":["column_name","data_type"],"values":["lifetime","text"]}}]}},{{"rowcount":1,"rows":[{{"columns":["version_num"],"values":["0002"]}}]}}]"#
+            r#"[{{"rowcount":1,"rows":[{{"columns":["columns"],"values":["{columns}"]}}]}},{{"rowcount":1,"rows":[{{"columns":["column_name","data_type"],"values":["lifetime","text"]}}]}},{{"rowcount":1,"rows":[{{"columns":["version_num"],"values":["0003"]}}]}}]"#
         )),
         "{}",
         finished.stderr
@@ -250,17 +317,17 @@ fn postgres_a_database_newer_than_the_ability_is_refused_untouched() {
             &server.database(),
             "pgsql",
             Some(
-                "[{sql: 'CREATE TABLE alembic_version (version_num VARCHAR(32) PRIMARY KEY)'}, {sql: 'INSERT INTO alembic_version VALUES (\\'0003\\')'}]",
+                "[{sql: 'CREATE TABLE alembic_version (version_num VARCHAR(32) PRIMARY KEY)'}, {sql: 'INSERT INTO alembic_version VALUES (\\'0004\\')'}]",
             ),
             "[{sql: 'SELECT 1'}]",
         ),
     );
     assert_eq!(
         logs(&finished.records),
-        [(
-            "failed".to_owned(),
-            "Migration could not plan from 0003 to head".to_owned()
-        )],
+        support::labelled(&[
+            ("failed", "Migration could not plan from 0004 to head"),
+            ("kind", "unavailable"),
+        ]),
         "{}",
         finished.stderr
     );
@@ -283,10 +350,10 @@ fn postgres_a_failing_statement_fails_the_memory_and_commits_nothing() {
     );
     assert_eq!(
         logs(&finished.records),
-        [(
-            "failed".to_owned(),
-            r#"column "nope" does not exist"#.to_owned()
-        )],
+        support::labelled(&[
+            ("failed", r#"column "nope" does not exist"#),
+            ("kind", "store_failed"),
+        ]),
         "{}",
         finished.stderr
     );

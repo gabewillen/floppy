@@ -11,7 +11,7 @@
   the invocation is the attachment, and leaving the invoking state cancels
   it.
 
-    opening -> migrating -> applying -> applied (final)
+    opening -> busy { migrating -> applying } -> applied (final)
 
   Input: the <param>s database and statements (the original's
   InputData.statements: [{sql, parameters?}], at least one). The database
@@ -23,20 +23,36 @@
 
   opening picks the engine. migrating invokes the migration ability
   (abilities/migration/migration.scx, Alembic's upgrade head) with
-  the original's revisions 0001 and 0002 in the engine's dialect
-  (abilities/memory/sqlite/ and
-  abilities/memory/postgresql/: the same tables, columns, defaults and
-  indexes as the original's Alembic scripts, with the same revision ids; on
-  Postgres the defaulted created_at and updated_at are TIMESTAMPTZ DEFAULT
-  NOW(), as postgres_memory declares created_at), so the database carries
-  Alembic's alembic_version as the original's does and the original database is used
-  in place. A database at a revision the history does not hold is refused
-  untouched. applying then runs the statements in one transaction.
+  floppy's revisions in the engine's dialect (abilities/memory/sqlite/ and
+  abilities/memory/postgresql/): 0001 and 0002 have the same tables,
+  columns, defaults and indexes as the original's Alembic scripts did when
+  floppy took them (the original's 0001 and 0002_behavior_lifetime), and
+  0003 is the original's 0002_stm_turns (proposed decision D126: the
+  original has since rewritten its 0001 in place and renumbered, so the
+  same revision id names a different schema in each, and a database the
+  original's Alembic wrote is not used in place). On Postgres the
+  defaulted created_at and updated_at are TIMESTAMPTZ DEFAULT NOW(), as
+  postgres_memory declares created_at. The database carries Alembic's
+  alembic_version as the original's does. A database at a revision the
+  history does not hold is refused untouched. applying then runs the
+  statements in one transaction.
+
+  busy bounds the operation by operation_timeout_ms (the <param>, the
+  original's operation timeout, 60 s by default): when it runs out,
+  leaving busy cancels the migration or the transaction, and the memory
+  fails with kind timeout ("Memory did not finish within 60s.").
 
   Output (to the parent, as the original's Memory answers): bot.ability.memory.output
   {results} (the original's OutputData: one result per statement, in order), or
-  bot.ability.failed {message} (the original's FailureData) when nothing was
-  committed. Then the session ends.
+  bot.ability.failed {message, kind} (the original's payload.FailureData)
+  when nothing was committed, kind the original's FailureKind: unavailable
+  when the database could not be brought to the head revision (the
+  original's memory is then not serving) or a service could not run,
+  invalid_input when the service refused the statements, store_failed
+  when the transaction failed and rolled back, timeout as above. Then
+  the session ends. (The original names the failure
+  bot.ability.memory.failed; floppy's invokers take bot.ability.failed
+  until they move together.)
 
   Bindings: the migration namespace package (through the migration
   ability) and the sql and pgsql service packages; a run grants both (scx
@@ -51,15 +67,22 @@
     <!-- The invoker's <param>s. -->
     <data id="database" expr="null"/>
     <data id="statements" expr="[]"/>
-    <!-- The schema: the original's Alembic revisions, one file each per engine,
-         with the same revision ids. -->
+    <!-- The schema: floppy's Alembic revisions, one file each per engine
+         (decision D126). -->
     <data id="sqlite_0001" src="sqlite/0001_initial_memory_schema.json"/>
     <data id="sqlite_0002" src="sqlite/0002_behavior_lifetime.json"/>
+    <data id="sqlite_0003" src="sqlite/0003_stm_turns.json"/>
     <data id="postgresql_0001" src="postgresql/0001_initial_memory_schema.json"/>
     <data id="postgresql_0002" src="postgresql/0002_behavior_lifetime.json"/>
+    <data id="postgresql_0003" src="postgresql/0003_stm_turns.json"/>
     <!-- The engine: Postgres for a postgresql:// URI, else SQLite. -->
     <data id="postgres" expr="false"/>
+    <!-- The operation's time bound (the original's operation timeout, 60 s),
+         which an invoker may set as a <param>. -->
+    <data id="operation_timeout_ms" expr="60000"/>
     <data id="failure" expr="null"/>
+    <!-- The original's payload.FailureKind of the failure. -->
+    <data id="failure_kind" expr="null"/>
   </datamodel>
   <script src="memory.js"/>
 
@@ -68,59 +91,86 @@
     <onentry>
       <assign location="postgres" expr="isPostgresDatabase()"/>
     </onentry>
-    <transition target="migrating"/>
+    <transition target="busy"/>
   </state>
 
-  <!-- Bring the database to the head revision. -->
-  <state id="migrating">
-    <invoke id="migration" type="scxml" src="../migration/migration.scx">
-      <param name="database" expr="database"/>
-      <param name="revisions" expr="engineRevisions()"/>
-    </invoke>
-    <transition event="bot.ability.migration.output" event:schema="../schemas/bot.ability.migration.output.json" target="applying"/>
-    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failing">
-      <assign location="failure" expr="_event.data.message"/>
+  <!-- One operation, bounded by operation_timeout_ms: leaving busy
+       cancels whatever it invoked. -->
+  <state id="busy" initial="migrating">
+    <onentry>
+      <send id="busy-after" event="busy.after" delayexpr="operationTimeoutDelay()"/>
+    </onentry>
+    <onexit>
+      <cancel sendid="busy-after"/>
+    </onexit>
+    <transition event="busy.after" target="failing">
+      <assign location="failure" expr="timeoutFailure()"/>
+      <assign location="failure_kind" expr="'timeout'"/>
     </transition>
-    <transition event="error.*" target="failing">
-      <assign location="failure" expr="couldNotRunFailure(_event)"/>
-    </transition>
-  </state>
 
-  <!-- Apply the statements, in one transaction, on the database's engine. -->
-  <state id="applying" initial="applying_from">
-    <state id="applying_from">
-      <transition cond="postgres" target="applying_postgres"/>
-      <transition target="applying_sqlite"/>
-    </state>
-    <state id="applying_sqlite">
-      <invoke id="apply" type="https://github.com/stateforward/floppy/services/sql">
+    <!-- Bring the database to the head revision. A database that cannot
+         be brought there is not serving. -->
+    <state id="migrating">
+      <invoke id="migration" type="scxml" src="../migration/migration.scx">
         <param name="database" expr="database"/>
-        <param name="statements" expr="statements"/>
+        <param name="revisions" expr="engineRevisions()"/>
       </invoke>
+      <transition event="bot.ability.migration.output" event:schema="../schemas/bot.ability.migration.output.json" target="applying"/>
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failing">
+        <assign location="failure" expr="_event.data.message"/>
+        <assign location="failure_kind" expr="'unavailable'"/>
+      </transition>
+      <transition event="error.*" target="failing">
+        <assign location="failure" expr="couldNotRunFailure(_event)"/>
+        <assign location="failure_kind" expr="'unavailable'"/>
+      </transition>
     </state>
-    <state id="applying_postgres">
-      <invoke id="apply_postgres" type="https://github.com/stateforward/floppy/services/pgsql">
-        <param name="database" expr="database"/>
-        <param name="statements" expr="statements"/>
-      </invoke>
+
+    <!-- Apply the statements, in one transaction, on the database's engine. -->
+    <state id="applying" initial="applying_from">
+      <state id="applying_from">
+        <transition cond="postgres" target="applying_postgres"/>
+        <transition target="applying_sqlite"/>
+      </state>
+      <state id="applying_sqlite">
+        <invoke id="apply" type="https://github.com/stateforward/floppy/services/sql">
+          <param name="database" expr="database"/>
+          <param name="statements" expr="statements"/>
+        </invoke>
+      </state>
+      <state id="applying_postgres">
+        <invoke id="apply_postgres" type="https://github.com/stateforward/floppy/services/pgsql">
+          <param name="database" expr="database"/>
+          <param name="statements" expr="statements"/>
+        </invoke>
+      </state>
+      <transition event="sql.result" target="applied">
+        <send event="bot.ability.memory.output" target="#_parent">
+          <param name="results" expr="_event.data.results"/>
+        </send>
+      </transition>
+      <!-- The transaction failed and rolled back. -->
+      <transition event="sql.failed" target="failing">
+        <assign location="failure" expr="_event.data.message"/>
+        <assign location="failure_kind" expr="'store_failed'"/>
+      </transition>
+      <!-- The service refused the statements before opening the database. -->
+      <transition event="error.execution" target="failing">
+        <assign location="failure" expr="couldNotRunFailure(_event)"/>
+        <assign location="failure_kind" expr="'invalid_input'"/>
+      </transition>
+      <transition event="error.*" target="failing">
+        <assign location="failure" expr="couldNotRunFailure(_event)"/>
+        <assign location="failure_kind" expr="'unavailable'"/>
+      </transition>
     </state>
-    <transition event="sql.result" target="applied">
-      <send event="bot.ability.memory.output" target="#_parent">
-        <param name="results" expr="_event.data.results"/>
-      </send>
-    </transition>
-    <transition event="sql.failed" target="failing">
-      <assign location="failure" expr="_event.data.message"/>
-    </transition>
-    <transition event="error.*" target="failing">
-      <assign location="failure" expr="couldNotRunFailure(_event)"/>
-    </transition>
   </state>
 
   <state id="failing">
     <onentry>
       <send event="bot.ability.failed" target="#_parent">
         <param name="message" expr="failure"/>
+        <param name="kind" expr="failure_kind"/>
       </send>
     </onentry>
     <transition target="applied"/>

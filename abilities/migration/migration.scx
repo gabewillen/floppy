@@ -11,7 +11,7 @@
   (the pgsql service); the runner's own statements are standard SQL both
   accept, and each engine has its own revision files.
 
-    reading -> planning -> applying -> migrated (final)
+    reading (tables, then version) -> planning -> applying -> migrated (final)
 
   Input: the <param>s database (the database file, in the directory the run
   grants the sql service), revisions (Alembic's script directory as data:
@@ -19,11 +19,19 @@
   being sql statements [{sql, parameters?}]) and target (Alembic's target:
   'head', the default, 'base', a revision, or a relative '+N' or '-N').
 
-  reading creates Alembic's alembic_version table when the database lacks
-  it (as Alembic does) and reads its version_num (null: base). planning
+  reading reads, writing nothing, the database's tables (sqlite_master
+  on SQLite, information_schema.tables in the current schema on
+  Postgres) and, when Alembic's alembic_version is among them, its
+  version_num (null: base, as for a database without it). A database that
+  holds any table the history creates (the CREATE TABLE statements of the
+  revisions' upgrades) but no alembic_version was not created by these
+  migrations: it matches no revision and is refused untouched with the
+  original's message ("Unversioned memory database already holds
+  ['bot_memory', ...]; not migrating it.", store.py migrate). planning
   orders the steps with <migration:plan> (a linear history walked by
-  revision and down_revision). applying runs, in one transaction, the
-  version row's guard and then every step's statements: the guard moves
+  revision and down_revision). applying runs, in one transaction,
+  Alembic's alembic_version creation (when missing, as Alembic does),
+  the version row's guard and then every step's statements: the guard moves
   the row from the version read to the target and must touch exactly one
   row (the sql service's rowcount), so a migration that got there first
   makes it fail with code rowcount (or SQLITE_BUSY, or Postgres's 23505,
@@ -48,7 +56,10 @@
     <data id="database" expr="null"/>
     <data id="revisions" expr="[]"/>
     <data id="target" expr="'head'"/>
-    <!-- Alembic's version table and its read. -->
+    <!-- The database's tables, per engine; Alembic's version table and
+         its read. -->
+    <data id="tables_select" expr="'SELECT name FROM sqlite_master WHERE type = \'table\''"/>
+    <data id="tables_select_postgres" expr="'SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema()'"/>
     <data id="version_table" expr="'CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL, CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))'"/>
     <data id="version_select" expr="'SELECT version_num FROM alembic_version'"/>
     <!-- The version row's guards: from base, between revisions, to base. -->
@@ -62,6 +73,8 @@
          busy database, Postgres's unique violation, serialization failure
          and deadlock. -->
     <data id="retryable" expr="['rowcount', 'SQLITE_BUSY', '23505', '40001', '40P01']"/>
+    <!-- The tables the database holds, as read. -->
+    <data id="tables" expr="[]"/>
     <data id="current" expr="null"/>
     <data id="plan" expr="null"/>
     <data id="guard" expr="null"/>
@@ -72,30 +85,65 @@
 
   <script src="migration.js"/>
 
-  <!-- Read the database's current revision, on the engine its URI names. -->
-  <state id="reading" initial="reading_from">
+  <!-- Read the database's tables, then its current revision, on the
+       engine its URI names, writing nothing. -->
+  <state id="reading" initial="reading_tables">
     <onentry>
       <assign location="postgres" expr="isPostgresDatabase()"/>
     </onentry>
-    <state id="reading_from">
-      <transition cond="postgres" target="reading_postgres"/>
-      <transition target="reading_sqlite"/>
+    <state id="reading_tables" initial="reading_tables_from">
+      <state id="reading_tables_from">
+        <transition cond="postgres" target="reading_tables_postgres"/>
+        <transition target="reading_tables_sqlite"/>
+      </state>
+      <state id="reading_tables_sqlite">
+        <invoke id="read_tables" type="https://github.com/stateforward/floppy/services/sql">
+          <param name="database" expr="database"/>
+          <param name="statements" expr="tablesStatements()"/>
+        </invoke>
+      </state>
+      <state id="reading_tables_postgres">
+        <invoke id="read_tables_postgres" type="https://github.com/stateforward/floppy/services/pgsql">
+          <param name="database" expr="database"/>
+          <param name="statements" expr="tablesStatements()"/>
+        </invoke>
+      </state>
+      <transition event="sql.result" target="reading_checked">
+        <assign location="tables" expr="tableNames(_event)"/>
+      </transition>
     </state>
-    <state id="reading_sqlite">
-      <invoke id="read" type="https://github.com/stateforward/floppy/services/sql">
-        <param name="database" expr="database"/>
-        <param name="statements" expr="versionStatements()"/>
-      </invoke>
+    <!-- Unversioned tables are refused untouched; no version table is
+         base. -->
+    <state id="reading_checked">
+      <transition cond="isUnversioned()" target="failing">
+        <assign location="failure" expr="unversionedFailure()"/>
+      </transition>
+      <transition cond="isVersioned()" target="reading_version"/>
+      <transition target="planning">
+        <assign location="current" expr="null"/>
+      </transition>
     </state>
-    <state id="reading_postgres">
-      <invoke id="read_postgres" type="https://github.com/stateforward/floppy/services/pgsql">
-        <param name="database" expr="database"/>
-        <param name="statements" expr="versionStatements()"/>
-      </invoke>
+    <state id="reading_version" initial="reading_version_from">
+      <state id="reading_version_from">
+        <transition cond="postgres" target="reading_version_postgres"/>
+        <transition target="reading_version_sqlite"/>
+      </state>
+      <state id="reading_version_sqlite">
+        <invoke id="read" type="https://github.com/stateforward/floppy/services/sql">
+          <param name="database" expr="database"/>
+          <param name="statements" expr="versionStatements()"/>
+        </invoke>
+      </state>
+      <state id="reading_version_postgres">
+        <invoke id="read_postgres" type="https://github.com/stateforward/floppy/services/pgsql">
+          <param name="database" expr="database"/>
+          <param name="statements" expr="versionStatements()"/>
+        </invoke>
+      </state>
+      <transition event="sql.result" target="planning">
+        <assign location="current" expr="currentRevision(_event)"/>
+      </transition>
     </state>
-    <transition event="sql.result" target="planning">
-      <assign location="current" expr="currentRevision(_event)"/>
-    </transition>
     <transition event="sql.failed" target="failing">
       <assign location="failure" expr="_event.data.message"/>
     </transition>
