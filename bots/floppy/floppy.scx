@@ -67,11 +67,16 @@
   when the text names the bot, as the cognition hands over a routine's
   bot.behavior.tick (its routines).
 
-  Short-term memory: the body relays each child's
-  bot.ability.memory.stm.turn (listening's heard speech, the
-  communication's relay of what its conversation said) and the
-  cognition's bot.ability.memory.stm.recent_turns to the register, and the
-  register's bot.ability.memory.stm.recent_turns.output to the cognition.
+  Short-term memory: the body relays a child's bot.ability.memory.stm.turn
+  to the register (no child writes turns yet: listening's heard speech
+  and the conversation's said messages are the listening and
+  communication workstreams' to add), reads the register's recent turns
+  (bot.ability.memory.stm.recent_turns {}) on entering each turn, and
+  relays the register's bot.ability.memory.stm.recent_turns.output to the
+  cognition. The cognition cannot ask through the body: the request's
+  descriptor matches the answer's name too, and scxml.rs judges an
+  arriving event by every matching transition's schema, so a body taking
+  both would refuse the answer.
   Nothing in floppy reads the register's stimuli yet (the original's
   Learning is not ported), so a bot.ability.memory.stm.recent.output is
   taken and dropped.
@@ -358,21 +363,15 @@
       </send>
     </transition>
     <!-- The short-term register (the original's bot.register, reached by
-         message only): the turns its producers write, and the cognition's
-         read of them and its answer. -->
+         message only): the turns its producers write, and the answer to
+         the body's read of them, for the cognition. -->
     <transition event="bot.ability.memory.stm.turn" event:schema="../../abilities/schemas/bot.ability.memory.stm.turn.json">
       <send event="bot.ability.memory.stm.turn" target="#_stm">
         <content expr="_event.data"/>
       </send>
     </transition>
-    <!-- Before the request, whose descriptor also matches it. -->
     <transition event="bot.ability.memory.stm.recent_turns.output" event:schema="../../abilities/schemas/bot.ability.memory.stm.recent_turns.output.json">
       <send event="bot.ability.memory.stm.recent_turns.output" target="#_cognition">
-        <content expr="_event.data"/>
-      </send>
-    </transition>
-    <transition event="bot.ability.memory.stm.recent_turns" event:schema="../../abilities/schemas/bot.ability.memory.stm.recent_turns.json">
-      <send event="bot.ability.memory.stm.recent_turns" target="#_stm">
         <content expr="_event.data"/>
       </send>
     </transition>
@@ -565,6 +564,10 @@
       <state id="processing">
         <onentry>
           <assign location="turn" expr="nextTurn()"/>
+          <!-- The turns heard and said lately, for the cognition. -->
+          <send event="bot.ability.memory.stm.recent_turns" target="#_stm">
+            <content expr="emptyData()"/>
+          </send>
           <cognition:attention_bias_for_turn location="focus_candidates" focuslocation="focus"
                                              stimulus="stimulus" devices="devices" focus="focused_device"/>
           <assign location="device_snapshots" expr="({})"/>
