@@ -358,13 +358,13 @@ fn the_cognition_is_told_the_bots_name_and_each_adoption() {
         text.replacen(
             alive,
             &format!(
-                r#"{alive}
+                r##"{alive}
     <onentry>
       <send event="bot.ability.identity.ask" target="#_parent"><content expr="({{}})"/></send>
     </onentry>
     <transition event="bot.ability.identity.named">
       <log label="double.named" expr="JSON.stringify(_event.data.name)"/>
-    </transition>"#
+    </transition>"##
             ),
             1,
         ),

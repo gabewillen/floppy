@@ -217,10 +217,7 @@ fn a_failing_statement_fails_the_memory_and_commits_nothing() {
 
 #[test]
 fn statements_the_service_refuses_fail_as_invalid_input() {
-    let finished = run(
-        &unique_scratch("memory"),
-        &harness(None, "[{sql: ''}]"),
-    );
+    let finished = run(&unique_scratch("memory"), &harness(None, "[{sql: ''}]"));
     assert_eq!(
         logs(&finished.records),
         support::labelled(&[
@@ -237,7 +234,10 @@ fn an_operation_over_its_timeout_fails_as_timeout() {
     // The original's operation timeout, set as the invoker's <param>.
     let document = harness(None, "[{sql: 'SELECT 1'}]");
     let statements = r#"<param name="statements" expr="[{sql: 'SELECT 1'}]"/>"#;
-    assert!(document.contains(statements), "the harness passes statements");
+    assert!(
+        document.contains(statements),
+        "the harness passes statements"
+    );
     let finished = run(
         &unique_scratch("memory"),
         &document.replacen(
