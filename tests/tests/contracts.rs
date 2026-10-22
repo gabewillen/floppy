@@ -95,7 +95,7 @@ const BODY_EVENTS: [&str; 13] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 88] = [
+const ABILITY_EVENTS: [&str; 87] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -134,7 +134,6 @@ const ABILITY_EVENTS: [&str; 88] = [
     "environment.sound",
     "bot.ability.identity.adopt",
     "bot.ability.identity.adopted",
-    "bot.ability.identity.adopt.failed",
     "bot.ability.identity.addressed",
     "bot.ability.identity.recalled",
     "bot.ability.identity.ask",

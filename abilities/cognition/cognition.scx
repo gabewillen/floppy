@@ -163,8 +163,12 @@
     <data id="offers_over" expr="false"/>
     <!-- What the bot knows of itself: its name, as the identity tells it
          (bot.ability.identity.named, relayed by the body; null until it
-         has taken one). -->
-    <data id="self" expr="({name: null})"/>
+         has taken one), and its owner's traits and its own description,
+         as the persona tells them (bot.ability.persona.output). -->
+    <data id="self" expr="({name: null, traits: [], description: null})"/>
+    <!-- The short-term register's recent turns, heard and said, as it last
+         answered (bot.ability.memory.stm.recent_turns.output). -->
+    <data id="recent_turns" expr="[]"/>
   </datamodel>
   <script src="cognition.js"/>
 
@@ -173,6 +177,16 @@
        (the original's NamedEvent). -->
   <transition event="bot.ability.identity.named" event:schema="../schemas/bot.ability.identity.named.json">
     <assign location="self.name" expr="_event.data.name"/>
+  </transition>
+  <!-- The persona's traits and description, on waking and after each
+       revision (the original's persona OutputEvent). -->
+  <transition event="bot.ability.persona.output" event:schema="../schemas/bot.ability.persona.output.json">
+    <assign location="self.traits" expr="_event.data.traits"/>
+    <assign location="self.description" expr="personaDescription(_event)"/>
+  </transition>
+  <!-- The short-term register's answer to a recent_turns read. -->
+  <transition event="bot.ability.memory.stm.recent_turns.output" event:schema="../schemas/bot.ability.memory.stm.recent_turns.output.json">
+    <assign location="recent_turns" expr="_event.data.turns"/>
   </transition>
   <state id="turns" initial="idle">
   <!-- Waits for the body's turn. -->

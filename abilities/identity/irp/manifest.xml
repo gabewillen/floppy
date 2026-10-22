@@ -51,7 +51,7 @@
     </test>
   </assert>
   <assert id="identity-5" specnum="5" specid="#identity-5">
-    <![CDATA[`bot.ability.identity.adopt` `{name, reason?}` takes the name and re-enters knowing, offering again; without a database nothing is written, with one the name is written to memory before it is taken. From then on it answers to that name.]]>
+    <![CDATA[`bot.ability.identity.adopt` `{name, reason?}` takes the name and re-enters knowing, offering again; without a database nothing is written, with one the name is written to memory before it is taken. From then on it answers to that name. A write that fails answers `bot.ability.failed` `{message: "Identity could not remember the name it took: ..."}` and re-enters knowing with the old name.]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>
@@ -60,6 +60,9 @@
     </test>
     <test id="142" conformance="mandatory" manual="false">
       <start uri="142/test142.scxml"/>
+    </test>
+    <test id="143" conformance="mandatory" manual="false">
+      <start uri="143/test143.scxml"/>
     </test>
   </assert>
   <assert id="identity-6" specnum="6" specid="#identity-6">

@@ -125,3 +125,10 @@ function intuitionFailure(_event) {
 function cognitionInput() {
   return ({stimulus: stimulus, focus: focus, focus_candidates: focus_candidates});
 }
+
+// alive
+
+// The persona's description (absent: none written yet).
+function personaDescription(_event) {
+  return _event.data.description === undefined ? null : _event.data.description;
+}

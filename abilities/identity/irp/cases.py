@@ -53,7 +53,7 @@ S.statement(1, "Without a database it recalls the name it was started with (the 
 S.statement(2, "With a database it recalls the last adopted name from memory, else the name it was started with, and is ready with the same offer; a recall attempt that fails or does not answer within `recall_attempt_timeout_ms` is asked again after `recall_retry_delay_ms`, and when the bring-up budget (`bring_up_timeout_ms`) runs out first it answers `bot.ability.failed` `{message: \"Identity could not recall a name: memory did not answer within the bring-up budget.\"}` and then recalls the name it was started with.")
 S.statement(3, "A named identity that hears its name in `bot.ability.communication.input` text (string content of a `text/*` content_type; the name's words, split at white space, case-folded and keeping only their letters and digits, appear as a whole run of the text's) hands the body `bot.ability.cognition.input` `{stimulus}`, the stimulus `{event: \"bot.ability.identity.addressed\", data: {name}, source: \"identity\"}`.")
 S.statement(4, "Nothing else it hears produces anything: text that does not name it (the name only as part of a word included), content that is not `text/*`, and anything heard while it has no name.")
-S.statement(5, "`bot.ability.identity.adopt` `{name, reason?}` takes the name and re-enters knowing, offering again; without a database nothing is written, with one the name is written to memory before it is taken. From then on it answers to that name.")
+S.statement(5, "`bot.ability.identity.adopt` `{name, reason?}` takes the name and re-enters knowing, offering again; without a database nothing is written, with one the name is written to memory before it is taken. From then on it answers to that name. A write that fails answers `bot.ability.failed` `{message: \"Identity could not remember the name it took: ...\"}` and re-enters knowing with the old name.")
 S.statement(6, "A named identity decodes each `environment.sound` through the speech decoding (the speech service) and looks for its name in the transcript: addressed, it hands the body the same `bot.ability.cognition.input` as for text; a nameless one decodes nothing.")
 S.statement(7, "A decoding that fails answers `bot.ability.failed` `{message}` (the speech decoding's failure message) and the identity goes back to listening.")
 S.statement(8, "Communication input, sounds and adopt events that arrive while it is recalling or adopting, and input and sounds that arrive while it is recognizing, are deferred and taken, in order, once it is back in knowing (or listening).")
@@ -112,6 +112,13 @@ S.case(142, 5, "an adopt whose data its schema refuses is never routed: the send
        [READY, send(ADOPT, js({"name": ""})), expect("error.execution"),
         send(INPUT, said("hello")), wait("300ms")],
        clock="wall")
+
+S.case(143, 5, "a name it cannot write down is not taken: the failure is answered and it offers again.",
+       [expect(FAILED, f"_event.data.message === {js(GAVE_UP)}"), READY,
+        send(ADOPT, js({"name": "Pip"})),
+        expect(FAILED, "_event.data.message.indexOf('Identity could not remember the name it took: ') === 0"),
+        READY, send(ASK, js({})), expect(NAMED, "_event.data.name === null")],
+       params=[("database", "'/nowhere/floppy.sqlite'"), ("bring_up_timeout_ms", "1500")], clock="wall")
 
 S.case(150, 6, "its name heard in a sound addresses it.",
        [READY, send(SOUND, sound()), expect(HANDOFF, addressed("Floppy"))],

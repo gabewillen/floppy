@@ -205,6 +205,8 @@ them). Both directions therefore call the Gemini API, so
 | `abilities/identity/identity.scx` | `bring_up_timeout_ms` | `30000` | recalling the name until memory answers, then the identity wakes with the session's name and says so (the original's 30 s attachment timeout) |
 | `abilities/persona/persona.scx` | `recall_attempt_timeout_ms` | `1000` | one attempt to recall the self-written description from memory, asked again after `recall_retry_delay_ms` (the original's 1 s and 100 ms) |
 | `abilities/persona/persona.scx` | `bring_up_timeout_ms` | `30000` | recalling the description until memory answers, then the persona wakes with none and says so (the original's 30 s attachment timeout) |
+| `abilities/memory/memory.scx` | `operation_timeout_ms` | `60000` | one memory operation, its migration and transaction together, which then fails with kind `timeout` (the original's 60 s operation timeout) |
+| `abilities/stm/stm.scx` | `open_timeout_ms` | `30000` | opening the short-term register (its database migrated), after which it is degraded (the original's 30 s attachment timeout) |
 | `abilities/reading/reading.scx` | `stage_timeout_ms` | `30000` | each reading stage (the original's 30 s) |
 | `abilities/conversation/conversation.scx` | `turn_timeout_ms` | `5000` | a turn detector's readiness, and then its turn, for each source of an input (the original's 5 s) |
 | `abilities/turn_detector/turn_detector.scx` | `end_of_turn_silence_seconds` | `0.5` | the silence that closes an open or paused turn (the original's 0.5 s; at least 0.01 s) |

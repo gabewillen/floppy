@@ -76,10 +76,12 @@
   created_at by memory_id, so two adoptions in one second keep their
   order) and sends
   bot.ability.identity.adopted {name: {text, kind: "fact"}} to
-  #_internal; a write that fails sends bot.ability.identity.adopt.failed
-  {message: "Identity could not remember the name it took: ..."} to
-  #_internal, which answers the body with bot.ability.failed {message}
-  (the original _fail_from_stage), and the bot keeps its old name (fail-closed).
+  #_internal; a write that fails answers the body with bot.ability.failed
+  {message: "Identity could not remember the name it took: ..."} (the
+  original's adopt.failed and _fail_from_stage, taken in one transition:
+  the private event sent to #_internal would be judged by the adopt
+  transition, whose descriptor matches it) and the bot keeps its old name
+  (fail-closed).
   Without a database it logs <log label="memory" expr="'absent'"> and
   sends adopted.
 
@@ -357,8 +359,12 @@
           <param name="name" expr="adoptedName()"/>
         </send>
       </transition>
-      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json">
-        <send event="bot.ability.identity.adopt.failed" target="#_internal">
+      <!-- The write failed (the original's _AdoptFailedEvent, taken here:
+           sent to #_internal it would be judged by the adopt descriptor,
+           which matches it, and refused). -->
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="knowing">
+        <log label="identity.adopt.failed" expr="adoptFailedMessage(_event)"/>
+        <send event="bot.ability.failed" target="#_parent">
           <param name="message" expr="adoptFailedMessage(_event)"/>
         </send>
       </transition>
@@ -370,13 +376,6 @@
         <param name="name" expr="name"/>
       </send>
     </transition>
-    <transition event="bot.ability.identity.adopt.failed" event:schema="../schemas/bot.ability.identity.adopt.failed.json" target="knowing">
-      <log label="identity.adopt.failed" expr="_event.data.message"/>
-      <send event="bot.ability.failed" target="#_parent">
-        <param name="message" expr="_event.data.message"/>
-      </send>
-    </transition>
-    <!-- After adopt.failed: the adopt descriptor also matches it. -->
     <transition event="bot.ability.communication.input" event:schema="../schemas/bot.ability.communication.input.json">
       <event:defer/>
     </transition>
