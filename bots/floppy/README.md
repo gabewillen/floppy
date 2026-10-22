@@ -98,8 +98,9 @@ call's budget (scxml.rs docs/limits.md, "Fuel"), which two bots already
 exceed at `scx`'s default of 3 billion. It stays this high until average
 usage is measured (decision D111).
 
-The env file must set `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (the
-reasoning's `generate` service has no default backend, decision D31) and
+The env file must set `FLOPPY_BASE_URL` (the reasoning's `generate`
+service has no default backend, decision D31; `FLOPPY_API_KEY` too unless
+the backend is keyless, decision D127) and
 `TYPESAFE_API_KEY` (the intuition's `decision` service; `TYPESAFE_BASE_URL`
 is optional, `https://api.typesafe.ai` without it). Without the TypeSafe key
 every turn fails with `the decision failed (unconfigured)`; without the model endpoint a turn that reaches reasoning
@@ -139,8 +140,8 @@ measures views through the `vision` service; that service imports
 it the media directory too (`--dir
 https://github.com/stateforward/floppy/services/vision=HOST::/media`),
 whether or not seeing is on (see Sight below).
-Speaking needs `FLOPPY_SPEECH_BASE_URL` and `FLOPPY_SPEECH_API_KEY` (the
-speech service has no default backend) and the speech service granted the
+Speaking needs `FLOPPY_SPEECH_BASE_URL` (the speech service has no default
+backend; `FLOPPY_SPEECH_API_KEY` too unless the backend is keyless) and the speech service granted the
 media directory its audio is written to (`--dir
 https://github.com/stateforward/floppy/services/speech=HOST::/media`);
 without them a response fails with `bot.ability.communication.failed`.

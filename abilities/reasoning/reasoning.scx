@@ -141,8 +141,9 @@
   memory ability's sql service package (a run grants it its directory,
   scx run's dir option); env scopes FLOPPY_API_KEY and
   FLOPPY_BASE_URL to the service's <invoke> (no default backend: without
-  either it answers generate.failed unconfigured). The generate service's
-  events are recorded by one transition each.
+  a base URL it answers generate.failed unconfigured, and without a key it
+  asks a keyless backend with no key header, decision D127). The generate
+  service's events are recorded by one transition each.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition"

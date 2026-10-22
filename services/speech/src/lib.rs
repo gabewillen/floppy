@@ -72,11 +72,15 @@
 //! not take, or a malformed value rejects the start: the `<invoke>` raises
 //! `error.execution` and nothing is read, sent, or written.
 //!
-//! The `env` slots ([`API_KEY_SLOT`], [`BASE_URL_SLOT`]) are both required
-//! at run time by the operations that call a backend (all but `normalize`,
-//! `append`, and `clip`). When either names no variable the run holds, the invocation
-//! reads, sends, and writes nothing and answers [`FAILED_EVENT`]
-//! ([`FailureCode::Unconfigured`]).
+//! The `env` slots ([`API_KEY_SLOT`], [`BASE_URL_SLOT`]) serve the
+//! operations that call a backend (all but `normalize`, `append`, and
+//! `clip`). The `baseurl` slot is required at run time: when it names no
+//! variable the run holds, the invocation reads, sends, and writes nothing
+//! and answers [`FAILED_EVENT`] ([`FailureCode::Unconfigured`]). When only
+//! the `apikey` slot names none, the backend is keyless (a local speech
+//! server that takes no key, as the original's keyless client asks one):
+//! every request is sent with no key header at all, `authorization`,
+//! `xi-api-key`, or `x-goog-api-key` (decision D127).
 //!
 //! # Parts
 //!
@@ -99,7 +103,8 @@
 //! # The requests
 //!
 //! * decode: `POST {base}/audio/transcriptions` with
-//!   `authorization: Bearer <apikey>` and a `multipart/form-data` body of
+//!   `authorization: Bearer <apikey>` (none for a keyless backend, as for
+//!   every key header below) and a `multipart/form-data` body of
 //!   `model`, `response_format` (`json`), and `file` (the audio's bytes,
 //!   named by the reference's last segment) ([`decoding_request`]).
 //! * encode: one request per stretch whose words are not blank, one at a
@@ -520,7 +525,7 @@ impl Operation {
 /// The closed failures of [`FAILED_EVENT`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FailureCode {
-    /// The `apikey` or the `baseurl` slot names no variable the run holds.
+    /// The `baseurl` slot names no variable the run holds.
     Unconfigured,
     /// The audio's file cannot be read (it does not exist, or is outside
     /// the granted directory).
@@ -1030,20 +1035,22 @@ fn encoding(
 }
 
 /// The invocation's endpoint, `(baseurl, apikey)`: the references the host
-/// handed for the two slots. There is no default backend, so both are
-/// required.
+/// handed for the two slots. There is no default backend, so the base URL
+/// is required; without a key the backend is keyless and no request
+/// carries a key header (decision D127).
 ///
 /// # Errors
 ///
-/// [`FailureCode::Unconfigured`] when either slot names no variable the run
-/// holds (the host hands no reference for it): nothing is read or sent.
+/// [`FailureCode::Unconfigured`] when the `baseurl` slot names no variable
+/// the run holds (the host hands no reference for it): nothing is read or
+/// sent.
 pub const fn endpoint(
     base_url: Option<u32>,
     api_key: Option<u32>,
-) -> Result<(u32, u32), FailureCode> {
-    match (base_url, api_key) {
-        (Some(base_url), Some(api_key)) => Ok((base_url, api_key)),
-        _ => Err(FailureCode::Unconfigured),
+) -> Result<(u32, Option<u32>), FailureCode> {
+    match base_url {
+        Some(base_url) => Ok((base_url, api_key)),
+        None => Err(FailureCode::Unconfigured),
     }
 }
 
@@ -1104,18 +1111,41 @@ fn file_name(path: &str) -> &str {
     }
 }
 
-fn bearer(api_key: u32) -> (String, Vec<Part>) {
-    (
-        "authorization".into(),
-        vec![Part::Literal("Bearer ".into()), Part::Reference(api_key)],
-    )
+/// The `authorization` bearer header of `api_key`; none for a keyless
+/// backend.
+fn bearer(api_key: Option<u32>) -> Option<(String, Vec<Part>)> {
+    api_key.map(|api_key| {
+        (
+            "authorization".into(),
+            vec![Part::Literal("Bearer ".into()), Part::Reference(api_key)],
+        )
+    })
+}
+
+/// The header `name` carrying `api_key` as it is, then `headers`; no key
+/// header for a keyless backend.
+fn keyed(
+    name: &str,
+    api_key: Option<u32>,
+    headers: impl IntoIterator<Item = (String, Vec<Part>)>,
+) -> Vec<(String, Vec<Part>)> {
+    api_key
+        .map(|api_key| (name.to_owned(), vec![Part::Reference(api_key)]))
+        .into_iter()
+        .chain(headers)
+        .collect()
 }
 
 /// The transcription request: `POST {base}/audio/transcriptions` with the
 /// `apikey` slot's reference as a bearer key and a `multipart/form-data`
 /// body of `model`, `response_format` (`json`), and `file` (`audio`).
 #[must_use]
-pub fn decoding_request(base_url: u32, api_key: u32, decoding: &Decoding, audio: &[u8]) -> Request {
+pub fn decoding_request(
+    base_url: u32,
+    api_key: Option<u32>,
+    decoding: &Decoding,
+    audio: &[u8],
+) -> Request {
     if decoding.provider == Provider::Gemini {
         return gemini::decoding_request(base_url, api_key, decoding, audio);
     }
@@ -1147,19 +1177,21 @@ pub fn decoding_request(base_url: u32, api_key: u32, decoding: &Decoding, audio:
             Part::Reference(base_url),
             Part::Literal(TRANSCRIPTIONS_PATH.into()),
         ],
-        headers: vec![
-            bearer(api_key),
-            (
-                "content-type".into(),
-                vec![Part::Literal(format!(
-                    "multipart/form-data; boundary={boundary}"
-                ))],
-            ),
-            (
-                "accept".into(),
-                vec![Part::Literal("application/json".into())],
-            ),
-        ],
+        headers: bearer(api_key)
+            .into_iter()
+            .chain([
+                (
+                    "content-type".into(),
+                    vec![Part::Literal(format!(
+                        "multipart/form-data; boundary={boundary}"
+                    ))],
+                ),
+                (
+                    "accept".into(),
+                    vec![Part::Literal("application/json".into())],
+                ),
+            ])
+            .collect(),
         body,
     }
 }
@@ -1170,7 +1202,12 @@ pub fn decoding_request(base_url: u32, api_key: u32, decoding: &Decoding, audio:
 /// `POST {base}/text-to-speech/{voice}?output_format=F` with `xi-api-key`
 /// and the body `{"model_id", "text"}`.
 #[must_use]
-pub fn encoding_request(base_url: u32, api_key: u32, encoding: &Encoding, words: &str) -> Request {
+pub fn encoding_request(
+    base_url: u32,
+    api_key: Option<u32>,
+    encoding: &Encoding,
+    words: &str,
+) -> Request {
     if encoding.provider == Provider::Gemini {
         return gemini::encoding_request(base_url, api_key, encoding, words);
     }
@@ -1192,10 +1229,7 @@ pub fn encoding_request(base_url: u32, api_key: u32, encoding: &Encoding, words:
                     encoding.voice
                 )),
             ],
-            headers: vec![
-                ("xi-api-key".into(), vec![Part::Reference(api_key)]),
-                content_type,
-            ],
+            headers: keyed("xi-api-key", api_key, [content_type]),
             body: canonical_json(&Json::Object(body)).into_bytes(),
         };
     }
@@ -1208,7 +1242,7 @@ pub fn encoding_request(base_url: u32, api_key: u32, encoding: &Encoding, words:
     body.insert("voice".into(), encoding.voice.clone().into());
     Request {
         url: vec![Part::Reference(base_url), Part::Literal(SPEECH_PATH.into())],
-        headers: vec![bearer(api_key), content_type],
+        headers: bearer(api_key).into_iter().chain([content_type]).collect(),
         body: canonical_json(&Json::Object(body)).into_bytes(),
     }
 }
@@ -1626,7 +1660,7 @@ mod guest {
 
     /// What `invoke` accepted: the operation and its endpoint, when the run
     /// configured one.
-    type Plan = (Operation, Option<(u32, u32)>);
+    type Plan = (Operation, Option<(u32, Option<u32>)>);
 
     fn plan(request: InvokeRequest) -> Result<Plan, ComponentError> {
         if request.type_uri != super::SERVICE_URI {
@@ -1667,7 +1701,7 @@ mod guest {
     }
 
     /// Runs the accepted operation to how it ends.
-    async fn run(operation: Operation, endpoint: Option<(u32, u32)>) -> super::Finished {
+    async fn run(operation: Operation, endpoint: Option<(u32, Option<u32>)>) -> super::Finished {
         use super::{Finished, voice};
         match &operation {
             Operation::Normalize(normalization) => {
@@ -1739,7 +1773,11 @@ mod guest {
     }
 
     /// Runs a voice classifier operation to its one event.
-    async fn run_voice(operation: &Operation, base_url: u32, api_key: u32) -> super::Finished {
+    async fn run_voice(
+        operation: &Operation,
+        base_url: u32,
+        api_key: Option<u32>,
+    ) -> super::Finished {
         use super::{Finished, voice};
         let failed = |code| Finished::event(Returned::failed(operation, code));
         Finished::event(match operation {

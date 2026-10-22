@@ -40,9 +40,10 @@ are in [schemas/](schemas/).
 ## Backends
 
 The package declares no `http-origins`, so there is no default backend
-(decision D31): the operations that call one need the `baseurl` and
-`apikey` slots bound to variables the run holds, else they answer
-`bot.ability.failed` and send nothing. floppy's documents bind
+(decision D31): the operations that call one need the `baseurl` slot
+bound to a variable the run holds, else they answer `bot.ability.failed`
+and send nothing. A run that holds a base URL and no key reaches a keyless
+server: the request carries no key header at all (decision D127). floppy's documents bind
 `FLOPPY_SPEECH_BASE_URL` and `FLOPPY_SPEECH_API_KEY` for `decode` and
 `encode`, and `FLOPPY_VOICE_BASE_URL` and `FLOPPY_VOICE_API_KEY` (a LocalAI
 server) for `detect`, `diarize` and `identify`. The models are each

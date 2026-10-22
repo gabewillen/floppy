@@ -244,8 +244,8 @@
   Running: scx run with an env file and an environment that invokes this
   document (environments/room/room.scx), then bot.input on standard input,
   which the environment gives every bot. The cognition's stages need TYPESAFE_API_KEY (intuition's decision
-  service) and FLOPPY_BASE_URL and FLOPPY_API_KEY (reasoning's generate
-  service, no default backend); without them a turn fails.
+  service) and FLOPPY_BASE_URL (reasoning's generate service, no default
+  backend; FLOPPY_API_KEY for a keyed backend); without them a turn fails.
 
   Time bounds (decision D101): the bounds param may set the cognition's
   child_operation_timeout_ms and child_operation_ceiling_ms (a stage's

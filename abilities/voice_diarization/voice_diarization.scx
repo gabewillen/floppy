@@ -26,7 +26,8 @@
 
   Bindings: the speech service package; env scopes FLOPPY_VOICE_BASE_URL
   and FLOPPY_VOICE_API_KEY to the service's <invoke> (no default backend,
-  decision D31). The run grants the service the media directory. An
+  decision D31; without a key it asks a keyless backend with no key
+  header, decision D127). The run grants the service the media directory. An
   invoked service's events are not checked against event:schema, so their
   shape is checked by cond.
 -->

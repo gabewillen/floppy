@@ -43,6 +43,10 @@ publish = false
 [workspace.dependencies]
 # The same pins as scxml.rs's workspace (scxml.rs/Cargo.toml); Cargo.lock was
 # seeded from scxml.rs/Cargo.lock so shared dependencies resolve identically.
+# The JSON Schema validator scxml-event-schema compiles with (the same pin):
+# the generate service reads where a call's arguments first fail its tool's
+# parameters, which `CompiledSchema::admits` does not report.
+boon = { version = "=0.6.1", default-features = false }
 opentelemetry = { version = "0.33.0", default-features = false, features = ["trace"] }
 serde = { version = "1.0.228", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "1.0.145", default-features = false, features = ["std"] }

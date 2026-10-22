@@ -80,9 +80,10 @@
   attributes below scope FLOPPY_API_KEY and FLOPPY_BASE_URL to the generate
   service's invokes and TYPESAFE_API_KEY and TYPESAFE_BASE_URL to the
   decision service's. The generate service has no default backend: when the
-  run holds no FLOPPY_BASE_URL or no FLOPPY_API_KEY it sends nothing and
-  answers generate.failed unconfigured, and the builder fails fast in
-  failed (unconfigured) instead of retrying.
+  run holds no FLOPPY_BASE_URL it sends nothing and answers generate.failed
+  unconfigured, and the builder fails fast in failed (unconfigured) instead
+  of retrying; a run with no FLOPPY_API_KEY reaches a keyless backend with
+  no key header (decision D127).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:scx="https://github.com/stateforward/scxml.rs/namespaces/scx"

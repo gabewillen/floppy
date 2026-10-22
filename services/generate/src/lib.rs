@@ -36,16 +36,24 @@
 //!   Completions provider offers its `dispatch` tool (decision D112; it
 //!   never sends `response_format`): the schema's root `description` is
 //!   the function's `description` and the rest of the schema its
-//!   `parameters`, and a call is required (`tool_choice` `required`). The
+//!   `parameters`, and a call is required (`tool_choice` `required`, unless
+//!   the invocation asks `auto`). The
 //!   reply's calls are returned as the original's text generator returns
-//!   them, every call's `arguments` a JSON object, and every call is of
+//!   them, every call's `arguments` a JSON object (arguments the model sent
+//!   as a JSON string of the object are decoded once more, as the original
+//!   decodes them), and every call is of
 //!   the function with arguments the schema admits **before** anything is
 //!   returned (a call of another name, or arguments it does not admit, fail
 //!   `schema-mismatch`, as the original's processing refuses a call that is
 //!   not its `dispatch`). A top-level field of the arguments that the
 //!   schema's root `properties` do not declare is dropped before the check
 //!   and is not returned (the original's processing reads only `events`);
-//!   nested objects are checked strictly. `schemaname` (a string matching
+//!   nested objects are checked strictly, after each string the model sent
+//!   where the schema takes only an array or an object is decoded once
+//!   (an `anyOf`'s first branch that admits the decoded value wins), as the
+//!   original's processing decodes them for a local model that encodes a
+//!   nested array or object as a JSON string; such a string that is not
+//!   JSON, or holds neither, is `not-json`. `schemaname` (a string matching
 //!   `[A-Za-z0-9_-]{1,64}`, [`DEFAULT_SCHEMA_NAME`] without it, requiring
 //!   a schema) is the function's `name`.
 //! * `reasoning_effort` (optional, one of `none`, `minimal`, `low`,
@@ -58,6 +66,23 @@
 //!   streamed reply (`"stream": true`, server-sent events); without it the
 //!   call is one non-streamed completion, as the original's `OpenAI`-compatible
 //!   provider makes it.
+//! * `tool_choice` (optional, `required` or `auto`, requiring a schema;
+//!   [`TOOL_CHOICE`] without it): sent as `tool_choice`. Under `auto` the
+//!   model may answer in its content instead of calling the tool, as the
+//!   original's processor allows for a backend whose guided decoding of a
+//!   required call degrades what the model writes: a reply with no call is
+//!   read as one call whose `id` is [`CONTENT_CALL_ID`] and whose arguments
+//!   are the content, checked as any call's; blank content is a result
+//!   with no call.
+//! * `temperature` (optional, a number from 0 to [`MAX_TEMPERATURE`]): sent
+//!   as `temperature` (the original's image decoder reads at `0`).
+//! * `max_completion_tokens` (optional, a whole number from 1 to
+//!   [`MAX_COMPLETION_TOKENS`]): sent as `max_completion_tokens` (the
+//!   original's image decoder writes at most `512`).
+//! * `thinking_token_budget` (optional, a whole number from 1 to
+//!   [`MAX_COMPLETION_TOKENS`]): sent as `thinking_token_budget`, the
+//!   extra body key with which vLLM bounds a reasoning model's thinking, as
+//!   the original's processor reserves it.
 //!
 //! Any other parameter, a parameter given twice, or a malformed value
 //! rejects the start: the `<invoke>` raises `error.execution` and nothing is
@@ -78,21 +103,24 @@
 //! run grants (`--dir https://github.com/stateforward/floppy/services/generate=HOST::/media`;
 //! `scx run` refuses a run that binds the service without a `--dir` grant)
 //! and sends it as a Chat Completions `image_url` part whose URL is a
-//! `data:` URL of its bytes ([`data_url`]), a PNG, JPEG, GIF, or WebP image
+//! `data:` URL of its bytes ([`data_url`]), a PNG, JPEG, or WebP image
 //! by its signature ([`IMAGE_MEDIA_TYPES`]). A reference that names no
 //! readable file in a granted directory, a file that is not such an image,
 //! or images over their bound reject the start like any malformed parameter:
 //! nothing is sent. Documents never hold the image's bytes.
 //!
-//! The `env` slots ([`API_KEY_SLOT`], [`BASE_URL_SLOT`]), both required at
-//! run time: `env:apikey="NAME"` (sent as a bearer token) and
+//! The `env` slots ([`API_KEY_SLOT`], [`BASE_URL_SLOT`]):
 //! `env:baseurl="NAME"` (the API base URL, for example
-//! `http://192.168.2.89:8000/v1`; it must not end with `/`). The package
+//! `http://192.168.2.89:8000/v1`; it must not end with `/`), required at
+//! run time, and `env:apikey="NAME"` (sent as a bearer token). The package
 //! declares no `http-origins`: the one origin a request may reach is the one
 //! the `baseurl` value supplies, which the host admits because the run, not
-//! the document or the component, chose it. When either slot names no
-//! variable the run holds, the invocation fails fast: it sends nothing and
-//! returns [`FAILED_EVENT`] with `unconfigured` ([`endpoint`]). The
+//! the document or the component, chose it. When the `baseurl` slot names
+//! no variable the run holds, the invocation fails fast: it sends nothing
+//! and returns [`FAILED_EVENT`] with `unconfigured` ([`endpoint`]). When
+//! only the `apikey` slot names none, the backend is keyless (a local
+//! server that takes no key, as the original's keyless client asks one):
+//! the request is sent with no `authorization` header (decision D127). The
 //! component holds opaque references only; the host substitutes the values
 //! into the one admitted request.
 //!
@@ -104,11 +132,25 @@
 //! event):
 //!
 //! * [`RESULT_EVENT`] the original's text-generator output, `{"content":
-//!   C, "tool_calls": [{"id": I, "name": N, "args": A}]}`: `C` the reply's
-//!   content (never empty without a schema; empty when a call has none),
-//!   and every call of the reply in order (the original's `TextToolCall`,
-//!   `A` a JSON object; at least one with a schema, none without).
-//! * [`FAILED_EVENT`] `{"code": C}` with one closed [`FailureCode`].
+//!   C, "tool_calls": [{"id": I, "name": N, "args": A}], "request_bytes":
+//!   B, "usage": U}`: `C` the reply's content (never empty without a
+//!   schema; empty when a call has none), and every call of the reply in
+//!   order (the original's `TextToolCall`, `A` a JSON object; at least one
+//!   with a schema, none without); with what the request cost, as the
+//!   original's Chat Completions output carries it (decision D126): `B` the
+//!   UTF-8 bytes of the request body without its streaming members
+//!   ([`Request::request_bytes`]), and `U` the tokens the backend counted
+//!   ([`Usage`]: `input_tokens`, `output_tokens`, `reasoning_tokens`,
+//!   `total_tokens`, each a whole number, a count the backend left out
+//!   absent), absent when the reply carried no count.
+//! * [`FAILED_EVENT`] `{"code": C}` with one closed [`FailureCode`]; a call
+//!   refused as `not-json` or `schema-mismatch` also carries `"rejection":
+//!   {"key": K, "message": M}` ([`Rejection`], the original's selection
+//!   rejection): `K` a stable key (`not-json`, `schema-mismatch:name` for a
+//!   call of another function, or `schema-mismatch:<P>`, `P` the JSON
+//!   pointer of where the arguments first fail), and `M` a one-line
+//!   diagnostic a model can repair from that repeats no argument value,
+//!   each at most [`MAX_REJECTION_CHARS`] characters.
 //!
 //! A call that may stream (`stream`, or the run's `stream` slot) first
 //! returns [`PROGRESS_EVENT`] `{"received": N}` (the reply's bytes received
@@ -128,8 +170,8 @@
 //!
 //! # The request
 //!
-//! `POST {base}/chat/completions` with `authorization: Bearer <apikey>`,
-//! `content-type: application/json`, `accept: application/json` (or
+//! `POST {base}/chat/completions` with `authorization: Bearer <apikey>`
+//! (none for a keyless backend), `content-type: application/json`, `accept: application/json` (or
 //! `text/event-stream` when streamed), and a body
 //! that is canonical JSON ([`scxml_event_schema::canonical_json`]: compact,
 //! members sorted by key), so one request always produces the same bytes
@@ -152,7 +194,13 @@
 //!
 //! A call is not streamed unless the invocation asks (`stream`), as the original's
 //! provider calls the API. A streamed request (`"stream": true`,
-//! server-sent events) lets closing the connection stop the generation on
+//! server-sent events) also asks for the usage on the stream's last chunk
+//! (`"stream_options": {"include_usage": true}`, as the original's client
+//! does). A call the run's `stream` slot decides cannot ask for it (a
+//! backend refuses `stream_options` without `stream`, and the slot's one
+//! value is the `stream` member), so its usage is the completion's when
+//! the backend does not stream, and only what a streaming backend sends
+//! unasked otherwise. A streamed request lets closing the connection stop the generation on
 //! the backend: a
 //! streaming backend notices the closed connection while it is still
 //! writing tokens, while a non-streaming one may finish (and bill) the whole
@@ -194,8 +242,9 @@
 //! its `delta.content` to the content and each `delta.tool_calls` fragment
 //! to the call its `index` names (its `id` and `function.name` when given,
 //! its `function.arguments` appended); a chunk without choices, such as a
-//! usage chunk, adds nothing, and a reasoning model's reasoning is never
-//! part of the reply. A refusal, an `error` object or chunk, a stream
+//! usage chunk, adds nothing but its `usage` (the last one counted is the
+//! reply's, as a completion's `usage` is), and a reasoning model's
+//! reasoning is never part of the reply. A refusal, an `error` object or chunk, a stream
 //! without `[DONE]` or a finish reason, or a body that is not such a
 //! completion or stream is a failure.
 //!
@@ -206,17 +255,21 @@
 //! counts as none: a reasoning model's stream opens with an empty
 //! `content`) are malformed. With a schema the answer is the content and
 //! every call, as the original's text generator checks them: a reply with
-//! no tool call ("did not include a required tool call") is malformed, and
+//! no tool call ("did not include a required tool call") is malformed
+//! under `required` and read from its content under `auto`, and
 //! a call whose arguments are not a JSON object is not JSON, and a call of
 //! another function, or one whose arguments the compiled schema does not
-//! admit, is a schema mismatch (checked only once the whole reply arrived).
+//! admit, is a schema mismatch (checked only once the whole reply arrived),
+//! each with the [`Rejection`] of the first call refused.
 //!
 //! # Bounds
 //!
 //! The conversation's text bytes ([`MAX_CONVERSATION_BYTES`]), its message
 //! count ([`MAX_MESSAGES`]), its content parts ([`MAX_PARTS`]), its images'
-//! bytes ([`MAX_IMAGE_BYTES`]), and the model name ([`MAX_MODEL_BYTES`]) are bounded on
-//! wasm builds only ([`scxml_types::wasm_bound`]); the schema is bounded by
+//! bytes ([`MAX_IMAGE_BYTES`]), the model name ([`MAX_MODEL_BYTES`]), and
+//! the schemas a call's arguments are decoded against
+//! ([`MAX_DECODING_STEPS`]) are bounded on wasm builds only
+//! ([`scxml_types::wasm_bound`]); the schema is bounded by
 //! `scxml-event-schema`, and the reply by the host's response-body bound.
 //!
 //! # Telemetry
@@ -263,9 +316,19 @@ pub const STREAM_SLOT: &str = "stream";
 pub const MAX_COMPLETION_TOKENS: u32 = 1_048_576;
 /// The path appended to the base URL.
 pub const CHAT_COMPLETIONS_PATH: &str = "/chat/completions";
-/// `tool_choice` with a schema: a call of the one tool is required, as the
-/// original's Chat Completions provider asks.
+/// `tool_choice` with a schema when the invocation names none: a call of
+/// the one tool is required, as the original's Chat Completions provider
+/// asks by default.
 pub const TOOL_CHOICE: &str = "required";
+/// The `tool_choice` values the service sends with a schema: `required`, or
+/// `auto`, which lets the model answer in its content as well, as the
+/// original's processor offers it for a backend whose guided decoding of a
+/// required call degrades what the model writes.
+pub const TOOL_CHOICES: [&str; 2] = ["required", "auto"];
+/// The `id` of a call read from a reply's content under `auto`.
+pub const CONTENT_CALL_ID: &str = "content";
+/// Upper bound of `temperature` (the Chat Completions API's).
+pub const MAX_TEMPERATURE: f64 = 2.0;
 /// The function's `name` when the invocation names none.
 pub const DEFAULT_SCHEMA_NAME: &str = "result";
 /// `reasoning_effort` when the invocation names none and gives no schema.
@@ -304,11 +367,14 @@ pub const MAX_MODEL_BYTES: usize = wasm_bound(256);
 pub const MAX_PARTS: usize = wasm_bound(256);
 /// Upper bound on the bytes of every image the conversation reads together
 /// (wasm builds only). Their base64 `data:` URLs and the conversation stay
-/// inside the host's 4 MiB request-body bound.
+/// inside the host's 4 MiB request-body bound, so it is also the bound of
+/// one image: the original's 4 MiB per image (`media.MAX_IMAGE_BYTES`)
+/// cannot fit a request's body once encoded.
 pub const MAX_IMAGE_BYTES: usize = wasm_bound(2 * 1024 * 1024);
 /// The image media types the service sends, by their leading bytes
-/// ([`image_media_type`]).
-pub const IMAGE_MEDIA_TYPES: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+/// ([`image_media_type`]): the original's `ImageMediaType`, the types every
+/// image-capable provider accepts (a producer transcodes any other).
+pub const IMAGE_MEDIA_TYPES: [&str; 3] = ["image/png", "image/jpeg", "image/webp"];
 
 /// One part of a URL or header value: literal text, or an opaque reference
 /// the host substitutes with the value it holds for one slot.
@@ -332,6 +398,10 @@ pub struct Request {
     /// The reference whose value (`true` or `false`) is the body's `stream`
     /// member, when the run's `stream` slot decides it ([`STREAM_SLOT`]).
     pub stream: Option<u32>,
+    /// The bytes of the body as the original counts a request's
+    /// (`OutputData.request_bytes`): the canonical body without its
+    /// streaming members (`stream`, `stream_options`).
+    pub request_bytes: usize,
 }
 
 impl Request {
@@ -467,6 +537,8 @@ pub struct ResponseSchema {
     pub parameters: Json,
     /// The schema compiled for checking each call's arguments.
     pub compiled: CompiledSchema,
+    /// `tool_choice`, one of [`TOOL_CHOICES`].
+    pub tool_choice: &'static str,
 }
 
 /// One validated generation request: what an invocation's parameters ask.
@@ -484,12 +556,17 @@ pub struct Generation {
     pub stream: bool,
     /// `max_completion_tokens`, when the invocation gave one.
     pub max_completion_tokens: Option<u64>,
+    /// `temperature`, when the invocation gave one.
+    pub temperature: Option<FiniteNumber>,
+    /// `thinking_token_budget` (vLLM's bound on a reasoning model's
+    /// thinking), when the invocation gave one.
+    pub thinking_token_budget: Option<u64>,
 }
 
 /// The closed failure codes of [`FAILED_EVENT`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FailureCode {
-    /// The `apikey` or the `baseurl` slot names no variable the run holds.
+    /// The `baseurl` slot names no variable the run holds.
     Unconfigured,
     /// The transport failed: no response.
     Transport,
@@ -530,6 +607,150 @@ impl FailureCode {
     }
 }
 
+/// The most characters of a [`Rejection`]'s key and message.
+pub const MAX_REJECTION_CHARS: usize = 200;
+/// The most characters of a name the model wrote (a property or a function)
+/// that a [`Rejection`] repeats.
+pub const MAX_REJECTED_NAME_CHARS: usize = 64;
+
+/// Why a reply's call was refused, as the original's `SelectionRejectionData`
+/// carries it, for a [`FailureCode::NotJson`] or
+/// [`FailureCode::SchemaMismatch`] failure: a stable `key` an invoking
+/// document may compare (the same refusal twice has the same key) and a
+/// one-line `message` its model may repair from. Neither carries a value of
+/// the arguments; each is at most [`MAX_REJECTION_CHARS`] characters.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Rejection {
+    /// `not-json`; `schema-mismatch:name` for a call of a function the
+    /// request did not offer; `schema-mismatch:<P>` for arguments the
+    /// parameters do not admit, `P` the JSON pointer of where they first
+    /// fail (empty for the root).
+    pub key: String,
+    /// What failed, where: a decode error's position, the expected and
+    /// found types, the missing or additional property names, or the
+    /// values the schema offers.
+    pub message: String,
+}
+
+impl Rejection {
+    fn new(key: &str, message: &str) -> Self {
+        Self {
+            key: one_line(key, MAX_REJECTION_CHARS),
+            message: one_line(message, MAX_REJECTION_CHARS),
+        }
+    }
+}
+
+/// A failed generation: its code and, for a refused call, its
+/// [`Rejection`].
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Failure {
+    /// The closed code.
+    pub code: FailureCode,
+    /// Why the call was refused ([`FailureCode::NotJson`] and
+    /// [`FailureCode::SchemaMismatch`] only).
+    pub rejection: Option<Rejection>,
+}
+
+impl From<FailureCode> for Failure {
+    fn from(code: FailureCode) -> Self {
+        Self {
+            code,
+            rejection: None,
+        }
+    }
+}
+
+impl Failure {
+    fn not_json(message: &str) -> Self {
+        Self {
+            code: FailureCode::NotJson,
+            rejection: Some(Rejection::new(FailureCode::NotJson.name(), message)),
+        }
+    }
+
+    fn schema_mismatch(location: &str, message: &str) -> Self {
+        Self {
+            code: FailureCode::SchemaMismatch,
+            rejection: Some(Rejection::new(
+                &format!("{}:{location}", FailureCode::SchemaMismatch.name()),
+                message,
+            )),
+        }
+    }
+}
+
+/// `text` on one line of at most `max` characters: every control character
+/// a space, and a longer text cut, ending in `…`.
+#[must_use]
+pub fn one_line(text: &str, max: usize) -> String {
+    let line = text.chars().map(|character| {
+        if character.is_control() {
+            ' '
+        } else {
+            character
+        }
+    });
+    if text.chars().count() <= max {
+        return line.collect();
+    }
+    line.take(max.saturating_sub(1))
+        .chain(std::iter::once('…'))
+        .collect()
+}
+
+/// The tokens a reply's backend said it counted, as the original's `Usage`
+/// reads a completion's `usage`: `input_tokens` (`prompt_tokens`),
+/// `output_tokens` (`completion_tokens`), `reasoning_tokens`
+/// (`completion_tokens_details.reasoning_tokens`), and `total_tokens`. A
+/// count the usage leaves out, or that is not a whole number, is absent.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Usage {
+    /// `usage.prompt_tokens`: the prompt's tokens.
+    pub input_tokens: Option<u64>,
+    /// `usage.completion_tokens`: the tokens the model wrote.
+    pub output_tokens: Option<u64>,
+    /// `usage.completion_tokens_details.reasoning_tokens`: of those, the
+    /// tokens it reasoned in.
+    pub reasoning_tokens: Option<u64>,
+    /// `usage.total_tokens`.
+    pub total_tokens: Option<u64>,
+}
+
+impl Usage {
+    /// The counts of a Chat Completions `usage` object, when it has any.
+    #[must_use]
+    pub fn read(usage: &Json) -> Option<Self> {
+        let count = |path: &[&str]| {
+            path.iter()
+                .try_fold(usage, |value, key| value.get(key))
+                .and_then(Json::as_u64)
+        };
+        let read = Self {
+            input_tokens: count(&["prompt_tokens"]),
+            output_tokens: count(&["completion_tokens"]),
+            reasoning_tokens: count(&["completion_tokens_details", "reasoning_tokens"]),
+            total_tokens: count(&["total_tokens"]),
+        };
+        (read != Self::default()).then_some(read)
+    }
+
+    /// The `usage` member of [`RESULT_EVENT`]: the counts it has.
+    #[must_use]
+    pub fn json(self) -> Json {
+        [
+            ("input_tokens", self.input_tokens),
+            ("output_tokens", self.output_tokens),
+            ("reasoning_tokens", self.reasoning_tokens),
+            ("total_tokens", self.total_tokens),
+        ]
+        .into_iter()
+        .filter_map(|(name, count)| Some((name.to_owned(), Json::from(count?))))
+        .collect::<Map<_, _>>()
+        .into()
+    }
+}
+
 /// The one event an invocation returns before it completes: its name and its
 /// data as a canonical JSON object.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -547,6 +768,22 @@ impl Returned {
         Self {
             name: FAILED_EVENT,
             data: canonical_json(&serde_json::json!({ "code": code.name() })),
+        }
+    }
+
+    /// [`FAILED_EVENT`] for `failure`: its code and, for a refused call,
+    /// its `rejection` `{"key", "message"}`.
+    #[must_use]
+    pub fn failure(failure: &Failure) -> Self {
+        let Some(rejection) = &failure.rejection else {
+            return Self::failed(failure.code);
+        };
+        Self {
+            name: FAILED_EVENT,
+            data: canonical_json(&serde_json::json!({
+                "code": failure.code.name(),
+                "rejection": { "key": rejection.key, "message": rejection.message },
+            })),
         }
     }
 
@@ -732,7 +969,7 @@ fn content_part(
             }
             *left = left.saturating_sub(bytes.len());
             let url =
-                data_url(&bytes).ok_or("generate image must be a PNG, JPEG, GIF, or WebP image")?;
+                data_url(&bytes).ok_or("generate image must be a PNG, JPEG, or WebP image")?;
             Ok(ContentPart::Image(Image { path, url }))
         }
         Some("image") => Err("generate image parts belong in user messages only"),
@@ -794,15 +1031,13 @@ fn percent_decoded(segment: &str) -> Option<String> {
 }
 
 /// The media type of an image's bytes, one of [`IMAGE_MEDIA_TYPES`], by its
-/// leading signature (PNG, JPEG, GIF, WebP).
+/// leading signature (PNG, JPEG, WebP).
 #[must_use]
 pub fn image_media_type(bytes: &[u8]) -> Option<&'static str> {
     if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
         Some("image/png")
     } else if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
         Some("image/jpeg")
-    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
-        Some("image/gif")
     } else if bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP".as_slice()) {
         Some("image/webp")
     } else {
@@ -862,6 +1097,7 @@ pub fn response_schema(source: &str, name: Option<&str>) -> Result<ResponseSchem
         description,
         parameters,
         compiled,
+        tool_choice: TOOL_CHOICE,
     })
 }
 
@@ -940,6 +1176,9 @@ pub fn parse_parameters<'a>(
     let mut reasoning_effort = None;
     let mut stream = None;
     let mut max_completion_tokens = None;
+    let mut tool_choice = None;
+    let mut temperature = None;
+    let mut thinking_token_budget = None;
     for (name, value) in parameters {
         let slot = match name {
             "model" => &mut model,
@@ -951,6 +1190,9 @@ pub fn parse_parameters<'a>(
             "reasoning_effort" => &mut reasoning_effort,
             "stream" => &mut stream,
             "max_completion_tokens" => &mut max_completion_tokens,
+            "tool_choice" => &mut tool_choice,
+            "temperature" => &mut temperature,
+            "thinking_token_budget" => &mut thinking_token_budget,
             _ => return Err("generate takes no parameter of that name"),
         };
         if slot.replace(value).is_some() {
@@ -999,19 +1241,16 @@ pub fn parse_parameters<'a>(
     let schema_name = schema_name_parameter(schema_name)?;
     let reasoning_effort = reasoning_effort_parameter(reasoning_effort, schema.is_some())?;
     let stream = boolean_parameter(stream, "generate stream must be a boolean")?.unwrap_or(false);
-    let max_completion_tokens = max_completion_tokens_parameter(max_completion_tokens)?;
-    let schema = match schema {
-        None => {
-            if schema_name.is_some() {
-                return Err("generate schemaname requires a schema");
-            }
-            None
-        }
-        Some(Data::JsonObject(text) | Data::String(text)) => {
-            Some(response_schema(text, schema_name)?)
-        }
-        Some(_) => return Err("generate schema must be a JSON object or a string holding one"),
-    };
+    let max_completion_tokens = token_count_parameter(
+        max_completion_tokens,
+        "generate max_completion_tokens must be a whole number from 1 to 1048576",
+    )?;
+    let thinking_token_budget = token_count_parameter(
+        thinking_token_budget,
+        "generate thinking_token_budget must be a whole number from 1 to 1048576",
+    )?;
+    let temperature = temperature_parameter(temperature)?;
+    let schema = tool_parameter(schema, schema_name, tool_choice_parameter(tool_choice)?)?;
     Ok(Generation {
         model,
         messages: conversation,
@@ -1019,7 +1258,60 @@ pub fn parse_parameters<'a>(
         reasoning_effort,
         stream,
         max_completion_tokens,
+        temperature,
+        thinking_token_budget,
     })
+}
+
+/// The one function tool of `schema` (absent without one), named
+/// `schema_name` and called as `tool_choice` says.
+fn tool_parameter(
+    schema: Option<&Data>,
+    schema_name: Option<&str>,
+    tool_choice: Option<&'static str>,
+) -> Result<Option<ResponseSchema>, &'static str> {
+    match schema {
+        None => {
+            if schema_name.is_some() {
+                return Err("generate schemaname requires a schema");
+            }
+            if tool_choice.is_some() {
+                return Err("generate tool_choice requires a schema");
+            }
+            Ok(None)
+        }
+        Some(Data::JsonObject(text) | Data::String(text)) => {
+            let mut tool = response_schema(text, schema_name)?;
+            tool.tool_choice = tool_choice.unwrap_or(TOOL_CHOICE);
+            Ok(Some(tool))
+        }
+        Some(_) => Err("generate schema must be a JSON object or a string holding one"),
+    }
+}
+
+/// `tool_choice`: absent, or one of [`TOOL_CHOICES`].
+fn tool_choice_parameter(value: Option<&Data>) -> Result<Option<&'static str>, &'static str> {
+    const INVALID: &str = "generate tool_choice must be required or auto";
+    match value {
+        None => Ok(None),
+        Some(Data::String(choice)) => TOOL_CHOICES
+            .into_iter()
+            .find(|known| known == choice)
+            .map(Some)
+            .ok_or(INVALID),
+        Some(_) => Err(INVALID),
+    }
+}
+
+/// `temperature`: absent, or a number from 0 to [`MAX_TEMPERATURE`].
+fn temperature_parameter(value: Option<&Data>) -> Result<Option<FiniteNumber>, &'static str> {
+    match value {
+        None => Ok(None),
+        Some(Data::Number(number)) if (0.0..=MAX_TEMPERATURE).contains(&number.get()) => {
+            Ok(Some(*number))
+        }
+        Some(_) => Err("generate temperature must be a number from 0 to 2"),
+    }
 }
 
 /// `schemaname`: absent, or `[A-Za-z0-9_-]{1,64}`.
@@ -1039,9 +1331,12 @@ fn schema_name_parameter(value: Option<&Data>) -> Result<Option<&str>, &'static 
     }
 }
 
-/// `max_completion_tokens`: absent, or a whole number from 1 to
-/// [`MAX_COMPLETION_TOKENS`].
-fn max_completion_tokens_parameter(value: Option<&Data>) -> Result<Option<u64>, &'static str> {
+/// A token count (`max_completion_tokens`, `thinking_token_budget`):
+/// absent, or a whole number from 1 to [`MAX_COMPLETION_TOKENS`].
+fn token_count_parameter(
+    value: Option<&Data>,
+    invalid: &'static str,
+) -> Result<Option<u64>, &'static str> {
     match value {
         None => Ok(None),
         Some(Data::Number(number))
@@ -1055,38 +1350,43 @@ fn max_completion_tokens_parameter(value: Option<&Data>) -> Result<Option<u64>, 
             )]
             Ok(Some(number.get() as u64))
         }
-        Some(_) => Err("generate max_completion_tokens must be a whole number from 1 to 1048576"),
+        Some(_) => Err(invalid),
     }
 }
 
 /// The invocation's endpoint, `(baseurl, apikey)`: the references the host
-/// handed for the two slots. There is no default backend, so both are
-/// required.
+/// handed for the two slots. There is no default backend, so the base URL
+/// is required; without a key the backend is keyless and the request
+/// carries no `authorization` header (decision D127).
 ///
 /// # Errors
 ///
-/// [`FailureCode::Unconfigured`] when either slot names no variable the run
-/// holds (the host hands no reference for it): nothing is sent.
+/// [`FailureCode::Unconfigured`] when the `baseurl` slot names no variable
+/// the run holds (the host hands no reference for it): nothing is sent.
 pub const fn endpoint(
     base_url: Option<u32>,
     api_key: Option<u32>,
-) -> Result<(u32, u32), FailureCode> {
-    match (base_url, api_key) {
-        (Some(base_url), Some(api_key)) => Ok((base_url, api_key)),
-        _ => Err(FailureCode::Unconfigured),
+) -> Result<(u32, Option<u32>), FailureCode> {
+    match base_url {
+        Some(base_url) => Ok((base_url, api_key)),
+        None => Err(FailureCode::Unconfigured),
     }
 }
 
 /// The Chat Completions request: `POST {base}/chat/completions` (`base` is
 /// the `baseurl` slot's reference) with the `apikey` slot's reference as a
-/// bearer key and a canonical JSON body: `messages`, `model`,
-/// `reasoning_effort`, `stream` (`true`) when streamed, and, with a
-/// schema, `tools` (one function, the schema its `parameters`) and
-/// `tool_choice` forcing it.
+/// bearer key (no `authorization` header without one) and a canonical JSON
+/// body: `messages`, `model`,
+/// `reasoning_effort`, `stream` (`true`) and `stream_options`
+/// (`{"include_usage": true}`, so the last chunk carries the usage) when
+/// streamed, and, with a schema, `tools` (one function, the schema its
+/// `parameters`) and `tool_choice` forcing it. Its
+/// [`Request::request_bytes`] are the body's without the two streaming
+/// members.
 #[must_use]
 pub fn build_request(
     base_url: u32,
-    api_key: u32,
+    api_key: Option<u32>,
     stream: Option<u32>,
     generation: &Generation,
 ) -> Request {
@@ -1106,11 +1406,16 @@ pub fn build_request(
         "reasoning_effort".into(),
         generation.reasoning_effort.into(),
     );
-    if generation.stream {
-        body.insert("stream".into(), Json::Bool(true));
-    }
     if let Some(tokens) = generation.max_completion_tokens {
         body.insert("max_completion_tokens".into(), tokens.into());
+    }
+    if let Some(temperature) = generation.temperature
+        && let Some(number) = serde_json::Number::from_f64(temperature.get())
+    {
+        body.insert("temperature".into(), number.into());
+    }
+    if let Some(budget) = generation.thinking_token_budget {
+        body.insert("thinking_token_budget".into(), budget.into());
     }
     if let Some(schema) = &generation.schema {
         let mut function = Map::new();
@@ -1123,38 +1428,55 @@ pub fn build_request(
             "tools".into(),
             serde_json::json!([{"type": "function", "function": function}]),
         );
-        body.insert("tool_choice".into(), TOOL_CHOICE.into());
+        body.insert("tool_choice".into(), schema.tool_choice.into());
+    }
+    let mut body = Json::Object(body);
+    let request_bytes = canonical_json(&body).len();
+    if generation.stream
+        && let Json::Object(members) = &mut body
+    {
+        members.insert("stream".into(), Json::Bool(true));
+        members.insert(
+            "stream_options".into(),
+            serde_json::json!({ "include_usage": true }),
+        );
     }
     Request {
         url: vec![
             Part::Reference(base_url),
             Part::Literal(CHAT_COMPLETIONS_PATH.into()),
         ],
-        headers: vec![
-            (
-                "authorization".into(),
-                vec![Part::Literal("Bearer ".into()), Part::Reference(api_key)],
-            ),
-            (
-                "content-type".into(),
-                vec![Part::Literal("application/json".into())],
-            ),
-            (
-                "accept".into(),
-                vec![Part::Literal(
-                    if generation.stream {
-                        "text/event-stream"
-                    } else if stream.is_some() {
-                        "application/json, text/event-stream"
-                    } else {
-                        "application/json"
-                    }
-                    .into(),
-                )],
-            ),
-        ],
-        body: canonical_json(&Json::Object(body)).into_bytes(),
+        headers: api_key
+            .map(|api_key| {
+                (
+                    "authorization".to_owned(),
+                    vec![Part::Literal("Bearer ".into()), Part::Reference(api_key)],
+                )
+            })
+            .into_iter()
+            .chain([
+                (
+                    "content-type".into(),
+                    vec![Part::Literal("application/json".into())],
+                ),
+                (
+                    "accept".into(),
+                    vec![Part::Literal(
+                        if generation.stream {
+                            "text/event-stream"
+                        } else if stream.is_some() {
+                            "application/json, text/event-stream"
+                        } else {
+                            "application/json"
+                        }
+                        .into(),
+                    )],
+                ),
+            ])
+            .collect(),
+        body: canonical_json(&body).into_bytes(),
         stream: stream.filter(|_| !generation.stream),
+        request_bytes,
     }
 }
 
@@ -1186,6 +1508,9 @@ pub struct Reply {
     pub tool_calls: Vec<ToolCall>,
     /// `finish_reason`.
     pub finish_reason: Option<String>,
+    /// The completion's `usage` (a stream's last chunk that carries one),
+    /// when it has a count.
+    pub usage: Option<Usage>,
 }
 
 /// One tool call of a reply.
@@ -1204,7 +1529,9 @@ pub struct ToolCall {
 /// `data:` chunk before `data: [DONE]`, their `delta.content` joined in
 /// order, each `delta.tool_calls` fragment folded into the call its `index`
 /// names (its `id` and `function.name` when given, its `function.arguments`
-/// appended), and the last `finish_reason`.
+/// appended), the last `finish_reason`, and the `usage` of the last chunk
+/// that carries one (a chunk without choices, as `stream_options`'
+/// `include_usage` asks for it).
 ///
 /// The body is server-sent events: lines ending in `\n` (or `\r\n`), an
 /// event's `data:` lines joined with `\n`, a blank line ending the event;
@@ -1223,6 +1550,7 @@ pub fn stream_reply(body: &[u8]) -> Result<Reply, FailureCode> {
     let mut calls: std::collections::BTreeMap<u64, ToolCall> = std::collections::BTreeMap::new();
     let mut refusal = String::new();
     let mut finish: Option<String> = None;
+    let mut usage = None;
     let mut done = false;
     let mut data: Option<String> = None;
     // A final event without its blank line still counts.
@@ -1239,6 +1567,9 @@ pub fn stream_reply(body: &[u8]) -> Result<Reply, FailureCode> {
             let chunk: Json = serde_json::from_str(&event).map_err(|_| FailureCode::Malformed)?;
             if !chunk.is_object() || chunk.get("error").is_some() {
                 return Err(FailureCode::Malformed);
+            }
+            if let Some(counted) = chunk.get("usage").filter(|counted| !counted.is_null()) {
+                usage = Usage::read(counted);
             }
             let choices = chunk
                 .get("choices")
@@ -1267,32 +1598,7 @@ pub fn stream_reply(body: &[u8]) -> Result<Reply, FailureCode> {
                     .into_iter()
                     .flatten()
                 {
-                    let index = piece
-                        .get("index")
-                        .and_then(Json::as_u64)
-                        .ok_or(FailureCode::Malformed)?;
-                    let call = calls.entry(index).or_default();
-                    if let Some(id) = piece
-                        .get("id")
-                        .and_then(Json::as_str)
-                        .filter(|id| !id.is_empty())
-                    {
-                        id.clone_into(&mut call.id);
-                    }
-                    let function = piece.get("function");
-                    if let Some(name) = function
-                        .and_then(|function| function.get("name"))
-                        .and_then(Json::as_str)
-                        .filter(|name| !name.is_empty())
-                    {
-                        name.clone_into(&mut call.name);
-                    }
-                    if let Some(arguments) = function
-                        .and_then(|function| function.get("arguments"))
-                        .and_then(Json::as_str)
-                    {
-                        call.arguments.push_str(arguments);
-                    }
+                    tool_call_fragment(&mut calls, piece)?;
                 }
             }
             continue;
@@ -1318,11 +1624,53 @@ pub fn stream_reply(body: &[u8]) -> Result<Reply, FailureCode> {
         content,
         tool_calls: calls.into_values().collect(),
         finish_reason: finish,
+        usage,
     })
 }
 
+/// Folds one streamed `delta.tool_calls` fragment into the call its
+/// `index` names: its `id` and `function.name` when given, its
+/// `function.arguments` appended.
+///
+/// # Errors
+///
+/// [`FailureCode::Malformed`] for a fragment without a non-negative `index`.
+fn tool_call_fragment(
+    calls: &mut std::collections::BTreeMap<u64, ToolCall>,
+    piece: &Json,
+) -> Result<(), FailureCode> {
+    let index = piece
+        .get("index")
+        .and_then(Json::as_u64)
+        .ok_or(FailureCode::Malformed)?;
+    let call = calls.entry(index).or_default();
+    if let Some(id) = piece
+        .get("id")
+        .and_then(Json::as_str)
+        .filter(|id| !id.is_empty())
+    {
+        id.clone_into(&mut call.id);
+    }
+    let function = piece.get("function");
+    if let Some(name) = function
+        .and_then(|function| function.get("name"))
+        .and_then(Json::as_str)
+        .filter(|name| !name.is_empty())
+    {
+        name.clone_into(&mut call.name);
+    }
+    if let Some(arguments) = function
+        .and_then(|function| function.get("arguments"))
+        .and_then(Json::as_str)
+    {
+        call.arguments.push_str(arguments);
+    }
+    Ok(())
+}
+
 /// The reply of a non-streamed Chat Completions result: its first choice's
-/// `message.content`, `message.tool_calls`, and `finish_reason`.
+/// `message.content`, `message.tool_calls`, and `finish_reason`, and the
+/// completion's `usage`.
 ///
 /// # Errors
 ///
@@ -1391,6 +1739,7 @@ pub fn completion_reply(body: &[u8]) -> Result<Reply, FailureCode> {
             .get("finish_reason")
             .and_then(Json::as_str)
             .map(str::to_owned),
+        usage: completion.get("usage").and_then(Usage::read),
     })
 }
 
@@ -1399,8 +1748,11 @@ impl Reply {
     /// generator returns it (its output's `content` and `tool_calls`):
     /// `{"content": C, "tool_calls": [{"id", "name", "args"}]}`, every
     /// call (the original's `TextToolCall`, its arguments a JSON object) in
-    /// order. With a tool (a schema, its call `required`) there is at least
-    /// one call; without, there is none and `C` is not empty.
+    /// order, and `usage` when the reply counted any tokens ([`Usage`]).
+    /// With a tool whose call is `required` there is at least one call;
+    /// under `auto` a reply without one is read from its content (one call
+    /// [`CONTENT_CALL_ID`] of its JSON object, none when it is blank);
+    /// without a tool there is none and `C` is not empty.
     ///
     /// # Errors
     ///
@@ -1414,16 +1766,17 @@ impl Reply {
     /// arguments are not a JSON object; [`FailureCode::SchemaMismatch`]
     /// when a call names another function than the tool's, or has arguments
     /// its schema does not admit (checked once the whole reply arrived,
-    /// every call before any is returned).
-    pub fn answer(self, tool: Option<&ResponseSchema>) -> Result<Json, FailureCode> {
+    /// every call before any is returned). The last two carry the
+    /// [`Rejection`] of the first call refused.
+    pub fn answer(self, tool: Option<&ResponseSchema>) -> Result<Json, Failure> {
         match self.finish_reason.as_deref() {
-            Some("length") => return Err(FailureCode::Truncated),
-            Some("content_filter") => return Err(FailureCode::Filtered),
+            Some("length") => return Err(FailureCode::Truncated.into()),
+            Some("content_filter") => return Err(FailureCode::Filtered.into()),
             Some("tool_calls") if self.tool_calls.is_empty() => {
-                return Err(FailureCode::Malformed);
+                return Err(FailureCode::Malformed.into());
             }
             Some(reason) if reason != "tool_calls" && !self.tool_calls.is_empty() => {
-                return Err(FailureCode::Malformed);
+                return Err(FailureCode::Malformed.into());
             }
             _ => {}
         }
@@ -1432,35 +1785,509 @@ impl Reply {
             .iter()
             .any(|call| call.id.trim().is_empty() || call.name.trim().is_empty())
         {
-            return Err(FailureCode::Malformed);
+            return Err(FailureCode::Malformed.into());
+        }
+        let mut answer = Map::new();
+        if let Some(usage) = self.usage {
+            answer.insert("usage".into(), usage.json());
         }
         let Some(tool) = tool else {
             if !self.tool_calls.is_empty() || self.content.is_empty() {
-                return Err(FailureCode::Malformed);
+                return Err(FailureCode::Malformed.into());
             }
-            return Ok(serde_json::json!({ "content": self.content, "tool_calls": [] }));
+            answer.insert("content".into(), self.content.into());
+            answer.insert("tool_calls".into(), Json::Array(Vec::new()));
+            return Ok(answer.into());
         };
-        if self.tool_calls.is_empty() {
-            return Err(FailureCode::Malformed);
-        }
-        let tool_calls = self
-            .tool_calls
+        let calls = if self.tool_calls.is_empty() {
+            // Under `auto` the model may answer in its content: it is read
+            // as the arguments of one call of the tool, and blank content
+            // selects nothing, as the original's processor reads it.
+            if tool.tool_choice != "auto" {
+                return Err(FailureCode::Malformed.into());
+            }
+            if self.content.trim().is_empty() {
+                Vec::new()
+            } else {
+                vec![ToolCall {
+                    id: CONTENT_CALL_ID.to_owned(),
+                    name: tool.name.clone(),
+                    arguments: self.content.clone(),
+                }]
+            }
+        } else {
+            self.tool_calls
+        };
+        let tool_calls = calls
             .into_iter()
             .map(|call| {
-                let mut args: Json =
-                    serde_json::from_str(&call.arguments).map_err(|_| FailureCode::NotJson)?;
-                let Some(fields) = args.as_object_mut() else {
-                    return Err(FailureCode::NotJson);
-                };
-                undeclared_dropped(fields, &tool.parameters);
-                let data = json_data(&args)?;
-                if call.name != tool.name || !tool.compiled.admits(&data) {
-                    return Err(FailureCode::SchemaMismatch);
-                }
+                let args = admitted_arguments(&call, tool)?;
                 Ok(serde_json::json!({ "id": call.id, "name": call.name, "args": args }))
             })
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(serde_json::json!({ "content": self.content, "tool_calls": tool_calls }))
+            .collect::<Result<Vec<_>, Failure>>()?;
+        answer.insert("content".into(), self.content.into());
+        answer.insert("tool_calls".into(), tool_calls.into());
+        Ok(answer.into())
+    }
+}
+
+/// The arguments of one call of `tool`, as a JSON object its parameters
+/// admit, read as the original's text generator and processor read them:
+/// arguments that are a JSON string of the object decoded once more,
+/// undeclared top-level fields dropped ([`undeclared_dropped`]), and each
+/// string where the parameters take only an array or an object decoded
+/// once ([`decoded_strings`]).
+///
+/// # Errors
+///
+/// [`Failure`] `not-json` for arguments that are not a JSON object (or hold
+/// a number outside the data model's range), and `schema-mismatch` for a
+/// call of another function or arguments the parameters do not admit, each
+/// with its [`Rejection`].
+fn admitted_arguments(call: &ToolCall, tool: &ResponseSchema) -> Result<Json, Failure> {
+    let not_json = |error| Failure::not_json(&format!("the arguments are not JSON: {error}"));
+    let mut args: Json = serde_json::from_str(&call.arguments).map_err(not_json)?;
+    if let Json::String(text) = &args {
+        args = serde_json::from_str(text).map_err(not_json)?;
+    }
+    let Some(fields) = args.as_object_mut() else {
+        return Err(Failure::not_json(&format!(
+            "the arguments are {}, not a JSON object",
+            json_kind(&args)
+        )));
+    };
+    undeclared_dropped(fields, &tool.parameters);
+    if call.name != tool.name {
+        return Err(Failure::schema_mismatch(
+            "name",
+            &format!(
+                "the call names a function the request did not offer: expected {}, got {}",
+                quoted(&tool.name),
+                quoted(&call.name)
+            ),
+        ));
+    }
+    let mut decoder = Decoder {
+        root: &tool.parameters,
+        checker: None,
+        steps: 0,
+    };
+    let args =
+        decoder
+            .decoded(args, &tool.parameters, "", "", 0)
+            .map_err(|(location, message)| {
+                Failure::not_json(&format!("{}: {message}", place(&location)))
+            })?;
+    let data = json_data(&args).map_err(|_| {
+        Failure::not_json("the arguments hold a number outside the data model's range")
+    })?;
+    if !tool.compiled.admits(&data) {
+        let (location, message) = Checker::new(&tool.parameters)
+            .and_then(|mut checker| checker.first_failure(&args))
+            .unwrap_or_else(|| {
+                (
+                    String::new(),
+                    "the arguments do not satisfy the tool's parameters".to_owned(),
+                )
+            });
+        return Err(Failure::schema_mismatch(
+            &location,
+            &format!("{}: {message}", place(&location)),
+        ));
+    }
+    Ok(args)
+}
+
+/// A JSON pointer as a message names it: `(root)` for the root.
+fn place(location: &str) -> &str {
+    if location.is_empty() {
+        "(root)"
+    } else {
+        location
+    }
+}
+
+/// The most `$ref`s [`Decoder`] follows one after another with no value
+/// between them (an object's property or an array's item is a value): a
+/// schema that refers to itself with no value between ends there.
+const MAX_DECODED_REFS: usize = 64;
+
+/// The most schemas [`Decoder`] decodes a call's arguments against (each
+/// `$ref`, `anyOf` branch, property and item counts one); more fails the
+/// call `not-json`. An `anyOf` of recursive branches can otherwise take
+/// work exponential in the arguments' depth.
+pub const MAX_DECODING_STEPS: usize = wasm_bound(64 * 1024);
+
+/// `token` escaped as a JSON pointer token (RFC 6901: `~0`, `~1`).
+fn pointer_token(token: &str) -> String {
+    token.replace('~', "~0").replace('/', "~1")
+}
+
+/// The JSON strings a model sent where a tool's parameters take only an
+/// array or an object, each decoded once, as the original's processing
+/// decodes them (`_decoded_json_strings`): local models often encode a
+/// nested array or object as a JSON string.
+struct Decoder<'a> {
+    /// The parameters, which a `$ref` resolves against.
+    root: &'a Json,
+    /// The parameters compiled for checking an `anyOf` branch, once one is
+    /// needed.
+    checker: Option<Checker>,
+    /// The schemas decoded against so far, at most [`MAX_DECODING_STEPS`].
+    steps: usize,
+}
+
+impl Decoder<'_> {
+    /// `value` with its strings decoded as `schema` (at the schema pointer
+    /// `at`, for the instance pointer `instance`, reached through `refs`
+    /// `$ref`s since the last value) says: a `$ref` (a local JSON pointer,
+    /// percent-decoded as the URI fragment it is) is followed; of an `anyOf`'s branches the first whose decoding its
+    /// branch admits wins, and with none the value is kept for the check to
+    /// refuse; a string where `type` takes an array or an object and not a
+    /// string is decoded once, and an object's declared properties and an
+    /// array's items are decoded as their schemas say.
+    ///
+    /// # Errors
+    ///
+    /// The instance pointer and why, for a string that is not JSON or that
+    /// holds neither an array nor an object, and for arguments that take
+    /// more than [`MAX_DECODING_STEPS`].
+    fn decoded(
+        &mut self,
+        value: Json,
+        schema: &Json,
+        at: &str,
+        instance: &str,
+        refs: usize,
+    ) -> Result<Json, (String, String)> {
+        self.steps = self.steps.saturating_add(1);
+        if self.exhausted() {
+            return Err((
+                instance.to_owned(),
+                format!("the arguments take more than {MAX_DECODING_STEPS} decoding steps"),
+            ));
+        }
+        let Json::Object(keywords) = schema else {
+            return Ok(value);
+        };
+        if let Some(Json::String(reference)) = keywords.get("$ref")
+            && let Some(pointer) = reference.strip_prefix('#').and_then(percent_decoded)
+            && let Some(target) = self.root.pointer(&pointer)
+            && refs < MAX_DECODED_REFS
+        {
+            return self.decoded(value, target, &pointer, instance, refs + 1);
+        }
+        if let Some(Json::Array(branches)) = keywords.get("anyOf") {
+            for (index, branch) in branches.iter().enumerate() {
+                let branch_at = format!("{at}/anyOf/{index}");
+                match self.decoded(value.clone(), branch, &branch_at, instance, refs) {
+                    Ok(decoded) if self.admits(&branch_at, &decoded) => return Ok(decoded),
+                    Err(error) if self.exhausted() => return Err(error),
+                    _ => {}
+                }
+            }
+            return Ok(value);
+        }
+        let types: Vec<&str> = match keywords.get("type") {
+            Some(Json::String(kind)) => vec![kind.as_str()],
+            Some(Json::Array(kinds)) => kinds.iter().filter_map(Json::as_str).collect(),
+            _ => Vec::new(),
+        };
+        let takes = |kind: &str| types.contains(&kind);
+        let mut value = value;
+        if let Json::String(text) = &value
+            && (takes("array") || takes("object"))
+            && !takes("string")
+        {
+            let decoded: Json = serde_json::from_str(text).map_err(|error| {
+                (
+                    instance.to_owned(),
+                    format!("a string-encoded value is not JSON: {error}"),
+                )
+            })?;
+            if !(decoded.is_array() && takes("array") || decoded.is_object() && takes("object")) {
+                return Err((
+                    instance.to_owned(),
+                    "a string-encoded value holds neither the array nor the object expected"
+                        .to_owned(),
+                ));
+            }
+            value = decoded;
+        }
+        match value {
+            Json::Object(members) if takes("object") => {
+                let properties = keywords.get("properties").and_then(Json::as_object);
+                members
+                    .into_iter()
+                    .map(|(name, member)| {
+                        let token = pointer_token(&name);
+                        let member = match properties.and_then(|declared| declared.get(&name)) {
+                            Some(property) => self.decoded(
+                                member,
+                                property,
+                                &format!("{at}/properties/{token}"),
+                                &format!("{instance}/{token}"),
+                                0,
+                            )?,
+                            None => member,
+                        };
+                        Ok((name, member))
+                    })
+                    .collect::<Result<Map<_, _>, _>>()
+                    .map(Json::Object)
+            }
+            Json::Array(items) if takes("array") => match keywords.get("items") {
+                Some(item @ Json::Object(_)) => items
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, member)| {
+                        self.decoded(
+                            member,
+                            item,
+                            &format!("{at}/items"),
+                            &format!("{instance}/{index}"),
+                            0,
+                        )
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(Json::Array),
+                _ => Ok(Json::Array(items)),
+            },
+            value => Ok(value),
+        }
+    }
+
+    /// Whether the arguments took more than [`MAX_DECODING_STEPS`].
+    fn exhausted(&self) -> bool {
+        exceeds_wasm_bound(self.steps, MAX_DECODING_STEPS)
+    }
+
+    /// Whether the sub-schema at the schema pointer `at` admits `value`.
+    fn admits(&mut self, at: &str, value: &Json) -> bool {
+        if self.checker.is_none() {
+            self.checker = Checker::new(self.root);
+        }
+        self.checker
+            .as_mut()
+            .is_some_and(|checker| checker.admits(at, value))
+    }
+}
+
+/// What kind of JSON value `value` is, for a message.
+fn json_kind(value: &Json) -> &'static str {
+    match value {
+        Json::Null => "null",
+        Json::Bool(_) => "a boolean",
+        Json::Number(_) => "a number",
+        Json::String(_) => "a string",
+        Json::Array(_) => "an array",
+        Json::Object(_) => "an object",
+    }
+}
+
+/// A name the model wrote, quoted and cut to [`MAX_REJECTED_NAME_CHARS`].
+fn quoted(name: &str) -> String {
+    format!("'{}'", one_line(name, MAX_REJECTED_NAME_CHARS))
+}
+
+/// The location boon knows a tool's parameters by: an in-memory resource,
+/// so nothing is ever loaded.
+const PARAMETERS_LOCATION: &str = "urn:floppy:generate:parameters";
+
+/// Refuses every URL: the parameters are compiled only from their value.
+struct NoLoader;
+
+impl boon::UrlLoader for NoLoader {
+    fn load(&self, url: &str) -> Result<Json, Box<dyn std::error::Error>> {
+        Err(format!("{url} is not loaded").into())
+    }
+}
+
+/// A tool's parameters compiled by boon (the validator
+/// [`CompiledSchema`] wraps) for what [`CompiledSchema::admits`] does not
+/// say: where arguments first fail.
+struct Checker {
+    compiler: boon::Compiler,
+    schemas: boon::Schemas,
+}
+
+impl Checker {
+    /// `parameters` as boon's one resource, its dialect its `$schema`, else
+    /// JSON Schema 2020-12, as [`CompiledSchema`] compiles it.
+    fn new(parameters: &Json) -> Option<Self> {
+        let mut compiler = boon::Compiler::new();
+        compiler.use_loader(Box::new(NoLoader));
+        compiler.set_default_draft(boon::Draft::V2020_12);
+        compiler
+            .add_resource(PARAMETERS_LOCATION, parameters.clone())
+            .ok()?;
+        Some(Self {
+            compiler,
+            schemas: boon::Schemas::new(),
+        })
+    }
+
+    /// Whether the sub-schema at the JSON pointer `at` (empty for the
+    /// parameters) admits `value`.
+    fn admits(&mut self, at: &str, value: &Json) -> bool {
+        let location = if at.is_empty() {
+            PARAMETERS_LOCATION.to_owned()
+        } else {
+            format!("{PARAMETERS_LOCATION}#{}", fragment(at))
+        };
+        self.compiler
+            .compile(&location, &mut self.schemas)
+            .is_ok_and(|index| self.schemas.validate(value, index).is_ok())
+    }
+
+    /// Where `value` first fails the parameters (a JSON pointer, empty for
+    /// the root) and why, with no value of it ([`first_failure`]); `None`
+    /// when boon admits it.
+    fn first_failure(&mut self, value: &Json) -> Option<(String, String)> {
+        let index = self
+            .compiler
+            .compile(PARAMETERS_LOCATION, &mut self.schemas)
+            .ok()?;
+        let error = self.schemas.validate(value, index).err()?;
+        Some(first_failure(&error))
+    }
+}
+
+/// A JSON pointer as a URI fragment: every byte but the unreserved ones and
+/// the pointer's own `/` and `~` percent-encoded.
+fn fragment(pointer: &str) -> String {
+    pointer
+        .bytes()
+        .map(|byte| {
+            if byte.is_ascii_alphanumeric() || b"-._~/".contains(&byte) {
+                char::from(byte).to_string()
+            } else {
+                format!("%{byte:02X}")
+            }
+        })
+        .collect()
+}
+
+/// The first failure of a validation error's tree: its location and its
+/// description ([`described`]). The first cause is followed down to a leaf;
+/// at an `anyOf` (or a `oneOf` none of whose branches match) the branch
+/// followed is the one branch that does not refuse a `const` or `enum` of
+/// the value's own members (the branch the value is meant for, as the
+/// dispatch tool's event branches are told apart by their `event`). When
+/// every branch refuses the same member's value, that member is the
+/// failure: it is none of the values the branches offer. Otherwise the
+/// `anyOf` itself is.
+fn first_failure(error: &boon::ValidationError<'_, '_>) -> (String, String) {
+    use boon::ErrorKind;
+    let here = || (error.instance_location.to_string(), described(&error.kind));
+    match &error.kind {
+        ErrorKind::AnyOf | ErrorKind::OneOf(None) if !error.causes.is_empty() => {
+            let depth = error.instance_location.tokens.len() + 1;
+            let refusals: Vec<Vec<&boon::ValidationError<'_, '_>>> = error
+                .causes
+                .iter()
+                .map(|branch| {
+                    let mut found = Vec::new();
+                    discriminating(branch, depth, &mut found);
+                    found
+                })
+                .collect();
+            let mut open = error
+                .causes
+                .iter()
+                .zip(&refusals)
+                .filter(|(_, refused)| refused.is_empty());
+            if let (Some((branch, _)), None) = (open.next(), open.next()) {
+                return first_failure(branch);
+            }
+            let Some(member) = refusals
+                .first()
+                .and_then(|refused| refused.first())
+                .map(|refusal| refusal.instance_location.to_string())
+            else {
+                return here();
+            };
+            let mut offered: Vec<String> = Vec::new();
+            for refused in &refusals {
+                let at_member = refused
+                    .iter()
+                    .filter(|refusal| refusal.instance_location.to_string() == member);
+                let mut any = false;
+                for refusal in at_member {
+                    any = true;
+                    let values: Vec<&Json> = match &refusal.kind {
+                        ErrorKind::Enum { want } => want.iter().collect(),
+                        ErrorKind::Const { want } => vec![*want],
+                        _ => Vec::new(),
+                    };
+                    for value in values {
+                        let value = canonical_json(value);
+                        if !offered.contains(&value) {
+                            offered.push(value);
+                        }
+                    }
+                }
+                if !any {
+                    return here();
+                }
+            }
+            (
+                member,
+                format!("value must be one of {}", offered.join(", ")),
+            )
+        }
+        _ => error.causes.first().map_or_else(here, first_failure),
+    }
+}
+
+/// The `const` and `enum` refusals of `error`'s tree at the instance
+/// `depth`: a branch's refusal of one of the value's own members.
+fn discriminating<'e, 's, 'v>(
+    error: &'e boon::ValidationError<'s, 'v>,
+    depth: usize,
+    found: &mut Vec<&'e boon::ValidationError<'s, 'v>>,
+) {
+    if error.causes.is_empty() {
+        if error.instance_location.tokens.len() == depth
+            && matches!(
+                error.kind,
+                boon::ErrorKind::Enum { .. } | boon::ErrorKind::Const { .. }
+            )
+        {
+            found.push(error);
+        }
+        return;
+    }
+    for cause in &error.causes {
+        discriminating(cause, depth, found);
+    }
+}
+
+/// What a validation failure says, without any value of the instance: the
+/// kinds that would repeat one (`format`, `pattern`, the numeric bounds,
+/// the content keywords) say only what the schema wants, and a property
+/// name the model wrote is cut to [`MAX_REJECTED_NAME_CHARS`].
+fn described(kind: &boon::ErrorKind<'_, '_>) -> String {
+    use boon::ErrorKind;
+    match kind {
+        ErrorKind::PropertyName { prop } => format!("invalid property name {}", quoted(prop)),
+        ErrorKind::AdditionalProperties { got } => format!(
+            "additional properties {} not allowed",
+            got.iter()
+                .map(|name| quoted(name))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        ErrorKind::Format { want, .. } => format!("value is not a valid {want}"),
+        ErrorKind::Pattern { want, .. } => format!("value does not match the pattern {want}"),
+        ErrorKind::ContentEncoding { want, .. } => format!("value is not {want} encoded"),
+        ErrorKind::ContentMediaType { want, .. } => format!("value is not of media type {want}"),
+        ErrorKind::Minimum { want, .. } => format!("value must be at least {want}"),
+        ErrorKind::Maximum { want, .. } => format!("value must be at most {want}"),
+        ErrorKind::ExclusiveMinimum { want, .. } => format!("value must be greater than {want}"),
+        ErrorKind::ExclusiveMaximum { want, .. } => format!("value must be less than {want}"),
+        ErrorKind::MultipleOf { want, .. } => format!("value must be a multiple of {want}"),
+        other => other.to_string().replace(PARAMETERS_LOCATION, ""),
     }
 }
 
@@ -1515,10 +2342,16 @@ pub fn is_event_stream(body: &[u8]) -> bool {
 }
 
 /// What one settled request becomes: [`RESULT_EVENT`] with the reply
-/// ([`Reply::answer`]: `{"content": C, "tool_calls": [...]}`), or
-/// [`FAILED_EVENT`] with the failure's code.
+/// ([`Reply::answer`]: `{"content": C, "tool_calls": [...]}`, its `usage`
+/// when counted) and `request_bytes` (the request's
+/// [`Request::request_bytes`]), or [`FAILED_EVENT`] with the failure's code
+/// and, for a refused call, its `rejection` ([`Returned::failure`]).
 #[must_use]
-pub fn outcome(generation: &Generation, answered: Result<Response, TransportFailure>) -> Returned {
+pub fn outcome(
+    generation: &Generation,
+    request_bytes: usize,
+    answered: Result<Response, TransportFailure>,
+) -> Returned {
     let response = match answered {
         Ok(response) => response,
         Err(TransportFailure::Unavailable) => return Returned::failed(FailureCode::Transport),
@@ -1532,10 +2365,16 @@ pub fn outcome(generation: &Generation, answered: Result<Response, TransportFail
     } else {
         completion_reply(&response.body)
     };
-    let data = match reply.and_then(|reply| reply.answer(generation.schema.as_ref())) {
+    let mut data = match reply
+        .map_err(Failure::from)
+        .and_then(|reply| reply.answer(generation.schema.as_ref()))
+    {
         Ok(data) => data,
-        Err(code) => return Returned::failed(code),
+        Err(failure) => return Returned::failure(&failure),
     };
+    if let Json::Object(members) = &mut data {
+        members.insert("request_bytes".into(), request_bytes.into());
+    }
     Returned {
         name: RESULT_EVENT,
         data: canonical_json(&data),
@@ -1659,7 +2498,7 @@ mod guest {
     /// to make first.
     enum Plan {
         Return(Returned),
-        Fetch(Generation, HttpRequest, bool),
+        Fetch(Generation, HttpRequest, bool, usize),
     }
 
     fn plan(request: InvokeRequest) -> Result<Plan, ComponentError> {
@@ -1714,7 +2553,7 @@ mod guest {
                 })
                 .collect(),
         };
-        Ok(Plan::Fetch(generation, http, streamed))
+        Ok(Plan::Fetch(generation, http, streamed, built.request_bytes))
     }
 
     #[allow(
@@ -1745,7 +2584,7 @@ mod guest {
                 let reply = match plan {
                     Plan::Return(reply) => reply,
                     // Suspends only this task, never the invoking session.
-                    Plan::Fetch(generation, http, streamed) => {
+                    Plan::Fetch(generation, http, streamed, request_bytes) => {
                         let answered = if streamed {
                             match receive(http, &mut returned).await {
                                 Some(answered) => answered,
@@ -1761,7 +2600,7 @@ mod guest {
                                 })
                                 .map_err(|failure| transport_failure(&failure))
                         };
-                        super::outcome(&generation, answered)
+                        super::outcome(&generation, request_bytes, answered)
                     }
                 };
                 telemetry::event(
