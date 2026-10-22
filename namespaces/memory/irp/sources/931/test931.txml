@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- memory-4: longer words are cut at the last whole word within 2048 bytes (the bound inside a word drops it), trailing space removed. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory">
+<datamodel>
+  <data id="t" expr="null"/>
+  <data id="w" expr="'word '.repeat(409) + 'longword'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <memory:cut_at_word location="t" words="w"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="t.cut === true &amp;&amp; t.text === 'word '.repeat(409).slice(0, -1)" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>
