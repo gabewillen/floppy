@@ -1,6 +1,6 @@
 [package]
 name = "floppy-service-decision"
-description = "The `decision` invoked service: OpenAI Decisions API's question types (a `choice` of an event from a choice list, filled from grounded options and validated against its schema, or of a label; a `predicate` of every groundable event; a `score` of candidates), through a pluggable backend, as a Wasm component whose `invoke` export is an `async func`"
+description = "The `decision` invoked service: OpenAI Decisions API's question types (a `choice` of an event from a choice list, filled from grounded options and validated against its schema, or of a label; a `predicate` of the one chosen event with its confidence, or a pass to a later tier; a `score` of candidates), through a pluggable backend, as a Wasm component whose `invoke` export is an `async func`"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

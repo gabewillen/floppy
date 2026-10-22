@@ -13,6 +13,18 @@ function isDeliberativeHandoff(name) {
   return name === 'bot.ability.reasoning.input';
 }
 
+// The cognition's ignore (types.IgnoreEvent): cognition only, never an
+// environment action.
+function isIgnore(name) {
+  return name === 'bot.ability.cognition.ignore';
+}
+
+// The decision's state: the stimulus as the model reads it (the reference
+// D-R-50).
+function decisionState() {
+  return ({turn: stimulus_content});
+}
+
 // A selected event with at least one selection (the service's events are
 // unchecked).
 function hasSelections(_event) {
@@ -40,15 +52,31 @@ function product(_event) {
   });
 }
 
-// The turn's selections (the original's escalation reason none).
-function selectionResult(_event) {
-  return ({handled: true, selected: product(_event), reason: 'none', turn: turn, confidence_tuner: confidence_tuner});
+// What the stage sends (the reference dispatch_selected_events): a handled
+// product's selections, and of an escalating one only its environment
+// actions (without_ignore_selections, and never the handoff); each to its
+// one target, so a selection without one is not sent.
+function actedSelections(_event) {
+  return product(_event).filter(function (item) {
+    return typeof item.target === 'string' && (result.handled || !(isIgnore(item.event) || isDeliberativeHandoff(item.event)));
+  });
 }
 
-// An escalating product: unhandled, its selections sent (the original
-// dispatches its _environment_actions before reasoning runs).
+// What every answer carries: the turn, what was sent, and the state the
+// cognition keeps across turns.
+function stageResult(fields) {
+  return Object.assign({turn: turn, acted: acted, confidence_tuner: confidence_tuner, bytes_per_token: bytes_per_token}, fields);
+}
+
+// The turn's selections (the original's escalation reason none).
+function selectionResult(_event) {
+  return stageResult({handled: true, selected: product(_event), reason: 'none'});
+}
+
+// An escalating product: unhandled, its environment actions sent (the
+// original dispatches its _environment_actions before the next tier runs).
 function escalatedResult(reason) {
-  return ({handled: false, reason: reason, turn: turn, confidence_tuner: confidence_tuner});
+  return stageResult({handled: false, reason: reason});
 }
 
 // An abstain with one of its reasons (the service's events are unchecked).
@@ -60,9 +88,11 @@ function abstainedLog(_event) {
   return 'turn ' + turn + ': abstained (' + _event.data.reason + ')';
 }
 
-// The original's empty product: no selection, no observation.
-function abstainedResult() {
-  return ({handled: false, reason: 'empty_product', turn: turn, confidence_tuner: confidence_tuner});
+// The original's empty product: no selection, no observation; a pass
+// names the tier it hands the turn to.
+function abstainedResult(_event) {
+  var empty = stageResult({handled: false, reason: 'empty_product'});
+  return typeof _event.data.hand_to === 'string' ? Object.assign(empty, {hand_to: _event.data.hand_to}) : empty;
 }
 
 function failedCode(_event) {
@@ -70,21 +100,31 @@ function failedCode(_event) {
 }
 
 function decisionFailedResult() {
-  return ({handled: false, failed: true, reason: 'the decision failed (' + failed_code + ')', turn: turn, confidence_tuner: confidence_tuner});
+  return stageResult({handled: false, failed: true, reason: 'the decision failed (' + failed_code + ')'});
 }
 
 function timedOutResult() {
-  return ({handled: false, failed: true, reason: 'the decision timed out after ' + decision_timeout_ms + ' ms', turn: turn, confidence_tuner: confidence_tuner});
+  return stageResult({handled: false, failed: true, reason: 'the decision timed out after ' + decision_timeout_ms + ' ms'});
 }
 
 function couldNotRunResult(_event) {
-  return ({handled: false, failed: true, reason: 'the decision could not run (' + _event.name + ')', turn: turn, confidence_tuner: confidence_tuner});
+  return stageResult({handled: false, failed: true, reason: 'the decision could not run (' + _event.name + ')'});
 }
 
-// The decision's instructions: the robot's own, then its environment this
-// turn as JSON when it has one (decision D106).
-function decisionInstructions() {
-  return environment === null ? instructions : instructions + '\n\nThe robot\'s environment: ' + JSON.stringify(environment);
+// Whether the decision has answered.
+function hasResult() {
+  return result !== null;
+}
+
+// The fewest bytes a token any answer showed (the reference
+// ContextFit.observe): the request's bytes over the tokens the backend
+// counted, from the service's done data (unchecked); a count that is not
+// positive teaches nothing.
+function learnedBytesPerToken(_event) {
+  var done = Object(_event.data);
+  var bytes = done.request_bytes;
+  var tokens = Object(done.usage).input_tokens;
+  return typeof bytes === 'number' && typeof tokens === 'number' && bytes > 0 && tokens > 0 ? Math.min(bytes_per_token, bytes / tokens) : bytes_per_token;
 }
 
 // The data a selection is sent with, as the original's dispatch_selected_events

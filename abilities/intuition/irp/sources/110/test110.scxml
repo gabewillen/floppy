@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- intuition-2: the confidence is the selections' minimum, observed by the tuner: 38 clears the warmup floor. -->
+<!-- intuition-2: the confidence is the selection's probability, observed by the tuner: 38 clears the warmup floor. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="intuition" type="scxml" src="../../../intuition.scx">
@@ -17,12 +17,9 @@
     <transition event="bot.say" target="step1"/>
   </state>
   <state id="step1">
-    <transition event="bot.ability.cognition.ignore" target="step2"/>
+    <transition event="done.invoke.intuition" cond="_event.data.turn === 1 &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.reason === &quot;none&quot; &amp;&amp; typeof _event.data.confidence_tuner === 'object' &amp;&amp; Array.isArray(_event.data.acted) &amp;&amp; typeof _event.data.bytes_per_token === 'number' &amp;&amp; JSON.stringify(_event.data.selected) === &quot;[{\&quot;data\&quot;:{},\&quot;event\&quot;:\&quot;bot.say\&quot;,\&quot;target\&quot;:\&quot;session\&quot;}]&quot; &amp;&amp; _event.data.confidence_tuner.n === 1 &amp;&amp; _event.data.confidence_tuner.mean === 38" target="step2"/>
   </state>
   <state id="step2">
-    <transition event="done.invoke.intuition" cond="_event.data.turn === 1 &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.reason === &quot;none&quot; &amp;&amp; typeof _event.data.confidence_tuner === 'object' &amp;&amp; JSON.stringify(_event.data.selected) === &quot;[{\&quot;data\&quot;:{},\&quot;event\&quot;:\&quot;bot.say\&quot;,\&quot;target\&quot;:\&quot;session\&quot;},{\&quot;data\&quot;:{},\&quot;event\&quot;:\&quot;bot.ability.cognition.ignore\&quot;,\&quot;target\&quot;:\&quot;session\&quot;}]&quot; &amp;&amp; _event.data.confidence_tuner.n === 1 &amp;&amp; _event.data.confidence_tuner.mean === 38" target="step3"/>
-  </state>
-  <state id="step3">
     <transition target="pass"/>
   </state>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>

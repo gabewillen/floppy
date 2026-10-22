@@ -13,7 +13,7 @@
             "confidence": 0.7,
             "probabilities": {
               "bot.say": 0.7,
-              "__unhandled__": 0.3
+              "__reasoning__": 0.3
             }
           }
         },
