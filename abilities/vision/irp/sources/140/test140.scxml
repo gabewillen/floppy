@@ -10,7 +10,7 @@
   <state id="step0">
     <onentry>
       <send event="bot.ability.vision.classification.input" target="#_vision"><content expr='{"kind": "image", "content": "media/a.png"}'/></send>
-      <send event="bot.ability.vision.classification.input" target="#_vision"><content expr='{"kind": "text", "content": ""}'/></send>
+      <send event="bot.ability.vision.classification.input" target="#_vision"><content expr='{"kind": "text", "content": " "}'/></send>
       <send event="bot.ability.vision.classification.input" target="#_vision"><content expr='{"kind": "text", "content": "words"}'/></send>
     </onentry>
     <transition event="bot.ability.vision.classification.output" cond='_event.data.kind === "image" &amp;&amp; _event.data.confidence === 1' target="step1"/>

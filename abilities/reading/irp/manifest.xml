@@ -3,12 +3,15 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/reading/irp/sources">
   <assert id="reading-1" specnum="1" specid="#reading-1">
-    <![CDATA[It offers nothing and answers only what it is given: on start it sends its parent nothing, and an input `bot.ability.reading.input` `{kind, content}` whose data its schema refuses (a kind other than `text` or `image`) is never routed to it (`error.execution` in the sender).]]>
+    <![CDATA[It offers nothing and answers only what it is given: on start it sends its parent nothing, and an input `bot.ability.reading.input` `{kind, content}` whose data its schema refuses (a kind other than `text` or `image`, or an empty `content`, the original's `min_length=1`) is never routed to it (`error.execution` in the sender).]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
     <test id="101" conformance="mandatory" manual="false">
       <start uri="101/test101.scxml"/>
+    </test>
+    <test id="102" conformance="mandatory" manual="false">
+      <start uri="102/test102.scxml"/>
     </test>
   </assert>
   <assert id="reading-2" specnum="2" specid="#reading-2">
@@ -21,7 +24,7 @@
     </test>
   </assert>
   <assert id="reading-3" specnum="3" specid="#reading-3">
-    <![CDATA[A text input whose text is blank, or an image input with an empty reference, is classified as unreadable and comes back as `bot.ability.reading.output` `{text: "", source_kind: "unreadable", confidence: 1}`; no model is called.]]>
+    <![CDATA[A text input whose text is only white space is classified as unreadable and comes back as `bot.ability.reading.output` `{text: "", source_kind: "unreadable", confidence: 1}`; no model is called.]]>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>
