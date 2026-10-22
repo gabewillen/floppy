@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/memory/irp/sources">
   <assert id="memory-1" specnum="1" specid="#memory-1">
-    <![CDATA[Before the statements, it brings the database to the head of the original's revisions (0001 then 0002, in the engine's dialect) through the migration ability, so the statements see Alembic's `alembic_version` at `0002` and the original's tables, `bot_behavior` with its `lifetime` column.]]>
+    <![CDATA[Before the statements, it brings the database to the head of floppy's revisions (0001, 0002, then 0003, the original's 0002_stm_turns, decision D165; in the engine's dialect) through the migration ability, so the statements see Alembic's `alembic_version` at `0003` and the tables, `bot_behavior` with its `lifetime` column and `bot_stm_turn`.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -18,7 +18,7 @@
     </test>
   </assert>
   <assert id="memory-3" specnum="3" specid="#memory-3">
-    <![CDATA[A statement that fails (the engine refuses it, or its `rowcount` is not the one it expects) answers `bot.ability.failed` `{message}`, the engine's message, and no `bot.ability.memory.output`.]]>
+    <![CDATA[A statement that fails (the engine refuses it, or its `rowcount` is not the one it expects) answers `bot.ability.failed` `{message, kind}`, the engine's message and kind `store_failed`, and no `bot.ability.memory.output`.]]>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>
@@ -30,7 +30,7 @@
     </test>
   </assert>
   <assert id="memory-4" specnum="4" specid="#memory-4">
-    <![CDATA[A database the migration cannot bring to head answers `bot.ability.failed` `{message}` with the migration's message, and the statements never run.]]>
+    <![CDATA[A database the migration cannot bring to head answers `bot.ability.failed` `{message, kind}` with the migration's message and kind `unavailable`, and the statements never run.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>

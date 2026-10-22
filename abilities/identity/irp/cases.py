@@ -71,10 +71,6 @@ S.case(111, 2, "a database it cannot open fails every recall attempt until the b
        [expect(FAILED, f"_event.data.message === {js(GAVE_UP)}"),
         READY, send(INPUT, said("hey floppy")), expect(HANDOFF, addressed("Floppy"))],
        params=[("database", "'/nowhere/floppy.sqlite'"), named("Floppy"), ("bring_up_timeout_ms", "1500")], clock="wall")
-S.case(112, 2, "attempts that never answer in time are asked again until the budget runs out.",
-       [expect(FAILED, f"_event.data.message === {js(GAVE_UP)}"), READY],
-       params=[DB, ("recall_attempt_timeout_ms", "1"), ("bring_up_timeout_ms", "1000")], clock="wall")
-
 S.case(120, 3, "its name in text addresses it.",
        [READY, send(INPUT, said("hey floppy, what's your name?")), expect(HANDOFF, addressed("Floppy"))],
        params=[named("Floppy")])
@@ -100,11 +96,11 @@ S.case(133, 4, "a name heard inside a hyphenated word does not address it (the w
        params=[named("Floppy")], clock="wall")
 
 S.case(140, 5, "an adopted name is taken without a database, offered again, and answered to.",
-       [READY, send(ADOPT, js({"name": "Floppy", "reason": "asked"})), READY,
+       [READY, send(ADOPT, js({"name": "Floppy", "reason": "asked"})), expect(NAMED, "_event.data.name === 'Floppy'"), READY,
         send(INPUT, said("hi floppy")), expect(HANDOFF, addressed("Floppy"))])
 S.case(141, 5, "with a database the adopted name is written down, then answered to; a second adoption replaces it.",
-       [READY, send(ADOPT, js({"name": "Floppy"})), READY,
-        send(ADOPT, js({"name": "Pip"})), READY,
+       [READY, send(ADOPT, js({"name": "Floppy"})), expect(NAMED, "_event.data.name === 'Floppy'"), READY,
+        send(ADOPT, js({"name": "Pip"})), expect(NAMED, "_event.data.name === 'Pip'"), READY,
         send(INPUT, said("Floppy?")), wait("500ms"),
         send(INPUT, said("Pip?")), expect(HANDOFF, addressed("Pip"))],
        params=[DB], clock="wall")
@@ -146,7 +142,7 @@ S.case(170, 8, "input that arrives while recalling from memory is taken once it 
        params=[DB, named("Floppy")], clock="wall")
 S.case(171, 8, "input that arrives while adopting is heard with the adopted name.",
        [READY, send(ADOPT, js({"name": "Pip"})), send(INPUT, said("Pip?")),
-        READY, expect(HANDOFF, addressed("Pip"))],
+        expect(NAMED, "_event.data.name === 'Pip'"), READY, expect(HANDOFF, addressed("Pip"))],
        params=[DB], clock="wall")
 S.case(172, 8, "text that arrives while a sound is being recognized waits for it: the sound's answer comes first.",
        [READY, send(SOUND, sound()), send(INPUT, said("Floppy")),

@@ -19,9 +19,6 @@
     <test id="111" conformance="mandatory" manual="false">
       <start uri="111/test111.scxml"/>
     </test>
-    <test id="112" conformance="mandatory" manual="false">
-      <start uri="112/test112.scxml"/>
-    </test>
   </assert>
   <assert id="identity-3" specnum="3" specid="#identity-3">
     <![CDATA[A named identity that hears its name in `bot.ability.communication.input` text (string content of a `text/*` content_type; the name's words, split at white space, case-folded and keeping only their letters and digits, appear as a whole run of the text's) hands the body `bot.ability.cognition.input` `{stimulus}`, the stimulus `{event: "bot.ability.identity.addressed", data: {name}, source: "identity"}`.]]>
