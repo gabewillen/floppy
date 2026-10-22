@@ -35,12 +35,12 @@ SAXON='java -jar /opt/saxon/saxon-he-12.8.jar' sh scripts/namespace-irp.sh prepa
 sh scripts/namespace-irp.sh baselines conversation
 ```
 
-The current baseline (manifest SHA-256 `5cf6a657074ff9b7ef457c5f894acb3403aa7dd9fbbf7ab4796b086fd87547da`,
+The current baseline (manifest SHA-256 `d76bb9d773be777d54859d3111b6122c036619de9509da8b465eed6fa15306d7`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
 measured on Linux x86_64, the host `tests/tests/namespace_irp.rs` compares
-fuel on, when the namespace took the original's `Message.participants` and
-dropped `sequence`, 2026-10-22) measures:
+fuel on, when the namespace took the original's `Message.participants` (with
+`resembles`) and dropped `sequence`, 2026-10-22) measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 30 / 30 | 0 | `87fdadded2d7717cd1e5985757b2fa3b3566ccd99796c98345d7f620d3dd6676` | `ea4da5ed003d373316fb9b7ffdf6297801ee5d1cfaca03457a426acc97bc5a31` |
+| ECMAScript | 30 / 30 | 0 | `c809e00942995a0232582b63b901c4159d53563ccb6ae9e6e7cbcf968500187d` | `5080b7b7d766d507f6a48b515f0b75a7510befb8f311e16b63ba65b76de3a06f` |

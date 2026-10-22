@@ -55,7 +55,7 @@
       "package_version": "0.1.0",
       "manifest_sha256": "2b057961554df399c840aebffc4dbb01be177dee9bdb48c7e30fde98315745f0",
       "schema_sha256": "f405b51085b455c291b94a1d65d18638b3d882b594e9df68e8c83ef52b24bc6a",
-      "component_sha256": "6b95f77921a208a0d73e59fb4c7b9fad5aaa6da303d70e25583d4927800ee0ba"
+      "component_sha256": "d95a6a1dff1d0f8c569af084044124c1917e053d349417768eb9217092367f5b"
     }
   ],
   "ir_version": 5,
@@ -68,29 +68,29 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "42d75c05c6fa60b3df47e21c270eae5ca1379b478f6cb89a025398c728dec6eb",
+  "identity_digest": "e6a629c20b8f63455bcbde5ed9e2c60385513164ca295b8aad47640ece73761e",
   "summary": {
     "total_selected": 30,
     "applicable_selected": 30,
-    "passed": 29,
-    "failed": 1,
+    "passed": 30,
+    "failed": 0,
     "unsupported": 0,
     "invalid": 0,
     "harness_error": 0,
     "skipped": 0,
     "not_applicable": 0,
-    "not_passing": 1,
+    "not_passing": 0,
     "passed_under_erratum": 0,
     "mandatory": {
       "applicable_selected": 30,
-      "passed": 29,
-      "failed": 1,
+      "passed": 30,
+      "failed": 0,
       "unsupported": 0,
       "invalid": 0,
       "harness_error": 0,
       "skipped": 0,
       "not_applicable": 0,
-      "not_passing": 1,
+      "not_passing": 0,
       "passed_under_erratum": 0
     },
     "optional": {
@@ -120,14 +120,14 @@
       },
       "#conversation-2": {
         "applicable_selected": 4,
-        "passed": 3,
-        "failed": 1,
+        "passed": 4,
+        "failed": 0,
         "unsupported": 0,
         "invalid": 0,
         "harness_error": 0,
         "skipped": 0,
         "not_applicable": 0,
-        "not_passing": 1,
+        "not_passing": 0,
         "passed_under_erratum": 0
       },
       "#conversation-3": {
@@ -218,14 +218,14 @@
     "by_datamodel": {
       "ecmascript": {
         "applicable_selected": 30,
-        "passed": 29,
-        "failed": 1,
+        "passed": 30,
+        "failed": 0,
         "unsupported": 0,
         "invalid": 0,
         "harness_error": 0,
         "skipped": 0,
         "not_applicable": 0,
-        "not_passing": 1,
+        "not_passing": 0,
         "passed_under_erratum": 0
       }
     }
@@ -439,10 +439,8 @@
       "datamodel": "ecmascript",
       "conformance": "mandatory",
       "manual": false,
-      "stage": "oracle",
-      "disposition": "failed",
-      "reason_code": "outcome-fail",
-      "reason": "official Outcome log reported fail",
+      "stage": "complete",
+      "disposition": "passed",
       "diagnostics": [
         {
           "code": "LINT010",
@@ -451,11 +449,11 @@
         }
       ],
       "configuration": [
-        "fail"
+        "pass"
       ],
       "terminal_status": "finished",
-      "commands": 2,
-      "fuel_consumed": 2,
+      "commands": 3,
+      "fuel_consumed": 3,
       "oracle": "outcome-log"
     },
     {

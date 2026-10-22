@@ -226,6 +226,7 @@ them). Both directions therefore call the Gemini API, so
 | `abilities/speaking/speaking.scx` | `recording_timeout_ms` | `5000` | recording the spoken words in the conversation (the original's 5 s) |
 | `abilities/listening/listening.scx` | `sensitivity_timeout_ms` | `30000` | scoring one sound (the original's 30 s stage operation timeout) |
 | `abilities/interpretation/interpretation.scx` | `stage_timeout_ms` | `30000` | each interpretation stage (the original's 30 s) |
+| `abilities/interpretation/interpretation.scx` | `recognize_timeout_ms` | `2000` | identification's extra time past the stage timeout (the original's 2 s; decision D177) |
 | `abilities/interpretation/interpretation.scx` | `product_threshold_db` | `3.0` | the perceived level a listening product needs (the original's 3 dB) |
 | `abilities/seeing/seeing.scx` | `measure_timeout_ms` | `2000` | one change measurement through the vision service (the original's 2 s) |
 | `abilities/seeing/seeing.scx` | `measure_every_ms` | `500` | the pace between measurements, whatever the frame rate (the original's 500 ms) |
