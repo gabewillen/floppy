@@ -1,0 +1,83 @@
+{
+  "include": [
+    "**/*.{scx,scxml}",
+    "**/*.md",
+    "**/*.xsd",
+    ".env.example"
+  ],
+  "exclude": [
+    "scxml.rs/**",
+    ".opencodereview/**",
+    "Cargo.lock",
+    "**/*.wasm",
+    "**/irp/baselines/**",
+    "tests/fixtures/phase4/traces/**",
+    "**/testdata/**",
+    "web/dist/**",
+    "**/irp/sources/**/*.json",
+    "**/irp/sources/**/media/**"
+  ],
+  "rules": [
+    {
+      "path": "**/irp/**",
+      "rule": ".opencodereview/rules/tests.md",
+      "merge_system_rule": true
+    },
+    {
+      "path": "**/*.{scx,scxml}",
+      "rule": ".opencodereview/rules/scxml.md"
+    },
+    {
+      "path": "**/schemas/*.json",
+      "rule": ".opencodereview/rules/schema.md"
+    },
+    {
+      "path": "{behaviors,bots/builder/examples}/**/*.json",
+      "rule": ".opencodereview/rules/schema.md"
+    },
+    {
+      "path": "{namespaces,services}/*/package/**",
+      "rule": ".opencodereview/rules/packaging.md"
+    },
+    {
+      "path": "**/*.xsd",
+      "rule": ".opencodereview/rules/packaging.md"
+    },
+    {
+      "path": "{bots,abilities,environments,devices,behaviors}/**/*.js",
+      "rule": ".opencodereview/rules/script.md",
+      "merge_system_rule": true
+    },
+    {
+      "path": "tests/**/*.rs",
+      "rule": ".opencodereview/rules/tests.md",
+      "merge_system_rule": true
+    },
+    {
+      "path": "{namespaces,services}/**/*.rs",
+      "rule": ".opencodereview/rules/rust.md",
+      "merge_system_rule": true
+    },
+    {
+      "path": "**/Cargo.toml",
+      "rule": ".opencodereview/rules/packaging.md"
+    },
+    {
+      "path": "rust-toolchain.toml",
+      "rule": ".opencodereview/rules/packaging.md"
+    },
+    {
+      "path": "scripts/**",
+      "rule": ".opencodereview/rules/packaging.md",
+      "merge_system_rule": true
+    },
+    {
+      "path": "**/*.md",
+      "rule": ".opencodereview/rules/docs.md"
+    },
+    {
+      "path": ".env.example",
+      "rule": ".opencodereview/rules/docs.md"
+    }
+  ]
+}
