@@ -29,6 +29,23 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
+              "content": "{\"events\": [{\"event\": \"bot.behavior.break\", \"target\": \"session.reflection\", \"data\": {\"event\": \"bot.behavior.break\", \"name\": \"Nobody\", \"reason\": \"  It greets strangers.  \"}, \"reason\": \"harm outweighs practice\"}]}"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
               "content": "{\"events\": []}"
             }
           }

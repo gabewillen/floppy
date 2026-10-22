@@ -102,9 +102,9 @@ def failed_prefix(text):
 
 S.statement(1, "Without a database (the `<param>` `database` null, its default) it offers nothing on start and answers each `bot.ability.reflection.input` `{turn, cognition_input, cognition_output}` at once with `bot.ability.reflection.output` (no data), asking no model.")
 S.statement(2, "With a database, `recalling` reads the prior episodes and the behavior inventory in one memory transaction and `processing` asks the generate service (schema `dispatch`, its `events` at most one) to select at most one of `bot.behavior.create`, `bot.behavior.change` or `bot.behavior.break`, each offered by the reflection's own session (a change's and a break's `name` pinned to the inventory's names, and neither offered when the inventory is empty; decision D100); the selection is sent to the reflection's own session, and an empty selection goes to `storing`, which stores the turn's episode and answers `bot.ability.reflection.output`.")
-S.statement(3, "More than one selected event fails the select (the dispatch tool admits one) with `bot.ability.failed` `{message: \"Reflection select failed (schema-mismatch)\"}`; a failed select call fails it with `Reflection select failed (<code>)`; a select call whose streamed reply makes no progress for `select_timeout_ms` (its first `generate.progress` arms it, each later one re-arms it) or that runs `select_ceiling_ms` in all fails it with `Reflection child cancellation timed out.` (decision D101).")
-S.statement(4, "A selected `bot.behavior.break` (`breaking`) marks the named behavior BROKEN with its trimmed reason and keeps the row, then stores the episode and answers `bot.ability.reflection.output`; a break of a name the inventory does not hold is not offered, so a model that selects one fails the select with `Reflection select failed (schema-mismatch)`.")
-S.statement(5, "A selected `bot.behavior.create` (`revising`) stores a DRAFT stub for a new name, invokes the builder bot with a `builder.request`, and on the builder's `done` (`accepting`) replaces the row ACTIVE with the built document's path (its three documents the builder wrote, decision D121), then stores the episode and answers `bot.ability.reflection.output`; a `bot.behavior.change` of a stored name reads its documents back (`reading`) and revises it the same way, and a change of a name the inventory does not hold is not offered, so a model that selects one fails the select with `Reflection select failed (schema-mismatch)`.")
+S.statement(3, "A select call the generate service refuses (`not-json`, or `schema-mismatch` such as more than one selected event, which the dispatch tool does not admit) is asked again with the original's feedback carrying its rejection, at most twice (decision D130); the same rejection as the one being repaired, or a third rejection, fails the select with `bot.ability.failed` `{message: \"Selection rejected: <message>\"}`; any other failed select call fails it with `Reflection select failed (<code>)`; a select call whose streamed reply makes no progress for `select_timeout_ms` (its first `generate.progress` arms it, each later one re-arms it) or that runs `select_ceiling_ms` in all fails it with `Reflection child cancellation timed out.` (decision D101).")
+S.statement(4, "A selected `bot.behavior.break` (`breaking`) marks the named behavior BROKEN with its trimmed reason and keeps the row, then stores the episode and answers `bot.ability.reflection.output`; a break of a name the inventory does not hold is not offered, so a model that selects one is refused twice and fails the select with `Selection rejected: <message>`.")
+S.statement(5, "A selected `bot.behavior.create` (`revising`) stores a DRAFT stub for a new name, invokes the builder bot with a `builder.request`, and on the builder's `done` (`accepting`) replaces the row ACTIVE with the built document's path (its three documents the builder wrote, decision D121), then stores the episode and answers `bot.ability.reflection.output`; a `bot.behavior.change` of a stored name reads its documents back (`reading`) and revises it the same way, and a change of a name the inventory does not hold is not offered, so a model that selects one is refused twice and fails the select with `Selection rejected: <message>`.")
 S.statement(6, "A builder that fails with the last draft it rejected (`abandoning`) keeps that draft's path in the row as DRAFT and fails the turn with `Reflection change abandoned: same diagnostic message after fix:` and the rendered diagnostics (no-progress); a builder that fails with no draft fails the turn with `Reflection revision failed: <reason>: <first diagnostic>`, the create's DRAFT stub kept.")
 S.statement(7, "`revising` is bounded by `revising_timeout_ms` without progress while a builder generation streams (the builder, invoked with `progress_target` `'#_parent'`, passes on each `generate.progress` of its streamed generations, which arms it, and sends `builder.progress` as it enters a stage, which disarms it) and by `revising_ceiling_ms` in all (the `<param>` `bounds` overriding either, decision D101): when one passes, the revision is cancelled and the turn fails with `Reflection child cancellation timed out.`.")
 S.statement(8, "A memory transaction that fails (here the recall, on a database the run does not grant) fails the turn with `Reflection memory recall failed: <detail>`; after any failure the turn's episode is stored with no behavior (unless storing it is what failed; decision D97) and the reflection is idle again and takes the next input.")
@@ -118,8 +118,8 @@ S.case(110, 2, "an empty selection stores the episode and answers the output; th
        [send(INPUT, turn(1)), expect(OUTPUT), send(INPUT, turn(2)), expect(OUTPUT)],
        params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(), select()], clock="wall")
 
-S.case(120, 3, "two selected events fail the turn.",
-       [send(INPUT, turn(1)), failed("Reflection select failed (schema-mismatch)")],
+S.case(120, 3, "two selected events, refused twice running, fail the turn.",
+       [send(INPUT, turn(1)), failed_prefix("Selection rejected: ")],
        params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE, CREATE)], clock="wall")
 S.case(121, 3, "a select call the backend fails fails the turn with its code.",
        [send(INPUT, turn(1)), failed("Reflection select failed (status)")],
@@ -127,9 +127,18 @@ S.case(121, 3, "a select call the backend fails fails the turn with its code.",
 S.case(122, 3, "a select call that outlasts its backstop fails the turn.",
        [send(INPUT, turn(1)), failed("Reflection child cancellation timed out.")],
        params=[DB, ("select_ceiling_ms", "1")], backend=[select()], clock="wall")
+S.case(123, 3, "a select reply that is not JSON is asked again, and the repaired empty selection answers the output.",
+       [send(INPUT, turn(1)), expect(OUTPUT)],
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[chat("not json"), select()], clock="wall")
+S.case(124, 3, "three different rejections running fail the turn after two repairs.",
+       [send(INPUT, turn(1)), failed_prefix("Selection rejected: ")],
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[chat("not json"), select(CREATE, CREATE), chat("not json"), select()], clock="wall")
+S.case(125, 3, "two different rejections running are both repaired, and the repaired empty selection answers the output.",
+       [send(INPUT, turn(1)), expect(OUTPUT)],
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[chat("not json"), select(CREATE, CREATE), select()], clock="wall")
 
 S.case(130, 4, "a break of a behavior the inventory does not hold is not offered: selecting one fails the select.",
-       [send(INPUT, turn(1)), failed("Reflection select failed (schema-mismatch)")],
+       [send(INPUT, turn(1)), failed_prefix("Selection rejected: ")],
        params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(brk("Nobody"))], clock="wall")
 S.case(131, 4, "a break of a stored behavior answers the output and keeps the row: a second break of it answers too.",
        [send(INPUT, turn(1)), expect(OUTPUT), send(INPUT, turn(2)), expect(OUTPUT), send(INPUT, turn(3)), expect(OUTPUT)],
@@ -144,7 +153,7 @@ S.case(141, 5, "a change of a created behavior is built and stored.",
        params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE), PLAN, draft(BEHAVIOR), select(change("GreetOnKnock")), PLAN, draft(BEHAVIOR)],
        clock="wall")
 S.case(142, 5, "a change of a behavior the inventory does not hold is not offered: selecting one fails the select.",
-       [send(INPUT, turn(1)), failed("Reflection select failed (schema-mismatch)")],
+       [send(INPUT, turn(1)), failed_prefix("Selection rejected: ")],
        params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(change("Nobody"))], clock="wall")
 
 S.case(150, 6, "a build that never validates abandons the change with the rendered diagnostics, and its draft row stays (a break of it answers).",
@@ -172,5 +181,5 @@ S.case(170, 8, "a recall on a database the run does not grant fails the turn, an
 
 S.case(180, 9, "a second input sent while the first is in hand runs after it: the first's failure, then the second's output.",
        [send(INPUT, turn(1)), send(INPUT, turn(2)),
-        failed("Reflection select failed (schema-mismatch)"), expect(OUTPUT)],
-       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(brk("Nobody")), select()], clock="wall")
+        failed_prefix("Selection rejected: "), expect(OUTPUT)],
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(brk("Nobody")), select(brk("Nobody")), select()], clock="wall")

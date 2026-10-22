@@ -122,6 +122,50 @@ fn break_selection(name: &str) -> Json {
     }])
 }
 
+/// Arguments the generate service refuses as not-json.
+const NOT_JSON: &str = r#"{"events": ["#;
+
+/// The live runs' refused create (docs/live-proof.md, `live_conversation`): its
+/// fields beside `event`, with no `data` and an unoffered `lifetime`, which
+/// the generate service refuses as schema-mismatch.
+fn flat_create_selection() -> Json {
+    json!([{
+        "event": "bot.behavior.create",
+        "name": "GreetOnKnock",
+        "triggers": ["environment.sound"],
+        "lifetime": "turn",
+        "reason": "a repeated pattern",
+    }])
+}
+
+/// The live runs' create with its `data` added but its `lifetime` still
+/// beside `event`: refused where `flat_create_selection` is, with another
+/// message.
+fn half_repaired_create_selection() -> Json {
+    json!([{
+        "event": "bot.behavior.create",
+        "data": create_selection()[0]["data"].clone(),
+        "lifetime": "turn",
+        "reason": "a repeated pattern",
+    }])
+}
+
+/// The select step's `dispatch` arguments on `route` for the run's
+/// `attempt`th select call (from 0): the repair routes answer a refused
+/// selection first (decision D130).
+fn dispatch_reply(route: &str, attempt: usize, body: &Json) -> Option<String> {
+    let events =
+        |selected: &Json| json!({"events": support::with_targets(body, selected)}).to_string();
+    match (route, attempt) {
+        ("repaired" | "samekey", 0) | ("rejections", 1) => Some(events(&flat_create_selection())),
+        ("samekey", 1) => Some(events(&half_repaired_create_selection())),
+        ("rejections" | "repairedtwice", 0 | 2) => Some(NOT_JSON.to_owned()),
+        ("repaired" | "rejections" | "samekey", _) => Some(events(&create_selection())),
+        ("repairedtwice", _) => Some(events(&json!([]))),
+        _ => Some(events(&selection(route)?)),
+    }
+}
+
 /// The select step's answer on `route`.
 fn selection(route: &str) -> Option<Json> {
     match route {
@@ -140,17 +184,16 @@ fn selection(route: &str) -> Option<Json> {
     }
 }
 
-/// The scripted answer to one request, or `None` to answer 500.
-fn answer(target: &str, body: &Json) -> Option<String> {
+/// The scripted answer to one request, the run's `attempt`th select call
+/// when it is one, or `None` to answer 500.
+fn answer(target: &str, body: &Json, attempt: usize) -> Option<String> {
     let route = target.trim_start_matches('/').split('/').next()?;
     if !target.ends_with("/v1/chat/completions") {
         return None;
     }
     let schema = body.pointer("/tools/0/function/name")?.as_str()?;
     match schema {
-        "dispatch" => Some(completion(
-            &json!({"events": support::with_targets(body, &selection(route)?)}).to_string(),
-        )),
+        "dispatch" => dispatch_reply(route, attempt, body).map(|args| completion(&args)),
         "topology_plan" => Some(completion(PLAN)),
         "scxml_draft" if route == "buildfail" => Some(completion(&draft(&rejected_behavior()))),
         "scxml_draft" if route == "genfail" => None,
@@ -244,7 +287,13 @@ fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
             return;
         }
     }
-    let reply = answer(&target, &body).map(|text| support::answer_as_asked(&body, text));
+    let attempt = log
+        .lock()
+        .expect("the log lock")
+        .iter()
+        .filter(|request| request.schema_name() == Some("dispatch"))
+        .count();
+    let reply = answer(&target, &body, attempt).map(|text| support::answer_as_asked(&body, text));
     log.lock().expect("the log lock").push(Received { body });
     let (status, text) = reply.map_or_else(
         || {
@@ -593,9 +642,11 @@ fn a_break_marks_the_behavior_broken_and_keeps_it_on(database: &str) {
 }
 
 /// A break of a behavior the inventory does not hold is not offered
-/// (decision D100), so a model that selects one fails the select call as
-/// schema-mismatch, and the turn's episode is still stored, with no
-/// behavior (decision D97).
+/// (decision D100), so the generate service refuses a model that selects
+/// one as schema-mismatch; the model is asked again once, refused the same
+/// way, and the turn fails (the original's same rejection twice running,
+/// decision D130), its episode still stored, with no behavior (decision
+/// D97).
 #[test]
 fn a_break_outside_the_inventory_is_refused() {
     a_break_outside_the_inventory_is_refused_on(SQLITE);
@@ -614,39 +665,183 @@ fn a_break_outside_the_inventory_is_refused_on(database: &str) {
     let mut run = start(&harness, &env);
     let records = reflect(&mut run, 1);
     drop(run.close(WAIT));
-    assert_eq!(
-        texts(&records, "harness.failed"),
-        ["Reflection select failed (schema-mismatch)"]
-    );
+    let failed = texts(&records, "harness.failed");
+    assert_eq!(failed.len(), 1, "{records:?}");
+    assert!(failed[0].starts_with("Selection rejected: "), "{failed:?}");
+    assert_eq!(mock.requests("dispatch").len(), 2);
     assert_eq!(json_log(&records, "episodes"), stored(&unapplied_episode()));
 }
 
 /// The original's select returns at most one inventory event: the dispatch
 /// tool's `events` admits one (`<processing:send max="1">`), so the
-/// generate service refuses a reply with two before anything is sent.
+/// generate service refuses a reply with two before anything is sent; the
+/// model, asked again, repeats it, and the same rejection twice running
+/// fails the turn (decision D130).
 #[test]
-fn more_than_one_selection_fails() {
-    more_than_one_selection_fails_on(SQLITE);
+fn more_than_one_selection_is_refused_twice_and_fails() {
+    more_than_one_selection_is_refused_twice_and_fails_on(SQLITE);
 }
 
 #[test]
 #[ignore = "needs a PGlite server: FLOPPY_PGLITE_SERVER"]
-fn postgres_more_than_one_selection_fails() {
+fn postgres_more_than_one_selection_is_refused_twice_and_fails() {
     let server = support::Pglite::start().expect("FLOPPY_PGLITE_SERVER is set");
-    more_than_one_selection_fails_on(&server.database());
+    more_than_one_selection_is_refused_twice_and_fails_on(&server.database());
 }
 
-fn more_than_one_selection_fails_on(database: &str) {
+fn more_than_one_selection_is_refused_twice_and_fails_on(database: &str) {
     let mock = Mock::start();
     let (harness, env) = layout(&mock, "two", SEED_BEHAVIOR, database);
     let mut run = start(&harness, &env);
     let records = reflect(&mut run, 1);
     drop(run.close(WAIT));
-    assert_eq!(
-        texts(&records, "harness.failed"),
-        ["Reflection select failed (schema-mismatch)"]
-    );
+    assert_eq!(mock.requests("dispatch").len(), 2);
+    let failed = texts(&records, "harness.failed");
+    assert_eq!(failed.len(), 1, "{records:?}");
+    assert!(failed[0].starts_with("Selection rejected: "), "{failed:?}");
+    assert_eq!(texts(&records, "reflection.rejected").len(), 2);
     assert_eq!(json_log(&records, "inventory")[0]["status"], "ACTIVE");
+}
+
+/// The original's select repair (`MAX_SELECTION_REPAIRS`, 615bacc;
+/// decision D130): the live run's create without `data`, which the
+/// generate service refuses as schema-mismatch, is asked again with the
+/// same system prompt and the original's feedback after the select input,
+/// carrying the rejection's message, and the repaired create is built.
+#[test]
+fn a_refused_selection_is_asked_again_with_its_diagnostic_and_learns() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "repaired", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let records = reflect(&mut run, 1);
+    drop(run.close(WAIT));
+    assert_eq!(
+        texts(&records, "harness.output"),
+        ["answered"],
+        "{records:?}"
+    );
+    assert_eq!(
+        texts(&records, "reflection.inventory"),
+        [r#"GreetOnKnock ACTIVE turn ["environment.sound"] (accept)"#]
+    );
+    let rejected = texts(&records, "reflection.rejected");
+    assert_eq!(rejected.len(), 1, "{rejected:?}");
+    assert!(
+        rejected[0].starts_with("attempt 0: schema-mismatch:"),
+        "{rejected:?}"
+    );
+    let selects = mock.requests("dispatch");
+    assert_eq!(selects.len(), 2);
+    assert_eq!(selects[1].message("system"), selects[0].message("system"));
+    let first = selects[0].message("user");
+    serde_json::from_str::<Json>(&first).expect("the first select prompt is JSON");
+    let repair = selects[1].message("user");
+    assert!(
+        repair.starts_with(&format!(
+            "{first}\nThe previous event selection was rejected during dispatch. Repair the selection and try again."
+        )),
+        "{repair}"
+    );
+    assert!(
+        repair.contains("\n----- BEGIN UNTRUSTED VALIDATOR DIAGNOSTIC -----\nSelection rejected: "),
+        "{repair}"
+    );
+    assert!(
+        repair.ends_with("\n----- END UNTRUSTED VALIDATOR DIAGNOSTIC -----"),
+        "{repair}"
+    );
+    assert_eq!(
+        json_log(&records, "episodes")[0]["content"]["behavior"]["name"],
+        "GreetOnKnock"
+    );
+}
+
+/// Three different rejections: the original repairs two and fails on the
+/// third with its message (decision D130), and the turn's episode is
+/// stored with no behavior (decision D97).
+#[test]
+fn three_different_refusals_fail_after_two_repairs() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "rejections", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let records = reflect(&mut run, 1);
+    drop(run.close(WAIT));
+    assert_eq!(mock.requests("dispatch").len(), 3);
+    let failed = texts(&records, "harness.failed");
+    assert_eq!(failed.len(), 1, "{records:?}");
+    assert!(
+        failed[0].starts_with("Selection rejected: the arguments are not JSON"),
+        "{failed:?}"
+    );
+    let rejected = texts(&records, "reflection.rejected");
+    assert_eq!(rejected.len(), 3, "{rejected:?}");
+    for (entry, prefix) in rejected.iter().zip([
+        "attempt 0: not-json",
+        "attempt 1: schema-mismatch:",
+        "attempt 2: not-json",
+    ]) {
+        assert!(entry.starts_with(prefix), "{rejected:?}");
+    }
+    assert!(mock.requests("scxml_draft").is_empty());
+    assert_eq!(json_log(&records, "episodes"), stored(&unapplied_episode()));
+}
+
+/// Two rejections at the same place with different messages are not the
+/// same rejection: the original compares its whole diagnostic, so the
+/// second is repaired too and the create is built (decision D130).
+#[test]
+fn a_refusal_at_the_same_place_with_another_message_is_repaired_again() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "samekey", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let records = reflect(&mut run, 1);
+    drop(run.close(WAIT));
+    assert_eq!(
+        texts(&records, "harness.output"),
+        ["answered"],
+        "{records:?}"
+    );
+    let rejected = texts(&records, "reflection.rejected");
+    assert_eq!(rejected.len(), 2, "{rejected:?}");
+    let key = |entry: &str| entry.split_once(": ").map(|(_, key)| key.to_owned());
+    assert_eq!(key(&rejected[0]), key(&rejected[1]), "{rejected:?}");
+    let selects = mock.requests("dispatch");
+    assert_eq!(selects.len(), 3);
+    let diagnostic = |n: usize| {
+        let prompt = selects[n].message("user");
+        prompt
+            .split_once("Selection rejected: ")
+            .map_or_else(|| panic!("{prompt}"), |(_, rest)| rest.to_owned())
+    };
+    assert_ne!(diagnostic(1), diagnostic(2));
+    assert_eq!(
+        json_log(&records, "episodes")[0]["content"]["behavior"]["name"],
+        "GreetOnKnock"
+    );
+}
+
+/// The repair count and the rejection being repaired start over with each
+/// turn: the second turn's first select carries no feedback.
+#[test]
+fn each_turn_starts_its_select_unrepaired() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "repairedtwice", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let first = reflect(&mut run, 1);
+    let second = reflect(&mut run, 2);
+    drop(run.close(WAIT));
+    assert_eq!(texts(&first, "harness.output"), ["answered"], "{first:?}");
+    assert_eq!(texts(&second, "harness.output"), ["answered"], "{second:?}");
+    let selects = mock.requests("dispatch");
+    assert_eq!(selects.len(), 4);
+    serde_json::from_str::<Json>(&selects[2].message("user"))
+        .expect("the second turn's first select prompt is plain JSON");
+    let rejected = texts(&second, "reflection.rejected");
+    assert_eq!(rejected.len(), 1, "{rejected:?}");
+    assert!(
+        rejected[0].starts_with("attempt 0: not-json"),
+        "{rejected:?}"
+    );
 }
 
 /// The original Revision through the builder: a create stores the built document
