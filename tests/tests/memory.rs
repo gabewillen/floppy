@@ -245,18 +245,20 @@ fn statements_the_service_refuses_fail_as_invalid_input() {
 fn an_operation_over_its_timeout_fails_as_timeout() {
     // The original's operation timeout, set as the invoker's <param>, on
     // the wall clock (the logical clock does not move while a service
-    // works).
-    let document = harness(None, "[{sql: 'SELECT 1'}]");
-    let statements = r#"<param name="statements" expr="[{sql: 'SELECT 1'}]"/>"#;
+    // works), over a statement that runs for seconds, so the timer always
+    // wins.
+    let slow = "[{sql: 'WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 50000000) SELECT count(*) FROM c'}]";
+    let document = harness(None, slow);
+    let statements = format!(r#"<param name="statements" expr="{slow}"/>"#);
     assert!(
-        document.contains(statements),
+        document.contains(&statements),
         "the harness passes statements"
     );
     let finished = run_on(
         &unique_scratch("memory"),
         &document.replacen(
-            statements,
-            &format!(r#"{statements}<param name="operation_timeout_ms" expr="1"/>"#),
+            &statements,
+            &format!(r#"{statements}<param name="operation_timeout_ms" expr="200"/>"#),
             1,
         ),
         "wall",
@@ -264,7 +266,7 @@ fn an_operation_over_its_timeout_fails_as_timeout() {
     assert_eq!(
         logs(&finished.records),
         support::labelled(&[
-            ("failed", "Memory did not finish within 0.001s."),
+            ("failed", "Memory did not finish within 0.2s."),
             ("kind", "timeout"),
         ]),
         "{}",
@@ -749,7 +751,7 @@ fn stm_turns_heard_and_said_are_read_oldest_first_and_long_words_are_cut() {
             ("stm.turn.recorded", "heard cut=true"),
             (
                 "turns",
-                r#"[["t1","heard",[{"ref":"voice:3f2a9c","role":"source"}],"Hi there, I am Maya.",false,"listening",true],["t2","said",[{"ref":"voice:tts:warm","role":"source","own":true}],"Hello Maya.",false,"conversation",true],["t3","heard",[],2044,true,"listening",true]]"#
+                r#"[["t1","heard",[{"ref":"voice:3f2a9c","role":"source"}],"Hi there, I am Maya.",false,"listening",true],["t2","said",[{"own":true,"ref":"voice:tts:warm","role":"source"}],"Hello Maya.",false,"conversation",true],["t3","heard",[],2044,true,"listening",true]]"#
             ),
             ("turns", r#"[["t3","heard",[],2044,true,"listening",true]]"#),
         ]),

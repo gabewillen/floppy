@@ -67,6 +67,12 @@ S.case(111, 2, "a database it cannot open fails every recall attempt until the b
        [failed(GAVE_UP), told(), READY],
        params=[TRAITS, NOWHERE, ("bring_up_timeout_ms", "1500")], clock="wall")
 
+# A select that runs for seconds: no attempt answers in time.
+SLOW = ("description_select", js("SELECT content FROM (WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 20000000) SELECT count(*) AS n, 'x' AS content FROM c) AS slow WHERE ?1 = 'self_persona' AND ?2 = 'self'"))
+S.case(112, 2, "attempts that do not answer in time are asked again until the bring-up budget runs out.",
+       [failed(GAVE_UP), told(), READY],
+       params=[TRAITS, DB, SLOW, ("recall_attempt_timeout_ms", "200"), ("bring_up_timeout_ms", "1500")], clock="wall")
+
 S.case(120, 3, "a revision without a database is told with the owner's traits, and offered again.",
        [told(), READY, revise("I like questions.", "I keep asking them."),
         told("I like questions.", "I keep asking them."), READY],

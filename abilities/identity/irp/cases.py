@@ -71,12 +71,24 @@ S.case(111, 2, "a database it cannot open fails every recall attempt until the b
        [expect(FAILED, f"_event.data.message === {js(GAVE_UP)}"),
         READY, send(INPUT, said("hey floppy")), expect(HANDOFF, addressed("Floppy"))],
        params=[("database", "'/nowhere/floppy.sqlite'"), named("Floppy"), ("bring_up_timeout_ms", "1500")], clock="wall")
-# Stored rows stand in for memory's: the newest is not JSON, the one
-# before it holds no name, the oldest is a good one.
-DAMAGED = ("name_select", js('SELECT content FROM (SELECT 1 AS n, \'{"text": "Pip", "kind": "fact"}\' AS content UNION ALL SELECT 2, \'{"text": "\' UNION ALL SELECT 3, \'{"text": "", "kind": "fact"}\') AS stored WHERE ?1 = \'self_name\' AND ?2 = \'self\' ORDER BY n'))
+# Stored rows stand in for memory's, oldest first: a good name, then rows
+# that are not JSON, hold an empty name, or carry a key a name has not.
+DAMAGED = ("name_select", js('SELECT content FROM (SELECT 1 AS n, \'{"text": "Pip", "kind": "fact"}\' AS content UNION ALL SELECT 2, \'{"text": "\' UNION ALL SELECT 3, \'{"text": "", "kind": "fact"}\' UNION ALL SELECT 4, \'{"text": "Bo", "kind": "fact", "reason": "x"}\') AS stored WHERE ?1 = \'self_name\' AND ?2 = \'self\' ORDER BY n'))
+# A name stored without its kind, the newest, is a fact.
+KINDLESS = ("name_select", js('SELECT content FROM (SELECT 1 AS n, \'{"text": "Pip", "kind": "fact"}\' AS content UNION ALL SELECT 2, \'{"text": "Bo"}\') AS stored WHERE ?1 = \'self_name\' AND ?2 = \'self\' ORDER BY n'))
+# A select that runs for seconds: no attempt answers in time.
+SLOW = ("name_select", js("SELECT content FROM (WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 20000000) SELECT count(*) AS n, 'x' AS content FROM c) AS slow WHERE ?1 = 'self_name' AND ?2 = 'self'"))
+S.case(112, 2, "attempts that do not answer in time are asked again until the bring-up budget runs out, then the started name is recalled.",
+       [expect(FAILED, f"_event.data.message === {js(GAVE_UP)}"),
+        READY, send(INPUT, said("hey floppy")), expect(HANDOFF, addressed("Floppy"))],
+       params=[DB, SLOW, named("Floppy"), ("recall_attempt_timeout_ms", "200"), ("bring_up_timeout_ms", "1500")], clock="wall")
 S.case(113, 2, "rows that do not decode as a name are skipped, so the name adopted before them is recalled.",
        [READY, send(INPUT, said("hey pip")), expect(HANDOFF, addressed("Pip"))],
        params=[DB, DAMAGED], clock="wall")
+S.case(114, 2, "a row without a kind is a name.",
+       [READY, send(INPUT, said("hey bo")), expect(HANDOFF, addressed("Bo"))],
+       params=[DB, KINDLESS], clock="wall")
+
 S.case(120, 3, "its name in text addresses it.",
        [READY, send(INPUT, said("hey floppy, what's your name?")), expect(HANDOFF, addressed("Floppy"))],
        params=[named("Floppy")])

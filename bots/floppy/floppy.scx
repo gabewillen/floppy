@@ -5,8 +5,8 @@
   lifecycle and processing turns; its abilities are invoked children
   (decision D6: invoke lifecycle replaces the original's attachment protocol).
 
-    live { activating -> active { unfocused, focused, processing,
-      cancelling_processing } }
+    live { activating -> active { unfocused, focused, reading_turns,
+      processing, cancelling_processing } }
     live -bot.deactivate-> deactivating -> inactive (final)
     live -bot.reboot (the cognition asks for one)-> live (re-entered:
       every ability is cancelled and invoked again)
@@ -69,13 +69,15 @@
 
   Short-term memory: the body relays a child's bot.ability.memory.stm.turn
   to the register (no child writes turns yet; the listening's heard
-  speech and the conversation's said messages will), reads the register's recent turns
-  (bot.ability.memory.stm.recent_turns {}) on entering each turn, and
-  relays the register's bot.ability.memory.stm.recent_turns.output to the
-  cognition. The cognition cannot ask through the body: the request's
-  descriptor matches the answer's name too, and scxml.rs judges an
-  arriving event by every matching transition's schema, so a body taking
-  both would refuse the answer.
+  speech and the conversation's said messages will). Before each turn, in
+  reading_turns, it reads the register's recent turns
+  (bot.ability.memory.stm.recent_turns {}) and relays the answer,
+  bot.ability.memory.stm.recent_turns.output, to the cognition ahead of
+  the turn's input; after reading_turns_timeout_ms (1 s) the turn starts
+  without it, and a later answer is dropped. The cognition cannot ask
+  through the body: the request's descriptor matches the answer's name
+  too, and scxml.rs judges an arriving event by every matching
+  transition's schema, so a body taking both would refuse the answer.
   Nothing in floppy reads the register's stimuli yet (the original's
   Learning is not ported), so a bot.ability.memory.stm.recent.output is
   taken and dropped.
@@ -141,7 +143,8 @@
   bounded by processing_timeout_ms clamped to 100..5000 ms (the original's
   cancel wait): the acknowledgement
   fails the turn (bot.processing.failed); no acknowledgement degrades the
-  bot. Stimuli that arrive during a turn are held by <event:defer/>
+  bot. Stimuli that arrive during a turn (reading_turns included) are
+  held by <event:defer/>
   (scxml.rs namespaces/event) and start the next turns, in order, one per
   return to unfocused or focused, before any later event.
 
@@ -259,6 +262,7 @@
     <data id="traits" expr="['warm', 'patient', 'curious', 'honest']"/>
     <data id="activation_timeout_ms" expr="30000"/>
     <data id="processing_timeout_ms" expr="300000"/>
+    <data id="reading_turns_timeout_ms" expr="1000"/>
     <!-- The devices the bot holds, which the environment gives as a
          <param> (decision D105): reference to the device session's
          _sessionid, its address; devices are their references, set on
@@ -364,18 +368,15 @@
       </send>
     </transition>
     <!-- The short-term register (the original's bot.register, reached by
-         message only): the turns a child writes, and the answer to the
-         body's read of them, for the cognition. -->
+         message only): the turns a child writes. -->
     <transition event="bot.ability.memory.stm.turn" event:schema="../../abilities/schemas/bot.ability.memory.stm.turn.json">
       <send event="bot.ability.memory.stm.turn" target="#_stm">
         <content expr="_event.data"/>
       </send>
     </transition>
-    <transition event="bot.ability.memory.stm.recent_turns.output" event:schema="../../abilities/schemas/bot.ability.memory.stm.recent_turns.output.json">
-      <send event="bot.ability.memory.stm.recent_turns.output" target="#_cognition">
-        <content expr="_event.data"/>
-      </send>
-    </transition>
+    <!-- An answer after its turn started is late: the cognition has the
+         turn's input already. -->
+    <transition event="bot.ability.memory.stm.recent_turns.output" event:schema="../../abilities/schemas/bot.ability.memory.stm.recent_turns.output.json"/>
     <!-- Nothing asks for the register's stimuli yet. -->
     <transition event="bot.ability.memory.stm.recent.output" event:schema="../../abilities/schemas/bot.ability.memory.stm.recent.output.json"/>
     <!-- What the bot knows of itself (the persona tells it on waking, while
@@ -543,30 +544,60 @@
         <onentry>
           <assign location="focused_device" expr="null"/>
         </onentry>
-        <transition event="bot.input" event:schema="schemas/bot.input.json" target="processing">
+        <transition event="bot.input" event:schema="schemas/bot.input.json" target="reading_turns">
           <assign location="stimulus" expr="({})"/>
           <assign location="stimulus.event" expr="_event.name"/>
           <assign location="stimulus.data" expr="_event.data"/>
           <assign location="stimulus.source" expr="null"/>
           <assign location="participants" expr="[]"/>
         </transition>
-        <transition event="bot.ability.cognition.input" event:schema="../../abilities/schemas/bot.ability.cognition.input.json" target="processing">
+        <transition event="bot.ability.cognition.input" event:schema="../../abilities/schemas/bot.ability.cognition.input.json" target="reading_turns">
           <assign location="stimulus" expr="_event.data.stimulus"/>
           <assign location="participants" expr="handoffParticipants(_event)"/>
         </transition>
       </state>
 
       <state id="focused">
-        <transition event="bot.input" event:schema="schemas/bot.input.json" target="processing">
+        <transition event="bot.input" event:schema="schemas/bot.input.json" target="reading_turns">
           <assign location="stimulus" expr="({})"/>
           <assign location="stimulus.event" expr="_event.name"/>
           <assign location="stimulus.data" expr="_event.data"/>
           <assign location="stimulus.source" expr="null"/>
           <assign location="participants" expr="[]"/>
         </transition>
-        <transition event="bot.ability.cognition.input" event:schema="../../abilities/schemas/bot.ability.cognition.input.json" target="processing">
+        <transition event="bot.ability.cognition.input" event:schema="../../abilities/schemas/bot.ability.cognition.input.json" target="reading_turns">
           <assign location="stimulus" expr="_event.data.stimulus"/>
           <assign location="participants" expr="handoffParticipants(_event)"/>
+        </transition>
+      </state>
+
+      <!-- Before each turn, the turns heard and said lately go to the
+           cognition, ahead of the turn's input; a register that does not
+           answer within reading_turns_timeout_ms leaves the cognition the
+           turns it had. -->
+      <state id="reading_turns">
+        <onentry>
+          <send event="bot.ability.memory.stm.recent_turns" target="#_stm">
+            <content expr="emptyData()"/>
+          </send>
+          <send id="reading-turns-after" event="reading_turns.after" delayexpr="delay(reading_turns_timeout_ms)"/>
+        </onentry>
+        <onexit>
+          <cancel sendid="reading-turns-after"/>
+        </onexit>
+        <transition event="bot.ability.memory.stm.recent_turns.output" event:schema="../../abilities/schemas/bot.ability.memory.stm.recent_turns.output.json" target="processing">
+          <send event="bot.ability.memory.stm.recent_turns.output" target="#_cognition">
+            <content expr="_event.data"/>
+          </send>
+        </transition>
+        <transition event="reading_turns.after" target="processing"/>
+        <transition event="bot.input" event:schema="schemas/bot.input.json">
+          <event:defer/>
+          <log label="floppy.deferred" expr="_event.name"/>
+        </transition>
+        <transition event="bot.ability.cognition.input" event:schema="../../abilities/schemas/bot.ability.cognition.input.json">
+          <event:defer/>
+          <log label="floppy.deferred" expr="_event.name"/>
         </transition>
       </state>
 
@@ -574,10 +605,6 @@
       <state id="processing">
         <onentry>
           <assign location="turn" expr="nextTurn()"/>
-          <!-- The turns heard and said lately, for the cognition. -->
-          <send event="bot.ability.memory.stm.recent_turns" target="#_stm">
-            <content expr="emptyData()"/>
-          </send>
           <cognition:attention_bias_for_turn location="focus_candidates" focuslocation="focus"
                                              stimulus="stimulus" devices="devices" focus="focused_device"/>
           <assign location="device_snapshots" expr="({})"/>

@@ -19,8 +19,14 @@
     <test id="111" conformance="mandatory" manual="false">
       <start uri="111/test111.scxml"/>
     </test>
+    <test id="112" conformance="mandatory" manual="false">
+      <start uri="112/test112.scxml"/>
+    </test>
     <test id="113" conformance="mandatory" manual="false">
       <start uri="113/test113.scxml"/>
+    </test>
+    <test id="114" conformance="mandatory" manual="false">
+      <start uri="114/test114.scxml"/>
     </test>
   </assert>
   <assert id="identity-3" specnum="3" specid="#identity-3">

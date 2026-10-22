@@ -24,9 +24,11 @@ function nameSelectStatements() {
   return [{sql: name_select, parameters: ['self_name', 'self']}];
 }
 
-// One stored row's content as the original's name fact, or null when it
-// does not decode as one (a damaged row is skipped, so it never costs the
-// bot the name adopted before it).
+// One stored row's content as the original's Name (identity/name.py: text,
+// and kind, "fact" when absent; no other key), or null when it does not
+// decode as one, so a damaged row never costs the bot the name adopted
+// before it. A text over 64 characters, which no adoption writes, is
+// skipped too: bot.ability.identity.named could not tell it.
 function storedName(content) {
   var value;
   try {
@@ -37,7 +39,13 @@ function storedName(content) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     return null;
   }
-  if (typeof value.text !== 'string' || Array.from(value.text).length < 1 || Array.from(value.text).length > 64 || value.kind !== 'fact') {
+  if (!Object.keys(value).every(function (key) { return key === 'text' || key === 'kind'; })) {
+    return null;
+  }
+  if (typeof value.text !== 'string' || Array.from(value.text).length < 1 || Array.from(value.text).length > 64) {
+    return null;
+  }
+  if (value.kind !== undefined && value.kind !== 'fact') {
     return null;
   }
   return {text: value.text, kind: 'fact'};
