@@ -57,7 +57,7 @@
       "package_version": "0.1.0",
       "manifest_sha256": "f7ab8f0764d69616e8e7f7fdf095e72de6150fd01d4d3fe15f2d2d9e06a071ed",
       "schema_sha256": "9feaf3d566eecf693ec0f88fe9c5e338d584f56e48d0d3f90ad222918bb6e398",
-      "component_sha256": "ddf8e54150967e902d2841ccea9ce4576a201d651c620d5482e207eeadcd76c7"
+      "component_sha256": "2eeb6e66c31a3e5d6585a2da1cdc1030882c4a32dde56d0f1fdab3d071a20c29"
     }
   ],
   "ir_version": 5,
@@ -70,7 +70,7 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "fe42ee8f71220a1ba434893d7bf14481742d275be9579397d86dfc0ee1d98251",
+  "identity_digest": "beaf8f1a11521de447fe45fc273f29bfe0b4dd1d1e6478c24054e48ff2a9ef8b",
   "summary": {
     "total_selected": 21,
     "applicable_selected": 21,

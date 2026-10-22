@@ -43,4 +43,4 @@ measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 21 / 21 | 0 | `047abeee43eac5fc8e206fc8d52623af3692f7e75b7c6d0c67fe1a25d4fe013b` | `245d0d3c30a8a5443d5920698e9e90776a34f8306d984276dcf639825ed5ced3` |
+| ECMAScript | 21 / 21 | 0 | `047abeee43eac5fc8e206fc8d52623af3692f7e75b7c6d0c67fe1a25d4fe013b` | `a7c3f46ca2baae604fe7afe19d314e5aff33f394bdd54a9ccf4bb398e1dedcd1` |
