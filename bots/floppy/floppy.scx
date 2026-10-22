@@ -24,8 +24,10 @@
   Abilities: live holds <invoke id="cognition">, <invoke
   id="communication"> (abilities/communication/communication.scx, which holds the
   conversation and speaking), <invoke id="identity">
-  (abilities/identity/identity.scx, the bot's name) and <invoke id="listening">
-  (abilities/listening/listening.scx, the ear); leaving live cancels every ability (SCXML
+  (abilities/identity/identity.scx, the bot's name), <invoke id="listening">
+  (abilities/listening/listening.scx, the ear) and <invoke id="stm">
+  (abilities/stm/stm.scx, the short-term register, the original's
+  bot.register); leaving live cancels every ability (SCXML
   6.4), which replaces the original's cleanup states: an SCXML invoke cancel is
   synchronous, so there is nothing for the original's 5 min deactivation
   timeout or its reboot preserve/reset cleanup to wait on, and every
@@ -63,6 +65,15 @@
   when the text names the bot, as the cognition hands over a routine's
   bot.behavior.tick (its routines).
 
+  Short-term memory: the body relays each child's
+  bot.ability.memory.stm.turn (listening's heard speech, the
+  communication's relay of what its conversation said) and the
+  cognition's bot.ability.memory.stm.recent_turns to the register, and the
+  register's bot.ability.memory.stm.recent_turns.output to the cognition.
+  Nothing in floppy reads the register's stimuli yet (the original's
+  Learning is not ported), so a bot.ability.memory.stm.recent.output is
+  taken and dropped.
+
   Self: the body relays the cognition's bot.ability.identity.ask to the
   identity and the identity's bot.ability.identity.named (its answer, and
   the name after each adoption) to the cognition, so the cognition can
@@ -77,7 +88,11 @@
   back to the body as any sound there does (the bot hears itself).
 
   Environment: environment.sound and environment.visual from the
-  environment, while active, go to
+  environment, while active, are first recorded in the short-term
+  register (the original's _fan_out_input: bot.ability.memory.stm.record
+  {stimulus_name, payload}, the payload the stimulus data's bounded scalar
+  projection, <memory:stm_projection>; a one-way message, so registration
+  never blocks admitting the stimulus), then go to
   each input ability (input, the original's Bot input: the invoke ids
   of the abilities that perceive raw stimuli; the identity and the
   listening), in
@@ -185,8 +200,8 @@
 
   Memory (the original's sqlite_memory): the body passes its database (a file in
   the directory the run grants the sql service at /memory, scx run's
-  dir option) to the cognition, the communication and the identity as
-  <param name="database">; reasoning recalls the cognitive episodes
+  dir option) to the cognition, the communication, the identity and the
+  short-term register as <param name="database">; reasoning recalls the cognitive episodes
   reflection stores, the identity its adopted names, and the conversation its
   relationship memories (abilities/memory/memory.scx over services/sql, one
   SQLite transaction per invocation). A run without the grant is refused
@@ -196,6 +211,7 @@
        xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:device="https://github.com/stateforward/floppy/namespaces/device"
+       xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory"
        xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="floppy" initial="live">
@@ -229,13 +245,16 @@
     <!-- Lifecycle: each entry into live is one run; the abilities expected
          and the offers each has sent this run. -->
     <data id="live_run" expr="0"/>
-    <data id="expected" expr="['cognition', 'communication', 'identity', 'listening']"/>
+    <data id="expected" expr="['cognition', 'communication', 'identity', 'listening', 'stm']"/>
     <data id="offers" expr="({})"/>
     <data id="waiting" expr="[]"/>
     <!-- The input abilities each environment.* stimulus fans out to
          (the original's Bot input, as invoke ids), and the one being sent to. -->
     <data id="input" expr="['identity', 'listening']"/>
     <data id="ability" expr="null"/>
+    <!-- The admitted stimulus's bounded scalar projection, for the
+         short-term register (<memory:stm_projection>). -->
+    <data id="stm_payload" expr="({})"/>
     <!-- The Listening abilities that receive speaking's efference copy
          (the original's Speaking listening peers, as invoke ids). -->
     <data id="listening_abilities" expr="['listening']"/>
@@ -284,6 +303,9 @@
       <param name="database" expr="database"/>
     </invoke>
     <invoke id="listening" type="scxml" src="../../abilities/listening/listening.scx"/>
+    <invoke id="stm" type="scxml" src="../../abilities/stm/stm.scx">
+      <param name="database" expr="database"/>
+    </invoke>
 
     <!-- Each ability's latest offers; the first of a run is its readiness. -->
     <transition event="bot.ability.offers" event:schema="../../abilities/schemas/bot.ability.offers.json">
@@ -307,6 +329,27 @@
         <content expr="_event.data"/>
       </send>
     </transition>
+    <!-- The short-term register (the original's bot.register, reached by
+         message only): the turns its producers write, and the cognition's
+         read of them and its answer. -->
+    <transition event="bot.ability.memory.stm.turn" event:schema="../../abilities/schemas/bot.ability.memory.stm.turn.json">
+      <send event="bot.ability.memory.stm.turn" target="#_stm">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <!-- Before the request, whose descriptor also matches it. -->
+    <transition event="bot.ability.memory.stm.recent_turns.output" event:schema="../../abilities/schemas/bot.ability.memory.stm.recent_turns.output.json">
+      <send event="bot.ability.memory.stm.recent_turns.output" target="#_cognition">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <transition event="bot.ability.memory.stm.recent_turns" event:schema="../../abilities/schemas/bot.ability.memory.stm.recent_turns.json">
+      <send event="bot.ability.memory.stm.recent_turns" target="#_stm">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <!-- Nothing asks for the register's stimuli yet. -->
+    <transition event="bot.ability.memory.stm.recent.output" event:schema="../../abilities/schemas/bot.ability.memory.stm.recent.output.json"/>
     <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json" target="deactivating"/>
     <!-- A reboot (the cognition asks for one): re-enter live. -->
     <transition event="bot.reboot" event:schema="../../abilities/schemas/bot.reboot.json" target="live">
@@ -355,7 +398,7 @@
 
     <state id="active" initial="unfocused">
       <!-- An ability that ends while the bot is active leaves it degraded. -->
-      <transition event="done.invoke.cognition done.invoke.communication done.invoke.identity done.invoke.listening" target="degraded">
+      <transition event="done.invoke.cognition done.invoke.communication done.invoke.identity done.invoke.listening done.invoke.stm" target="degraded">
         <assign location="degraded_reason" expr="abilityEndedReason(_event)"/>
       </transition>
       <!-- Communication input from outside goes to the communication, whose
@@ -370,16 +413,28 @@
         </send>
       </transition>
       <!-- A sound the environment delivers (the bot's own speech
-           included): a stimulus for every input ability. -->
+           included): recorded in the short-term register, then a
+           stimulus for every input ability. -->
       <transition event="environment.sound" event:schema="../../abilities/schemas/environment.sound.json">
+        <memory:stm_projection location="stm_payload" data="_event.data"/>
+        <send event="bot.ability.memory.stm.record" target="#_stm">
+          <param name="stimulus_name" expr="'environment.sound'"/>
+          <param name="payload" expr="stm_payload"/>
+        </send>
         <foreach array="input" item="ability">
           <send event="environment.sound" targetexpr="abilityTarget(ability)">
             <content expr="_event.data"/>
           </send>
         </foreach>
       </transition>
-      <!-- A visual stimulus goes to every input ability. -->
+      <!-- A visual stimulus is recorded in the short-term register, then
+           goes to every input ability. -->
       <transition event="environment.visual" event:schema="schemas/environment.visual.json">
+        <memory:stm_projection location="stm_payload" data="_event.data"/>
+        <send event="bot.ability.memory.stm.record" target="#_stm">
+          <param name="stimulus_name" expr="'environment.visual'"/>
+          <param name="payload" expr="stm_payload"/>
+        </send>
         <foreach array="input" item="ability">
           <send event="environment.visual" targetexpr="abilityTarget(ability)">
             <content expr="_event.data"/>
