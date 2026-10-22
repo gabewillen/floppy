@@ -135,7 +135,7 @@ fn upgrade_and_downgrade_walk_the_revisions_and_keep_alembic_version() {
             ("inspect", r#"[[["0003"]],[[5]],[[1]]]"#),
         ])
     );
-    // 0003's downgrade drops bot_stm_turn (decision D126).
+    // 0003's downgrade drops bot_stm_turn (decision D165).
     assert_eq!(
         migrate(&directory, "'-1'", SCHEMA),
         pairs(&[

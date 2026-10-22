@@ -27,7 +27,7 @@
   abilities/memory/postgresql/): 0001 and 0002 have the same tables,
   columns, defaults and indexes as the original's Alembic scripts did when
   floppy took them (the original's 0001 and 0002_behavior_lifetime), and
-  0003 is the original's 0002_stm_turns (proposed decision D126: the
+  0003 is the original's 0002_stm_turns (proposed decision D165: the
   original has since rewritten its 0001 in place and renumbered, so the
   same revision id names a different schema in each, and a database the
   original's Alembic wrote is not used in place). On Postgres the
@@ -68,7 +68,7 @@
     <data id="database" expr="null"/>
     <data id="statements" expr="[]"/>
     <!-- The schema: floppy's Alembic revisions, one file each per engine
-         (decision D126). -->
+         (decision D165). -->
     <data id="sqlite_0001" src="sqlite/0001_initial_memory_schema.json"/>
     <data id="sqlite_0002" src="sqlite/0002_behavior_lifetime.json"/>
     <data id="sqlite_0003" src="sqlite/0003_stm_turns.json"/>

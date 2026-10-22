@@ -1,7 +1,7 @@
 # Plan: episodic graph memory, embeddings and associative recall
 
 Parity gap 9 and 10 ([parity gaps](parity-gaps.md)), workstream item M6. This
-is a plan only: it needs the maintainer's decisions 3 (migrations; D126 is
+is a plan only: it needs the maintainer's decisions 3 (migrations; D165 is
 proposed), 7 (rest and consolidation) and, for persons, 6 (participant
 identity). Nothing here is built until they are answered.
 
@@ -42,7 +42,7 @@ Each step keeps the document structure rule (D39) and puts I/O in services.
    accepts `{blob: hex}` parameters; `services/pgsql` maps the same
    statement to `pgvector` or a SQL expression (to decide with decision 2).
 3. **Schema.** The graph tables as revision `0004` in both dialects
-   (D126's non-breaking path), unless decision 3 chooses the original's
+   (D165's non-breaking path), unless decision 3 chooses the original's
    rewrite.
 4. **Memory serving.** `abilities/memory/memory.scx` keeps its one-shot
    transaction and gains a long-lived serving state for remember, search,

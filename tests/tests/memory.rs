@@ -138,7 +138,7 @@ fn a_fresh_database_is_migrated_to_the_original_head_schema() {
 
 #[test]
 fn the_head_schema_keeps_the_short_term_turns() {
-    // Decision D126: the original's 0002_stm_turns, floppy's 0003.
+    // Decision D165: the original's 0002_stm_turns, floppy's 0003.
     let directory = unique_scratch("memory");
     let finished = run(
         &directory,
