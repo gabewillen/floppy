@@ -26,7 +26,7 @@ DEACTIVATE = "bot.deactivate"
 OFFERS = "bot.ability.offers"
 INPUT = "bot.input"
 DONE = "done.invoke.floppy"
-ABILITIES = ["cognition", "communication", "identity", "listening"]
+ABILITIES = ["cognition", "communication", "identity", "listening", "persona"]
 GHOST = ("expected", js(ABILITIES + ["ghost"]))
 # The abilities' products the body passes on to its environment.
 NOISE = ("bot.ability",)
@@ -73,7 +73,7 @@ def case(test_id, number, comment, steps, params=(), **options):
     S.case(test_id, number, comment, steps, ignore=NOISE, params=[ENVIRONMENT] + list(params), **options)
 
 
-S.statement(1, "Invoked, the body starts in `live`, which invokes the abilities (`cognition`, `communication`, `identity`, `listening`), and activates on its own (no `bot.activate`): it sends `bot.activated` to its parent, and takes a turn's input, only once every expected ability (the data `expected`) has sent its first `bot.ability.offers`.")
+S.statement(1, "Invoked, the body starts in `live`, which invokes the abilities (`cognition`, `communication`, `identity`, `listening`, `persona`), and activates on its own (no `bot.activate`): it sends `bot.activated` to its parent, and takes a turn's input, only once every expected ability (the data `expected`) has sent its first `bot.ability.offers`.")
 S.statement(2, "While `activating`, an `error.*` event, an ability's `done.invoke`, or the activation timer (`activation_timeout_ms`) fails the activation: the body sends `bot.activating.failed` to its parent and its session ends in the final state `inactive`.")
 S.statement(3, "`bot.deactivate` leaves `live` and ends the session in `inactive`: from `active` or `activating`, after sending `bot.deactivated` to its parent (every accepted request is answered).")
 S.statement(4, "`bot.reboot` `{reason}` re-enters `live`, and the body passes it on to its parent: the abilities are invoked again and the bot waits for their offers again (and sends `bot.activated` again) before it takes input; the turn count goes on.")

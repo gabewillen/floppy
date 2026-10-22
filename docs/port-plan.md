@@ -242,7 +242,8 @@ D33 to D43.
   answers itself at once through `#_internal` with
   the original's event and logs `<log label="memory" expr="'absent'">`. Either
   way the step ends with the original's event (`bot.ability.reasoning.recalled`,
-  `.retained`, `bot.ability.identity.recalled`, `.adopted`), so the
+  `.retained`, `bot.ability.identity.recalled`, `.adopted`,
+  `bot.ability.persona.recalled`, `.revised`), so the
   topology does not change (decision D44).
 - **Speaking.** Phase 4 spoke in text mode (decision D38); phase 6
   speaks audio (decision D59, [Phase 6 conventions](#phase-6-conventions)),

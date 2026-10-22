@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/bots/floppy/irp/sources">
   <assert id="floppy-1" specnum="1" specid="#floppy-1">
-    <![CDATA[Invoked, the body starts in `live`, which invokes the abilities (`cognition`, `communication`, `identity`, `listening`), and activates on its own (no `bot.activate`): it sends `bot.activated` to its parent, and takes a turn's input, only once every expected ability (the data `expected`) has sent its first `bot.ability.offers`.]]>
+    <![CDATA[Invoked, the body starts in `live`, which invokes the abilities (`cognition`, `communication`, `identity`, `listening`, `persona`), and activates on its own (no `bot.activate`): it sends `bot.activated` to its parent, and takes a turn's input, only once every expected ability (the data `expected`) has sent its first `bot.ability.offers`.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>

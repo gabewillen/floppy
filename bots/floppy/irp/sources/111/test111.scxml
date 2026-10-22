@@ -4,7 +4,7 @@
 <state id="harness" initial="boot">
   <invoke id="floppy" type="scxml" src="../../../floppy.scx">
     <param name="environment" expr="_sessionid"/>
-    <param name="expected" expr='["cognition", "communication", "identity", "listening", "ghost"]'/>
+    <param name="expected" expr='["cognition", "communication", "identity", "listening", "persona", "ghost"]'/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
