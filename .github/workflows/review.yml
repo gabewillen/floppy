@@ -1,0 +1,66 @@
+name: review
+
+# Open Code Review reviews each pull request against the rules in
+# .opencodereview/ (rule.json and background.md). The action checks out the
+# base branch and reads the rules from it, so a rule change applies from the
+# pull request after the one that merges it, and the background is read from
+# the base as well.
+#
+# The model is configured in the repository settings: secrets OCR_LLM_URL and
+# OCR_LLM_TOKEN, variables OCR_LLM_MODEL and OCR_LLM_PROTOCOL (anthropic,
+# openai or openai-responses). Without OCR_LLM_TOKEN the job skips the review.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - id: configured
+        env:
+          OCR_LLM_TOKEN: ${{ secrets.OCR_LLM_TOKEN }}
+        run: |
+          if [ -n "$OCR_LLM_TOKEN" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::OCR_LLM_TOKEN is not set; skipping the review."
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.configured.outputs.ok == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          sparse-checkout: .opencodereview
+      - if: steps.configured.outputs.ok == 'true'
+        id: background
+        run: |
+          {
+            echo "text<<OCR_BACKGROUND_EOF"
+            cat .opencodereview/background.md 2>/dev/null || true
+            echo "OCR_BACKGROUND_EOF"
+          } >> "$GITHUB_OUTPUT"
+      - if: steps.configured.outputs.ok == 'true'
+        uses: alibaba/open-code-review@375f64cd6f67a48a135da83cfcf59c52669a09cb # v1.13.3
+        with:
+          llm_url: ${{ secrets.OCR_LLM_URL }}
+          llm_auth_token: ${{ secrets.OCR_LLM_TOKEN }}
+          llm_model: ${{ vars.OCR_LLM_MODEL }}
+          llm_use_anthropic: ${{ vars.OCR_LLM_PROTOCOL == 'anthropic' }}
+          llm_protocol: ${{ vars.OCR_LLM_PROTOCOL }}
+          ocr_version: 1.13.3
+          background: ${{ steps.background.outputs.text }}
+          effort: high
+          sticky_summary: 'true'
+          incremental: 'true'
