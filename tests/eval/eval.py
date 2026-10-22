@@ -14,6 +14,10 @@ Usage: python3 tests/eval/eval.py COMMAND [options]
   expand   have an LLM write held-out variations of the scenarios (new
            wordings, names, triggers and probes) for checking a climb's
            winner on input it never saw
+  builder  the builder track: the reflex and routine scenarios once per
+           --column, each with the builder pinned to one model (the bot
+           keeps its own), reporting each model's build success rate and
+           attempts per accepted build
   targets  list every prompt <data> the climb can change
 
 The bot runs through tests/tests/learning_eval.rs (`cargo test`), which
@@ -117,12 +121,14 @@ def drive(jobs, out, parallel, dry=False):
     return status
 
 
-def make_jobs(scenarios, repeats, out, overlay=None, prefix=""):
+def make_jobs(scenarios, repeats, out, overlay=None, prefix="", extra=None):
     jobs = []
     for name, scenario in scenarios.items():
         for repeat in range(repeats):
             job_id = f"{prefix}{name}-r{repeat}"
-            jobs.append({"id": job_id, "scenario": scenario, "overlay": overlay, "out": os.path.join(out, "jobs", job_id)})
+            job = {"id": job_id, "scenario": scenario, "overlay": overlay, "out": os.path.join(out, "jobs", job_id)}
+            job.update(extra or {})
+            jobs.append(job)
     return jobs
 
 
@@ -156,6 +162,7 @@ def grade_job(job, env, judge_names, check_weight):
         "results": results,
         "grades": grades,
         "evidence": score.evidence(records),
+        "builds": score.builds(records),
     }
     # A job that crashed before writing anything has no directory yet.
     os.makedirs(job["out"], exist_ok=True)
@@ -403,6 +410,125 @@ def cmd_climb(args):
     print(os.path.join(out, "climb.md"))
 
 
+# The builder track
+
+
+# Where builder.scx takes the request's model; the track pins it instead.
+BUILDER_MODEL = '<assign location="model" expr="requestModel(_event)"/>'
+
+
+def pin_builder_model(model, directory, base=None):
+    """Writes into `directory` a builder.scx (from the overlay `base` when it
+    holds one, else the workspace's) that builds with `model` whatever model
+    reflection asks for, so the bot reasons on one model and builds on
+    another."""
+    rel = os.path.join("bots", "builder", "builder.scx")
+    source = os.path.join(base, rel) if base and os.path.exists(os.path.join(base, rel)) else os.path.join(ROOT, rel)
+    with open(source, encoding="utf-8") as handle:
+        document = handle.read()
+    if document.count(BUILDER_MODEL) != 1 or "'" in model or '"' in model:
+        raise SystemExit("builder.scx no longer takes the request's model where the track pins it (eval.py BUILDER_MODEL)")
+    if base:
+        shutil.copytree(base, directory, dirs_exist_ok=True)
+    out = os.path.join(directory, rel)
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    with open(out, "w", encoding="utf-8") as handle:
+        handle.write(document.replace(BUILDER_MODEL, f'<assign location="model" expr="\'{model}\'"/>'))
+
+
+def parse_column(text):
+    """`label=builder_model[;env=a:b][;bot=model]`."""
+    label, _, rest = text.partition("=")
+    parts = rest.split(";")
+    column = {"label": label, "builder": parts[0], "env_files": None, "bot": None}
+    for part in parts[1:]:
+        key, _, value = part.partition("=")
+        if key == "env":
+            column["env_files"] = [os.path.abspath(p) for p in value.split(os.pathsep) if p]
+        elif key == "bot":
+            column["bot"] = value
+        else:
+            raise SystemExit(f"unknown column field {key!r} in {text!r}")
+    if not label or not column["builder"]:
+        raise SystemExit(f"a column is label=builder_model[;env=files][;bot=model]: {text!r}")
+    return column
+
+
+def builder_table(columns, graded):
+    """Per column and scenario: builds run, accepted, the success rate, and
+    the attempts per accepted build; with each column's failure reasons."""
+    lines = ["# Builder track", "",
+             "Each column runs the bot's reflex and routine scenarios with its builder pinned to one model. A build is one "
+             "builder run reflection started (a create or change); attempts are its author attempts.", "",
+             "| Column | Builder model | Scenario | Builds | Accepted | Success | Attempts per accepted | Learned |",
+             "| --- | --- | --- | --- | --- | --- | --- | --- |"]
+    summary = {}
+    for column in columns:
+        rows = [g for g in graded if g["id"].startswith(column["label"] + "-")]
+        totals = {"builds": 0, "accepted": 0, "attempts": [], "reasons": {}, "learned": []}
+        for scenario in sorted({g["scenario"] for g in rows}):
+            runs = [g for g in rows if g["scenario"] == scenario]
+            built = [b for g in runs for b in g["builds"]]
+            accepted = [b for b in built if b["accepted"]]
+            learned = [r["score"] for g in runs for r in g["results"] if r["check"] == "learned"]
+            totals["builds"] += len(built)
+            totals["accepted"] += len(accepted)
+            totals["attempts"] += [b["attempts"] for b in accepted]
+            totals["learned"] += learned
+            for b in built:
+                if not b["accepted"]:
+                    totals["reasons"][b["reason"]] = totals["reasons"].get(b["reason"], 0) + 1
+            rate = f"{len(accepted) / len(built):.2f}" if built else "n/a"
+            attempts = f"{statistics.mean(b['attempts'] for b in accepted):.1f}" if accepted else "n/a"
+            mean_learned = f"{statistics.mean(learned):.2f}" if learned else "n/a"
+            lines.append(f"| {column['label']} | `{column['builder']}` | {scenario} | {len(built)} | {len(accepted)} | {rate} | {attempts} | {mean_learned} |")
+        summary[column["label"]] = {
+            "builder": column["builder"],
+            "builds": totals["builds"],
+            "accepted": totals["accepted"],
+            "success": totals["accepted"] / totals["builds"] if totals["builds"] else None,
+            "attempts_per_accepted": statistics.mean(totals["attempts"]) if totals["attempts"] else None,
+            "learned": statistics.mean(totals["learned"]) if totals["learned"] else None,
+            "failures": totals["reasons"],
+        }
+    lines += ["", "| Column | Builds | Success | Attempts per accepted | Learned | Failed builds by reason |", "| --- | --- | --- | --- | --- | --- |"]
+    for label, s in summary.items():
+        success = "n/a" if s["success"] is None else f"{s['success']:.2f}"
+        attempts = "n/a" if s["attempts_per_accepted"] is None else f"{s['attempts_per_accepted']:.1f}"
+        learned = "n/a" if s["learned"] is None else f"{s['learned']:.2f}"
+        reasons = ", ".join(f"{k} {v}" for k, v in sorted(s["failures"].items())) or "none"
+        lines.append(f"| {label} | {s['builds']} | {success} | {attempts} | {learned} | {reasons} |")
+    return "\n".join(lines) + "\n", summary
+
+
+def cmd_builder(args):
+    scenarios = load_scenarios(args.scenario or ["reflex", "routine"], args.scenarios_dir)
+    columns = [parse_column(c) for c in args.column]
+    out = args.out or os.path.join(OUT, "builder-" + now())
+    jobs = []
+    for column in columns:
+        overlay = os.path.join(out, "columns", column["label"], "overlay")
+        pin_builder_model(column["builder"], overlay, args.overlay)
+        extra = {}
+        if column["env_files"]:
+            extra["env_files"] = column["env_files"]
+        if column["bot"]:
+            extra["model"] = column["bot"]
+        jobs += make_jobs(scenarios, args.repeats, out, overlay, prefix=column["label"] + "-", extra=extra)
+    drive(jobs, out, args.parallel, dry=args.dry)
+    if args.dry:
+        return
+    graded = grade_all(jobs, judge_env(args), args.judge_names, args.check_weight)
+    table, summary = builder_table(columns, graded)
+    with open(os.path.join(out, "builder.json"), "w", encoding="utf-8") as handle:
+        json.dump({"columns": summary, "jobs": graded}, handle, indent=2)
+    with open(os.path.join(out, "builder.md"), "w", encoding="utf-8") as handle:
+        handle.write(table)
+    with open(os.path.join(out, "report.md"), "w", encoding="utf-8") as handle:
+        handle.write(report_markdown(f"Builder track {os.path.basename(out)}", aggregate(graded), graded))
+    print(os.path.join(out, "builder.md"))
+
+
 EXPAND_SYSTEM = (
     "You write held-out test scenarios for floppy, a companion robot bot that learns its name, reflexes (turn "
     "behaviors) and routines from what people tell it. Given one scenario as JSON, write a variation that tests the "
@@ -482,6 +608,13 @@ def main(argv=None):
     p.add_argument("--variants", type=int, default=1)
     p.add_argument("--proposers", default="codex,gemini")
     p.set_defaults(func=cmd_expand)
+    p = sub.add_parser("builder")
+    common(p)
+    p.add_argument("--column", action="append", required=True,
+                   help="label=builder_model[;env=a:b][;bot=model]: one builder model, with the column's env files and bot model when they differ (repeatable)")
+    p.add_argument("--overlay", help="an overlay every column starts from")
+    p.add_argument("--dry", action="store_true", help="write the plan only")
+    p.set_defaults(func=cmd_builder)
     p = sub.add_parser("targets")
     p.set_defaults(func=cmd_targets)
 

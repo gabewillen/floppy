@@ -10,7 +10,8 @@
 //! floppy-tests --locked --test learning_eval -- --ignored --nocapture`
 //!
 //! The plan is `{"parallel": N, "jobs": [{"id", "scenario", "overlay",
-//! "out"}]}`. Each job lays out a scratch copy of the bot and the builder
+//! "out", "env_files"?, "model"?}]}`; a job's `env_files` and `model`
+//! replace `FLOPPY_LIVE_ENV_FILE` and `FLOPPY_LIVE_MODEL` for it. Each job lays out a scratch copy of the bot and the builder
 //! its reflection invokes, copies the files of `overlay` (a directory laid
 //! out like the workspace, or null) over it, and runs the scenario's
 //! sessions one after another on one memory directory and one behaviors
@@ -86,14 +87,28 @@ fn layout(overlay: Option<&Path>, name: Option<&str>) -> PathBuf {
     dir.join("bots/floppy/floppy.scx")
 }
 
-/// Starts the room with the bot at `body`, its memory in `memory`.
-fn start(body: &Path, memory: &Path) -> Run {
+/// Starts the room with the bot at `body`, its memory in `memory`: the
+/// job's `env_files` and `model` when it names them, else the live tests'.
+fn start(body: &Path, memory: &Path, job: &Json) -> Run {
     let mut args = Vec::new();
-    for file in support::live_env_files() {
+    let env_files: Vec<PathBuf> = match job["env_files"].as_array() {
+        Some(files) => files
+            .iter()
+            .filter_map(Json::as_str)
+            .map(PathBuf::from)
+            .collect(),
+        None => support::live_env_files(),
+    };
+    for file in env_files {
         args.push("--env-file".to_owned());
         args.push(file.display().to_string());
     }
-    let model = format!("'{}'", support::live_model());
+    let model = format!(
+        "'{}'",
+        job["model"]
+            .as_str()
+            .map_or_else(support::live_model, str::to_owned)
+    );
     let layout = body
         .parent()
         .and_then(Path::parent)
@@ -147,7 +162,7 @@ fn run_job(job: &Json, clock: Instant) {
     let mut steps = Vec::new();
     let sessions = scenario["sessions"].as_array().cloned().unwrap_or_default();
     for (session, spec) in sessions.iter().enumerate() {
-        let mut run = start(&body, &memory);
+        let mut run = start(&body, &memory, job);
         for (step, spec) in spec["steps"]
             .as_array()
             .cloned()

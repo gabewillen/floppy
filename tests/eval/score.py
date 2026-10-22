@@ -220,3 +220,39 @@ def evidence(job, limit=400):
             if label.startswith("reflection") or label.startswith("builder") or "failed" in label:
                 lines.append(f"session {index} {label}: {text[:limit]}")
     return lines
+
+
+def builds(job):
+    """Every build the builder ran in the job (reflection invokes it for each
+    create or change), from its own logs: `author` "<mode> draft, attempt
+    N" (attempt 1 starts a build), `retry_gate` "failure N ...", and its
+    final state, `done` "built <name> in N attempt(s)" or `failed`
+    "<reason>: <diagnostic>". A build the turn cancelled has no final
+    state. Each is {accepted, attempts, reason, diagnostics}."""
+    out = []
+    for records in job["sessions"]:
+        current = None
+        for label, text in logs(records):
+            if label == "author":
+                match = re.search(r"attempt (\d+)$", text)
+                attempt = int(match.group(1)) if match else 1
+                if current is None or attempt == 1:
+                    if current is not None:
+                        out.append(current)
+                    current = {"accepted": False, "attempts": 0, "reason": "unfinished", "diagnostics": []}
+                current["attempts"] = max(current["attempts"], attempt)
+            elif current is not None and label == "retry_gate":
+                current["diagnostics"].append(text[:200])
+            elif current is not None and label == "done":
+                match = re.search(r"in (\d+) attempt", text)
+                current.update(accepted=True, reason="done", attempts=int(match.group(1)) if match else current["attempts"])
+                out.append(current)
+                current = None
+            elif current is not None and label == "failed":
+                current["reason"] = text.split(":")[0].split(" ")[0][:40] or "failed"
+                current["diagnostics"].append(text[:200])
+                out.append(current)
+                current = None
+        if current is not None:
+            out.append(current)
+    return out

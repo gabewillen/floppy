@@ -135,6 +135,37 @@ scenarios (new names, triggers, replies and probes), checked to load, so a
 climb's winner can be run (`eval.py run --scenarios-dir <dir>`) on input it
 never climbed on.
 
+## Builder track
+
+The maintainer's bar for the builder (2026-10-22): it must succeed with
+small models, which may only take longer and more attempts. `eval.py
+builder` measures that where the builder really runs, inside reflection:
+it runs the reflex and routine scenarios once per `--column
+label=builder_model[;env=<env files>][;bot=<model>]`, each with
+`bots/builder/builder.scx` pinned to the column's model in an overlay (its
+`<assign location="model">` takes a literal instead of the request's
+model), so the bot reasons and reflects on its own model (`bot`, else
+`FLOPPY_LIVE_MODEL`) and builds on the column's. The builder model must be
+served by the column's `FLOPPY_BASE_URL` (its `env` files, else
+`FLOPPY_LIVE_ENV_FILE`).
+
+`score.builds` reads each build from the builder's own logs (`author`
+attempt 1 starts one; `done` "built X in N attempt(s)" or `failed`
+"<reason>: ..." ends it; a build its turn cancelled stays `unfinished`),
+and `builder.md` gives, per column and scenario, the builds, the accepted
+ones, the success rate, the attempts per accepted build and the `learned`
+check, then per column the failed builds by reason (`no-progress`,
+`attempts-exhausted`, `abandoned`, `unfinished`). For example, on the CPA
+gateway with the decision server on the lab:
+
+```sh
+python3 tests/eval/eval.py builder --judges none --repeats 2 \
+  --column "luna=gabe-codex-1/gpt-6-luna;env=.env.cpa-lab" \
+  --column "lite=gemini-3.1-flash-lite;env=.env.cpa-lab;bot=gabe-codex-1/gpt-6-luna" \
+  --column "qwen27=cerebras/qwen-3.8-27b;env=.env.cpa-lab;bot=gabe-codex-1/gpt-6-luna" \
+  --column "gemma=gemma-4-26b-a4b;env=.env.lab:.env.speech;bot=gemma-4-26b-a4b"
+```
+
 ## Running it
 
 The bot's backends are the live tests' (`FLOPPY_LIVE_ENV_FILE`,

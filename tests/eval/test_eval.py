@@ -98,6 +98,20 @@ class Scorer(unittest.TestCase):
         self.assertEqual(value, 1.0)
 
 
+class Builds(unittest.TestCase):
+    def test_each_build_is_counted_with_its_attempts_and_end(self):
+        session = [
+            log("design", "plan"), log("author", "create draft, attempt 1"), log("retry_gate", "failure 1: validate XML001"),
+            log("author", "repair draft, attempt 2"), log("done", "built PingPong in 2 attempt(s)"),
+            log("author", "create draft, attempt 1"), log("retry_gate", "failure 1: validate XML001"),
+            log("author", "repair draft, attempt 2"), log("failed", "no-progress: validate XML001"),
+            log("author", "create draft, attempt 1"),
+        ]
+        found = score.builds({"steps": [], "sessions": [session], "done": True})
+        self.assertEqual([(b["accepted"], b["attempts"], b["reason"]) for b in found],
+                         [(True, 2, "done"), (False, 2, "no-progress"), (False, 1, "unfinished")])
+
+
 class Codec(unittest.TestCase):
     def test_every_prompt_round_trips(self):
         for target in prompts.discover():
