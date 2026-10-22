@@ -43,6 +43,14 @@ use support::{Run, unique_scratch, workspace};
 /// select step and a builder revision of a few attempts.
 const SAY_TIMEOUT: Duration = Duration::from_mins(15);
 
+/// How long a settled said step keeps collecting records: the turn's
+/// reply can be said after its reflection settled.
+const SAY_GRACE: Duration = Duration::from_secs(15);
+
+/// The message of [`Run::until`]'s panic on its limit, which [`wait`]
+/// expects for every wait step.
+const TIMED_OUT: &str = "no expected record within";
+
 /// The records that end a said step's wait: its reflection settled, or its
 /// turn (or the bot) failed.
 const SETTLED: &[&str] = &[
@@ -163,7 +171,13 @@ fn run_job(job: &Json, clock: Instant) {
                 let limit = spec["timeout_s"]
                     .as_u64()
                     .map_or(SAY_TIMEOUT, Duration::from_secs);
-                ("say", wait(&run, limit, is_settled))
+                let settled = wait(&run, limit, is_settled);
+                // The reply is spoken after the turn's reflection may have
+                // settled; let it land in this step, not the next.
+                if settled {
+                    wait(&run, SAY_GRACE, |_| false);
+                }
+                ("say", settled)
             } else {
                 let seconds = spec["wait_s"].as_u64().unwrap_or(0);
                 // Nothing ends a wait but its time.
@@ -214,6 +228,20 @@ fn learning_eval() {
     let plan: Json =
         serde_json::from_str(&std::fs::read_to_string(&plan_path).expect("the plan is readable"))
             .expect("the plan is JSON");
+    // A wait reaching its limit is how a wait step ends: keep its panic out
+    // of the output, and report every other one as usual.
+    let report = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let message = info
+            .payload()
+            .downcast_ref::<String>()
+            .map(String::as_str)
+            .or_else(|| info.payload().downcast_ref::<&str>().copied())
+            .unwrap_or_default();
+        if !message.starts_with(TIMED_OUT) {
+            report(info);
+        }
+    }));
     // Build the components and scx once, before the jobs share them.
     let _cli = support::cli();
     let parallel = plan["parallel"]
