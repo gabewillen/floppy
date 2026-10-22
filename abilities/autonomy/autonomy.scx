@@ -25,9 +25,11 @@
   its own one percept. The first behavior that handles a percept settles
   it; the turn is handled only when every percept was, with what the
   handling behaviors selected in the percepts' arrival order. Otherwise it
-  is unhandled after those selections were sent, and its answer carries
-  them as acted {percepts, acts} (the reference's ActedData: the
-  handled percepts' positions and their selections).
+  is unhandled, and its answer carries those selections as acted
+  {percepts, acts} (the reference's ActedData: the handled percepts'
+  positions and their selections). A selection that names no target (the
+  trusted seed's) is not sent here: it reaches the body only when the
+  cognition carries acted.acts into the turn's output.
 
   Input: the <param>s turn, input (focus and focus_candidates, the original's
   bot.ability.autonomy.input, schemas/bot.ability.autonomy.input.json),

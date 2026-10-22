@@ -217,23 +217,10 @@ function heldAfterTake() {
   return held.slice(take.count);
 }
 
-// Why the body left active, from the event that took it out (the original's
-// _release_held).
-function releaseReason(_event) {
-  if (_event.name === 'bot.deactivate') {
-    return 'deactivated';
-  }
-  if (_event.name === 'bot.reboot') {
-    return 'rebooted';
-  }
-  if (_event.name === 'bot.processing.cancel.timed_out' || _event.name.indexOf('done.invoke.') === 0) {
-    return 'degraded';
-  }
-  return 'stopped';
-}
-
-function releasedLog(_event) {
-  return JSON.stringify({count: held.length, reason: releaseReason(_event)});
+// What a leaving transition releases, with its reason (deactivated,
+// rebooted or degraded; the original's _release_held).
+function releasedLog(reason) {
+  return JSON.stringify({count: held.length, reason: reason});
 }
 
 // processing

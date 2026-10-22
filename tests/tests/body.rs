@@ -811,6 +811,31 @@ fn without_firmware_src_the_body_shows_no_firmware() {
 }
 
 #[test]
+fn what_is_held_when_the_bot_degrades_is_released() {
+    let body = layout(
+        &Cognition::Double("'ready'"),
+        &[("processing_timeout_ms", "1500")],
+    );
+    let mut run = start(&body);
+    activated(&mut run);
+    // A cancel the cognition never acknowledges degrades the bot.
+    run.event("bot.input", &input("deaf", "first"));
+    run.until(WAIT, label_is("double.participants"));
+    run.event("bot.input", &input("reply", "second"));
+    run.event("bot.input", &input("reply", "third"));
+    run.until(WAIT, |record| {
+        label_is("floppy.held")(record) && record["text"] == "2"
+    });
+    let records = run.until(WAIT, label_is("floppy.released"));
+    assert_eq!(
+        only(&records, &["floppy.released"]),
+        pairs(&[("floppy.released", r#"{"count":2,"reason":"degraded"}"#)])
+    );
+    run.until(WAIT, label_is("done.invoke"));
+    close(run, "what_is_held_when_the_bot_degrades_is_released");
+}
+
+#[test]
 fn a_turn_that_times_out_is_cancelled_and_fails() {
     let body = layout(
         &Cognition::Double("'ready'"),

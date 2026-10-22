@@ -103,9 +103,10 @@
   their order-preserving union. A turn ends in turn_ended, which starts
   the next turn at once while anything is held (an unfocused body first
   focuses the first held percept's device), and otherwise returns to
-  focused or unfocused. Leaving active releases what is still held,
-  logged as floppy.released {count, reason} (deactivated, rebooted,
-  degraded, or stopped) and never replayed. The body counts the turn, computes the
+  focused or unfocused. What is still held when the bot is deactivated,
+  rebooted or degraded is released by that transition, logged as
+  floppy.released {count, reason} (deactivated, rebooted or degraded),
+  and never replayed. The body counts the turn, computes the
   turn's attention bias with <cognition:attention_bias_for_turn> (focus, focus_candidates:
   the original's attention_bias_for_turn from device identity only, percept by percept), assembles the turn's choices (below), sends bot.ability.cognition.input
   {turn, stimulus, focus, focus_candidates, participants, choices, environment} to the cognition, and
@@ -324,9 +325,19 @@
         <assign location="waiting" expr="waitingWithout(_event)"/>
       </if>
     </transition>
-    <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json" target="deactivating"/>
+    <!-- What is still held when the body leaves is released, counted and
+         logged by each leaving transition with its reason, never replayed
+         (the original's _release_held); live's entry empties it. -->
+    <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json" target="deactivating">
+      <if cond="holdsPercepts()">
+        <log label="floppy.released" expr="releasedLog('deactivated')"/>
+      </if>
+    </transition>
     <!-- A reboot (the cognition asks for one): re-enter live. -->
     <transition event="bot.reboot" event:schema="../../abilities/schemas/bot.reboot.json" target="live">
+      <if cond="holdsPercepts()">
+        <log label="floppy.released" expr="releasedLog('rebooted')"/>
+      </if>
       <send event="bot.reboot" target="#_parent">
         <content expr="_event.data"/>
       </send>
@@ -408,7 +419,11 @@
             <content expr="emptyData()"/>
           </send>
         </transition>
-        <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json" target="deactivating"/>
+        <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json" target="deactivating">
+          <if cond="holdsPercepts()">
+            <log label="floppy.released" expr="releasedLog('deactivated')"/>
+          </if>
+        </transition>
         <!-- A product the firmware hands over as it starts waits for active
              (the original defers it). -->
         <transition event="bot.ability.cognition.input" event:schema="../../abilities/schemas/bot.ability.cognition.input.json">
@@ -417,17 +432,11 @@
       </state>
 
       <state id="active" initial="unfocused">
-        <!-- What is still held when the body leaves active is released,
-             counted and logged, never replayed (the original's
-             _release_held). -->
-        <onexit>
-          <if cond="holdsPercepts()">
-            <log label="floppy.released" expr="releasedLog(_event)"/>
-          </if>
-          <assign location="held" expr="[]"/>
-        </onexit>
         <!-- An ability that ends while the bot is active leaves it degraded. -->
         <transition event="done.invoke.cognition done.invoke.communication done.invoke.identity done.invoke.listening done.invoke.firmware" target="degraded">
+          <if cond="holdsPercepts()">
+            <log label="floppy.released" expr="releasedLog('degraded')"/>
+          </if>
           <assign location="degraded_reason" expr="abilityEndedReason(_event)"/>
         </transition>
         <!-- Communication input from outside goes to the communication, whose
@@ -678,6 +687,9 @@
           </transition>
           <transition event="bot.processing.cancel.timed_out" event:schema="schemas/bot.processing.cancel.timed_out.json"
                       cond="isCurrentTurn(_event)" target="degraded">
+            <if cond="holdsPercepts()">
+              <log label="floppy.released" expr="releasedLog('degraded')"/>
+            </if>
             <send event="bot.processing.cancel.timed_out" target="#_parent">
               <content expr="turnData()"/>
             </send>
