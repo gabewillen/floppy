@@ -39,8 +39,19 @@ function nextLiveRun() {
   return live_run + 1;
 }
 
+// The abilities expected ready: seeing too while it is on.
 function expectedAbilities() {
-  return expected.slice();
+  return seeing_enabled ? expected.concat(['seeing']) : expected.slice();
+}
+
+// Whether the eye is off: its ending is then ignored.
+function isSeeingOff() {
+  return !seeing_enabled;
+}
+
+// Whether the offers _event carries are taken: seeing's only while it is on.
+function isTakenOffer(_event) {
+  return seeing_enabled || _event.data.ability !== 'seeing';
 }
 
 // Whether the ability whose offers _event carries is still waited for.
@@ -51,6 +62,12 @@ function isWaiting(_event) {
 // waiting without the ability whose offers _event carries.
 function waitingWithout(_event) {
   return waiting.filter(function (ability) { return ability !== _event.data.ability; });
+}
+
+// The abilities an environment.visual goes to: seeing after the input
+// abilities while it is on.
+function visualInput() {
+  return seeing_enabled ? input.concat(['seeing']) : input;
 }
 
 // The abilities' offers a turn may select from: every ability's but the

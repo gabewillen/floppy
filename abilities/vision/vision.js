@@ -9,7 +9,12 @@ function classifiesAsText() {
   return kind === 'text' && content.trim().length > 0;
 }
 
-// An image with a reference.
+// An image (its schema refuses an empty reference).
 function classifiesAsImage() {
-  return kind === 'image' && content.length > 0;
+  return kind === 'image';
+}
+
+// The classifier's confidence for the classification.
+function classificationConfidence() {
+  return {text: text_confidence, image: image_confidence, unreadable: unreadable_confidence}[classification];
 }

@@ -30,6 +30,8 @@
 //!   function call as that call, its content the arguments, and a streamed
 //!   request (`"stream": true`) as its server-sent-event stream
 //!   ([`support::answer_as_asked`]). Every service's base URL points at it;
+//! * `irp/sources/<id>/logs.json` (optional), `{LABEL: [TEXT, ...]}`:
+//!   the run's logs of each label are exactly those texts, in order;
 //! * `irp/sources/<id>/media/` (optional) is the media the generate and
 //!   speech services find at `/media` (a fresh copy per case; an empty
 //!   directory without it).
@@ -247,6 +249,27 @@ fn script(case: &Path) -> (bool, Vec<Answer>) {
     (wall, answers)
 }
 
+/// The case's required logs, `(label, texts)`, from its `logs.json`.
+fn expected_logs(case: &Path) -> Vec<(String, Vec<String>)> {
+    let Ok(text) = std::fs::read_to_string(case.join("logs.json")) else {
+        return Vec::new();
+    };
+    let logs: Json = serde_json::from_str(&text).expect("logs.json is JSON");
+    logs.as_object()
+        .expect("logs.json is an object")
+        .iter()
+        .map(|(label, texts)| {
+            let texts = texts
+                .as_array()
+                .expect("a label's logs are an array")
+                .iter()
+                .map(|text| text.as_str().expect("a logged text").to_owned())
+                .collect();
+            (label.clone(), texts)
+        })
+        .collect()
+}
+
 /// Runs one case; returns why it did not pass, if it did not.
 fn run_case(document: &Path, case: &Path, test: &str) -> Option<String> {
     let start = case.join(format!("test{test}.scxml"));
@@ -289,9 +312,10 @@ fn run_case(document: &Path, case: &Path, test: &str) -> Option<String> {
     if binds(document, "pgsql") {
         args.extend(support::pgsql_grant());
     }
-    // The generate and speech services read and write media at /media: a
-    // fresh copy of the case's media/ directory, else an empty directory.
-    for name in ["generate", "speech"] {
+    // The generate, speech and vision services read and write media at
+    // /media: a fresh copy of the case's media/ directory, else an empty
+    // directory.
+    for name in ["generate", "speech", "vision"] {
         if binds(document, name) {
             let media = unique_scratch("irp-media");
             if case.join("media").is_dir() {
@@ -314,14 +338,24 @@ fn run_case(document: &Path, case: &Path, test: &str) -> Option<String> {
     ]);
     let run = Run::start(&args, &[]);
     let finished = run.finish(LIMIT);
-    let outcome: Vec<String> = logs(&finished.all)
-        .into_iter()
-        .filter(|(label, _)| label == "Outcome")
-        .map(|(_, text)| text)
+    let logged = logs(&finished.all);
+    let texts = |wanted: &str| -> Vec<String> {
+        logged
+            .iter()
+            .filter(|(label, _)| label == wanted)
+            .map(|(_, text)| text.clone())
+            .collect()
+    };
+    let outcome = texts("Outcome");
+    let expected = expected_logs(case);
+    let unmet: Vec<String> = expected
+        .iter()
+        .filter(|(label, wanted)| texts(label) != **wanted)
+        .map(|(label, wanted)| format!("{label}: wanted {wanted:?}, logged {:?}", texts(label)))
         .collect();
-    (!(finished.status.success() && outcome == ["pass"])).then(|| {
+    (!(finished.status.success() && outcome == ["pass"] && unmet.is_empty())).then(|| {
         format!(
-            "exit {:?}, Outcome {outcome:?}\nrecords: {}\nstderr: {}",
+            "exit {:?}, Outcome {outcome:?}, logs {unmet:?}\nrecords: {}\nstderr: {}",
             finished.status.code(),
             finished
                 .all

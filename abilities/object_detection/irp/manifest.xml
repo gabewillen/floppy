@@ -1,0 +1,107 @@
+<?xml version="1.0"?>
+<!-- The object_detection document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/object_detection/irp/sources">
+  <assert id="object_detection-1" specnum="1" specid="#object_detection-1">
+    <![CDATA[Its input is its `<param>`s: it sends itself `bot.ability.vision.detection.input` `{image, media_type}` (the original's InputData, the image by reference), which its schema checks, so an `image` that is missing or empty sends nothing to the model and answers `bot.ability.failed` `{message: "ObjectDetection could not run (error.execution)"}`; nothing reaches the parent before its one answer.]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.scxml"/>
+    </test>
+    <test id="101" conformance="mandatory" manual="false">
+      <start uri="101/test101.scxml"/>
+    </test>
+    <test id="102" conformance="mandatory" manual="false">
+      <start uri="102/test102.scxml"/>
+    </test>
+  </assert>
+  <assert id="object_detection-2" specnum="2" specid="#object_detection-2">
+    <![CDATA[It asks the generate service once, with one user message (the original's DETECT_INSTRUCTIONS as a text part and the image's reference as an image part, the image read from the granted media directory), and answers its parent `bot.ability.vision.detection.output` `{objects}`, each object `{label, confidence, box: {x, y, width, height}}` as the reply gave it; a reply of `[]` is `{objects: []}`; then it ends (`done.invoke.<id>` follows the answer).]]>
+    <test id="110" conformance="mandatory" manual="false">
+      <start uri="110/test110.scxml"/>
+    </test>
+    <test id="111" conformance="mandatory" manual="false">
+      <start uri="111/test111.scxml"/>
+    </test>
+    <test id="112" conformance="mandatory" manual="false">
+      <start uri="112/test112.scxml"/>
+    </test>
+  </assert>
+  <assert id="object_detection-3" specnum="3" specid="#object_detection-3">
+    <![CDATA[The reply is trimmed, and a reply fenced as markdown (starting with three backticks) is read inside the fence: the text after its first line, a closing fence removed, trimmed again.]]>
+    <test id="120" conformance="mandatory" manual="false">
+      <start uri="120/test120.scxml"/>
+    </test>
+    <test id="121" conformance="mandatory" manual="false">
+      <start uri="121/test121.scxml"/>
+    </test>
+    <test id="122" conformance="mandatory" manual="false">
+      <start uri="122/test122.scxml"/>
+    </test>
+    <test id="123" conformance="mandatory" manual="false">
+      <start uri="123/test123.scxml"/>
+    </test>
+  </assert>
+  <assert id="object_detection-4" specnum="4" specid="#object_detection-4">
+    <![CDATA[Each reply item is validated on its own as the original's DetectedObject, with pydantic's lax numbers (a boolean or a numeric string reads as its number): `label` a string of 1..100 characters, `confidence` 0..1 or `null` (required), `box` the original's geometry.Box (`x`, `y` in 0..1, `width`, `height` in (0, 1], `x + width` and `y + height` at most 1 + 1e-6), and no other keys; an item that is not one is skipped, never failing the detection.]]>
+    <test id="130" conformance="mandatory" manual="false">
+      <start uri="130/test130.scxml"/>
+    </test>
+    <test id="131" conformance="mandatory" manual="false">
+      <start uri="131/test131.scxml"/>
+    </test>
+    <test id="132" conformance="mandatory" manual="false">
+      <start uri="132/test132.scxml"/>
+    </test>
+    <test id="133" conformance="mandatory" manual="false">
+      <start uri="133/test133.scxml"/>
+    </test>
+  </assert>
+  <assert id="object_detection-5" specnum="5" specid="#object_detection-5">
+    <![CDATA[The first `max_objects` (32 by default, a `<param>`) valid items, in reply order, are kept, then ordered by descending confidence, unrated last, equally rated objects keeping the reply's order.]]>
+    <test id="140" conformance="mandatory" manual="false">
+      <start uri="140/test140.scxml"/>
+    </test>
+    <test id="141" conformance="mandatory" manual="false">
+      <start uri="141/test141.scxml"/>
+    </test>
+    <test id="142" conformance="mandatory" manual="false">
+      <start uri="142/test142.scxml"/>
+    </test>
+  </assert>
+  <assert id="object_detection-6" specnum="6" specid="#object_detection-6">
+    <![CDATA[A reply over `max_reply_bytes` (65536 by default, a `<param>`; UTF-8 bytes) answers `bot.ability.failed` `{message: "the reply of <n> bytes exceeds max_reply_bytes (<max>)"}`, and a reply that is not a JSON array answers `{message: "the reply is not a JSON array of objects"}` (never the reply itself).]]>
+    <test id="150" conformance="mandatory" manual="false">
+      <start uri="150/test150.scxml"/>
+    </test>
+    <test id="151" conformance="mandatory" manual="false">
+      <start uri="151/test151.scxml"/>
+    </test>
+    <test id="152" conformance="mandatory" manual="false">
+      <start uri="152/test152.scxml"/>
+    </test>
+    <test id="153" conformance="mandatory" manual="false">
+      <start uri="153/test153.scxml"/>
+    </test>
+    <test id="154" conformance="mandatory" manual="false">
+      <start uri="154/test154.scxml"/>
+    </test>
+  </assert>
+  <assert id="object_detection-7" specnum="7" specid="#object_detection-7">
+    <![CDATA[A model call that fails answers `bot.ability.failed` `{message: "Object detection generator failed: <code>."}`, the generate service's failure code in the message, and an image reference the generate service cannot read rejects its start: `{message: "ObjectDetection could not run (error.execution)"}`.]]>
+    <test id="160" conformance="mandatory" manual="false">
+      <start uri="160/test160.scxml"/>
+    </test>
+    <test id="161" conformance="mandatory" manual="false">
+      <start uri="161/test161.scxml"/>
+    </test>
+    <test id="162" conformance="mandatory" manual="false">
+      <start uri="162/test162.scxml"/>
+    </test>
+  </assert>
+  <assert id="object_detection-8" specnum="8" specid="#object_detection-8">
+    <![CDATA[An output its schema refuses (more than 32 objects, when the invoker allows more) answers `bot.ability.failed` `{message: "Object detection produced output that does not match its output schema."}`, the original's invalid-output failure.]]>
+    <test id="170" conformance="mandatory" manual="false">
+      <start uri="170/test170.scxml"/>
+    </test>
+  </assert>
+</assertions>

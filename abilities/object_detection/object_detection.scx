@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's ObjectDetection (the reference abilities/vision/detection.py) with the
+  original's GenerativeDetector: what things are in one image and where,
+  asked of an image-capable model once per image. Seeing
+  (abilities/seeing/seeing.scx) invokes it once per view from the state
+  that bounds its objects stage; leaving that state cancels it and its
+  model call (SCXML 6.4), which replaces the original's stuck-stage recovery
+  (detach and re-attach).
+
+    detection { idle -bot.ability.vision.detection.input-> applying
+      -generate.result-> replied } -> applied (final)
+
+  Input: the <param>s image (a reference to the image, as
+  environment.visual carries it) and media_type (the view's, or null),
+  model (the vision model, as reading's), instructions (the original's
+  DETECT_INSTRUCTIONS, verbatim), max_objects (the original's MAX_OBJECTS,
+  32) and max_reply_bytes (the original's 65536).
+
+  idle sends its input to itself as bot.ability.vision.detection.input
+  {image, media_type} (the original's InputData, the image by reference);
+  the transition taking it carries its event:schema, so a missing or
+  malformed image is error.execution here and a failure.
+
+  applying invokes the generate service with one user message whose
+  content is the instructions as a text part ({kind: "text", content})
+  and the image's reference as an image part ({kind: "image", content}),
+  the original's TextPart and ImagePart, as reading builds them. Its text
+  reply goes to replied.
+
+  replied is the original's GenerativeDetector.classify on the reply: a
+  reply over max_reply_bytes (UTF-8) fails; the reply is trimmed, and a
+  reply fenced as markdown (starting with three backticks) is read inside
+  the fence (the text after its first line, a closing fence removed,
+  trimmed again); anything but a JSON array fails ("the reply is not a
+  JSON array of objects"). Each item is validated on its own as the
+  original's DetectedObject (pydantic's lax rules: label a string of 1..100
+  characters; confidence a number, a boolean or a numeric string in 0..1,
+  or null; box the original's geometry.Box {x, y in 0..1, width, height in
+  (0, 1], x + width and y + height at most 1 + 1e-6}; no other keys, none
+  missing); an invalid item is skipped and the count logged
+  (object_detection.invalid, the original's bot.vision.detection.invalid
+  counter). The first max_objects valid items, in reply order, are kept
+  and sorted stably by descending confidence, unrated last (the original's
+  OutputData). It sends them to itself as bot.ability.vision.detection.output
+  {objects}, and the transition taking it answers the parent with it.
+
+  Failures: the parent gets bot.ability.failed {message} (the original's
+  FailureData, its message the original's error text where it has one):
+  a reply the detector refuses (the messages above), generate.failed
+  ("Object detection generator failed: <code>."), a result without text,
+  an output its schema refuses (the original's invalid-output failure,
+  "Object detection produced output that does not match its output
+  schema.", such as more than 32 objects), or a step that cannot run
+  ("ObjectDetection could not run (<error event>)": a malformed input, or
+  an image the generate service cannot read, which rejects its start).
+  Either answer ends the detection in applied.
+
+  Media by reference: the generate service reads the image from the media
+  directory the run grants it as /media and sends it as a data: URL; this
+  document never holds image bytes. The original's check that the model
+  can take the image is the service's (an image it cannot send rejects
+  its start).
+
+  Logs: object_detection.invalid (the count of skipped items) and
+  object_detection.failed (the failure message); never a label, a box or
+  the reply.
+
+  Contracts: every event it takes, its own included, references its
+  abilities/schemas/ file by event:schema. The generate service's events
+  are not checked by scxml.rs, so their conds check their shape.
+
+  Bindings: the generate service package; env scopes FLOPPY_API_KEY and
+  FLOPPY_BASE_URL to its <invoke> (no default backend, decision D31:
+  without either it answers generate.failed unconfigured). The run grants
+  the service the media directory (scx run's dir option).
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="ObjectDetection" initial="detection">
+  <datamodel>
+    <!-- The invoker's <param>s. -->
+    <data id="image" expr="null"/>
+    <data id="media_type" expr="null"/>
+    <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <data id="instructions" expr="'List the distinct objects you can see in this image. Answer with only a JSON array and no other text. Each item is {&quot;label&quot;: a short name for the object, &quot;confidence&quot;: how sure you are from 0 to 1, or null, &quot;box&quot;: {&quot;x&quot;: ..., &quot;y&quot;: ..., &quot;width&quot;: ..., &quot;height&quot;: ...}}, where the box is normalized to the image: 0 to 1, measured from the top-left corner. Answer [] when you see no objects.'"/>
+    <data id="max_objects" expr="32"/>
+    <data id="max_reply_bytes" expr="65536"/>
+    <!-- The model's reply, and what the detector made of it. -->
+    <data id="reply" expr="null"/>
+    <data id="detected" expr="null"/>
+  </datamodel>
+  <script src="object_detection.js"/>
+
+  <!-- Any failure answers the parent with the original's FailureData. -->
+  <state id="detection" initial="idle">
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="applied">
+      <log label="object_detection.failed" expr="_event.data.message"/>
+      <send event="bot.ability.failed" target="#_parent">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <transition event="error.*" target="applied">
+      <log label="object_detection.failed" expr="couldNotRunMessage(_event)"/>
+      <send event="bot.ability.failed" target="#_parent">
+        <param name="message" expr="couldNotRunMessage(_event)"/>
+      </send>
+    </transition>
+
+    <!-- The input, from the invoker's <param>s, checked by its schema. -->
+    <state id="idle">
+      <onentry>
+        <send event="bot.ability.vision.detection.input" target="#_internal">
+          <param name="image" expr="image"/>
+          <param name="media_type" expr="media_type"/>
+        </send>
+      </onentry>
+      <transition event="bot.ability.vision.detection.input"
+                  event:schema="../schemas/bot.ability.vision.detection.input.json" target="applying"/>
+    </state>
+
+    <!-- The model looks at the referenced image. -->
+    <state id="applying">
+      <invoke id="detector" type="https://github.com/stateforward/floppy/services/generate"
+              env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
+        <param name="model" expr="model"/>
+        <param name="messages" expr="detectionMessages()"/>
+      </invoke>
+      <transition event="generate.result" cond="isGenerateTextResult(_event)" target="replied">
+        <assign location="reply" expr="_event.data.content"/>
+      </transition>
+      <transition event="generate.failed">
+        <send event="bot.ability.failed" target="#_internal">
+          <param name="message" expr="generatorFailedMessage(_event)"/>
+        </send>
+      </transition>
+      <transition event="done.invoke.detector">
+        <send event="bot.ability.failed" target="#_internal">
+          <param name="message" expr="'Object detection generator produced non-text output.'"/>
+        </send>
+      </transition>
+    </state>
+
+    <!-- The original's GenerativeDetector.classify on the reply. -->
+    <state id="replied">
+      <onentry>
+        <assign location="detected" expr="detectedReply()"/>
+        <if cond="hasSkippedItems()">
+          <log label="object_detection.invalid" expr="detected.skipped"/>
+        </if>
+        <if cond="hasObjects()">
+          <send event="bot.ability.vision.detection.output" target="#_internal">
+            <param name="objects" expr="detected.objects"/>
+          </send>
+        <else/>
+          <send event="bot.ability.failed" target="#_internal">
+            <param name="message" expr="detected.message"/>
+          </send>
+        </if>
+      </onentry>
+      <transition event="bot.ability.vision.detection.output"
+                  event:schema="../schemas/bot.ability.vision.detection.output.json" target="applied">
+        <send event="bot.ability.vision.detection.output" target="#_parent">
+          <content expr="_event.data"/>
+        </send>
+      </transition>
+      <!-- An output its schema refuses (the original's invalid output). -->
+      <transition event="error.*" target="applied">
+        <log label="object_detection.failed" expr="mismatchedMessage()"/>
+        <send event="bot.ability.failed" target="#_parent">
+          <param name="message" expr="mismatchedMessage()"/>
+        </send>
+      </transition>
+    </state>
+  </state>
+
+  <final id="applied"/>
+</scxml>

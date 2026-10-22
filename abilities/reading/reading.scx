@@ -67,6 +67,12 @@
   (error.execution, a failed image_decoding). This document never holds
   image bytes.
 
+  Input: the original's input carries a typed media.Image and no kind since
+  fa45d93; that commit is superseded here by D36 (media is a URI
+  reference), so the input keeps the kind that tells a reference from text.
+  Its content is non-empty (the original's min_length=1, reading.py:50): an
+  empty one is refused by its schema and never reaches the reading.
+
   Logs: reading.focused (the input's kind), reading.output (the
   source_kind) and reading.failed (the stage).
 

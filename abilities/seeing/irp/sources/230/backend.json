@@ -1,0 +1,31 @@
+{
+  "clock": "logical",
+  "answers": [
+    {
+      "path": "/chat/completions",
+      "status": 500,
+      "body": {
+        "error": {
+          "message": "boom"
+        }
+      }
+    },
+    {
+      "path": "/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "A white square."
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

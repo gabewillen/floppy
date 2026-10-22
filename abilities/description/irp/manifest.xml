@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<!-- The description document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/description/irp/sources">
+  <assert id="description-1" specnum="1" specid="#description-1">
+    <![CDATA[Its input is its `<param>`s: it sends itself `bot.ability.vision.description.input` `{image, media_type}` (the original's media.Image, by reference), which its schema checks, so an `image` that is missing or empty sends nothing to the model and answers `bot.ability.failed` `{message: "Description could not run (error.execution)"}`; nothing reaches the parent before its one answer.]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.scxml"/>
+    </test>
+    <test id="101" conformance="mandatory" manual="false">
+      <start uri="101/test101.scxml"/>
+    </test>
+    <test id="102" conformance="mandatory" manual="false">
+      <start uri="102/test102.scxml"/>
+    </test>
+  </assert>
+  <assert id="description-2" specnum="2" specid="#description-2">
+    <![CDATA[It asks the generate service once, with one user message (the original's DESCRIBE_INSTRUCTIONS as a text part and the image's reference as an image part, the image read from the granted media directory), and answers its parent `bot.ability.vision.description.output` `{description}`, the reply stripped of white space as the original's `str.strip()` strips it; then it ends (`done.invoke.<id>` follows the answer).]]>
+    <test id="110" conformance="mandatory" manual="false">
+      <start uri="110/test110.scxml"/>
+    </test>
+    <test id="111" conformance="mandatory" manual="false">
+      <start uri="111/test111.scxml"/>
+    </test>
+    <test id="112" conformance="mandatory" manual="false">
+      <start uri="112/test112.scxml"/>
+    </test>
+  </assert>
+  <assert id="description-3" specnum="3" specid="#description-3">
+    <![CDATA[A reply that is empty once stripped answers `bot.ability.failed` `{message: "the generator answered with an empty description"}`.]]>
+    <test id="120" conformance="mandatory" manual="false">
+      <start uri="120/test120.scxml"/>
+    </test>
+    <test id="121" conformance="mandatory" manual="false">
+      <start uri="121/test121.scxml"/>
+    </test>
+  </assert>
+  <assert id="description-4" specnum="4" specid="#description-4">
+    <![CDATA[A description of at most 4000 characters (the original's MAX_DESCRIPTION_CHARS, counted in characters, not bytes) is answered; a longer one is an output its schema refuses and answers `bot.ability.failed` `{message: "Description produced output that does not match its output schema."}`, the original's invalid-output failure.]]>
+    <test id="130" conformance="mandatory" manual="false">
+      <start uri="130/test130.scxml"/>
+    </test>
+    <test id="131" conformance="mandatory" manual="false">
+      <start uri="131/test131.scxml"/>
+    </test>
+  </assert>
+  <assert id="description-5" specnum="5" specid="#description-5">
+    <![CDATA[A model call that fails answers `bot.ability.failed` `{message: "Description generator failed: <code>."}`, the generate service's failure code in the message, and an image reference the generate service cannot read rejects its start: `{message: "Description could not run (error.execution)"}`.]]>
+    <test id="140" conformance="mandatory" manual="false">
+      <start uri="140/test140.scxml"/>
+    </test>
+    <test id="141" conformance="mandatory" manual="false">
+      <start uri="141/test141.scxml"/>
+    </test>
+    <test id="142" conformance="mandatory" manual="false">
+      <start uri="142/test142.scxml"/>
+    </test>
+  </assert>
+</assertions>

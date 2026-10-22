@@ -170,6 +170,7 @@ fn layout(speaking: &Speaking, edits: &[(&str, &[(&str, &str)])]) -> PathBuf {
         "memory",
         "stm",
         "persona",
+        "seeing",
     ] {
         support::copy_ability(name, &abilities);
     }

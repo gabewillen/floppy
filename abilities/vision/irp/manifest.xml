@@ -18,21 +18,18 @@
     </test>
   </assert>
   <assert id="vision-3" specnum="3" specid="#vision-3">
-    <![CDATA[An input `{kind: "image", content}` with a reference (non-empty content) is classified as image: `{kind: "image", confidence: 1.0}`; classifying reads nothing, so the reference need not name a file.]]>
+    <![CDATA[An input `{kind: "image", content}` (its reference) is classified as image: `{kind: "image", confidence: 1.0}`; classifying reads nothing, so the reference need not name a file.]]>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>
   </assert>
   <assert id="vision-4" specnum="4" specid="#vision-4">
-    <![CDATA[Anything else is unreadable: blank text or an image with an empty reference is answered `{kind: "unreadable", confidence: 1.0}`.]]>
+    <![CDATA[Anything else is unreadable: text that is only white space is answered `{kind: "unreadable", confidence: 1.0}`.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>
     <test id="131" conformance="mandatory" manual="false">
       <start uri="131/test131.scxml"/>
-    </test>
-    <test id="132" conformance="mandatory" manual="false">
-      <start uri="132/test132.scxml"/>
     </test>
   </assert>
   <assert id="vision-5" specnum="5" specid="#vision-5">
@@ -42,12 +39,24 @@
     </test>
   </assert>
   <assert id="vision-6" specnum="6" specid="#vision-6">
-    <![CDATA[An input whose data does not satisfy its schema (`kind` other than text or image, or a missing `content`) is `error.execution` in its sender and is never classified.]]>
+    <![CDATA[An input whose data does not satisfy its schema (`kind` other than text or image, a missing `content`, or an empty `content`, the original's `min_length=1`) is `error.execution` in its sender and is never classified.]]>
     <test id="150" conformance="mandatory" manual="false">
       <start uri="150/test150.scxml"/>
     </test>
     <test id="151" conformance="mandatory" manual="false">
       <start uri="151/test151.scxml"/>
+    </test>
+    <test id="152" conformance="mandatory" manual="false">
+      <start uri="152/test152.scxml"/>
+    </test>
+    <test id="153" conformance="mandatory" manual="false">
+      <start uri="153/test153.scxml"/>
+    </test>
+  </assert>
+  <assert id="vision-7" specnum="7" specid="#vision-7">
+    <![CDATA[The confidences are the classifier's `text_confidence`, `image_confidence` and `unreadable_confidence` (each 1.0 by default, the original's defaults), which the invoker may set as `<param>`s.]]>
+    <test id="160" conformance="mandatory" manual="false">
+      <start uri="160/test160.scxml"/>
     </test>
   </assert>
 </assertions>

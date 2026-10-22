@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- vision-4: empty text is unreadable. -->
+<!-- vision-4: a single space is unreadable. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="vision" type="scxml" src="../../../vision.scx"/>
@@ -9,7 +9,7 @@
   </state>
   <state id="step0">
     <onentry>
-      <send event="bot.ability.vision.classification.input" target="#_vision"><content expr='{"kind": "text", "content": ""}'/></send>
+      <send event="bot.ability.vision.classification.input" target="#_vision"><content expr='{"kind": "text", "content": " "}'/></send>
     </onentry>
     <transition event="bot.ability.vision.classification.output" cond='_event.data.kind === "unreadable" &amp;&amp; _event.data.confidence === 1' target="step1"/>
   </state>

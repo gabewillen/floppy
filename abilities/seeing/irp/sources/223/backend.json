@@ -1,0 +1,73 @@
+{
+  "clock": "logical",
+  "answers": [
+    {
+      "path": "/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "[{\"label\": \"cup\", \"confidence\": 0.5, \"box\": {\"x\": 0.25, \"y\": 0.5, \"width\": 0.25, \"height\": 0.25}}]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "[{\"label\": \"person\", \"confidence\": 0.75, \"box\": {\"x\": 0, \"y\": 0, \"width\": 0.5, \"height\": 1}}]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "[{\"label\": \"lamp\", \"confidence\": null, \"box\": {\"x\": 0.75, \"y\": 0.25, \"width\": 0.25, \"height\": 0.5}}]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "[]"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,185 @@
+<?xml version="1.0"?>
+<!-- The seeing document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/seeing/irp/sources">
+  <assert id="seeing-1" specnum="1" specid="#seeing-1">
+    <![CDATA[On start it sends its parent `bot.ability.offers` `{ability: "seeing", choices}`, choices the one model-callable `bot.ability.seeing.look` with its schema compacted (no `$schema`, title or examples; `{}` with no other property), no target; it offers once.]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.scxml"/>
+    </test>
+    <test id="101" conformance="mandatory" manual="false">
+      <start uri="101/test101.scxml"/>
+    </test>
+  </assert>
+  <assert id="seeing-2" specnum="2" specid="#seeing-2">
+    <![CDATA[An `environment.visual` with a `source` is held as that source's view and, as the source's first view, measured and handed on: the parent gets `bot.ability.cognition.input` `{stimulus: {event: "bot.ability.seeing.sight", data: {cause: "change", views: [view], participants}, source: <the view's source>}, participants}`, the view `{image, media_type, kind, participants, change: null, age_ms, objects: null, description: null}` copied from the stimulus (`media_type` and `kind` null when it names none) and `participants` the view's stamped participants.]]>
+    <test id="110" conformance="mandatory" manual="false">
+      <start uri="110/test110.scxml"/>
+    </test>
+    <test id="111" conformance="mandatory" manual="false">
+      <start uri="111/test111.scxml"/>
+    </test>
+  </assert>
+  <assert id="seeing-3" specnum="3" specid="#seeing-3">
+    <![CDATA[An `environment.visual` without a `source` is dropped: nothing is held, measured or handed on, and a look then sees nothing (`{cause: "look", views: [], participants: []}`, source `"seeing"`).]]>
+    <test id="120" conformance="mandatory" manual="false">
+      <start uri="120/test120.scxml"/>
+    </test>
+    <test id="121" conformance="mandatory" manual="false">
+      <start uri="121/test121.scxml"/>
+    </test>
+  </assert>
+  <assert id="seeing-4" specnum="4" specid="#seeing-4">
+    <![CDATA[A later view of a source is measured against the signature of the last view of that source handed on, by `measure` (`byte_identity` by default: 0 for the same bytes, 1 for others; or `frame_diff`, the mean difference of the views' blurred 32x32 grays): a change of at least `change_threshold` (0.1) is handed on with its change; a smaller change is not.]]>
+    <test id="130" conformance="mandatory" manual="false">
+      <start uri="130/test130.scxml"/>
+    </test>
+    <test id="131" conformance="mandatory" manual="false">
+      <start uri="131/test131.scxml"/>
+    </test>
+    <test id="132" conformance="mandatory" manual="false">
+      <start uri="132/test132.scxml"/>
+    </test>
+  </assert>
+  <assert id="seeing-5" specnum="5" specid="#seeing-5">
+    <![CDATA[A view whose change is below the threshold keeps the signature handed on before, so drift accumulates against it: views that each differ from the one before by less than the threshold are handed on once they differ enough from the last view handed on.]]>
+    <test id="140" conformance="mandatory" manual="false">
+      <start uri="140/test140.scxml"/>
+    </test>
+  </assert>
+  <assert id="seeing-6" specnum="6" specid="#seeing-6">
+    <![CDATA[`bot.ability.seeing.look` `{}` hands on every fresh view, newest first (views that arrived together in the order they arrived), each with `change: null` and its `age_ms`, as `{cause: "look", views, participants}` from source `"seeing"`; `participants` are the views' stamped participants, first occurrence first.]]>
+    <test id="150" conformance="mandatory" manual="false">
+      <start uri="150/test150.scxml"/>
+    </test>
+  </assert>
+  <assert id="seeing-7" specnum="7" specid="#seeing-7">
+    <![CDATA[A look is served at the next opportunity, ahead of any measurement, and every sight, change or look, is followed by a full `settle_after_ms` (5000): a look that arrives while the eye measures, interprets or settles waits for that, and looks waiting for the same opportunity are one look.]]>
+    <test id="160" conformance="mandatory" manual="false">
+      <start uri="160/test160.scxml"/>
+    </test>
+    <test id="161" conformance="mandatory" manual="false">
+      <start uri="161/test161.scxml"/>
+    </test>
+  </assert>
+  <assert id="seeing-8" specnum="8" specid="#seeing-8">
+    <![CDATA[At most one measurement runs per `measure_every_ms` (500): after a measurement that hands nothing on the eye paces, and a frame that arrives meanwhile is measured when the pace ends; a look while pacing is served at once.]]>
+    <test id="170" conformance="mandatory" manual="false">
+      <start uri="170/test170.scxml"/>
+    </test>
+    <test id="171" conformance="mandatory" manual="false">
+      <start uri="171/test171.scxml"/>
+    </test>
+  </assert>
+  <assert id="seeing-9" specnum="9" specid="#seeing-9">
+    <![CDATA[Sources are measured round robin: of the sources with an unmeasured fresh view, the least recently measured goes first, a source never measured before all others, ties to the oldest arrival.]]>
+    <test id="180" conformance="mandatory" manual="false">
+      <start uri="180/test180.scxml"/>
+    </test>
+    <test id="181" conformance="mandatory" manual="false">
+      <start uri="181/test181.scxml"/>
+    </test>
+  </assert>
+  <assert id="seeing-10" specnum="10" specid="#seeing-10">
+    <![CDATA[Each source's newest view replaces its older one (latest wins); at most four views are held, the least recently received evicted past four; a view older than `max_view_age_ms` (60000) is not fresh (a look does not see it, nothing measures it) and is forgotten with its signature at the next hold, so that source's next view is a first view again.]]>
+    <test id="190" conformance="mandatory" manual="false">
+      <start uri="190/test190.scxml"/>
+    </test>
+    <test id="191" conformance="mandatory" manual="false">
+      <start uri="191/test191.scxml"/>
+    </test>
+    <test id="192" conformance="mandatory" manual="false">
+      <start uri="192/test192.scxml"/>
+    </test>
+  </assert>
+  <assert id="seeing-11" specnum="11" specid="#seeing-11">
+    <![CDATA[A view the vision service cannot measure (an unreadable reference, or for `frame_diff` a file OpenCV cannot decode, no PNG, JPEG or WebP it reads) is not handed on and no other measure is asked; it counts as measured, the eye paces, and a look still sees the view.]]>
+    <test id="200" conformance="mandatory" manual="false">
+      <start uri="200/test200.scxml"/>
+    </test>
+    <test id="201" conformance="mandatory" manual="false">
+      <start uri="201/test201.scxml"/>
+    </test>
+  </assert>
+  <assert id="seeing-12" specnum="12" specid="#seeing-12">
+    <![CDATA[A measurement is bounded by `measure_timeout_ms` (2000): when it passes first nothing is handed on and the eye paces. The vision service answers within its `<invoke>`, so no positive bound passes first here: `tests/tests/seeing.rs` drives the timeout with a vision stand-in that never answers.]]>
+    <test id="210" conformance="mandatory" manual="false">
+      <start uri="210/test210.scxml"/>
+    </test>
+  </assert>
+  <assert id="seeing-13" specnum="13" specid="#seeing-13">
+    <![CDATA[With `detect` on, each view handed on is given to the object detection child (abilities/object_detection, with the view's image and media type and the model), and its `bot.ability.vision.detection.output` fills the view's `objects`; with `describe` on the description child's `bot.ability.vision.description.output` fills its `description`. A view's objects stage runs before its description stage, and a sight's views are interpreted one after another, in order.]]>
+    <test id="220" conformance="mandatory" manual="false">
+      <start uri="220/test220.scxml"/>
+    </test>
+    <test id="221" conformance="mandatory" manual="false">
+      <start uri="221/test221.scxml"/>
+    </test>
+    <test id="222" conformance="mandatory" manual="false">
+      <start uri="222/test222.scxml"/>
+    </test>
+    <test id="223" conformance="mandatory" manual="false">
+      <start uri="223/test223.scxml"/>
+    </test>
+  </assert>
+  <assert id="seeing-14" specnum="14" specid="#seeing-14">
+    <![CDATA[A stage that fails (its child answers `bot.ability.failed`) or does not answer within `stage_timeout_ms` (30000) leaves only its own field null; the sight is still handed on.]]>
+    <test id="230" conformance="mandatory" manual="false">
+      <start uri="230/test230.scxml"/>
+    </test>
+    <test id="231" conformance="mandatory" manual="false">
+      <start uri="231/test231.scxml"/>
+    </test>
+    <test id="232" conformance="mandatory" manual="false">
+      <start uri="232/test232.scxml"/>
+    </test>
+    <test id="233" conformance="mandatory" manual="false">
+      <start uri="233/test233.scxml"/>
+    </test>
+  </assert>
+  <assert id="seeing-15" specnum="15" specid="#seeing-15">
+    <![CDATA[A stimulus its schema refuses is never routed here: an `environment.visual` without an image, or a look with data, raises `error.execution` in the sender.]]>
+    <test id="240" conformance="mandatory" manual="false">
+      <start uri="240/test240.scxml"/>
+    </test>
+    <test id="241" conformance="mandatory" manual="false">
+      <start uri="241/test241.scxml"/>
+    </test>
+  </assert>
+  <assert id="seeing-16" specnum="16" specid="#seeing-16">
+    <![CDATA[Its parameters are checked before it perceives, as the original's constructor checks them: a `change_threshold` outside (0, 1], a `measure_every_ms`, `measure_timeout_ms`, `settle_after_ms`, `max_view_age_ms` or `stage_timeout_ms` that is not positive, a `measure_every_ms` longer than `settle_after_ms`, or a `measure` other than `byte_identity` and `frame_diff` ends it in its final state `degraded`, logging `seeing.degraded` with the first refusal's reason, in that order: it offers nothing, and its invoker gets `done.invoke.seeing`.]]>
+    <test id="250" conformance="mandatory" manual="false">
+      <start uri="250/test250.scxml"/>
+    </test>
+    <test id="251" conformance="mandatory" manual="false">
+      <start uri="251/test251.scxml"/>
+    </test>
+    <test id="252" conformance="mandatory" manual="false">
+      <start uri="252/test252.scxml"/>
+    </test>
+    <test id="253" conformance="mandatory" manual="false">
+      <start uri="253/test253.scxml"/>
+    </test>
+    <test id="254" conformance="mandatory" manual="false">
+      <start uri="254/test254.scxml"/>
+    </test>
+    <test id="255" conformance="mandatory" manual="false">
+      <start uri="255/test255.scxml"/>
+    </test>
+    <test id="256" conformance="mandatory" manual="false">
+      <start uri="256/test256.scxml"/>
+    </test>
+    <test id="257" conformance="mandatory" manual="false">
+      <start uri="257/test257.scxml"/>
+    </test>
+    <test id="258" conformance="mandatory" manual="false">
+      <start uri="258/test258.scxml"/>
+    </test>
+    <test id="259" conformance="mandatory" manual="false">
+      <start uri="259/test259.scxml"/>
+    </test>
+    <test id="260" conformance="mandatory" manual="false">
+      <start uri="260/test260.scxml"/>
+    </test>
+  </assert>
+</assertions>
