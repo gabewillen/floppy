@@ -332,6 +332,145 @@ fn a_deactivated_bot_leaves_its_environment() {
         "{:?}",
         finished.records
     );
+    // A bot that leaves on bot.deactivate is not restarted (D158).
+    assert!(
+        sessions_of(&finished.records, "room.restarted").is_empty(),
+        "{:?}",
+        finished.records
+    );
+}
+
+/// Sets the room at `room`'s supervision (decision D158) to `supervision`,
+/// an ECMAScript object expression.
+fn supervise(room: &Path, supervision: &str) {
+    let text = std::fs::read_to_string(room).expect("the room is readable");
+    let start = text
+        .find(r#"<data id="supervision" expr=""#)
+        .expect("the room declares its supervision");
+    let end = start + text[start..].find("/>").expect("the <data> element closes");
+    let mut text = text;
+    text.replace_range(
+        start..end,
+        &format!(r#"<data id="supervision" expr="({supervision})""#),
+    );
+    std::fs::write(room, text).expect("the room copy is writable");
+}
+
+#[test]
+fn a_bot_sent_bot_deactivate_in_its_backoff_is_not_restarted() {
+    let dir = layout(&[("processing_timeout_ms", "300")]);
+    let room = support::environment(&dir, &["floppy"], &[]);
+    supervise(
+        &room,
+        "{max_restarts: 5, backoff_initial_ms: 2000, backoff_max_ms: 2000, stable_after_ms: 600000}",
+    );
+    let mut run = Run::start(&[room.display().to_string()], &[]);
+    all_activated(&run, &["floppy"]);
+    run.event("bot.input", &input("deaf", "x"));
+    let mut records = run.until(WAIT, label_is("done.invoke"));
+    // The host stops it while it waits: the original's backoff goes to
+    // stopped, so the 2 s restart never comes.
+    run.event("bot.deactivate", &json!({}));
+    std::thread::sleep(Duration::from_millis(4000));
+    let finished = run.close(WAIT);
+    records.extend(finished.records);
+    assert!(
+        logs(&records)
+            .iter()
+            .all(|(label, _)| label != "room.restarted"),
+        "{records:?}"
+    );
+}
+
+#[test]
+fn a_degraded_bot_is_restarted_after_a_backoff_until_its_budget_is_spent() {
+    let dir = layout(&[("processing_timeout_ms", "300")]);
+    let room = support::environment(&dir, &["floppy"], &[]);
+    supervise(
+        &room,
+        "{max_restarts: 3, backoff_initial_ms: 200, backoff_max_ms: 300, stable_after_ms: 600000}",
+    );
+    let mut run = Run::start(&[room.display().to_string()], &[]);
+    all_activated(&run, &["floppy"]);
+    // An unacknowledged cancel degrades the bot; the room restarts it
+    // after 200 ms, then 300 ms (doubled, capped), and leaves it once a
+    // third failed attempt would not fit max_restarts 3.
+    let mut records = Vec::new();
+    for _ in 0..2 {
+        run.event("bot.input", &input("deaf", "x"));
+        records.extend(run.until(WAIT, label_is("room.restarted")));
+        records.extend(run.until(WAIT, label_is("bot.activated")));
+    }
+    run.event("bot.input", &input("deaf", "x"));
+    records.extend(run.until(WAIT, label_is("room.exhausted")));
+    let finished = run.close(WAIT);
+    records.extend(finished.records);
+    assert_eq!(
+        logs(&records)
+            .into_iter()
+            .filter(|(label, _)| label.starts_with("room.") || label == "bot.degraded")
+            .collect::<Vec<_>>(),
+        support::labelled(&[
+            ("bot.degraded", r#"{"stage":"processing_cancel"}"#),
+            (
+                "room.restarted",
+                r#"{"participant":"floppy","attempt":1,"delay_ms":200}"#
+            ),
+            ("bot.degraded", r#"{"stage":"processing_cancel"}"#),
+            (
+                "room.restarted",
+                r#"{"participant":"floppy","attempt":2,"delay_ms":300}"#
+            ),
+            ("bot.degraded", r#"{"stage":"processing_cancel"}"#),
+            ("room.exhausted", r#"{"participant":"floppy","attempts":3}"#),
+        ])
+    );
+    // A restarted bot is a participant again: host input reached it.
+    assert_eq!(
+        sessions_of(&records, "double.input"),
+        [
+            "session.floppy.cognition",
+            "session.floppy.cognition",
+            "session.floppy.cognition"
+        ]
+    );
+}
+
+#[test]
+fn a_bot_whose_activation_fails_is_restarted() {
+    // An activation timeout (an expected ability never offers) fails the
+    // activation, and the room restarts the bot.
+    let dir = layout(&[
+        ("activation_timeout_ms", "200"),
+        (
+            "expected",
+            "['cognition', 'communication', 'identity', 'listening', 'ghost']",
+        ),
+    ]);
+    let room = support::environment(&dir, &["floppy"], &[]);
+    supervise(
+        &room,
+        "{max_restarts: 2, backoff_initial_ms: 100, backoff_max_ms: 100, stable_after_ms: 600000}",
+    );
+    let run = Run::start(&[room.display().to_string()], &[]);
+    let mut records = run.until(WAIT, label_is("room.restarted"));
+    records.extend(run.until(WAIT, label_is("room.exhausted")));
+    drop(run.close(WAIT));
+    assert_eq!(
+        logs(&records)
+            .into_iter()
+            .filter(|(label, _)| label.starts_with("room.") || label == "bot.activating.failed")
+            .collect::<Vec<_>>(),
+        support::labelled(&[
+            ("bot.activating.failed", "{}"),
+            (
+                "room.restarted",
+                r#"{"participant":"floppy","attempt":1,"delay_ms":100}"#
+            ),
+            ("bot.activating.failed", "{}"),
+            ("room.exhausted", r#"{"participant":"floppy","attempts":2}"#),
+        ])
+    );
 }
 
 #[test]
@@ -945,7 +1084,9 @@ fn the_bot_sends_its_environment_to_the_cognition() {
     let records = one_turn(&[], &[], |_| {});
     assert_eq!(
         environments(&records),
-        [json!({"id": "session", "self": {"state": "processing", "owned_devices": {}}})]
+        [
+            json!({"id": "session", "self": {"state": "processing", "owned_devices": {}, "held_percepts": 0}})
+        ]
     );
     // The lamp, with a nested object and a null in its data model.
     let records = one_turn(&["lamp"], &["lamp"], |room| {
@@ -981,7 +1122,9 @@ fn a_device_that_left_is_not_in_the_environment_block() {
     let records = one_turn(&["lamp"], &[], |_| {});
     assert_eq!(
         environments(&records),
-        [json!({"id": "session", "self": {"state": "processing", "owned_devices": {}}})]
+        [
+            json!({"id": "session", "self": {"state": "processing", "owned_devices": {}, "held_percepts": 0}})
+        ]
     );
 }
 
@@ -998,4 +1141,51 @@ fn a_held_device_whose_read_fails_drops_only_that_device() {
     assert_eq!(owned.keys().collect::<Vec<_>>(), ["lamp"], "{sent:?}");
     assert_eq!(owned["lamp"]["ref"], json!("lamp"));
     assert_eq!(owned["lamp"]["id"], json!("session.lamp"));
+}
+
+#[test]
+fn a_device_on_an_object_reaches_its_bot_with_what_it_sits_on() {
+    let dir = layout(&[]);
+    let room = support::environment_with_devices(
+        &dir,
+        &["floppy"],
+        &["lamp"],
+        &[("floppy", &["lamp"])],
+        &[],
+    );
+    // The lamp sits on the desk (D159).
+    support::place(&room, "lamp: {position: {x: 0, y: 0, z: 0}, on: 'desk'}");
+    let text = std::fs::read_to_string(&room).expect("the room is readable");
+    std::fs::write(
+        &room,
+        text.replacen(
+            r#"<data id="objects" expr="[]"/>"#,
+            r#"<data id="objects" expr="['desk']"/>"#,
+            1,
+        ),
+    )
+    .expect("the room copy is writable");
+    let mut run = Run::start(&[room.display().to_string()], &[]);
+    all_activated(&run, &["floppy"]);
+    assert_eq!(
+        data_of(&mut run, "session.floppy", "placed_on"),
+        json!({"lamp": "desk"})
+    );
+    run.event("bot.input", &lamp_input("ignore", &json!("x")));
+    let records = completed(&run);
+    drop(run.close(WAIT));
+    let environment: Json = serde_json::from_str(
+        texts_of(&records, "session.floppy.cognition", "double.environment")
+            .last()
+            .expect("the turn's environment"),
+    )
+    .expect("JSON");
+    assert_eq!(
+        environment["self"]["owned_devices"]["lamp"]["on"],
+        json!("desk")
+    );
+    assert_eq!(
+        environment["self"]["owned_devices"]["lamp"]["ref"],
+        json!("lamp")
+    );
 }
