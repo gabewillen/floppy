@@ -33,7 +33,8 @@
   recall a description from memory: ...") or does not answer within
   recall_attempt_timeout_ms (1 s) is asked again after
   recall_retry_delay_ms (100 ms). When the bring-up budget
-  (bring_up_timeout_ms, 30 s, the body's activation_timeout_ms) runs out
+  (bring_up_timeout_ms, 30 s by default; the body passes half its
+  activation_timeout_ms) runs out
   first, it sends bot.ability.failed {message: "Persona could not recall
   a description: memory did not answer within the bring-up budget."} to
   the parent and wakes with none, as the original's _give_up_recalling
@@ -137,7 +138,8 @@
     <data id="description_parameters" expr="[]"/>
     <!-- Recall's time bounds (the original persona.py): one attempt, the
          pause before the next, and the bring-up budget (the original's
-         attachment timeout, 30 s, as the body's activation_timeout_ms),
+         attachment timeout, 30 s; the body passes half its
+         activation_timeout_ms, so the budget runs out first),
          which an invoker may set as <param>s. -->
     <data id="recall_attempt_timeout_ms" expr="1000"/>
     <data id="recall_retry_delay_ms" expr="100"/>

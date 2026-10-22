@@ -26,7 +26,8 @@
   offer is its readiness. A database that cannot be opened (logged as
   stm.open.failed, "short-term memory could not open its database: ...")
   or does not open within open_timeout_ms leaves it degraded, without an
-  offer, so the body's activation fails as the original's attach does; on
+  offer, so the body's activation fails at its timeout (the original's
+  attach fails it at once); on
   entering degraded it sends bot.ability.failed {message: "unavailable:
   StmMemory is degraded."} to the parent.
   Without a database it logs <log label="memory" expr="'absent'">, offers,
@@ -52,7 +53,9 @@
     read returns stays put between sheds. The producer cuts the words with
     <memory:cut_at_word>; the register cuts them again (a no-op on cut
     words) because no schema can bound UTF-8 bytes, and cut is true when
-    either cut them.
+    either cut them. Words that cut to nothing (only white space before
+    the bound, which the original's TurnRecordData refuses) are not
+    written, and are logged as stm.failed.
   A notification that fails is logged as stm.failed ("short-term memory
   <event> failed: ...", the original's warning); nobody is told.
 
@@ -201,7 +204,7 @@
       <transition event="bot.ability.memory.stm.reinforce" event:schema="../schemas/bot.ability.memory.stm.reinforce.json" target="reinforcing">
         <assign location="request" expr="_event.data"/>
       </transition>
-      <transition event="bot.ability.memory.stm.turn" event:schema="../schemas/bot.ability.memory.stm.turn.json" target="recording_turn">
+      <transition event="bot.ability.memory.stm.turn" event:schema="../schemas/bot.ability.memory.stm.turn.json" target="bounding_turn">
         <assign location="request" expr="_event.data"/>
         <memory:cut_at_word location="bounded" words="_event.data.text"/>
       </transition>
@@ -264,6 +267,15 @@
 
       <!-- Record one turn, shedding the older half beyond turn_capacity in
            the same transaction. -->
+      <!-- Words that cut to nothing (white space up to the bound) are no
+           turn: a stored empty text would fail every later read. -->
+      <state id="bounding_turn">
+        <transition cond="isEmptyTurn()" target="idle">
+          <log label="stm.failed" expr="emptyTurnMessage()"/>
+        </transition>
+        <transition target="recording_turn"/>
+      </state>
+
       <state id="recording_turn">
         <invoke id="turn" type="scxml" src="../memory/memory.scx">
           <param name="database" expr="database"/>

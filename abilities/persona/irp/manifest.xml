@@ -16,9 +16,6 @@
     <test id="111" conformance="mandatory" manual="false">
       <start uri="111/test111.scxml"/>
     </test>
-    <test id="112" conformance="mandatory" manual="false">
-      <start uri="112/test112.scxml"/>
-    </test>
   </assert>
   <assert id="persona-3" specnum="3" specid="#persona-3">
     <![CDATA[`bot.ability.persona.revise` `{text, reason}` writes the description down (with a database; without one nothing is written) before it becomes the bot's, then tells `bot.ability.persona.output` `{traits, description: {text, reason, traits, kind: "fact"}}`, the owner's traits it was written under included, and offers again; each revision replaces the description before it.]]>

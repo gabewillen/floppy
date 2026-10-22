@@ -457,12 +457,15 @@ fn a_database_changed_under_an_open_transaction_fails_it_with_changed() {
 }
 
 #[test]
-fn a_connection_waits_for_another_connections_lock() {
+fn a_connection_is_opened_with_the_busy_timeout() {
     // The original's engine.py busy_timeout: 5 s.
     let database = database("busy");
     let connection = connect(&database).expect("the database opens");
     let waited: i64 = connection
         .query_row("PRAGMA busy_timeout", [], |row| row.get(0))
         .expect("the pragma reads");
-    assert_eq!(waited, 5000);
+    assert_eq!(
+        u128::try_from(waited).expect("the pragma is not negative"),
+        BUSY_TIMEOUT.as_millis()
+    );
 }

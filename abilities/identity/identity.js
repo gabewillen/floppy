@@ -24,9 +24,28 @@ function nameSelectStatements() {
   return [{sql: name_select, parameters: ['self_name', 'self']}];
 }
 
-// The last adopted name, else the session's.
+// One stored row's content as the original's name fact, or null when it
+// does not decode as one (a damaged row is skipped, so it never costs the
+// bot the name adopted before it).
+function storedName(content) {
+  var value;
+  try {
+    value = JSON.parse(content);
+  } catch (error) {
+    return null;
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  if (typeof value.text !== 'string' || Array.from(value.text).length < 1 || Array.from(value.text).length > 64 || value.kind !== 'fact') {
+    return null;
+  }
+  return {text: value.text, kind: 'fact'};
+}
+
+// The last adopted name that decodes, else the session's.
 function recalledNameFromMemory(_event) {
-  return _event.data.results[0].rows.length > 0 ? JSON.parse(_event.data.results[0].rows.at(-1).values[0]) : recalled_name;
+  return _event.data.results[0].rows.reduce(function (latest, row) { return storedName(row.values[0]) || latest; }, recalled_name);
 }
 
 function recallFailedMessage(_event) {

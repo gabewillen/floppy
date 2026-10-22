@@ -51,12 +51,15 @@
     </test>
   </assert>
   <assert id="stm-7" specnum="7" specid="#stm-7">
-    <![CDATA[A turn's words longer than 2048 UTF-8 bytes are cut at a whole word and its `cut` is true.]]>
+    <![CDATA[A turn's words longer than 2048 UTF-8 bytes are cut at a whole word and its `cut` is true; words that cut to nothing (only white space before the bound) are not written.]]>
     <test id="160" conformance="mandatory" manual="false">
       <start uri="160/test160.scxml"/>
     </test>
     <test id="161" conformance="mandatory" manual="false">
       <start uri="161/test161.scxml"/>
+    </test>
+    <test id="162" conformance="mandatory" manual="false">
+      <start uri="162/test162.scxml"/>
     </test>
   </assert>
   <assert id="stm-8" specnum="8" specid="#stm-8">

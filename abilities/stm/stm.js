@@ -111,6 +111,14 @@ function turnCut() {
   return bounded.cut || request.cut === true;
 }
 
+function isEmptyTurn() {
+  return bounded.text.length === 0;
+}
+
+function emptyTurnMessage() {
+  return 'short-term memory bot.ability.memory.stm.turn failed: the words cut to nothing at the turn bound';
+}
+
 function turnStatements() {
   const kept = turn_capacity - Math.floor(turn_capacity / 2);
   const parameters = [request.id, utcText(Date.now()), request.direction, JSON.stringify(request.speakers || []),

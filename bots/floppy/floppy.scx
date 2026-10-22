@@ -69,9 +69,8 @@
   bot.behavior.tick (its routines).
 
   Short-term memory: the body relays a child's bot.ability.memory.stm.turn
-  to the register (no child writes turns yet: listening's heard speech
-  and the conversation's said messages are the listening and
-  communication workstreams' to add), reads the register's recent turns
+  to the register (no child writes turns yet; the listening's heard
+  speech and the conversation's said messages will), reads the register's recent turns
   (bot.ability.memory.stm.recent_turns {}) on entering each turn, and
   relays the register's bot.ability.memory.stm.recent_turns.output to the
   cognition. The cognition cannot ask through the body: the request's
@@ -339,6 +338,7 @@
     </invoke>
     <invoke id="identity" type="scxml" src="../../abilities/identity/identity.scx">
       <param name="database" expr="database"/>
+      <param name="bring_up_timeout_ms" expr="bringUpTimeout()"/>
     </invoke>
     <invoke id="listening" type="scxml" src="../../abilities/listening/listening.scx"/>
     <invoke id="stm" type="scxml" src="../../abilities/stm/stm.scx">
@@ -346,6 +346,7 @@
     </invoke>
     <invoke id="persona" type="scxml" src="../../abilities/persona/persona.scx">
       <param name="database" expr="database"/>
+      <param name="bring_up_timeout_ms" expr="bringUpTimeout()"/>
       <param name="traits" expr="traits"/>
     </invoke>
 
@@ -372,8 +373,8 @@
       </send>
     </transition>
     <!-- The short-term register (the original's bot.register, reached by
-         message only): the turns its producers write, and the answer to
-         the body's read of them, for the cognition. -->
+         message only): the turns a child writes, and the answer to the
+         body's read of them, for the cognition. -->
     <transition event="bot.ability.memory.stm.turn" event:schema="../../abilities/schemas/bot.ability.memory.stm.turn.json">
       <send event="bot.ability.memory.stm.turn" target="#_stm">
         <content expr="_event.data"/>
@@ -391,6 +392,15 @@
          the cognition. -->
     <transition event="bot.ability.persona.output" event:schema="../../abilities/schemas/bot.ability.persona.output.json">
       <send event="bot.ability.persona.output" target="#_cognition">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <!-- A failure that is no current turn's reply (the identity's, the
+         persona's or the short-term register's, which may come while the
+         bot is activating, or the cognition's for another turn) goes to
+         the environment. -->
+    <transition event="bot.ability.failed" event:schema="../../abilities/schemas/bot.ability.failed.json">
+      <send event="bot.ability.failed" target="#_parent">
         <content expr="_event.data"/>
       </send>
     </transition>
@@ -717,13 +727,6 @@
       <!-- A reply that belongs to no current turn is dropped. -->
       <transition event="bot.ability.cognition.output bot.ability.cognition.cancelled bot.ability.processing.cancelled">
         <log label="floppy.stale" expr="staleReplyLog(_event)"/>
-      </transition>
-      <!-- A failure that is no current turn's reply: the identity's, or
-           the cognition's for another turn. -->
-      <transition event="bot.ability.failed" event:schema="../../abilities/schemas/bot.ability.failed.json">
-        <send event="bot.ability.failed" target="#_parent">
-          <content expr="_event.data"/>
-        </send>
       </transition>
     </state>
   </state>
