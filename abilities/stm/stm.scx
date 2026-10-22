@@ -35,7 +35,9 @@
   Notifications (no reply; the sender never waits on perception upkeep):
   - bot.ability.memory.stm.record {stimulus_name, payload, event_id?,
     source?, target?} (the original's RecordData, which the producer builds
-    with <memory:stm_projection>) inserts one row into bot_stm_memory
+    with <memory:stm_projection>; its schema holds the payload to non-empty
+    keys and strings of at most 40 characters, as RecordData's validator
+    does) inserts one row into bot_stm_memory
     (payload_json the projection with sorted keys and compact separators,
     created_at now) and, in the same transaction, evicts every row beyond
     capacity by the effective clock COALESCE(last_accessed_at, created_at),
@@ -57,17 +59,19 @@
   Requests (each answered to the parent, in arrival order):
   - bot.ability.memory.stm.recent {stimulus_name?, limit?} reads the rows
     whose effective clock is inside recency_window_ms, optionally for one
-    stimulus, newest first, at most limit (default capacity), and answers
+    stimulus, newest first, at most limit (default recent_limit, 64, the
+    original's RecentData default), and answers
     bot.ability.memory.stm.recent.output {entries} (the original's
     ObservedEvent: stm_id, stimulus_name, payload, event_id, source,
     target, created_at, last_accessed_at).
   - bot.ability.memory.stm.recent_turns {limit?, within?} reads the
-    newest turns, at most limit (default turn_capacity), written at or
+    newest turns, at most limit (default recent_turns_limit, 32, the
+    original's RecentTurnsData default), written at or
     after the floor, and answers
     bot.ability.memory.stm.recent_turns.output {turns} oldest first (the
     original's Turn: id, at, direction, speakers, text, cut,
-    conversation). The window is turn_window_ms, or within (an ISO 8601
-    duration) when that is shorter; the floor is now less the window,
+    conversation). The window is turn_window_ms, or within (milliseconds,
+    the original's timedelta) when that is shorter; the floor is now less the window,
     moved down to a whole step of half the window since the Unix epoch, so
     a turn is read for at least the window and at most one and a half.
   A request that fails is answered bot.ability.failed {message: "short-term
@@ -116,6 +120,10 @@
     <data id="turn_capacity" expr="32"/>
     <data id="turn_window_ms" expr="600000"/>
     <data id="open_timeout_ms" expr="30000"/>
+    <!-- The reads' default limits (the original's RecentData and
+         RecentTurnsData defaults, fixed whatever the capacities are). -->
+    <data id="recent_limit" expr="64"/>
+    <data id="recent_turns_limit" expr="32"/>
     <!-- The operation in hand: its event's data, and a turn's words as
          <memory:cut_at_word> bounds them. -->
     <data id="request" expr="null"/>

@@ -60,7 +60,7 @@
     </test>
   </assert>
   <assert id="stm-8" specnum="8" specid="#stm-8">
-    <![CDATA[The turns' window is `turn_window_ms`, or `within` (an ISO 8601 duration) when that is shorter; its floor moves in whole steps of half the window, so a turn is read for at least the window and at most one and a half windows.]]>
+    <![CDATA[The turns' window is `turn_window_ms`, or `within` (milliseconds) when that is shorter; its floor moves in whole steps of half the window, so a turn is read for at least the window and at most one and a half windows.]]>
     <test id="170" conformance="mandatory" manual="false">
       <start uri="170/test170.scxml"/>
     </test>

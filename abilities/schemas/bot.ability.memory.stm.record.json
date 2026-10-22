@@ -28,6 +28,7 @@
       "additionalProperties": {
         "anyOf": [
           {
+            "maxLength": 40,
             "type": "string"
           },
           {
@@ -47,6 +48,9 @@
           "kind": "knock"
         }
       ],
+      "propertyNames": {
+        "minLength": 1
+      },
       "title": "Payload",
       "type": "object"
     },

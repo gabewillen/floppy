@@ -9,7 +9,7 @@
     },
     {
       "limit": 8,
-      "within": "PT5M"
+      "within": 300000
     }
   ],
   "properties": {
@@ -27,17 +27,17 @@
     "within": {
       "anyOf": [
         {
-          "format": "duration",
-          "type": "string"
+          "exclusiveMinimum": 0,
+          "type": "integer"
         },
         {
           "type": "null"
         }
       ],
       "default": null,
-      "description": "Only turns written this recently; the register's own recency window when omitted or longer.",
+      "description": "Only turns written this recently, in milliseconds; the register's own recency window when omitted or longer.",
       "examples": [
-        "PT5M"
+        300000
       ],
       "title": "Within"
     }

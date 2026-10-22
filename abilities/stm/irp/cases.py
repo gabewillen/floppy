@@ -54,7 +54,7 @@ S.statement(4, "`bot.ability.memory.stm.reinforce` `{stm_ids}` stamps those reco
 S.statement(5, "`bot.ability.memory.stm.turn` `{id, direction, speakers, text, cut, conversation}` is written with no reply, and `bot.ability.memory.stm.recent_turns` `{limit?, within?}` answers `bot.ability.memory.stm.recent_turns.output` `{turns}`: the newest turns, at most `limit`, oldest first, each `{id, at, direction, speakers, text, cut, conversation}` with `at` UTC (Z).")
 S.statement(6, "A turn that puts the register over `turn_capacity` sheds the older half at once, in the same transaction: the newest `turn_capacity - floor(turn_capacity / 2)` stay.")
 S.statement(7, "A turn's words longer than 2048 UTF-8 bytes are cut at a whole word and its `cut` is true.")
-S.statement(8, "The turns' window is `turn_window_ms`, or `within` (an ISO 8601 duration) when that is shorter; its floor moves in whole steps of half the window, so a turn is read for at least the window and at most one and a half windows.")
+S.statement(8, "The turns' window is `turn_window_ms`, or `within` (milliseconds) when that is shorter; its floor moves in whole steps of half the window, so a turn is read for at least the window and at most one and a half windows.")
 S.statement(9, "Requests and notifications are applied one at a time, in arrival order: what arrives while it is opening or applying waits, so a read sees every write sent before it.")
 S.statement(10, "A database it cannot open leaves it degraded, without an offer: it sends `bot.ability.failed` `{message: \"unavailable: StmMemory is degraded.\"}`, answers every request the same way, and drops every notification.")
 
@@ -133,8 +133,8 @@ S.case(170, 8, "a turn older than one and a half windows is not read.",
        params=[DB, ("turn_window_ms", "1000")], clock="wall")
 S.case(171, 8, "within narrows the window but never widens it.",
        [READY, turn("t1", "heard", "old"), wait("1700ms"), turn("t2", "heard", "new"),
-        recent_turns(within="PT1S"), expect(RECENT_TURNS_OUTPUT, texts("new")),
-        recent_turns(within="PT1H"), expect(RECENT_TURNS_OUTPUT, texts("old", "new"))],
+        recent_turns(within=1000), expect(RECENT_TURNS_OUTPUT, texts("new")),
+        recent_turns(within=3600000), expect(RECENT_TURNS_OUTPUT, texts("old", "new"))],
        params=[DB, ("turn_window_ms", "60000")], clock="wall")
 
 S.case(180, 9, "what is sent while it is opening waits, and a read sees every write sent before it.",

@@ -800,7 +800,7 @@ fn stm_reads_keep_to_their_windows() {
             stm_turn("t2", "said", "'new'", "conversation"),
             to_stm("recent", "({})"),
             to_stm("recent_turns", "({})"),
-            to_stm("recent_turns", "({within: 'PT1H'})"),
+            to_stm("recent_turns", "({within: 3600000})"),
         ]
         .concat(),
     ];

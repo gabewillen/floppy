@@ -24,7 +24,7 @@ function delay(ms) {
 // opening
 
 function hasNoDatabase() {
-  return database === null || database === undefined || database === '';
+  return database === null;
 }
 
 function openStatements() {
@@ -71,7 +71,7 @@ function reinforceStatements() {
 
 function recentStatements() {
   const cutoff = utcText(Date.now() - recency_window_ms);
-  const limit = request.limit === undefined ? capacity : request.limit;
+  const limit = request.limit === undefined ? recent_limit : request.limit;
   const named = typeof request.stimulus_name === 'string';
   const sql = named ? recent_named_select : recent_select;
   const parameters = named ? [cutoff, request.stimulus_name, limit] : [cutoff, limit];
@@ -124,21 +124,10 @@ function turnRecordedLog() {
 
 // recent_turns (the original's _recent_turns)
 
-// An ISO 8601 duration (PnDTnHnMnS, as pydantic reads a timedelta) in ms,
-// or null when it is not one.
-function durationMs(text) {
-  const m = typeof text === 'string' ? /^P(?:(\d+(?:\.\d+)?)D)?(?:T(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?)?$/.exec(text) : null;
-  if (m === null || text === 'P' || text.slice(-1) === 'T') {
-    return null;
-  }
-  const part = (value, unit) => (value === undefined ? 0 : parseFloat(value) * unit);
-  return part(m[1], 86400000) + part(m[2], 3600000) + part(m[3], 60000) + part(m[4], 1000);
-}
-
-// within narrows the register's window, never widens it.
+// within (ms) narrows the register's window, never widens it.
 function turnWindowMs() {
-  const within = durationMs(request.within);
-  return within !== null && within > 0 && within < turn_window_ms ? within : turn_window_ms;
+  const within = request.within;
+  return typeof within === 'number' && within < turn_window_ms ? within : turn_window_ms;
 }
 
 // The floor advances in whole half-window steps since the Unix epoch, so
@@ -147,7 +136,7 @@ function recentTurnsStatements() {
   const window = turnWindowMs();
   const step = window / 2;
   const floor = Math.floor((Date.now() - window) / step) * step;
-  const limit = request.limit === undefined ? turn_capacity : request.limit;
+  const limit = request.limit === undefined ? recent_turns_limit : request.limit;
   return [{sql: recent_turns_select, parameters: [utcText(floor), limit]}];
 }
 

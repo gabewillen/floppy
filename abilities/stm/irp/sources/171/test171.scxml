@@ -23,13 +23,13 @@
   <state id="step2">
     <onentry>
       <send event="bot.ability.memory.stm.turn" target="#_stm"><content expr='{"id": "t2", "direction": "heard", "speakers": [], "text": "new", "cut": false, "conversation": "listening"}'/></send>
-      <send event="bot.ability.memory.stm.recent_turns" target="#_stm"><content expr='{"within": "PT1S"}'/></send>
+      <send event="bot.ability.memory.stm.recent_turns" target="#_stm"><content expr='{"within": 1000}'/></send>
     </onentry>
     <transition event="bot.ability.memory.stm.recent_turns.output" cond='JSON.stringify(_event.data.turns.map((t) =&gt; t.text)) === "[\"new\"]"' target="step3"/>
   </state>
   <state id="step3">
     <onentry>
-      <send event="bot.ability.memory.stm.recent_turns" target="#_stm"><content expr='{"within": "PT1H"}'/></send>
+      <send event="bot.ability.memory.stm.recent_turns" target="#_stm"><content expr='{"within": 3600000}'/></send>
     </onentry>
     <transition event="bot.ability.memory.stm.recent_turns.output" cond='JSON.stringify(_event.data.turns.map((t) =&gt; t.text)) === "[\"old\",\"new\"]"' target="step4"/>
   </state>
