@@ -50,6 +50,7 @@ fn layout(data: &[(&str, &str)]) -> PathBuf {
         "identity",
         "memory",
         "stm",
+        "persona",
     ] {
         support::copy_ability(name, &abilities);
     }
