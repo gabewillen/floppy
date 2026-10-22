@@ -1,0 +1,5 @@
+{
+  "seeing.degraded": [
+    "change_threshold must be in (0, 1]"
+  ]
+}

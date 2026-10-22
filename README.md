@@ -32,6 +32,7 @@ other, and [docs/decisions.md](docs/decisions.md) records the decisions that sha
 | `services/files/` | the files service (a Wasm component: reads and writes the directory the run grants, where the builder writes a learned behavior's three documents; decision D121; [files](services/files/README.md)) |
 | `services/{sql,pgsql}/` | the memory engines (Wasm components: one SQLite or Postgres transaction per `<invoke>`, [sql](services/sql/README.md), [pgsql](services/pgsql/README.md)) |
 | `services/speech/` | the speech service (a Wasm component: speech decoding and encoding on OpenAI-compatible audio APIs, voice detection, diarization and identification on LocalAI's voice APIs; decisions D57, D66; [speech](services/speech/README.md)) |
+| `services/vision/` | the vision service (a Wasm component: the original's change measures, `byte_identity` and `frame_diff`, on images in the directory the run grants; decision D185; [vision](services/vision/README.md)) |
 | `bots/builder/` | the builder bot: its SCXML document (`builder.scx`), schemas, and saved live examples |
 | `bots/floppy/` | the floppy bot: the body (`floppy.scx`, the original's Bot) and its event contracts |
 | `environments/room/` | the room, the environment the floppy bot runs in: the root session that invokes its bots (and any devices) as participants, routes host input, and delivers sound and visuals (decisions D102 to D111; [room](environments/room/README.md)) |
@@ -66,6 +67,7 @@ printf '%s\n' \
   '{"name":"bot.ability.communication.input","data":{"source_ids":["gabe"],"target_ids":["floppy"],"content":"Hi floppy!","content_type":"text/plain"}}' |
   scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" \
     --dir "https://github.com/stateforward/floppy/services/speech=$PWD/media::/media" --dir "https://github.com/stateforward/floppy/services/files=$PWD/behaviors::/behaviors" \
+    --dir "https://github.com/stateforward/floppy/services/vision=$PWD/media::/media" \
     --fuel 9223372036854775807 environments/room/room.scx
 # A bot, with the packages of floppy's latest GitHub release (once one is
 # published: docs/release.md).
@@ -225,6 +227,11 @@ them). Both directions therefore call the Gemini API, so
 | `abilities/listening/listening.scx` | `sensitivity_timeout_ms` | `30000` | scoring one sound (the original's 30 s stage operation timeout) |
 | `abilities/interpretation/interpretation.scx` | `stage_timeout_ms` | `30000` | each interpretation stage (the original's 30 s) |
 | `abilities/interpretation/interpretation.scx` | `product_threshold_db` | `3.0` | the perceived level a listening product needs (the original's 3 dB) |
+| `abilities/seeing/seeing.scx` | `measure_timeout_ms` | `2000` | one change measurement through the vision service (the original's 2 s) |
+| `abilities/seeing/seeing.scx` | `measure_every_ms` | `500` | the pace between measurements, whatever the frame rate (the original's 500 ms) |
+| `abilities/seeing/seeing.scx` | `settle_after_ms` | `5000` | the settle after every sight: at most one sight per settle, plus looks (the original's 5 s) |
+| `abilities/seeing/seeing.scx` | `max_view_age_ms` | `60000` | how long a held view stays fresh (the original's 60 s) |
+| `abilities/seeing/seeing.scx` | `stage_timeout_ms` | `30000` | each object detection or description call (the original's 30 s) |
 
 The bot's `bounds` param may also bound a cognition tier's step on its own (the reference's
 `_tier_timeouts`, [floppy fields]): `reflex_timeout_ms` bounds the learned behaviors and the decision

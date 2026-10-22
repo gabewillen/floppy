@@ -28,9 +28,10 @@
   (abilities/identity/identity.scx, the bot's name), <invoke id="listening">
   (abilities/listening/listening.scx, the ear), <invoke id="stm">
   (abilities/stm/stm.scx, the short-term register, the original's
-  bot.register) and <invoke id="persona"> (abilities/persona/persona.scx,
-  the owner's traits and the bot's own description of itself); leaving
-  live cancels every ability (SCXML
+  bot.register), <invoke id="persona"> (abilities/persona/persona.scx,
+  the owner's traits and the bot's own description of itself) and <invoke
+  id="seeing"> (abilities/seeing/seeing.scx, the eye; see Seeing below);
+  leaving live cancels every ability (SCXML
   6.4), which replaces the original's cleanup states: an SCXML invoke cancel is
   synchronous, so there is nothing for the original's 5 min deactivation
   timeout or its reboot preserve/reset cleanup to wait on, and every
@@ -38,7 +39,7 @@
   sends its first bot.ability.offers; the body is active when every
   expected ability is ready. A run-tagged activation timer
   (activation_timeout_ms), an error event, or an ability ending while
-  activating fails the activation (bot.activating.failed) and ends the
+  activating (seeing only while its switch is on) fails the activation (bot.activating.failed) and ends the
   session in inactive; an ability ending while active degrades the bot.
 
   Lifecycle answers (the original's a2cbaa8): the activator is the
@@ -127,6 +128,18 @@
   speech or labelled non-speech over as bot.ability.cognition.input, which
   starts a turn like any handoff. The listening's
   bot.ability.listening.failed is logged.
+
+  Seeing: the seeing_enabled <data> switch (false by default; the
+  environment may pass it as a <param>, decision D107) decides whether the
+  eye perceives. On, seeing is an expected ability (the body waits for its
+  offers), each environment.visual goes to it after the input abilities,
+  its offer (bot.ability.seeing.look) is among the turn's choices, its
+  sight comes back as bot.ability.cognition.input {stimulus:
+  bot.ability.seeing.sight}, which is held and perceived like any handoff
+  (Turns, below), and its ending degrades the bot. Off, seeing still runs
+  but is sent no stimulus, its offers are not taken and its ending is
+  ignored (while activating, while the firmware starts and while active),
+  so the bot behaves as without it.
 
   Turns: bot.input, or an ability's bot.ability.cognition.input handoff
   (the original grants any ability product the turn, blind to its content),
@@ -327,6 +340,9 @@
     <!-- The input abilities each environment.* stimulus fans out to
          (the original's Bot input, as invoke ids), and the one being sent to. -->
     <data id="input" expr="['identity', 'listening']"/>
+    <!-- Whether the eye perceives (decision D189): on, seeing is expected,
+         takes every environment.visual and offers its look. -->
+    <data id="seeing_enabled" expr="false"/>
     <data id="ability" expr="null"/>
     <!-- The admitted stimulus's bounded scalar projection, for the
          short-term register (<memory:stm_projection>). -->
@@ -397,10 +413,13 @@
       <param name="bring_up_timeout_ms" expr="bringUpTimeout()"/>
       <param name="traits" expr="traits"/>
     </invoke>
+    <invoke id="seeing" type="scxml" src="../../abilities/seeing/seeing.scx"/>
 
     <!-- Each ability's latest offers; the first of a run is its readiness. -->
     <transition event="bot.ability.offers" event:schema="../../abilities/schemas/bot.ability.offers.json">
-      <assign location="offers[_event.data.ability]" expr="_event.data.choices"/>
+      <if cond="isTakenOffer(_event)">
+        <assign location="offers[_event.data.ability]" expr="_event.data.choices"/>
+      </if>
       <if cond="isWaiting(_event)">
         <assign location="waiting" expr="waitingWithout(_event)"/>
       </if>
@@ -494,6 +513,10 @@
           <content expr="emptyData()"/>
         </send>
       </transition>
+      <!-- Seeing ending while its switch is off is ignored here as it is
+           in active (decision D189): only an expected ability's ending
+           fails the activation. -->
+      <transition event="done.invoke.seeing" cond="isSeeingOff()"/>
       <transition event="done.invoke" target="inactive">
         <log label="floppy.diagnostic" expr="activatingDoneDiagnostic(_event)"/>
         <send event="bot.activating.failed" target="#_parent">
@@ -542,6 +565,9 @@
             <content expr="emptyData()"/>
           </send>
         </transition>
+        <!-- Seeing ending while its switch is off is ignored here as in
+             activating (decision D189). -->
+        <transition event="done.invoke.seeing" cond="isSeeingOff()"/>
         <transition event="done.invoke" target="inactive">
           <log label="floppy.diagnostic" expr="activatingDoneDiagnostic(_event)"/>
           <send event="bot.activating.failed" target="#_parent">
@@ -563,6 +589,12 @@
       <state id="active" initial="unfocused">
         <!-- An ability that ends while the bot is active leaves it degraded. -->
         <transition event="done.invoke.cognition done.invoke.communication done.invoke.identity done.invoke.listening done.invoke.stm done.invoke.persona done.invoke.firmware" target="degraded">
+          <if cond="holdsPercepts()">
+            <log label="floppy.released" expr="releasedLog('degraded')"/>
+          </if>
+          <assign location="degraded_reason" expr="abilityEndedReason(_event)"/>
+        </transition>
+        <transition event="done.invoke.seeing" cond="seeing_enabled" target="degraded">
           <if cond="holdsPercepts()">
             <log label="floppy.released" expr="releasedLog('degraded')"/>
           </if>
@@ -594,13 +626,13 @@
           </foreach>
         </transition>
         <!-- A visual stimulus is recorded in the short-term register, then
-             goes to every input ability. -->
-        <transition event="environment.visual" event:schema="schemas/environment.visual.json">
+             goes to every input ability, and to seeing when it is on. -->
+        <transition event="environment.visual" event:schema="../../abilities/schemas/environment.visual.json">
           <memory:stm_projection location="stm_payload" data="_event.data"/>
           <send event="bot.ability.memory.stm.record" target="#_stm">
             <content expr="stmRecord('environment.visual', _event)"/>
           </send>
-          <foreach array="input" item="ability">
+          <foreach array="visualInput()" item="ability">
             <send event="environment.visual" targetexpr="abilityTarget(ability)">
               <content expr="_event.data"/>
             </send>

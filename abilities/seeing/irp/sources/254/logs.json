@@ -1,0 +1,5 @@
+{
+  "seeing.degraded": [
+    "settle_after_ms must be positive"
+  ]
+}

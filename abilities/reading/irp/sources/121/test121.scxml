@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- reading-3: an image input with an empty reference is unreadable. -->
+<!-- reading-3: a single tab is unreadable. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="reading" type="scxml" src="../../../reading.scx"/>
@@ -9,7 +9,7 @@
   </state>
   <state id="step0">
     <onentry>
-      <send event="bot.ability.reading.input" target="#_reading"><content expr='{"kind": "image", "content": ""}'/></send>
+      <send event="bot.ability.reading.input" target="#_reading"><content expr='{"kind": "text", "content": "\t"}'/></send>
     </onentry>
     <transition event="bot.ability.reading.output" cond='_event.data.text === "" &amp;&amp; _event.data.source_kind === "unreadable" &amp;&amp; _event.data.confidence === 1' target="step1"/>
   </state>

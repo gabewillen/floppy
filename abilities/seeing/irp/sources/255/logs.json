@@ -1,0 +1,5 @@
+{
+  "seeing.degraded": [
+    "max_view_age_ms must be positive"
+  ]
+}

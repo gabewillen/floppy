@@ -195,9 +195,9 @@ fn text_is_read_as_text() {
 }
 
 #[test]
-fn blank_text_and_an_empty_image_reference_are_unreadable() {
+fn blank_text_is_unreadable() {
     let finished = run(&layout(
-        "[{kind: 'text', content: '  \\n '}, {kind: 'image', content: ''}]",
+        "[{kind: 'text', content: '  \\n '}, {kind: 'text', content: '\\t'}]",
         &Generate::Hangs,
     ));
     assert_eq!(

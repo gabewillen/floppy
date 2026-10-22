@@ -1,0 +1,5 @@
+{
+  "seeing.degraded": [
+    "measure_every_ms cannot be longer than settle_after_ms"
+  ]
+}

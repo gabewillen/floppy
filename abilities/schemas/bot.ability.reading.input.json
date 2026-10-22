@@ -22,6 +22,7 @@
         "Read this note.",
         "media/receipt.png"
       ],
+      "minLength": 1,
       "title": "Content",
       "type": "string"
     }

@@ -68,18 +68,21 @@ printf '%s\n' \
   '{"name":"bot.input","data":{"observation":{"event":"text","data":"hello"}}}' |
   scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
     --dir https://github.com/stateforward/floppy/services/speech=media::/media --dir https://github.com/stateforward/floppy/services/files=behaviors::/behaviors \
+    --dir https://github.com/stateforward/floppy/services/vision=media::/media \
     --fuel 9223372036854775807 environments/room/room.scx
 # A conversation: text addressed to the bot, answered through floppy.say.
 printf '%s\n' \
   '{"name":"bot.ability.communication.input","data":{"source_ids":["gabe"],"target_ids":["floppy"],"content":"Hi floppy!","content_type":"text/plain"}}' |
   scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
     --dir https://github.com/stateforward/floppy/services/speech=media::/media --dir https://github.com/stateforward/floppy/services/files=behaviors::/behaviors \
+    --dir https://github.com/stateforward/floppy/services/vision=media::/media \
     --fuel 9223372036854775807 environments/room/room.scx
 # floppy's latest release, once one is published (phase 7).
 printf '%s\n' \
   '{"name":"bot.input","data":{"observation":{"event":"text","data":"hello"}}}' |
   scx run --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
     --dir https://github.com/stateforward/floppy/services/speech=media::/media --dir https://github.com/stateforward/floppy/services/files=behaviors::/behaviors \
+    --dir https://github.com/stateforward/floppy/services/vision=media::/media \
     --fuel 9223372036854775807 environments/room/room.scx
 ```
 
@@ -131,6 +134,12 @@ though it is used only when the database is a Postgres connection URI
 imports `wasi:filesystem` too (it reads the images a message names), so
 the run grants it a media directory the same way (create `media/` first;
 it is ignored by git).
+The body invokes [seeing](../../abilities/seeing/seeing.scx), which
+measures views through the `vision` service; that service imports
+`wasi:filesystem` (it reads the images a view names), so every run grants
+it the media directory too (`--dir
+https://github.com/stateforward/floppy/services/vision=HOST::/media`),
+whether or not seeing is on (see Sight below).
 Speaking needs `FLOPPY_SPEECH_BASE_URL` (the speech service has no default
 backend; `FLOPPY_SPEECH_API_KEY` too unless the backend is keyless) and the speech service granted the
 media directory its audio is written to (`--dir
@@ -165,6 +174,25 @@ Voice detection, diarization and voice identification call
 speech decoding calls `FLOPPY_SPEECH_BASE_URL` with `FLOPPY_SPEECH_API_KEY`;
 neither has a default backend. A sound that cannot be heard is logged as
 `bot.ability.listening.failed`.
+
+Sight (D185 to D189): the body's `seeing_enabled` `<data>` (`false` by
+default; the environment's `<invoke>` may pass it as a `<param>`) turns the
+[seeing](../../abilities/seeing/seeing.scx) ability on. On, every
+`environment.visual` `{image, media_type, kind, source, participants}` goes
+to it as well as to the input abilities: it holds the newest view of each
+`source` (a view without one is dropped), measures how much it changed
+since the last view of that source it handed on (the `vision` service,
+`byte_identity` by default), and hands a first view, or one that changed by
+at least 0.1, to the body as `bot.ability.cognition.input` whose stimulus
+is `bot.ability.seeing.sight` `{cause, views, participants}`, which is
+held and perceived like any handoff (D156); its offer `bot.ability.seeing.look` is among the turn's choices, and
+a selected look hands on every fresh view. `image` is a reference to a file
+in the directory the run grants the vision service (`media/frame.png` is
+`frame.png` there). Object detection and description (its `detect` and
+`describe` data) are off by default. Off, the body still invokes seeing,
+but sends it no stimulus, does not take its offers and ignores its ending,
+while activating, while the firmware starts and while active (decision
+D189), so the bot behaves as before.
 
 Each event the body emits goes to its environment, which writes it as a
 `log` record labelled with its name, its text the event's data as JSON:
@@ -205,6 +233,11 @@ an earlier turn, `floppy.diagnostic` why activation failed, and
 - `cargo test -p floppy-tests --test speech_service`: the speech service
   against a fake backend (decoding, encoding, ElevenLabs, a missing grant,
   an unconfigured or failing backend, malformed parameters).
+- `cargo test -p floppy-tests --test seeing`: the body with seeing off
+  (a visual reaches only the input abilities and starts no turn) and on (a
+  visual with a source becomes a turn whose stimulus is
+  `bot.ability.seeing.sight`, the look is offered); `FLOPPY_IRP_SUITE=seeing
+  cargo test -p floppy-tests --test document_irp` runs seeing's own suite.
 - `cargo test -p floppy-tests --test reading`: reading and vision under a
   harness, image decoding against a generate double (the original's Reading;
   nothing in the bot invokes it yet).

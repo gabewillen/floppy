@@ -30,9 +30,9 @@ def failure(stage, message):
     return f"_event.data.stage === {js(stage)} && _event.data.message === {js(message)}"
 
 
-S.statement(1, "It offers nothing and answers only what it is given: on start it sends its parent nothing, and an input `bot.ability.reading.input` `{kind, content}` whose data its schema refuses (a kind other than `text` or `image`) is never routed to it (`error.execution` in the sender).")
+S.statement(1, "It offers nothing and answers only what it is given: on start it sends its parent nothing, and an input `bot.ability.reading.input` `{kind, content}` whose data its schema refuses (a kind other than `text` or `image`, or an empty `content`, the original's `min_length=1`) is never routed to it (`error.execution` in the sender).")
 S.statement(2, "A text input whose text is not blank is classified as text (confidence 1) and comes back as `bot.ability.reading.output` `{text, source_kind: \"text\", confidence}`, its text the input's content unchanged; no model is called.")
-S.statement(3, "A text input whose text is blank, or an image input with an empty reference, is classified as unreadable and comes back as `bot.ability.reading.output` `{text: \"\", source_kind: \"unreadable\", confidence: 1}`; no model is called.")
+S.statement(3, "A text input whose text is only white space is classified as unreadable and comes back as `bot.ability.reading.output` `{text: \"\", source_kind: \"unreadable\", confidence: 1}`; no model is called.")
 S.statement(4, "An image input with a reference is classified as image and read by the generate service (one user message: the original's ImageDecoder prompt as a text part and the reference as an image part, the image read from the granted media directory); the reply, trimmed, comes back as `bot.ability.reading.output` `{text, source_kind: \"image\", confidence: 1}`.")
 S.statement(5, "A model call that fails answers `bot.ability.reading.failed` `{stage: \"image_decoding\", message: \"Reading image decoder failed: <code>.\"}`, the generate service's failure code in the message, and the reading returns to Unfocused, taking the next input as on arrival.")
 S.statement(6, "An image reference the generate service cannot read (no such file in the granted media directory) rejects the model call's start: the reading answers `bot.ability.reading.failed` `{stage: \"image_decoding\", message: \"the image decoding could not run (error.execution)\"}`.")
@@ -45,6 +45,10 @@ S.case(100, 1, "the reading sends nothing on start: nothing arrives before the f
 S.case(101, 1, "an input whose kind its schema refuses is never routed: the sender gets error.execution.",
        [send(INPUT, reading("audio", "media/a.wav")), expect("error.execution"),
         send(INPUT, reading("text", "next")), expect(OUTPUT, output("next", "text"))])
+S.case(102, 1, "an input with an empty content is never routed: the sender gets error.execution.",
+       [send(INPUT, reading("text", "")), expect("error.execution"),
+        send(INPUT, reading("image", "")), expect("error.execution"),
+        send(INPUT, reading("text", "next")), expect(OUTPUT, output("next", "text"))])
 
 S.case(110, 2, "a text input is read as its own text.",
        [send(INPUT, reading("text", "Read this note.")), expect(OUTPUT, output("Read this note.", "text"))])
@@ -53,8 +57,8 @@ S.case(111, 2, "a text input keeps its surrounding white space (text is passed t
 
 S.case(120, 3, "blank text is unreadable.",
        [send(INPUT, reading("text", "  \n ")), expect(OUTPUT, output("", "unreadable"))])
-S.case(121, 3, "an image input with an empty reference is unreadable.",
-       [send(INPUT, reading("image", "")), expect(OUTPUT, output("", "unreadable"))])
+S.case(121, 3, "a single tab is unreadable.",
+       [send(INPUT, reading("text", "\t")), expect(OUTPUT, output("", "unreadable"))])
 
 S.case(130, 4, "an image is read by the model and its reply trimmed.",
        [send(INPUT, reading("image", "media/receipt.png")), expect(OUTPUT, output("Total due: $14.21", "image"))],

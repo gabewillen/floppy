@@ -11,6 +11,22 @@ Last updated: 2026-10-22.
 
 ## Current state (2026-10-09) — resume here
 
+- **Seeing (2026-10-22, D185 to D189):** `abilities/seeing/seeing.scx`
+  is the original's eye: it holds the newest `environment.visual` of each
+  `source` (a new [floppy field]; the schema moved to `abilities/schemas/`),
+  measures change through the new `vision` service (`byte_identity`,
+  `frame_diff`), looks when the model selects `bot.ability.seeing.look`, and
+  hands each sight to the body as `bot.ability.cognition.input`; object
+  detection and description are its per-view stage children over generate.
+  The body invokes it always, and its `seeing_enabled` switch (off by
+  default) decides whether it is expected, fed and offered; every bot run
+  now grants the vision service a media directory. Faces wait on decision 6.
+  `frame_diff` decodes as the original's OpenCV 5.0.0 build does (its own
+  JPEG DC decoder, libpng's gray and gamma, `image-webp`, Exif
+  orientation), checked against OpenCV fixtures in
+  `services/vision/src/testdata/`; Cargo.lock carries `miniz_oxide` 0.8.9
+  for `png` beside scxml.rs's 0.9 (D185). A document IRP case may now
+  require its run's logs (`logs=` in cases.py, `logs.json`).
 - **Body and room parity (2026-10-22, D155 to D160):** `bot.clear_focus`
   is gone (focus stays until the bot focuses another device; the reflex
   floor keeps it). A busy body holds what arrives (`floppy.held`), and the
@@ -874,6 +890,12 @@ The remaining the original port runs as one ultracode run with these grants:
 
 ## Backlog (agreed, not started)
 
+- scxml.rs: check a service's WASI grant only when an invocation of it
+  starts (or let a run declare a grant optional). `scx run` resolves every
+  service the bound document tree names before the session starts, even one
+  in a state never entered, so the floppy bot's every run grants the vision
+  service its media directory though seeing is off by default (D185, PR #8).
+  With the check moved, the default run would need no vision grant.
 - Browser parity slice 2 (services, resolution, WASI shims, element trace).
 - `scx compile --target native`: one self-contained executable per platform;
   top-level `<data>` ids are the arguments, `<donedata>` JSON on stdout,
