@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Description (the reference abilities/vision/description.py) with the
+  floppy's Description (the original's image description) with the
   original's GenerativeDescriber: what one image shows, in a few plain
   sentences, asked of an image-capable model once per image. Seeing
   (abilities/seeing/seeing.scx) invokes it once per view from the state
@@ -27,7 +27,7 @@
   the original's TextPart and ImagePart, as reading builds them. Its text
   reply goes to replied.
 
-  replied is the original's GenerativeDescriber.decode and the Description's
+  replied is the original's GenerativeDescriber and the Description's
   output guard: the reply is trimmed; an empty one fails ("the generator
   answered with an empty description"); it is sent to itself as
   bot.ability.vision.description.output {description} (the original's bare
@@ -127,7 +127,7 @@
       </transition>
     </state>
 
-    <!-- The original's GenerativeDescriber.decode and output guard. -->
+    <!-- The original's GenerativeDescriber and output guard. -->
     <state id="replied">
       <onentry>
         <if cond="isEmptyDescription()">

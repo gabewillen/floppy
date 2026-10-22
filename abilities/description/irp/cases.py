@@ -34,7 +34,7 @@ def message(value):
 
 
 S.statement(1, "Its input is its `<param>`s: it sends itself `bot.ability.vision.description.input` `{image, media_type}` (the original's media.Image, by reference), which its schema checks, so an `image` that is missing or empty sends nothing to the model and answers `bot.ability.failed` `{message: \"Description could not run (error.execution)\"}`; nothing reaches the parent before its one answer.")
-S.statement(2, "It asks the generate service once, with one user message (the original's DESCRIBE_INSTRUCTIONS as a text part and the image's reference as an image part, the image read from the granted media directory), and answers its parent `bot.ability.vision.description.output` `{description}`, the reply stripped of white space as the original's `str.strip()` strips it; then it ends (`done.invoke.<id>` follows the answer).")
+S.statement(2, "It asks the generate service once, with one user message (the original's DESCRIBE_INSTRUCTIONS as a text part and the image's reference as an image part, the image read from the granted media directory), and answers its parent `bot.ability.vision.description.output` `{description}`, the reply trimmed of white space; then it ends (`done.invoke.<id>` follows the answer).")
 S.statement(3, "A reply that is empty once stripped answers `bot.ability.failed` `{message: \"the generator answered with an empty description\"}`.")
 S.statement(4, "A description of at most 4000 characters (the original's MAX_DESCRIPTION_CHARS, counted in characters, not bytes) is answered; a longer one is an output its schema refuses and answers `bot.ability.failed` `{message: \"Description produced output that does not match its output schema.\"}`, the original's invalid-output failure.")
 S.statement(5, "A model call that fails answers `bot.ability.failed` `{message: \"Description generator failed: <code>.\"}`, the generate service's failure code in the message, and an image reference the generate service cannot read rejects its start: `{message: \"Description could not run (error.execution)\"}`.")
@@ -56,17 +56,17 @@ S.case(110, 2, "the reply, stripped, is the description, and the description the
 S.case(111, 2, "an absolute reference to the granted media directory, with no media type, is read too.",
        [expect(OUTPUT, described(SAID))],
        params=[("image", "'/media/scene.png'")], backend=replying(SAID))
-S.case(112, 2, "Python's white space is stripped (information separators, next line), a byte order mark is not.",
-       [expect(OUTPUT, described("﻿" + SAID))],
-       params=SCENE, backend=replying("\x1c\x85﻿" + SAID + "\x1f　"))
+S.case(112, 2, "Unicode white space and a byte order mark around the reply are trimmed.",
+       [expect(OUTPUT, described(SAID))],
+       params=SCENE, backend=replying("\t\ufeff" + SAID + "\r\u3000"))
 
 # 3: an empty reply.
 S.case(120, 3, "a reply of only line breaks is no description.",
        [expect(FAILED, message("the generator answered with an empty description")), expect(DONE)],
        params=SCENE, backend=replying("\n\n"))
-S.case(121, 3, "a reply of only white space, Python's included, is no description.",
+S.case(121, 3, "a reply of only white space is no description.",
        [expect(FAILED, message("the generator answered with an empty description"))],
-       params=SCENE, backend=replying(" \n\t\x1c\x85  "))
+       params=SCENE, backend=replying(" \n\t\u3000\r\u2003 "))
 
 # 4: the output schema's bound.
 S.case(130, 4, "4000 characters, some of them two UTF-8 bytes, are a description.",

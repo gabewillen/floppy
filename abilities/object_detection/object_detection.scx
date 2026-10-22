@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's ObjectDetection (the reference abilities/vision/detection.py) with the
+  floppy's ObjectDetection (the original's object detection) with the
   original's GenerativeDetector: what things are in one image and where,
   asked of an image-capable model once per image. Seeing
   (abilities/seeing/seeing.scx) invokes it once per view from the state
@@ -28,15 +28,15 @@
   the original's TextPart and ImagePart, as reading builds them. Its text
   reply goes to replied.
 
-  replied is the original's GenerativeDetector.classify on the reply: a
+  replied is the original's GenerativeDetector on the reply: a
   reply over max_reply_bytes (UTF-8) fails; the reply is trimmed, and a
   reply fenced as markdown (starting with three backticks) is read inside
   the fence (the text after its first line, a closing fence removed,
   trimmed again); anything but a JSON array fails ("the reply is not a
   JSON array of objects"). Each item is validated on its own as the
-  original's DetectedObject (pydantic's lax rules: label a string of 1..100
-  characters; confidence a number, a boolean or a numeric string in 0..1,
-  or null; box the original's geometry.Box {x, y in 0..1, width, height in
+  original's DetectedObject (label a string of 1..100 characters;
+  confidence a JSON number in 0..1, or null, a boolean or a numeric string
+  being refused (D186); box the original's geometry.Box {x, y in 0..1, width, height in
   (0, 1], x + width and y + height at most 1 + 1e-6}; no other keys, none
   missing); an invalid item is skipped and the count logged
   (object_detection.invalid, the original's bot.vision.detection.invalid
@@ -143,7 +143,7 @@
       </transition>
     </state>
 
-    <!-- The original's GenerativeDetector.classify on the reply. -->
+    <!-- The original's GenerativeDetector on the reply. -->
     <state id="replied">
       <onentry>
         <assign location="detected" expr="detectedReply()"/>
