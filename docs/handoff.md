@@ -351,18 +351,22 @@ Last updated: 2026-10-21.
 ## Intuition contract and reasoning prompt (2026-10-10)
 
 - **Intuition** uses the decision service's kind `predicate` (`select`
-  until D120; the original's TypeSafe `Processor.process`): `decision.selected {selections: [{event,
-  data, confidence}]}`, every groundable event with its own probability.
-  Intuition observes their least confidence (0-100) with
+  until D120; the reference decision processor, D150): `decision.selected
+  {selections: [{event, data, confidence, target?}]}`, only the chosen event
+  with its probability. Intuition observes that confidence (0-100) with
   `<intuition:observe>` first, then `<intuition:escalate>` compares it with
   the updated threshold (the original's `_tune_confidence`, D114). `low_confidence` and `deliberative_input` send
-  the environment actions before the turn escalates (D113; the
-  2026-10-11 dedupe is gone). The service's pass
-  criterion is the original's `__unhandled__`, its state document the original's
-  `{"turn": {"envelope": {"name"}, "data"}}` (built by the service from
-  the `stimulus` param since D120), and data grounds from the
-  non-null stimulus value then the enum (no `const`). `choice` (`choose`
-  until D120) lost its `threshold` (and `below-threshold`).
+  only the environment actions before the turn escalates (never the ignore
+  or the handoff), and every donedata carries `acted`, what was sent. The
+  service's pass criteria are one per tier of `hand_ons` (`__intuition__`,
+  `__reasoning__`; `["reasoning"]` by default), a pass returning `hand_to`;
+  its state is `{turn: T}`, T the stimulus's `<cognition:model_facing_content>`,
+  and data grounds from the `stimulus` param's non-null value then the enum
+  (no `const`). With `max_context_tokens` the request is fitted to the
+  model's context, and intuition learns and returns `bytes_per_token` from
+  the service's done data. `choice` (`choose` until D120, the builder's
+  triage) keeps its pass criterion `__unhandled__`; it lost its `threshold`
+  (and `below-threshold`).
 - **Reasoning** sends the original's `model_facing_xml(ProcessorInput)` under
   the original's budgets (`<cognition:model_facing_content>`, D114; it was
   `promptProjection()` in reasoning.js, checked byte-for-byte against the
