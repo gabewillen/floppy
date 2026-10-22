@@ -6,9 +6,9 @@
     "kind": "namespace-irp",
     "source": "namespaces/memory/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "e5dfc0af0c5549b9cd043a6ba924ad363357cbd4b3ef88a40ba5b2f4ad3dae83",
+    "corpus_digest": "54a7587bdee0d7026bf470b21edff34a98c8c3afd4d30c3a96f16fabc8bfdfc6",
     "source_digest": "da2586612bea631d7ace0b365eeac61d874a79d2c8ca5632e251ca8c9d738a59",
-    "manifest_digest": "502a5ff0c40220b70783865bd1964d33aad869a6197fb650b70d0c3c4897c879",
+    "manifest_digest": "fde067bb51cbb9a6f1dc3a41dbc3c12c86b82485d35b496c90e609270b7378e3",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
@@ -68,7 +68,7 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "7c9de1553caea1bf5ca52a73a963c0ec91d1a7770c86c7a69562462d5d1441cd",
+  "identity_digest": "abddf71e46a369f631d769b48885cd2fdddd400edb21357722fa701fdcb3532a",
   "summary": {
     "total_selected": 17,
     "applicable_selected": 17,

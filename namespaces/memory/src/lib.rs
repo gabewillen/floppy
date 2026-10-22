@@ -68,8 +68,7 @@
 //! characters within the bound, less the partial word it ends in when the
 //! bound falls inside a word (neither its last character nor the next one
 //! is white space) and an earlier word break exists, with trailing white
-//! space removed. White space is Python's `str.isspace` (Unicode
-//! `White_Space`, and U+001C to U+001F).
+//! space removed. White space is Unicode `White_Space`.
 //!
 //! # `<memory:stm_projection location="L" data="D"/>`
 //!
@@ -685,13 +684,6 @@ fn cut_at_word_element<H: MemoryHost>(
     Ok(Executed::Handled)
 }
 
-/// Python's `str.isspace` for one character: Unicode `White_Space`, and
-/// the information separators U+001C to U+001F (bidirectional class B or
-/// S), which Python counts and Unicode does not.
-fn is_python_space(character: char) -> bool {
-    character.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&character)
-}
-
 /// The original's `_cut_at_word`: `words` within [`MAX_TURN_TEXT_BYTES`],
 /// cut at the last whole word, and whether it was cut (see the crate
 /// documentation, `<memory:cut_at_word>`).
@@ -707,30 +699,30 @@ pub fn cut_at_word(words: &str) -> (String, bool) {
         .find(|index| words.is_char_boundary(*index))
         .unwrap_or(0);
     let (mut head, tail) = words.split_at(end);
-    let ends_in_space = head.chars().next_back().is_some_and(is_python_space);
-    let next_is_space = tail.chars().next().is_some_and(is_python_space);
+    let ends_in_space = head.chars().next_back().is_some_and(char::is_whitespace);
+    let next_is_space = tail.chars().next().is_some_and(char::is_whitespace);
     if !(ends_in_space || next_is_space) {
         // The bound fell inside a word: drop that partial word.
         if let Some(rest) = before_last_word(head) {
             head = rest;
         }
     }
-    (head.trim_end_matches(is_python_space).to_owned(), true)
+    (head.trim_end_matches(char::is_whitespace).to_owned(), true)
 }
 
 /// `text.rsplit(maxsplit=1)[0]` when that split has two parts: `text`
 /// without its trailing white space, its last word, and the white space
 /// before that word; `None` when it holds at most one word.
 fn before_last_word(text: &str) -> Option<&str> {
-    let trimmed = text.trim_end_matches(is_python_space);
+    let trimmed = text.trim_end_matches(char::is_whitespace);
     let (index, _) = trimmed
         .char_indices()
         .rev()
-        .find(|(_, character)| is_python_space(*character))?;
+        .find(|(_, character)| char::is_whitespace(*character))?;
     let rest = trimmed
         .get(..index)
         .unwrap_or_default()
-        .trim_end_matches(is_python_space);
+        .trim_end_matches(char::is_whitespace);
     (!rest.is_empty()).then_some(rest)
 }
 
