@@ -13,7 +13,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.autonomy" cond="_event.data.turn === 10 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === &quot;unhandled&quot; &amp;&amp; JSON.stringify(_event.data.candidates) === &quot;[\&quot;SpeechHeard\&quot;]&quot; &amp;&amp; _event.data.selected === undefined &amp;&amp; JSON.stringify(_event.data.acted.percepts) === '[1]' &amp;&amp; _event.data.acted.selected.length === 1 &amp;&amp; _event.data.acted.selected[0].event === 'bot.ability.communication.input'" target="step1"/>
+    <transition event="done.invoke.autonomy" cond="_event.data.turn === 10 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === &quot;unhandled&quot; &amp;&amp; JSON.stringify(_event.data.candidates) === &quot;[\&quot;SpeechHeard\&quot;]&quot; &amp;&amp; _event.data.selected === undefined &amp;&amp; JSON.stringify(_event.data.acted.percepts) === '[1]' &amp;&amp; _event.data.acted.acts.length === 1 &amp;&amp; _event.data.acted.acts[0].event === 'bot.ability.communication.input'" target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

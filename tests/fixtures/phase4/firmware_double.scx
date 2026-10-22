@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A firmware double for the body tests (tests/tests/body.rs): an owner's
+  firmware (the original's bot file partials, decision D160), the timer of
+  the original's bot/firmware.py example. tests/tests/body.rs copies it
+  beside a copy of the body and names it with the body's firmware_src.
+
+  Unless mode is 'silent' (the test rewrites mode's expr), it starts by
+  offering its command, timer.set {minutes}, under the ability firmware,
+  and offers it again on each change. In idle, timer.set sets minutes,
+  logs firmware.set with them, reports to the body (a
+  bot.ability.cognition.input whose stimulus, timer.started, carries a
+  bot.input observation "reply" with the minutes as its data, so the
+  cognition double answers it as a reply) and goes to running; in running,
+  timer.cancel goes back to idle. The body reads its state and minutes
+  with <device:snapshot>.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       version="1.0" datamodel="ecmascript" name="firmware_double" initial="idle">
+  <datamodel>
+    <data id="mode" expr="'ready'"/>
+    <data id="minutes" expr="0"/>
+    <data id="set" expr="({event: 'timer.set', description: 'Start the timer.', schema: {type: 'object', properties: {minutes: {type: 'integer', minimum: 1}}, required: ['minutes'], additionalProperties: false}})"/>
+  </datamodel>
+  <state id="idle">
+    <onentry>
+      <if cond="mode === 'ready'">
+        <send event="bot.ability.offers" target="#_parent">
+          <param name="ability" expr="'firmware'"/>
+          <param name="choices" expr="[set]"/>
+        </send>
+      </if>
+    </onentry>
+    <transition event="timer.set" target="running">
+      <assign location="minutes" expr="_event.data.minutes"/>
+      <log label="firmware.set" expr="minutes"/>
+      <send event="bot.ability.cognition.input" target="#_parent">
+        <param name="stimulus" expr="({event: 'timer.started', data: {observation: {event: 'reply', data: 'timer ' + minutes}}})"/>
+      </send>
+    </transition>
+  </state>
+  <state id="running">
+    <transition event="timer.cancel" target="idle"/>
+  </state>
+</scxml>

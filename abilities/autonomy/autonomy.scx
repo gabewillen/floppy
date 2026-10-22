@@ -26,8 +26,8 @@
   it; the turn is handled only when every percept was, with what the
   handling behaviors selected in the percepts' arrival order. Otherwise it
   is unhandled after those selections were sent, and its answer carries
-  them as acted {percepts, selected} (the reference's ActedData, the
-  handled percepts' positions and selections) [floppy field].
+  them as acted {percepts, acts} (the reference's ActedData: the
+  handled percepts' positions and their selections).
 
   Input: the <param>s turn, input (focus and focus_candidates, the original's
   bot.ability.autonomy.input, schemas/bot.ability.autonomy.input.json),

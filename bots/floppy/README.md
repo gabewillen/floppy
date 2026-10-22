@@ -184,7 +184,9 @@ records, which are not the original events, are labelled `floppy.*`:
 `floppy.output` is the turn's selected events, speaking logs the words as
 `floppy.say`, `floppy.choices` is each turn's choices (JSON, each tagged
 with its offering session's id as `target`), `floppy.focus` each focus
-change, `floppy.deferred` each input deferred during a turn,
+change, `floppy.held` how many percepts are held after each arrival
+during a turn, `floppy.released` what was still held when the bot left
+active (`{count, reason}`),
 `floppy.degraded` the reason the bot degraded, `floppy.stale` a reply to
 an earlier turn, `floppy.diagnostic` why activation failed, and
 `floppy.rejected` an event the body refused.

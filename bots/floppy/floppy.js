@@ -69,6 +69,32 @@ function activatingDoneDiagnostic(_event) {
   return 'the ability ' + _event.invokeid + ' ended while activating';
 }
 
+// started (the firmware)
+
+// The firmware's document: the owner's, else the firmware of a bot that
+// has none.
+function firmwareSrc() {
+  return firmware_src === null ? 'firmware/firmware.scx' : firmware_src;
+}
+
+function hasFirmware() {
+  return firmware_src !== null;
+}
+
+// The firmware's address, <_sessionid>.firmware (decision D110).
+function firmwareTarget() {
+  return '#_scxml_' + _sessionid + '.firmware';
+}
+
+// The firmware has sent its first offers this run.
+function isFirmwareStarted() {
+  return offers.firmware !== undefined;
+}
+
+function firmwareTimeoutDiagnostic() {
+  return 'the firmware did not start within ' + firmware_timeout_ms + ' ms';
+}
+
 // active
 
 function abilityEndedReason(_event) {
@@ -227,18 +253,33 @@ function cognitionInput() {
 // The turn's environment from the bot's perspective (decision D106), in
 // the original's layout: the environment's id, then the bot itself, its
 // state and its own attributes (owned_devices, each held device that was
-// read this turn under its reference with its id, state and attributes, a
-// device that is not running left out; held_percepts, how many percepts
-// wait for a later turn).
+// read this turn under its reference with its id, state and attributes,
+// and on, the object it sits on (decision D159), a device that is not
+// running left out; held_percepts, how many percepts wait for a later
+// turn; firmware, the owner's firmware read this turn, under the
+// reference firmware, when it has one).
 function environmentField() {
   var owned = {};
   devices.forEach(function (reference) {
     var snapshot = device_snapshots[reference];
     if (snapshot !== undefined) {
       owned[reference] = {ref: reference, id: snapshot.id, state: snapshot.state, attributes: snapshot.attributes};
+      if (typeof placed_on[reference] === 'string') {
+        owned[reference].on = placed_on[reference];
+      }
     }
   });
-  return {id: environment, self: {state: 'processing', owned_devices: owned, held_percepts: held.length}};
+  var own = {state: 'processing', owned_devices: owned, held_percepts: held.length};
+  if (firmware_snapshot !== null) {
+    own.firmware = {ref: 'firmware', id: firmware_snapshot.id, state: firmware_snapshot.state, attributes: firmware_snapshot.attributes};
+  }
+  return {id: environment, self: own};
+}
+
+// The turn's input could not be sent to the cognition.
+function executionFailure(_event) {
+  var reason = Object(_event.data).message;
+  return {message: 'the turn\'s input could not be sent: ' + (typeof reason === 'string' ? reason : _event.name), turn: turn};
 }
 
 function choicesOverFailure() {

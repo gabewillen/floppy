@@ -157,7 +157,7 @@ function noBehaviorsOutput() {
 function unhandledOutput() {
   var output = {turn: turn, handled: false, candidates: tried, reason: 'unhandled'};
   if (handled.length > 0) {
-    output.acted = {percepts: handled, selected: selected};
+    output.acted = {percepts: handled, acts: selected};
   }
   return output;
 }

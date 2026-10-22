@@ -69,7 +69,7 @@ S.statement(2, "A `bot.ability.listening.speech.output` stimulus runs the Speech
 S.statement(3, "A seed that does not handle the turn passes it to the learned inventory; without memory the turn is unhandled: `{turn, handled: false, candidates: [\"SpeechHeard\"], reason: \"unhandled\"}`.")
 S.statement(4, "With memory, one transaction of the Memory ability on the `database` <param> loads the ACTIVE `turn` behaviors whose trigger is the stimulus's event; when none matches, the turn is `no-behaviors`, or `unhandled` with the seed in `candidates` when a seed ran.")
 S.statement(5, "A load that fails or outlasts `memory_timeout_ms` matches no behaviors and the turn goes on, as a load with no rows does.")
-S.statement(6, "A `bot.perceived` stimulus (the body's percepts taken together) is matched percept by percept, in arrival order, each percept's stimulus as the stimulus: the turn is handled only when every percept was, `selected` the handling behaviors' selections in arrival order; otherwise it is `unhandled` (or `no-behaviors` when nothing was tried), and `acted` `{percepts, selected}` names the handled percepts' positions and their selections when any was.")
+S.statement(6, "A `bot.perceived` stimulus (the body's percepts taken together) is matched percept by percept, in arrival order, each percept's stimulus as the stimulus: the turn is handled only when every percept was, `selected` the handling behaviors' selections in arrival order; otherwise it is `unhandled` (or `no-behaviors` when nothing was tried), and `acted` `{percepts, acts}` (the reference's ActedData) names the handled percepts' positions and their selections when any was.")
 
 S.case(100, 1, "with no memory and no seed, nothing runs.",
        [answer(1, "no-behaviors", []), wait("300ms")], params=run("bot.input", TEXT), clock="wall")
@@ -104,8 +104,8 @@ S.case(160, 6, "two sourced speech percepts are each admitted: the turn is handl
        params=perceived(9, (SPEECH, speech(["caller"])), (SPEECH, speech(["gabe"]))))
 S.case(161, 6, "a batch only partly handled is unhandled, and carries what the seed did as acted.",
        [answer(10, "unhandled", ["SpeechHeard"],
-               "JSON.stringify(_event.data.acted.percepts) === '[1]' && _event.data.acted.selected.length === 1"
-               " && _event.data.acted.selected[0].event === 'bot.ability.communication.input'")],
+               "JSON.stringify(_event.data.acted.percepts) === '[1]' && _event.data.acted.acts.length === 1"
+               " && _event.data.acted.acts[0].event === 'bot.ability.communication.input'")],
        params=perceived(10, ("bot.input", TEXT), (SPEECH, speech(["caller"]))))
 S.case(162, 6, "a batch no seed triggers runs nothing: no-behaviors, no acted.",
        [answer(11, "no-behaviors", [], "_event.data.acted === undefined")],
