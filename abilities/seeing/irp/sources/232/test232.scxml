@@ -4,7 +4,7 @@
 <state id="harness" initial="boot">
   <invoke id="seeing" type="scxml" src="../../../seeing.scx">
     <param name="detect" expr="true"/>
-    <param name="stage_timeout_ms" expr="0"/>
+    <param name="stage_timeout_ms" expr="1"/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>

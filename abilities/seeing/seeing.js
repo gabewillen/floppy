@@ -25,6 +25,44 @@ function isFresh(view, now) {
   return ageMs(view, now) <= max_view_age_ms;
 }
 
+// initializing: the original's constructor refusals
+
+// The bounded durations, in the original's order.
+var DURATIONS = ['measure_every_ms', 'measure_timeout_ms', 'settle_after_ms', 'max_view_age_ms', 'stage_timeout_ms'];
+var MEASURES = ['byte_identity', 'frame_diff'];
+
+function isPositive(value) {
+  return typeof value === 'number' && value > 0;
+}
+
+function refusesChangeThreshold() {
+  return !(typeof change_threshold === 'number' && change_threshold > 0 && change_threshold <= 1);
+}
+
+// The first duration that is not positive, or null.
+function refusedDuration() {
+  var values = {measure_every_ms: measure_every_ms, measure_timeout_ms: measure_timeout_ms, settle_after_ms: settle_after_ms,
+                max_view_age_ms: max_view_age_ms, stage_timeout_ms: stage_timeout_ms};
+  var refused = DURATIONS.filter(function (name) { return !isPositive(values[name]); });
+  return refused.length > 0 ? refused[0] : null;
+}
+
+function refusesDuration() {
+  return refusedDuration() !== null;
+}
+
+function refusedDurationReason() {
+  return refusedDuration() + ' must be positive';
+}
+
+function refusesPacing() {
+  return measure_every_ms > settle_after_ms;
+}
+
+function refusesMeasure() {
+  return MEASURES.indexOf(measure) === -1;
+}
+
 // perceiving: holding (the original _hold)
 
 // The views and outcomes once _event's view is held: stale views expire;

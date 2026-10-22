@@ -34,7 +34,7 @@
   sends its first bot.ability.offers; the body is active when every
   expected ability is ready. A run-tagged activation timer
   (activation_timeout_ms), an error event, or an ability ending while
-  activating fails the activation (bot.activating.failed) and ends the
+  activating (seeing only while its switch is on) fails the activation (bot.activating.failed) and ends the
   session in inactive; an ability ending while active degrades the bot.
 
   Lifecycle answers (the original's a2cbaa8): the activator is the
@@ -90,8 +90,9 @@
   its offer (bot.ability.seeing.look) is among the turn's choices, its
   sight comes back as bot.ability.cognition.input {stimulus:
   bot.ability.seeing.sight}, which starts a turn like any handoff, and its
-  ending degrades the bot. Off, seeing still runs but is sent no stimulus
-  and its offers are not taken, so the bot behaves as without it.
+  ending degrades the bot. Off, seeing still runs but is sent no stimulus,
+  its offers are not taken and its ending is ignored (while activating as
+  while active), so the bot behaves as without it.
 
   Turns: bot.input, or an ability's bot.ability.cognition.input handoff
   (the original grants any ability product the turn, blind to its content), in
@@ -338,6 +339,10 @@
           <content expr="emptyData()"/>
         </send>
       </transition>
+      <!-- Seeing ending while its switch is off is ignored here as it is
+           in active (decision D189): only an expected ability's ending
+           fails the activation. -->
+      <transition event="done.invoke.seeing" cond="isSeeingOff()"/>
       <transition event="done.invoke" target="inactive">
         <log label="floppy.diagnostic" expr="activatingDoneDiagnostic(_event)"/>
         <send event="bot.activating.failed" target="#_parent">

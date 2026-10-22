@@ -3,7 +3,10 @@
 # Most cases run on the logical clock (no backend.json, or clock="logical"):
 # every timer fires as soon as nothing else is pending, so each view's
 # age_ms is exact. The vision service answers within its <invoke>, and the
-# logical clock never moves past a model call in flight.
+# logical clock never moves past a model call in flight, so a case that
+# times a stage out runs on the wall clock with a 1 ms bound, which the
+# stage child's model call (a component started and a request answered)
+# always outlasts.
 
 import json
 
@@ -109,10 +112,11 @@ S.statement(8, "At most one measurement runs per `measure_every_ms` (500): after
 S.statement(9, "Sources are measured round robin: of the sources with an unmeasured fresh view, the least recently measured goes first, a source never measured before all others, ties to the oldest arrival.")
 S.statement(10, "Each source's newest view replaces its older one (latest wins); at most four views are held, the least recently received evicted past four; a view older than `max_view_age_ms` (60000) is not fresh (a look does not see it, nothing measures it) and is forgotten with its signature at the next hold, so that source's next view is a first view again.")
 S.statement(11, "A view the vision service cannot measure (an unreadable reference, or for `frame_diff` a file OpenCV cannot decode, no PNG, JPEG or WebP it reads) is not handed on and no other measure is asked; it counts as measured, the eye paces, and a look still sees the view.")
-S.statement(12, "A measurement is bounded by `measure_timeout_ms` (2000): when it passes first nothing is handed on and the eye paces.")
+S.statement(12, "A measurement is bounded by `measure_timeout_ms` (2000): when it passes first nothing is handed on and the eye paces. The vision service answers within its `<invoke>`, so no positive bound passes first here: `tests/tests/seeing.rs` drives the timeout with a vision stand-in that never answers.")
 S.statement(13, "With `detect` on, each view handed on is given to the object detection child (abilities/object_detection, with the view's image and media type and the model), and its `bot.ability.vision.detection.output` fills the view's `objects`; with `describe` on the description child's `bot.ability.vision.description.output` fills its `description`. A view's objects stage runs before its description stage, and a sight's views are interpreted one after another, in order.")
 S.statement(14, "A stage that fails (its child answers `bot.ability.failed`) or does not answer within `stage_timeout_ms` (30000) leaves only its own field null; the sight is still handed on.")
 S.statement(15, "A stimulus its schema refuses is never routed here: an `environment.visual` without an image, or a look with data, raises `error.execution` in the sender.")
+S.statement(16, "Its parameters are checked before it perceives, as the original's constructor checks them: a `change_threshold` outside (0, 1], a `measure_every_ms`, `measure_timeout_ms`, `settle_after_ms`, `max_view_age_ms` or `stage_timeout_ms` that is not positive, a `measure_every_ms` longer than `settle_after_ms`, or a `measure` other than `byte_identity` and `frame_diff` ends it in its final state `degraded`, logging `seeing.degraded` with the first refusal's reason, in that order: it offers nothing, and its invoker gets `done.invoke.seeing`.")
 
 S.case(100, 1, "the offer is look alone, compacted.", [READY])
 S.case(101, 1, "it offers once: the first sight is the next thing the parent gets.",
@@ -217,10 +221,11 @@ S.case(201, 11, "frame difference: a file that is no image is not handed on; a l
         sight("look", "seeing", [view("text.png", age=1000)])],
        params=[FRAME_DIFF])
 
-S.case(210, 12, "a measurement that does not answer within the bound hands nothing on; a look still sees the view.",
+S.case(210, 12, "the vision service answers within its <invoke>: even a 1 ms bound does not pass first, so the first view is handed on before the look sees it.",
        [READY, send(VISUAL, visual("a.png", "camera-1")), look(),
-        sight("look", "seeing", [view("a.png", age=0)])],
-       params=[("measure_timeout_ms", "0")])
+        sight("change", "camera-1", [view("a.png")]),
+        sight("look", "seeing", [view("a.png", age=5000)])],
+       params=[("measure_timeout_ms", "1")], logs={"seeing.measure": ["first"]})
 
 S.case(220, 13, "with detect on, the view's objects are the detection child's.",
        [READY, send(VISUAL, visual("a.png", "camera-1")),
@@ -259,16 +264,39 @@ S.case(231, 14, "a failed description leaves description null; the objects are s
 S.case(232, 14, "an objects stage that does not answer within stage_timeout_ms leaves objects null.",
        [READY, send(VISUAL, visual("a.png", "camera-1")),
         sight("change", "camera-1", [view("a.png")])],
-       params=[("detect", "true"), ("stage_timeout_ms", "0")],
-       backend=replying(json.dumps([CUP])), clock="logical", logs={"seeing.stage": ["objects timeout"]})
+       params=[("detect", "true"), ("stage_timeout_ms", "1")],
+       backend=replying(json.dumps([CUP])), clock="wall", logs={"seeing.stage": ["objects timeout"]})
 S.case(233, 14, "a description stage that does not answer within stage_timeout_ms leaves description null.",
        [READY, send(VISUAL, visual("a.png", "camera-1")),
         sight("change", "camera-1", [view("a.png")])],
-       params=[("describe", "true"), ("stage_timeout_ms", "0")],
-       backend=replying(DESCRIBED), clock="logical", logs={"seeing.stage": ["description timeout"]})
+       params=[("describe", "true"), ("stage_timeout_ms", "1")],
+       backend=replying(DESCRIBED), clock="wall", logs={"seeing.stage": ["description timeout"]})
 
 S.case(240, 15, "a visual without an image is never routed: the sender gets error.execution.",
        [READY, send(VISUAL, js({"source": "camera-1"})), expect("error.execution"),
         send(VISUAL, visual("a.png", "camera-1")), sight("change", "camera-1", [view("a.png")])])
 S.case(241, 15, "a look with data is never routed: the sender gets error.execution.",
        [READY, send(LOOK, js({"now": True})), expect("error.execution"), look(), sight("look", "seeing", [])])
+
+
+def refused(test_id, comment, params, reason):
+    """A case whose parameters the eye refuses: it ends at once, offering nothing."""
+    S.case(test_id, 16, comment, [expect("done.invoke.seeing")], params=params, logs={"seeing.degraded": [reason]})
+
+
+refused(250, "a change_threshold of 0 is refused.", [("change_threshold", "0")], "change_threshold must be in (0, 1]")
+refused(251, "a change_threshold over 1 is refused.", [("change_threshold", "1.5")], "change_threshold must be in (0, 1]")
+refused(252, "a measure_every_ms of 0 is refused.", [("measure_every_ms", "0")], "measure_every_ms must be positive")
+refused(253, "a negative measure_timeout_ms is refused.", [("measure_timeout_ms", "-1")], "measure_timeout_ms must be positive")
+refused(254, "a settle_after_ms of 0 is refused.", [("settle_after_ms", "0")], "settle_after_ms must be positive")
+refused(255, "a max_view_age_ms of 0 is refused.", [("max_view_age_ms", "0")], "max_view_age_ms must be positive")
+refused(256, "a stage_timeout_ms of 0 is refused.", [("stage_timeout_ms", "0")], "stage_timeout_ms must be positive")
+refused(257, "a measure_every_ms longer than settle_after_ms is refused.", [("measure_every_ms", "5001")],
+        "measure_every_ms cannot be longer than settle_after_ms")
+refused(258, "a measure other than byte_identity and frame_diff is refused.", [("measure", "'embedding'")],
+        "measure must be byte_identity or frame_diff")
+refused(259, "only the first refusal is logged: the threshold's, before the measure's.",
+        [("change_threshold", "0"), ("measure", "'embedding'")], "change_threshold must be in (0, 1]")
+S.case(260, 16, "a measure_every_ms equal to settle_after_ms is accepted: the eye offers and sees.",
+       [READY, send(VISUAL, visual("a.png", "camera-1")), sight("change", "camera-1", [view("a.png")])],
+       params=[("measure_every_ms", "5000")])

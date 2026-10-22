@@ -1,0 +1,5 @@
+{
+  "seeing.degraded": [
+    "measure must be byte_identity or frame_diff"
+  ]
+}

@@ -5,9 +5,14 @@
   how much a view changed since the last view of that source it handed
   on, and hands on a view that changed past a threshold; asked to look, it
   hands on every fresh view. The body (bots/floppy/floppy.scx) invokes it
-  as its child "seeing", one of its input abilities, when its seeing
-  switch is on.
+  as its child "seeing" beside its other abilities, and its seeing_enabled
+  switch decides whether it perceives (decision D189): on, it is an
+  expected ability, every environment.visual goes to it after the input
+  abilities and its look offer is taken; off, it is sent no stimulus and
+  its offers are not taken.
 
+    initializing -refused-> degraded (final)
+                 -else-> perceiving
     perceiving { watching -environment.visual or look-> next
                  next -look pending-> interpreting
                       -an unmeasured fresh view-> measuring
@@ -20,9 +25,20 @@
                    viewed -> viewing ... -> handing_on } -sight-> settling
                  settling -settle_after_ms-> next }
 
-  This is the original's perceiving; its initializing, detaching and
-  degraded are the attachment protocol, which invoke lifecycle replaces
-  (decision D6): Seeing has no persistent child to wait for.
+  Initializing (decision D185) is the original's constructor refusals,
+  checked on the invoker's <param>s before the eye perceives: a
+  change_threshold outside (0, 1], a duration that is not positive
+  (measure_every_ms, measure_timeout_ms, settle_after_ms, max_view_age_ms,
+  stage_timeout_ms), a measure_every_ms longer than settle_after_ms, and,
+  floppy's own check (the original's measure is an object), a measure
+  that is neither byte_identity nor frame_diff. The first refusal, in that
+  order, ends Seeing in the final state degraded, logged as
+  seeing.degraded with its closed reason, so its invoker gets
+  done.invoke.seeing. Otherwise initializing goes on to the original's
+  perceiving. The original's initializing also attaches its stage children,
+  and its detaching and degraded follow a failed detach: that is the
+  attachment protocol, which invoke lifecycle replaces (decision D6):
+  Seeing has no persistent child to wait for.
 
   Holding (the original _hold): environment.visual {image, media_type,
   kind, source, participants} is taken from wherever perception is,
@@ -112,8 +128,8 @@
   over, the offer is empty and logged).
 
   Logs (closed values only; never a source, a reference, a label, a
-  description or a signature): seeing.view, seeing.measure, seeing.stage
-  and seeing.sight, as above.
+  description or a signature): seeing.degraded, seeing.view,
+  seeing.measure, seeing.stage and seeing.sight, as above.
 
   Contracts: the events it takes reference abilities/schemas/ by
   event:schema (never inline), its own measure.completed, measure.failed
@@ -135,7 +151,7 @@
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
-       version="1.0" datamodel="ecmascript" name="Seeing" initial="perceiving">
+       version="1.0" datamodel="ecmascript" name="Seeing" initial="initializing">
   <datamodel>
     <!-- The invoker's <param>s (the original's constructor defaults). -->
     <data id="change_threshold" expr="0.1"/>
@@ -173,6 +189,23 @@
     <data id="offers_over" expr="false"/>
   </datamodel>
   <script src="seeing.js"/>
+
+  <!-- The original's constructor refusals, in its order. -->
+  <state id="initializing">
+    <transition cond="refusesChangeThreshold()" target="degraded">
+      <log label="seeing.degraded" expr="'change_threshold must be in (0, 1]'"/>
+    </transition>
+    <transition cond="refusesDuration()" target="degraded">
+      <log label="seeing.degraded" expr="refusedDurationReason()"/>
+    </transition>
+    <transition cond="refusesPacing()" target="degraded">
+      <log label="seeing.degraded" expr="'measure_every_ms cannot be longer than settle_after_ms'"/>
+    </transition>
+    <transition cond="refusesMeasure()" target="degraded">
+      <log label="seeing.degraded" expr="'measure must be byte_identity or frame_diff'"/>
+    </transition>
+    <transition target="perceiving"/>
+  </state>
 
   <state id="perceiving" initial="watching">
     <onentry>
@@ -437,4 +470,8 @@
       <transition event="settling.after" cond="isTimer(_event)" target="next"/>
     </state>
   </state>
+
+  <!-- A refused configuration: Seeing ends, and its invoker gets
+       done.invoke.seeing. -->
+  <final id="degraded"/>
 </scxml>

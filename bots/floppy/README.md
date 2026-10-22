@@ -186,8 +186,10 @@ a turn; its offer `bot.ability.seeing.look` is among the turn's choices, and
 a selected look hands on every fresh view. `image` is a reference to a file
 in the directory the run grants the vision service (`media/frame.png` is
 `frame.png` there). Object detection and description (its `detect` and
-`describe` data) are off by default. Off, seeing is sent nothing and
-offers nothing.
+`describe` data) are off by default. Off, the body still invokes seeing,
+but sends it no stimulus, does not take its offers and ignores its ending,
+while activating as while active (decision D189), so the bot behaves as
+before.
 
 Each event the body emits goes to its environment, which writes it as a
 `log` record labelled with its name, its text the event's data as JSON:

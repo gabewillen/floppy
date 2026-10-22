@@ -102,7 +102,7 @@
     </test>
   </assert>
   <assert id="seeing-12" specnum="12" specid="#seeing-12">
-    <![CDATA[A measurement is bounded by `measure_timeout_ms` (2000): when it passes first nothing is handed on and the eye paces.]]>
+    <![CDATA[A measurement is bounded by `measure_timeout_ms` (2000): when it passes first nothing is handed on and the eye paces. The vision service answers within its `<invoke>`, so no positive bound passes first here: `tests/tests/seeing.rs` drives the timeout with a vision stand-in that never answers.]]>
     <test id="210" conformance="mandatory" manual="false">
       <start uri="210/test210.scxml"/>
     </test>
@@ -144,6 +144,42 @@
     </test>
     <test id="241" conformance="mandatory" manual="false">
       <start uri="241/test241.scxml"/>
+    </test>
+  </assert>
+  <assert id="seeing-16" specnum="16" specid="#seeing-16">
+    <![CDATA[Its parameters are checked before it perceives, as the original's constructor checks them: a `change_threshold` outside (0, 1], a `measure_every_ms`, `measure_timeout_ms`, `settle_after_ms`, `max_view_age_ms` or `stage_timeout_ms` that is not positive, a `measure_every_ms` longer than `settle_after_ms`, or a `measure` other than `byte_identity` and `frame_diff` ends it in its final state `degraded`, logging `seeing.degraded` with the first refusal's reason, in that order: it offers nothing, and its invoker gets `done.invoke.seeing`.]]>
+    <test id="250" conformance="mandatory" manual="false">
+      <start uri="250/test250.scxml"/>
+    </test>
+    <test id="251" conformance="mandatory" manual="false">
+      <start uri="251/test251.scxml"/>
+    </test>
+    <test id="252" conformance="mandatory" manual="false">
+      <start uri="252/test252.scxml"/>
+    </test>
+    <test id="253" conformance="mandatory" manual="false">
+      <start uri="253/test253.scxml"/>
+    </test>
+    <test id="254" conformance="mandatory" manual="false">
+      <start uri="254/test254.scxml"/>
+    </test>
+    <test id="255" conformance="mandatory" manual="false">
+      <start uri="255/test255.scxml"/>
+    </test>
+    <test id="256" conformance="mandatory" manual="false">
+      <start uri="256/test256.scxml"/>
+    </test>
+    <test id="257" conformance="mandatory" manual="false">
+      <start uri="257/test257.scxml"/>
+    </test>
+    <test id="258" conformance="mandatory" manual="false">
+      <start uri="258/test258.scxml"/>
+    </test>
+    <test id="259" conformance="mandatory" manual="false">
+      <start uri="259/test259.scxml"/>
+    </test>
+    <test id="260" conformance="mandatory" manual="false">
+      <start uri="260/test260.scxml"/>
     </test>
   </assert>
 </assertions>

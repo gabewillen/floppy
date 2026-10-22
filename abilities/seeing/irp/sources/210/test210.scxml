@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- seeing-12: a measurement that does not answer within the bound hands nothing on; a look still sees the view. -->
+<!-- seeing-12: the vision service answers within its &lt;invoke&gt;: even a 1 ms bound does not pass first, so the first view is handed on before the look sees it. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="seeing" type="scxml" src="../../../seeing.scx">
-    <param name="measure_timeout_ms" expr="0"/>
+    <param name="measure_timeout_ms" expr="1"/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
@@ -17,9 +17,12 @@
       <send event="environment.visual" target="#_seeing"><content expr='{"image": "media/a.png", "media_type": "image/png", "source": "camera-1"}'/></send>
       <send event="bot.ability.seeing.look" target="#_seeing"><content expr="({})"/></send>
     </onentry>
-    <transition event="bot.ability.cognition.input" cond='JSON.stringify(_event.data) === "{\"participants\":[],\"stimulus\":{\"data\":{\"cause\":\"look\",\"participants\":[],\"views\":[{\"age_ms\":0,\"change\":null,\"description\":null,\"image\":\"media/a.png\",\"kind\":null,\"media_type\":\"image/png\",\"objects\":null,\"participants\":[]}]},\"event\":\"bot.ability.seeing.sight\",\"source\":\"seeing\"}}"' target="step2"/>
+    <transition event="bot.ability.cognition.input" cond='JSON.stringify(_event.data) === "{\"participants\":[],\"stimulus\":{\"data\":{\"cause\":\"change\",\"participants\":[],\"views\":[{\"age_ms\":0,\"change\":null,\"description\":null,\"image\":\"media/a.png\",\"kind\":null,\"media_type\":\"image/png\",\"objects\":null,\"participants\":[]}]},\"event\":\"bot.ability.seeing.sight\",\"source\":\"camera-1\"}}"' target="step2"/>
   </state>
   <state id="step2">
+    <transition event="bot.ability.cognition.input" cond='JSON.stringify(_event.data) === "{\"participants\":[],\"stimulus\":{\"data\":{\"cause\":\"look\",\"participants\":[],\"views\":[{\"age_ms\":5000,\"change\":null,\"description\":null,\"image\":\"media/a.png\",\"kind\":null,\"media_type\":\"image/png\",\"objects\":null,\"participants\":[]}]},\"event\":\"bot.ability.seeing.sight\",\"source\":\"seeing\"}}"' target="step3"/>
+  </state>
+  <state id="step3">
     <transition target="pass"/>
   </state>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>

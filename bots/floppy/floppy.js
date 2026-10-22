@@ -37,6 +37,11 @@ function expectedAbilities() {
   return seeing_enabled ? expected.concat(['seeing']) : expected.slice();
 }
 
+// Whether the eye is off: its ending is then ignored.
+function isSeeingOff() {
+  return !seeing_enabled;
+}
+
 // Whether the offers _event carries are taken: seeing's only while it is on.
 function isTakenOffer(_event) {
   return seeing_enabled || _event.data.ability !== 'seeing';

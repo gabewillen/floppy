@@ -1,5 +1,5 @@
 {
-  "clock": "logical",
+  "clock": "wall",
   "answers": [
     {
       "path": "/chat/completions",
