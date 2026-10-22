@@ -79,5 +79,6 @@ scx run --env-file .env \
   <document>
 ```
 
-The run also needs `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (no default
-backend, decision D31).
+The run also needs `FLOPPY_BASE_URL` (no default backend, decision D31),
+and `FLOPPY_API_KEY` unless the backend is keyless: without a held key the
+request carries no `authorization` header (decision D127).

@@ -84,15 +84,18 @@
 //! or images over their bound reject the start like any malformed parameter:
 //! nothing is sent. Documents never hold the image's bytes.
 //!
-//! The `env` slots ([`API_KEY_SLOT`], [`BASE_URL_SLOT`]), both required at
-//! run time: `env:apikey="NAME"` (sent as a bearer token) and
+//! The `env` slots ([`API_KEY_SLOT`], [`BASE_URL_SLOT`]):
 //! `env:baseurl="NAME"` (the API base URL, for example
-//! `http://192.168.2.89:8000/v1`; it must not end with `/`). The package
+//! `http://192.168.2.89:8000/v1`; it must not end with `/`), required at
+//! run time, and `env:apikey="NAME"` (sent as a bearer token). The package
 //! declares no `http-origins`: the one origin a request may reach is the one
 //! the `baseurl` value supplies, which the host admits because the run, not
-//! the document or the component, chose it. When either slot names no
-//! variable the run holds, the invocation fails fast: it sends nothing and
-//! returns [`FAILED_EVENT`] with `unconfigured` ([`endpoint`]). The
+//! the document or the component, chose it. When the `baseurl` slot names
+//! no variable the run holds, the invocation fails fast: it sends nothing
+//! and returns [`FAILED_EVENT`] with `unconfigured` ([`endpoint`]). When
+//! only the `apikey` slot names none, the backend is keyless (a local
+//! server that takes no key, as the original's keyless client asks one):
+//! the request is sent with no `authorization` header (decision D127). The
 //! component holds opaque references only; the host substitutes the values
 //! into the one admitted request.
 //!
@@ -142,8 +145,8 @@
 //!
 //! # The request
 //!
-//! `POST {base}/chat/completions` with `authorization: Bearer <apikey>`,
-//! `content-type: application/json`, `accept: application/json` (or
+//! `POST {base}/chat/completions` with `authorization: Bearer <apikey>`
+//! (none for a keyless backend), `content-type: application/json`, `accept: application/json` (or
 //! `text/event-stream` when streamed), and a body
 //! that is canonical JSON ([`scxml_event_schema::canonical_json`]: compact,
 //! members sorted by key), so one request always produces the same bytes
@@ -515,7 +518,7 @@ pub struct Generation {
 /// The closed failure codes of [`FAILED_EVENT`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FailureCode {
-    /// The `apikey` or the `baseurl` slot names no variable the run holds.
+    /// The `baseurl` slot names no variable the run holds.
     Unconfigured,
     /// The transport failed: no response.
     Transport,
@@ -1246,26 +1249,28 @@ fn max_completion_tokens_parameter(value: Option<&Data>) -> Result<Option<u64>, 
 }
 
 /// The invocation's endpoint, `(baseurl, apikey)`: the references the host
-/// handed for the two slots. There is no default backend, so both are
-/// required.
+/// handed for the two slots. There is no default backend, so the base URL
+/// is required; without a key the backend is keyless and the request
+/// carries no `authorization` header (decision D127).
 ///
 /// # Errors
 ///
-/// [`FailureCode::Unconfigured`] when either slot names no variable the run
-/// holds (the host hands no reference for it): nothing is sent.
+/// [`FailureCode::Unconfigured`] when the `baseurl` slot names no variable
+/// the run holds (the host hands no reference for it): nothing is sent.
 pub const fn endpoint(
     base_url: Option<u32>,
     api_key: Option<u32>,
-) -> Result<(u32, u32), FailureCode> {
-    match (base_url, api_key) {
-        (Some(base_url), Some(api_key)) => Ok((base_url, api_key)),
-        _ => Err(FailureCode::Unconfigured),
+) -> Result<(u32, Option<u32>), FailureCode> {
+    match base_url {
+        Some(base_url) => Ok((base_url, api_key)),
+        None => Err(FailureCode::Unconfigured),
     }
 }
 
 /// The Chat Completions request: `POST {base}/chat/completions` (`base` is
 /// the `baseurl` slot's reference) with the `apikey` slot's reference as a
-/// bearer key and a canonical JSON body: `messages`, `model`,
+/// bearer key (no `authorization` header without one) and a canonical JSON
+/// body: `messages`, `model`,
 /// `reasoning_effort`, `stream` (`true`) and `stream_options`
 /// (`{"include_usage": true}`, so the last chunk carries the usage) when
 /// streamed, and, with a schema, `tools` (one function, the schema its
@@ -1275,7 +1280,7 @@ pub const fn endpoint(
 #[must_use]
 pub fn build_request(
     base_url: u32,
-    api_key: u32,
+    api_key: Option<u32>,
     stream: Option<u32>,
     generation: &Generation,
 ) -> Request {
@@ -1327,29 +1332,34 @@ pub fn build_request(
             Part::Reference(base_url),
             Part::Literal(CHAT_COMPLETIONS_PATH.into()),
         ],
-        headers: vec![
-            (
-                "authorization".into(),
-                vec![Part::Literal("Bearer ".into()), Part::Reference(api_key)],
-            ),
-            (
-                "content-type".into(),
-                vec![Part::Literal("application/json".into())],
-            ),
-            (
-                "accept".into(),
-                vec![Part::Literal(
-                    if generation.stream {
-                        "text/event-stream"
-                    } else if stream.is_some() {
-                        "application/json, text/event-stream"
-                    } else {
-                        "application/json"
-                    }
-                    .into(),
-                )],
-            ),
-        ],
+        headers: api_key
+            .map(|api_key| {
+                (
+                    "authorization".to_owned(),
+                    vec![Part::Literal("Bearer ".into()), Part::Reference(api_key)],
+                )
+            })
+            .into_iter()
+            .chain([
+                (
+                    "content-type".into(),
+                    vec![Part::Literal("application/json".into())],
+                ),
+                (
+                    "accept".into(),
+                    vec![Part::Literal(
+                        if generation.stream {
+                            "text/event-stream"
+                        } else if stream.is_some() {
+                            "application/json, text/event-stream"
+                        } else {
+                            "application/json"
+                        }
+                        .into(),
+                    )],
+                ),
+            ])
+            .collect(),
         body: canonical_json(&body).into_bytes(),
         stream: stream.filter(|_| !generation.stream),
         request_bytes,

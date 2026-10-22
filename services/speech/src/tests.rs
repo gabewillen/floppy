@@ -305,7 +305,7 @@ fn a_decoding_is_a_multipart_transcription_request() {
     let Operation::Decode(decoding) = decode() else {
         panic!("a decoding");
     };
-    let request = decoding_request(2, 1, &decoding, b"RIFF-audio");
+    let request = decoding_request(2, Some(1), &decoding, b"RIFF-audio");
     assert_eq!(
         request.url,
         [
@@ -340,7 +340,7 @@ fn the_boundary_never_occurs_in_the_audio() {
     let Operation::Decode(decoding) = decode() else {
         panic!("a decoding");
     };
-    let request = decoding_request(2, 1, &decoding, b"..floppy-speech-00000000..");
+    let request = decoding_request(2, Some(1), &decoding, b"..floppy-speech-00000000..");
     assert_eq!(
         request.headers[1].1,
         [Part::Literal(
@@ -354,7 +354,7 @@ fn an_encoding_is_a_speech_request() {
     let Operation::Encode(encoding) = encode(&[]) else {
         panic!("an encoding");
     };
-    let request = encoding_request(2, 1, &encoding);
+    let request = encoding_request(2, Some(1), &encoding);
     assert_eq!(
         request.url,
         [Part::Reference(2), Part::Literal(SPEECH_PATH.into())]
@@ -371,7 +371,7 @@ fn an_elevenlabs_encoding_is_its_text_to_speech_request() {
     let Operation::Encode(encoding) = encode(&[("provider", text("elevenlabs"))]) else {
         panic!("an encoding");
     };
-    let request = encoding_request(2, 1, &encoding);
+    let request = encoding_request(2, Some(1), &encoding);
     assert_eq!(
         request.url,
         [
@@ -569,8 +569,11 @@ fn every_event_satisfies_its_published_schema() {
     }
 }
 
+/// The base URL is required (no default backend), the key is not: every
+/// request to a keyless backend is the keyed one without its key header
+/// (decision D127).
 #[test]
-fn both_slots_are_required_and_the_package_declares_no_origin() {
+fn the_base_url_is_required_and_a_keyless_request_has_no_key_header() {
     let manifest = scxml_validator_core::ServicePackageManifest::from_json(include_bytes!(
         "../package/speech.service.json"
     ))
@@ -579,9 +582,54 @@ fn both_slots_are_required_and_the_package_declares_no_origin() {
         manifest.http_origins.is_empty(),
         "no default backend: the baseurl value supplies the one origin"
     );
-    assert_eq!(endpoint(Some(2), Some(1)), Ok((2, 1)));
-    for (base_url, api_key) in [(None, Some(1)), (Some(2), None), (None, None)] {
-        assert_eq!(endpoint(base_url, api_key), Err(FailureCode::Unconfigured));
+    assert_eq!(endpoint(Some(2), Some(1)), Ok((2, Some(1))));
+    assert_eq!(endpoint(Some(2), None), Ok((2, None)));
+    for api_key in [Some(1), None] {
+        assert_eq!(endpoint(None, api_key), Err(FailureCode::Unconfigured));
+    }
+    let (Operation::Decode(decoding), Operation::Decode(gemini_decoding)) =
+        (decode(), gemini_decode())
+    else {
+        panic!("decodings");
+    };
+    let encodings: Vec<Encoding> = [
+        encode(&[]),
+        encode(&[("provider", text("elevenlabs"))]),
+        gemini_encode("audio/wav"),
+    ]
+    .into_iter()
+    .map(|operation| match operation {
+        Operation::Encode(encoding) => encoding,
+        _ => panic!("an encoding"),
+    })
+    .collect();
+    let built = |api_key: Option<u32>| -> Vec<Request> {
+        let mut requests = vec![
+            decoding_request(2, api_key, &decoding, b"RIFF-audio"),
+            decoding_request(2, api_key, &gemini_decoding, b"RIFF-audio"),
+            voice::detection_request(2, api_key, "silero-vad", &[0.0, 0.5]),
+            voice::diarization_request(2, api_key, "pyannote", "utterance.wav", b"RIFF"),
+            voice::embedding_request(2, api_key, "wespeaker", b"RIFF"),
+        ];
+        requests.extend(
+            encodings
+                .iter()
+                .map(|encoding| encoding_request(2, api_key, encoding)),
+        );
+        requests
+    };
+    for (keyed, keyless) in built(Some(1)).into_iter().zip(built(None)) {
+        let key = ["authorization", "xi-api-key", "x-goog-api-key"];
+        assert!(key.contains(&keyed.headers[0].0.as_str()), "{keyed:?}");
+        assert!(
+            keyless
+                .headers
+                .iter()
+                .all(|(name, _)| !key.contains(&name.as_str())),
+            "{keyless:?}"
+        );
+        assert_eq!(keyless.headers, keyed.headers[1..]);
+        assert_eq!((keyless.url, keyless.body), (keyed.url, keyed.body));
     }
 }
 
@@ -637,7 +685,7 @@ fn a_gemini_decoding_is_an_interaction_with_the_audio_inline() {
         panic!("a decoding");
     };
     assert_eq!(decoding.media_type, GEMINI_AUDIO_MEDIA_TYPE);
-    let request = decoding_request(2, 1, &decoding, b"RIFF-audio");
+    let request = decoding_request(2, Some(1), &decoding, b"RIFF-audio");
     assert_eq!(
         request.url,
         [
@@ -667,7 +715,7 @@ fn a_gemini_encoding_is_an_interaction_answering_audio() {
     let Operation::Encode(encoding) = gemini_encode("audio/pcm") else {
         panic!("an encoding");
     };
-    let request = encoding_request(2, 1, &encoding);
+    let request = encoding_request(2, Some(1), &encoding);
     assert_eq!(
         request.url,
         [

@@ -164,7 +164,7 @@ fn a_prompt_with_a_system_message_builds_the_canonical_request() {
         ("prompt", text("Say hello.")),
     ])
     .expect("valid parameters");
-    let request = build_request(2, 1, None, &generation);
+    let request = build_request(2, Some(1), None, &generation);
     assert_eq!(
         request.url,
         [
@@ -200,7 +200,7 @@ fn a_streamed_generation_asks_for_server_sent_events() {
         ("stream", Data::Bool(true)),
     ])
     .expect("valid parameters");
-    let request = build_request(2, 1, None, &generation);
+    let request = build_request(2, Some(1), None, &generation);
     assert_eq!(
         String::from_utf8(request.body).expect("UTF-8"),
         r#"{"messages":[{"content":"p","role":"user"}],"model":"m","reasoning_effort":"low","stream":true,"stream_options":{"include_usage":true}}"#
@@ -235,7 +235,7 @@ fn a_streamed_generation_asks_for_server_sent_events() {
 #[test]
 fn a_requests_bytes_are_its_body_without_the_streaming_members() {
     let plain = parse(&[("model", text("m")), ("prompt", text("héllo"))]).expect("valid");
-    let request = build_request(2, 1, None, &plain);
+    let request = build_request(2, Some(1), None, &plain);
     assert_eq!(request.request_bytes, request.body.len());
     let streamed = parse(&[
         ("model", text("m")),
@@ -243,13 +243,13 @@ fn a_requests_bytes_are_its_body_without_the_streaming_members() {
         ("stream", Data::Bool(true)),
     ])
     .expect("valid");
-    let streamed = build_request(2, 1, None, &streamed);
+    let streamed = build_request(2, Some(1), None, &streamed);
     assert_eq!(streamed.request_bytes, request.body.len());
     assert!(streamed.body.len() > streamed.request_bytes);
     // The run's stream slot adds its member to the body as it is sent,
     // never to the count.
     assert_eq!(
-        build_request(2, 1, Some(3), &plain).request_bytes,
+        build_request(2, Some(1), Some(3), &plain).request_bytes,
         request.body.len()
     );
     // The result carries the bytes it is given.
@@ -315,7 +315,7 @@ fn a_replys_usage_is_the_results_usage() {
 #[test]
 fn the_runs_stream_slot_decides_the_stream_member() {
     let generation = parse(&[("model", text("m")), ("prompt", text("p"))]).expect("valid");
-    let request = build_request(2, 1, Some(3), &generation);
+    let request = build_request(2, Some(1), Some(3), &generation);
     assert_eq!(
         request.body_parts(),
         [
@@ -332,7 +332,7 @@ fn the_runs_stream_slot_decides_the_stream_member() {
         vec![Part::Literal("application/json, text/event-stream".into())]
     )));
     // Without the slot the call is not streamed.
-    let plain = build_request(2, 1, None, &generation);
+    let plain = build_request(2, Some(1), None, &generation);
     assert_eq!(
         plain.body_parts(),
         [Part::Literal(
@@ -346,7 +346,7 @@ fn the_runs_stream_slot_decides_the_stream_member() {
         ("stream", Data::Bool(true)),
     ])
     .expect("valid");
-    assert_eq!(build_request(2, 1, Some(3), &streamed).stream, None);
+    assert_eq!(build_request(2, Some(1), Some(3), &streamed).stream, None);
 }
 
 /// `max_completion_tokens` bounds a reply's tokens (decision D101): a model
@@ -360,7 +360,7 @@ fn max_completion_tokens_is_sent_and_bounded() {
     ])
     .expect("valid");
     let body: Json =
-        serde_json::from_slice(&build_request(2, 1, None, &generation).body).expect("JSON");
+        serde_json::from_slice(&build_request(2, Some(1), None, &generation).body).expect("JSON");
     assert_eq!(body["max_completion_tokens"], 8192);
     for bad in [number(0.0), number(1.5), number(2_000_000.0), text("8192")] {
         assert!(
@@ -388,7 +388,7 @@ fn a_schema_is_the_one_tool_and_a_call_is_required() {
     ])
     .expect("valid parameters");
     let body: Json =
-        serde_json::from_slice(&build_request(2, 1, None, &generation).body).expect("JSON");
+        serde_json::from_slice(&build_request(2, Some(1), None, &generation).body).expect("JSON");
     assert!(body.get("response_format").is_none(), "{body}");
     assert_eq!(body["tools"].as_array().map(Vec::len), Some(1), "{body}");
     assert_eq!(body["tools"][0]["type"], "function");
@@ -408,7 +408,7 @@ fn a_schema_is_the_one_tool_and_a_call_is_required() {
     ])
     .expect("valid parameters");
     let text_body: Json =
-        serde_json::from_slice(&build_request(2, 1, None, &from_text).body).expect("JSON");
+        serde_json::from_slice(&build_request(2, Some(1), None, &from_text).body).expect("JSON");
     assert_eq!(
         text_body["tools"][0]["function"]["name"],
         DEFAULT_SCHEMA_NAME
@@ -417,7 +417,7 @@ fn a_schema_is_the_one_tool_and_a_call_is_required() {
     // Without a schema, no tool is offered.
     let plain = parse(&[("model", text("m")), ("prompt", text("Say."))]).expect("valid");
     let plain_body: Json =
-        serde_json::from_slice(&build_request(2, 1, None, &plain).body).expect("JSON");
+        serde_json::from_slice(&build_request(2, Some(1), None, &plain).body).expect("JSON");
     assert!(plain_body.get("tools").is_none() && plain_body.get("tool_choice").is_none());
 }
 
@@ -431,7 +431,7 @@ fn the_schemas_root_description_is_the_functions_and_the_rest_its_parameters() {
     ])
     .expect("valid parameters");
     let body: Json =
-        serde_json::from_slice(&build_request(2, 1, None, &generation).body).expect("JSON");
+        serde_json::from_slice(&build_request(2, Some(1), None, &generation).body).expect("JSON");
     assert_eq!(body["tools"][0]["function"]["description"], "Pick one.");
     // The rest is sent as given: nothing is normalized.
     assert_eq!(
@@ -450,7 +450,8 @@ fn the_schemas_root_description_is_the_functions_and_the_rest_its_parameters() {
         ("schema", text(SCHEMA)),
     ])
     .expect("valid parameters");
-    let body: Json = serde_json::from_slice(&build_request(2, 1, None, &plain).body).expect("JSON");
+    let body: Json =
+        serde_json::from_slice(&build_request(2, Some(1), None, &plain).body).expect("JSON");
     assert!(
         body["tools"][0]["function"].get("description").is_none(),
         "{body}"
@@ -466,7 +467,7 @@ fn reasoning_effort_is_sent_as_given() {
     ])
     .expect("valid parameters");
     let body: Json =
-        serde_json::from_slice(&build_request(2, 1, None, &generation).body).expect("JSON");
+        serde_json::from_slice(&build_request(2, Some(1), None, &generation).body).expect("JSON");
     assert_eq!(body["reasoning_effort"], "high");
 }
 
@@ -499,7 +500,7 @@ fn an_image_part_is_sent_as_an_image_url_with_its_data_url() {
         &[("/media/page 1.png", png(b"ab"))],
     )
     .expect("valid parameters");
-    let request = build_request(0, 1, None, &generation);
+    let request = build_request(0, Some(1), None, &generation);
     assert_eq!(
         String::from_utf8(request.body).expect("UTF-8"),
         r#"{"messages":[{"content":[{"text":"Read all visible text in this image. Return only the text.","type":"text"},{"image_url":{"url":"data:image/png;base64,iVBORw0KGgphYg=="},"type":"image_url"}],"role":"user"}],"model":"m","reasoning_effort":"low"}"#,
@@ -1321,8 +1322,11 @@ fn every_failure_code_and_both_events_satisfy_the_builder_event_schemas() {
     }
 }
 
+/// The base URL is required (no default backend), the key is not: a
+/// keyless backend is asked with no `authorization` header (decision
+/// D127).
 #[test]
-fn both_slots_are_required_and_the_package_declares_no_origin() {
+fn the_base_url_is_required_and_the_package_declares_no_origin() {
     let manifest = scxml_validator_core::ServicePackageManifest::from_json(include_bytes!(
         "../package/generate.service.json"
     ))
@@ -1331,14 +1335,28 @@ fn both_slots_are_required_and_the_package_declares_no_origin() {
         manifest.http_origins.is_empty(),
         "no default backend: the baseurl value supplies the one origin"
     );
-    assert_eq!(endpoint(Some(2), Some(1)), Ok((2, 1)));
-    for (base_url, api_key) in [(None, Some(1)), (Some(2), None), (None, None)] {
+    assert_eq!(endpoint(Some(2), Some(1)), Ok((2, Some(1))));
+    assert_eq!(endpoint(Some(2), None), Ok((2, None)));
+    for api_key in [Some(1), None] {
         assert_eq!(
-            endpoint(base_url, api_key),
+            endpoint(None, api_key),
             Err(FailureCode::Unconfigured),
-            "{base_url:?} {api_key:?}"
+            "{api_key:?}"
         );
     }
+    let generation = parse(&[("model", text("m")), ("prompt", text("p"))]).expect("valid");
+    let keyless = build_request(2, None, None, &generation);
+    let keyed = build_request(2, Some(1), None, &generation);
+    assert!(
+        keyless
+            .headers
+            .iter()
+            .all(|(name, _)| name != "authorization"),
+        "{:?}",
+        keyless.headers
+    );
+    assert_eq!(keyless.headers, keyed.headers[1..]);
+    assert_eq!((keyless.url, keyless.body), (keyed.url, keyed.body));
 }
 
 #[test]

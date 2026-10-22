@@ -274,7 +274,7 @@ fn detection_sends_sixteen_kilohertz_mono_samples() {
     assert_eq!(samples, vec![0.25, 0.25]);
     let samples = vad_samples(&pcm(&[0, 16_384, -32_768]), 16_000, 1);
     assert_eq!(samples, vec![0.0, 0.5, -1.0]);
-    let request = detection_request(3, 4, "silero-vad", &samples);
+    let request = detection_request(3, Some(4), "silero-vad", &samples);
     assert_eq!(
         request.url,
         vec![Part::Reference(3), Part::Literal("/vad".into())]
@@ -359,7 +359,7 @@ fn detected_spans_are_clamped_into_the_clip_and_ordered() {
 
 #[test]
 fn diarization_uploads_a_wav_and_clips_each_segment() {
-    let request = diarization_request(1, 2, "pyannote-diarization", "utterance.wav", b"RIFF");
+    let request = diarization_request(1, Some(2), "pyannote-diarization", "utterance.wav", b"RIFF");
     let body = String::from_utf8(request.body).expect("UTF-8");
     assert!(body.contains("name=\"model\"\r\n\r\npyannote-diarization\r\n"));
     assert!(body.contains("name=\"response_format\"\r\n\r\njson\r\n"));
@@ -424,7 +424,7 @@ fn identification_embeds_each_segment() {
     assert_eq!(base64(b"f"), "Zg==");
     assert_eq!(base64(b"fo"), "Zm8=");
     assert_eq!(base64(b"foobar"), "Zm9vYmFy");
-    let request = embedding_request(5, 6, "voice-detect-wespeaker-resnet34", b"RIFF");
+    let request = embedding_request(5, Some(6), "voice-detect-wespeaker-resnet34", b"RIFF");
     assert_eq!(
         request.url,
         vec![Part::Reference(5), Part::Literal("/voice/embed".into())]

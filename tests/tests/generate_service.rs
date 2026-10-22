@@ -629,8 +629,11 @@ fn malformed_parameters_reject_the_start_and_send_nothing() {
     assert!(mock.received().is_empty(), "nothing is sent");
 }
 
+/// A run that holds a base URL and no key asks a keyless backend: the
+/// request carries no `authorization` header at all, as the original's
+/// keyless client asks one (decision D127).
 #[test]
-fn without_a_granted_key_nothing_is_sent() {
+fn without_a_held_key_the_request_carries_no_authorization() {
     let mock = Mock::start();
     let env = env_file_with(
         "nokey",
@@ -642,10 +645,15 @@ fn without_a_granted_key_nothing_is_sent() {
     let records = &finished.records;
     assert_eq!(
         logs(records),
-        labelled(&[("failed", "unconfigured"), ("final", "done")]),
+        labelled(&[("reply", "Hello from the fake backend!"), ("final", "done")]),
         "{records:?}"
     );
-    assert!(mock.received().is_empty(), "no request without a key");
+    let received = mock.received();
+    assert_eq!(received.len(), 1, "exactly one request");
+    assert_eq!(
+        received[0].authorization, None,
+        "a keyless request has no authorization header"
+    );
 }
 
 /// The package declares no `http-origins`, so the one origin a request may
@@ -745,22 +753,24 @@ fn the_consent_lists_each_service_and_where_each_variable_goes_and_never_a_value
 }
 
 #[test]
-fn a_key_named_only_by_another_invoke_is_absent_and_nothing_is_sent() {
+fn a_key_named_only_by_another_invoke_is_absent_and_never_sent() {
     let mock = Mock::start();
     let env = env_file("out-of-scope", &format!("{}/text/v1", mock.origin));
     // Only the decision invocation names the key: the generate invocation
     // gets no reference for it and its apikey slot is absent, exactly as if
-    // the run held no value.
+    // the run held no value, so it asks keyless (decision D127).
     let finished = open(&args(&env), &two_services(TEXT_PARAMS));
     let records = &finished.records;
     assert_eq!(
         logs(records),
-        labelled(&[("failed", "unconfigured"), ("final", "done")]),
+        labelled(&[("reply", "Hello from the fake backend!"), ("final", "done")]),
         "{records:?}"
     );
-    assert!(
-        mock.received().is_empty(),
-        "no request without an in-scope key"
+    let received = mock.received();
+    assert_eq!(received.len(), 1, "exactly one request");
+    assert_eq!(
+        received[0].authorization, None,
+        "the out-of-scope key never reaches the request"
     );
 }
 
