@@ -50,6 +50,14 @@ const IGNORE: &str = "bot.ability.cognition.ignore";
 const RESPOND: &str = "bot.ability.communication.respond";
 /// The deliberative handoff the intuition tier is offered (decision D144).
 const HANDOFF: &str = "bot.ability.reasoning.input";
+/// An 8 s inactivity bound for reasoning, with the reflex tier (autonomy
+/// and the decision layer) given its own 30 s step bound (decision D140), so
+/// a loaded machine's slow decision never meets reasoning's bound.
+/// The reflex tier's own 30 s step bound alone, for tests that shorten the
+/// stage bounds in the cognition's `<data>` to bound reasoning.
+const SLOW_REFLEX_BOUNDS: &str = "({reflex_timeout_ms: 30000})";
+const STALLED_REASONING_BOUNDS: &str =
+    "({child_operation_timeout_ms: 8000, reflex_timeout_ms: 30000})";
 /// A model context whose budget (three bytes a token) holds the first
 /// turn's prompt but not the second's with its recalled episode.
 const FITTED_TOKENS: u32 = 2_200;
@@ -1416,7 +1424,7 @@ fn reasoned_turns_recalled(database: &str, test: Option<&str>) {
     // The first turn's one episode, a cognition:cognitive_episode (the
     // original episodes.CognitiveEpisode).
     let episode = format!(
-        "    <cognition:cognitive_episode stimulus_name=\"bot.input\">\n      <focus_candidates count=\"0\" />\n      <output count=\"1\">\n        <cognition:event target=\"session.floppy.cognition\" event=\"{IGNORE}\" reason=\"nothing to say\">\n          <data />\n        </cognition:event>\n      </output>\n    </cognition:cognitive_episode>\n"
+        "    <cognition:cognitive_episode stimulus_name=\"bot.input\">\n      <focus_candidates count=\"0\" />\n      <output count=\"1\">\n        <cognition:event target=\"session.floppy.cognition\" event=\"{IGNORE}\" reason=\"nothing to say\" />\n      </output>\n    </cognition:cognitive_episode>\n"
     );
     assert!(
         prompts[1].contains(&format!(
@@ -1829,7 +1837,7 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
 /// reasoning selects the very action the escalated decision layer already sent
 /// (respond with `hi`, the decision layer's environment action), it is sent again,
 /// after it, as the original's reasoning dispatches it again; the output
-/// is reasoning's.
+/// is the decision layer's acted, then reasoning's.
 #[test]
 fn reasoning_sends_its_selections_after_the_environment_actions() {
     let mock = Mock::start();
@@ -1850,6 +1858,7 @@ fn reasoning_sends_its_selections_after_the_environment_actions() {
     assert_eq!(
         json_text(&records, "harness.output"),
         json!({"turn": 1, "output": [
+            {"event": RESPOND, "data": {"text": "hi"}, "target": "session"},
             {"event": RESPOND, "data": {"text": "hi"}, "reason": "answer", "target": "session"},
         ]})
     );
@@ -1948,7 +1957,7 @@ fn a_decision_layer_failure_cascades_to_reasoning() {
     close(run, &mock, "a_decision_layer_failure_cascades_to_reasoning");
 }
 
-/// A decision service the run gives no key answers `unconfigured`, and the
+/// A decision service the run gives no base URL answers `unconfigured`, and the
 /// turn goes on to reasoning, which answers it.
 #[test]
 fn an_unconfigured_decision_layer_cascades_to_reasoning() {
@@ -1958,7 +1967,7 @@ fn an_unconfigured_decision_layer_cascades_to_reasoning() {
     std::fs::write(
         &bot.env,
         env.lines()
-            .filter(|line| !line.starts_with("TYPESAFE_API_KEY="))
+            .filter(|line| !line.starts_with("TYPESAFE_"))
             .fold(String::new(), |kept, line| kept + line + "\n"),
     )
     .expect("the env file is writable");
@@ -1967,7 +1976,8 @@ fn an_unconfigured_decision_layer_cascades_to_reasoning() {
     let records = run.until(WAIT, turn_ended);
     assert_eq!(
         texts(&records, "cognition.cascaded"),
-        strings(&[r#"{"stage":"reflex","reason":"the decision failed (unconfigured)"}"#])
+        strings(&[r#"{"stage":"reflex","reason":"the decision failed (unconfigured)"}"#]),
+        "{records:?}"
     );
     assert_eq!(
         texts(&records, "cognition.stage")
@@ -2055,7 +2065,7 @@ fn a_reasoning_reply_that_keeps_streaming_outlasts_the_inactivity_bound() {
         )],
     );
     streaming(&bot);
-    let mut run = start(&bot);
+    let mut run = start_activated(&bot, &[("bounds", SLOW_REFLEX_BOUNDS)]);
     say(&mut run, "hello");
     let records = run.until(WAIT, turn_ended);
     assert_eq!(
@@ -2082,7 +2092,7 @@ fn a_reasoning_reply_that_keeps_streaming_outlasts_the_inactivity_bound() {
 fn a_reasoning_reply_that_is_not_streamed_is_bounded_by_the_backstop_alone() {
     let mock = Mock::start();
     let bot = layout(&mock, Decision::Abstain, Generation::Slow, &[]);
-    let mut run = start_activated(&bot, &[("bounds", "({child_operation_timeout_ms: 8000})")]);
+    let mut run = start_activated(&bot, &[("bounds", STALLED_REASONING_BOUNDS)]);
     say(&mut run, "hello");
     let records = run.until(WAIT, turn_ended);
     assert_eq!(
@@ -2108,7 +2118,7 @@ fn a_reasoning_reply_the_run_does_not_stream_is_bounded_by_the_backstop_alone() 
     let mock = Mock::start();
     let bot = layout(&mock, Decision::Abstain, Generation::Slow, &[]);
     set_stream(&bot, "false");
-    let mut run = start_activated(&bot, &[("bounds", "({child_operation_timeout_ms: 8000})")]);
+    let mut run = start_activated(&bot, &[("bounds", STALLED_REASONING_BOUNDS)]);
     say(&mut run, "hello");
     let records = run.until(WAIT, turn_ended);
     assert_eq!(
@@ -2135,7 +2145,7 @@ fn a_reasoning_reply_that_stalls_fails_its_turn_at_the_inactivity_bound() {
     let mock = Mock::start();
     let bot = layout(&mock, Decision::Abstain, Generation::Stall, &[]);
     streaming(&bot);
-    let mut run = start_activated(&bot, &[("bounds", "({child_operation_timeout_ms: 8000})")]);
+    let mut run = start_activated(&bot, &[("bounds", STALLED_REASONING_BOUNDS)]);
     say(&mut run, "hello");
     let records = until_turn_ended(&run, 1);
     assert_eq!(
@@ -2158,7 +2168,7 @@ fn a_reasoning_reply_of_keep_alive_comments_only_fails_its_turn_at_the_inactivit
     let mock = Mock::start();
     let bot = layout(&mock, Decision::Abstain, Generation::Pings, &[]);
     streaming(&bot);
-    let mut run = start_activated(&bot, &[("bounds", "({child_operation_timeout_ms: 8000})")]);
+    let mut run = start_activated(&bot, &[("bounds", STALLED_REASONING_BOUNDS)]);
     say(&mut run, "hello");
     let records = until_turn_ended(&run, 1);
     assert_eq!(
@@ -2186,7 +2196,7 @@ fn a_reasoning_reply_that_streams_past_the_ceiling_fails_its_turn() {
         )],
     );
     streaming(&bot);
-    let mut run = start(&bot);
+    let mut run = start_activated(&bot, &[("bounds", SLOW_REFLEX_BOUNDS)]);
     say(&mut run, "hello");
     let records = until_turn_ended(&run, 1);
     assert_eq!(
