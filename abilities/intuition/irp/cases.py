@@ -175,6 +175,6 @@ S.case(160, 7, "an answer counting many tokens teaches fewer bytes a token.",
 S.case(161, 7, "an answer counting few tokens teaches nothing: bytes a token stay 3.",
        [sent("bot.say"), done(16, True, "none", "_event.data.bytes_per_token === 3")],
        params=run([SAY], turn=16), backend=decided({"bot.say": 0.9, PASS: 0.1}))
-S.case(162, 7, "a request over max_context_tokens is fitted and still sent.",
+S.case(162, 7, "a request over max_context_tokens is still sent: it cannot fit, and the turn is handled.",
        [sent("bot.say"), done(17, True, "none", selected(("bot.say", {})))],
        params=run([SAY], turn=17, max_context_tokens=1), backend=decided({"bot.say": 0.9, PASS: 0.1}))

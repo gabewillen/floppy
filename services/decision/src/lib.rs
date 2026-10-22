@@ -705,7 +705,7 @@ impl ContextFit {
 /// How a request was fitted to a model's context (the reference
 /// `ContextFitOutcome`).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum FitOutcome {
+pub enum ContextFitOutcome {
     /// Sent whole.
     Fit,
     /// The selection's instructions were cut to fit.
@@ -714,7 +714,7 @@ pub enum FitOutcome {
     Overflow,
 }
 
-impl FitOutcome {
+impl ContextFitOutcome {
     /// The wire name.
     #[must_use]
     pub const fn name(self) -> &'static str {
@@ -1116,7 +1116,7 @@ pub struct Prepared {
     fit: Option<ContextFit>,
     default_instructions: &'static str,
     /// The body bytes and fit of the request last built ([`Prepared::request`]).
-    sent: Option<(usize, Option<FitOutcome>)>,
+    sent: Option<(usize, Option<ContextFitOutcome>)>,
 }
 
 #[derive(Debug)]
@@ -1374,7 +1374,7 @@ impl Prepared {
             backend.request(batch, api_key, base.clone())
         };
         let mut request = backend.request(&self.batch, api_key, base.clone());
-        let mut outcome = FitOutcome::Fit;
+        let mut outcome = ContextFitOutcome::Fit;
         if request.body.len() > budget {
             let lines: Vec<String> = self
                 .batch
@@ -1403,9 +1403,9 @@ impl Prepared {
                 (default, built)
             });
             outcome = if built.body.len() <= budget {
-                FitOutcome::Cut
+                ContextFitOutcome::Cut
             } else {
-                FitOutcome::Overflow
+                ContextFitOutcome::Overflow
             };
             if let Some(selection) = self.batch.questions.first_mut() {
                 selection.instructions = instructions;

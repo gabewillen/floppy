@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- intuition-7: a request over max_context_tokens is fitted and still sent. -->
+<!-- intuition-7: a request over max_context_tokens is still sent: it cannot fit, and the turn is handled. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="intuition" type="scxml" src="../../../intuition.scx">
