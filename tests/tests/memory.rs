@@ -25,6 +25,7 @@
 
 mod support;
 
+use std::fmt::Write as _;
 use std::path::Path;
 use std::time::Duration;
 
@@ -504,7 +505,7 @@ fn every_recall_reads_the_most_recent_window_oldest_first() {
 /// cut, conversation and whether its time is UTC) and `failed`, ending
 /// after `answers` reads answered or failed.
 fn stm_harness(database: &str, params: &str, stages: &[String], answers: usize) -> String {
-    let mut staged = String::new();
+    let mut transitions = String::new();
     for (n, stage) in stages.iter().enumerate() {
         let event = if n == 0 {
             "bot.ability.offers".to_owned()
@@ -516,9 +517,11 @@ fn stm_harness(database: &str, params: &str, stages: &[String], answers: usize) 
         } else {
             ""
         };
-        staged.push_str(&format!(
+        write!(
+            transitions,
             "\n    <transition event=\"{event}\">{offers}{stage}</transition>"
-        ));
+        )
+        .expect("writing to a String cannot fail");
     }
     format!(
         r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="running">
@@ -528,7 +531,7 @@ fn stm_harness(database: &str, params: &str, stages: &[String], answers: usize) 
   <state id="running">
     <invoke id="stm" type="scxml" src="stm/stm.scx">
       <param name="database" expr="{database}"/>{params}
-    </invoke>{staged}
+    </invoke>{transitions}
     <transition event="bot.ability.memory.stm.recent.output">
       <log label="recent" expr="JSON.stringify(_event.data.entries.map((e) =&gt; [e.stimulus_name, e.payload, e.event_id, e.source, e.target, e.stm_id.length, e.last_accessed_at !== null]))"/>
       <assign location="answers" expr="answers + 1"/>
@@ -556,7 +559,7 @@ fn to_stm(event: &str, data: &str) -> String {
         .replace('"', "&quot;")
         .replace('<', "&lt;");
     format!(
-        r#"<send event="bot.ability.memory.stm.{event}" target="#_stm"><content expr="{data}"/></send>"#
+        r##"<send event="bot.ability.memory.stm.{event}" target="#_stm"><content expr="{data}"/></send>"##
     )
 }
 
