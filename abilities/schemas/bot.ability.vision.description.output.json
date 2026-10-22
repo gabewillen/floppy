@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.vision.description.output",
+  "description": "What one image shows, in a few plain sentences.",
+  "additionalProperties": false,
+  "properties": {
+    "description": {
+      "description": "The describer's plain-text answer: non-blank, at most 4000 characters. The original's output is this text itself; floppy wraps it in an object [floppy field].",
+      "examples": [
+        "A person sits at a desk with a laptop and a coffee cup. A window behind them shows daylight."
+      ],
+      "maxLength": 4000,
+      "minLength": 1,
+      "title": "Description",
+      "type": "string"
+    }
+  },
+  "required": [
+    "description"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "description": "A person sits at a desk with a laptop and a coffee cup. A window behind them shows daylight."
+    }
+  ]
+}

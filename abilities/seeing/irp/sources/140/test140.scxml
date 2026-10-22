@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- seeing-5: white, then 240 (below 0.1 from white), then 225 (past 0.1 from white, not from 240): 225 is handed on. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="seeing" type="scxml" src="../../../seeing.scx">
+    <param name="measure" expr="'frame_diff'"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'seeing' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === 'bot.ability.seeing.look' &amp;&amp; _event.data.choices[0].target === undefined &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[0].schema['$schema'] === undefined &amp;&amp; _event.data.choices[0].schema.examples === undefined &amp;&amp; _event.data.choices[0].schema.additionalProperties === false" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="environment.visual" target="#_seeing"><content expr='{"image": "media/a.png", "media_type": "image/png", "source": "camera-1"}'/></send>
+    </onentry>
+    <transition event="bot.ability.cognition.input" cond='JSON.stringify(_event.data) === "{\"participants\":[],\"stimulus\":{\"data\":{\"cause\":\"change\",\"participants\":[],\"views\":[{\"age_ms\":0,\"change\":null,\"description\":null,\"image\":\"media/a.png\",\"kind\":null,\"media_type\":\"image/png\",\"objects\":null,\"participants\":[]}]},\"event\":\"bot.ability.seeing.sight\",\"source\":\"camera-1\"}}"' target="step2"/>
+  </state>
+  <state id="step2">
+    <onentry>
+      <send event="harness.waited" delay="6s"/>
+    </onentry>
+    <transition event="harness.waited" target="step3"/>
+  </state>
+  <state id="step3">
+    <onentry>
+      <send event="environment.visual" target="#_seeing"><content expr='{"image": "media/gray240.png", "media_type": "image/png", "source": "camera-1"}'/></send>
+      <send event="environment.visual" target="#_seeing"><content expr='{"image": "media/gray225.png", "media_type": "image/png", "source": "camera-1"}'/></send>
+    </onentry>
+    <transition event="bot.ability.cognition.input" cond="_event.data.stimulus.data.cause === 'change' &amp;&amp; _event.data.stimulus.data.views[0].image === &quot;media/gray225.png&quot; &amp;&amp; _event.data.stimulus.data.views[0].change &gt; 0.11 &amp;&amp; _event.data.stimulus.data.views[0].change &lt; 0.12 &amp;&amp; _event.data.stimulus.data.views[0].age_ms === 500" target="step4"/>
+  </state>
+  <state id="step4">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

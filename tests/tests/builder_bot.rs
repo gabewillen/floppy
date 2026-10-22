@@ -1627,7 +1627,8 @@ fn the_same_diagnostic_twice_ends_the_build_with_no_progress() {
 /// No default model backend: without `FLOPPY_BASE_URL` the first
 /// generation answers `unconfigured` without sending anything, and the
 /// builder fails fast in `failed` (`unconfigured`) with a diagnostic naming
-/// both required variables, without retrying or asking the decision service.
+/// the missing base URL (a key is not required: a keyless backend takes
+/// none, decision D127), without retrying or asking the decision service.
 #[test]
 fn without_a_model_base_url_the_build_fails_fast_unconfigured() {
     let mock = Mock::start();
@@ -1645,7 +1646,7 @@ fn without_a_model_base_url_the_build_fails_fast_unconfigured() {
     assert_eq!(failed["diagnostics"][0]["code"], "unconfigured", "{failed}");
     let message = failed["diagnostics"][0]["message"].as_str().unwrap_or("");
     assert!(
-        message.contains("FLOPPY_BASE_URL") && message.contains("FLOPPY_API_KEY"),
+        message.contains("no FLOPPY_BASE_URL") && !message.contains("no FLOPPY_API_KEY"),
         "{failed}"
     );
     assert_eq!(failed["history"], json!([]), "no retry: {failed}");

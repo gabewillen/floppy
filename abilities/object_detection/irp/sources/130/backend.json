@@ -1,0 +1,22 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "[\"cup\", 3, null, [{\"label\": \"cup\", \"confidence\": 0.87, \"box\": {\"x\": 0.4, \"y\": 0.5, \"width\": 0.1, \"height\": 0.15}}], {\"label\": \"cup\", \"confidence\": 0.87, \"box\": {\"x\": 0.4, \"y\": 0.5, \"width\": 0.1, \"height\": 0.15}}, {\"label\": \"cup\", \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"cup\", \"confidence\": 0.5, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}, \"color\": \"red\"}, {\"label\": \"\", \"confidence\": 0.5, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\", \"confidence\": 0.5, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": 7, \"confidence\": 0.5, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"cup\", \"confidence\": 1.5, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"cup\", \"confidence\": -0.1, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"cup\", \"confidence\": \"high\", \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"cup\", \"confidence\": 0.5, \"box\": [0, 0, 1, 1]}, {\"label\": \"cup\", \"confidence\": 0.5, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1}}, {\"label\": \"cup\", \"confidence\": 0.5, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1, \"depth\": 1}}, {\"label\": \"cup\", \"confidence\": 0.5, \"box\": {\"x\": -0.1, \"y\": 0, \"width\": 0.5, \"height\": 0.5}}, {\"label\": \"cup\", \"confidence\": 0.5, \"box\": {\"x\": 0, \"y\": 1.5, \"width\": 0.5, \"height\": 0.5}}, {\"label\": \"cup\", \"confidence\": 0.5, \"box\": {\"x\": 0, \"y\": 0, \"width\": 0, \"height\": 0.5}}, {\"label\": \"cup\", \"confidence\": 0.5, \"box\": {\"x\": 0, \"y\": 0, \"width\": 0.5, \"height\": 1.5}}, {\"label\": \"cup\", \"confidence\": 0.5, \"box\": {\"x\": 0.6, \"y\": 0, \"width\": 0.5, \"height\": 0.5}}, {\"label\": \"cup\", \"confidence\": 0.5, \"box\": {\"x\": 0, \"y\": 0.5, \"width\": 0.5, \"height\": 0.500002}}, {\"label\": \"lamp\", \"confidence\": null, \"box\": {\"x\": 0.75, \"y\": 0.25, \"width\": 0.25, \"height\": 0.5}}]"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

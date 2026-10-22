@@ -54,7 +54,7 @@ expected_wasi_virt_rev='448f6df8f688cee5d6995e96b1ffc31f9bf00742'
 expected_wasi_sdk='25.0'
 session_components='scxml_machine scxml_compiler scxml_data_model_ecmascript scxml_data_model_xpath scxml_data_model_null scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_clock scxml_resolver_github scx'
 namespace_components='floppy_decision floppy_conversation floppy_migration floppy_device floppy_processing floppy_intuition floppy_cognition floppy_identity floppy_memory floppy_behavior floppy_autonomy'
-service_components='floppy_service_generate floppy_service_decision floppy_service_sql floppy_service_files floppy_service_speech floppy_service_pgsql'
+service_components='floppy_service_generate floppy_service_decision floppy_service_sql floppy_service_files floppy_service_speech floppy_service_pgsql floppy_service_vision'
 # Package validator components (stateforward:scxml-validator/package-validator),
 # each named by its package's manifest (`validator-artifact`).
 validator_components='floppy_service_generate_validator'
@@ -251,6 +251,24 @@ expected_imports() {
                 'wasi:sockets/tcp@0.2.12' \
                 'wasi:sockets/tcp-create-socket@0.2.12'
             ;;
+        # The vision service: one async `invoke` export and the images in
+        # the directory the run grants, measured in memory. It keeps
+        # exactly the filesystem it imports for the host (which links it
+        # only under `--dir`): the filesystem interfaces, the wasi:io
+        # interfaces they use, and wasi:clocks/wall-clock for their
+        # timestamps; wasi:cli and the 0.2 monotonic clock are denied by the
+        # composed provider (services/vision/wasi-cli-deny.wat).
+        floppy_service_vision)
+            printf '%s\n' \
+                'stateforward:scxml/types@0.2.0' \
+                'stateforward:scxml/telemetry@0.2.0' \
+                'wasi:io/poll@0.2.12' \
+                'wasi:clocks/wall-clock@0.2.12' \
+                'wasi:io/error@0.2.12' \
+                'wasi:io/streams@0.2.12' \
+                'wasi:filesystem/types@0.2.12' \
+                'wasi:filesystem/preopens@0.2.12'
+            ;;
         # A package validator's world imports nothing: its export's record
         # types arrive through the types-only types and document interfaces.
         floppy_service_generate_validator)
@@ -355,15 +373,16 @@ build_component() {
     test -f "$raw" || { echo "missing release component artifact: $raw" >&2; exit 1; }
     virt_input=$raw
     case "$component" in
-        floppy_decision|floppy_service_generate|floppy_service_decision|floppy_service_generate_validator)
+        floppy_decision|floppy_service_generate|floppy_service_decision|floppy_service_generate_validator|floppy_service_vision)
         # <decision:choice> compiles each offered schema, the generate service
         # checks structured output, and the decision service checks the
         # choices' schemas and the filled event data with the same `event`
-        # schema code (boon, std's RandomState). wasi-virt denies randomness
-        # (the first schema check would trap), so compose the subtree's
-        # pinned deterministic provider first, exactly as scxml.rs does for
-        # its validator component (see the .wat header); the values only
-        # key in-memory hash tables.
+        # schema code (boon, std's RandomState); the vision service's WebP
+        # decoder (image-webp) keys its chunks in a std HashMap. wasi-virt
+        # denies randomness (the first schema check would trap), so compose
+        # the subtree's pinned deterministic provider first, exactly as
+        # scxml.rs does for its validator component (see the .wat header);
+        # the values only key in-memory hash tables.
         random="$run_tmp/wasi-random-validator.wasm"
         seeded="$run_tmp/$component.seeded.wasm"
         wasm-tools parse "$workspace/scxml.rs/components/scxml-validator/wasi-random.wat" -o "$random"
@@ -371,8 +390,8 @@ build_component() {
         virt_input=$seeded
         ;;
     esac
-    if [ "$component" = floppy_service_sql ] || [ "$component" = floppy_service_files ] || [ "$component" = floppy_service_speech ] || [ "$component" = floppy_service_generate ] || [ "$component" = floppy_service_pgsql ]; then
-        # The sql, files, speech and generate services keep their filesystem
+    if [ "$component" = floppy_service_sql ] || [ "$component" = floppy_service_files ] || [ "$component" = floppy_service_speech ] || [ "$component" = floppy_service_generate ] || [ "$component" = floppy_service_pgsql ] || [ "$component" = floppy_service_vision ]; then
+        # The sql, files, speech, generate and vision services keep their filesystem
         # imports for the host (and pgsql its sockets): a wasi-virt adapter would virtualize the
         # filesystem too, so the standard library's and wasi-libc's other
         # WASI imports (wasi:cli and the monotonic clock) are satisfied by
@@ -400,7 +419,7 @@ build_component() {
     wasm-tools validate --features component-model,cm-async "$virtualized"
     imports=$(wasm-tools component wit "$virtualized" | sed -n 's/^  import \(.*\);$/\1/p')
     # A component may keep only a WASI interface its allowlist names (the
-    # sql and speech services the filesystem they import).
+    # sql, speech and vision services the filesystem they import).
     allowed_wasi=$(expected_imports "$component" | grep -E '^wasi:' || true)
     if printf '%s\n' "$imports" | grep -E '^wasi:' | grep -Fxv "$allowed_wasi" | grep -q .; then
         echo "virtualized component retains a WASI capability: $component" >&2

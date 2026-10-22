@@ -3,16 +3,19 @@
   A room: floppy's environment (the original's Environment, decision D102),
   run as the root session. Its invoked children are its participants: join
   is an invoke starting, leave is the invoke ending (cancelled, done, or
-  failed). It keeps membership and delivers what enters it, and nothing
-  else.
+  failed). It keeps membership, delivers what enters it, and supervises
+  its bots.
 
-    present (invokes floppy)
+    present (parallel) { keeping, supervising.floppy { running.floppy
+      (invokes floppy) -> recovering.floppy -> backoff.floppy ->
+      running.floppy | exhausted.floppy (final); left.floppy (final) } }
 
   Participants: present invokes the floppy bot (bots/floppy/floppy.scx) as
   its child "floppy", with the environment's id (the root's _sessionid,
   decision D106) as <param name="environment"> and the devices it holds as
-  <param name="owned_devices">; the bot activates on joining (decision
-  D107). An environment with devices (devices/<name>/<name>.scx, decision
+  <param name="owned_devices">, and what each of its devices sits on as
+  <param name="placed_on"> (decision D159); the bot activates on joining
+  (decision D107). An environment with devices (devices/<name>/<name>.scx, decision
   D105) invokes them in the same state, before its bots, and names in
   holdings which bot holds which; this room has none. A child's
   _sessionid is <the environment's _sessionid>.<invoke id> (scxml.rs,
@@ -25,6 +28,25 @@
   failed) removes it, and the environment logs the event's invokeid and
   data (the bot's donedata). A failed send (error.communication with no
   invokeid) removes nobody.
+
+  Supervision (decision D158, the original's runtime Supervisor): each bot
+  runs in its own region of present, supervising.<bot>, which invokes it in
+  running.<bot>. A bot that leaves degraded (its donedata has a reason),
+  after a failed activation (it sent bot.activating.failed), or failed
+  (error.communication.<bot>) is restarted: recovering.<bot> counts the
+  failed attempt and waits in backoff.<bot> (the original's doubling
+  backoff from backoff_initial_ms, capped at backoff_max_ms) before
+  running.<bot> invokes it again, logged room.restarted {participant,
+  attempt, delay_ms}; when another attempt would not fit max_restarts the
+  bot is left, logged room.exhausted {participant, attempts}
+  (exhausted.<bot>). A bot that has run stable_after_ms has its attempts
+  reset, counted once from its first bot.activated (starting.<bot>,
+  serving.<bot>; a reboot does not re-arm it). A bot that leaves on
+  bot.deactivate, or is sent one while it waits in backoff.<bot>, is not
+  restarted (left.<bot>). The leave and the activation are announced to
+  the regions as room.left {participant, restart} and room.activated
+  {participant} [floppy names], internal events of the room (participant
+  null for a failed send, which names no invoke and no region takes).
 
   Sound (decision D103): an environment.sound or environment.visual from a
   participant (a bot's communication sends its speaking's playout to
@@ -77,30 +99,108 @@
          (decision D105). Its keys are the bots; every other participant
          is a device. -->
     <data id="holdings" expr="({floppy: []})"/>
-    <!-- Where each participant is and the quietest sound it hears:
-         invoke id to {position: {x, y, z} in metres, threshold_db in dB
-         SPL}. A participant with none hears every sound. -->
+    <!-- Where each participant is, the quietest sound it hears, and what
+         it sits on: invoke id to {position: {x, y, z} in metres,
+         threshold_db in dB SPL, on?: an object's id}. A participant with
+         none hears every sound. -->
     <data id="placements" expr="({})"/>
+    <!-- The physical things participants sit on (the original's
+         environment.Object: a desk, a table, a shelf): their ids. An
+         object does nothing; it shows only through what sits on it. -->
+    <data id="objects" expr="[]"/>
+    <!-- Supervision (the original's runtime Policy defaults): the
+         consecutive failed attempts each bot may make, its backoff, and
+         how long it runs before its attempts are reset; each bot's failed
+         attempts and whether its last activation failed. -->
+    <data id="supervision" expr="({max_restarts: 5, backoff_initial_ms: 1000, backoff_max_ms: 60000, stable_after_ms: 60000})"/>
+    <data id="attempts" expr="({})"/>
+    <data id="activation_failed" expr="({})"/>
   </datamodel>
   <script src="room.js"/>
 
-  <state id="present">
+  <parallel id="present">
     <onentry>
       <assign location="participants" expr="['floppy']"/>
     </onentry>
-    <invoke id="floppy" type="scxml" src="../../bots/floppy/floppy.scx">
-      <param name="environment" expr="_sessionid"/>
-      <param name="owned_devices" expr="ownedDevices('floppy')"/>
-    </invoke>
+    <!-- Membership and delivery: present's own transitions, below. -->
+    <state id="keeping"/>
+    <!-- The bot floppy, supervised. -->
+    <state id="supervising.floppy" initial="running.floppy">
+      <state id="running.floppy" initial="starting.floppy">
+        <onentry>
+          <assign location="participants" expr="joined('floppy')"/>
+        </onentry>
+        <onexit>
+          <cancel sendid="stable.floppy"/>
+        </onexit>
+        <invoke id="floppy" type="scxml" src="../../bots/floppy/floppy.scx">
+          <param name="environment" expr="_sessionid"/>
+          <param name="owned_devices" expr="ownedDevices('floppy')"/>
+          <param name="placed_on" expr="placedOn('floppy')"/>
+        </invoke>
+        <!-- Stable after stable_after_ms from its first bot.activated (the
+             original arms it once, in running, which it enters on
+             activation); a reboot's activation does not re-arm it. -->
+        <state id="starting.floppy">
+          <transition event="room.activated" cond="isFor(_event, 'floppy')" target="serving.floppy"/>
+        </state>
+        <state id="serving.floppy">
+          <onentry>
+            <send id="stable.floppy" event="room.stable" delayexpr="stableDelay()">
+              <param name="participant" expr="'floppy'"/>
+            </send>
+          </onentry>
+        </state>
+        <transition event="room.stable" cond="isFor(_event, 'floppy')">
+          <assign location="attempts.floppy" expr="0"/>
+        </transition>
+        <transition event="room.left" cond="isRestartable(_event, 'floppy')" target="recovering.floppy"/>
+        <transition event="room.left" cond="isFor(_event, 'floppy')" target="left.floppy"/>
+      </state>
+      <state id="recovering.floppy">
+        <transition cond="isWithinBudget('floppy')" target="backoff.floppy">
+          <assign location="attempts.floppy" expr="nextAttempt('floppy')"/>
+        </transition>
+        <transition target="exhausted.floppy">
+          <log label="room.exhausted" expr="exhaustedJson('floppy')"/>
+        </transition>
+      </state>
+      <state id="backoff.floppy">
+        <onentry>
+          <send id="restart.floppy" event="room.restart" delayexpr="backoffDelay('floppy')">
+            <param name="participant" expr="'floppy'"/>
+          </send>
+        </onentry>
+        <onexit>
+          <cancel sendid="restart.floppy"/>
+        </onexit>
+        <!-- A stop while it waits: it is not restarted (the original's
+             backoff goes to stopped). -->
+        <transition event="bot.deactivate" event:schema="../../bots/floppy/schemas/bot.deactivate.json" target="left.floppy"/>
+        <transition event="room.restart" cond="isFor(_event, 'floppy')" target="running.floppy">
+          <log label="room.restarted" expr="restartedJson('floppy')"/>
+          <assign location="activation_failed.floppy" expr="false"/>
+        </transition>
+      </state>
+      <final id="exhausted.floppy"/>
+      <final id="left.floppy"/>
+    </state>
 
-    <!-- Leave: a participant that finished or failed. -->
+    <!-- Leave: a participant that finished or failed, announced to its
+         supervisor. -->
     <transition event="done.invoke">
       <log label="done.invoke" expr="leaveJson(_event)"/>
       <assign location="participants" expr="without(_event.invokeid)"/>
+      <send event="room.left" target="#_internal">
+        <content expr="leftData(_event, false)"/>
+      </send>
     </transition>
     <transition event="error.communication">
       <log label="error.communication" expr="leaveJson(_event)"/>
       <assign location="participants" expr="without(_event.invokeid)"/>
+      <send event="room.left" target="#_internal">
+        <content expr="leftData(_event, true)"/>
+      </send>
     </transition>
 
     <!-- Host input. -->
@@ -121,7 +221,7 @@
         </if>
       </foreach>
     </transition>
-    <transition event="environment.visual" event:schema="../../bots/floppy/schemas/environment.visual.json">
+    <transition event="environment.visual" event:schema="../../abilities/schemas/environment.visual.json">
       <log label="environment.visual" expr="eventDataJson(_event)"/>
       <foreach array="participants" item="participant">
         <send event="environment.visual" targetexpr="participantTarget(participant)">
@@ -151,9 +251,13 @@
     <!-- What the bots emit. -->
     <transition event="bot.activated" event:schema="../../bots/floppy/schemas/bot.activated.json">
       <log label="bot.activated" expr="eventDataJson(_event)"/>
+      <send event="room.activated" target="#_internal">
+        <content expr="activatedData(_event)"/>
+      </send>
     </transition>
     <transition event="bot.activating.failed" event:schema="../../bots/floppy/schemas/bot.activating.failed.json">
       <log label="bot.activating.failed" expr="eventDataJson(_event)"/>
+      <assign location="activation_failed" expr="activationFailedOf(_event)"/>
     </transition>
     <transition event="bot.deactivated" event:schema="../../bots/floppy/schemas/bot.deactivated.json">
       <log label="bot.deactivated" expr="eventDataJson(_event)"/>
@@ -194,5 +298,5 @@
     <transition event="bot.ability.failed" event:schema="../../abilities/schemas/bot.ability.failed.json">
       <log label="bot.ability.failed" expr="eventDataJson(_event)"/>
     </transition>
-  </state>
+  </parallel>
 </scxml>

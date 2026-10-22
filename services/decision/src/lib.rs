@@ -1,9 +1,9 @@
 //! The `decision` invoked service: one decision per `<invoke>`, asked as
 //! one of the `OpenAI` Decisions API's question types (decision D120): a
 //! `choice` (choose an event from a choice list, or a label), a
-//! `predicate` (every groundable event with its confidence), or a `score`
-//! (score candidates), as a `stateforward:scxml/invoked-service` Wasm
-//! component.
+//! `predicate` (the one chosen event with its confidence, or a pass to a
+//! later tier), or a `score` (score candidates), as a
+//! `stateforward:scxml/invoked-service` Wasm component.
 //!
 //! Asking a backend is slow I/O, so a decision is a service, never
 //! executable content: the invoking session keeps processing events and
@@ -35,8 +35,9 @@
 //! # Parameters (`<param>`)
 //!
 //! * `kind` (optional): `choice` (the default), `predicate`, or `score`.
-//! * `state`: the state document the backend decides about, a string, a
-//!   JSON object, or a JSON array; required unless `stimulus` is given.
+//! * `state` (required): the state document the backend decides about, a
+//!   string, a JSON object, or a JSON array (the decision layer's is the
+//!   model-facing text of its stimulus, `{"turn": T}`, the reference D-R-50).
 //! * `instructions` (optional, a non-empty string): what to decide; each
 //!   kind has a default.
 //! * `model` (optional, a non-empty string): the backend's model; the
@@ -48,16 +49,20 @@
 //!   an optional `target` string, as `<processing:collect_offered_events>`
 //!   tags it; an event
 //!   is listed once, or once per target with the same schema, and is one
-//!   candidate; no event is named [`ABSTAIN_LABEL`]), and either `data`
-//!   (optional: a JSON object of evidence) or `stimulus` (optional: the
-//!   stimulus the decision is about, from which the service builds the
-//!   state and the evidence, the original's `_stimulus_document`; given
-//!   with neither `state` nor `data`). A `stimulus` that is a JSON object
-//!   whose `event` is a string makes the state
-//!   `{"turn": {"envelope": {"name": event}, "data": D}}`, `D` its `data`
-//!   member (`null` when absent); any other value `V` makes it
-//!   `{"turn": {"data": V}}`; the evidence is `D` (or `V`) when it is a JSON
-//!   object. No other member of the stimulus is read.
+//!   candidate; no event is named a reserved pass criterion), and at most
+//!   one of `data` (a JSON object of evidence) and `stimulus` (the stimulus
+//!   the decision is about, read only for grounding: the evidence is the
+//!   `data` member of a JSON object whose `event` is a string, else the
+//!   stimulus itself, when that is a JSON object; no other member is read);
+//!   without either, an object `state` is the evidence. Optionally
+//!   `max_context_tokens` (the model's context in tokens, a whole number
+//!   from 1 to [`MAX_CONTEXT_TOKENS`], or `null` to send the request whole)
+//!   and `bytes_per_token` (the invoking document's learned estimate, in
+//!   `(0, 3]`, [`DEFAULT_BYTES_PER_TOKEN`] without one): see "Context fit".
+//! * `predicate` also: `hand_ons` (optional: a non-empty JSON array of
+//!   distinct tiers, `intuition` or `reasoning`, the later tiers a pass may
+//!   hand the turn to, the reference's `hand_ons`; `["reasoning"]` without
+//!   one).
 //! * `choice` over labels: `labels` instead of `choices` (a JSON array of
 //!   strings, a JSON object mapping each label to its description, a
 //!   string, object, array, or `null`, or one string of labels separated by
@@ -70,14 +75,17 @@
 //! Any other parameter, a parameter given twice, a `choice` with both or
 //! neither of `choices` and `labels`, or a malformed value rejects the
 //! start: the `<invoke>` raises `error.execution` and nothing is sent. The
-//! `env` slots: `env:apikey="NAME"` (a bearer token, required at
-//! run time) and `env:baseurl="NAME"` (the API base URL, for example
+//! `env` slots: `env:apikey="NAME"` (a bearer token) and
+//! `env:baseurl="NAME"` (the API base URL, for example
 //! `https://api.typesafe.ai`; it must not end with `/`). When no `baseurl`
-//! value is held, the base URL is the package's first declared
+//! value is held, a held key goes to the package's first declared
 //! `http-origins` entry (`https://api.typesafe.ai`, read from
 //! `package/decision.service.json`), as the deleted scxml.rs `openai`
 //! namespace defaulted to its provider's URL; the manifest stays the one
-//! place the origin is written.
+//! place the origin is written. Without a held key, a held base URL is
+//! asked keyless (no authorization header is sent, as the reference sends
+//! its bearer only when given one); with neither, the service sends
+//! nothing and answers `unconfigured`.
 //!
 //! # `choice` over events, and `predicate`
 //!
@@ -97,27 +105,35 @@
 //!   no option is not offered.
 //! * **The batch.** The question `selection` criteria are every offered
 //!   event (described by the first line of its description, else by its
-//!   name: the reference `_event_wording`) plus the pass criterion [`ABSTAIN_LABEL`]
-//!   ([`ABSTAIN_DESCRIPTION`]); each offered event's required member is its
-//!   own question `<event>::<member>` whose criteria are its options. When
-//!   nothing is offered, the service returns [`ABSTAIN_EVENT`]
-//!   `{"reason": "no-candidates"}` without a request; when the pass
-//!   criterion wins, [`ABSTAIN_EVENT`] `{"reason": "declined", "confidence": P}`.
+//!   name: the reference `_event_wording`) plus the pass criteria: a
+//!   predicate's one per tier of `hand_ons` ([`HandOn`]: `__intuition__`
+//!   and `__reasoning__`, each in the reference's wording, R-23 and
+//!   D-R-42), a choice's [`ABSTAIN_LABEL`] ([`ABSTAIN_DESCRIPTION`]); each
+//!   offered event's required member is its own question `<event>::<member>`
+//!   whose criteria are its options. When nothing is offered, the service
+//!   returns [`ABSTAIN_EVENT`] `{"reason": "no-candidates"}` without a
+//!   request; when a pass criterion wins, [`ABSTAIN_EVENT`]
+//!   `{"reason": "declined", "confidence": P}`, with `"hand_to": tier` for a
+//!   predicate's (the reference's explicit decline naming its tier).
 //! * **`choice`** returns the winning event itself, with its filled data.
 //! * **`predicate`** returns [`SELECTED_EVENT`]
 //!   `{"selections": [{"event": E, "data": D, "confidence": P, "target": T}]}`:
-//!   every offered event, in choices order, with its filled data, its own
-//!   probability in the selection question (the original: "every groundable
-//!   event rides the response"), and `target` its only offerer, the one
-//!   `target` its listings name (the original's `_single_enabler`; absent
-//!   when no listing or several name one); the invoking document sends
-//!   each to its target. Each event's confidence is its share of the one
-//!   selection question, as the original's intuition receives it, not one
-//!   question per event (D120).
-//! * **Validation before returning.** The filled data of every returned
+//!   only the chosen event (the reference D-R-28: the other options'
+//!   probabilities are not selections), with its filled data, its
+//!   probability in the selection question as its confidence, and `target`
+//!   its only offerer, the one `target` its listings name (the original's
+//!   `_single_enabler`; absent when no listing or several name one); the
+//!   invoking document sends it to its target.
+//! * **Validation before returning.** The filled data of the returned
 //!   event must satisfy its schema from the choices; otherwise the service
 //!   returns [`FAILED_EVENT`] `{"code": "schema-mismatch"}` and never the
 //!   event.
+//! * **Context fit.** With `max_context_tokens`, a request body over
+//!   `floor(max_context_tokens * bytes_per_token)` bytes has the selection's
+//!   instructions cut to as many leading whole lines as fit, then to the
+//!   kind's default instructions (the reference `_fitted`, D-R-36); the
+//!   state and every criterion are never cut, and a request still over is
+//!   sent anyway, so the backend's refusal is the decision's failure.
 //!
 //! # `choice` over labels, and `score`
 //!
@@ -129,8 +145,14 @@
 //! # Events
 //!
 //! `invoke` (the component's one export, an `async func`) writes exactly
-//! one event to the stream it returns, then resolves its result future with
-//! no data. A failure returns [`FAILED_EVENT`] `{"code": C}` with one closed
+//! one event to the stream it returns, then resolves its result future: with
+//! no data when nothing was sent, else with `{"request_bytes": N,
+//! "context_fit": O, "usage": {"input_tokens": I, "output_tokens": W}}`
+//! (`done.invoke.<id>`'s data): the request body's bytes, its fit (`fit`,
+//! `cut` or `overflow`, only with `max_context_tokens`), and the tokens a
+//! successful answer says the backend counted, from which the invoking
+//! document learns its bytes per token (the reference `ContextFit.observe`,
+//! D-R-45). A failure returns [`FAILED_EVENT`] `{"code": C}` with one closed
 //! [`FailureCode`]. The chosen event of `choice` is defined by the invoking
 //! document (its choices' `event:schema` transitions), and the document
 //! describes this service's own events with `event:schema` too
@@ -153,6 +175,8 @@
 //! names ([`MAX_EVENT_NAME_BYTES`]) are bounded on wasm builds only
 //! ([`scxml_types::wasm_bound`]); schemas are bounded by
 //! `scxml-event-schema`, and the answer by the host's response-body bound.
+//! `max_context_tokens` is range-checked on every build to at most
+//! [`MAX_CONTEXT_TOKENS`], which keeps the context fit's arithmetic exact.
 //!
 //! # Telemetry
 //!
@@ -180,7 +204,7 @@ use scxml_event_schema::{CompiledSchema, canonical_json};
 use scxml_types::{DataValue as Data, exceeds_wasm_bound, wasm_bound};
 use serde_json::{Map, Value as Json};
 
-pub use backend::{Backend, Batch, Criterion, Distribution, Question, TypeSafe};
+pub use backend::{Backend, Batch, Criterion, Distribution, Question, TypeSafe, Usage};
 
 /// The service's name: the last path segment of its repository service URI
 /// before the tag.
@@ -206,11 +230,71 @@ pub const RANKED_EVENT: &str = "decision.ranked";
 pub const CLASSIFIED_EVENT: &str = "decision.classified";
 /// The event a failed decision returns.
 pub const FAILED_EVENT: &str = "decision.failed";
-/// The selection's reserved pass criterion: no event fits (the original
-/// `_RESERVED_PASS_CRITERION`). The choices never name it.
+/// The reserved pass criterion of a `choice` over events: no event fits.
+/// The choices never name it.
 pub const ABSTAIN_LABEL: &str = "__unhandled__";
-/// The pass criterion's wording (the reference `_DEFAULT_PASS_WORDING`).
+/// The `choice` pass criterion's wording.
 pub const ABSTAIN_DESCRIPTION: &str = "None of these: leave the turn unhandled.";
+
+/// A later tier a `predicate` pass hands the turn to (the reference
+/// `processing.HandOn`, R-23): each has its own reserved pass criterion (the
+/// reference `_PASS_CRITERIA`), which the choices never name, and its own
+/// wording (the reference `_DEFAULT_PASS_WORDING`, D-R-42: never as leaving
+/// the turn unhandled).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HandOn {
+    /// Answer it in words now, with intuition.
+    Intuition,
+    /// Think it through first, with reasoning.
+    Reasoning,
+}
+
+impl HandOn {
+    /// Every tier, in the reference's order.
+    pub const ALL: [Self; 2] = [Self::Intuition, Self::Reasoning];
+
+    /// The tier's name (`hand_ons` items and `hand_to`).
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Intuition => "intuition",
+            Self::Reasoning => "reasoning",
+        }
+    }
+
+    /// The tier's reserved pass criterion.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Intuition => "__intuition__",
+            Self::Reasoning => "__reasoning__",
+        }
+    }
+
+    /// What passing to the tier does.
+    #[must_use]
+    pub const fn wording(self) -> &'static str {
+        match self {
+            Self::Intuition => "None of these fits: answer it in words now, with intuition.",
+            Self::Reasoning => {
+                "None of these fits: it needs thought, so think it through first, with reasoning."
+            }
+        }
+    }
+
+    fn named(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|tier| tier.name() == name)
+    }
+}
+
+/// Whether `label` is a reserved pass criterion, which no choice may name.
+fn reserved_label(label: &str) -> bool {
+    label == ABSTAIN_LABEL || HandOn::ALL.iter().any(|tier| tier.label() == label)
+}
+
+/// The bytes of request body a token before an answer teaches fewer (the
+/// reference `ContextFit`'s starting estimate, D-R-45).
+pub const DEFAULT_BYTES_PER_TOKEN: f64 = 3.0;
 
 /// The selection question's name in a `choice` or `predicate` batch.
 pub const SELECTION_QUESTION: &str = "selection";
@@ -250,6 +334,8 @@ pub const MAX_INSTRUCTIONS_BYTES: usize = wasm_bound(16 * 1024);
 pub const MAX_MODEL_BYTES: usize = wasm_bound(256);
 /// Upper bound on a choice event name's bytes (wasm builds only).
 pub const MAX_EVENT_NAME_BYTES: usize = wasm_bound(256);
+/// Upper bound on `max_context_tokens` (a model's context, in tokens).
+pub const MAX_CONTEXT_TOKENS: u32 = 1 << 30;
 
 /// One part of a URL or header value: literal text, or an opaque reference
 /// the host substitutes with the value it holds for one slot.
@@ -295,7 +381,8 @@ pub enum TransportFailure {
 /// The closed failure codes of [`FAILED_EVENT`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FailureCode {
-    /// The `apikey` slot names no variable the run holds.
+    /// Neither the `apikey` nor the `baseurl` slot names a variable the run
+    /// holds, or no base URL is known.
     Unconfigured,
     /// The transport failed: no response.
     Transport,
@@ -346,11 +433,14 @@ impl Returned {
         Self::new(FAILED_EVENT, &serde_json::json!({ "code": code.name() }))
     }
 
-    fn abstain(reason: &str, confidence: Option<f64>) -> Self {
+    fn abstain(reason: &str, confidence: Option<f64>, hand_to: Option<HandOn>) -> Self {
         let mut data = Map::new();
         data.insert("reason".into(), reason.into());
         if let Some(confidence) = confidence {
             data.insert("confidence".into(), confidence.into());
+        }
+        if let Some(tier) = hand_to {
+            data.insert("hand_to".into(), tier.name().into());
         }
         Self::new(ABSTAIN_EVENT, &Json::Object(data))
     }
@@ -429,8 +519,8 @@ pub fn choices_from_json(value: &Json) -> Result<Vec<Candidate>, &'static str> {
             .and_then(Json::as_str)
             .filter(|event| valid_event_name(event))
             .ok_or(INVALID)?;
-        if event == ABSTAIN_LABEL {
-            return Err("decision choices name the reserved pass criterion");
+        if reserved_label(event) {
+            return Err("decision choices name a reserved pass criterion");
         }
         let target = match members.get("target") {
             None => None,
@@ -580,17 +670,71 @@ fn ground(
 pub struct DecisionRequest {
     model: Option<String>,
     instructions: String,
+    default_instructions: &'static str,
     state: Json,
+    fit: Option<ContextFit>,
     kind: Kind,
+}
+
+/// A model's context window in bytes of request body (the reference
+/// `processing.ContextFit`, D-R-36): the invoking document holds the learned
+/// estimate across requests and passes it in, so the service stays stateless.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ContextFit {
+    /// The model's context, in tokens.
+    pub max_context_tokens: u32,
+    /// Bytes of request body a token: [`DEFAULT_BYTES_PER_TOKEN`] until an
+    /// answer teaches fewer.
+    pub bytes_per_token: f64,
+}
+
+impl ContextFit {
+    /// The request body bytes that fit (the reference `budget_bytes`).
+    #[must_use]
+    pub fn budget_bytes(&self) -> usize {
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "a whole number in 0..=MAX_CONTEXT_TOKENS * 3, both checked at the parameter"
+        )]
+        let budget = (f64::from(self.max_context_tokens) * self.bytes_per_token).floor() as usize;
+        budget
+    }
+}
+
+/// How a request was fitted to a model's context (the reference
+/// `ContextFitOutcome`).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ContextFitOutcome {
+    /// Sent whole.
+    Fit,
+    /// The selection's instructions were cut to fit.
+    Cut,
+    /// Still over at its smallest, and sent anyway.
+    Overflow,
+}
+
+impl ContextFitOutcome {
+    /// The wire name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Fit => "fit",
+            Self::Cut => "cut",
+            Self::Overflow => "overflow",
+        }
+    }
 }
 
 #[derive(Debug)]
 enum Kind {
-    /// `choice` over events (`every: false`) or `predicate` (`every: true`).
+    /// `choice` over events (`every: false`, no `hand_ons`: its pass is
+    /// [`ABSTAIN_LABEL`]) or `predicate` (`every: true`, one pass per tier).
     Events {
         choices: Vec<Candidate>,
         evidence: Option<Map<String, Json>>,
         every: bool,
+        hand_ons: Vec<HandOn>,
     },
     Score {
         candidates: Vec<Json>,
@@ -703,32 +847,87 @@ fn find<'a>(given: &[(&str, &'a Data)], name: &str) -> Option<&'a Data> {
         .map(|(_, value)| *value)
 }
 
-/// The state document and the evidence of the original's `_stimulus_document`:
-/// a stimulus object whose `event` is a string is its envelope's name, with
-/// its `data` (`null` when absent); any other value is the data itself.
-fn stimulus_document(stimulus: Json) -> Json {
-    let mut turn = Map::new();
+/// The evidence of a stimulus, as the reference grounds from it: the data of
+/// a stimulus object whose `event` is a string, else the stimulus itself;
+/// evidence only when that is a JSON object.
+fn stimulus_evidence(stimulus: Json) -> Option<Map<String, Json>> {
     let data = match stimulus {
         Json::Object(mut members) if members.get("event").is_some_and(Json::is_string) => {
-            let name = members.remove("event").unwrap_or(Json::Null);
-            turn.insert("envelope".into(), serde_json::json!({ "name": name }));
             members.remove("data").unwrap_or(Json::Null)
         }
         other => other,
     };
-    turn.insert("data".into(), data);
-    serde_json::json!({ "turn": turn })
+    match data {
+        Json::Object(members) => Some(members),
+        _ => None,
+    }
 }
 
-/// The event part of a `choice` or `predicate` request: its choices and its
-/// evidence (`data`, the stimulus's object data when `state` was built from
-/// a stimulus, else an object `state`).
-fn events_kind(
-    given: &[(&str, &Data)],
-    state: &Json,
-    from_stimulus: bool,
-    every: bool,
-) -> Result<Kind, &'static str> {
+/// The tiers of a `hand_ons` value: a non-empty JSON array of distinct tier
+/// names.
+fn hand_ons_of(value: &Data) -> Result<Vec<HandOn>, &'static str> {
+    const INVALID: &str =
+        "decision hand_ons must be a non-empty array of distinct tiers, intuition or reasoning";
+    let Some(Json::Array(items)) = json_of(value) else {
+        return Err(INVALID);
+    };
+    let mut tiers: Vec<HandOn> = Vec::new();
+    for item in &items {
+        let tier = item.as_str().and_then(HandOn::named).ok_or(INVALID)?;
+        if tiers.contains(&tier) {
+            return Err(INVALID);
+        }
+        tiers.push(tier);
+    }
+    if tiers.is_empty() {
+        return Err(INVALID);
+    }
+    Ok(tiers)
+}
+
+/// The context fit of `max_context_tokens` (a positive whole number within
+/// [`MAX_CONTEXT_TOKENS`], or `null` to send every request whole) and
+/// `bytes_per_token` (in `(0, 3]`, [`DEFAULT_BYTES_PER_TOKEN`] when absent).
+fn context_fit(
+    max_context_tokens: Option<&Data>,
+    bytes_per_token: Option<&Data>,
+) -> Result<Option<ContextFit>, &'static str> {
+    let bytes_per_token = match bytes_per_token {
+        None => DEFAULT_BYTES_PER_TOKEN,
+        Some(Data::Number(number))
+            if number.get() > 0.0 && number.get() <= DEFAULT_BYTES_PER_TOKEN =>
+        {
+            number.get()
+        }
+        Some(_) => return Err("decision bytes_per_token must be a number in (0, 3]"),
+    };
+    match max_context_tokens {
+        None | Some(Data::Null) => Ok(None),
+        Some(Data::Number(number))
+            if number.get().fract() == 0.0
+                && number.get() >= 1.0
+                && number.get() <= f64::from(MAX_CONTEXT_TOKENS) =>
+        {
+            #[allow(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "a whole number checked to lie in 1..=MAX_CONTEXT_TOKENS"
+            )]
+            let max_context_tokens = number.get() as u32;
+            Ok(Some(ContextFit {
+                max_context_tokens,
+                bytes_per_token,
+            }))
+        }
+        Some(_) => Err("decision max_context_tokens must be a positive whole number or null"),
+    }
+}
+
+/// The event part of a `choice` or `predicate` request: its choices, its
+/// evidence (`data`, else the stimulus's object data, else an object
+/// `state`), and a predicate's tiers (`hand_ons`, reasoning alone when
+/// absent: the reference hands a pass to reasoning when the turn names none).
+fn events_kind(given: &[(&str, &Data)], state: &Json, every: bool) -> Result<Kind, &'static str> {
     let choices = choices_from_json(
         &json_of(
             find(given, "choices")
@@ -736,25 +935,32 @@ fn events_kind(
         )
         .ok_or("decision choices must be a JSON array")?,
     )?;
-    let evidence = match (from_stimulus, find(given, "data")) {
-        (true, _) => state
-            .get("turn")
-            .and_then(|turn| turn.get("data"))
-            .and_then(Json::as_object)
-            .cloned(),
-        (false, None) => match state {
+    let evidence = match (find(given, "stimulus"), find(given, "data")) {
+        (Some(_), Some(_)) => {
+            return Err("decision takes a stimulus or data as evidence, not both");
+        }
+        (Some(stimulus), None) => {
+            stimulus_evidence(json_of(stimulus).ok_or("decision stimulus must be a JSON value")?)
+        }
+        (None, None) => match state {
             Json::Object(members) => Some(members.clone()),
             _ => None,
         },
-        (false, Some(data)) => match json_of(data) {
+        (None, Some(data)) => match json_of(data) {
             Some(Json::Object(members)) => Some(members),
             _ => return Err("decision data must be a JSON object"),
         },
+    };
+    let hand_ons = match (every, find(given, "hand_ons")) {
+        (true, Some(value)) => hand_ons_of(value)?,
+        (true, None) => vec![HandOn::Reasoning],
+        (false, _) => Vec::new(),
     };
     Ok(Kind::Events {
         choices,
         evidence,
         every,
+        hand_ons,
     })
 }
 
@@ -768,6 +974,30 @@ enum KindName {
     ChoiceOfLabels,
     Predicate,
     Score,
+}
+
+/// The parameters a kind takes besides `kind`, `state`, `instructions` and
+/// `model`.
+const fn kind_parameters(kind: KindName) -> &'static [&'static str] {
+    match kind {
+        KindName::ChoiceOfEvents => &[
+            "choices",
+            "data",
+            "stimulus",
+            "max_context_tokens",
+            "bytes_per_token",
+        ],
+        KindName::Predicate => &[
+            "choices",
+            "data",
+            "stimulus",
+            "hand_ons",
+            "max_context_tokens",
+            "bytes_per_token",
+        ],
+        KindName::Score => &["candidates"],
+        KindName::ChoiceOfLabels => &["labels"],
+    }
 }
 
 /// The validated decision request of an invocation's parameters (see the
@@ -805,31 +1035,15 @@ pub fn parse_parameters<'a>(
         }
         (kind, _, _) => kind,
     };
-    let allowed: &[&str] = match kind {
-        KindName::ChoiceOfEvents | KindName::Predicate => &["choices", "data", "stimulus"],
-        KindName::Score => &["candidates"],
-        KindName::ChoiceOfLabels => &["labels"],
-    };
+    let allowed = kind_parameters(kind);
     if given.iter().any(|(name, _)| {
         !allowed.contains(name) && !matches!(*name, "kind" | "state" | "instructions" | "model")
     }) {
         return Err("decision takes no parameter of that name for its kind");
     }
-    let (state, from_stimulus) = match get("stimulus") {
-        Some(stimulus) => {
-            if get("state").is_some() || get("data").is_some() {
-                return Err("decision takes a stimulus without a state or data parameter");
-            }
-            let stimulus = json_of(stimulus).ok_or("decision stimulus must be a JSON value")?;
-            (stimulus_document(stimulus), true)
-        }
-        None => (
-            json_of(get("state").ok_or("decision requires a state parameter")?)
-                .filter(|state| matches!(state, Json::String(_) | Json::Object(_) | Json::Array(_)))
-                .ok_or("decision state must be a string, a JSON object, or a JSON array")?,
-            false,
-        ),
-    };
+    let state = json_of(get("state").ok_or("decision requires a state parameter")?)
+        .filter(|state| matches!(state, Json::String(_) | Json::Object(_) | Json::Array(_)))
+        .ok_or("decision state must be a string, a JSON object, or a JSON array")?;
     if exceeds_wasm_bound(canonical_json(&state).len(), MAX_STATE_BYTES) {
         return Err("decision state exceeds its bound");
     }
@@ -858,9 +1072,10 @@ pub fn parse_parameters<'a>(
         })
         .transpose()?
         .unwrap_or_else(|| default_instructions.to_owned());
+    let fit = context_fit(get("max_context_tokens"), get("bytes_per_token"))?;
     let kind = match kind {
-        KindName::ChoiceOfEvents => events_kind(&given, &state, from_stimulus, false)?,
-        KindName::Predicate => events_kind(&given, &state, from_stimulus, true)?,
+        KindName::ChoiceOfEvents => events_kind(&given, &state, false)?,
+        KindName::Predicate => events_kind(&given, &state, true)?,
         KindName::Score => {
             let (candidates, criteria) =
                 score_criteria(get("candidates").ok_or("decision score requires candidates")?)?;
@@ -876,7 +1091,9 @@ pub fn parse_parameters<'a>(
     Ok(DecisionRequest {
         model,
         instructions,
+        default_instructions,
         state,
+        fit,
         kind,
     })
 }
@@ -890,11 +1107,16 @@ pub enum Plan {
     Ask(Prepared),
 }
 
-/// A request ready to ask: its batch, and what decides from the answer.
+/// A request ready to ask: its batch, what decides from the answer, and how
+/// the request is fitted to the model's context.
 #[derive(Debug)]
 pub struct Prepared {
     batch: Batch,
     decide: Decide,
+    fit: Option<ContextFit>,
+    default_instructions: &'static str,
+    /// The body bytes and fit of the request last built ([`Prepared::request`]).
+    sent: Option<(usize, Option<ContextFitOutcome>)>,
 }
 
 #[derive(Debug)]
@@ -903,6 +1125,7 @@ enum Decide {
         choices: Vec<Candidate>,
         offered: Vec<Grounded>,
         every: bool,
+        hand_ons: Vec<HandOn>,
     },
     Score {
         candidates: Vec<Json>,
@@ -941,7 +1164,8 @@ fn python_repr(text: &str) -> String {
 }
 
 /// The questions of one `choice` or `predicate` batch (the original's `TypeSafe`
-/// `Processor.process`): the selection (every offered event, then
+/// `Processor.process`): the selection (every offered event, then the pass
+/// criteria: a predicate's one per tier of `hand_ons`, a choice's
 /// [`ABSTAIN_LABEL`]), then each offered event's member questions
 /// (`<event>::<member>`, each criterion described by the question's
 /// wording), in choices and `required` order.
@@ -952,6 +1176,7 @@ fn python_repr(text: &str) -> String {
 fn event_questions(
     choices: &[Candidate],
     offered: &[Grounded],
+    hand_ons: &[HandOn],
     instructions: String,
 ) -> Result<Vec<Question>, &'static str> {
     let mut selection: Vec<Criterion> = offered
@@ -967,10 +1192,16 @@ fn event_questions(
             ),
         })
         .collect();
-    selection.push(Criterion {
-        label: ABSTAIN_LABEL.into(),
-        description: ABSTAIN_DESCRIPTION.into(),
-    });
+    if hand_ons.is_empty() {
+        selection.push(Criterion {
+            label: ABSTAIN_LABEL.into(),
+            description: ABSTAIN_DESCRIPTION.into(),
+        });
+    }
+    selection.extend(hand_ons.iter().map(|tier| Criterion {
+        label: tier.label().into(),
+        description: tier.wording().into(),
+    }));
     let mut questions = vec![Question {
         name: SELECTION_QUESTION.into(),
         instructions,
@@ -1039,7 +1270,9 @@ impl DecisionRequest {
         let Self {
             model,
             instructions,
+            default_instructions,
             state,
+            fit,
             kind,
         } = self;
         let (questions, decide) = match kind {
@@ -1047,6 +1280,7 @@ impl DecisionRequest {
                 choices,
                 evidence,
                 every,
+                hand_ons,
             } => {
                 let offered: Vec<Grounded> = (0..choices.len())
                     .filter(|index| {
@@ -1057,14 +1291,15 @@ impl DecisionRequest {
                     .filter_map(|index| ground(&choices, index, evidence.as_ref()))
                     .collect();
                 if offered.is_empty() {
-                    return Ok(Plan::Return(Returned::abstain("no-candidates", None)));
+                    return Ok(Plan::Return(Returned::abstain("no-candidates", None, None)));
                 }
                 (
-                    event_questions(&choices, &offered, instructions)?,
+                    event_questions(&choices, &offered, &hand_ons, instructions)?,
                     Decide::Events {
                         choices,
                         offered,
                         every,
+                        hand_ons,
                     },
                 )
             }
@@ -1098,6 +1333,9 @@ impl DecisionRequest {
                 questions,
             },
             decide,
+            fit,
+            default_instructions,
+            sent: None,
         }))
     }
 }
@@ -1109,10 +1347,107 @@ impl Prepared {
         &self.batch
     }
 
-    /// The one request that asks the batch through `backend`.
+    /// The one request that asks the batch through `backend`, fitted to the
+    /// model's context when the request has a [`ContextFit`] (the reference
+    /// `_fitted`, D-R-36): over its budget, the selection's instructions keep
+    /// as many leading whole lines as fit, then the kind's default
+    /// instructions; the state and every criterion are never cut, and a
+    /// request still over at its smallest is sent anyway (the backend's
+    /// refusal is the decision's failure). The batch keeps the instructions
+    /// sent.
+    pub fn request<B: Backend>(
+        &mut self,
+        backend: &B,
+        api_key: Option<u32>,
+        base: Part,
+    ) -> Request {
+        let Some(fit) = self.fit else {
+            let request = backend.request(&self.batch, api_key, base);
+            self.sent = Some((request.body.len(), None));
+            return request;
+        };
+        let budget = fit.budget_bytes();
+        let instructed = |batch: &mut Batch, instructions: String| {
+            if let Some(selection) = batch.questions.first_mut() {
+                selection.instructions = instructions;
+            }
+            backend.request(batch, api_key, base.clone())
+        };
+        let mut request = backend.request(&self.batch, api_key, base.clone());
+        let mut outcome = ContextFitOutcome::Fit;
+        if request.body.len() > budget {
+            let lines: Vec<String> = self
+                .batch
+                .questions
+                .first()
+                .map(|selection| split_lines(&selection.instructions))
+                .unwrap_or_default();
+            let mut best: Option<(String, Request)> = None;
+            let (mut low, mut high) = (1, lines.len().saturating_sub(1));
+            while low <= high {
+                let count = low + (high - low) / 2;
+                let instructions = lines.get(..count).unwrap_or_default().join("\n");
+                let mut candidate = self.batch.clone();
+                let built = instructed(&mut candidate, instructions.clone());
+                if built.body.len() <= budget {
+                    best = Some((instructions, built));
+                    low = count + 1;
+                } else {
+                    high = count - 1;
+                }
+            }
+            let (instructions, built) = best.unwrap_or_else(|| {
+                let mut candidate = self.batch.clone();
+                let default = self.default_instructions.to_owned();
+                let built = instructed(&mut candidate, default.clone());
+                (default, built)
+            });
+            outcome = if built.body.len() <= budget {
+                ContextFitOutcome::Cut
+            } else {
+                ContextFitOutcome::Overflow
+            };
+            if let Some(selection) = self.batch.questions.first_mut() {
+                selection.instructions = instructions;
+            }
+            request = built;
+        }
+        self.sent = Some((request.body.len(), Some(outcome)));
+        request
+    }
+
+    /// The done data of the request last built, once `answered`: its body
+    /// bytes (`request_bytes`), its fit (`context_fit`, with a
+    /// [`ContextFit`]) and the tokens a successful answer says the backend
+    /// counted (`usage`), from which the invoking document learns its
+    /// bytes per token (the reference `ContextFit.observe`, D-R-45); `None`
+    /// before a request was built.
     #[must_use]
-    pub fn request<B: Backend>(&self, backend: &B, api_key: u32, base: Part) -> Request {
-        backend.request(&self.batch, api_key, base)
+    pub fn done_data<B: Backend>(
+        &self,
+        backend: &B,
+        answered: &Result<Response, TransportFailure>,
+    ) -> Option<String> {
+        let (request_bytes, outcome) = self.sent?;
+        let mut data = Map::new();
+        data.insert("request_bytes".into(), request_bytes.into());
+        if let Some(outcome) = outcome {
+            data.insert("context_fit".into(), outcome.name().into());
+        }
+        if let Some(usage) = answered
+            .as_ref()
+            .ok()
+            .filter(|response| (200..300).contains(&response.status))
+            .and_then(|response| backend.usage(&response.body))
+        {
+            let mut tokens = Map::new();
+            tokens.insert("input_tokens".into(), usage.input_tokens.into());
+            if let Some(output_tokens) = usage.output_tokens {
+                tokens.insert("output_tokens".into(), output_tokens.into());
+            }
+            data.insert("usage".into(), Json::Object(tokens));
+        }
+        Some(canonical_json(&Json::Object(data)))
     }
 
     /// The event the answer decides (see the crate documentation).
@@ -1120,7 +1455,7 @@ impl Prepared {
     pub fn decide<B: Backend>(
         &self,
         backend: &B,
-        answered: Result<Response, TransportFailure>,
+        answered: &Result<Response, TransportFailure>,
     ) -> Returned {
         let response = match answered {
             Ok(response) => response,
@@ -1147,10 +1482,12 @@ impl Prepared {
                 choices,
                 offered,
                 every,
+                hand_ons,
             } => decided_events(
                 choices,
                 offered,
                 *every,
+                hand_ons,
                 question,
                 distribution,
                 distributions,
@@ -1219,6 +1556,7 @@ fn decided_events(
     choices: &[Candidate],
     offered: &[Grounded],
     every: bool,
+    hand_ons: &[HandOn],
     question: &Question,
     distribution: &Distribution,
     distributions: &[Distribution],
@@ -1232,8 +1570,17 @@ fn decided_events(
             .unwrap_or(0.0)
     };
     if offered.get(chosen).is_none() {
-        // The pass criterion is the selection's last criterion.
-        return Ok(Returned::abstain("declined", Some(probability(chosen))));
+        // The pass criteria follow the offered events: a choice's one, or a
+        // predicate's one per tier, in `hand_ons` order.
+        let hand_to = chosen
+            .checked_sub(offered.len())
+            .and_then(|index| hand_ons.get(index))
+            .copied();
+        return Ok(Returned::abstain(
+            "declined",
+            Some(probability(chosen)),
+            hand_to,
+        ));
     }
     // The event at `index` with its filled data, validated
     // against its schema, and the candidate it is.
@@ -1249,34 +1596,52 @@ fn decided_events(
         }
         Ok((candidate, data))
     };
+    let (candidate, data) = event(chosen)?;
     if !every {
-        let (candidate, data) = event(chosen)?;
         return Ok(Returned::new(&candidate.event, &data));
     }
-    // The original: every groundable event rides the response with
-    // its own probability; the pass criterion never does. Each carries its
-    // only offerer as `target` (the original's `_single_enabler`), none
-    // when several offer it.
-    let selections = (0..offered.len())
-        .map(|index| {
-            let (candidate, data) = event(index)?;
-            let mut selection = serde_json::json!({
-                "event": candidate.event,
-                "data": data,
-                "confidence": probability(index),
-            });
-            if let ([target], Some(selection)) =
-                (candidate.targets.as_slice(), selection.as_object_mut())
-            {
-                selection.insert("target".into(), Json::String(target.clone()));
-            }
-            Ok(selection)
-        })
-        .collect::<Result<Vec<Json>, FailureCode>>()?;
+    // Only the chosen option is returned (the reference D-R-28), with its
+    // probability as its confidence and its only offerer as `target` (the
+    // original's `_single_enabler`), none when several offer it.
+    let mut selection = serde_json::json!({
+        "event": candidate.event,
+        "data": data,
+        "confidence": probability(chosen),
+    });
+    if let ([target], Some(selection)) = (candidate.targets.as_slice(), selection.as_object_mut()) {
+        selection.insert("target".into(), Json::String(target.clone()));
+    }
     Ok(Returned::new(
         SELECTED_EVENT,
-        &serde_json::json!({ "selections": selections }),
+        &serde_json::json!({ "selections": [selection] }),
     ))
+}
+
+/// The lines of `text` as Python's `str.splitlines` splits them (the
+/// reference cuts its instructions by them): at `\n`, `\r`, `\r\n`, `\x0b`,
+/// `\x0c`, `\x1c` to `\x1e`, `\u{85}`, `\u{2028}` and `\u{2029}`, no empty
+/// line after a final break.
+fn split_lines(text: &str) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut line = String::new();
+    let mut characters = text.chars().peekable();
+    while let Some(character) = characters.next() {
+        match character {
+            '\r' => {
+                if characters.peek() == Some(&'\n') {
+                    characters.next();
+                }
+                lines.push(std::mem::take(&mut line));
+            }
+            '\n' | '\x0b' | '\x0c' | '\x1c' | '\x1d' | '\x1e' | '\u{85}' | '\u{2028}'
+            | '\u{2029}' => lines.push(std::mem::take(&mut line)),
+            other => line.push(other),
+        }
+    }
+    if !line.is_empty() {
+        lines.push(line);
+    }
+    lines
 }
 
 /// The package's first declared `http-origins` entry: the base URL when no
@@ -1411,19 +1776,20 @@ mod guest {
         )
         .and_then(super::DecisionRequest::plan)
         .map_err(|detail| error(ErrorCode::InvalidInput, detail))?;
-        let prepared = match plan {
+        let mut prepared = match plan {
             Plan::Return(returned) => return Ok(Next::Return(returned)),
             Plan::Ask(prepared) => prepared,
         };
-        let Some(api_key) = slot(&request.references, super::API_KEY_SLOT) else {
-            return Ok(Next::Return(Returned::failed(FailureCode::Unconfigured)));
-        };
-        let base = match slot(&request.references, super::BASE_URL_SLOT) {
-            Some(reference) => super::Part::Reference(reference),
-            None => match super::package_origin() {
+        // A held key goes to the run's base URL, else the package's origin;
+        // without a key, only a base URL the run names is asked, keyless.
+        let api_key = slot(&request.references, super::API_KEY_SLOT);
+        let base = match (slot(&request.references, super::BASE_URL_SLOT), api_key) {
+            (Some(reference), _) => super::Part::Reference(reference),
+            (None, Some(_)) => match super::package_origin() {
                 Some(origin) => super::Part::Literal(origin),
                 None => return Ok(Next::Return(Returned::failed(FailureCode::Unconfigured))),
             },
+            (None, None) => return Ok(Next::Return(Returned::failed(FailureCode::Unconfigured))),
         };
         let built = prepared.request(&TypeSafe, api_key, base);
         let http = HttpRequest {
@@ -1467,8 +1833,8 @@ mod guest {
                 ))
             });
             wit_bindgen::spawn(async move {
-                let decided = match next {
-                    Next::Return(decided) => decided,
+                let (decided, done_data) = match next {
+                    Next::Return(decided) => (decided, None),
                     // Suspends only this task, never the invoking session.
                     Next::Ask(prepared, http) => {
                         let answered = outbound_http::fetch(http)
@@ -1481,7 +1847,10 @@ mod guest {
                                 ErrorCode::PayloadTooLarge => TransportFailure::TooLarge,
                                 _ => TransportFailure::Unavailable,
                             });
-                        prepared.decide(&TypeSafe, answered)
+                        (
+                            prepared.decide(&TypeSafe, &answered),
+                            prepared.done_data(&TypeSafe, &answered),
+                        )
                     }
                 };
                 telemetry::event(
@@ -1499,7 +1868,7 @@ mod guest {
                     return;
                 }
                 drop(returned);
-                let _ = done.write(Ok(None)).await;
+                let _ = done.write(Ok(done_data.map(DataValue::JsonObject))).await;
             });
             Ok((returned_reader, done_reader))
         }

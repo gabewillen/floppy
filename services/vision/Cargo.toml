@@ -1,0 +1,35 @@
+[package]
+name = "floppy-service-vision"
+description = "The `vision` invoked service: measures how much a view changed since the last one handed on (the original's change measures), reading the image from a directory the run grants, as a Wasm component whose `invoke` export is an `async func`"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Canonical JSON (the done data) and the `previous` signature's parse.
+scxml-event-schema.workspace = true
+scxml-types.workspace = true
+serde_json.workspace = true
+# The byte identity measure's SHA-256 (the same pin as scxml.rs).
+sha2.workspace = true
+# The frame difference measure's PNG and WebP decoders, pure Rust for
+# wasm32-wasip2 (floppy only; see the workspace's pins). JPEG is decoded
+# by the crate itself (`src/jpeg.rs`), at an eighth as libjpeg decodes it.
+png.workspace = true
+image-webp.workspace = true
+# The WASI 0.3 async ABI: `invoke` is an `async func`.
+wit-bindgen = { workspace = true, features = ["async", "async-spawn"] }
+
+[dev-dependencies]
+# The package test reads the manifest with the parser every host uses.
+scxml-validator-core.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- stm-5: heard and said turns are read back oldest first with their speakers. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="stm" type="scxml" src="../../../stm.scx">
+    <param name="database" expr="'/memory/floppy.sqlite'"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'stm' &amp;&amp; _event.data.choices.length === 0" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.memory.stm.turn" target="#_stm"><content expr="{&quot;id&quot;: &quot;t1&quot;, &quot;direction&quot;: &quot;heard&quot;, &quot;speakers&quot;: [{&quot;ref&quot;: &quot;voice:3f2a9c&quot;, &quot;role&quot;: &quot;source&quot;}], &quot;text&quot;: &quot;Hi there, I'm Maya.&quot;, &quot;cut&quot;: false, &quot;conversation&quot;: &quot;listening&quot;}"/></send>
+      <send event="bot.ability.memory.stm.turn" target="#_stm"><content expr='{"id": "t2", "direction": "said", "speakers": [{"ref": "voice:tts:warm", "role": "source", "own": true}], "text": "Hello Maya.", "cut": false, "conversation": "conversation"}'/></send>
+      <send event="bot.ability.memory.stm.recent_turns" target="#_stm"><content expr="{}"/></send>
+    </onentry>
+    <transition event="bot.ability.memory.stm.recent_turns.output" cond="JSON.stringify(_event.data.turns.map((t) =&gt; t.text)) === &quot;[\&quot;Hi there, I'm Maya.\&quot;,\&quot;Hello Maya.\&quot;]&quot; &amp;&amp; _event.data.turns[0].direction === 'heard' &amp;&amp; _event.data.turns[1].direction === 'said' &amp;&amp; _event.data.turns[0].speakers[0].ref === 'voice:3f2a9c' &amp;&amp; _event.data.turns[1].speakers[0].own === true &amp;&amp; _event.data.turns[1].conversation === 'conversation' &amp;&amp; _event.data.turns[0].cut === false &amp;&amp; /Z$/.test(_event.data.turns[0].at)" target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

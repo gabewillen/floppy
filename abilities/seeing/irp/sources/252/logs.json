@@ -1,0 +1,5 @@
+{
+  "seeing.degraded": [
+    "measure_every_ms must be positive"
+  ]
+}

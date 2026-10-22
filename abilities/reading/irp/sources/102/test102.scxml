@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- reading-1: an input with an empty content is never routed: the sender gets error.execution. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="reading" type="scxml" src="../../../reading.scx"/>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <onentry>
+      <send event="bot.ability.reading.input" target="#_reading"><content expr='{"kind": "text", "content": ""}'/></send>
+    </onentry>
+    <transition event="error.execution" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.reading.input" target="#_reading"><content expr='{"kind": "image", "content": ""}'/></send>
+    </onentry>
+    <transition event="error.execution" target="step2"/>
+  </state>
+  <state id="step2">
+    <onentry>
+      <send event="bot.ability.reading.input" target="#_reading"><content expr='{"kind": "text", "content": "next"}'/></send>
+    </onentry>
+    <transition event="bot.ability.reading.output" cond='_event.data.text === "next" &amp;&amp; _event.data.source_kind === "text" &amp;&amp; _event.data.confidence === 1' target="step3"/>
+  </state>
+  <state id="step3">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

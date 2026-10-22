@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's Description (the original's image description) with the
+  original's GenerativeDescriber: what one image shows, in a few plain
+  sentences, asked of an image-capable model once per image. Seeing
+  (abilities/seeing/seeing.scx) invokes it once per view from the state
+  that bounds its description stage; leaving that state cancels it and its
+  model call (SCXML 6.4), which replaces the original's stuck-stage recovery
+  (detach and re-attach).
+
+    description { idle -bot.ability.vision.description.input-> applying
+      -generate.result-> replied } -> applied (final)
+
+  Input: the <param>s image (a reference to the image, as
+  environment.visual carries it) and media_type (the view's, or null),
+  model (the vision model, as reading's) and instructions (the original's
+  DESCRIBE_INSTRUCTIONS, verbatim).
+
+  idle sends its input to itself as bot.ability.vision.description.input
+  {image, media_type} (the original's media.Image, by reference); the
+  transition taking it carries its event:schema, so a missing or malformed
+  image is error.execution here and a failure.
+
+  applying invokes the generate service with one user message whose
+  content is the instructions as a text part ({kind: "text", content})
+  and the image's reference as an image part ({kind: "image", content}),
+  the original's TextPart and ImagePart, as reading builds them. Its text
+  reply goes to replied.
+
+  replied is the original's GenerativeDescriber and the Description's
+  output guard: the reply is trimmed; an empty one fails ("the generator
+  answered with an empty description"); it is sent to itself as
+  bot.ability.vision.description.output {description} (the original's bare
+  string, wrapped), whose schema admits at most the original's
+  MAX_DESCRIPTION_CHARS (4000) characters, and the transition taking it
+  answers the parent with it.
+
+  Failures: the parent gets bot.ability.failed {message} (the original's
+  FailureData, its message the original's error text where it has one): an
+  empty reply, generate.failed ("Description generator failed: <code>."),
+  a result without text, a description over 4000 characters (the original's
+  invalid-output failure, "Description produced output that does not match
+  its output schema."), or a step that cannot run ("Description could not
+  run (<error event>)": a malformed input, or an image the generate service
+  cannot read, which rejects its start). Either answer ends the
+  description in applied.
+
+  Media by reference: the generate service reads the image from the media
+  directory the run grants it as /media and sends it as a data: URL; this
+  document never holds image bytes. The original's check that the model
+  can take the image is the service's (an image it cannot send rejects
+  its start).
+
+  Logs: description.failed (the failure message); never the description.
+
+  Contracts: every event it takes, its own included, references its
+  abilities/schemas/ file by event:schema. The generate service's events
+  are not checked by scxml.rs, so their conds check their shape.
+
+  Bindings: the generate service package; env scopes FLOPPY_API_KEY and
+  FLOPPY_BASE_URL to its <invoke> (no default backend, decision D31:
+  without a base URL it answers generate.failed unconfigured, and without
+  a key it asks a keyless backend with no key header, decision D127). The
+  run grants the service the media directory (scx run's dir option).
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="Description" initial="description">
+  <datamodel>
+    <!-- The invoker's <param>s. -->
+    <data id="image" expr="null"/>
+    <data id="media_type" expr="null"/>
+    <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <data id="instructions" expr="'Describe what this image shows in two or three plain sentences: the people, objects, text and activity in view. Do not guess who anyone is; describe people only by what can be seen.'"/>
+    <!-- The model's reply, trimmed. -->
+    <data id="said" expr="null"/>
+  </datamodel>
+  <script src="description.js"/>
+
+  <!-- Any failure answers the parent with the original's FailureData. -->
+  <state id="description" initial="idle">
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="applied">
+      <log label="description.failed" expr="_event.data.message"/>
+      <send event="bot.ability.failed" target="#_parent">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <transition event="error.*" target="applied">
+      <log label="description.failed" expr="couldNotRunMessage(_event)"/>
+      <send event="bot.ability.failed" target="#_parent">
+        <param name="message" expr="couldNotRunMessage(_event)"/>
+      </send>
+    </transition>
+
+    <!-- The input, from the invoker's <param>s, checked by its schema. -->
+    <state id="idle">
+      <onentry>
+        <send event="bot.ability.vision.description.input" target="#_internal">
+          <param name="image" expr="image"/>
+          <param name="media_type" expr="media_type"/>
+        </send>
+      </onentry>
+      <transition event="bot.ability.vision.description.input"
+                  event:schema="../schemas/bot.ability.vision.description.input.json" target="applying"/>
+    </state>
+
+    <!-- The model looks at the referenced image. -->
+    <state id="applying">
+      <invoke id="describer" type="https://github.com/stateforward/floppy/services/generate"
+              env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
+        <param name="model" expr="model"/>
+        <param name="messages" expr="descriptionMessages()"/>
+      </invoke>
+      <transition event="generate.result" cond="isGenerateTextResult(_event)" target="replied">
+        <assign location="said" expr="saidText(_event)"/>
+      </transition>
+      <transition event="generate.failed">
+        <send event="bot.ability.failed" target="#_internal">
+          <param name="message" expr="generatorFailedMessage(_event)"/>
+        </send>
+      </transition>
+      <transition event="done.invoke.describer">
+        <send event="bot.ability.failed" target="#_internal">
+          <param name="message" expr="'Description generator produced non-text output.'"/>
+        </send>
+      </transition>
+    </state>
+
+    <!-- The original's GenerativeDescriber and output guard. -->
+    <state id="replied">
+      <onentry>
+        <if cond="isEmptyDescription()">
+          <send event="bot.ability.failed" target="#_internal">
+            <param name="message" expr="'the generator answered with an empty description'"/>
+          </send>
+        <else/>
+          <send event="bot.ability.vision.description.output" target="#_internal">
+            <param name="description" expr="said"/>
+          </send>
+        </if>
+      </onentry>
+      <transition event="bot.ability.vision.description.output"
+                  event:schema="../schemas/bot.ability.vision.description.output.json" target="applied">
+        <send event="bot.ability.vision.description.output" target="#_parent">
+          <content expr="_event.data"/>
+        </send>
+      </transition>
+      <!-- An output its schema refuses (the original's invalid output). -->
+      <transition event="error.*" target="applied">
+        <log label="description.failed" expr="mismatchedMessage()"/>
+        <send event="bot.ability.failed" target="#_parent">
+          <param name="message" expr="mismatchedMessage()"/>
+        </send>
+      </transition>
+    </state>
+  </state>
+
+  <final id="applied"/>
+</scxml>

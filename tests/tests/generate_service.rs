@@ -145,8 +145,8 @@ fn counted_stream(content: &str) -> String {
 
 /// A deterministic fake Chat Completions backend on 127.0.0.1: the first
 /// path segment picks the scripted answer (`/text`, `/json`, `/mismatch`,
-/// `/invented`, `/usage`, `/stream`, `/fail` answers 500); every request is
-/// recorded.
+/// `/invented`, `/usage`, `/stream`, `/content`, `/fail` answers 500);
+/// every request is recorded.
 struct Mock {
     origin: String,
     received: Arc<Mutex<Vec<Received>>>,
@@ -215,6 +215,9 @@ impl Mock {
                     ),
                     "/usage/v1/chat/completions" => ("200 OK", counted_completion("Counted.")),
                     "/stream/v1/chat/completions" => ("200 OK", counted_stream("Streamed.")),
+                    "/content/v1/chat/completions" => {
+                        ("200 OK", completion(r#"{"score":"41","answer":"yes"}"#))
+                    }
                     "/fail/v1/chat/completions" => (
                         "500 Internal Server Error",
                         r#"{"error":{"message":"boom"}}"#.to_owned(),
@@ -467,6 +470,47 @@ fn a_failing_backend_returns_generate_failed() {
     );
 }
 
+/// Under `tool_choice` `auto` a model may answer in its content, which is
+/// read as the tool's call (here with a score the schema refuses as a
+/// string, so the rejection names it); the sampling and thinking bounds are
+/// sent as given.
+#[test]
+fn under_auto_the_content_is_read_as_the_call_and_the_bounds_are_sent() {
+    let mock = Mock::start();
+    let env = env_file("content", &format!("{}/content/v1", mock.origin));
+    let params = format!(
+        r#"{STRUCTURED_PARAMS}
+      <param name="tool_choice" expr="'auto'"/>
+      <param name="temperature" expr="0"/>
+      <param name="max_completion_tokens" expr="512"/>
+      <param name="thinking_token_budget" expr="64"/>"#
+    );
+    let finished = open(
+        &args(&env),
+        &document_with(&params, "'unexpected'", "JSON.stringify(_event.data)"),
+    );
+    assert_eq!(
+        logs(&finished.records),
+        labelled(&[
+            (
+                "failed",
+                r#"{"code":"schema-mismatch","rejection":{"key":"schema-mismatch:/score","message":"/score: want integer, but got string"}}"#
+            ),
+            ("final", "done")
+        ]),
+        "{:?}",
+        finished.records
+    );
+    let received = mock.received();
+    assert_eq!(received.len(), 1);
+    let body: serde_json::Value =
+        serde_json::from_slice(&received[0].body).expect("the body is JSON");
+    assert_eq!(body["tool_choice"], "auto");
+    assert_eq!(body["temperature"], 0.0);
+    assert_eq!(body["max_completion_tokens"], 512);
+    assert_eq!(body["thinking_token_budget"], 64);
+}
+
 /// A PNG signature and two bytes: the smallest file the service sends as
 /// `image/png`.
 const PNG: &[u8] = b"\x89PNG\r\n\x1a\nab";
@@ -591,7 +635,7 @@ fn parameters_the_package_validator_sees_refuse_the_run_and_send_nothing() {
     let finished = support::run_document(
         "generate.scx",
         &document(
-            r#"<param name="prompt" expr="'Say hello.'"/><param name="temperature" expr="1"/>"#,
+            r#"<param name="prompt" expr="'Say hello.'"/><param name="top_p" expr="1"/>"#,
             "_event.data.content",
         ),
         &args(&env),
@@ -629,8 +673,11 @@ fn malformed_parameters_reject_the_start_and_send_nothing() {
     assert!(mock.received().is_empty(), "nothing is sent");
 }
 
+/// A run that holds a base URL and no key asks a keyless backend: the
+/// request carries no `authorization` header at all, as the original's
+/// keyless client asks one (decision D127).
 #[test]
-fn without_a_granted_key_nothing_is_sent() {
+fn without_a_held_key_the_request_carries_no_authorization() {
     let mock = Mock::start();
     let env = env_file_with(
         "nokey",
@@ -642,10 +689,15 @@ fn without_a_granted_key_nothing_is_sent() {
     let records = &finished.records;
     assert_eq!(
         logs(records),
-        labelled(&[("failed", "unconfigured"), ("final", "done")]),
+        labelled(&[("reply", "Hello from the fake backend!"), ("final", "done")]),
         "{records:?}"
     );
-    assert!(mock.received().is_empty(), "no request without a key");
+    let received = mock.received();
+    assert_eq!(received.len(), 1, "exactly one request");
+    assert_eq!(
+        received[0].authorization, None,
+        "a keyless request has no authorization header"
+    );
 }
 
 /// The package declares no `http-origins`, so the one origin a request may
@@ -745,22 +797,24 @@ fn the_consent_lists_each_service_and_where_each_variable_goes_and_never_a_value
 }
 
 #[test]
-fn a_key_named_only_by_another_invoke_is_absent_and_nothing_is_sent() {
+fn a_key_named_only_by_another_invoke_is_absent_and_never_sent() {
     let mock = Mock::start();
     let env = env_file("out-of-scope", &format!("{}/text/v1", mock.origin));
     // Only the decision invocation names the key: the generate invocation
     // gets no reference for it and its apikey slot is absent, exactly as if
-    // the run held no value.
+    // the run held no value, so it asks keyless (decision D127).
     let finished = open(&args(&env), &two_services(TEXT_PARAMS));
     let records = &finished.records;
     assert_eq!(
         logs(records),
-        labelled(&[("failed", "unconfigured"), ("final", "done")]),
+        labelled(&[("reply", "Hello from the fake backend!"), ("final", "done")]),
         "{records:?}"
     );
-    assert!(
-        mock.received().is_empty(),
-        "no request without an in-scope key"
+    let received = mock.received();
+    assert_eq!(received.len(), 1, "exactly one request");
+    assert_eq!(
+        received[0].authorization, None,
+        "the out-of-scope key never reaches the request"
     );
 }
 

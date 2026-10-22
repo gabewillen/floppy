@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- object_detection-5: 32 objects at most by default. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="object_detection" type="scxml" src="../../../object_detection.scx">
+    <param name="image" expr="'media/scene.png'"/>
+    <param name="media_type" expr="'image/png'"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.vision.detection.output" cond='JSON.stringify(_event.data) === "{\"objects\":[{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o0\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o1\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o2\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o3\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o4\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o5\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o6\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o7\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o8\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o9\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o10\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o11\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o12\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o13\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o14\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o15\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o16\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o17\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o18\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o19\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o20\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o21\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o22\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o23\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o24\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o25\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o26\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o27\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o28\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o29\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o30\"},{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":null,\"label\":\"o31\"}]}"' target="step1"/>
+  </state>
+  <state id="step1">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

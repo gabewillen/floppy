@@ -78,11 +78,11 @@ const FLOPPY_NAME: &str = "[floppy name]";
 const DIALECT: &str = "https://json-schema.org/draft/2020-12/schema";
 
 /// The body's events (`bots/floppy/schemas/`).
-const BODY_EVENTS: [&str; 13] = [
+const BODY_EVENTS: [&str; 12] = [
     "bot.deactivate",
     "bot.input",
+    "bot.perceived",
     "bot.focus_device",
-    "bot.clear_focus",
     "bot.activated",
     "bot.activating.failed",
     "bot.deactivated",
@@ -91,11 +91,10 @@ const BODY_EVENTS: [&str; 13] = [
     "bot.processing.timed_out",
     "bot.processing.cancel.timed_out",
     "bot.degraded",
-    "environment.visual",
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 75] = [
+const ABILITY_EVENTS: [&str; 98] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -104,6 +103,9 @@ const ABILITY_EVENTS: [&str; 75] = [
     "bot.ability.cognition.cancelled",
     "bot.ability.cognition.ignore",
     "bot.ability.cognition.child.hop.timed_out",
+    // A failed or timed-out step, handed back to be perceived.
+    "bot.ability.cognition.step.failed",
+    "bot.ability.cognition.step.timed_out",
     "bot.ability.processing.cancelled",
     "bot.ability.autonomy.input",
     "bot.ability.autonomy.output",
@@ -134,9 +136,16 @@ const ABILITY_EVENTS: [&str; 75] = [
     "environment.sound",
     "bot.ability.identity.adopt",
     "bot.ability.identity.adopted",
-    "bot.ability.identity.adopt.failed",
     "bot.ability.identity.addressed",
     "bot.ability.identity.recalled",
+    "bot.ability.identity.ask",
+    "bot.ability.identity.named",
+    // The original's Persona: its revise, its output and its private
+    // completions.
+    "bot.ability.persona.revise",
+    "bot.ability.persona.output",
+    "bot.ability.persona.recalled",
+    "bot.ability.persona.revised",
     "bot.behavior.create",
     "bot.behavior.change",
     "bot.behavior.break",
@@ -180,12 +189,33 @@ const ABILITY_EVENTS: [&str; 75] = [
     "bot.ability.turn_detector.turn.complete",
     "bot.ability.turn_detector.failed",
     "bot.ability.turn_detector.ready",
+    // The original's short-term register (abilities/memory/stm.py): its
+    // notifications, its requests and their replies.
+    "bot.ability.memory.stm.record",
+    "bot.ability.memory.stm.reinforce",
+    "bot.ability.memory.stm.recent",
+    "bot.ability.memory.stm.recent.output",
+    "bot.ability.memory.stm.turn",
+    "bot.ability.memory.stm.recent_turns",
+    "bot.ability.memory.stm.recent_turns.output",
+    // Seeing (the original's Seeing), the stimulus it takes, and its stage
+    // children's object detection and description (decisions D185 to
+    // D189).
+    "environment.visual",
+    "bot.ability.seeing.sight",
+    "bot.ability.seeing.look",
+    "bot.ability.seeing.measure.completed",
+    "bot.ability.seeing.measure.failed",
+    "bot.ability.vision.detection.input",
+    "bot.ability.vision.detection.output",
+    "bot.ability.vision.description.input",
+    "bot.ability.vision.description.output",
 ];
 
 /// The correlated events of one processing turn: each requires `turn`.
 /// Tool events (the ones a model chooses, such as
 /// `bot.ability.cognition.ignore`) never do: their data is the model's.
-const CORRELATED: [&str; 16] = [
+const CORRELATED: [&str; 18] = [
     "bot.processing.completed",
     "bot.processing.failed",
     "bot.processing.timed_out",
@@ -194,6 +224,8 @@ const CORRELATED: [&str; 16] = [
     "bot.ability.cognition.cancel",
     "bot.ability.cognition.cancelled",
     "bot.ability.cognition.child.hop.timed_out",
+    "bot.ability.cognition.step.failed",
+    "bot.ability.cognition.step.timed_out",
     "bot.ability.processing.cancelled",
     "bot.ability.autonomy.input",
     "bot.ability.autonomy.output",
@@ -355,6 +387,48 @@ fn every_schema_is_2020_12_compiles_and_is_titled_by_its_file_name() {
             );
         }
     }
+}
+
+/// Whether `node` is a schema of the original's `Participant`: an object
+/// schema whose properties are its `ref` and `role`.
+fn is_participant(node: &Json) -> bool {
+    node.get("properties")
+        .and_then(Json::as_object)
+        .is_some_and(|properties| properties.contains_key("ref") && properties.contains_key("role"))
+}
+
+#[test]
+fn every_participant_is_the_originals_one_participant() {
+    // scxml.rs bundles no schema from another file (a `$ref` that is not a
+    // fragment is refused, `ReferenceReason::External`), so each schema
+    // that carries participants inlines the original's Participant, and
+    // every one is the same: its ref, role, own and resembles.
+    let mut participants: Vec<(String, Json)> = Vec::new();
+    for (event, schema) in all_schemas() {
+        walk(&schema, &mut |node| {
+            if is_participant(node) {
+                participants.push((event.clone(), node.clone()));
+            }
+        });
+    }
+    let (_, first) = participants
+        .iter()
+        .find(|(event, _)| event == "bot.input")
+        .expect("bot.input carries participants");
+    let properties: BTreeSet<&str> = first["properties"]
+        .as_object()
+        .expect("properties")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(
+        properties,
+        BTreeSet::from(["ref", "role", "own", "resembles"])
+    );
+    for (event, participant) in &participants {
+        assert_eq!(participant, first, "{event} inlines the one Participant");
+    }
+    assert!(participants.len() > 1, "{participants:?}");
 }
 
 #[test]

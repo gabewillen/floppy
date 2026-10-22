@@ -1,0 +1,22 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "[{\"label\": \"a\", \"confidence\": 1, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"b\", \"confidence\": true, \"box\": {\"x\": 0, \"y\": 0, \"width\": 0.5, \"height\": 0.5}}, {\"label\": \"c\", \"confidence\": \"0.5\", \"box\": {\"x\": 0, \"y\": 0, \"width\": 0.5, \"height\": 0.5}}, {\"label\": \"d\", \"confidence\": 0.5, \"box\": {\"x\": \"0.25\", \"y\": 0, \"width\": 0.5, \"height\": 0.5}}, {\"label\": \"e\", \"confidence\": 0.5, \"box\": {\"x\": false, \"y\": 0, \"width\": 0.5, \"height\": 0.5}}, {\"label\": \"f\", \"confidence\": 0.5, \"box\": {\"x\": 0, \"y\": 0, \"width\": 0.5, \"height\": 0.5}}]"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -35,7 +35,9 @@
   with one user message whose content is the original's ImageDecoder prompt
   ("Read all visible text in this image. Return only the text.") as a
   text part ({kind: "text", content}) and the input's reference as an
-  image part ({kind: "image", content}), the original's reading parts, and sends
+  image part ({kind: "image", content}), the original's reading parts, at
+  the original's image decoder settings (temperature 0, at most 512
+  tokens, decision D128), and sends
   bot.ability.reading.image.decoded {text (the reply, trimmed as the original
   does), source_kind: "image", confidence}. The confidence is the
   classification's. EncodingOutput sends
@@ -67,6 +69,12 @@
   (error.execution, a failed image_decoding). This document never holds
   image bytes.
 
+  Input: the original's input carries a typed media.Image and no kind since
+  fa45d93; that commit is superseded here by D36 (media is a URI
+  reference), so the input keeps the kind that tells a reference from text.
+  Its content is non-empty (the original's min_length=1, reading.py:50): an
+  empty one is refused by its schema and never reaches the reading.
+
   Logs: reading.focused (the input's kind), reading.output (the
   source_kind) and reading.failed (the stage).
 
@@ -77,9 +85,10 @@
 
   Bindings: the generate service package, resolved from its repository
   URI; env scopes FLOPPY_API_KEY and FLOPPY_BASE_URL to its <invoke> (no
-  default backend: without either it answers generate.failed
-  unconfigured). model is the vision model the Sparks serve; an invoker
-  may pass another by <param>.
+  default backend: without a base URL it answers generate.failed
+  unconfigured, and without a key it asks a keyless backend with no key
+  header, decision D127). model is the vision model the Sparks serve; an
+  invoker may pass another by <param>.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
@@ -206,6 +215,8 @@
                 env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
           <param name="model" expr="model"/>
           <param name="messages" expr="imageDecodingMessages()"/>
+          <param name="temperature" expr="0"/>
+          <param name="max_completion_tokens" expr="512"/>
         </invoke>
         <transition event="generate.result" cond="isGenerateTextResult(_event)">
           <send event="bot.ability.reading.image.decoded" target="#_internal">

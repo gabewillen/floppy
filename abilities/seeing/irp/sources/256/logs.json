@@ -1,0 +1,5 @@
+{
+  "seeing.degraded": [
+    "stage_timeout_ms must be positive"
+  ]
+}

@@ -53,12 +53,23 @@ pub struct Distribution {
     pub probabilities: Vec<f64>,
 }
 
+/// The tokens a backend says it counted for one answered request.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Usage {
+    /// The tokens it read: the request as its own tokenizer and template
+    /// counted it.
+    pub input_tokens: u64,
+    /// The tokens it wrote, when it says.
+    pub output_tokens: Option<u64>,
+}
+
 /// A decision backend.
 pub trait Backend {
     /// The one `POST` that asks `batch`: `base` is the `baseurl` slot's
     /// reference, or the package's declared origin when no value is held,
-    /// and `api_key` the `apikey` slot's.
-    fn request(&self, batch: &Batch, api_key: u32, base: Part) -> Request;
+    /// and `api_key` the `apikey` slot's, `None` for a keyless endpoint (no
+    /// authorization is sent).
+    fn request(&self, batch: &Batch, api_key: Option<u32>, base: Part) -> Request;
 
     /// The distributions of a successful response body, one per question of
     /// `batch`, in order.
@@ -68,6 +79,10 @@ pub trait Backend {
     /// A static detail when the body does not answer exactly the batch's
     /// questions with valid distributions over their labels.
     fn answers(&self, batch: &Batch, body: &[u8]) -> Result<Vec<Distribution>, &'static str>;
+
+    /// The tokens a successful response body says the backend counted;
+    /// `None` when it says nothing usable.
+    fn usage(&self, body: &[u8]) -> Option<Usage>;
 }
 
 /// The index of the most probable criterion: highest probability, ties
@@ -107,9 +122,10 @@ pub fn argmax(criteria: &[Criterion], distribution: &Distribution) -> Option<usi
 }
 
 /// `TypeSafe`'s `system_one` API, as `typesafe-sdk` 0.6 speaks it:
-/// `POST {base}/v1/systemone` with `Authorization: Bearer <key>` and the
+/// `POST {base}/v1/systemone` with `Authorization: Bearer <key>` (none for a
+/// keyless endpoint) and the
 /// canonical JSON body `{"model":M,"questions":{N:{"criteria":{L:D},"instructions":I,"type":"choice"}},"state":S}`;
-/// the answer is `{"model":…,"answers":{N:{"type":"choice","choice":L,"confidence":…,"probabilities":{L:P}}},"usage":…}`.
+/// the answer is `{"model":…,"answers":{N:{"type":"choice","choice":L,"confidence":…,"probabilities":{L:P}}},"usage":{"input_tokens":…,"output_tokens":…}}`.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct TypeSafe;
 
@@ -121,7 +137,7 @@ impl TypeSafe {
 }
 
 impl Backend for TypeSafe {
-    fn request(&self, batch: &Batch, api_key: u32, base: Part) -> Request {
+    fn request(&self, batch: &Batch, api_key: Option<u32>, base: Part) -> Request {
         let questions: Map<String, Json> = batch
             .questions
             .iter()
@@ -146,24 +162,39 @@ impl Backend for TypeSafe {
             "questions": questions,
             "state": batch.state,
         });
-        Request {
-            url: vec![base, Part::Literal(Self::SYSTEM_ONE_PATH.into())],
-            headers: vec![
+        let mut headers: Vec<(String, Vec<Part>)> = api_key
+            .map(|api_key| {
                 (
                     "authorization".into(),
                     vec![Part::Literal("Bearer ".into()), Part::Reference(api_key)],
-                ),
-                (
-                    "content-type".into(),
-                    vec![Part::Literal("application/json".into())],
-                ),
-                (
-                    "accept".into(),
-                    vec![Part::Literal("application/json".into())],
-                ),
-            ],
+                )
+            })
+            .into_iter()
+            .collect();
+        headers.extend([
+            (
+                "content-type".into(),
+                vec![Part::Literal("application/json".into())],
+            ),
+            (
+                "accept".into(),
+                vec![Part::Literal("application/json".into())],
+            ),
+        ]);
+        Request {
+            url: vec![base, Part::Literal(Self::SYSTEM_ONE_PATH.into())],
+            headers,
             body: canonical_json(&body).into_bytes(),
         }
+    }
+
+    fn usage(&self, body: &[u8]) -> Option<Usage> {
+        let value: Json = serde_json::from_slice(body).ok()?;
+        let usage = value.get("usage")?;
+        Some(Usage {
+            input_tokens: usage.get("input_tokens")?.as_u64()?,
+            output_tokens: usage.get("output_tokens").and_then(Json::as_u64),
+        })
     }
 
     fn answers(&self, batch: &Batch, body: &[u8]) -> Result<Vec<Distribution>, &'static str> {

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- intuition-4: with intuition among the hand_ons, its pass hands the turn to intuition. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="intuition" type="scxml" src="../../../intuition.scx">
+    <param name="turn" expr="8"/>
+    <param name="stimulus" expr='{"event": "bot.input", "data": {"observation": {"event": "text", "data": "hello"}}, "source": "body"}'/>
+    <param name="focus" expr="null"/>
+    <param name="choices" expr='[{"event": "bot.say", "schema": {}, "target": "session"}]'/>
+    <param name="hand_ons" expr='["intuition", "reasoning"]'/>
+    <param name="decision_timeout_ms" expr="150000"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="done.invoke.intuition" cond="_event.data.turn === 8 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === &quot;empty_product&quot; &amp;&amp; typeof _event.data.confidence_tuner === 'object' &amp;&amp; Array.isArray(_event.data.acted) &amp;&amp; typeof _event.data.bytes_per_token === 'number' &amp;&amp; _event.data.hand_to === 'intuition' &amp;&amp; JSON.stringify(_event.data.acted) === &quot;[]&quot; &amp;&amp; _event.data.confidence_tuner.n === 0" target="step1"/>
+  </state>
+  <state id="step1">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

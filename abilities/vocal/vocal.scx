@@ -31,8 +31,9 @@
   "vocal", choices: []} to the parent; it offers nothing.
 
   Bindings: the speech service package, with FLOPPY_SPEECH_BASE_URL and
-  FLOPPY_SPEECH_API_KEY (no default backend, D31) and a media directory
-  the run grants it (scx run's dir option).
+  FLOPPY_SPEECH_API_KEY (no default backend, D31; without a key it asks a
+  keyless backend with no key header, D127) and a media directory the run
+  grants it (scx run's dir option).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"

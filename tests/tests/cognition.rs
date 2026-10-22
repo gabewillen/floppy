@@ -1,5 +1,6 @@
 //! The floppy bot's cognition cascade (`abilities/cognition/cognition.scx` with its
-//! stages `abilities/autonomy/autonomy.scx`, `intuition.scx`, and `reasoning.scx`),
+//! stages `abilities/autonomy/autonomy.scx`, `intuition.scx` (the decision
+//! layer), and `reasoning.scx`),
 //! run as the body's child through `scx run` on the wall clock.
 //!
 //! Each test lays out a scratch copy of the repository's shape (the body
@@ -47,6 +48,21 @@ const SETTLE: Duration = Duration::from_secs(1);
 const FAKE_KEYS: &str = "FLOPPY_API_KEY=floppy-fake\nTYPESAFE_API_KEY=ts-floppy-fake\n";
 const IGNORE: &str = "bot.ability.cognition.ignore";
 const RESPOND: &str = "bot.ability.communication.respond";
+/// The deliberative handoff the intuition tier is offered (decision D144).
+const HANDOFF: &str = "bot.ability.reasoning.input";
+/// An 8 s inactivity bound for reasoning, with the reflex tier (autonomy
+/// and the decision layer) given its own 30 s step bound (decision D140), so
+/// a loaded machine's slow decision never meets reasoning's bound.
+/// The reflex tier's own 30 s step bound alone, for tests that shorten the
+/// stage bounds in the cognition's `<data>` to bound reasoning.
+const SLOW_REFLEX_BOUNDS: &str = "({reflex_timeout_ms: 30000})";
+const STALLED_REASONING_BOUNDS: &str =
+    "({child_operation_timeout_ms: 8000, reflex_timeout_ms: 30000})";
+/// A model context whose budget (three bytes a token) holds the first
+/// turn's prompt but not the second's with its recalled episode.
+const FITTED_TOKENS: u32 = 2_200;
+/// The model a bot composing the intuition tier gives it.
+const INTUITION_MODEL: &str = "chat-model";
 const ADOPT: &str = "bot.ability.identity.adopt";
 /// The turn's choices as the body collects them, each `event@target`: the
 /// cognition's offer, the communication's and the identity's, each tagged
@@ -60,11 +76,16 @@ const COGNITION: &str = "session.floppy.cognition";
 enum Decision {
     /// Chooses ignore (0.8).
     Ignore,
-    /// Chooses the pass criterion `__unhandled__` (0.8): reasoning handles
-    /// the turn.
+    /// Chooses the pass to reasoning `__reasoning__` (0.8): reasoning
+    /// handles the turn.
     Abstain,
+    /// Chooses the pass to intuition `__intuition__` (0.8): the chat tier
+    /// takes the turn when the bot composes one.
+    ToIntuition,
     /// Chooses ignore with 0.34 (each other label 0.33).
     Low,
+    /// Chooses respond with 0.34 (each other label 0.33).
+    LowRespond,
     /// Answers 500.
     Fail,
     /// Never answers.
@@ -76,7 +97,9 @@ impl Decision {
         match self {
             Self::Ignore => "ignore",
             Self::Abstain => "abstain",
+            Self::ToIntuition => "tointuition",
             Self::Low => "low",
+            Self::LowRespond => "lowrespond",
             Self::Fail => "dfail",
             Self::Hang => "dhang",
         }
@@ -93,7 +116,7 @@ enum Generation {
     /// A response for the communication to say.
     Respond,
     /// The communication's respond with the text `hi`: the same action a
-    /// low-confidence intuition hands out for the stimulus `hi`.
+    /// low-confidence decision layer hands out for the stimulus `hi`.
     Repeat,
     /// Answers 500.
     Fail,
@@ -107,6 +130,11 @@ enum Generation {
     /// A stream of keep-alive comments only, as a gateway sends while its
     /// model says nothing ([`support::answer_with_pings`]).
     Pings,
+    /// The intuition tier's model ([`INTUITION_MODEL`]) says it is
+    /// thinking and hands the turn on; any other answers as [`Self::Respond`].
+    HandOff,
+    /// The intuition tier's model answers 500; any other as [`Self::Respond`].
+    IntuitionFails,
 }
 
 impl Generation {
@@ -121,6 +149,8 @@ impl Generation {
             Self::Repeat => "grepeat",
             Self::Fail => "gfail",
             Self::Hang => "ghang",
+            Self::HandOff => "ghandoff",
+            Self::IntuitionFails => "gintuitionfails",
         }
     }
 }
@@ -227,14 +257,26 @@ fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
     }
     match target {
         "/ignore/v1/systemone" => ok(decided(body, IGNORE, 0.8)?),
-        "/abstain/v1/systemone" => ok(decided(body, "__unhandled__", 0.8)?),
+        "/abstain/v1/systemone" => ok(decided(body, "__reasoning__", 0.8)?),
+        "/tointuition/v1/systemone" => ok(decided(body, "__intuition__", 0.8)?),
         "/low/v1/systemone" => ok(decided_with(body, IGNORE, 0.34, Some(0.33))?),
+        "/lowrespond/v1/systemone" => ok(decided_with(body, RESPOND, 0.34, Some(0.33))?),
         "/gignore/v1/chat/completions" => selection(json!([
             {"event": IGNORE, "data": {}, "reason": "nothing to say"}
         ])),
         "/grespond/v1/chat/completions" => selection(json!([
             {"event": RESPOND, "data": {"text": "Hi! I am floppy."}, "reason": "greet"}
         ])),
+        "/ghandoff/v1/chat/completions" if body["model"] == INTUITION_MODEL => selection(json!([
+            {"event": RESPOND, "data": {"text": "Let me think."}, "reason": "hold on"},
+            {"event": HANDOFF, "data": {}, "reason": "this needs thought"}
+        ])),
+        "/gintuitionfails/v1/chat/completions" if body["model"] == INTUITION_MODEL => fail(),
+        "/ghandoff/v1/chat/completions" | "/gintuitionfails/v1/chat/completions" => {
+            selection(json!([
+                {"event": RESPOND, "data": {"text": "Hi! I am floppy."}, "reason": "greet"}
+            ]))
+        }
         "/grepeat/v1/chat/completions" => selection(json!([
             {"event": RESPOND, "data": {"text": "hi"}, "reason": "answer"}
         ])),
@@ -439,6 +481,10 @@ fn layout(
     let dir = unique_scratch("cognition");
     copy_dir(&workspace().join("bots/floppy"), &dir.join("bots/floppy"));
     copy_dir(
+        &workspace().join("bots/floppy/firmware"),
+        &dir.join("bots/floppy/firmware"),
+    );
+    copy_dir(
         &workspace().join("bots/floppy/schemas"),
         &dir.join("bots/floppy/schemas"),
     );
@@ -632,7 +678,7 @@ fn selection_labels(mock: &Mock) -> Vec<String> {
 }
 
 #[test]
-fn intuition_handles_an_ignore_without_reasoning() {
+fn the_decision_layer_handles_an_ignore_without_reasoning() {
     let mock = Mock::start();
     let bot = layout(&mock, Decision::Ignore, Generation::Fail, &[]);
     let mut run = start(&bot);
@@ -646,7 +692,7 @@ fn intuition_handles_an_ignore_without_reasoning() {
         texts(&records, "cognition.stage"),
         strings(&[
             "autonomy unhandled (no-behaviors)",
-            "intuition handled (none)"
+            "decision handled (none)"
         ])
     );
     // The body gives the cognition its memory: autonomy looks the
@@ -656,16 +702,20 @@ fn intuition_handles_an_ignore_without_reasoning() {
         strings(&["turn 1: 0 matched for bot.input"])
     );
     // An ignore is the turn's terminal product, the cognition's only (the
-    // original's without_ignore_selections): intuition sends it to the
+    // original's without_ignore_selections): the decision layer sends it to the
     // cognition, its only offerer (the decision service names it), which
     // logs it.
     assert_eq!(texts(&records, "cognition.ignore"), strings(&["turn 1"]));
     // The decision offered the turn's choices it could fill (respond's
     // text and adopt's name have no grounded value); reasoning asked no
     // model.
-    assert_eq!(selection_labels(&mock), strings(&["__unhandled__", IGNORE]));
+    assert_eq!(selection_labels(&mock), strings(&["__reasoning__", IGNORE]));
     assert!(reasoning_requests(&mock).is_empty());
-    let finished = close(run, &mock, "intuition_handles_an_ignore_without_reasoning");
+    let finished = close(
+        run,
+        &mock,
+        "the_decision_layer_handles_an_ignore_without_reasoning",
+    );
     // Reflection reflected on the turn after its output (the backend's
     // empty selection) and asked the model once.
     assert_eq!(
@@ -816,7 +866,7 @@ fn start_with(bot: &Bot, args: &[String]) -> Run {
 /// stimulus triggers run in name order as candidates (the behavior double,
 /// `tests/fixtures/phase4/behavior_double.scx`, is one); a silent one, one
 /// that declines and one that cannot run advance, and the first that
-/// handles the turn answers it before intuition runs. A DRAFT behavior and
+/// handles the turn answers it before the decision layer runs. A DRAFT behavior and
 /// one triggered by another event never run; uses and failures are
 /// counted.
 #[test]
@@ -936,7 +986,7 @@ fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
         json_text(&records, "floppy.output"),
         json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "reason": "behavior: ignore", "target": COGNITION}]})
     );
-    // Neither intuition nor reasoning ran: no backend but reflection's
+    // Neither the decision layer nor reasoning ran: no backend but reflection's
     // was asked.
     assert!(texts(&records, "intuition").is_empty(), "{records:?}");
     assert!(asked_only_reflection(&mock));
@@ -956,7 +1006,7 @@ fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
 
 /// The original's Autonomy dispatches a handled behavior's selections before it
 /// counts the use: one that cannot be sent (here one that names no target)
-/// marks the behavior failed, not used, and fails the turn; intuition never
+/// marks the behavior failed, not used, and fails the turn; the decision layer never
 /// runs.
 #[test]
 fn a_learned_behavior_whose_selection_cannot_be_sent_fails_the_turn() {
@@ -987,7 +1037,7 @@ fn a_learned_behavior_whose_selection_cannot_be_sent_fails_the_turn() {
     support::use_database(&bot.body, DATABASE);
     let mut run = start_with(&bot, &grant);
     say(&mut run, "background noise");
-    let records = run.until(WAIT, turn_ended);
+    let records = until_turn_ended(&run, 1);
     let message = "Autonomy behavior dispatch failed: error.communication";
     assert_eq!(
         texts(&records, "autonomy.candidate.failed"),
@@ -999,6 +1049,19 @@ fn a_learned_behavior_whose_selection_cannot_be_sent_fails_the_turn() {
     );
     assert!(texts(&records, "floppy.output").is_empty(), "{records:?}");
     assert!(texts(&records, "intuition").is_empty(), "{records:?}");
+    // The handed-back failure of reflex is the next turn's stimulus, which
+    // no behavior is triggered by; it skips the decision layer, and
+    // reasoning (failing too) ends it without handing anything back.
+    let records = until_turn_ended(&run, 2);
+    assert_eq!(
+        opened(&records, 2).as_deref(),
+        Some("bot.ability.cognition.step.failed")
+    );
+    assert!(texts(&records, "intuition").is_empty(), "{records:?}");
+    assert_eq!(
+        texts(&records, "cognition.handed_back"),
+        strings(&["bounded"])
+    );
     close(
         run,
         &mock,
@@ -1008,9 +1071,9 @@ fn a_learned_behavior_whose_selection_cannot_be_sent_fails_the_turn() {
 }
 
 /// When every triggered behavior declines, autonomy answers unhandled and
-/// the cascade goes on to intuition.
+/// the cascade goes on to the decision layer.
 #[test]
-fn when_no_learned_behavior_handles_the_turn_intuition_runs() {
+fn when_no_learned_behavior_handles_the_turn_the_decision_layer_runs() {
     let mock = Mock::start();
     let declines = turn_behavior("({turn: turn, handled: false})");
     let memory = format!("'{DATABASE}'");
@@ -1038,7 +1101,7 @@ fn when_no_learned_behavior_handles_the_turn_intuition_runs() {
     let records = run.until(WAIT, label_is("bot.processing.completed"));
     assert_eq!(
         texts(&records, "cognition.stage"),
-        strings(&["autonomy unhandled (unhandled)", "intuition handled (none)"])
+        strings(&["autonomy unhandled (unhandled)", "decision handled (none)"])
     );
     assert_eq!(
         json_text(&records, "floppy.output"),
@@ -1047,7 +1110,7 @@ fn when_no_learned_behavior_handles_the_turn_intuition_runs() {
     close(
         run,
         &mock,
-        "when_no_learned_behavior_handles_the_turn_intuition_runs",
+        "when_no_learned_behavior_handles_the_turn_the_decision_layer_runs",
     );
     assert_eq!(usage(&grant, DATABASE), json!([["Declines", "0", "0"]]));
 }
@@ -1126,7 +1189,7 @@ fn reasoning_selects_from_the_turns_choices() {
         texts(&records, "cognition.stage"),
         strings(&[
             "autonomy unhandled (no-behaviors)",
-            "intuition unhandled (empty_product)",
+            "decision unhandled (empty_product)",
             "reasoning handled"
         ])
     );
@@ -1192,23 +1255,19 @@ fn reasoning_selects_from_the_turns_choices() {
         .and_then(|messages| messages.last())
         .and_then(|message| message["content"].as_str())
         .expect("the user message");
-    // The original's model_facing_xml of the ProcessorInput: the host input
-    // (stimulus and instructions), prior episodes and standing directives,
-    // no focus.
+    // The reference's model-facing content (decision D141): the situation
+    // (the environment block), then the stimulus as its own root; nothing
+    // recalled yet, and no focus.
     assert!(
-        prompt.starts_with("<cognition:processor_input>\n  <host_input>"),
+        prompt.starts_with("<environment id=\"session\">"),
         "{prompt}"
     );
     assert!(
-        prompt.contains("what is the capital of France?"),
+        prompt.ends_with("</dict>") && prompt.contains("what is the capital of France?"),
         "{prompt}"
     );
     assert!(
-        prompt.contains("<prior_episodes count=\"0\" />"),
-        "{prompt}"
-    );
-    assert!(
-        prompt.contains("<standing_directives count=\"0\" />"),
+        !prompt.contains("prior_episodes") && !prompt.contains("standing_directives"),
         "{prompt}"
     );
     assert!(!prompt.contains("focus"), "{prompt}");
@@ -1237,7 +1296,7 @@ fn a_reasoned_response_is_said_through_the_communication() {
         texts(&records, "cognition.stage"),
         strings(&[
             "autonomy unhandled (no-behaviors)",
-            "intuition unhandled (empty_product)",
+            "decision unhandled (empty_product)",
             "reasoning handled"
         ])
     );
@@ -1340,6 +1399,45 @@ fn a_reasoned_turn_is_recalled_by_the_next() {
     reasoned_turns_recalled(DATABASE, Some("a_reasoned_turn_is_recalled_by_the_next"));
 }
 
+/// Context fit (decision D143): with the bot's `bounds.max_context_tokens`
+/// each prompt is fitted to its model's context. The first turn recalls
+/// nothing and fits; the second's recalled episode does not fit the same
+/// budget and is trimmed, while the stimulus is kept.
+#[test]
+fn a_prompt_over_its_context_has_its_recalled_memory_trimmed() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Ignore, &[]);
+    support::use_database(&bot.body, DATABASE);
+    let mut run = start_activated(
+        &bot,
+        &[(
+            "bounds",
+            &format!("({{max_context_tokens: {FITTED_TOKENS}}})"),
+        )],
+    );
+    say(&mut run, "remember this");
+    let first = run.until(WAIT, turn_ended);
+    say(&mut run, "and this");
+    let second = run.until(WAIT, turn_ended);
+    assert_eq!(texts(&first, "cognition.fit"), ["fit"]);
+    assert_eq!(texts(&second, "cognition.fit"), ["cut"]);
+    let prompts = prompts(&mock);
+    assert_eq!(prompts.len(), 2, "{prompts:?}");
+    // The trimmed episode is counted as omitted (the original's
+    // recalled.omitted).
+    assert!(
+        prompts[1].contains("<prior_episodes count=\"0\" omitted=\"1\" />"),
+        "{}",
+        prompts[1]
+    );
+    assert!(
+        prompts[1].contains("<entry key=\"data\" value=\"and this\" />"),
+        "{}",
+        prompts[1]
+    );
+    drop(run.close(WAIT));
+}
+
 /// The same on the Postgres engine: the body's database is a `PGlite`
 /// server's, so the cognition's autonomy and reasoning, the identity and
 /// the conversation all keep their memory there.
@@ -1366,15 +1464,13 @@ fn reasoned_turns_recalled(database: &str, test: Option<&str>) {
     run.until(WAIT, turn_ended);
     let prompts = prompts(&mock);
     assert_eq!(prompts.len(), 2, "{prompts:?}");
-    assert!(
-        prompts[0].contains("\n  <prior_episodes count=\"0\" />\n"),
-        "{}",
-        prompts[0]
-    );
+    // No episode yet: the prompt recalls nothing (an empty collection
+    // renders nothing, decision D141).
+    assert!(!prompts[0].contains("prior_episodes"), "{}", prompts[0]);
     // The first turn's one episode, a cognition:cognitive_episode (the
     // original episodes.CognitiveEpisode).
     let episode = format!(
-        "    <cognition:cognitive_episode stimulus_name=\"bot.input\">\n      <focus_candidates count=\"0\" />\n      <output count=\"1\">\n        <cognition:event target=\"session.floppy.cognition\" event=\"{IGNORE}\" reason=\"nothing to say\">\n          <data />\n        </cognition:event>\n      </output>\n    </cognition:cognitive_episode>\n"
+        "    <cognition:cognitive_episode stimulus_name=\"bot.input\">\n      <focus_candidates count=\"0\" />\n      <output count=\"1\">\n        <cognition:event target=\"session.floppy.cognition\" event=\"{IGNORE}\" reason=\"nothing to say\" />\n      </output>\n    </cognition:cognitive_episode>\n"
     );
     assert!(
         prompts[1].contains(&format!(
@@ -1397,12 +1493,191 @@ fn an_abstention_escalates_to_reasoning() {
         texts(&records, "cognition.stage"),
         strings(&[
             "autonomy unhandled (no-behaviors)",
-            "intuition unhandled (empty_product)",
+            "decision unhandled (empty_product)",
             "reasoning handled"
         ])
     );
     assert_eq!(texts(&records, "floppy.output").len(), 1);
     close(run, &mock, "an_abstention_escalates_to_reasoning");
+}
+
+/// Reasoning's system channel is the bot's self block (decision D141):
+/// the cognition asks the identity for the bot's name until it is told,
+/// and a bot that has taken none says so (the reference's `SelfData`).
+#[test]
+fn reasoning_is_told_the_bots_self() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Respond, &[]);
+    let mut run = start(&bot);
+    say(&mut run, "hello");
+    let records = run.until(WAIT, turn_ended);
+    assert_eq!(
+        texts(&records, "cognition.stage")
+            .last()
+            .map(String::as_str),
+        Some("reasoning handled")
+    );
+    let request = &reasoning_requests(&mock)[0].body;
+    assert_eq!(request["messages"][0]["role"], "system", "{request}");
+    let system = request["messages"][0]["content"]
+        .as_str()
+        .unwrap_or_default();
+    assert!(
+        system.contains("<persona>") && system.contains("<no_name_yet"),
+        "{system}"
+    );
+    close(run, &mock, "reasoning_is_told_the_bots_self");
+}
+
+/// The activation settings of a bot that composes the intuition tier.
+fn with_intuition() -> [(&'static str, &'static str); 1] {
+    [("intuition_model", "'chat-model'")]
+}
+
+/// The chat requests the intuition tier sent (its model's).
+fn intuition_requests(mock: &Mock) -> Vec<Received> {
+    reasoning_requests(mock)
+        .into_iter()
+        .filter(|request| request.body["model"] == INTUITION_MODEL)
+        .collect()
+}
+
+/// Whether a chat request's dispatch tool offers the handoff.
+fn offers_handoff(request: &Received) -> bool {
+    request.body["tools"].to_string().contains(HANDOFF)
+}
+
+/// The decision layer's pass names the tier it hands the turn to (its
+/// `hand_to`, R-23): with the chat tier composed it is offered both passes,
+/// and passing to reasoning skips intuition.
+#[test]
+fn a_pass_to_reasoning_skips_the_intuition_tier() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Ignore, &[]);
+    let mut run = start_activated(&bot, &with_intuition());
+    say(&mut run, "hello");
+    let records = run.until(WAIT, turn_ended);
+    assert_eq!(
+        texts(&records, "cognition.stage"),
+        strings(&[
+            "autonomy unhandled (no-behaviors)",
+            "decision unhandled (empty_product)",
+            "reasoning handled"
+        ]),
+        "{records:?}"
+    );
+    assert!(intuition_requests(&mock).is_empty());
+    let decisions = mock.received("/systemone");
+    let criteria = &decisions[0].body["questions"]["selection"]["criteria"];
+    assert!(criteria.get("__intuition__").is_some(), "{criteria}");
+    assert!(criteria.get("__reasoning__").is_some(), "{criteria}");
+    drop(run.close(WAIT));
+}
+
+/// The intuition tier (decision D144): a bot that composes one answers in
+/// words on its chat model, without thinking first, before reasoning is
+/// ever asked; it is offered the deliberative handoff, the body never is.
+#[test]
+fn intuition_answers_in_words_without_reasoning() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::ToIntuition, Generation::Respond, &[]);
+    let mut run = start_activated(&bot, &with_intuition());
+    say(&mut run, "hello");
+    let records = run.until(WAIT, turn_ended);
+    assert_eq!(
+        texts(&records, "cognition.stage"),
+        strings(&[
+            "autonomy unhandled (no-behaviors)",
+            "decision unhandled (empty_product)",
+            "intuition handled"
+        ]),
+        "{records:?}"
+    );
+    let requests = reasoning_requests(&mock);
+    assert_eq!(requests.len(), 1, "only intuition is asked");
+    assert_eq!(requests[0].body["model"], INTUITION_MODEL);
+    assert_eq!(requests[0].body["reasoning_effort"], "none");
+    assert!(offers_handoff(&requests[0]));
+    assert!(
+        !texts(&records, "cognition.offers")
+            .concat()
+            .contains(HANDOFF)
+    );
+    assert_eq!(texts(&records, "floppy.output").len(), 1);
+    close(run, &mock, "intuition_answers_in_words_without_reasoning");
+}
+
+/// Intuition selecting the handoff hands the turn on to reasoning: what it
+/// said first is sent, rides the turn's acted into reasoning's prompt, and
+/// leads the turn's output (the reference's deliberation, D-R-52).
+#[test]
+fn intuition_hands_the_turn_to_reasoning_after_what_it_said() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::ToIntuition, Generation::HandOff, &[]);
+    let mut run = start_activated(&bot, &with_intuition());
+    say(&mut run, "hello");
+    let records = run.until(WAIT, turn_ended);
+    assert_eq!(
+        texts(&records, "cognition.stage"),
+        strings(&[
+            "autonomy unhandled (no-behaviors)",
+            "decision unhandled (empty_product)",
+            "intuition unhandled (handoff)",
+            "reasoning handled"
+        ]),
+        "{records:?}"
+    );
+    assert_eq!(intuition_requests(&mock).len(), 1);
+    let reasoning: Vec<Received> = reasoning_requests(&mock)
+        .into_iter()
+        .filter(|request| request.body["model"] != INTUITION_MODEL)
+        .collect();
+    assert_eq!(reasoning.len(), 1);
+    assert!(
+        !offers_handoff(&reasoning[0]),
+        "reasoning is never offered the handoff"
+    );
+    let prompt = reasoning[0].body["messages"].to_string();
+    assert!(
+        prompt.contains("cognition:acted") && prompt.contains("Let me think."),
+        "{prompt}"
+    );
+    let output = &json_text(&records, "floppy.output")["output"];
+    assert_eq!(output.as_array().map(Vec::len), Some(2), "{output}");
+    assert_eq!(output[0]["data"]["text"], "Let me think.");
+    close(
+        run,
+        &mock,
+        "intuition_hands_the_turn_to_reasoning_after_what_it_said",
+    );
+}
+
+/// A failing intuition hands the same turn on to reasoning, as a failing
+/// decision layer does (the reference `_cascade_intuition_failure`, D-R-36).
+#[test]
+fn a_failing_intuition_cascades_to_reasoning() {
+    let mock = Mock::start();
+    let bot = layout(
+        &mock,
+        Decision::ToIntuition,
+        Generation::IntuitionFails,
+        &[],
+    );
+    let mut run = start_activated(&bot, &with_intuition());
+    say(&mut run, "hello");
+    let records = run.until(WAIT, turn_ended);
+    assert_eq!(
+        texts(&records, "cognition.cascaded"),
+        strings(&[r#"{"stage":"intuition","reason":"the intuition failed (status)"}"#])
+    );
+    assert_eq!(
+        texts(&records, "cognition.stage")
+            .last()
+            .map(String::as_str),
+        Some("reasoning handled")
+    );
+    assert!(texts(&records, "cognition.handed_back").is_empty());
+    close(run, &mock, "a_failing_intuition_cascades_to_reasoning");
 }
 
 #[test]
@@ -1423,7 +1698,7 @@ fn low_confidence_is_observed_by_the_tuner_and_escalates() {
         );
         assert_eq!(
             texts(records, "cognition.stage")[1],
-            "intuition unhandled (low_confidence)"
+            "decision unhandled (low_confidence)"
         );
         // The first observation sets the mean; an equal one keeps it, and
         // the variance stays at its floor.
@@ -1471,7 +1746,7 @@ fn after_the_warmup_the_threshold_follows_the_tuner() {
     );
     assert_eq!(
         texts(&first, "cognition.stage")[1],
-        "intuition unhandled (low_confidence)"
+        "decision unhandled (low_confidence)"
     );
     close(
         run,
@@ -1493,12 +1768,11 @@ fn offered_schema(event: &str) -> Json {
     schema
 }
 
-/// The original's `low_confidence` keeps the environment actions: intuition gets
-/// every groundable event with its own confidence (ignore 0.34, respond
-/// 0.33 with the stimulus's text), observes their least, 33, and escalates
-/// under the floor 35 with respond (ignore is no environment action); the
-/// cognition routes respond first, then reasoning's selection. Reasoning's
-/// prompt is the original's model-facing XML of its `ProcessorInput`.
+/// The original's `low_confidence` keeps the environment actions: the decision layer gets
+/// the chosen event with its confidence (respond 0.34 with the stimulus's
+/// text), observes it, 34, and escalates under the floor 35, sending
+/// respond before reasoning runs. Reasoning's prompt is the original's
+/// model-facing content of its `InputData`.
 /// Runs one `hi` turn, offering ignore and respond, through the cognition
 /// harness of `bot` (which offers respond itself) and returns its records
 /// up to the harness's output.
@@ -1545,24 +1819,23 @@ fn low_confidence_turn(bot: &Bot) -> (Run, Vec<Json>) {
 #[test]
 fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
     let mock = Mock::start();
-    let bot = layout(&mock, Decision::Low, Generation::Ignore, &[]);
+    let bot = layout(&mock, Decision::LowRespond, Generation::Ignore, &[]);
     let (run, records) = low_confidence_turn(&bot);
     assert_eq!(
         texts(&records, "intuition"),
-        strings(&[&format!(
-            "turn 1: {IGNORE} {RESPOND} (confidence 33, escalate true)"
-        )])
+        strings(&[&format!("turn 1: {RESPOND} (confidence 34, escalate true)")])
     );
     assert_eq!(
         texts(&records, "cognition.stage"),
         strings(&[
             "autonomy unhandled (no-behaviors)",
-            "intuition unhandled (low_confidence)",
+            "decision unhandled (low_confidence)",
             "reasoning handled"
         ])
     );
-    // The escalating intuition sent its environment action (respond's
-    // grounded "hi") before reasoning ran; the output is reasoning's.
+    // The escalating decision layer sent its environment action (respond's
+    // grounded "hi") before reasoning ran; the output is that acted, then
+    // reasoning's (the reference ActedData).
     assert_eq!(
         texts(&records, "harness.sent"),
         strings(&[r#"{"text":"hi"}"#])
@@ -1570,16 +1843,17 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
     assert_eq!(
         json_text(&records, "harness.output"),
         json!({"turn": 1, "output": [
+            {"event": RESPOND, "data": {"text": "hi"}, "target": "session"},
             {"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "session.cognition"},
         ]})
     );
-    // The TypeSafe state is the original's turn document, and respond's text is
-    // grounded in the stimulus's value.
+    // The TypeSafe state is the stimulus's model-facing text (the reference
+    // D-R-50), and respond's text is grounded in the stimulus's value.
     let decisions = mock.received("/systemone");
     assert_eq!(decisions.len(), 1);
     assert_eq!(
         decisions[0].body["state"],
-        json!({"turn": {"envelope": {"name": "bot.input"}, "data": {"text": "hi"}}})
+        json!({"turn": "<dict stimulus:event=\"bot.input\" stimulus:source=\"conversation\">\n  <content>\n    <entry key=\"text\" value=\"hi\" />\n  </content>\n</dict>"})
     );
     assert_eq!(
         decisions[0].body["questions"][format!("{RESPOND}::text")]["criteria"],
@@ -1592,9 +1866,11 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
         .and_then(|messages| messages.iter().find(|message| message["role"] == "user"))
         .and_then(|message| message["content"].as_str())
         .expect("a user message");
+    // Reasoning is told what the decision layer already did, as a fact of
+    // the turn's situation (the reference's ActedData), before the stimulus.
     assert_eq!(
         user,
-        "<cognition:processor_input>\n  <host_input>\n    <processing:input>\n      <input stimulus:event=\"bot.input\" stimulus:source=\"conversation\">\n        <content>\n          <entry key=\"text\" value=\"hi\" />\n        </content>\n      </input>\n    </processing:input>\n  </host_input>\n  <prior_episodes count=\"0\" />\n  <standing_directives count=\"0\" />\n</cognition:processor_input>"
+        "<cognition:acted>\n  <percepts count=\"1\">\n    <item>0</item>\n  </percepts>\n  <acts count=\"1\">\n    <cognition:event target=\"session\" event=\"bot.ability.communication.respond\">\n      <data>\n        <entry key=\"text\" value=\"hi\" />\n      </data>\n    </cognition:event>\n  </acts>\n</cognition:acted>\n<dict stimulus:event=\"bot.input\" stimulus:source=\"conversation\">\n  <content>\n    <entry key=\"text\" value=\"hi\" />\n  </content>\n</dict>"
     );
     close(
         run,
@@ -1604,20 +1880,20 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
 }
 
 /// Each stage sends its own selections, as the original's do: when
-/// reasoning selects the very action the escalated intuition already sent
-/// (respond with `hi`, intuition's environment action), it is sent again,
+/// reasoning selects the very action the escalated decision layer already sent
+/// (respond with `hi`, the decision layer's environment action), it is sent again,
 /// after it, as the original's reasoning dispatches it again; the output
-/// is reasoning's.
+/// is the decision layer's acted, then reasoning's.
 #[test]
 fn reasoning_sends_its_selections_after_the_environment_actions() {
     let mock = Mock::start();
-    let bot = layout(&mock, Decision::Low, Generation::Repeat, &[]);
+    let bot = layout(&mock, Decision::LowRespond, Generation::Repeat, &[]);
     let (run, records) = low_confidence_turn(&bot);
     assert_eq!(
         texts(&records, "cognition.stage"),
         strings(&[
             "autonomy unhandled (no-behaviors)",
-            "intuition unhandled (low_confidence)",
+            "decision unhandled (low_confidence)",
             "reasoning handled"
         ])
     );
@@ -1628,6 +1904,7 @@ fn reasoning_sends_its_selections_after_the_environment_actions() {
     assert_eq!(
         json_text(&records, "harness.output"),
         json!({"turn": 1, "output": [
+            {"event": RESPOND, "data": {"text": "hi"}, "target": "session"},
             {"event": RESPOND, "data": {"text": "hi"}, "reason": "answer", "target": "session"},
         ]})
     );
@@ -1644,12 +1921,28 @@ fn a_reasoning_failure_fails_the_turn() {
     let bot = layout(&mock, Decision::Abstain, Generation::Fail, &[]);
     let mut run = start(&bot);
     say(&mut run, "question");
-    let records = run.until(WAIT, turn_ended);
+    let records = until_turn_ended(&run, 1);
     assert_eq!(
         json_text(&records, "bot.processing.failed"),
         json!({"message": "the reasoning failed (status)", "turn": 1})
     );
     assert!(texts(&records, "floppy.output").is_empty());
+    // The failed step is handed back as the next turn's stimulus (the
+    // reference _hand_back_step_failure); its reasoning fails the same way,
+    // and that turn hands nothing back.
+    let records = until_turn_ended(&run, 2);
+    assert_eq!(
+        opened(&records, 2).as_deref(),
+        Some("bot.ability.cognition.step.failed")
+    );
+    assert_eq!(
+        json_text(&records, "bot.processing.failed"),
+        json!({"message": "the reasoning failed (status)", "turn": 2})
+    );
+    assert_eq!(
+        texts(&records, "cognition.handed_back"),
+        strings(&["bounded"])
+    );
     close(run, &mock, "a_reasoning_failure_fails_the_turn");
 }
 
@@ -1659,13 +1952,30 @@ fn a_selection_outside_the_choices_never_becomes_output() {
     let bot = layout(&mock, Decision::Abstain, Generation::OffChoice, &[]);
     let mut run = start(&bot);
     say(&mut run, "look at the lamp");
-    let records = run.until(WAIT, turn_ended);
-    // The generate service holds the reply to the choices' schema first.
+    let records = until_turn_ended(&run, 1);
+    // The generate service holds the reply to the choices' schema first;
+    // reasoning asks again once with the rejection as feedback, and the
+    // same rejection twice running fails the turn (decision D142), keyed by
+    // where the selection first fails and told by its message (D126).
+    assert_eq!(texts(&records, "reasoning.repair").len(), 1);
+    assert_eq!(
+        json_text(&records, "reasoning.repair"),
+        json!({"attempt": 1, "key": "schema-mismatch:/events/0/event"})
+    );
     assert_eq!(
         json_text(&records, "bot.processing.failed"),
-        json!({"message": "the reasoning failed (schema-mismatch)", "turn": 1})
+        json!({
+            "message": "Selection rejected: /events/0/event: value must be one of \"bot.ability.cognition.ignore\", \"bot.ability.communication.respond\", \"bot.ability.identity.adopt\"",
+            "turn": 1
+        })
     );
     assert!(texts(&records, "floppy.output").is_empty());
+    let records = until_turn_ended(&run, 2);
+    assert!(texts(&records, "floppy.output").is_empty());
+    assert_eq!(
+        texts(&records, "cognition.handed_back"),
+        strings(&["bounded"])
+    );
     close(
         run,
         &mock,
@@ -1673,30 +1983,77 @@ fn a_selection_outside_the_choices_never_becomes_output() {
     );
 }
 
+/// A failing decision layer hands the same turn on to reasoning (the
+/// reference `_cascade_decision_failure`, D-R-36): nothing is handed back.
 #[test]
-fn an_intuition_failure_fails_the_turn() {
+fn a_decision_layer_failure_cascades_to_reasoning() {
     let mock = Mock::start();
     let bot = layout(&mock, Decision::Fail, Generation::Ignore, &[]);
     let mut run = start(&bot);
     say(&mut run, "hello");
     let records = run.until(WAIT, turn_ended);
     assert_eq!(
-        json_text(&records, "bot.processing.failed"),
-        json!({"message": "the decision failed (status)", "turn": 1})
+        texts(&records, "cognition.cascaded"),
+        strings(&[r#"{"stage":"reflex","reason":"the decision failed (status)"}"#])
     );
-    assert!(mock.received("/chat/completions").is_empty());
-    close(run, &mock, "an_intuition_failure_fails_the_turn");
+    assert_eq!(
+        texts(&records, "cognition.stage"),
+        strings(&["autonomy unhandled (no-behaviors)", "reasoning handled"])
+    );
+    assert_eq!(
+        json_text(&records, "floppy.output"),
+        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "reason": "nothing to say", "target": COGNITION}]})
+    );
+    close(run, &mock, "a_decision_layer_failure_cascades_to_reasoning");
 }
 
+/// A decision service the run gives no base URL answers `unconfigured`, and the
+/// turn goes on to reasoning, which answers it.
 #[test]
-fn an_intuition_that_does_not_decide_in_time_fails_the_turn() {
+fn an_unconfigured_decision_layer_cascades_to_reasoning() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Ignore, Generation::Ignore, &[]);
+    let env = std::fs::read_to_string(&bot.env).expect("the env file is readable");
+    std::fs::write(
+        &bot.env,
+        env.lines()
+            .filter(|line| !line.starts_with("TYPESAFE_"))
+            .fold(String::new(), |kept, line| kept + line + "\n"),
+    )
+    .expect("the env file is writable");
+    let mut run = start(&bot);
+    say(&mut run, "hello");
+    let records = run.until(WAIT, turn_ended);
+    assert_eq!(
+        texts(&records, "cognition.cascaded"),
+        strings(&[r#"{"stage":"reflex","reason":"the decision failed (unconfigured)"}"#]),
+        "{records:?}"
+    );
+    assert_eq!(
+        texts(&records, "cognition.stage")
+            .last()
+            .map(String::as_str),
+        Some("reasoning handled")
+    );
+    assert!(mock.received("/systemone").is_empty());
+    close(
+        run,
+        &mock,
+        "an_unconfigured_decision_layer_cascades_to_reasoning",
+    );
+}
+
+/// The decision layer's own bound (`decision_timeout_ms`) ends the decision
+/// as a failure, which cascades.
+#[test]
+fn a_decision_not_made_in_time_cascades_to_reasoning() {
     let mock = Mock::start();
     let bot = layout(
         &mock,
         Decision::Hang,
         Generation::Ignore,
         &[(
-            "abilities/intuition/intuition.scx",
+            "abilities/cognition/cognition.scx",
             &[("decision_timeout_ms", "300")],
         )],
     );
@@ -1704,56 +2061,40 @@ fn an_intuition_that_does_not_decide_in_time_fails_the_turn() {
     say(&mut run, "hello");
     let records = run.until(WAIT, turn_ended);
     assert_eq!(
-        json_text(&records, "bot.processing.failed"),
-        json!({"message": "the decision timed out after 300 ms", "turn": 1})
+        texts(&records, "cognition.cascaded"),
+        strings(&[r#"{"stage":"reflex","reason":"the decision timed out after 300 ms"}"#])
+    );
+    assert_eq!(
+        texts(&records, "cognition.stage")
+            .last()
+            .map(String::as_str),
+        Some("reasoning handled")
     );
     close(
         run,
         &mock,
-        "an_intuition_that_does_not_decide_in_time_fails_the_turn",
+        "a_decision_not_made_in_time_cascades_to_reasoning",
     );
 }
 
-/// `stage` never answers; `hop_ms` is long enough for the stages before
-/// it to answer.
-fn reboots_on_a_silent_stage(
-    test: &str,
-    decision: Decision,
-    generation: Generation,
-    stage: &str,
-    hop_ms: &str,
-) {
-    // A reasoning reply that does not stream (the default) is bounded by the
-    // stage's backstop alone; the stages before it by inactivity from their
-    // start (decision D101).
-    let (bound, timed_out) = if stage == "reasoning" {
-        (
-            "child_operation_ceiling_ms",
-            format!("turn 1: {stage} after {hop_ms} ms in all"),
-        )
-    } else {
-        (
-            "child_operation_timeout_ms",
-            format!("turn 1: {stage} after {hop_ms} ms without progress"),
-        )
-    };
-    let mock = Mock::start();
-    let bot = layout(
-        &mock,
-        decision,
-        generation,
-        &[("abilities/cognition/cognition.scx", &[(bound, hop_ms)])],
-    );
-    let mut run = start(&bot);
-    say(&mut run, "hello");
-    let records = run.until(WAIT, label_is("bot.activated"));
-    assert_eq!(texts(&records, "cognition.hop.timed_out"), [timed_out]);
-    assert_eq!(
-        texts(&records, "bot.reboot"),
-        strings(&[r#"{"reason":"cognition_child_teardown_failed"}"#])
-    );
-    assert!(texts(&records, "floppy.output").is_empty());
-    close(run, &mock, test);
+/// Records until turn `turn` ends.
+fn until_turn_ended(run: &Run, turn: u64) -> Vec<Json> {
+    let mark = format!("\"turn\":{turn}");
+    run.until(WAIT, |record| {
+        turn_ended(record)
+            && record["text"]
+                .as_str()
+                .is_some_and(|text| text.contains(&mark))
+    })
+}
+
+/// The stimulus envelope the cognition handed the body back in the turn
+/// the logged `cognition` record opens (`turn N: <event>`).
+fn opened(records: &[Json], turn: u64) -> Option<String> {
+    let prefix = format!("turn {turn}: ");
+    texts(records, "cognition")
+        .into_iter()
+        .find_map(|text| text.strip_prefix(&prefix).map(str::to_owned))
 }
 
 /// Reasoning's reply streams (decision D101): a model that keeps answering
@@ -1774,14 +2115,14 @@ fn a_reasoning_reply_that_keeps_streaming_outlasts_the_inactivity_bound() {
         )],
     );
     streaming(&bot);
-    let mut run = start(&bot);
+    let mut run = start_activated(&bot, &[("bounds", SLOW_REFLEX_BOUNDS)]);
     say(&mut run, "hello");
     let records = run.until(WAIT, turn_ended);
     assert_eq!(
         texts(&records, "cognition.stage"),
         strings(&[
             "autonomy unhandled (no-behaviors)",
-            "intuition unhandled (empty_product)",
+            "decision unhandled (empty_product)",
             "reasoning handled"
         ]),
         "{records:?}"
@@ -1801,7 +2142,7 @@ fn a_reasoning_reply_that_keeps_streaming_outlasts_the_inactivity_bound() {
 fn a_reasoning_reply_that_is_not_streamed_is_bounded_by_the_backstop_alone() {
     let mock = Mock::start();
     let bot = layout(&mock, Decision::Abstain, Generation::Slow, &[]);
-    let mut run = start_activated(&bot, &[("bounds", "({child_operation_timeout_ms: 8000})")]);
+    let mut run = start_activated(&bot, &[("bounds", STALLED_REASONING_BOUNDS)]);
     say(&mut run, "hello");
     let records = run.until(WAIT, turn_ended);
     assert_eq!(
@@ -1827,7 +2168,7 @@ fn a_reasoning_reply_the_run_does_not_stream_is_bounded_by_the_backstop_alone() 
     let mock = Mock::start();
     let bot = layout(&mock, Decision::Abstain, Generation::Slow, &[]);
     set_stream(&bot, "false");
-    let mut run = start_activated(&bot, &[("bounds", "({child_operation_timeout_ms: 8000})")]);
+    let mut run = start_activated(&bot, &[("bounds", STALLED_REASONING_BOUNDS)]);
     say(&mut run, "hello");
     let records = run.until(WAIT, turn_ended);
     assert_eq!(
@@ -1847,24 +2188,25 @@ fn a_reasoning_reply_the_run_does_not_stream_is_bounded_by_the_backstop_alone() 
 }
 
 /// A reasoning reply that stops arriving ends the stage at the inactivity
-/// bound (decision D101), here the bot's `bounds` param: the cognition asks the
-/// body for a reboot.
+/// bound (decision D101), here the bot's `bounds` param: the step fails
+/// only its turn, and nothing reboots.
 #[test]
-fn a_reasoning_reply_that_stalls_reboots_at_the_inactivity_bound() {
+fn a_reasoning_reply_that_stalls_fails_its_turn_at_the_inactivity_bound() {
     let mock = Mock::start();
     let bot = layout(&mock, Decision::Abstain, Generation::Stall, &[]);
     streaming(&bot);
-    let mut run = start_activated(&bot, &[("bounds", "({child_operation_timeout_ms: 8000})")]);
+    let mut run = start_activated(&bot, &[("bounds", STALLED_REASONING_BOUNDS)]);
     say(&mut run, "hello");
-    let records = run.until(WAIT, label_is("bot.activated"));
+    let records = until_turn_ended(&run, 1);
     assert_eq!(
         texts(&records, "cognition.hop.timed_out"),
         ["turn 1: reasoning after 8000 ms without progress"]
     );
     assert_eq!(
-        texts(&records, "bot.reboot"),
-        strings(&[r#"{"reason":"cognition_child_teardown_failed"}"#])
+        json_text(&records, "bot.processing.failed"),
+        json!({"message": "Cognition's reasoning step took longer than 8 seconds, so the turn failed.", "turn": 1})
     );
+    assert!(texts(&records, "bot.reboot").is_empty());
     drop(run.close(WAIT));
 }
 
@@ -1872,13 +2214,13 @@ fn a_reasoning_reply_that_stalls_reboots_at_the_inactivity_bound() {
 /// only keeps its connection alive while its model says nothing ends the
 /// stage at the inactivity bound.
 #[test]
-fn a_reasoning_reply_of_keep_alive_comments_only_reboots_at_the_inactivity_bound() {
+fn a_reasoning_reply_of_keep_alive_comments_only_fails_its_turn_at_the_inactivity_bound() {
     let mock = Mock::start();
     let bot = layout(&mock, Decision::Abstain, Generation::Pings, &[]);
     streaming(&bot);
-    let mut run = start_activated(&bot, &[("bounds", "({child_operation_timeout_ms: 8000})")]);
+    let mut run = start_activated(&bot, &[("bounds", STALLED_REASONING_BOUNDS)]);
     say(&mut run, "hello");
-    let records = run.until(WAIT, label_is("bot.activated"));
+    let records = until_turn_ended(&run, 1);
     assert_eq!(
         texts(&records, "cognition.hop.timed_out"),
         ["turn 1: reasoning after 8000 ms without progress"]
@@ -1889,7 +2231,7 @@ fn a_reasoning_reply_of_keep_alive_comments_only_reboots_at_the_inactivity_bound
 /// The backstop (decision D101): a stage that keeps making progress still
 /// ends once it has run `child_operation_ceiling_ms` in all.
 #[test]
-fn a_reasoning_reply_that_streams_past_the_ceiling_reboots() {
+fn a_reasoning_reply_that_streams_past_the_ceiling_fails_its_turn() {
     let mock = Mock::start();
     let bot = layout(
         &mock,
@@ -1904,36 +2246,147 @@ fn a_reasoning_reply_that_streams_past_the_ceiling_reboots() {
         )],
     );
     streaming(&bot);
-    let mut run = start(&bot);
+    let mut run = start_activated(&bot, &[("bounds", SLOW_REFLEX_BOUNDS)]);
     say(&mut run, "hello");
-    let records = run.until(WAIT, label_is("bot.activated"));
+    let records = until_turn_ended(&run, 1);
     assert_eq!(
         texts(&records, "cognition.hop.timed_out"),
         ["turn 1: reasoning after 10000 ms in all"]
     );
+    assert!(texts(&records, "bot.reboot").is_empty());
     drop(run.close(WAIT));
 }
 
-#[test]
-fn a_silent_intuition_asks_the_body_for_a_reboot() {
-    reboots_on_a_silent_stage(
-        "a_silent_intuition_asks_the_body_for_a_reboot",
-        Decision::Hang,
-        Generation::Ignore,
-        "intuition",
-        "500",
+/// `stage` never answers; `hop_ms` is long enough for the stages before
+/// it to answer. The step fails only its turn (the reference
+/// `_fail_timed_out_step`): nothing reboots, and the failure is handed back
+/// to the body as the stimulus of a new turn.
+fn fails_its_turn_on_a_silent_stage(
+    decision: Decision,
+    generation: Generation,
+    (stage, tier): (&str, &str),
+    hop_ms: &str,
+) -> (Run, Mock, Vec<Json>) {
+    // A reasoning reply that does not stream (the default) is bounded by the
+    // stage's backstop alone; the stages before it by inactivity from their
+    // start (decision D101).
+    let (bound, timed_out) = if stage == "reasoning" {
+        (
+            "child_operation_ceiling_ms",
+            format!("turn 1: {stage} after {hop_ms} ms in all"),
+        )
+    } else {
+        (
+            "child_operation_timeout_ms",
+            format!("turn 1: {stage} after {hop_ms} ms without progress"),
+        )
+    };
+    let mock = Mock::start();
+    let bot = layout(
+        &mock,
+        decision,
+        generation,
+        &[("abilities/cognition/cognition.scx", &[(bound, hop_ms)])],
     );
+    let mut run = start(&bot);
+    say(&mut run, "hello");
+    let records = until_turn_ended(&run, 1);
+    assert_eq!(texts(&records, "cognition.hop.timed_out"), [timed_out]);
+    let seconds = hop_ms.parse::<f64>().expect("a number") / 1000.0;
+    assert_eq!(
+        json_text(&records, "bot.processing.failed"),
+        json!({"message": format!("Cognition's {tier} step took longer than {seconds} seconds, so the turn failed."), "turn": 1})
+    );
+    assert!(texts(&records, "floppy.output").is_empty());
+    let records = until_turn_ended(&run, 2);
+    assert_eq!(
+        opened(&records, 2).as_deref(),
+        Some("bot.ability.cognition.step.timed_out"),
+        "{records:?}"
+    );
+    assert!(texts(&records, "bot.reboot").is_empty());
+    (run, mock, records)
 }
 
+/// A decision layer that outlasts the reflex tier's step fails its turn;
+/// the handed-back failure of reflex skips the decision layer, so reasoning
+/// answers the next turn (the reference `_takes_decision`).
 #[test]
-fn a_silent_reasoning_asks_the_body_for_a_reboot() {
-    reboots_on_a_silent_stage(
-        "a_silent_reasoning_asks_the_body_for_a_reboot",
+fn a_silent_decision_layer_fails_only_its_turn() {
+    let test = "a_silent_decision_layer_fails_only_its_turn";
+    let (run, mock, records) = fails_its_turn_on_a_silent_stage(
+        Decision::Hang,
+        Generation::Ignore,
+        ("decision", "reflex"),
+        "500",
+    );
+    assert_eq!(
+        texts(&records, "cognition.stage"),
+        strings(&["autonomy unhandled (no-behaviors)", "reasoning handled"])
+    );
+    close(run, &mock, test);
+}
+
+/// A tier's own step bound (the bot's `bounds`, the reference's
+/// `_tier_timeouts`, decision D140): the reflex tier's, shorter than the
+/// decision layer's own `decision_timeout_ms`, fails the turn before the
+/// decision can cascade, as the reference's step timeout does.
+#[test]
+fn the_reflex_tiers_bound_fails_a_silent_decision_layers_turn() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Hang, Generation::Ignore, &[]);
+    let mut run = start_activated(&bot, &[("bounds", "({reflex_timeout_ms: 1500})")]);
+    say(&mut run, "hello");
+    let records = until_turn_ended(&run, 1);
+    assert_eq!(
+        texts(&records, "cognition.hop.timed_out"),
+        ["turn 1: decision after 1500 ms without progress"]
+    );
+    assert!(texts(&records, "cognition.cascaded").is_empty());
+    assert_eq!(
+        json_text(&records, "bot.processing.failed"),
+        json!({"message": "Cognition's reflex step took longer than 1.5 seconds, so the turn failed.", "turn": 1})
+    );
+    drop(run.close(WAIT));
+}
+
+/// The reasoning tier's own bound replaces both of the stage's bounds
+/// (decision D140): a reply that is not streamed is cut off at it.
+#[test]
+fn the_reasoning_tiers_bound_fails_a_silent_reasoning_turn() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Hang, &[]);
+    let mut run = start_activated(&bot, &[("bounds", "({reasoning_timeout_ms: 1500})")]);
+    say(&mut run, "hello");
+    let records = until_turn_ended(&run, 1);
+    assert_eq!(
+        texts(&records, "cognition.hop.timed_out"),
+        ["turn 1: reasoning after 1500 ms in all"]
+    );
+    assert_eq!(
+        json_text(&records, "bot.processing.failed"),
+        json!({"message": "Cognition's reasoning step took longer than 1.5 seconds, so the turn failed.", "turn": 1})
+    );
+    drop(run.close(WAIT));
+}
+
+/// A reasoning that outlasts its step fails its turn, and the handed-back
+/// failure's own turn, failing the same way, hands nothing back (the
+/// reference `_hand_back_failure`'s bound).
+#[test]
+fn a_silent_reasoning_fails_only_its_turn() {
+    let test = "a_silent_reasoning_fails_only_its_turn";
+    let (run, mock, records) = fails_its_turn_on_a_silent_stage(
         Decision::Abstain,
         Generation::Hang,
-        "reasoning",
+        ("reasoning", "reasoning"),
         "20000",
     );
+    assert_eq!(
+        texts(&records, "cognition.handed_back"),
+        strings(&["bounded"])
+    );
+    close(run, &mock, test);
 }
 
 /// The turn times out (`timeout_ms`, long enough for the stages before
@@ -1987,12 +2440,12 @@ fn cancels_in(
 }
 
 #[test]
-fn a_cancel_during_intuition_is_acknowledged() {
+fn a_cancel_during_the_decision_layer_is_acknowledged() {
     cancels_in(
-        "a_cancel_during_intuition_is_acknowledged",
+        "a_cancel_during_the_decision_layer_is_acknowledged",
         Decision::Hang,
         Generation::Ignore,
-        "intuition",
+        "decision",
         "1500",
     );
 }
@@ -2334,12 +2787,14 @@ fn reasonings_prompt_carries_the_environment_block() {
     );
     let lines: Vec<&str> = block.lines().map(str::trim).collect();
     assert_eq!(lines[1], r#"<self state="processing">"#, "{block}");
-    assert_eq!(lines[2], "<owned_devices>", "{block}");
+    // The bot's own attributes come first (decision D156).
+    assert_eq!(lines[2], "<held_percepts>0</held_percepts>", "{block}");
+    assert_eq!(lines[3], "<owned_devices>", "{block}");
     // ref, id and state are the device's only XML attributes; each of its
     // snapshot attributes is a child element, a string as its escaped
     // text, a number as its JSON text.
     assert_eq!(
-        lines[3], r#"<device ref="lamp" id="session.lamp" state="off">"#,
+        lines[4], r#"<device ref="lamp" id="session.lamp" state="off">"#,
         "{block}"
     );
     for element in [

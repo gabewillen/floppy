@@ -10,9 +10,12 @@
       -bot.ability.vision.classification.apply.completed-> Unclassified
 
   Classifying applies the classifier (the original's mlx_vlm VisualClassifier, no
-  model): a text input whose text is not blank is text, an image input with
-  a reference is image, anything else is unreadable, each with confidence
-  1.0 (the classifier's defaults). It sends its classification to itself
+  model): an image input is image, a text input whose text is not blank is
+  text, and blank text is unreadable, with the classifier's confidences
+  text_confidence, image_confidence and unreadable_confidence (each 1.0 by
+  default, the original's defaults; an invoker may pass others by <param>).
+  An input whose content is empty never reaches it: its schema refuses it
+  (the original's min_length=1, reading.py:50). It sends its classification to itself
   as bot.ability.vision.classification.apply.completed (the original's private
   completion), and the transition taking it answers the parent with
   bot.ability.vision.classification.output {kind, confidence}. This
@@ -33,6 +36,11 @@
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="VisualClassification" initial="Unclassified">
   <datamodel>
+    <!-- The classifier's confidences (the original's VisualClassifier
+         fields), which the invoker may set as <param>s. -->
+    <data id="text_confidence" expr="1.0"/>
+    <data id="image_confidence" expr="1.0"/>
+    <data id="unreadable_confidence" expr="1.0"/>
     <data id="kind" expr="null"/>
     <data id="content" expr="null"/>
     <data id="classification" expr="null"/>
@@ -50,16 +58,16 @@
   <!-- The classifier: the original's mlx_vlm VisualClassifier rule. -->
   <state id="Classifying">
     <onentry>
-      <if cond="classifiesAsText()">
-        <assign location="classification" expr="'text'"/>
-      <elseif cond="classifiesAsImage()"/>
+      <if cond="classifiesAsImage()">
         <assign location="classification" expr="'image'"/>
+      <elseif cond="classifiesAsText()"/>
+        <assign location="classification" expr="'text'"/>
       <else/>
         <assign location="classification" expr="'unreadable'"/>
       </if>
       <send event="bot.ability.vision.classification.apply.completed" target="#_internal">
         <param name="kind" expr="classification"/>
-        <param name="confidence" expr="1.0"/>
+        <param name="confidence" expr="classificationConfidence()"/>
       </send>
     </onentry>
     <transition event="bot.ability.vision.classification.apply.completed"
