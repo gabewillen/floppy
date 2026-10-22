@@ -44,10 +44,11 @@ impl Reader<'_> {
         })
     }
 
-    /// `getURational`, read only for its bounds.
+    /// `getURational`, read only for its bounds. An offset past `u32` is
+    /// past any data, so it is unreadable.
     fn rationals(self, at: u32, count: u32) -> Option<()> {
         for index in 0..count {
-            let at = usize::try_from(at.wrapping_add(8 * index)).ok()?;
+            let at = usize::try_from(at.checked_add(index.checked_mul(8)?)?).ok()?;
             self.u32(at)?;
             self.u32(at.checked_add(4)?)?;
         }
