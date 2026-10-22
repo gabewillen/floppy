@@ -219,6 +219,10 @@ with none takes `child_operation_timeout_ms` and `child_operation_ceiling_ms`. A
 time or fails fails only its turn, which is handed back to the cognition as a
 `bot.ability.cognition.step.timed_out` or `bot.ability.cognition.step.failed` stimulus.
 
+The bot's `bounds` param may also give reasoning's model context, `max_context_tokens` (none by default:
+nothing is fitted), and the tokens reserved for its reply, `completion_reserve_tokens` (0), [floppy fields]:
+each prompt is then fitted to the context as the reference's `ContextFit` fits it (decision D143).
+
 The cognition always runs reflection and routines beside its turns, as
 The original's bots compose them. The floppy bot's `database` is
 `/memory/floppy.sqlite`, so its runs grant the `sql` service a memory

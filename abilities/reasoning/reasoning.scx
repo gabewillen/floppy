@@ -25,31 +25,34 @@
   logs <log label="memory" expr="'absent'"> and sends its event with
   memory_consulted false and nothing recalled.
 
-  Prompt (the original's processing.py InputData.model_facing_content over
-  cognition/event.py model_facing_content): the user message is the
-  original's ProcessorInput as model-facing XML, built by
-  <cognition:model_facing_content>: <cognition:processor_input> holding host_input (a
-  processing:input whose input field is the stimulus, stamped
-  stimulus:event, stimulus:id, stimulus:source and stimulus:target),
-  prior_episodes (cognition:cognitive_episode) and standing_directives
-  (cognition:directive), each list with its count, and the environment
-  block (decision D106); no focus (the original's ProcessorInput has
-  none). The stimulus's data is JSON here, so it renders
-  as the original renders a payload that is not a model: a content field, an
-  object as entry elements, an array as item elements, each object or
-  array item filled as one, as the original renders a model item (so a
-  conversation's messages reach the model; decision D99). ElementTree's
+  Prompt (the reference's processing.py InputData.model_facing_content over
+  cognition/event.py model_facing_content, built by
+  <cognition:model_facing_content>): the system message is the reference's
+  system channel, its instructions (none: the reference's reasoning has
+  no static policy, DEFAULT_INSTRUCTIONS "") then the self block of the
+  bot's self (the <param> self, what the cognition was told of itself),
+  and is left out when both are empty; the user message is laid out most
+  stable first: the recalled prior_episodes (cognition:cognitive_episode)
+  and standing_directives (cognition:directive) after the turn's
+  situation (the environment block, decision D106, then what earlier
+  stages already did on the turn, the <param> acted), then the stimulus as
+  the root element of its own block, stamped stimulus:event, stimulus:id,
+  stimulus:source and stimulus:target. The stimulus's data is JSON here,
+  so it renders as the reference renders a payload that is not a model: a
+  content field, an object as entry elements, an array as item elements,
+  each object or array item filled as one (decision D99). ElementTree's
   indent and serialization (two spaces, an empty element as <name />) are
-  reproduced. The original's budgets hold: 262144 encoded bytes, 4096 nodes, 4096
-  collection items and 65536 characters per scalar for the projection; the
-  system prompt and the dispatch schema are reserved first, and the
-  projection renders into the bytes they leave of the prompt's 262144.
-  Recalled context never fails the turn: prior_episodes and
-  standing_directives keep their newest items that fit and count the rest
-  as omitted="<n>" (the original's b1654d6). Over a budget otherwise (the
-  stimulus alone overflows), the element writes the original's message to
-  prompt_failure and the stage fails without a model call with it (for
-  example "prompt projection encoded byte budget exceeded"). applying ends on the generate service's done.invoke, which
+  reproduced. The reference's budgets hold: 262144 encoded bytes, 4096
+  nodes, 4096 collection items and 65536 characters per scalar for the
+  projection; the system channel and the dispatch schema are reserved
+  first, and the projection renders into the bytes they leave of the
+  prompt's 262144. Recalled context never fails the turn: prior_episodes
+  and standing_directives keep their newest items that fit and count the
+  rest as omitted="<n>" (the original's b1654d6). Over a budget otherwise
+  (the stimulus alone overflows), the element writes the reference's
+  message to prompt_failure and the stage fails without a model call with
+  it (for example "prompt projection encoded byte budget exceeded").
+  applying ends on the generate service's done.invoke, which
   stands in for the original's private bot.ability.reasoning.reasoned
   completion. The call streams its reply when the run's FLOPPY_STREAM
   says the backend does (env:stream), and each generate.progress the
@@ -80,12 +83,36 @@
   selected bot.ability.cognition.ignore goes to the cognition, which only
   logs it.
 
+  Repair (the reference's deliberation selection repair, types.py
+  MAX_SELECTION_REPAIRS and with_selection_feedback; decision D142): a
+  reply the dispatch tool's schema refuses (generate.failed not-json or
+  schema-mismatch, its rejection {key, message}, or its code as both
+  without one) is not yet a failure: applying is entered again, so the
+  call is made again with the reference's repair feedback (the rejection
+  message, marked as untrusted validator diagnostic data) rendered last
+  in the prompt, at most max_selection_repairs (2) times. The same
+  rejection key twice running, or a rejection once the repairs are
+  spent, fails the stage with the reference's "Selection rejected:
+  <message>".
+
+  Context fit (the reference's ContextFit and its providers' fitting,
+  decision D143): with a max_context_tokens, each call's prompt is fitted
+  to floor((max_context_tokens - completion_reserve_tokens) *
+  bytes_per_token) bytes of request, the system channel and the dispatch
+  schema included: the prompt renders whole, or with its recalled memory
+  trimmed to fit (logged cognition.fit fit, cut or overflow; the stimulus
+  is never cut). Each generate.result whose usage counts the input tokens
+  of a request of request_bytes teaches bytes_per_token the fewest bytes
+  a token any reply showed, and the donedata carries it back to the
+  cognition, which passes it to the next turn's reasoning.
+
   Input: the <param>s turn, stimulus, focus, focus_candidates, choices,
-  model and database. Output: <donedata>, received by the cognition as
+  model, database, environment, self, acted, max_context_tokens,
+  completion_reserve_tokens and bytes_per_token. Output: <donedata>, received by the cognition as
   done.invoke.reasoning:
 
-    {turn, handled: true, selected: [{event, data, reason, target}]}
-    {turn, handled: false, failed: true, reason}
+    {turn, handled: true, selected: [{event, data, reason, target}], bytes_per_token}
+    {turn, handled: false, failed: true, reason, bytes_per_token}
 
   The cognition's hop timeout bounds the stage (leaving it cancels the model
   call, SCXML 6.4).
@@ -119,13 +146,43 @@
     <!-- The bot's environment (decision D106): its prompt renders it as
          the environment block. -->
     <data id="environment" expr="null"/>
-    <data id="system" expr="'You are the deliberate reasoning of floppy, a small companion robot. You receive one stimulus the robot observed, as JSON, with what the robot is looking at. Select every event the robot should take for it from the offered events (an empty list selects none), with its data, its target when the event names one, and a short reason. When an offered event says something, give it the complete text to say.'"/>
+    <!-- What the bot knows of itself (the cognition's self datum) and what
+         earlier stages already did on the turn (their dispatched
+         selections), from the cognition's <param>s. -->
+    <data id="self" expr="null"/>
+    <data id="acted" expr="[]"/>
+    <!-- The reference reasoning's static policy: none
+         (DEFAULT_INSTRUCTIONS ""). -->
+    <data id="instructions" expr="''"/>
+    <!-- The system channel <cognition:model_facing_content> writes, null for
+         none. -->
+    <data id="system" expr="null"/>
     <!-- The model call: its schema, invocation, and reply. -->
     <data id="schema" expr="null"/>
     <data id="prompt" expr="null"/>
     <data id="prompt_failure" expr="null"/>
     <data id="selected" expr="null"/>
     <data id="gen_failure" expr="null"/>
+    <!-- Selection repair (the reference's deliberation, decision D142): the
+         rejection of this attempt ({key, message}), the attempts repaired
+         so far (at most max_selection_repairs, the reference's
+         MAX_SELECTION_REPAIRS), the key of the rejection just before, and
+         the feedback the next attempt renders last. -->
+    <data id="rejection" expr="null"/>
+    <data id="attempt" expr="0"/>
+    <data id="max_selection_repairs" expr="2"/>
+    <data id="last_rejection_key" expr="null"/>
+    <data id="feedback" expr="null"/>
+    <!-- Context fit (the reference's ContextFit, decision D143): the model's
+         context and the tokens reserved for its reply, from the
+         cognition's <param>s (null fits nothing), the request bytes a token
+         (3 until a reply's usage teaches it fewer), and this call's fitted
+         budget and fit. -->
+    <data id="max_context_tokens" expr="null"/>
+    <data id="completion_reserve_tokens" expr="0"/>
+    <data id="bytes_per_token" expr="3"/>
+    <data id="budget" expr="null"/>
+    <data id="fit" expr="null"/>
     <data id="result" expr="null"/>
     <!-- The dispatch call and the selection being sent (the <foreach>
          items). -->
@@ -212,11 +269,18 @@
       <processing:send location="schema" choices="choices"/>
       <assign location="selected" expr="null"/>
       <assign location="gen_failure" expr="null"/>
+      <assign location="rejection" expr="null"/>
+      <assign location="budget" expr="fitBudget()"/>
       <log label="reasoning" expr="choices"/>
       <cognition:model_facing_content location="prompt" failurelocation="prompt_failure"
-                                      stimulus="stimulus" prior_episodes="prior_episodes"
-                                      standing_directives="standing_directives" environment="environment"
-                                      instructions="system" schema="schema"/>
+                                      systemlocation="system" stimulus="stimulus" self="self"
+                                      environment="environment" acted="acted" prior_episodes="prior_episodes"
+                                      standing_directives="standing_directives" feedback="feedback"
+                                      instructions="instructions" schema="schema" budget="budget"
+                                      fitlocation="fit"/>
+      <if cond="isFitted()">
+        <log label="cognition.fit" expr="fit"/>
+      </if>
     </onentry>
     <!-- Over a prompt budget: fail before the model call is started. -->
     <transition cond="hasNoPrompt()" target="done">
@@ -225,8 +289,7 @@
     <invoke id="generate" type="https://github.com/stateforward/floppy/services/generate"
             env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL" env:stream="FLOPPY_STREAM">
       <param name="model" expr="model"/>
-      <param name="system" expr="system"/>
-      <param name="prompt" expr="prompt"/>
+      <param name="messages" expr="messages()"/>
       <param name="schema" expr="schema"/>
       <param name="schemaname" expr="'dispatch'"/>
     </invoke>
@@ -241,6 +304,7 @@
     <!-- Every dispatch call's events, in order: each sent to its target
          and kept. -->
     <transition event="generate.result">
+      <assign location="bytes_per_token" expr="observedBytesPerToken(_event)"/>
       <assign location="selected" expr="[]"/>
       <foreach array="_event.data.tool_calls" item="call">
         <foreach array="call.args.events" item="s">
@@ -253,9 +317,22 @@
     </transition>
     <transition event="generate.failed">
       <assign location="gen_failure" expr="generateFailure(_event)"/>
+      <assign location="rejection" expr="rejectionOf(_event)"/>
     </transition>
     <transition event="done.invoke.generate" cond="hasSelection()" target="done">
       <assign location="result" expr="selectedResult()"/>
+    </transition>
+    <!-- A rejected selection is repaired: the call is made again with the
+         rejection as its feedback, unless it is the same rejection twice
+         running or the repairs are spent. -->
+    <transition event="done.invoke.generate" cond="isRepairable()" target="applying">
+      <log label="reasoning.repair" expr="repairLog()"/>
+      <assign location="attempt" expr="attempt + 1"/>
+      <assign location="last_rejection_key" expr="rejection.key"/>
+      <assign location="feedback" expr="repairFeedback()"/>
+    </transition>
+    <transition event="done.invoke.generate" cond="isRejected()" target="done">
+      <assign location="result" expr="rejectedResult()"/>
     </transition>
     <transition event="done.invoke.generate" target="done">
       <assign location="result" expr="failedResult()"/>
@@ -267,7 +344,7 @@
 
   <final id="done">
     <donedata>
-      <content expr="result"/>
+      <content expr="withFit(result)"/>
     </donedata>
   </final>
 </scxml>

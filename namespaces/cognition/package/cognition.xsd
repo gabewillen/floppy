@@ -12,14 +12,19 @@
                    focuslocation (optional): receives the focus.
                    stimulus, devices, focus (required): expressions.
   cognition:model_facing_content
-                   location (required): receives the model-facing text of
-                   the turn's input (the original's model_facing_content of
-                   its ProcessorInput) under the original's budgets.
-                   failurelocation (optional): receives the original's
+                   location (required): receives the turn's user content
+                   as the reference's processing InputData's
+                   model_facing_content lays it out (most stable first),
+                   under the reference's budgets.
+                   failurelocation (optional): receives the reference's
                    message when a budget is exceeded.
-                   stimulus, prior_episodes, standing_directives
-                   (required), environment, instructions, schema
-                   (optional): expressions.
+                   systemlocation (optional): receives the system channel,
+                   the instructions then the self block.
+                   fitlocation (optional): receives fit, cut or overflow
+                   when a budget is given.
+                   stimulus (required), self, recent, environment, acted,
+                   prior_episodes, standing_directives, feedback,
+                   instructions, schema, budget (optional): expressions.
                    Neither takes another attribute or content.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -38,12 +43,19 @@
     <xs:complexType>
       <xs:attribute name="location" type="xs:string" use="required"/>
       <xs:attribute name="failurelocation" type="xs:string" use="optional"/>
+      <xs:attribute name="systemlocation" type="xs:string" use="optional"/>
+      <xs:attribute name="fitlocation" type="xs:string" use="optional"/>
       <xs:attribute name="stimulus" type="xs:string" use="required"/>
-      <xs:attribute name="prior_episodes" type="xs:string" use="required"/>
-      <xs:attribute name="standing_directives" type="xs:string" use="required"/>
+      <xs:attribute name="self" type="xs:string" use="optional"/>
+      <xs:attribute name="recent" type="xs:string" use="optional"/>
       <xs:attribute name="environment" type="xs:string" use="optional"/>
+      <xs:attribute name="acted" type="xs:string" use="optional"/>
+      <xs:attribute name="prior_episodes" type="xs:string" use="optional"/>
+      <xs:attribute name="standing_directives" type="xs:string" use="optional"/>
+      <xs:attribute name="feedback" type="xs:string" use="optional"/>
       <xs:attribute name="instructions" type="xs:string" use="optional"/>
       <xs:attribute name="schema" type="xs:string" use="optional"/>
+      <xs:attribute name="budget" type="xs:string" use="optional"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>

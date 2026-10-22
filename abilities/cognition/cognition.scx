@@ -52,7 +52,10 @@
   stages dispatched before they passed it on (the reference ActedData);
   the turn's output, and the reflection's cognition_output, is the acted
   followed by the handling stage's selections (the original's cognition
-  output is its terminal stage's, with what was acted first).
+  output is its terminal stage's, with what was acted first). Reasoning
+  is told it (its <param> acted) and renders it in its prompt's situation
+  as a fact of the turn, never as an instruction (the reference's
+  _build_processing_input).
 
   Step timeouts (decision D101, the reference's step timeout): each stage
   substate arms two bot.ability.cognition.child.hop.timed_out timers and
@@ -194,6 +197,13 @@
     <!-- What earlier stages dispatched before they passed the turn on (the
          reference ActedData's acts), and the turn's output. -->
     <data id="acted" expr="[]"/>
+    <!-- The percepts the acted were for, when a stage named them (null:
+         the turn's one stimulus). -->
+    <data id="acted_percepts" expr="null"/>
+    <!-- Reasoning's context fit (the reference's ContextFit, decision D143):
+         the request bytes a token, 3 until a reply's usage teaches it
+         fewer, kept here across turns and passed to each reasoning. -->
+    <data id="bytes_per_token" expr="3"/>
     <data id="selected" expr="[]"/>
     <!-- The failed step: its message, and the stimulus handed back. -->
     <data id="failure" expr="null"/>
@@ -251,6 +261,7 @@
   <state id="processing" initial="running_autonomy">
     <onentry>
       <assign location="acted" expr="[]"/>
+      <assign location="acted_percepts" expr="null"/>
       <assign location="selected" expr="[]"/>
       <assign location="failure" expr="null"/>
       <assign location="step" expr="null"/>
@@ -298,6 +309,7 @@
       </transition>
       <transition event="done.invoke.autonomy" cond="isUnhandled(_event)" target="after_autonomy">
         <log label="cognition.stage" expr="stageLog('autonomy unhandled', _event)"/>
+        <assign location="acted_percepts" expr="perceptsAfter(_event)"/>
         <assign location="acted" expr="actedAfter(_event)"/>
       </transition>
       <transition event="done.invoke.autonomy" cond="matchesStageOutput(_event)" target="failing">
@@ -353,6 +365,7 @@
         <assign location="confidence_tuner" expr="decisionTuner(_event)"/>
         <log label="cognition.tuner" expr="tunerLog()"/>
         <log label="cognition.stage" expr="stageLog('decision unhandled', _event)"/>
+        <assign location="acted_percepts" expr="perceptsAfter(_event)"/>
         <assign location="acted" expr="actedAfter(_event)"/>
       </transition>
       <!-- A failing decision layer hands the same turn on (D-R-36). -->
@@ -360,6 +373,7 @@
         <assign location="confidence_tuner" expr="decisionTuner(_event)"/>
         <log label="cognition.tuner" expr="tunerLog()"/>
         <log label="cognition.cascaded" expr="cascadedLog(stageFailure(_event))"/>
+        <assign location="acted_percepts" expr="perceptsAfter(_event)"/>
         <assign location="acted" expr="actedAfter(_event)"/>
       </transition>
       <transition event="error.communication.decision" target="running_reasoning">
@@ -389,6 +403,10 @@
         <param name="focus_candidates" expr="focus_candidates"/>
         <param name="choices" expr="choices"/>
         <param name="environment" expr="environment"/>
+        <param name="acted" expr="actedFact()"/>
+        <param name="max_context_tokens" expr="contextTokens()"/>
+        <param name="completion_reserve_tokens" expr="reserveTokens()"/>
+        <param name="bytes_per_token" expr="bytes_per_token"/>
         <param name="model" expr="model"/>
         <param name="database" expr="database"/>
       </invoke>
@@ -404,9 +422,11 @@
       </transition>
       <transition event="done.invoke.reasoning" cond="isHandled(_event)" target="completing">
         <log label="cognition.stage" expr="'reasoning handled'"/>
+        <assign location="bytes_per_token" expr="bytesPerTokenAfter(_event)"/>
         <assign location="selected" expr="handledOutput(_event)"/>
       </transition>
       <transition event="done.invoke.reasoning" cond="matchesStageOutput(_event)" target="failing">
+        <assign location="bytes_per_token" expr="bytesPerTokenAfter(_event)"/>
         <assign location="failure" expr="stageFailure(_event)"/>
         <assign location="step" expr="failedStep(failure)"/>
       </transition>

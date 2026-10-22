@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- cognition-5: recent turns that are not an array raise error.execution and assign nothing. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition" xmlns:conf="http://www.w3.org/2005/scxml-conformance" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="p" expr="'untouched'"/>
+  <data id="f" expr="'untouched'"/>
+  <data id="s" expr="({event: &#34;bot.input&#34;, data: &#34;hi&#34;, source: &#34;gabe&#34;})"/>
+  <data id="r" expr="({})"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <cognition:model_facing_content location="p" failurelocation="f" stimulus="s" recent="r"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="p === 'untouched' &amp;&amp; f === 'untouched'" target="pass"/>
+  <transition event="*" target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

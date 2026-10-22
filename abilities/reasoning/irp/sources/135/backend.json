@@ -1,0 +1,39 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "{\"events\": [{\"event\": \"bot.ability.identity.adopt\", \"data\": {\"name\": \"Pip\"}, \"reason\": \"x\", \"target\": \"session\"}]}"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "{\"events\": [{\"event\": \"bot.ability.communication.respond\", \"data\": {\"text\": \"Hi! I am floppy.\"}, \"reason\": \"greet\", \"target\": \"session\"}]}"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -5,10 +5,10 @@
 //! The original's cognition module owns the turn's attention policy
 //! (`abilities/cognition/types.py` `attention_bias_for_turn`, with the
 //! body's `_interrupt_reference` and `_target_device_reference`) and the
-//! projection of a turn's input for a model (`abilities/cognition/event.py`
-//! `model_facing_content`, with `processing.py`
-//! `InputData.model_facing_content`'s budget for the instructions and the
-//! tool). Both are synchronous and quick, so they are executable content
+//! projection of a turn for a model (`processing.py`
+//! `InputData.model_facing_content` over `abilities/cognition/event.py`
+//! `model_facing_content`, fitted as a provider fits it to its
+//! `ContextFit`). Both are synchronous and quick, so they are executable content
 //! here, under the original's names. Documents bind [`NAMESPACE_URI`]
 //! (conventionally with the prefix `cognition`):
 //!
@@ -16,12 +16,14 @@
 //! <cognition:attention_bias_for_turn location="focus_candidates" focuslocation="focus"
 //!                                    stimulus="stimulus" devices="devices" focus="focused_device"/>
 //! <cognition:model_facing_content location="prompt" failurelocation="prompt_failure"
-//!     stimulus="stimulus" prior_episodes="prior_episodes" standing_directives="standing_directives"
-//!     environment="environment" instructions="system" schema="schema"/>
+//!     systemlocation="system" fitlocation="fit" stimulus="stimulus" self="self" recent="recent"
+//!     environment="environment" acted="acted" prior_episodes="prior_episodes"
+//!     standing_directives="standing_directives" feedback="feedback" instructions="instructions"
+//!     schema="schema" budget="budget"/>
 //! ```
 //!
-//! Every attribute but `location`, `focuslocation` and `failurelocation` is
-//! an expression of the document's data model. Each element writes to its
+//! Every attribute but `location`, `focuslocation`, `failurelocation`,
+//! `systemlocation` and `fitlocation` is an expression of the document's data model. Each element writes to its
 //! locations and never sends.
 //!
 //! # `<cognition:attention_bias_for_turn location="L" focuslocation="F" stimulus="X" devices="D" focus="G"/>`
@@ -45,76 +47,119 @@
 //! (required) receives the candidates, a JSON array. Values compare as JSON
 //! values (ECMAScript strict equality on the strings device ids are).
 //!
-//! # `<cognition:model_facing_content location="L" failurelocation="F" stimulus="S" prior_episodes="P" standing_directives="D" environment="E" instructions="I" schema="T"/>`
+//! # `<cognition:model_facing_content location="L" stimulus="S" …/>`
 //!
-//! The original's `model_facing_xml(ProcessorInput)` over floppy's JSON:
-//! `location` (required) receives the pseudo-XML text a model reads for a
-//! turn, `<cognition:processor_input>` holding
+//! The original's `InputData.model_facing_content` over floppy's JSON:
+//! `location` (required) receives the user content a model reads for a
+//! turn, its blocks joined by newlines, most stable first (R-20 C5), each
+//! left out when absent:
 //!
-//! * `host_input`, a `processing:input` whose `input` field is the
-//!   stimulus `stimulus` (required) evaluates to (nothing when it is
-//!   `null`): `<input>` with the stimulus's data as its `content` field,
-//!   stamped `stimulus:event`, then `stimulus:id`, `stimulus:source` and
-//!   `stimulus:target` when each is a non-empty string;
-//! * `prior_episodes` (required, an array of the original's
-//!   `CognitiveEpisode`s: `focus`, `focus_candidates`, `stimulus_name`,
-//!   `output` as `cognition:event`s and `behavior` as a `behavior:create`,
-//!   `behavior:change` or `behavior:break`) and `standing_directives`
-//!   (required, an array of the original's `Directive`s: `text`, `kind`,
-//!   `instruction` by default), each a list with its `count`;
-//! * the environment block (decision D106) of `environment` (optional; an
-//!   object, anything else renders nothing), the original's
-//!   `Environment.model_snapshot` layout: `<environment id>` holding `<self
-//!   state>` with the bot's own attributes as children and
-//!   `<owned_devices>` with one `<device ref id state>` per held device,
-//!   its attributes as children.
+//! 1. the stable part of what the bot has in mind (the original's
+//!    `RecalledData` with only its `__model_facing_stable_fields__`):
+//!    `<cognition:recalled>` holding `recent` (optional, an array of
+//!    short-term memory's turns, oldest first), uncounted (its
+//!    `__model_facing_uncounted_fields__`), each turn one `<memory:turn>`
+//!    line (`stm.Turn.__model_facing_element__`: `at` as `%H:%M:%SZ`,
+//!    `direction`, `who` the speakers' `ref`s when it has any, `cut="true"`
+//!    when its words were cut, holding its `text`);
+//! 2. the turn's situation: the environment block (decision D106) of
+//!    `environment` (optional; an object, anything else renders nothing),
+//!    the original's `Environment.model_snapshot` layout (`<environment
+//!    id>` holding `<self state>` with the bot's own attributes as children
+//!    and `<owned_devices>` with one `<device ref id state>` per held
+//!    device, its attributes as children), then what earlier stages already
+//!    did on the turn (`acted`, optional: the selections they dispatched,
+//!    an array, or the original's `ActedData` `{percepts, acts}`) as the
+//!    original's `memory_content` of its `ActedData`: `<cognition:acted>`
+//!    with the `percepts` (`[0]` for an array: floppy's turn has one) and
+//!    the `acts` as `cognition:event`s, or `<cognition:acted
+//!    omitted="size" />` over its 16384 bytes;
+//! 3. the rest of what the bot has in mind: `<cognition:recalled>` holding
+//!    `prior_episodes` (an array of the original's `CognitiveEpisode`s:
+//!    `focus`, `focus_candidates`, `stimulus_name`, `output` as
+//!    `cognition:event`s and `behavior` as a `behavior:create`,
+//!    `behavior:change` or `behavior:break`) and `standing_directives` (an
+//!    array of the original's `Directive`s: `text`, `kind`, `instruction`
+//!    by default), each optional and with its `count`: floppy's recalled
+//!    memory until associative memory exists (decision D97);
+//! 4. the stimulus (`stimulus`, required) as the root element of its own
+//!    block, tagged as the original's `_payload_tag` tags a payload that is
+//!    not a model (`dict`, `list`, `str`, `int`, `float`, `bool`, or
+//!    `none_type` for no data or a `null` stimulus), a string as its text and
+//!    anything else as its `content` field, stamped `stimulus:event`, then
+//!    `stimulus:id`, `stimulus:source` and `stimulus:target` when each is a
+//!    non-empty string; a `bot.ability.conversation.output`'s messages
+//!    leave out `provenance`, `source_ids` and `target_ids` (the original's
+//!    `conversation.Message.__model_facing_excluded_fields__`);
+//! 5. the repair `feedback` (optional, a string; `null` is none).
+//!
+//! `systemlocation` (optional) receives the system channel: the
+//! `instructions` (optional, a string; `null` is none), trimmed, then a
+//! blank line and the self block of `self` (optional; the cognition's
+//! `self` datum `{name?, traits?, description?}`), the original's
+//! `SelfData.__model_repr__`: `<persona>` holding `<name taken_by="you">`
+//! for a `name` string or `<no_name_yet/>` for `null` (nothing without
+//! one), then, with traits, `<traits given_by="owner">` of `<trait>`s and
+//! `<description written_by="you">` (empty without one), every value
+//! escaped; `null` when both are empty.
 //!
 //! A field renders as the original's `_fill_field` renders a value that is
 //! not a model: `null` is skipped, a scalar is an attribute (a number as
 //! Python's `str` writes it), an object is an element of `<entry key>`
 //! elements each holding its `value`, and an array an element with its
 //! `count` of `<item>` elements, a scalar item as its text and an object or
-//! array item filled as `item` (decision D99). A snapshot attribute renders
-//! as a child element named after its key (each character other than a
-//! letter, a digit, `_`, `.` or `-` replaced by `_`, and `_` put first when
-//! the tag is empty or starts with a digit, `.` or `-`): a string as its
-//! text, a boolean or number as its JSON text, an object as nested
-//! elements, an array as a list. Object members render in the data model's
-//! canonical order (sorted keys). The text is `ElementTree.indent(space="
-//! ")` then `ElementTree.tostring`: attributes in order, an empty element
-//! as `<name />`.
+//! array item filled as `item` (decision D99); an empty array or object
+//! renders nothing unless it is an entry's value or an item. A snapshot
+//! attribute renders as a child element named after its key (each character
+//! other than a letter, a digit, `_`, `.` or `-` replaced by `_`, and `_`
+//! put first when the tag is empty or starts with a digit, `.` or `-`): a
+//! string as its text, a boolean or number as its JSON text, an object as
+//! nested elements, an array as a list. Object members render in the data
+//! model's canonical order (sorted keys). Each block is
+//! `ElementTree.indent(space="  ")` then `ElementTree.tostring`: attributes
+//! in order, an empty element as `<name />`.
 //!
 //! The original's budgets hold: 262144 encoded bytes, 4096 nodes, 4096
-//! collection items and 65536 characters per scalar for the projection,
-//! and 65536 characters for the instructions (`instructions`, optional, a
-//! string; `null` is none). The instructions and the tool's schema
-//! (`schema`, optional, its compact JSON) are reserved first, and the
-//! projection renders into the bytes they leave of the prompt's 262144
-//! (the original's `InputData.model_facing_content`).
+//! collection items and 65536 characters per scalar for each block, and
+//! 65536 characters for the system channel, the situation and the
+//! feedback. The system channel and the tool's schema (`schema`, optional,
+//! its compact JSON) are reserved first; the situation and the feedback are
+//! never trimmed, and the stimulus renders into the bytes they leave of the
+//! prompt's 262144.
 //!
-//! `prior_episodes` and `standing_directives` are recalled context, the
-//! original's budgeted fields (`__model_facing_budgeted_fields__`, both
-//! `"tail"`), so they never make the projection fail (the original's
-//! `b1654d6`): their elements are placed where they belong, but their items
-//! render after the rest of the projection, each field in turn, newest
-//! (last) first, into the bytes the rest leaves. An item that would exceed
-//! any budget is left out; the kept items keep their order, the field's
-//! `count` is how many were kept, and `omitted="<n>"` follows it when any
-//! was left out. Sizes are measured as rendered and indented, so the text
-//! always fits.
+//! What the bot has in mind never makes the projection fail (the original's
+//! `b1654d6`): its stable part, then its rest, each render into the bytes
+//! everything else leaves, their items newest (last) first; an item that
+//! would exceed any budget is left out, the kept items keep their order, a
+//! counted field's `count` is how many were kept, and `omitted="<n>"`
+//! follows when any was left out. A part whose frame alone does not fit is
+//! left out. Sizes are measured as rendered and indented, so the text always
+//! fits.
 //!
-//! Over a budget otherwise (the stimulus alone overflows, or the
-//! instructions are over the scalar budget), `failurelocation` (optional)
-//! receives the original's `ValueError` message (for example `prompt
-//! projection collection item budget exceeded`) and `location` receives
+//! `budget` (optional, a number of bytes; `null` is none) is the fitted size
+//! of the whole request (the original's `ContextFit.budget_bytes` less the
+//! reserved completion); with it the projection is fitted as a provider
+//! fits it: the content renders whole, and when it is over the budget less
+//! the system channel and the schema it renders again with what the bot has
+//! in mind trimmed to that, and `fitlocation` (optional) receives `fit`,
+//! `cut` (the trimmed content fits) or `overflow` (it is still over: the
+//! stimulus, situation and feedback are never cut, and the request goes as
+//! it is). Without a budget `fitlocation` receives `null`.
+//!
+//! Over a budget otherwise (the stimulus alone overflows, or the system
+//! channel, the situation or the feedback is over the scalar budget),
+//! `failurelocation` (optional) receives the original's `ValueError`
+//! message (for example `prompt projection collection item budget
+//! exceeded`) and `location`, `systemlocation` and `fitlocation` receive
 //! `null`; without `failurelocation` it is `error.execution`. Within them,
-//! `failurelocation` receives `null`. `failurelocation` is assigned before
-//! `location`.
+//! `failurelocation` receives `null`. The locations are assigned in the
+//! order `failurelocation`, `systemlocation`, `fitlocation`, `location`.
 //!
 //! The original also counts the left-out items in its
-//! `bot.processing.prompt.recalled.omitted` metric; this component's
-//! telemetry is the closed per-entry-point observation below, so the count
-//! is only the `omitted` attribute.
+//! `bot.processing.prompt.recalled.omitted` metric and each fit in
+//! `bot.processing.context.fit.count`; this component's telemetry is the
+//! closed per-entry-point observation below, so the count is only the
+//! `omitted` attribute and the fit is `fitlocation`.
 //!
 //! # Failures
 //!
@@ -478,26 +523,40 @@ fn model_facing_content<H: CognitionHost>(
     let [
         location,
         failure_location,
+        system_location,
+        fit_location,
         stimulus,
+        known,
+        recent,
+        environment,
+        acted,
         prior_episodes,
         standing_directives,
-        environment,
+        feedback,
         instructions,
         schema,
+        budget,
     ] = attribute_values(
         attributes,
         [
             "location",
             "failurelocation",
+            "systemlocation",
+            "fitlocation",
             "stimulus",
+            "self",
+            "recent",
+            "environment",
+            "acted",
             "prior_episodes",
             "standing_directives",
-            "environment",
+            "feedback",
             "instructions",
             "schema",
+            "budget",
         ],
         [
-            "cognition:model_facing_content takes only the location, failurelocation, stimulus, prior_episodes, standing_directives, environment, instructions and schema attributes",
+            "cognition:model_facing_content takes only the location, failurelocation, systemlocation, fitlocation, stimulus, self, recent, environment, acted, prior_episodes, standing_directives, feedback, instructions, schema and budget attributes",
             "cognition:model_facing_content repeats an attribute",
             "cognition:model_facing_content has an empty attribute",
         ],
@@ -508,56 +567,88 @@ fn model_facing_content<H: CognitionHost>(
     let stimulus = stimulus.ok_or(Failure::Execution(
         "cognition:model_facing_content requires a stimulus",
     ))?;
-    let prior_episodes = prior_episodes.ok_or(Failure::Execution(
-        "cognition:model_facing_content requires prior_episodes",
-    ))?;
-    let standing_directives = standing_directives.ok_or(Failure::Execution(
-        "cognition:model_facing_content requires standing_directives",
-    ))?;
     no_content(content, "cognition:model_facing_content holds no content")?;
     let stimulus = read_stimulus(host, stimulus)?;
-    let prior_episodes = read_array(
-        host,
-        prior_episodes,
-        "cognition:model_facing_content prior_episodes did not evaluate",
-        "cognition:model_facing_content prior_episodes is not an array",
-    )?;
-    let standing_directives = read_array(
-        host,
-        standing_directives,
-        "cognition:model_facing_content standing_directives did not evaluate",
-        "cognition:model_facing_content standing_directives is not an array",
-    )?;
-    let (environment, instructions, tool_bytes) =
-        read_reserved(host, environment, instructions, schema)?;
-    let input = ProcessorInput {
+    let known = read_json(host, known, "self")?.unwrap_or(Json::Null);
+    let recent = read_list(host, recent, "recent")?;
+    let prior_episodes = read_list(host, prior_episodes, "prior_episodes")?;
+    let standing_directives = read_list(host, standing_directives, "standing_directives")?;
+    let environment = read_json(host, environment, "environment")?.unwrap_or(Json::Null);
+    let acted = read_json(host, acted, "acted")?.unwrap_or(Json::Null);
+    let feedback = read_text(host, feedback, "feedback")?;
+    let instructions = read_text(host, instructions, "instructions")?;
+    let tool_bytes =
+        read_json(host, schema, "schema")?.map_or(0, |schema| schema.to_string().len());
+    let budget = read_budget(host, budget)?;
+    let input = TurnInput {
         stimulus: stimulus.as_ref(),
+        recent: &recent,
+        environment: &environment,
+        acted: &acted,
         prior_episodes: &prior_episodes,
         standing_directives: &standing_directives,
-        environment: &environment,
+        feedback: &feedback,
     };
-    let (prompt, failure) = match project(&input, &instructions, tool_bytes) {
-        Ok(prompt) => (Data::String(prompt), Data::Null),
-        Err(message) => match failure_location {
-            Some(_) => (Data::Null, Data::String(message.into())),
-            None => return Err(Failure::Execution(message)),
-        },
-    };
-    if let Some(failure_location) = failure_location {
-        assign_to(
-            host,
-            failure_location,
-            &failure,
-            "cognition:model_facing_content could not assign failurelocation",
-        )?;
-    }
-    assign_to(
+    let system = system(&instructions, &known);
+    let projected = project(&input, &system, tool_bytes, budget);
+    assign_projection(
         host,
-        location,
-        &prompt,
-        "cognition:model_facing_content could not assign the content",
+        projected,
+        system,
+        [
+            failure_location,
+            system_location,
+            fit_location,
+            Some(location),
+        ],
     )?;
     Ok(Executed::Handled)
+}
+
+/// Assigns a projection to `[failurelocation, systemlocation,
+/// fitlocation, location]`, each that is given: on success `null`, the
+/// system channel (`null` when empty), the fit (`null` without a budget)
+/// and the content; on failure the message and `null`s (without
+/// `failurelocation`, the failure is `error.execution`).
+fn assign_projection<H: CognitionHost>(
+    host: &mut H,
+    projected: Result<Projected, &'static str>,
+    system: String,
+    locations: [Option<&str>; 4],
+) -> Result<(), Failure<H::Error>> {
+    let values = match projected {
+        Ok(projected) => [
+            Data::Null,
+            if system.is_empty() {
+                Data::Null
+            } else {
+                Data::String(system)
+            },
+            projected
+                .fit
+                .map_or(Data::Null, |fit| Data::String(fit.as_str().into())),
+            Data::String(projected.content),
+        ],
+        Err(message) if locations[0].is_some() => [
+            Data::String(message.into()),
+            Data::Null,
+            Data::Null,
+            Data::Null,
+        ],
+        Err(message) => return Err(Failure::Execution(message)),
+    };
+    let failures = [
+        "cognition:model_facing_content could not assign failurelocation",
+        "cognition:model_facing_content could not assign systemlocation",
+        "cognition:model_facing_content could not assign fitlocation",
+        "cognition:model_facing_content could not assign the content",
+    ];
+    for ((location, value), failed) in locations.into_iter().zip(&values).zip(failures) {
+        if let Some(location) = location {
+            assign_to(host, location, value, failed)?;
+        }
+    }
+    Ok(())
 }
 
 /// The stimulus envelope `expression` evaluates to: an object with a
@@ -589,171 +680,507 @@ fn read_stimulus<H: CognitionHost>(
     Ok(stimulus)
 }
 
-/// The array `expression` evaluates to, else `failed` or `malformed`.
-fn read_array<H: CognitionHost>(
+/// An optional input attribute's failure details: it did not evaluate,
+/// or it evaluated to a value of the wrong kind.
+fn input_failures(name: &str) -> (&'static str, &'static str) {
+    match name {
+        "self" => (
+            "cognition:model_facing_content self did not evaluate",
+            "cognition:model_facing_content self is not a JSON value",
+        ),
+        "recent" => (
+            "cognition:model_facing_content recent did not evaluate",
+            "cognition:model_facing_content recent is not an array",
+        ),
+        "prior_episodes" => (
+            "cognition:model_facing_content prior_episodes did not evaluate",
+            "cognition:model_facing_content prior_episodes is not an array",
+        ),
+        "standing_directives" => (
+            "cognition:model_facing_content standing_directives did not evaluate",
+            "cognition:model_facing_content standing_directives is not an array",
+        ),
+        "environment" => (
+            "cognition:model_facing_content environment did not evaluate",
+            "cognition:model_facing_content environment is not a JSON value",
+        ),
+        "acted" => (
+            "cognition:model_facing_content acted did not evaluate",
+            "cognition:model_facing_content acted is not a JSON value",
+        ),
+        "feedback" => (
+            "cognition:model_facing_content feedback did not evaluate",
+            "cognition:model_facing_content feedback is not a string",
+        ),
+        "instructions" => (
+            "cognition:model_facing_content instructions did not evaluate",
+            "cognition:model_facing_content instructions is not a string",
+        ),
+        _ => (
+            "cognition:model_facing_content schema did not evaluate",
+            "cognition:model_facing_content schema is not a JSON value",
+        ),
+    }
+}
+
+/// The JSON value the optional input attribute `name` evaluates to
+/// (`None` without the attribute).
+fn read_json<H: CognitionHost>(
     host: &mut H,
-    expression: &str,
-    failed: &'static str,
-    malformed: &'static str,
+    expression: Option<&str>,
+    name: &str,
+) -> Result<Option<Json>, Failure<H::Error>> {
+    let (failed, malformed) = input_failures(name);
+    expression
+        .map(|expression| {
+            json_of(&evaluate(host, expression, failed)?).ok_or(Failure::Execution(malformed))
+        })
+        .transpose()
+}
+
+/// The array the optional list attribute `name` evaluates to; `null` or no
+/// attribute is none.
+fn read_list<H: CognitionHost>(
+    host: &mut H,
+    expression: Option<&str>,
+    name: &str,
 ) -> Result<Vec<Json>, Failure<H::Error>> {
-    match json_of(&evaluate(host, expression, failed)?) {
+    match read_json(host, expression, name)? {
+        None | Some(Json::Null) => Ok(Vec::new()),
         Some(Json::Array(items)) => Ok(items),
+        Some(_) => Err(Failure::Execution(input_failures(name).1)),
+    }
+}
+
+/// The string the optional text attribute `name` evaluates to; `null` or
+/// no attribute is empty.
+fn read_text<H: CognitionHost>(
+    host: &mut H,
+    expression: Option<&str>,
+    name: &str,
+) -> Result<String, Failure<H::Error>> {
+    let Some(expression) = expression else {
+        return Ok(String::new());
+    };
+    let (failed, malformed) = input_failures(name);
+    match evaluate(host, expression, failed)? {
+        Data::String(text) => Ok(text),
+        Data::Null => Ok(String::new()),
         _ => Err(Failure::Execution(malformed)),
     }
 }
 
-/// `<cognition:model_facing_content>`'s optional inputs: the environment
-/// (`null` for none), the instructions (empty for none) and the tool
-/// schema's compact JSON bytes (0 for none).
-fn read_reserved<H: CognitionHost>(
+/// The fitted budget an optional `expression` evaluates to: a number of
+/// bytes, floored at zero; `null` or no attribute fits nothing.
+fn read_budget<H: CognitionHost>(
     host: &mut H,
-    environment: Option<&str>,
-    instructions: Option<&str>,
-    schema: Option<&str>,
-) -> Result<(Json, String, usize), Failure<H::Error>> {
-    let environment = environment
-        .map(|environment| {
-            json_of(&evaluate(
-                host,
-                environment,
-                "cognition:model_facing_content environment did not evaluate",
-            )?)
-            .ok_or(Failure::Execution(
-                "cognition:model_facing_content environment is not a JSON value",
-            ))
-        })
-        .transpose()?
-        .unwrap_or(Json::Null);
-    let instructions = instructions
-        .map(|instructions| {
-            match evaluate(
-                host,
-                instructions,
-                "cognition:model_facing_content instructions did not evaluate",
-            )? {
-                Data::String(text) => Ok(text),
-                Data::Null => Ok(String::new()),
-                _ => Err(Failure::Execution(
-                    "cognition:model_facing_content instructions is not a string",
-                )),
-            }
-        })
-        .transpose()?
-        .unwrap_or_default();
-    let tool_bytes = schema
-        .map(|schema| {
-            json_of(&evaluate(
-                host,
-                schema,
-                "cognition:model_facing_content schema did not evaluate",
-            )?)
-            .map(|schema| schema.to_string().len())
-            .ok_or(Failure::Execution(
-                "cognition:model_facing_content schema is not a JSON value",
-            ))
-        })
-        .transpose()?
-        .unwrap_or(0);
-    Ok((environment, instructions, tool_bytes))
+    expression: Option<&str>,
+) -> Result<Option<usize>, Failure<H::Error>> {
+    let Some(expression) = expression else {
+        return Ok(None);
+    };
+    match evaluate(
+        host,
+        expression,
+        "cognition:model_facing_content budget did not evaluate",
+    )? {
+        Data::Null => Ok(None),
+        Data::Number(bytes) => {
+            let bytes = bytes.get().floor();
+            #[expect(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "a finite byte count, floored at zero and saturated at usize::MAX"
+            )]
+            Ok(Some(if bytes <= 0.0 { 0 } else { bytes as usize }))
+        }
+        _ => Err(Failure::Execution(
+            "cognition:model_facing_content budget is not a number",
+        )),
+    }
 }
 
 /// What `<cognition:model_facing_content>` projects: the original's
-/// `ProcessorInput` fields.
+/// processing `InputData`, its `situation` (the environment block, then the
+/// `acted` fact) and `recalled` (`RecalledData`) as floppy's JSON.
 #[derive(Clone, Copy, Debug)]
-pub struct ProcessorInput<'a> {
+pub struct TurnInput<'a> {
     /// The stimulus envelope, `None` for none.
     pub stimulus: Option<&'a Map<String, Json>>,
-    /// The prior cognitive episodes.
-    pub prior_episodes: &'a [Json],
-    /// The standing directives.
-    pub standing_directives: &'a [Json],
+    /// The recent turns short-term memory holds, oldest first (the
+    /// original's `RecalledData.recent`, `stm.Turn`s).
+    pub recent: &'a [Json],
     /// The bot's environment, `null` for none.
     pub environment: &'a Json,
+    /// What earlier stages already did on the turn: the selections they
+    /// dispatched (an array), or the original's `ActedData` (`{percepts,
+    /// acts}`); `null` or an empty array for nothing.
+    pub acted: &'a Json,
+    /// The prior cognitive episodes (floppy's recalled memory until
+    /// associative memory exists, decision D97).
+    pub prior_episodes: &'a [Json],
+    /// The standing directives (decision D97, as `prior_episodes`).
+    pub standing_directives: &'a [Json],
+    /// The repair feedback, empty for none.
+    pub feedback: &'a str,
 }
 
-/// The model-facing text of `input` under the original's budgets, with
-/// `instructions` and a tool schema of `tool_bytes` bytes reserved from the
-/// prompt's first (see the crate documentation).
+/// How a projection was fitted to a fitted budget (the original's
+/// `ContextFitOutcome`).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Fit {
+    /// Sent whole.
+    Fit,
+    /// Recalled memory was cut or left out to fit.
+    Cut,
+    /// Still over at its smallest, sent anyway.
+    Overflow,
+}
+
+impl Fit {
+    /// The original's outcome name.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Fit => "fit",
+            Self::Cut => "cut",
+            Self::Overflow => "overflow",
+        }
+    }
+}
+
+/// A turn's projected user content and, with a fitted budget, how it fit.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Projected {
+    /// The user content.
+    pub content: String,
+    /// How it fit the fitted budget; `None` without one.
+    pub fit: Option<Fit>,
+}
+
+/// The system channel: the static `instructions` then the self block of
+/// `known` (the original's `SelfData.__model_repr__`), joined by a blank
+/// line as `Processing._input_for_processor` stamps them; empty when both
+/// are.
+#[must_use]
+pub fn system(instructions: &str, known: &Json) -> String {
+    let instructions = instructions.trim();
+    let block = self_block(known);
+    match (instructions.is_empty(), block.is_empty()) {
+        (true, _) => block,
+        (false, true) => instructions.to_owned(),
+        (false, false) => format!("{instructions}\n\n{block}"),
+    }
+}
+
+/// The original's `SelfData.__model_repr__` of the cognition's `self`
+/// datum (`{name?, traits?, description?}`, what identity and persona told
+/// it): `<persona>` holding the name (`identity.NameData`'s `<name
+/// taken_by="you">` for a string, `<no_name_yet/>` for `null`, nothing when
+/// absent) and, with traits (the persona's `OutputData` has at least one),
+/// the owner's `<traits given_by="owner">`, then the self-written
+/// `<description written_by="you">` (empty without one); empty when `known`
+/// is not an object.
+fn self_block(known: &Json) -> String {
+    let Some(known) = known.as_object() else {
+        return String::new();
+    };
+    let mut block = String::from("<persona>");
+    match known.get("name") {
+        Some(Json::String(name)) => {
+            block.push_str("<name taken_by=\"you\">");
+            block.push_str(&xml_escape(name));
+            block.push_str("</name>");
+        }
+        Some(Json::Null) => block.push_str("<no_name_yet/>"),
+        _ => {}
+    }
+    let traits: Vec<&str> = known
+        .get("traits")
+        .and_then(Json::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Json::as_str)
+        .collect();
+    if !traits.is_empty() {
+        block.push_str("<traits given_by=\"owner\">");
+        for trait_text in traits {
+            block.push_str("<trait>");
+            block.push_str(&xml_escape(trait_text));
+            block.push_str("</trait>");
+        }
+        block.push_str("</traits>");
+        match known.get("description").and_then(Json::as_str) {
+            Some(text) => {
+                block.push_str("<description written_by=\"you\">");
+                block.push_str(&xml_escape(text));
+                block.push_str("</description>");
+            }
+            None => block.push_str("<description written_by=\"you\"/>"),
+        }
+    }
+    block.push_str("</persona>");
+    block
+}
+
+/// `xml.sax.saxutils.escape`: `&`, `<` and `>`.
+fn xml_escape(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+/// The original's `InputData.model_facing_content` fitted as a provider
+/// fits it to a `ContextFit` budget: the user content of `input`, with the
+/// system channel `system` and a tool schema of `tool_bytes` bytes reserved
+/// first (see the crate documentation).
 ///
 /// # Errors
 ///
-/// The original's message for the first budget exceeded: the instructions
-/// over the scalar budget, or the projection without its recalled items
-/// over the bytes the instructions and the tool leave (or any other
-/// budget). Recalled items never fail the projection: those that do not fit
-/// are left out and counted.
+/// The original's message for the first budget exceeded: the system
+/// channel, the situation or the feedback over the scalar budget, or the
+/// stimulus over the bytes they and the tool leave (or any other budget).
+/// Recalled memory never fails the projection.
 pub fn project(
-    input: &ProcessorInput<'_>,
-    instructions: &str,
+    input: &TurnInput<'_>,
+    system: &str,
     tool_bytes: usize,
+    budget: Option<usize>,
+) -> Result<Projected, &'static str> {
+    let whole = content(input, system, tool_bytes, None)?;
+    let Some(budget) = budget else {
+        return Ok(Projected {
+            content: whole,
+            fit: None,
+        });
+    };
+    let budget = budget
+        .saturating_sub(system.len())
+        .saturating_sub(tool_bytes);
+    if whole.len() <= budget {
+        return Ok(Projected {
+            content: whole,
+            fit: Some(Fit::Fit),
+        });
+    }
+    // Over: render again within the budget, which trims or leaves out only
+    // the recalled memory.
+    let content = content(input, system, tool_bytes, Some(budget))?;
+    let fit = if content.len() <= budget {
+        Fit::Cut
+    } else {
+        Fit::Overflow
+    };
+    Ok(Projected {
+        content,
+        fit: Some(fit),
+    })
+}
+
+/// The original's `InputData.model_facing_content` with its
+/// `budget_bytes`: the stable recalled part, the situation, the varying
+/// recalled part, the stimulus, the feedback, joined by newlines, each
+/// left out when absent.
+fn content(
+    input: &TurnInput<'_>,
+    system: &str,
+    tool_bytes: usize,
+    budget_bytes: Option<usize>,
 ) -> Result<String, &'static str> {
-    if instructions.chars().count() > MAX_SCALAR_CHARACTERS {
+    let situation = situation(input.environment, input.acted)?;
+    let around: Vec<&str> = [situation.as_str(), input.feedback]
+        .into_iter()
+        .filter(|block| !block.is_empty())
+        .collect();
+    if [system]
+        .iter()
+        .chain(&around)
+        .any(|block| block.chars().count() > MAX_SCALAR_CHARACTERS)
+    {
         return Err(SCALAR_BUDGET);
     }
+    let reserved = system.len().saturating_add(tool_bytes);
+    // The situation and the feedback each join the stimulus with a newline.
+    let beside: usize = around.iter().map(|block| block.len() + 1).sum();
     let limit = MAX_PROJECTION_BYTES
-        .saturating_sub(instructions.len())
-        .saturating_sub(tool_bytes);
-    let mut budget = Budget::default();
-    let mut root = budget.element("cognition:processor_input")?;
-    let mut host_input = budget.element("host_input")?;
-    let mut processing_input = budget.element("processing:input")?;
-    if let Some(stimulus) = input.stimulus {
-        processing_input
-            .children
-            .push(stimulus_element(stimulus, &mut budget)?);
-    }
-    host_input.children.push(processing_input);
-    root.children.push(host_input);
-    let mut deferred = Vec::new();
-    for (name, items, render) in [
-        ("prior_episodes", input.prior_episodes, episode as Render),
-        ("standing_directives", input.standing_directives, directive),
-    ] {
-        let (list, recalled) = budgeted(name, items, render, &mut budget)?;
-        if let Some(recalled) = recalled {
-            deferred.push((root.children.len(), recalled));
-        }
-        root.children.push(list);
-    }
-    if let Some(environment) = environment_element(input.environment, &mut budget)? {
-        root.children.push(environment);
-    }
-    render_budgeted(&mut root, &deferred, limit, &mut budget)?;
-    let rendered = root.text(0);
-    if rendered.len() > limit {
+        .checked_sub(reserved)
+        .and_then(|limit| limit.checked_sub(beside))
+        .ok_or(BYTE_BUDGET)?;
+    let mut stimulus_budget = Budget::default();
+    let mut stimulus = stimulus_element(input.stimulus, &mut stimulus_budget)?.text(0);
+    if stimulus.len() > limit {
         return Err(BYTE_BUDGET);
     }
-    Ok(rendered)
-}
-
-/// The original's `_BudgetedField`: a recalled tuple whose items render
-/// after the rest of the projection, kept from its tail (both of
-/// `ProcessorInput`'s budgeted fields, `prior_episodes` and
-/// `standing_directives`, are `"tail"`: recalled oldest first, so the
-/// newest survive).
-#[derive(Clone, Copy)]
-struct Recalled<'a> {
-    items: &'a [Json],
-    render: Render,
-}
-
-/// A budgeted tuple field (the original's `_fill_field` with `keep`): with
-/// items, its element is placed now with the upper bounds `count` and
-/// `omitted` (both its length) and its items deferred to
-/// [`render_budgeted`]; without, it renders as any tuple.
-fn budgeted<'a>(
-    name: &str,
-    items: &'a [Json],
-    render: Render,
-    budget: &mut Budget,
-) -> Result<(Element, Option<Recalled<'a>>), &'static str> {
-    if items.is_empty() {
-        return Ok((models(name, items, render, budget)?, None));
+    let mut stable = None;
+    let mut varying = None;
+    if !(input.recent.is_empty()
+        && input.prior_episodes.is_empty()
+        && input.standing_directives.is_empty())
+    {
+        let available = budget_bytes.map_or(MAX_PROJECTION_BYTES - reserved, |budget| {
+            budget.min(MAX_PROJECTION_BYTES - reserved)
+        });
+        let mut remaining = available.checked_sub(stimulus.len() + beside);
+        // The stable fields render before the situation and claim the
+        // budget first; the rest after it.
+        for (rendered, fields) in [
+            (
+                &mut stable,
+                vec![Field {
+                    name: "recent",
+                    items: input.recent,
+                    render: turn,
+                    counted: false,
+                }],
+            ),
+            (
+                &mut varying,
+                vec![
+                    Field {
+                        name: "prior_episodes",
+                        items: input.prior_episodes,
+                        render: episode,
+                        counted: true,
+                    },
+                    Field {
+                        name: "standing_directives",
+                        items: input.standing_directives,
+                        render: directive,
+                        counted: true,
+                    },
+                ],
+            ),
+        ] {
+            if fields.iter().all(|field| field.items.is_empty()) {
+                continue;
+            }
+            // A newline joins each recalled element to what follows it.
+            remaining = remaining.and_then(|remaining| remaining.checked_sub(1));
+            if let Some(limit) = remaining
+                && let Some(text) = recalled(&fields, limit)
+            {
+                remaining = Some(limit - text.len());
+                *rendered = Some(text);
+            }
+        }
     }
-    let mut list = budget.element(name)?;
-    budget.attribute(&mut list, "count", items.len().to_string())?;
-    budget.attribute(&mut list, "omitted", items.len().to_string())?;
-    Ok((list, Some(Recalled { items, render })))
+    let before: Vec<&str> = [
+        stable.as_deref(),
+        Some(situation.as_str()),
+        varying.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .filter(|block| !block.is_empty())
+    .collect();
+    if !before.is_empty() {
+        stimulus = format!("{}\n{stimulus}", before.join("\n"));
+    }
+    if !input.feedback.is_empty() {
+        stimulus.push('\n');
+        stimulus.push_str(input.feedback);
+    }
+    Ok(stimulus)
+}
+
+/// The turn's situation: the environment block, then what earlier stages
+/// already did on it (the original's `_build_processing_input`: the world
+/// block and the `acted` fact joined by a newline); empty for neither.
+fn situation(environment: &Json, acted: &Json) -> Result<String, &'static str> {
+    let mut budget = Budget::default();
+    let world = environment_element(environment, &mut budget)?.map(|element| element.text(0));
+    let fact = acted_fact(acted);
+    Ok([world, fact]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join("\n"))
+}
+
+/// What the original keeps of a turn's `ActedData` in its situation
+/// (`memory_content` within `_MAX_ACTED_BYTES`): `<cognition:acted>` with
+/// the `percepts` acted on and the `acts` dispatched, or the bare element
+/// with `omitted="size"` when it does not fit; `None` when nothing was
+/// done.
+fn acted_fact(acted: &Json) -> Option<String> {
+    let (percepts, acts) = match acted {
+        Json::Array(acts) => (vec![Json::from(0)], acts.as_slice()),
+        Json::Object(acted) => (
+            acted
+                .get("percepts")
+                .and_then(Json::as_array)
+                .cloned()
+                .unwrap_or_else(|| vec![Json::from(0)]),
+            acted
+                .get("acts")
+                .and_then(Json::as_array)
+                .map_or(&[][..], Vec::as_slice),
+        ),
+        _ => return None,
+    };
+    if acts.is_empty() {
+        return None;
+    }
+    let rendered = (|| {
+        let mut budget = Budget::default();
+        let mut element = budget.element("cognition:acted")?;
+        fill_field(
+            &mut element,
+            "percepts",
+            Some(&Json::Array(percepts)),
+            &mut budget,
+        )?;
+        element
+            .children
+            .push(models("acts", acts, selection, &mut budget)?);
+        let text = element.text(0);
+        if text.len() > MAX_ACTED_BYTES {
+            return Err(BYTE_BUDGET);
+        }
+        Ok::<_, &'static str>(text)
+    })();
+    Some(rendered.unwrap_or_else(|_| "<cognition:acted omitted=\"size\" />".to_owned()))
+}
+
+/// The bytes the acted fact may take (the original's `_MAX_ACTED_BYTES`:
+/// a sixteenth of an episode's 262144).
+const MAX_ACTED_BYTES: usize = 16_384;
+
+/// One budgeted field of a recalled part: its items render after the rest
+/// of the part, newest (last) first.
+#[derive(Clone, Copy)]
+struct Field<'a> {
+    name: &'static str,
+    items: &'a [Json],
+    render: Render,
+    counted: bool,
+}
+
+/// One part of the original's `RecalledData` rendered within `limit`
+/// bytes: `<cognition:recalled>` holding each field with items, the rest at
+/// their defaults rendering nothing; `None` when its frame does not fit.
+fn recalled(fields: &[Field<'_>], limit: usize) -> Option<String> {
+    let mut budget = Budget::default();
+    let mut root = budget.element("cognition:recalled").ok()?;
+    let mut deferred = Vec::new();
+    for field in fields.iter().filter(|field| !field.items.is_empty()) {
+        let mut list = budget.element(field.name).ok()?;
+        // Upper bounds for the final count and omission, settled once the
+        // items render.
+        if field.counted {
+            budget
+                .attribute(&mut list, "count", field.items.len().to_string())
+                .ok()?;
+        }
+        budget
+            .attribute(&mut list, "omitted", field.items.len().to_string())
+            .ok()?;
+        deferred.push((root.children.len(), *field));
+        root.children.push(list);
+    }
+    render_budgeted(&mut root, &deferred, limit, &mut budget).ok()?;
+    let text = root.text(0);
+    (text.len() <= limit).then_some(text)
 }
 
 /// The original's `_render_budgeted`: each deferred field's items, newest
@@ -765,10 +1192,10 @@ fn budgeted<'a>(
 /// # Errors
 ///
 /// [`BYTE_BUDGET`] when `root` without any recalled item is already over
-/// `limit`: the stimulus alone overflows.
+/// `limit`: the frame does not fit.
 fn render_budgeted(
     root: &mut Element,
-    deferred: &[(usize, Recalled<'_>)],
+    deferred: &[(usize, Field<'_>)],
     limit: usize,
     budget: &mut Budget,
 ) -> Result<(), &'static str> {
@@ -1087,8 +1514,25 @@ fn members(value: Option<&Json>) -> Option<&Map<String, Json>> {
 }
 
 /// The original's `_fill_field` over a JSON value (see the crate
-/// documentation).
+/// documentation): an empty array or object renders nothing, as it tells
+/// the model nothing its absence does not.
 fn fill_field(
+    element: &mut Element,
+    name: &str,
+    value: Option<&Json>,
+    budget: &mut Budget,
+) -> Result<(), &'static str> {
+    match value {
+        Some(Json::Array(items)) if items.is_empty() => Ok(()),
+        Some(Json::Object(object)) if object.is_empty() => Ok(()),
+        value => fill_item(element, name, value, budget),
+    }
+}
+
+/// The original's `_fill_field` with `as_item`: a value placed as an entry
+/// of an enclosing collection, which renders even when it is an empty
+/// array or object, keeping that collection's count true.
+fn fill_item(
     element: &mut Element,
     name: &str,
     value: Option<&Json>,
@@ -1110,7 +1554,7 @@ fn fill_field(
             for item in items {
                 match scalar_text(item) {
                     Some(text) => list.children.push(budget.text_element("item", text)?),
-                    None => fill_field(&mut list, "item", Some(item), budget)?,
+                    None => fill_item(&mut list, "item", Some(item), budget)?,
                 }
             }
             element.children.push(list);
@@ -1122,7 +1566,7 @@ fn fill_field(
             for (key, value) in object {
                 let mut entry = budget.element("entry")?;
                 budget.attribute(&mut entry, "key", key.clone())?;
-                fill_field(&mut entry, "value", Some(value), budget)?;
+                fill_item(&mut entry, "value", Some(value), budget)?;
                 mapping.children.push(entry);
             }
             element.children.push(mapping);
@@ -1131,33 +1575,127 @@ fn fill_field(
     }
 }
 
-/// The stimulus envelope as the original's `hsm.Event` field: `<input>`
-/// holding its data as content, stamped `stimulus:event`, then
-/// `stimulus:id`, `:source` and `:target` when set.
+/// The stimulus as the root element of its own block (the original's
+/// `_project` of a payload that is not a model): tagged as the original's
+/// `_payload_tag` tags the payload's Python type (`dict`, `list`, `str`,
+/// `int`, `float`, `bool`, `none_type`), a string as its text and anything else filled as its
+/// `content` field, stamped `stimulus:event`, then `stimulus:id`,
+/// `:source` and `:target` when set. A conversation output's messages
+/// leave out the fields the original's `conversation.Message` excludes from
+/// a model (`__model_facing_excluded_fields__`).
 fn stimulus_element(
-    envelope: &Map<String, Json>,
+    envelope: Option<&Map<String, Json>>,
     budget: &mut Budget,
 ) -> Result<Element, &'static str> {
-    let mut input = budget.element("input")?;
-    fill_field(&mut input, "content", envelope.get("data"), budget)?;
+    let data = envelope.and_then(|envelope| envelope.get("data"));
+    let shown = match envelope.and_then(|envelope| envelope.get("event")) {
+        Some(Json::String(event)) if event == CONVERSATION_OUTPUT => {
+            data.map(model_facing_messages)
+        }
+        _ => data.cloned(),
+    };
+    let tag = match &shown {
+        None | Some(Json::Null) => "none_type",
+        Some(Json::Bool(_)) => "bool",
+        Some(Json::Number(number)) if number.is_f64() => "float",
+        Some(Json::Number(_)) => "int",
+        Some(Json::String(_)) => "str",
+        Some(Json::Array(_)) => "list",
+        Some(Json::Object(_)) => "dict",
+    };
+    let mut root = match &shown {
+        Some(Json::String(text)) => budget.text_element(tag, text.clone())?,
+        shown => {
+            let mut root = budget.element(tag)?;
+            fill_field(&mut root, "content", shown.as_ref(), budget)?;
+            root
+        }
+    };
+    let Some(envelope) = envelope else {
+        return Ok(root);
+    };
     let event = envelope
         .get("event")
         .and_then(Json::as_str)
         .unwrap_or_default()
         .to_owned();
-    budget.attribute(&mut input, "stimulus:event", event)?;
+    budget.attribute(&mut root, "stimulus:event", event)?;
     for key in ["id", "source", "target"] {
         if let Some(text) = envelope.get(key).and_then(Json::as_str)
             && !text.is_empty()
         {
-            budget.attribute(&mut input, &format!("stimulus:{key}"), text.to_owned())?;
+            budget.attribute(&mut root, &format!("stimulus:{key}"), text.to_owned())?;
         }
     }
-    Ok(input)
+    Ok(root)
+}
+
+/// The conversation's output event, whose messages a model sees without
+/// their correlation.
+const CONVERSATION_OUTPUT: &str = "bot.ability.conversation.output";
+
+/// The fields of a conversation message a model never sees (the original's
+/// `conversation.Message.__model_facing_excluded_fields__`).
+const MESSAGE_EXCLUDED_FIELDS: [&str; 3] = ["provenance", "source_ids", "target_ids"];
+
+/// A conversation output's data with each of its `messages` without
+/// [`MESSAGE_EXCLUDED_FIELDS`].
+fn model_facing_messages(data: &Json) -> Json {
+    let mut data = data.clone();
+    if let Some(messages) = data.get_mut("messages").and_then(Json::as_array_mut) {
+        for message in messages.iter_mut().filter_map(Json::as_object_mut) {
+            for field in MESSAGE_EXCLUDED_FIELDS {
+                message.remove(field);
+            }
+        }
+    }
+    data
 }
 
 /// Renders one model of a tuple.
 type Render = fn(Option<&Map<String, Json>>, &mut Budget) -> Result<Element, &'static str>;
+
+/// The original's `stm.Turn.__model_facing_element__`: one `<memory:turn>`
+/// line, `at` (UTC, to the second), `direction`, `who` (each speaker's
+/// `ref`) when it has speakers and `cut="true"` when the words were cut,
+/// holding the words.
+fn turn(turn: Option<&Map<String, Json>>, budget: &mut Budget) -> Result<Element, &'static str> {
+    let field = |key: &str| turn.and_then(|turn| turn.get(key));
+    let mut element = budget.element("memory:turn")?;
+    if let Some(at) = field("at").and_then(Json::as_str) {
+        budget.attribute(&mut element, "at", utc_time(at))?;
+    }
+    budget.attribute(
+        &mut element,
+        "direction",
+        ecmascript_string(field("direction")),
+    )?;
+    let who = field("speakers")
+        .and_then(Json::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|speaker| speaker.get("ref").and_then(Json::as_str))
+        .collect::<Vec<_>>()
+        .join(" ");
+    if !who.is_empty() {
+        budget.attribute(&mut element, "who", who)?;
+    }
+    if field("cut") == Some(&Json::Bool(true)) {
+        budget.attribute(&mut element, "cut", "true".to_owned())?;
+    }
+    let text = field("text").and_then(Json::as_str).unwrap_or_default();
+    budget.scalar(text)?;
+    element.text = Some(text.to_owned());
+    Ok(element)
+}
+
+/// `%H:%M:%SZ` of an RFC 3339 UTC timestamp (the register stamps `at` in
+/// UTC, `Z`); the text after its `T` up to the seconds, else as given.
+fn utc_time(at: &str) -> String {
+    at.split_once('T')
+        .and_then(|(_, time)| time.get(..8))
+        .map_or_else(|| at.to_owned(), |time| format!("{time}Z"))
+}
 
 /// A tuple of models: `<name count>` holding one element per model.
 fn models(
@@ -1186,7 +1724,7 @@ fn episode(
     fill_field(&mut element, "focus", field("focus"), budget)?;
     let empty = Json::Array(Vec::new());
     let candidates = field("focus_candidates").filter(|value| value.is_array());
-    fill_field(
+    fill_item(
         &mut element,
         "focus_candidates",
         Some(candidates.unwrap_or(&empty)),
@@ -1252,7 +1790,7 @@ fn behavior_element(
         ]
     };
     for key in keys {
-        fill_field(&mut element, key, behavior.get(*key), budget)?;
+        fill_item(&mut element, key, behavior.get(*key), budget)?;
     }
     Ok(element)
 }
@@ -1356,7 +1894,7 @@ fn snapshot_attributes(
                 let child = budget.text_element(&tag, text)?;
                 element.children.push(child);
             }
-            Json::Array(_) => fill_field(element, &tag, Some(value), budget)?,
+            Json::Array(_) => fill_item(element, &tag, Some(value), budget)?,
             Json::Object(object) => {
                 let mut child = budget.element(&tag)?;
                 snapshot_attributes(&mut child, object, budget)?;

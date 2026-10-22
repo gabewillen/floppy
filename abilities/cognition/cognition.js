@@ -135,8 +135,27 @@ function handledOutput(_event) {
 
 // What earlier stages acted, then what this stage dispatched before it
 // passed the turn on (its donedata's acted, when it has one).
+// A stage's donedata acted is the selections it dispatched (an array), or
+// the reference ActedData {percepts, acts} (autonomy's, for the percepts its
+// behaviors handled).
+function actsOf(_event) {
+  var given = _event.data.acted;
+  return Array.isArray(given) ? given : Array.isArray(Object(given).acts) ? given.acts : [];
+}
+
 function actedAfter(_event) {
-  return Array.isArray(_event.data.acted) ? acted.concat(_event.data.acted) : acted;
+  return acted.concat(actsOf(_event));
+}
+
+// The percepts an earlier stage acted on, when it named them; else these.
+function perceptsAfter(_event) {
+  var given = Object(_event.data.acted).percepts;
+  return Array.isArray(given) && given.length > 0 ? given : acted_percepts;
+}
+
+// What reasoning is told was already done: the reference ActedData.
+function actedFact() {
+  return acted_percepts === null ? acted : ({percepts: acted_percepts, acts: acted});
 }
 
 // A done.invoke.<stage> that handled the turn in hand with its selections.
@@ -200,4 +219,20 @@ function cascadedLog(reason) {
 // The reflection's cognition_input: the turn's stimulus, focus and focus_candidates.
 function cognitionInput() {
   return ({stimulus: stimulus, focus: focus, focus_candidates: focus_candidates});
+}
+
+// Context fit (decision D143): the bounds' model context and the tokens
+// reserved for the reply, [floppy fields]; null fits nothing.
+function contextTokens() {
+  return typeof bounds.max_context_tokens === 'number' ? bounds.max_context_tokens : null;
+}
+
+function reserveTokens() {
+  return typeof bounds.completion_reserve_tokens === 'number' ? bounds.completion_reserve_tokens : 0;
+}
+
+// What reasoning learned of the request bytes a token, else what was known.
+function bytesPerTokenAfter(_event) {
+  var learned = _event.data.bytes_per_token;
+  return typeof learned === 'number' && learned > 0 ? learned : bytes_per_token;
 }
