@@ -443,6 +443,10 @@ fn layout(
     let dir = unique_scratch("cognition");
     copy_dir(&workspace().join("bots/floppy"), &dir.join("bots/floppy"));
     copy_dir(
+        &workspace().join("bots/floppy/firmware"),
+        &dir.join("bots/floppy/firmware"),
+    );
+    copy_dir(
         &workspace().join("bots/floppy/schemas"),
         &dir.join("bots/floppy/schemas"),
     );
@@ -2293,12 +2297,14 @@ fn reasonings_prompt_carries_the_environment_block() {
     );
     let lines: Vec<&str> = block.lines().map(str::trim).collect();
     assert_eq!(lines[1], r#"<self state="processing">"#, "{block}");
-    assert_eq!(lines[2], "<owned_devices>", "{block}");
+    // The bot's own attributes come first (decision D156).
+    assert_eq!(lines[2], "<held_percepts>0</held_percepts>", "{block}");
+    assert_eq!(lines[3], "<owned_devices>", "{block}");
     // ref, id and state are the device's only XML attributes; each of its
     // snapshot attributes is a child element, a string as its escaped
     // text, a number as its JSON text.
     assert_eq!(
-        lines[3], r#"<device ref="lamp" id="session.lamp" state="off">"#,
+        lines[4], r#"<device ref="lamp" id="session.lamp" state="off">"#,
         "{block}"
     );
     for element in [

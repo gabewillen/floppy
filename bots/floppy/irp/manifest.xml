@@ -69,7 +69,7 @@
     </test>
   </assert>
   <assert id="floppy-7" specnum="7" specid="#floppy-7">
-    <![CDATA[An input that arrives during a turn waits and starts the next turn when the bot returns to attention.]]>
+    <![CDATA[An input that arrives during a turn is held, and the turn's end (`turn_ended`) starts the next turn at once with what is held: one percept is that turn's stimulus as itself, several are perceived together as `bot.perceived`.]]>
     <test id="160" conformance="mandatory" manual="false">
       <start uri="160/test160.scxml"/>
     </test>
