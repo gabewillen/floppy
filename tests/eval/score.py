@@ -242,7 +242,8 @@ def builds(job):
     or `failed` "<reason>: <diagnostic>". Two builders can
     run at once (reflection's and the learning ability's), so each build is
     followed by its record's `session`. A build the turn cancelled has no
-    final state. Each is {accepted, attempts, failures, reason, cause,
+    final state; the next `author` attempt 1, or a `design` not following
+    `triage`, starts the next build. Each is {accepted, attempts, failures, reason, cause,
     diagnostics}."""
     out = []
     for records in job["sessions"]:
@@ -264,10 +265,16 @@ def builds(job):
                 if build is not None and attempt == 1 and build["attempts"] >= 1:
                     out.append(build)
                     build = None
+            elif label == "design" and build is not None and build["last"] not in ("triage", "retry_gate"):
+                # A build redesigns only after triage: a design after any
+                # other line starts a new build (the open one was cut).
+                out.append(build)
+                build = None
             if build is None:
                 # Any of a builder's lines opens a build: a failure before
                 # its first author call (its design) is that build's too.
                 build = current[where] = {"accepted": False, "attempts": 0, "failures": 0, "reason": "unfinished", "cause": "", "diagnostics": []}
+            build["last"] = label
             if label == "author":
                 build["attempts"] = max(build["attempts"], attempt)
             elif label == "retry_gate":

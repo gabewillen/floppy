@@ -134,6 +134,17 @@ class Builds(unittest.TestCase):
         found = score.builds({"steps": [], "sessions": [session], "done": True})
         self.assertEqual([(b["accepted"], b["attempts"], b["diagnostics"][0][:9]) for b in found], [(True, 2, "failure 1")])
 
+    def test_a_build_cut_in_its_design_is_its_own(self):
+        session = [
+            log("design", "plan"),
+            log("design", "plan"), log("author", "create draft, attempt 1"), log("retry_gate", "failure 1 of 8: validate XML001"),
+            log("triage", "redesign"), log("design", "plan"), log("author", "create draft, attempt 2"),
+            log("done", "built PingPong in 2 attempt(s)"),
+        ]
+        found = score.builds({"steps": [], "sessions": [session], "done": True})
+        self.assertEqual([(b["accepted"], b["attempts"], b["reason"]) for b in found],
+                         [(False, 0, "unfinished"), (True, 2, "done")])
+
     def test_two_builders_at_once_are_two_builds(self):
         def at(where, label, text):
             return {**log(label, text), "session": where}
