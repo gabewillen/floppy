@@ -4,10 +4,9 @@
 //! `<behavior:verify_tick>` and `<behavior:verify_apply>` as a
 //! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
-//! The original's behavior package (`behavior/storage.py`,
-//! `behavior/instance.py`, `behavior/verify.py`): the inventory rows a
-//! memory select returns read as behavior instances, the statements that
-//! replace one behavior's row and triggers, the schedule bounds a
+//! What the reflection and the builder need of learned behaviors: the
+//! inventory rows a memory select returns read as behavior instances, the
+//! statements that replace one behavior's row and triggers, the schedule bounds a
 //! behavior's lifetime implies, the check of a persistent routine's
 //! forced tick, and the check of a turn behavior's run on its live turn.
 //! The memory ability applies the statements through the sql service and
@@ -33,9 +32,8 @@
 //!
 //! # `<behavior:instances_from_behavior_results location="L" behaviors="B" triggers="T"/>`
 //!
-//! The original's `storage.instances_from_behavior_results`. `behaviors`
-//! and `triggers` (required) each evaluate to one statement's result of a
-//! `bot.ability.memory.output` (an object whose `rows` is an array of rows
+//! `behaviors` and `triggers` (required) each evaluate to one statement's
+//! result of a `bot.ability.memory.output` (an object whose `rows` is an array of rows
 //! with `columns` and `values`): the behavior rows, then the trigger rows
 //! (`behavior_name`, `trigger`). `location` (required) receives one
 //! instance per behavior row, in row order: every column of the row as a
@@ -47,11 +45,10 @@
 //!
 //! # `<behavior:replace_behavior_clauses location="L" instance="I"/>`
 //!
-//! The original's `storage.replace_behavior_clauses`: the statements that
-//! delete a behavior's triggers and row and insert its replacement row and
+//! The statements that delete a behavior's triggers and row and insert its replacement row and
 //! each of its distinct triggers, in that order, as
 //! `bot.ability.memory.input` statements `{sql, parameters}`. `instance`
-//! (required) evaluates to an object named as the original's `Instance`:
+//! (required) evaluates to a behavior instance:
 //! `name` (a non-empty string), `source` (a string), and optionally
 //! `description` (a string; otherwise empty), `examples` (any value,
 //! written as `JSON.stringify` writes it; absent is `[]`), `lifetime` (a
@@ -64,15 +61,15 @@
 //!
 //! # `<behavior:lifetime_errors location="L" scxml="S" min_every="M"? turn_after_bound="A"? lifetimelocation="F"? scheduleslocation="C"?/>`
 //!
-//! The original's `instance._lifetime_errors` over an SCXML document, read
-//! with an XML parser. `scxml` (required) evaluates to the document's text.
+//! The lifetime check of an SCXML document, read with an XML parser.
+//! `scxml` (required) evaluates to the document's text.
 //! A transition that contains a `<send event="bot.behavior.tick">` ticks:
 //! each delayed `<send>` (one with a `delay` or a `delayexpr`) of an event
-//! a ticking transition takes is a schedule (the original's `every` and
-//! `at`), any other an `after`. The document is `persistent` when it sends
+//! a ticking transition takes is a schedule (an `every` or an `at`), any
+//! other an `after`. The document is `persistent` when it sends
 //! `bot.behavior.tick` anywhere, else `turn` (the persistent routine
 //! contract). `min_every` and `turn_after_bound` (optional) evaluate to the
-//! original check's bounds in milliseconds, or `null`; with neither given
+//! check's bounds in milliseconds, or `null`; with neither given
 //! nothing is checked. `location` (required) receives at most 20
 //! diagnostics `{kind: "lifetime", code: "E0009", message}`: a schedule
 //! whose literal delay is shorter than `min_every`, a turn behavior's
@@ -85,10 +82,10 @@
 //!
 //! # `<behavior:verify_tick location="L" ticks="T"/>`
 //!
-//! The original's `verify._verify_tick` with `_selection_binding_errors`
-//! on a persistent routine's forced tick. `ticks` (required) evaluates to
+//! The check of a persistent routine's forced tick and of its selections'
+//! data. `ticks` (required) evaluates to
 //! the `bot.behavior.tick` data the routine sent, in order. `location`
-//! (required) receives the original's `E0008` messages, none when the
+//! (required) receives the `E0008` messages, none when the
 //! first tick carries `name`, `trigger` (`every` or `at`), `scheduled_at`
 //! and `fired_at` and its `output` selects at least one event whose data
 //! holds the tick's own values for any of those fields.
@@ -171,23 +168,23 @@ const SCXML_NAMESPACE: &str = "http://www.w3.org/2005/07/scxml";
 /// The event a persistent routine sends on every tick.
 const TICK_EVENT: &str = "bot.behavior.tick";
 
-/// The original `delete_behavior_clauses`' first clause: a behavior's
+/// The first delete clause: a behavior's
 /// triggers (first, for engines without `ON DELETE CASCADE`).
 pub const DELETE_TRIGGERS: &str = "DELETE FROM bot_behavior_trigger WHERE behavior_name = ?";
 
-/// The original `delete_behavior_clauses`' second clause: a behavior's row.
+/// The second delete clause: a behavior's row.
 pub const DELETE_BEHAVIOR: &str = "DELETE FROM bot_behavior WHERE name = ?";
 
-/// The original `insert_behavior_clauses`' row: name, source, description,
+/// The insert clause of a behavior's row: name, source, description,
 /// examples JSON, lifetime, status, usage and failure counters; the status
 /// reason empty and the status stamped now.
 pub const INSERT_BEHAVIOR: &str = "INSERT INTO bot_behavior (name, source, description, examples_json, lifetime, status, status_reason, status_updated_at, used_count, last_used_at, failed_count, last_failed_at) VALUES (?, ?, ?, ?, ?, ?, '', replace(substr(CAST(CURRENT_TIMESTAMP AS TEXT), 1, 19), ' ', 'T') || 'Z', ?, ?, ?, ?)";
 
-/// The original `insert_behavior_clauses`' trigger row.
+/// The insert clause of one of a behavior's triggers.
 pub const INSERT_TRIGGER: &str =
     "INSERT INTO bot_behavior_trigger (behavior_name, \"trigger\") VALUES (?, ?)";
 
-/// The original's diagnostic help for E0009.
+/// The diagnostic help for E0009.
 const LIFETIME_HELP: &str = " Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names.";
 
 /// The most diagnostics the lifetime check writes.
@@ -459,7 +456,7 @@ fn result_rows<'a>(
         .collect()
 }
 
-/// The original's `instances_from_behavior_results` (see the crate
+/// The behavior instances of a memory select (see the crate
 /// documentation, `<behavior:instances_from_behavior_results>`).
 ///
 /// # Errors
@@ -611,7 +608,7 @@ fn statement(sql: &str, parameters: Vec<Json>) -> Json {
     Json::Object(statement)
 }
 
-/// The original's `replace_behavior_clauses` (see the crate documentation,
+/// The statements that replace a behavior (see the crate documentation,
 /// `<behavior:replace_behavior_clauses>`).
 ///
 /// # Errors
@@ -1073,7 +1070,7 @@ fn lifetime_error(message: String) -> Json {
     Json::Object(error)
 }
 
-/// The original's `_lifetime_errors` over `text` (see the crate
+/// The lifetime check over `text` (see the crate
 /// documentation, `<behavior:lifetime_errors>`).
 #[must_use]
 pub fn lifetime_errors(
@@ -1189,7 +1186,7 @@ fn verify_tick_element<H: BehaviorHost>(
 /// The tick fields a selection's data must not contradict.
 const LIVE_FIELDS: [&str; 4] = ["name", "trigger", "scheduled_at", "fired_at"];
 
-/// The original's `_verify_tick` and `_selection_binding_errors` on the
+/// The forced tick's check, and its selections' data, on the
 /// first of `ticks` (see the crate documentation, `<behavior:verify_tick>`).
 #[must_use]
 pub fn verify_tick(ticks: &[Json]) -> Vec<String> {
