@@ -26,8 +26,8 @@
 //! communication does with what it is sent.
 //!
 //! One test sets `input` (the input abilities each stimulus fans out to) to
-//! `['identity']` and puts
-//! `tests/fixtures/phase4/input_double.scx` in the identity's place; the
+//! `['identity']` and puts `tests/fixtures/phase4/input_double.scx` in the
+//! identity's place; the
 //! double logs `input.sound` and `input.visual` for each `environment.*`
 //! stimulus the body fans out to it.
 //!
@@ -304,8 +304,8 @@ fn deactivate_while_activating_is_answered_and_cancels_the_abilities() {
     run.event("bot.deactivate", &json!({}));
     let records = run.until(WAIT, label_is("done.invoke"));
     // Every accepted bot.deactivate is answered (decision D118): never
-    // activated, the bot still
-    // reports bot.deactivated once its abilities are cancelled.
+    // activated, the bot still reports bot.deactivated once its abilities
+    // are cancelled.
     assert_eq!(
         only(
             &records,

@@ -236,7 +236,8 @@ fn a_named_bot_hears_its_name_in_a_sound() {
     );
     assert_eq!(texts(&records, "floppy.say"), strings(&["I am Floppy"]));
     // The bot hears its own playout too (every input ability hears the
-    // environment); the speech double writes no audio, so decoding it fails, and the identity says so.
+    // environment); the speech double writes no audio, so decoding it
+    // fails, and the identity says so.
     run.until(WAIT, label_is("identity.recognition.failed"));
     assert_eq!(backend.decoded(), strings(&["hey floppy"]));
     close(run, test);
@@ -355,8 +356,9 @@ fn postgres_an_adopted_name_is_recalled_by_the_next_run() {
 }
 
 /// The cognition asks for the bot's own name as it starts, while the bot
-/// is activating; the body relays the ask to the identity, which answers once it has recalled, and relays every
-/// `bot.ability.identity.named` (each adoption's too) back. The double is
+/// is activating; the body relays the ask to the identity, which answers
+/// once it has recalled, and relays every `bot.ability.identity.named`
+/// (each adoption's too) back. The double is
 /// rewritten to ask on start and log each answer as `double.named`.
 #[test]
 fn the_cognition_is_told_the_bots_name_and_each_adoption() {

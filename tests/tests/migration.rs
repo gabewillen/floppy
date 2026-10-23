@@ -204,7 +204,8 @@ fn an_unknown_target_fails_and_commits_nothing() {
 
 #[test]
 fn an_unversioned_database_with_memory_tables_is_refused_untouched() {
-    // Memory tables but no alembic_version match no revision; the refusal writes nothing (no version table).
+    // Memory tables but no alembic_version match no revision; the refusal
+    // writes nothing (no version table).
     let directory = unique_scratch("migration");
     // At base already, nothing is written; the inspection then makes one
     // of the history's tables and one of its own.

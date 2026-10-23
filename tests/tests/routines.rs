@@ -1,6 +1,7 @@
 //! floppy's Routines ability (`abilities/routines/routines.scx`), run
-//! through `scx run` on the logical clock under `tests/fixtures/phase5/routines_harness.scx`, which stands in
-//! for the cognition.
+//! through `scx run` on the logical clock under
+//! `tests/fixtures/phase5/routines_harness.scx`, which stands in for the
+//! cognition.
 //!
 //! The harness stores behavior inventory rows through the Memory ability in
 //! a directory the run grants, invokes the routines with the database path
