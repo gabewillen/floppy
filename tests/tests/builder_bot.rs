@@ -600,8 +600,8 @@ fn routine_draft(delay: &str, output: &str) -> String {
 
 const CHIME: &str = "[{event: 'bot.speaking.say', data: {parts: [{words: 'Hourly chime.'}]}}]";
 
-/// The request with the original `check()`'s lifetime bounds (`ROUTINE_MIN_EVERY`,
-/// `TURN_SILENCE_BOUND`), as reflection sends it.
+/// The request with the lifetime bounds (`min_every_ms`,
+/// `turn_after_bound_ms`), as reflection sends it.
 fn lifetime_request() -> Json {
     json!({"spec": "chime every hour", "min_every_ms": 60000, "turn_after_bound_ms": 1000})
 }
@@ -1518,8 +1518,8 @@ fn the_same_diagnostic_twice_ends_the_build_with_no_progress() {
     assert_eq!(failed["reason"], "no-progress");
     assert_eq!(failed["diagnostics"][0]["kind"], "validate");
     assert_eq!(failed["diagnostics"][0]["code"], "SCXML005");
-    // The last draft the validator rejected (the original drafts the rejected
-    // source).
+    // The last draft the validator rejected (the reflection stores the
+    // rejected source as a draft).
     assert_eq!(
         failed["scxml"].as_str(),
         Some(traffic_light(&green_separate(), "amber").as_str()),
@@ -1584,10 +1584,10 @@ fn without_a_model_base_url_the_build_fails_fast_unconfigured() {
     );
 }
 
-/// The original `check()` (E0009): with the request's lifetime bounds, a routine
+/// The lifetime check (E0009): with the request's lifetime bounds, a routine
 /// whose schedule is shorter than the minimum interval is rejected and
-/// repaired; the repaired routine is verified by one forced tick (the original
-/// `verify_apply`), its schedule's event delivered at once, whose output
+/// repaired; the repaired routine is verified by one forced tick
+/// (`<behavior:verify_tick>`), its schedule's event delivered at once, whose output
 /// selects an event.
 #[test]
 fn a_routine_under_the_minimum_interval_is_repaired_and_its_first_tick_is_forced() {
@@ -1629,7 +1629,7 @@ fn a_routine_under_the_minimum_interval_is_repaired_and_its_first_tick_is_forced
     assert_eq!(done["tests"].as_array().map(Vec::len), Some(1), "{done}");
 }
 
-/// The original runtime and verify: a routine tick that selects nothing fails
+/// The forced tick's check: a routine tick that selects nothing fails
 /// (E0008), and the build ends with that draft in its failed data.
 #[test]
 fn a_routine_tick_with_no_selection_is_rejected_with_its_draft() {
@@ -1848,7 +1848,7 @@ fn a_live_turn_failure_is_repaired_from_its_diagnostic() {
     );
 }
 
-/// The original `check()` (E0009): with the request's lifetime bounds, a turn
+/// The lifetime check (E0009): with the request's lifetime bounds, a turn
 /// behavior's delayed send longer than the silence bound never fires, so
 /// the traffic light (a turn machine with 30 s, 3 s and 20 s timers) is
 /// rejected each time; without the bounds the same draft is built (the
