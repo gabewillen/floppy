@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Sensitivity: the front of listening, which holds the body's prediction of its own sound
-  and scores every arrival against it. The listening
+  floppy's Sensitivity: the front of listening, which holds the body's
+  prediction of its own sound and scores every arrival against it. The
+  listening
   (abilities/listening/listening.scx) invokes it as its long-lived child
   "sensitivity".
 
