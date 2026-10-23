@@ -415,14 +415,14 @@ fn choice_fires_the_chosen_schema_transition_with_schema_valid_data() {
     );
     assert_eq!(
         body["questions"]["order.ship::sku"]["criteria"],
-        json!({"A-1": "Which value fills 'sku' for order.ship?"}),
+        json!({"A-1": "Which value fills \"sku\" for order.ship?"}),
         "the sku is grounded in the dataexpr evidence"
     );
     assert_eq!(
         body["questions"]["order.ship::carrier"]["criteria"],
         json!({
-            "ups": "Which value fills 'carrier' for order.ship?",
-            "fedex": "Which value fills 'carrier' for order.ship?"
+            "ups": "Which value fills \"carrier\" for order.ship?",
+            "fedex": "Which value fills \"carrier\" for order.ship?"
         }),
         "the carrier is grounded in the schema's enum"
     );

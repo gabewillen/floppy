@@ -1818,7 +1818,7 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
     );
     assert_eq!(
         decisions[0].body["questions"][format!("{RESPOND}::parts")]["criteria"],
-        json!({r#"[{"words":"hi"}]"#: format!("Which value fills 'parts' for {RESPOND}?")})
+        json!({r#"[{"words":"hi"}]"#: format!("Which value fills \"parts\" for {RESPOND}?")})
     );
     let reasoning = reasoning_requests(&mock);
     assert_eq!(reasoning.len(), 1);
