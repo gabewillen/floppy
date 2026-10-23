@@ -1,27 +1,31 @@
 # Review rules
 
 [Open Code Review](https://github.com/alibaba/open-code-review) (`ocr`) reviews
-pull requests against floppy's own rules, through `.github/workflows/review.yml`.
+pull requests against floppy's own rules. It runs as the maintainer's
+self-hosted bot, which posts the `gabe-code-reviewer` check, and reads
+`.opencodereview/rule.json` from the repository.
 
 - `rule.json` picks one rule file per changed file by path glob (first match
   wins), adds the file types `ocr` would otherwise skip (`.scx`, `.scxml`,
   `.md`, `.xsd`), and excludes the `scxml.rs/` subtree, lockfiles and generated
   output. Entries with `merge_system_rule` keep `ocr`'s built-in checks for that
-  language beside floppy's.
+  language beside floppy's. The last entry, `**`, gives every other file
+  `rules/common.md`.
 - `rules/*.md` hold the per-area rules: SCXML documents, their ECMAScript,
   event schemas, Rust components, packaging and scripts, tests, and docs.
-- `background.md` holds the rules for every file and is passed as review
-  context (`--background-file`).
+- `ocr` gives each file exactly one rule, so each area rule ends with the same
+  "Rules for every file" section as `rules/common.md`. Change that section in
+  all of them together.
 
 AGENTS.md stays the normative source; these files restate it for the reviewer
 and cite it, so a rule change there updates the matching rule here.
 
-Run a review locally against `main`:
+To try the rules locally against `main`:
 
 ```sh
 npm install -g @alibaba-group/open-code-review
 ocr config provider && ocr config model
-ocr review --from main --to HEAD --background-file .opencodereview/background.md
+ocr review --from main --to HEAD
 ```
 
 `ocr rules check <path>` shows which rule a file gets, and
