@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/voice_identification/irp/sources">
   <assert id="voice_identification-1" specnum="1" specid="#voice_identification-1">
-    <![CDATA[Given the `segments` `<param>` (the original's InputData), it clips nothing: the speech service's `identify` (one `POST {base}/voice/embed` per segment) answers `bot.ability.hearing.voice.identification.output` `{embeddings}`, and the done data (`done.invoke.voice_identification`) is exactly `{segments, embeddings}`: the segments as given and one embedding per segment, in segment order, each `{embedding, model, confidence: null}`.]]>
+    <![CDATA[Given the `segments` `<param>`, it clips nothing: the speech service's `identify` (one `POST {base}/voice/embed` per segment) answers `bot.ability.hearing.voice.identification.output` `{embeddings}`, and the done data (`done.invoke.voice_identification`) is exactly `{segments, embeddings}`: the segments as given and one embedding per segment, in segment order, each `{embedding, model, confidence: null}`.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -33,7 +33,7 @@
     </test>
   </assert>
   <assert id="voice_identification-5" specnum="5" specid="#voice_identification-5">
-    <![CDATA[When the identification answers `bot.ability.failed` `{message}` (an error status, a malformed embedding), the done data is exactly the original's FailureData `{message}`.]]>
+    <![CDATA[When the identification answers `bot.ability.failed` `{message}` (an error status, a malformed embedding), the done data is exactly `{message}`.]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>
