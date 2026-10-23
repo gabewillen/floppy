@@ -68,12 +68,11 @@
 //!   previous values, clamped to 0..1.
 //!
 //! A failure rejects the start, as the files service's does (the `<invoke>`
-//! raises `error.execution`): an invalid
-//! parameter, a `previous` that is not a signature of the requested measure
-//! and size, an unreadable or empty file, a file over [`MAX_IMAGE_BYTES`],
-//! and, for `frame_diff`, an image `OpenCV`'s reduced decode would not
-//! read (see "The frame difference") or one over [`MAX_PIXELS`]
-//! ([`VisionError`]).
+//! raises `error.execution`): an invalid parameter, a `previous` that is
+//! not a signature of the requested measure and size, an unreadable or
+//! empty file, a file over [`MAX_IMAGE_BYTES`], and, for `frame_diff`, an
+//! image `OpenCV`'s reduced decode would not read (see "The frame
+//! difference") or one over [`MAX_PIXELS`] ([`VisionError`]).
 //!
 //! # The frame difference
 //!
@@ -114,9 +113,9 @@
 //!
 //! # Bounds
 //!
-//! The file's bytes ([`MAX_IMAGE_BYTES`], 4 MiB), the decoded pixels ([`MAX_PIXELS`]), and a
-//! reference ([`MAX_REFERENCE_BYTES`]) are bounded on wasm builds only
-//! ([`scxml_types::wasm_bound`]). The done data is at most
+//! The file's bytes ([`MAX_IMAGE_BYTES`], 4 MiB), the decoded pixels
+//! ([`MAX_PIXELS`]), and a reference ([`MAX_REFERENCE_BYTES`]) are bounded
+//! on wasm builds only ([`scxml_types::wasm_bound`]). The done data is at most
 //! [`FRAME_SIZE`]² numbers, under the session's event bound.
 //!
 //! # Telemetry
@@ -174,8 +173,7 @@ pub const FRAME_VALUES: usize = FRAME_SIZE * FRAME_SIZE;
 pub enum VisionError {
     /// A parameter is unknown, repeated, missing, or malformed.
     InvalidParameter,
-    /// `previous` is not a signature of the requested measure and size (the
-    /// original's `change.Error`).
+    /// `previous` is not a signature of the requested measure and size.
     MismatchedPrevious,
     /// The image file could not be read, or is empty.
     Unreadable,
