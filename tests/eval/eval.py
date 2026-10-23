@@ -468,16 +468,22 @@ def builder_table(columns, graded):
     the attempts per accepted build; with each column's failure reasons."""
     lines = ["# Builder track", "",
              "Each column runs the bot's reflex and routine scenarios with its builder pinned to one model. A build is one "
-             "builder run reflection or the learning ability started (a create or change); attempts are its author attempts.", "",
+             "builder run reflection or the learning ability started (a create or change); attempts are its author attempts "
+             "(its budget of failures also counts a failed design). A revision its turn cut before any draft is counted "
+             "apart, not as a build.", "",
              "| Column | Builder model | Scenario | Builds | Accepted | Success | Attempts per accepted | Learned |",
              "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     summary = {}
     for column in columns:
         rows = [g for g in graded if g["id"].startswith(column["label"] + "-")]
-        totals = {"builds": 0, "accepted": 0, "attempts": [], "reasons": {}, "learned": []}
+        totals = {"builds": 0, "accepted": 0, "attempts": [], "reasons": {}, "learned": [], "cut": 0}
         for scenario in sorted({g["scenario"] for g in rows}):
             runs = [g for g in rows if g["scenario"] == scenario]
-            built = [b for g in runs for b in g["builds"]]
+            # A revision its turn cut before the builder wrote a draft
+            # measures the turn, not the builder: counted apart.
+            started = [b for g in runs for b in g["builds"]]
+            built = [b for b in started if b["attempts"] or b["reason"] != "unfinished"]
+            totals["cut"] += len(started) - len(built)
             accepted = [b for b in built if b["accepted"]]
             # Learned anywhere in the job, not only on the teaching turn: a
             # behavior reflection learns turns later still counts here.
@@ -502,14 +508,16 @@ def builder_table(columns, graded):
             "attempts_per_accepted": statistics.mean(totals["attempts"]) if totals["attempts"] else None,
             "learned": statistics.mean(totals["learned"]) if totals["learned"] else None,
             "failures": totals["reasons"],
+            "cut_before_draft": totals["cut"],
         }
-    lines += ["", "| Column | Builds | Success | Attempts per accepted | Learned | Failed builds by reason |", "| --- | --- | --- | --- | --- | --- |"]
+    lines += ["", "| Column | Builds | Success | Attempts per accepted | Learned | Failed builds by reason | Cut before a draft |",
+              "| --- | --- | --- | --- | --- | --- | --- |"]
     for label, s in summary.items():
         success = "n/a" if s["success"] is None else f"{s['success']:.2f}"
         attempts = "n/a" if s["attempts_per_accepted"] is None else f"{s['attempts_per_accepted']:.1f}"
         learned = "n/a" if s["learned"] is None else f"{s['learned']:.2f}"
         reasons = ", ".join(f"{k} {v}" for k, v in sorted(s["failures"].items())) or "none"
-        lines.append(f"| {label} | {s['builds']} | {success} | {attempts} | {learned} | {reasons} |")
+        lines.append(f"| {label} | {s['builds']} | {success} | {attempts} | {learned} | {reasons} | {s['cut_before_draft']} |")
     return "\n".join(lines) + "\n", summary
 
 

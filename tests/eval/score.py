@@ -239,7 +239,8 @@ def builds(job):
     or `failed` "<reason>: <diagnostic>". Two builders can
     run at once (reflection's and the learning ability's), so each build is
     followed by its record's `session`. A build the turn cancelled has no
-    final state. Each is {accepted, attempts, reason, cause, diagnostics}."""
+    final state. Each is {accepted, attempts, failures, reason, cause,
+    diagnostics}."""
     out = []
     for records in job["sessions"]:
         current = {}
@@ -263,10 +264,14 @@ def builds(job):
             if build is None:
                 # Any of a builder's lines opens a build: a failure before
                 # its first author call (its design) is that build's too.
-                build = current[where] = {"accepted": False, "attempts": 0, "reason": "unfinished", "cause": "", "diagnostics": []}
+                build = current[where] = {"accepted": False, "attempts": 0, "failures": 0, "reason": "unfinished", "cause": "", "diagnostics": []}
             if label == "author":
                 build["attempts"] = max(build["attempts"], attempt)
             elif label == "retry_gate":
+                # "failure N of M": the budget counts a failed design as
+                # well as each failed draft.
+                match = re.match(r"failure (\d+)", text)
+                build["failures"] = max(build["failures"], int(match.group(1)) if match else build["failures"] + 1)
                 build["diagnostics"].append(text[:200])
             elif label == "done":
                 match = re.search(r"in (\d+) attempt", text)

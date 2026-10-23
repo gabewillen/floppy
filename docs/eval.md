@@ -164,7 +164,10 @@ served by the column's `FLOPPY_BASE_URL` (its `env` files, else
 each record's `session` since reflection's and the learning ability's
 builders can run at once (`author`
 attempt 1 starts one; `done` "built X in N attempt(s)" or `failed`
-"<reason>: ..." ends it; a build its turn cancelled stays `unfinished`),
+"<reason>: ..." ends it; a build its turn cancelled stays `unfinished`, and
+one cut before any draft is counted apart as "cut before a draft", since it
+measures the turn, not the builder; the 8-failure budget also counts a
+failed design, so a build can exhaust it in fewer than 8 attempts),
 and `builder.md` gives, per column and scenario, the builds, the accepted
 ones, the success rate, the attempts per accepted build and whether the
 scenario's behavior was learned anywhere in the job, then per column the
