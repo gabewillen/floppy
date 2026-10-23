@@ -3,8 +3,8 @@
 The learning eval grades how well the floppy bot learns from what people
 tell it, on real input: its **name** (the identity ability adopts a name,
 answers to it, and recalls it after a restart), its **reflexes** (turn
-behaviors reflection learns and autonomy then runs on matching input, the
-reference's reflex tier) and its **routines** (persistent behaviors that act
+behaviors reflection learns and autonomy then runs on matching input) and
+its **routines** (persistent behaviors that act
 on a schedule with no input). It exists because the live runs so far
 (docs/live-proof.md, 2026-10-20 and 2026-10-21) showed reflection rarely
 learns a behavior, and no test checked a learned behavior against the input
