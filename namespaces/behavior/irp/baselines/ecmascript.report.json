@@ -6,9 +6,9 @@
     "kind": "namespace-irp",
     "source": "namespaces/behavior/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "9c75c71c9755aab55263c63f1da5e2fd2112e5c30f327a8167ba8977beadf41f",
-    "source_digest": "84182183083a41aae58c877d1a4f8b45b64c9accde278051f2eb0e72a720deda",
-    "manifest_digest": "6ec951a679ce5840adc3365644c2c8e794b4406310fb56f8a04820b6ca34d2db",
+    "corpus_digest": "d25e1f4e963ca676f6ea224f3fc507d9478751b51add4b9eea2c6ab19f538e47",
+    "source_digest": "54d7fc04630659e8a8866f32c5810b2d74dd3b01e4e73184fc22a9a2a0d945eb",
+    "manifest_digest": "533609314879380163193f277a74df5c247d8a4b29d0441262338947b91ea20a",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
@@ -16,11 +16,9 @@
       "name": "saxon-process",
       "version": "SaxonJ-HE 12.8 from Saxonica",
       "command_argv": [
-        "java",
-        "-jar",
-        "saxon-he-12.8.jar"
+        "saxon"
       ],
-      "executable_digest": "25c6dfe3cd6b0f0c5a9a0bcf80bd726422ac95f7b812e2b8d1b56ba869154230"
+      "executable_digest": "012b6e274f9fa87155e1527848af8d41f19c6e89d7266a3b50716d5891eb739b"
     },
     "datamodel": "ecmascript",
     "provenance": "baseuri=https://github.com/stateforward/floppy/tree/main/namespaces/behavior/irp/sources"
@@ -55,8 +53,8 @@
     {
       "namespace_uri": "https://github.com/stateforward/floppy/namespaces/behavior",
       "package_version": "0.1.0",
-      "manifest_sha256": "e0d705c7230bb08440213f88ff97fc62d1fc9a5a28debed4a3f6caeabb842163",
-      "schema_sha256": "d5be72c57e45e73120c06617c5a7dc7866b1636002b2d6a54a6c294381461daa",
+      "manifest_sha256": "872a0572e3fde2c9fe2e2c547b6d61d9899cb5e27f199d6c9e744c78a11147f5",
+      "schema_sha256": "9aeb98cf3ae485919cf1b55fb8ca8f50c4a3b585e0c10d1d7e3fe5742b4ba67a",
       "component_sha256": "5ac75c5a1ba6b22cdf48b07da50082d978b5e17b5d81ddde432e121281c89567"
     }
   ],
@@ -70,7 +68,7 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "9d4c8d1020427da094d3f81680d17c935dca1144ba2c1b731ff87ce21f622cdd",
+  "identity_digest": "dc9292e4e3bf08b14a3a5291d65193cf8e5b688adeaa4f2bbacfa47d3baa7bdf",
   "summary": {
     "total_selected": 23,
     "applicable_selected": 23,
