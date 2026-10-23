@@ -2,7 +2,7 @@
 <!-- conversation-3: similar embeddings match one to one. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation">
 <datamodel>
-  <data id="rs" expr="[({session_ref: 'relationship-e', context_ref: 'e', source_ids: [[1, 0, 0]], target_ids: ['bot'], participants: [], sequences: []})]"/>
+  <data id="rs" expr="[({session_ref: 'relationship-e', context_ref: 'e', source_ids: [[1, 0, 0]], target_ids: ['bot'], participants: []})]"/>
   <data id="i" expr="null"/>
   <data id="input" expr="({source_ids: [[0.99, 0.1, 0]], target_ids: ['bot']})"/>
 </datamodel>

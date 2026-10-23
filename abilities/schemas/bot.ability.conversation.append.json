@@ -6,7 +6,7 @@
   "properties": {
     "message": {
       "additionalProperties": false,
-      "description": "Immutable bot message and its typed effector provenance.",
+      "description": "One immutable, model-safe inbound or outbound message of the current exchange. A model reads who said it (participants), which way, and what was said (content); provenance and the opaque source_ids and target_ids are correlation: they stay on the typed data and are left out of what a model is shown.",
       "examples": [
         {
           "content": "Hello",
@@ -18,7 +18,6 @@
             "source": "caller",
             "target": "conversation"
           },
-          "sequence": 0,
           "source_ids": [
             "caller"
           ],
@@ -28,12 +27,6 @@
         }
       ],
       "properties": {
-        "sequence": {
-          "description": "Zero-based position in committed conversation history.",
-          "minimum": 0,
-          "title": "Sequence",
-          "type": "integer"
-        },
         "direction": {
           "description": "Whether the message came from a participant or the bot.",
           "enum": [
@@ -58,6 +51,7 @@
               }
             ]
           },
+          "maxItems": 4,
           "title": "Source Ids",
           "type": "array",
           "uniqueItems": true
@@ -77,6 +71,7 @@
               }
             ]
           },
+          "maxItems": 4,
           "title": "Target Ids",
           "type": "array",
           "uniqueItems": true
@@ -90,6 +85,136 @@
           "minLength": 1,
           "title": "Content Type",
           "type": "string"
+        },
+        "participants": {
+          "default": [],
+          "description": "Who produced or was addressed by this message, stamped by its producer and never inferred: an inbound message carries the participants stamped on the turn it was built from (who spoke, and to whom), and Speaking stamps the bot's own voice ref on what it said.",
+          "examples": [
+            [],
+            [
+              {
+                "ref": "voice:tts:warm",
+                "role": "source"
+              }
+            ]
+          ],
+          "items": {
+            "additionalProperties": false,
+            "description": "Someone who took part in a stimulus: an opaque, producer-stable identity reference and the role it played (source: who produced it; target: who it was addressed to).",
+            "examples": [
+              {
+                "ref": "+15555550100",
+                "role": "source"
+              },
+              {
+                "ref": "person-42",
+                "role": "target"
+              },
+              {
+                "own": true,
+                "ref": "voice:3f2a9c",
+                "role": "source"
+              }
+            ],
+            "properties": {
+              "ref": {
+                "description": "Opaque, producer-stable identity such as a phone number, an app person id, or a chat handle. Never a display name chosen by the bot.",
+                "examples": [
+                  "+15555550100",
+                  "person-42",
+                  "caller"
+                ],
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Ref",
+                "type": "string"
+              },
+              "role": {
+                "description": "source: who produced the stimulus (speaker, sender). target: who it was addressed to.",
+                "enum": [
+                  "source",
+                  "target"
+                ],
+                "examples": [
+                  "source",
+                  "target"
+                ],
+                "title": "Role",
+                "type": "string"
+              },
+              "own": {
+                "default": false,
+                "description": "True when the producer knows this participant is the bot itself, for example the bot's own voice heard back or the voice it spoke with. Stamped only by that producer; never inferred.",
+                "examples": [
+                  false,
+                  true
+                ],
+                "title": "Own",
+                "type": "boolean"
+              },
+              "resembles": {
+                "default": [],
+                "description": "For an identity its producer made just now (nobody it knew): the known identities it resembles, best first, at most 3. Stamped only by that producer; never a link.",
+                "examples": [
+                  [
+                    {
+                      "ref": "voice:7b1e04",
+                      "similarity": 0.42
+                    }
+                  ]
+                ],
+                "items": {
+                  "additionalProperties": false,
+                  "description": "A known identity this new one resembles: its ref and how similar the two are (-1..1). Perception data only: it links nothing, and it is never a print.",
+                  "examples": [
+                    {
+                      "ref": "voice:7b1e04",
+                      "similarity": 0.42
+                    }
+                  ],
+                  "properties": {
+                    "ref": {
+                      "description": "The ref of the known identity, as its producer stamps it.",
+                      "examples": [
+                        "voice:7b1e04"
+                      ],
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "title": "Ref",
+                      "type": "string"
+                    },
+                    "similarity": {
+                      "description": "How similar the two are, -1..1; higher is more alike.",
+                      "examples": [
+                        0.42
+                      ],
+                      "maximum": 1.0,
+                      "minimum": -1.0,
+                      "title": "Similarity",
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "ref",
+                    "similarity"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 3,
+                "title": "Resembles",
+                "type": "array"
+              }
+            },
+            "required": [
+              "ref",
+              "role"
+            ],
+            "title": "Participant",
+            "type": "object"
+          },
+          "maxItems": 32,
+          "title": "Participants",
+          "type": "array"
         },
         "provenance": {
           "additionalProperties": false,
@@ -185,7 +310,6 @@
         }
       },
       "required": [
-        "sequence",
         "direction",
         "source_ids",
         "target_ids",

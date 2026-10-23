@@ -1,0 +1,14 @@
+{"label":"harness.offers","session":"session","text":"speaking","type":"log"}
+{"label":"speech.encode","parent":"session.speaking.vocal","session":"session.speaking.vocal.speech","text":"encode one -> media/speaking-1.pcm","type":"log"}
+{"label":"speaking.late","parent":"session","session":"session.speaking","text":"u1","type":"log"}
+{"label":"speaking.deferred","parent":"session","session":"session.speaking","text":"bot.ability.speaking.input","type":"log"}
+{"label":"speaking.rejected","parent":"session","session":"session.speaking","text":"holding 1 utterances, the most it holds","type":"log"}
+{"label":"harness.answer","session":"session","text":"bot.ability.failed {\"message\":\"Speaking is holding too many utterances; this one is refused.\"}","type":"log"}
+{"label":"speaking.timed_out","parent":"session","session":"session.speaking","text":"encoding 1 after 2000 ms","type":"log"}
+{"label":"harness.answer","session":"session","text":"bot.ability.failed {\"message\":\"Speech encoding timed out.\"}","type":"log"}
+{"label":"harness.offers","session":"session","text":"speaking","type":"log"}
+{"label":"speech.encode","parent":"session.speaking.vocal","session":"session.speaking.vocal.speech","text":"encode two -> media/speaking-2.pcm","type":"log"}
+{"label":"speaking.timed_out","parent":"session","session":"session.speaking","text":"encoding 2 after 2000 ms","type":"log"}
+{"label":"harness.answer","session":"session","text":"bot.ability.failed {\"message\":\"Speech encoding timed out.\"}","type":"log"}
+{"label":"harness.offers","session":"session","text":"speaking","type":"log"}
+{"label":"speaking.late","parent":"session","session":"session.speaking","text":"u1","type":"log"}

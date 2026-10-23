@@ -28,6 +28,7 @@
           }
         ]
       },
+      "maxItems": 4,
       "minItems": 1,
       "title": "Source Ids",
       "type": "array",
@@ -54,6 +55,7 @@
           }
         ]
       },
+      "maxItems": 4,
       "title": "Target Ids",
       "type": "array",
       "uniqueItems": true

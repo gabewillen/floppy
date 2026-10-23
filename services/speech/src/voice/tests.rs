@@ -258,7 +258,7 @@ fn malformed_voice_parameters_reject_the_start() {
                 "detect",
                 vec![("audio", text("a")), ("voice", text("alloy"))],
             ),
-            "speech takes text, voice, and provider only to encode",
+            "speech takes parts, voice, and provider only to encode",
         ),
     ] {
         assert_eq!(parse(&parameters), Err(expected), "{parameters:?}");

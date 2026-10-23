@@ -11,7 +11,7 @@
     <conversation:relationship_for_input location="rs" indexlocation="i" input="input"/>
   </onentry>
   <transition event="error.execution" conf:targetfail=""/>
-  <transition cond="i === 0 &amp;&amp; rs.length === 1 &amp;&amp; rs[0].context_ref === '{&quot;identity_groups&quot;:[[&quot;alice&quot;,&quot;zed&quot;],[&quot;bot&quot;]]}' &amp;&amp; rs[0].session_ref === 'relationship-' + rs[0].context_ref &amp;&amp; rs[0].source_ids.join() === 'alice,zed' &amp;&amp; rs[0].participants.length === 0 &amp;&amp; rs[0].sequences.length === 0" conf:targetpass=""/>
+  <transition cond="i === 0 &amp;&amp; rs.length === 1 &amp;&amp; rs[0].context_ref === '{&quot;identity_groups&quot;:[[&quot;alice&quot;,&quot;zed&quot;],[&quot;bot&quot;]]}' &amp;&amp; rs[0].session_ref === 'relationship-' + rs[0].context_ref &amp;&amp; rs[0].source_ids.join() === 'alice,zed' &amp;&amp; rs[0].participants.length === 0" conf:targetpass=""/>
   <transition conf:targetfail=""/>
 </state>
 <conf:pass/>

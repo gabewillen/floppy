@@ -21,7 +21,7 @@
     </test>
   </assert>
   <assert id="conversation-2" specnum="2" specid="#conversation-2">
-    <![CDATA[<conversation:message_for_turn> writes the committed message {sequence, direction, source_ids, target_ids, content, content_type, provenance}, without the message's other members: inbound audio content is null, other content is kept as given, and absent content is null; a provenance's id, source, target and session_ref are taken when they are strings, else null, and its turn_ref is taken as given; without a session_ref an inbound message's is relationship-<its relationship context reference> and an outbound one's null.]]>
+    <![CDATA[<conversation:message_for_turn> writes the committed message {direction, source_ids, target_ids, content, content_type, participants, provenance}, without the message's other members: inbound audio content is null, other content is kept as given, and absent content is null; the message's participants, at most 32 {ref, role} each with an optional boolean own and an optional resembles (at most 3 {ref, similarity}, similarity -1 to 1), are kept as given (absent or null is none), and others raise error.execution; a provenance's id, source, target and session_ref are taken when they are strings, else null, and its turn_ref is taken as given; without a session_ref an inbound message's is relationship-<its relationship context reference> and an outbound one's null.]]>
     <test id="310" conformance="mandatory" manual="false">
       <start uri="310/test310.txml"/>
     </test>
@@ -31,9 +31,12 @@
     <test id="312" conformance="mandatory" manual="false">
       <start uri="312/test312.txml"/>
     </test>
+    <test id="313" conformance="mandatory" manual="false">
+      <start uri="313/test313.txml"/>
+    </test>
   </assert>
   <assert id="conversation-3" specnum="3" specid="#conversation-3">
-    <![CDATA[<conversation:relationship_for_input> writes the index of the input's relationship: targetless input shares the first ambient relationship, other input the best scoring one in either direction (names equal, embeddings at least 0.85 alike, one to one); with none it appends a relationship whose context_ref is {"identity_groups":[...]} over the sorted identity groups, whose session_ref is relationship- and that, and whose participants and sequences are empty.]]>
+    <![CDATA[<conversation:relationship_for_input> writes the index of the input's relationship: targetless input shares the first ambient relationship, other input the best scoring one in either direction (names equal, embeddings at least 0.85 alike, one to one); with none it appends a relationship whose context_ref is {"identity_groups":[...]} over the sorted identity groups, whose session_ref is relationship- and that, and whose participants are empty.]]>
     <test id="320" conformance="mandatory" manual="false">
       <start uri="320/test320.txml"/>
     </test>
@@ -66,12 +69,15 @@
     </test>
   </assert>
   <assert id="conversation-6" specnum="6" specid="#conversation-6">
-    <![CDATA[<conversation:complete_turn> writes the inbound message of the turns' product: their texts joined by spaces as text/plain when any has text, each distinct text once; else no content for audio/*; else the input's content; with the first turn's turn_ref and the given session_ref.]]>
+    <![CDATA[<conversation:complete_turn> writes the inbound message of the turns' product: their texts joined by spaces as text/plain when any has text, each distinct text once; else no content for audio/*; else the input's content; with the first turn's turn_ref, the given session_ref, and the given participants (none when absent).]]>
     <test id="350" conformance="mandatory" manual="false">
       <start uri="350/test350.txml"/>
     </test>
     <test id="351" conformance="mandatory" manual="false">
       <start uri="351/test351.txml"/>
+    </test>
+    <test id="352" conformance="mandatory" manual="false">
+      <start uri="352/test352.txml"/>
     </test>
   </assert>
   <assert id="conversation-7" specnum="7" specid="#conversation-7">

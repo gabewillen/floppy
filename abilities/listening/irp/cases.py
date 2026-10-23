@@ -50,7 +50,7 @@ S.statement(1, "It waits for both children, the sensitivity and the interpretati
 S.statement(2, "Each `environment.sound` is scored by the sensitivity (`bot.ability.listening.sensitivity.score` `{stimulus: {event: \"environment.sound\", data: <the sound>}}`) and the score goes on to the interpretation; the interpretation's speech product is handed to the parent as `bot.ability.cognition.input` `{stimulus: {event: \"bot.ability.listening.speech.output\", data: <the product>, source: \"listening\"}}`, the product's parent the sound's envelope.")
 S.statement(3, "A sound is scored at its `received_level_db`: a product the interpretation finds below its threshold is dropped, a louder one handed on.")
 S.statement(4, "The interpretation's own `bot.ability.cognition.input` (labelled non-speech) and its `bot.ability.listening.failed` `{stage, message}` go on to the parent unchanged.")
-S.statement(5, "`bot.ability.speaking.efference` goes to the sensitivity from wherever perception is, without interrupting it; the score request's stimulus carries the sound's `source` (none when the sound names none), so while the copy's window is open a sound off the copy's `mouth` (speaking stamps its own sound `source: \"speaking\"`) is scored against the prediction, fully predicted at 0 dB, and its product is withheld, while a sound from any other source is scored at its received level.")
+S.statement(5, "`bot.ability.speaking.efference` goes to the sensitivity from wherever perception is, without interrupting it; the score request's stimulus carries the sound's `source` (none when the sound names none), so while the copy's window is open a sound off the copy's `mouth` (speaking stamps its own sound `source: \"speaking\"`) is scored against the prediction, fully predicted at 0 dB, and its product is withheld, while a sound from any other source is scored at its received level; a silent copy (`duration` 0) closes the window, so the mouth's sound after it is scored at its received level again.")
 S.statement(6, "Sounds that arrive before the children are ready, or while one is being scored, are held (`<event:defer/>`) and taken in order.")
 S.statement(7, "Scoring is bounded by `sensitivity_timeout_ms` (the original's 30 s): its timer answers `bot.ability.listening.failed` `{stage: \"sensitivity\", message: \"Listening sensitivity timed out.\"}` and returns to `Listening`.")
 S.statement(8, "A sound its schema refuses (no audio reference) is never routed here: the send raises `error.execution` in the sender.")
@@ -90,6 +90,11 @@ S.case(141, 5, "while the efference copy's window is open the bot's own sound (s
         hear("voiced2.wav"), hear("silence.wav"),
         speech("cut in", parent="voiced2.wav")],
        params=PATIENT, backend=[VOICED, SILENT, decoded("own voice"), VOICED, SILENT, decoded("cut in")])
+S.case(142, 5, "a silent copy closes the efference copy's window: the bot's own sound after it is handed on.",
+       [READY, send(EFFERENCE, js({"mouth": "speaking", "duration": 60})), send(EFFERENCE, js({"mouth": "speaking", "duration": 0})),
+        hear("voiced.wav", source="speaking"), hear("silence.wav", source="speaking"),
+        speech("own voice")],
+       params=PATIENT, backend=[VOICED, SILENT, decoded("own voice")])
 
 S.case(150, 6, "sounds sent before the listening is ready, and back to back, are interpreted in order.",
        utterance() + utterance("voiced2.wav") + [READY, speech("first"), speech("second", parent="voiced2.wav")],

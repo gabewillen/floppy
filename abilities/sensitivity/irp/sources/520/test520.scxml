@@ -15,7 +15,7 @@
       <send event="bot.ability.speaking.efference" target="#_sensitivity"><content expr='{"mouth": "speaker", "duration": 60}'/></send>
       <send event="bot.ability.listening.sensitivity.score" target="#_sensitivity"><content expr='{"stimulus": {"event": "environment.sound", "data": {"audio": "media/a.wav", "received_level_db": -20, "amplitude_db": -10}, "source": "mic"}}'/></send>
     </onentry>
-    <transition event="bot.ability.listening.sensitivity.output" cond="_event.data.perceived_level_db === -20" target="step2"/>
+    <transition event="bot.ability.listening.sensitivity.output" cond="_event.data.perceived_level_db === -20 &amp;&amp; _event.data.producing === true" target="step2"/>
   </state>
   <state id="step2">
     <transition target="pass"/>

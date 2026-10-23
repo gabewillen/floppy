@@ -9,16 +9,19 @@
     </test>
   </assert>
   <assert id="communication-2" specnum="2" specid="#communication-2">
-    <![CDATA[`bot.ability.communication.input` in active goes to the conversation; a text product comes back to the body as `bot.ability.cognition.input` `{stimulus}` unchanged, its stimulus carrying the conversation's history with the input as its latest, inbound, message.]]>
+    <![CDATA[`bot.ability.communication.input` in active, or in responding while a response is said (hearing goes on, decision D175), goes to the conversation; a text product comes back to the body as `bot.ability.cognition.input` `{stimulus}` unchanged, its stimulus carrying the conversation's current exchange, which the input opens as its one, inbound, message, stamped with the turn's participants (its source and target ids).]]>
     <test id="110" conformance="mandatory" manual="false">
       <start uri="110/test110.scxml"/>
     </test>
     <test id="111" conformance="mandatory" manual="false">
       <start uri="111/test111.scxml"/>
     </test>
+    <test id="112" conformance="mandatory" manual="false">
+      <start uri="112/test112.scxml"/>
+    </test>
   </assert>
   <assert id="communication-3" specnum="3" specid="#communication-3">
-    <![CDATA[A product that is not text reaches the body as the conversation's `bot.ability.conversation.output` itself (its latest message inbound); history whose latest message is outbound is not forwarded.]]>
+    <![CDATA[A product that is not text reaches the body as the conversation's `bot.ability.conversation.output` itself (its latest message inbound); an exchange whose latest message is outbound (the record of a response) is not forwarded.]]>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>
@@ -33,18 +36,36 @@
     </test>
   </assert>
   <assert id="communication-5" specnum="5" specid="#communication-5">
-    <![CDATA[`bot.ability.communication.respond` `{text}` (non-blank) in active is said through speaking: in order, the body gets speaking's efference copy `bot.ability.speaking.efference` `{mouth: "speaking", duration, media_type, sample_rate_hz, channels}`, the communication puts speaking's `environment.sound` `{audio, media_type, sample_rate_hz, channels, source: "speaking"}` into the environment whose id its `environment` names (`#_scxml_` + that id), and the body gets `bot.ability.speaking.output` `{text, media_type, sample_rate_hz, channels}`; the communication is active again and offers again, and the outbound record goes to the conversation as history only.]]>
+    <![CDATA[`bot.ability.communication.respond` `{parts}` (1 to 64 parts `{expression?, words?}`, decision D178) that says something, in active, is said through speaking: in order, the body gets speaking's efference copy `bot.ability.speaking.efference` `{mouth: "speaking", duration, media_type, sample_rate_hz, channels}`, the communication puts speaking's `environment.sound` `{audio, media_type, sample_rate_hz, channels, source: "speaking"}` into the environment whose id its `environment` names (`#_scxml_` + that id), and the body gets `bot.ability.speaking.output` `{text, media_type, sample_rate_hz, channels}`, its text the parts' words joined exactly as written; the communication is active again and offers again, and the outbound record joins the conversation's exchange only.]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>
     <test id="141" conformance="mandatory" manual="false">
       <start uri="141/test141.scxml"/>
     </test>
+    <test id="142" conformance="mandatory" manual="false">
+      <start uri="142/test142.scxml"/>
+    </test>
   </assert>
   <assert id="communication-6" specnum="6" specid="#communication-6">
-    <![CDATA[A blank response answers `bot.ability.communication.failed` `{message: "Communication response text must be non-blank."}` without speaking; the communication stays active and says the next response.]]>
+    <![CDATA[A reply that says nothing (its words, joined, blank; a part whose words are blank; a part with neither words, a pause nor a sound; an expression that directs no cue) answers `bot.ability.communication.failed` `{message: "A reply must say something: every part needs words, a sound or a pause, and the words must not be blank."}` without speaking; the communication stays active and says the next response. A respond its schema refuses (no parts, empty words) never arrives: the send raises `error.execution` in the sender.]]>
     <test id="150" conformance="mandatory" manual="false">
       <start uri="150/test150.scxml"/>
+    </test>
+    <test id="151" conformance="mandatory" manual="false">
+      <start uri="151/test151.scxml"/>
+    </test>
+    <test id="152" conformance="mandatory" manual="false">
+      <start uri="152/test152.scxml"/>
+    </test>
+    <test id="153" conformance="mandatory" manual="false">
+      <start uri="153/test153.scxml"/>
+    </test>
+    <test id="154" conformance="mandatory" manual="false">
+      <start uri="154/test154.scxml"/>
+    </test>
+    <test id="155" conformance="mandatory" manual="false">
+      <start uri="155/test155.scxml"/>
     </test>
   </assert>
   <assert id="communication-7" specnum="7" specid="#communication-7">
@@ -60,7 +81,7 @@
     </test>
   </assert>
   <assert id="communication-9" specnum="9" specid="#communication-9">
-    <![CDATA[Responses and input that arrive while a response is in hand, and input that arrives before it is active, are deferred and taken, in order, once it is active.]]>
+    <![CDATA[Responses that arrive while a response is in hand, and input that arrives before it is active, are deferred and taken, in order, once it is active.]]>
     <test id="180" conformance="mandatory" manual="false">
       <start uri="180/test180.scxml"/>
     </test>
@@ -72,6 +93,24 @@
     <![CDATA[`bot.ability.communication.activate` `{}` is taken only in inactive: in active it does nothing.]]>
     <test id="190" conformance="mandatory" manual="false">
       <start uri="190/test190.scxml"/>
+    </test>
+  </assert>
+  <assert id="communication-11" specnum="11" specid="#communication-11">
+    <![CDATA[A response's id is its respond's sendid (none when the sender names none). A finished response's id is kept among the last `closed_responses_bound` (16) finished ids, and a respond with a finished id, or another copy of the response in hand or of a held one, is dropped (logged `communication.late`): nothing is said or answered for it, and a re-sent held id takes no second slot toward `held_responses_bound` (the first copy is kept, decision D175).]]>
+    <test id="202" conformance="mandatory" manual="false">
+      <start uri="202/test202.scxml"/>
+    </test>
+    <test id="200" conformance="mandatory" manual="false">
+      <start uri="200/test200.scxml"/>
+    </test>
+    <test id="201" conformance="mandatory" manual="false">
+      <start uri="201/test201.scxml"/>
+    </test>
+  </assert>
+  <assert id="communication-12" specnum="12" specid="#communication-12">
+    <![CDATA[At most `held_responses_bound` (16, a `<param>`) responses are held while one is in hand; past that a respond is refused with `bot.ability.communication.failed` `{message: "Communication is holding too many responses; this one is refused."}` (decision D175), and the held ones are still said, in order.]]>
+    <test id="210" conformance="mandatory" manual="false">
+      <start uri="210/test210.scxml"/>
     </test>
   </assert>
 </assertions>

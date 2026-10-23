@@ -5,7 +5,7 @@
 //!
 //! | Element | The original |
 //! | --- | --- |
-//! | `<conversation:message_for_turn>` | `_message_for_turn`, `_model_safe_content`, `MessageProvenance` |
+//! | `<conversation:message_for_turn>` | message for a turn and its provenance |
 //! | `<conversation:relationship_for_input>` | `Conversation._relationship_for_input` (its identity collection score), `_stable_context_ref`, `_new_relationship_ref` |
 //! | `<conversation:participant_for_source>` | `Conversation._participant_for_source` |
 //! | `<conversation:fail_turn>` | `Conversation._fail_turn`'s participants |
@@ -32,24 +32,26 @@
 //! An identity is a name (a string) or an embedding (an array of numbers).
 //! Two identities are the same when their sort keys are (a name's text,
 //! an embedding's compact Python JSON). A relationship is an object
-//! `{session_ref, context_ref, source_ids, target_ids, participants,
-//! sequences}` (the original's `_RelationshipProfile`); its other members
-//! are kept as they are.
+//! `{session_ref, context_ref, source_ids, target_ids, participants}`;
+//! its other members are kept as they are.
 //!
-//! # `<conversation:message_for_turn location="L" direction="D" event="E" message="M" sequence="S" provenance="P"/>`
+//! # `<conversation:message_for_turn location="L" direction="D" event="E" message="M" provenance="P"/>`
 //!
 //! `direction` is the literal `inbound` or `outbound` (not an expression).
 //! `event` (required) evaluates to the committing event's name, a non-empty
 //! string. `message` (required) evaluates to an object with `source_ids`
 //! and `target_ids` (arrays of identities), `content_type` (a non-empty
-//! string) and optionally `content` (any value; absent is `null`); its
-//! other members are not committed. `sequence` (required) evaluates to the
-//! message's position in the history, a non-negative integer. `provenance`
+//! string) and optionally `content` (any value; absent is `null`) and
+//! `participants` (at most [`MAX_PARTICIPANTS`] `{ref, role}`, each with an
+//! optional boolean `own` and an optional `resembles`, at most
+//! [`MAX_RESEMBLANCES`] `{ref, similarity}`; absent or `null` is none); its other members are
+//! not committed. `provenance`
 //! (optional) evaluates to an object (`null` or `undefined` is none) whose
 //! `id`, `session_ref` and `turn_ref` the provenance takes. `location`
-//! (required) receives the committed message, `{sequence, direction,
-//! source_ids, target_ids, content, content_type, provenance: {event, id,
-//! source, target, session_ref, turn_ref}}`:
+//! (required) receives the committed message,
+//! `{direction, source_ids, target_ids, content, content_type,
+//! participants, provenance: {event, id, source, target, session_ref,
+//! turn_ref}}`:
 //!
 //! * `content`: inbound, `null` when the content type, lower-cased, starts
 //!   with `audio/` (media never enters the model-facing history), else the
@@ -78,7 +80,7 @@
 //! begins a relationship of its own, appended: its `context_ref` is the
 //! input's relationship context reference ([`relationship_context_ref`]),
 //! its `session_ref` `relationship-` and that, its identities sorted, and
-//! its participants and sequences empty. `location` receives the
+//! its participants empty. `location` receives the
 //! relationships and `indexlocation` (required) the relationship's index.
 //!
 //! # `<conversation:participant_for_source location="L" source="S"/>` and `<conversation:fail_turn location="L" source="S"/>`
@@ -109,15 +111,17 @@
 //! else as `{kind: "content", source_participant_ref, content,
 //! content_type}`.
 //!
-//! # `<conversation:complete_turn location="L" event="E" input="X" turns="T" session_ref="R" sequence="S"/>`
+//! # `<conversation:complete_turn location="L" event="E" input="X" turns="T" session_ref="R" participants="P"/>`
 //!
 //! The inbound message the turns `T` (an array of the detectors' completed
 //! turns, at least one) make of the input `X`: as
 //! `<conversation:message_for_turn>` commits it, with the turns' texts
 //! joined by spaces as `text/plain` when any has text (each distinct text
 //! once, decision D79); else no content for `audio/*`; else the input's
-//! content; and the provenance's `turn_ref` the first turn's and its
-//! `session_ref` the string `R`.
+//! content; the provenance's `turn_ref` the first turn's and its
+//! `session_ref` the string `R`; and its participants `P` (optional, as a
+//! message's `participants`: the ones `<conversation:turn_participants>`
+//! stamps for the turn; decision D176).
 //!
 //! # `<conversation:ingest_content location="L" content="C"/>`
 //!
@@ -413,17 +417,10 @@ fn message_for_turn<H: ConversationHost>(
     content: &[Content],
     host: &mut H,
 ) -> Result<Executed, Failure<H::Error>> {
-    let [location, direction, event, message, sequence, provenance] = attribute_values(
+    let [location, direction, event, message, provenance] = attribute_values(
         attributes,
-        [
-            "location",
-            "direction",
-            "event",
-            "message",
-            "sequence",
-            "provenance",
-        ],
-        "conversation:message_for_turn takes only the location, direction, event, message, sequence and provenance attributes",
+        ["location", "direction", "event", "message", "provenance"],
+        "conversation:message_for_turn takes only the location, direction, event, message and provenance attributes",
         "conversation:message_for_turn repeats an attribute",
         "conversation:message_for_turn has an empty attribute",
     )?;
@@ -450,9 +447,6 @@ fn message_for_turn<H: ConversationHost>(
     let message = message.ok_or(Failure::Execution(
         "conversation:message_for_turn requires a message",
     ))?;
-    let sequence = sequence.ok_or(Failure::Execution(
-        "conversation:message_for_turn requires a sequence",
-    ))?;
     no_content(content, "conversation:message_for_turn holds no content")?;
     let event = read_event(
         host,
@@ -471,16 +465,8 @@ fn message_for_turn<H: ConversationHost>(
             "conversation:message_for_turn message is not an object",
         ));
     };
-    let sequence = sequence_of(
-        host,
-        sequence,
-        [
-            "conversation:message_for_turn sequence did not evaluate",
-            "conversation:message_for_turn sequence is not a non-negative integer",
-        ],
-    )?;
     let provenance = provenance_of(host, provenance)?;
-    let (committed, _) = committed_message(direction, &event, &message, sequence, &provenance)?;
+    let (committed, _) = committed_message(direction, &event, &message, &provenance)?;
     assign_to(
         host,
         location,
@@ -498,21 +484,6 @@ fn read_event<H: ConversationHost>(
 ) -> Result<String, Failure<H::Error>> {
     match evaluate(host, event, failed)? {
         Data::String(event) if !event.is_empty() => Ok(event),
-        _ => Err(Failure::Execution(malformed)),
-    }
-}
-
-/// Evaluates `sequence` to a non-negative integer.
-fn sequence_of<H: ConversationHost>(
-    host: &mut H,
-    sequence: &str,
-    [failed, malformed]: [&'static str; 2],
-) -> Result<serde_json::Number, Failure<H::Error>> {
-    match evaluate(host, sequence, failed)? {
-        Data::Number(value) => match number(value.get()) {
-            Json::Number(sequence) if sequence.as_u64().is_some() => Ok(sequence),
-            _ => Err(Failure::Execution(malformed)),
-        },
         _ => Err(Failure::Execution(malformed)),
     }
 }
@@ -552,7 +523,6 @@ pub fn committed_message<E>(
     direction: Direction,
     event: &str,
     message: &Map<String, Json>,
-    sequence: serde_json::Number,
     provenance: &Map<String, Json>,
 ) -> Result<(Map<String, Json>, String), Failure<E>> {
     let identities = |name: &str, malformed: &'static str| match message.get(name) {
@@ -579,6 +549,12 @@ pub fn committed_message<E>(
         Direction::Inbound if content_type.to_lowercase().starts_with("audio/") => Json::Null,
         _ => message.get("content").cloned().unwrap_or(Json::Null),
     };
+    let participants = match message.get("participants") {
+        None | Some(Json::Null) => Vec::new(),
+        Some(participants) => message_participants(participants).ok_or(Failure::Execution(
+            "conversation message participants are not at most 32 {ref, role, own?, resembles?}",
+        ))?,
+    };
     let context_ref = relationship_context_ref(&source_ids, &target_ids);
     let string = |name: &str| match provenance.get(name) {
         Some(Json::String(text)) => Json::String(text.clone()),
@@ -599,14 +575,74 @@ pub fn committed_message<E>(
         provenance.get("turn_ref").cloned().unwrap_or(Json::Null),
     );
     let mut committed = Map::new();
-    committed.insert("sequence".into(), Json::Number(sequence));
     committed.insert("direction".into(), Json::String(direction.name().into()));
     committed.insert("source_ids".into(), Json::Array(source_ids));
     committed.insert("target_ids".into(), Json::Array(target_ids));
     committed.insert("content".into(), content);
     committed.insert("content_type".into(), Json::String(content_type));
+    committed.insert("participants".into(), Json::Array(participants));
     committed.insert("provenance".into(), Json::Object(committed_provenance));
     Ok((committed, context_ref))
+}
+
+/// A message's participants (decision D176): at
+/// most [`MAX_PARTICIPANTS`], each `{ref, role}` with an optional boolean
+/// `own` and an optional `resembles` ([`is_resembles`]), its ref non-empty and at most [`MAX_PARTICIPANT_REF_CHARACTERS`]
+/// characters, its role `source` or `target`; `None` otherwise.
+fn message_participants(participants: &Json) -> Option<Vec<Json>> {
+    let participants = participants.as_array()?;
+    if participants.len() > MAX_PARTICIPANTS {
+        return None;
+    }
+    participants
+        .iter()
+        .map(|participant| {
+            let members = participant.as_object()?;
+            let reference = members.get("ref")?.as_str()?;
+            let role = members.get("role")?.as_str()?;
+            let own = match members.get("own") {
+                None => 0,
+                Some(Json::Bool(_)) => 1,
+                Some(_) => return None,
+            };
+            let resembles = match members.get("resembles") {
+                None => 0,
+                Some(resembles) if is_resembles(resembles) => 1,
+                Some(_) => return None,
+            };
+            (members.len() == 2 + own + resembles
+                && !reference.is_empty()
+                && reference.chars().count() <= MAX_PARTICIPANT_REF_CHARACTERS
+                && matches!(role, "source" | "target"))
+            .then(|| participant.clone())
+        })
+        .collect()
+}
+
+/// A participant's `resembles`: at
+/// most [`MAX_RESEMBLANCES`] `{ref, similarity}`, each ref non-empty and at
+/// most [`MAX_PARTICIPANT_REF_CHARACTERS`] characters and each similarity
+/// a number from -1 to 1.
+fn is_resembles(resembles: &Json) -> bool {
+    resembles.as_array().is_some_and(|resembles| {
+        resembles.len() <= MAX_RESEMBLANCES
+            && resembles.iter().all(|resemblance| {
+                resemblance.as_object().is_some_and(|members| {
+                    members.len() == 2
+                        && members
+                            .get("ref")
+                            .and_then(Json::as_str)
+                            .is_some_and(|reference| {
+                                !reference.is_empty()
+                                    && reference.chars().count() <= MAX_PARTICIPANT_REF_CHARACTERS
+                            })
+                        && members
+                            .get("similarity")
+                            .and_then(Json::as_f64)
+                            .is_some_and(|similarity| (-1.0..=1.0).contains(&similarity))
+                })
+            })
+    })
 }
 
 /// An identity: a string, or an array of numbers (an embedding).
@@ -1283,7 +1319,6 @@ pub fn relationship_for(
     relationship.insert("source_ids".into(), Json::Array(sorted_identities(sources)));
     relationship.insert("target_ids".into(), Json::Array(sorted_identities(targets)));
     relationship.insert("participants".into(), Json::Array(Vec::new()));
-    relationship.insert("sequences".into(), Json::Array(Vec::new()));
     relationships.push(Json::Object(relationship));
     Ok(relationships.len() - 1)
 }
@@ -1640,7 +1675,7 @@ fn complete_turn<H: ConversationHost>(
     content: &[Content],
     host: &mut H,
 ) -> Result<Executed, Failure<H::Error>> {
-    let [location, event, input, turns, session_ref, sequence] = attribute_values(
+    let [location, event, input, turns, session_ref, participants] = attribute_values(
         attributes,
         [
             "location",
@@ -1648,9 +1683,9 @@ fn complete_turn<H: ConversationHost>(
             "input",
             "turns",
             "session_ref",
-            "sequence",
+            "participants",
         ],
-        "conversation:complete_turn takes only the location, event, input, turns, session_ref and sequence attributes",
+        "conversation:complete_turn takes only the location, event, input, turns, session_ref and participants attributes",
         "conversation:complete_turn repeats an attribute",
         "conversation:complete_turn has an empty attribute",
     )?;
@@ -1668,9 +1703,6 @@ fn complete_turn<H: ConversationHost>(
     ))?;
     let session_ref = session_ref.ok_or(Failure::Execution(
         "conversation:complete_turn requires a session_ref",
-    ))?;
-    let sequence = sequence.ok_or(Failure::Execution(
-        "conversation:complete_turn requires a sequence",
     ))?;
     no_content(content, "conversation:complete_turn holds no content")?;
     let event = read_event(
@@ -1717,18 +1749,23 @@ fn complete_turn<H: ConversationHost>(
             "conversation:complete_turn session_ref is not a string",
         ));
     };
-    let sequence = sequence_of(
-        host,
-        sequence,
-        [
-            "conversation:complete_turn sequence did not evaluate",
-            "conversation:complete_turn sequence is not a non-negative integer",
-        ],
-    )?;
-    let (product, provenance) =
+    let participants = match participants {
+        None => Json::Null,
+        Some(participants) => match evaluate(
+            host,
+            participants,
+            "conversation:complete_turn participants did not evaluate",
+        )? {
+            Data::Null | Data::Undefined | Data::Absent => Json::Null,
+            value => json_of(&value).ok_or(Failure::Execution(
+                "conversation:complete_turn participants are not at most 32 {ref, role, own?, resembles?}",
+            ))?,
+        },
+    };
+    let (mut product, provenance) =
         turn_product(&input, &turns, &session_ref).map_err(Failure::Execution)?;
-    let (message, _) =
-        committed_message(Direction::Inbound, &event, &product, sequence, &provenance)?;
+    product.insert("participants".into(), participants);
+    let (message, _) = committed_message(Direction::Inbound, &event, &product, &provenance)?;
     assign_to(
         host,
         location,
@@ -2172,6 +2209,9 @@ pub const MAX_PARTICIPANTS: usize = 32;
 /// The longest participant ref, in characters (the original's
 /// `_MAX_PARTICIPANT_REF_LENGTH`).
 pub const MAX_PARTICIPANT_REF_CHARACTERS: usize = 200;
+
+/// The most identities a participant resembles.
+pub const MAX_RESEMBLANCES: usize = 3;
 
 /// `<conversation:turn_participants>`'s detail for an input of the wrong
 /// kind.

@@ -7,7 +7,7 @@
 </datamodel>
 <state id="s0">
   <onentry>
-    <conversation:commit location="l" direction="inbound" event="'e'" message="msg" sequence="0"/>
+    <conversation:commit location="l" direction="inbound" event="'e'" message="msg"/>
     <raise event="executed"/>
   </onentry>
   <transition event="error.execution" cond="l === 'untouched'" conf:targetpass=""/>

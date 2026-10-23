@@ -18,7 +18,12 @@ def canonical(value):
 
 
 def say(text="Hello there."):
-    return send(INPUT, js({"text": text}))
+    """An utterance of one part, its words `text`."""
+    return send(INPUT, js({"parts": [{"words": text}]}))
+
+
+def reply(*parts):
+    return send(INPUT, js({"parts": list(parts)}))
 
 
 def encoded(audio="media/reply.pcm", media_type="audio/pcm", rate=24000, channels=1, duration=0.1):
@@ -31,12 +36,13 @@ def failed(text):
 
 
 S.statement(1, "On start, and on every later entry into `idle`, it offers nothing: it sends `bot.ability.offers` `{ability: \"vocal\", choices: []}` to its parent.")
-S.statement(2, "`bot.ability.vocal.speech.encoding.input` `{text}` in `idle` is encoded by the speech service's `encode` with the `<param>`s `model`, `voice`, `output` and `media_type` (`audio/pcm` by default); with provider `null` (the default) that is the OpenAI-compatible `POST {base}/audio/speech`. The service's answer is sent to the parent as `bot.ability.vocal.speech.encoding.output` `{audio, media_type, sample_rate_hz, channels, duration}` (the audio as the `output` reference; raw PCM is 24 kHz mono, its duration measured from its bytes; a format the service cannot measure has `null`s), and it returns to `idle`.")
+S.statement(2, "`bot.ability.vocal.speech.encoding.input` `{parts}` (1 to 64 parts `{expression?, words?}`) in `idle` is encoded by the speech service's `encode` with the `<param>`s `parts`, `model`, `voice`, `output` and `media_type` (`audio/pcm` by default); with provider `null` (the default) that is the OpenAI-compatible `POST {base}/audio/speech`. The service's answer is sent to the parent as `bot.ability.vocal.speech.encoding.output` `{audio, media_type, sample_rate_hz, channels, duration}` (the audio as the `output` reference; raw PCM is 24 kHz mono, its duration measured from its bytes; a format the service cannot measure has `null`s), and it returns to `idle`.")
 S.statement(3, "The `provider` `<param>` names the original's provider instead: `elevenlabs` is `POST {base}/text-to-speech/{voice}?output_format=…`, `gemini` is `POST {base}/interactions` (its answer's base64 audio part), each answered as above.")
 S.statement(4, "When the service answers `bot.ability.failed` `{message}` (an error status, an empty answer, an `output` that cannot be written), it sends the parent `bot.ability.failed` with the service's message and returns to `idle`.")
 S.statement(5, "When the service cannot run (a missing `voice`, rejecting its start with `error.execution`), it sends the parent `bot.ability.failed` `{message: \"The speech service could not run (<error event>).\"}` and returns to `idle`.")
 S.statement(6, "An input that arrives while `applying` is dropped: only the input in hand is encoded and answered.")
 S.statement(7, "Each input is a new encoding: after an answer or a failure, the next input in `idle` is encoded again.")
+S.statement(8, "The service says the parts (decision D178): walking them in order, a part with a pause opens a new stretch, each stretch whose words are not blank is one backend request saying its words joined as written, one at a time in order, and no other cue (a sound, an emotion) is applied. With a pause the answers are joined as 16-bit PCM with each pause's silence at its place (0.4 s short, 1 s long), written raw for `audio/pcm` or in a WAV container for `audio/wav`; a pause with another `media_type` rejects the service's start, answered as in statement 5.")
 
 # 1: readiness.
 S.case(100, 1, "the vocal offers nothing on start.", [READY], params=PARAMS)
@@ -93,3 +99,23 @@ S.case(161, 7, "after a failure the next input is encoded again.",
        [READY, say("first"), failed("Speech encoding failed: the backend answered an error status."), READY,
         say("second"), encoded(), READY],
        params=PARAMS, backend=[{"path": SPEECH, "status": 500, "body": {"error": "boom"}}, {"path": SPEECH, "body": PCM}])
+
+# 8: parts, stretches and pauses.
+S.case(170, 8, "a short pause splits the reply into two requests, joined with 0.4 s of silence between them (0.1 + 0.4 + 0.2 s).",
+       [READY, reply({"words": "One,"}, {"expression": {"pause": "short"}, "words": " two."}), encoded(duration=0.7), READY],
+       params=PARAMS, backend=[{"path": SPEECH, "body": PCM}, {"path": SPEECH, "body": PCM * 2}])
+S.case(171, 8, "a long pause that opens the reply is 1 s of silence before its one request's speech.",
+       [READY, reply({"expression": {"pause": "long"}}, {"words": "Hello."}), encoded(duration=1.1), READY],
+       params=PARAMS, backend=[{"path": SPEECH, "body": PCM}, {"path": SPEECH, "body": PCM * 2}])
+S.case(172, 8, "a closing pause with no words after it sends no request of its own: one request, then 0.4 s of silence.",
+       [READY, reply({"words": "Hello."}, {"expression": {"pause": "short"}}), encoded(duration=0.5), READY],
+       params=PARAMS, backend=[{"path": SPEECH, "body": PCM}, {"path": SPEECH, "body": PCM * 2}])
+S.case(173, 8, "parts without a pause are one request, a sound and other cues applying nothing.",
+       [READY, reply({"expression": {"sound": "laugh"}}, {"expression": {"emotion": "happy"}, "words": "Ha,"}, {"words": " yes."}),
+        encoded(duration=0.1), READY],
+       params=PARAMS, backend=[{"path": SPEECH, "body": PCM}, {"path": SPEECH, "body": PCM * 2}])
+S.case(174, 8, "a pause with audio/mpeg cannot be encoded: the service rejects its start.",
+       [READY, reply({"words": "One,"}, {"expression": {"pause": "short"}, "words": " two."}),
+        failed("The speech service could not run (error.execution)."), READY],
+       params=[("model", "'tts-1'"), ("voice", "'alloy'"), ("output", "'media/reply.mp3'"), ("media_type", "'audio/mpeg'")],
+       backend=[{"path": SPEECH, "body": "ID3 not really mp3"}])

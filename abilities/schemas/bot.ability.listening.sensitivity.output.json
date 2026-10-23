@@ -662,6 +662,16 @@
         12.0
       ],
       "title": "Perceived Level Db"
+    },
+    "producing": {
+      "default": false,
+      "description": "Whether the body was producing sound when this arrived: a mouth had been commanded and its efference window was still open. A fact about the moment, not about where the sound came from; somebody else's voice arriving while the bot talks is producing too.",
+      "examples": [
+        false,
+        true
+      ],
+      "title": "Producing",
+      "type": "boolean"
     }
   },
   "required": [

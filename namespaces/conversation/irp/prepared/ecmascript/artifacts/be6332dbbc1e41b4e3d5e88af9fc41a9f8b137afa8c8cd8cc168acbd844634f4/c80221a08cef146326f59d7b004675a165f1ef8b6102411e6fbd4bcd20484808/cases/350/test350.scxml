@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- conversation-6: the turns' distinct texts are joined as text/plain with the first turn's reference. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="m" expr="null"/>
+  <data id="input" expr="({source_ids: ['a', 'b'], target_ids: [], content: 'x', content_type: 'text/plain'})"/>
+  <data id="turns" expr="[{turn_ref: 't1', text: 'hi'}, {turn_ref: 't2', text: 'hi'}, {turn_ref: 't3', text: ''}]"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:complete_turn location="m" event="'bot.ability.conversation.input'" input="input" turns="turns" session_ref="'relationship-x'"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="m.content === 'hi' &amp;&amp; m.content_type === 'text/plain' &amp;&amp; m.direction === 'inbound' &amp;&amp; m.provenance.turn_ref === 't1' &amp;&amp; m.provenance.session_ref === 'relationship-x'" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

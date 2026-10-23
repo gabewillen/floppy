@@ -6,6 +6,14 @@ fn text(value: &str) -> Data {
     Data::String(value.into())
 }
 
+fn parts(value: &Json) -> Data {
+    Data::canonical_json_array(&value.to_string()).expect("the parts are a JSON array")
+}
+
+fn hello() -> Data {
+    parts(&serde_json::json!([{"words": "Hello there."}]))
+}
+
 fn parse(parameters: &[(&str, Data)]) -> Result<Operation, &'static str> {
     parse_parameters(parameters.iter().map(|(name, value)| (*name, value)))
 }
@@ -24,7 +32,7 @@ fn encode(extra: &[(&str, Data)]) -> Operation {
     let mut parameters = vec![
         ("operation", text("encode")),
         ("model", text("tts-1")),
-        ("text", text("Hello there.")),
+        ("parts", hello()),
         ("voice", text("alloy")),
         ("output", text("/media/said.mp3")),
     ];
@@ -201,31 +209,31 @@ fn malformed_parameters_reject_the_start() {
 #[test]
 fn malformed_encoding_parameters_reject_the_start() {
     let encoding = [
-        ("text", text("hi")),
+        ("parts", hello()),
         ("voice", text("alloy")),
         ("output", text("o.mp3")),
     ];
     refuses(vec![
         (
             with("encode", &[("voice", text("alloy")), ("output", text("o"))]),
-            "speech encode requires a text parameter",
-        ),
-        (
-            with(
-                "encode",
-                &[
-                    ("text", text(" ")),
-                    ("voice", text("alloy")),
-                    ("output", text("o")),
-                ],
-            ),
-            "speech text must be a non-empty string",
+            "speech encode requires a parts parameter",
         ),
         (
             with(
                 "encode",
                 &[
                     ("text", text("hi")),
+                    ("voice", text("alloy")),
+                    ("output", text("o")),
+                ],
+            ),
+            "speech takes no parameter of that name",
+        ),
+        (
+            with(
+                "encode",
+                &[
+                    ("parts", hello()),
                     ("voice", text("a/b")),
                     ("output", text("o")),
                 ],
@@ -233,7 +241,7 @@ fn malformed_encoding_parameters_reject_the_start() {
             "speech voice must match [A-Za-z0-9_.-]{1,128}",
         ),
         (
-            with("encode", &[("text", text("hi")), ("voice", text("alloy"))]),
+            with("encode", &[("parts", hello()), ("voice", text("alloy"))]),
             "speech encode requires an output parameter",
         ),
         (
@@ -354,7 +362,8 @@ fn an_encoding_is_a_speech_request() {
     let Operation::Encode(encoding) = encode(&[]) else {
         panic!("an encoding");
     };
-    let request = encoding_request(2, Some(1), &encoding);
+    assert_eq!(encoding.said().collect::<Vec<_>>(), ["Hello there."]);
+    let request = encoding_request(2, Some(1), &encoding, "Hello there.");
     assert_eq!(
         request.url,
         [Part::Reference(2), Part::Literal(SPEECH_PATH.into())]
@@ -371,7 +380,7 @@ fn an_elevenlabs_encoding_is_its_text_to_speech_request() {
     let Operation::Encode(encoding) = encode(&[("provider", text("elevenlabs"))]) else {
         panic!("an encoding");
     };
-    let request = encoding_request(2, Some(1), &encoding);
+    let request = encoding_request(2, Some(1), &encoding, "Hello there.");
     assert_eq!(
         request.url,
         [
@@ -427,7 +436,7 @@ fn a_transcription_answers_the_decoded_text() {
 fn encoded_audio_is_written_before_the_output_names_it() {
     let operation = encode(&[]);
     let mut written = None;
-    let returned = encoding_outcome(&operation, ok(b"ID3-mp3"), |path, audio| {
+    let returned = encoding_outcome(&operation, [ok(b"ID3-mp3")], |path, audio| {
         written = Some((path.to_owned(), audio.to_vec()));
         Ok(())
     });
@@ -440,14 +449,14 @@ fn encoded_audio_is_written_before_the_output_names_it() {
         returned.data,
         r#"{"audio":"/media/said.mp3","channels":null,"duration":null,"media_type":"audio/mpeg","sample_rate_hz":null}"#
     );
-    let failed = encoding_outcome(&operation, ok(b"ID3-mp3"), |_, _| {
+    let failed = encoding_outcome(&operation, [ok(b"ID3-mp3")], |_, _| {
         Err(std::io::Error::other("denied"))
     });
     assert_eq!(
         data(&failed)["message"],
         "Speech encoding failed: the output cannot be written."
     );
-    let empty = encoding_outcome(&operation, ok(b""), |_, _| {
+    let empty = encoding_outcome(&operation, [ok(b"")], |_, _| {
         panic!("nothing is written for an empty answer")
     });
     assert_eq!(
@@ -459,11 +468,11 @@ fn encoded_audio_is_written_before_the_output_names_it() {
 #[test]
 fn the_rate_channels_and_duration_are_named_only_when_known() {
     let wav_encoding = encode(&[("media_type", text("audio/wav"))]);
-    let returned = encoding_outcome(&wav_encoding, ok(&wav(22_050, 2)), |_, _| Ok(()));
+    let returned = encoding_outcome(&wav_encoding, [ok(&wav(22_050, 2))], |_, _| Ok(()));
     assert_eq!(data(&returned)["sample_rate_hz"], 22_050);
     assert_eq!(data(&returned)["channels"], 2);
     assert_eq!(data(&returned)["duration"], 0.1);
-    let unreadable = encoding_outcome(&wav_encoding, ok(b"RIFF"), |_, _| Ok(()));
+    let unreadable = encoding_outcome(&wav_encoding, [ok(b"RIFF")], |_, _| Ok(()));
     assert_eq!(data(&unreadable)["sample_rate_hz"], Json::Null);
     assert_eq!(data(&unreadable)["duration"], Json::Null);
     // A streamed WAV's unknown data size counts the bytes present.
@@ -479,13 +488,13 @@ fn the_rate_channels_and_duration_are_named_only_when_known() {
         let mut parameters = vec![("media_type", text("audio/pcm"))];
         parameters.extend(provider);
         let pcm = encode(&parameters);
-        let returned = encoding_outcome(&pcm, ok(&[0; 4800]), |_, _| Ok(()));
+        let returned = encoding_outcome(&pcm, [ok(&[0; 4800])], |_, _| Ok(()));
         assert_eq!(data(&returned)["sample_rate_hz"], 24_000);
         assert_eq!(data(&returned)["channels"], 1);
         assert_eq!(data(&returned)["duration"], 0.1);
     }
     let elevenlabs = encode(&[("provider", text("elevenlabs"))]);
-    let returned = encoding_outcome(&elevenlabs, ok(b"ID3"), |_, _| Ok(()));
+    let returned = encoding_outcome(&elevenlabs, [ok(b"ID3")], |_, _| Ok(()));
     assert_eq!(data(&returned)["sample_rate_hz"], 44_100);
     assert_eq!(data(&returned)["duration"], Json::Null);
 }
@@ -496,7 +505,7 @@ fn a_null_parameter_is_not_given() {
         parse(&[
             ("operation", text("encode")),
             ("model", Data::Null),
-            ("text", text("hi")),
+            ("parts", hello()),
             ("voice", text("alloy")),
             ("output", text("o.pcm")),
         ]),
@@ -540,13 +549,18 @@ fn every_event_satisfies_its_published_schema() {
     ));
     let returned = decoding_outcome(&decode(), ok(br#"{"text":""}"#));
     assert!(decoded.admits(&Data::JsonObject(returned.data)));
+    let paused = encode_parts(
+        &serde_json::json!([{"words": "A"}, {"expression": {"pause": "short"}, "words": "B"}]),
+        "audio/wav",
+    );
     for operation in [
         encode(&[]),
         encode(&[("media_type", text("audio/wav"))]),
         encode(&[("provider", text("elevenlabs"))]),
+        paused,
     ] {
         let audio = wav(16_000, 1);
-        let returned = encoding_outcome(&operation, ok(&audio), |_, _| Ok(()));
+        let returned = encoding_outcome(&operation, [ok(&audio), ok(&audio)], |_, _| Ok(()));
         assert!(
             encoded.admits(&Data::JsonObject(returned.data.clone())),
             "{}",
@@ -614,7 +628,7 @@ fn the_base_url_is_required_and_a_keyless_request_has_no_key_header() {
         requests.extend(
             encodings
                 .iter()
-                .map(|encoding| encoding_request(2, api_key, encoding)),
+                .map(|encoding| encoding_request(2, api_key, encoding, "hi")),
         );
         requests
     };
@@ -666,7 +680,7 @@ fn gemini_encode(media_type: &str) -> Operation {
     parse(&[
         ("operation", text("encode")),
         ("model", text("gemini-3.1-flash-tts-preview")),
-        ("text", text("Hello there.")),
+        ("parts", hello()),
         ("voice", text("Kore")),
         ("output", text("/media/said.pcm")),
         ("media_type", text(media_type)),
@@ -715,7 +729,7 @@ fn a_gemini_encoding_is_an_interaction_answering_audio() {
     let Operation::Encode(encoding) = gemini_encode("audio/pcm") else {
         panic!("an encoding");
     };
-    let request = encoding_request(2, Some(1), &encoding);
+    let request = encoding_request(2, Some(1), &encoding, "Hello there.");
     assert_eq!(
         request.url,
         [
@@ -764,7 +778,7 @@ fn gemini_audio_is_written_raw_or_in_a_wav_container() {
     // Two 16-bit samples, base64 of [1, 0, 2, 0].
     let answer = br#"{"steps":[{"type":"model_output","content":[{"type":"audio","data":"AQACAA==","sample_rate":24000,"channels":1,"mime_type":"audio/l16; rate=24000; channels=1"}]}]}"#;
     let mut written = None;
-    let returned = encoding_outcome(&gemini_encode("audio/pcm"), ok(answer), |path, audio| {
+    let returned = encoding_outcome(&gemini_encode("audio/pcm"), [ok(answer)], |path, audio| {
         written = Some((path.to_owned(), audio.to_vec()));
         Ok(())
     });
@@ -776,7 +790,7 @@ fn gemini_audio_is_written_raw_or_in_a_wav_container() {
     assert_eq!(data(&returned)["channels"], 1);
 
     let mut wav = Vec::new();
-    let returned = encoding_outcome(&gemini_encode("audio/wav"), ok(answer), |_, audio| {
+    let returned = encoding_outcome(&gemini_encode("audio/wav"), [ok(answer)], |_, audio| {
         wav = audio.to_vec();
         Ok(())
     });
@@ -790,7 +804,7 @@ fn gemini_audio_is_written_raw_or_in_a_wav_container() {
         br#"{"steps":[{"content":[{"type":"audio","data":"AQACAA==","sample_rate":16000}]}]}"#,
         br#"{"steps":[{"content":[{"type":"audio","data":"not*base64"}]}]}"#,
     ] {
-        let returned = encoding_outcome(&gemini_encode("audio/pcm"), ok(body), |_, _| Ok(()));
+        let returned = encoding_outcome(&gemini_encode("audio/pcm"), [ok(body)], |_, _| Ok(()));
         assert_eq!(
             returned.name,
             FAILED_EVENT,
@@ -809,4 +823,362 @@ fn base64_round_trips() {
         );
     }
     assert_eq!(gemini::base64_decoded("A"), None);
+}
+
+fn encode_parts(value: &Json, media_type: &str) -> Operation {
+    parse(&[
+        ("operation", text("encode")),
+        ("model", text("tts-1")),
+        ("parts", parts(value)),
+        ("voice", text("alloy")),
+        ("output", text("/media/said")),
+        ("media_type", text(media_type)),
+    ])
+    .expect("a valid encoding")
+}
+
+fn stretches_of(operation: &Operation) -> &[Stretch] {
+    let Operation::Encode(encoding) = operation else {
+        panic!("an encoding");
+    };
+    &encoding.stretches
+}
+
+fn stretch(pause: Option<Pause>, words: &str) -> Stretch {
+    Stretch {
+        pause,
+        words: words.into(),
+    }
+}
+
+#[test]
+fn malformed_parts_reject_the_start() {
+    use serde_json::json;
+    let refused = |value: Data, expected: &'static str| {
+        assert_eq!(
+            parse(&with(
+                "encode",
+                &[
+                    ("parts", value.clone()),
+                    ("voice", text("alloy")),
+                    ("output", text("o.pcm")),
+                    ("media_type", text("audio/pcm")),
+                ],
+            )),
+            Err(expected),
+            "{value:?}"
+        );
+    };
+    let shape = "speech parts must be 1 to 64 parts of {expression?, words?}";
+    let unspoken = "speech parts' words must not be blank or hold * < > [ ] { } ( )";
+    let expression = "speech parts' expression must be an object of Expression fields";
+    refused(text("Hello."), shape);
+    refused(parts(&json!([])), shape);
+    refused(
+        parts(&json!(vec![json!({"words": "a"}); MAX_PARTS + 1])),
+        shape,
+    );
+    refused(parts(&json!(["Hello."])), shape);
+    refused(parts(&json!([{"words": "a", "text": "b"}])), shape);
+    refused(parts(&json!([{"words": " \n"}])), unspoken);
+    refused(parts(&json!([{"words": ""}])), unspoken);
+    refused(parts(&json!([{"words": 1}])), unspoken);
+    for marked in ["*waves*", "<break/>", "[laugh]", "{x}", "(chuckle) hi"] {
+        refused(parts(&json!([{"words": marked}])), unspoken);
+    }
+    refused(
+        parts(&json!([{"words": "a".repeat(MAX_WORDS_CHARS + 1)}])),
+        "speech parts' words must be at most 2000 characters",
+    );
+    refused(
+        parts(&json!([{"expression": "warm", "words": "a"}])),
+        expression,
+    );
+    refused(
+        parts(&json!([{"expression": {"tone": "warm"}, "words": "a"}])),
+        expression,
+    );
+    refused(
+        parts(&json!([{"expression": {"pause": "medium"}, "words": "a"}])),
+        "speech parts' pause must be short or long",
+    );
+    refused(
+        parts(&json!([{"expression": {"sound": 1}, "words": "a"}])),
+        "speech parts' sound must be a string",
+    );
+    refused(
+        parts(&json!([{"words": "a"}, {"expression": {"emotion": "warm"}}])),
+        "speech parts must each have words, a pause, or a sound",
+    );
+    refused(
+        parts(&json!([{"words": "a"}, {}])),
+        "speech parts must each have words, a pause, or a sound",
+    );
+    refused(
+        parts(&json!([{"expression": {"pause": "short"}}, {"expression": {"sound": "sigh"}}])),
+        "speech parts have no words",
+    );
+    // At the bound, null members are absent and other cues are read past.
+    let at_bound = encode_parts(
+        &json!([
+            {"words": "a".repeat(MAX_WORDS_CHARS)},
+            {"expression": {"sound": "laugh", "sound_at": "after"}},
+            {"expression": {"instructions": "softly", "pace": 9, "pause": null, "sound": null}, "words": "b"},
+        ]),
+        "audio/mpeg",
+    );
+    assert_eq!(
+        stretches_of(&at_bound),
+        [stretch(None, &format!("{}b", "a".repeat(MAX_WORDS_CHARS)))]
+    );
+}
+
+#[test]
+fn a_pause_needs_pcm_or_wav() {
+    let paused = serde_json::json!([{"words": "a"}, {"expression": {"pause": "long"}}]);
+    for media_type in ["audio/mpeg", "audio/opus", "audio/flac"] {
+        assert_eq!(
+            parse(&[
+                ("operation", text("encode")),
+                ("model", text("tts-1")),
+                ("parts", parts(&paused)),
+                ("voice", text("alloy")),
+                ("output", text("o")),
+                ("media_type", text(media_type)),
+            ]),
+            Err("speech pauses need audio/pcm or audio/wav"),
+        );
+    }
+    assert_eq!(
+        parse(&[
+            ("operation", text("encode")),
+            ("model", text("tts-1")),
+            ("parts", parts(&paused)),
+            ("voice", text("alloy")),
+            ("output", text("o")),
+        ]),
+        Err("speech pauses need audio/pcm or audio/wav"),
+    );
+    for media_type in ["audio/pcm", "audio/wav"] {
+        let Operation::Encode(encoding) = encode_parts(&paused, media_type) else {
+            panic!("an encoding");
+        };
+        assert!(encoding.pauses(), "{media_type}");
+    }
+}
+
+#[test]
+fn a_pause_opens_a_stretch_and_words_join_verbatim() {
+    let operation = encode_parts(
+        &serde_json::json!([
+            {"words": "Hi, "},
+            {"expression": {"emotion": "warm", "sound": "laugh"}, "words": "there."},
+            {"expression": {"sound": "sigh"}},
+            {"expression": {"pause": "short"}},
+            {"words": " Then"},
+            {"expression": {"pause": "long", "style": "whisper"}, "words": " more."},
+        ]),
+        "audio/pcm",
+    );
+    assert_eq!(
+        stretches_of(&operation),
+        [
+            stretch(None, "Hi, there."),
+            stretch(Some(Pause::Short), " Then"),
+            stretch(Some(Pause::Long), " more."),
+        ]
+    );
+    // A pause that opens the reply opens its first stretch, and a stretch
+    // of no words holds only its pause.
+    let operation = encode_parts(
+        &serde_json::json!([
+            {"expression": {"pause": "long"}},
+            {"words": "A"},
+            {"expression": {"pause": "short"}},
+            {"expression": {"pause": "long"}, "words": "B"},
+        ]),
+        "audio/pcm",
+    );
+    assert_eq!(
+        stretches_of(&operation),
+        [
+            stretch(Some(Pause::Long), "A"),
+            stretch(Some(Pause::Short), ""),
+            stretch(Some(Pause::Long), "B"),
+        ]
+    );
+}
+
+#[test]
+fn each_stretch_with_words_is_one_request_saying_them() {
+    let reply = serde_json::json!([
+        {"words": "A"},
+        {"expression": {"pause": "short"}},
+        {"expression": {"pause": "long"}, "words": "B"},
+    ]);
+    for (provider, field) in [
+        (None, "input"),
+        (Some("elevenlabs"), "text"),
+        (Some("gemini"), "input"),
+    ] {
+        let mut parameters = vec![
+            ("operation", text("encode")),
+            ("model", text("m")),
+            ("parts", parts(&reply)),
+            ("voice", text("v")),
+            ("output", text("o")),
+            ("media_type", text("audio/pcm")),
+        ];
+        if let Some(provider) = provider {
+            parameters.push(("provider", text(provider)));
+        }
+        let Ok(Operation::Encode(encoding)) = parse(&parameters) else {
+            panic!("an encoding");
+        };
+        let said: Vec<&str> = encoding.said().collect();
+        assert_eq!(said, ["A", "B"], "{provider:?}");
+        for words in said {
+            let request = encoding_request(2, Some(1), &encoding, words);
+            assert_eq!(json_body(&request)[field], words, "{provider:?}");
+        }
+    }
+}
+
+#[test]
+fn a_pause_is_silence_of_its_length() {
+    assert!((Pause::Short.seconds() - 0.4).abs() < f64::EPSILON);
+    assert!((Pause::Long.seconds() - 1.0).abs() < f64::EPSILON);
+    assert_eq!(Pause::Short.frames(PCM_SAMPLE_RATE_HZ), 9600);
+    assert_eq!(Pause::Long.frames(PCM_SAMPLE_RATE_HZ), 24_000);
+    assert_eq!(Pause::Short.frames(22_050), 8820);
+    assert_eq!(Pause::Short.frames(11_025), 4410);
+
+    let operation = encode_parts(
+        &serde_json::json!([{"words": "A"}, {"expression": {"pause": "short"}, "words": "B"}]),
+        "audio/pcm",
+    );
+    let mut written = None;
+    let returned = encoding_outcome(
+        &operation,
+        [ok(&[1, 0]), ok(&[2, 0, 3, 0])],
+        |path, audio| {
+            written = Some((path.to_owned(), audio.to_vec()));
+            Ok(())
+        },
+    );
+    let mut expected = vec![1, 0];
+    expected.resize(2 + 19_200, 0);
+    expected.extend_from_slice(&[2, 0, 3, 0]);
+    assert_eq!(written, Some(("/media/said".to_owned(), expected)));
+    assert_eq!(returned.name, ENCODING_OUTPUT_EVENT);
+    assert_eq!(data(&returned)["sample_rate_hz"], 24_000);
+    assert_eq!(data(&returned)["channels"], 1);
+    assert_eq!(data(&returned)["duration"], 19_206.0 / 48_000.0);
+}
+
+#[test]
+fn a_pause_that_opens_the_reply_comes_first() {
+    let reply = serde_json::json!([{"expression": {"pause": "long"}}, {"words": "A"}]);
+    let mut written = Vec::new();
+    let returned = encoding_outcome(
+        &encode_parts(&reply, "audio/pcm"),
+        [ok(&[7, 0])],
+        |_, audio| {
+            written = audio.to_vec();
+            Ok(())
+        },
+    );
+    assert_eq!(returned.name, ENCODING_OUTPUT_EVENT);
+    assert_eq!(written.len(), 48_002);
+    assert!(written[..48_000].iter().all(|&byte| byte == 0));
+    assert_eq!(&written[48_000..], &[7, 0]);
+    // Gemini's PCM is assembled the same way.
+    let Operation::Encode(mut encoding) = encode_parts(&reply, "audio/pcm") else {
+        panic!("an encoding");
+    };
+    encoding.provider = Provider::Gemini;
+    let answer = br#"{"steps":[{"content":[{"type":"audio","data":"BwA="}]}]}"#;
+    let mut gemini = Vec::new();
+    let returned = encoding_outcome(&Operation::Encode(encoding), [ok(answer)], |_, audio| {
+        gemini = audio.to_vec();
+        Ok(())
+    });
+    assert_eq!(returned.name, ENCODING_OUTPUT_EVENT);
+    assert_eq!(gemini, written);
+}
+
+#[test]
+fn wav_stretches_are_joined_in_one_wav() {
+    let operation = encode_parts(
+        &serde_json::json!([{"words": "A"}, {"expression": {"pause": "short"}, "words": "B"}]),
+        "audio/wav",
+    );
+    let mut written = Vec::new();
+    let returned = encoding_outcome(
+        &operation,
+        [ok(&wav(16_000, 2)), ok(&wav(16_000, 2))],
+        |_, audio| {
+            written = audio.to_vec();
+            Ok(())
+        },
+    );
+    assert_eq!(returned.name, ENCODING_OUTPUT_EVENT);
+    let (rate, channels, pcm) = voice::wav_16bit(&written).expect("a 16-bit WAV");
+    assert_eq!((rate, channels), (16_000, 2));
+    // A tenth of a second, 0.4 seconds of silence, a tenth of a second.
+    assert_eq!(pcm.len(), 6400 + 6400 * 4 + 6400);
+    assert_eq!(data(&returned)["sample_rate_hz"], 16_000);
+    assert_eq!(data(&returned)["channels"], 2);
+    assert_eq!(data(&returned)["duration"], 0.6);
+
+    for (first, second) in [
+        (wav(16_000, 1), wav(22_050, 1)),
+        (wav(16_000, 1), wav(16_000, 2)),
+        (wav(16_000, 1), b"RIFF".to_vec()),
+    ] {
+        let returned = encoding_outcome(&operation, [ok(&first), ok(&second)], |_, _| {
+            panic!("nothing is written for stretches that disagree")
+        });
+        assert_eq!(
+            data(&returned)["message"],
+            "Speech encoding failed: the backend's answer is malformed."
+        );
+    }
+}
+
+#[test]
+fn a_failed_stretch_ends_the_reply_and_writes_nothing() {
+    let operation = encode_parts(
+        &serde_json::json!([{"words": "A"}, {"expression": {"pause": "short"}, "words": "B"}]),
+        "audio/pcm",
+    );
+    for (answered, reason) in [
+        (
+            vec![ok(&[1, 0]), Err(TransportFailure::Unavailable)],
+            "the backend is unreachable",
+        ),
+        (
+            vec![
+                ok(&[1, 0]),
+                Ok(Response {
+                    status: 500,
+                    body: Vec::new(),
+                }),
+            ],
+            "the backend answered an error status",
+        ),
+        (
+            vec![ok(&[1, 0]), ok(b"")],
+            "the backend's answer is malformed",
+        ),
+        (vec![ok(&[1, 0])], "the backend's answer is malformed"),
+    ] {
+        let returned = encoding_outcome(&operation, answered, |_, _| {
+            panic!("nothing is written for a failed stretch")
+        });
+        assert_eq!(
+            data(&returned)["message"],
+            format!("Speech encoding failed: {reason}.")
+        );
+    }
 }

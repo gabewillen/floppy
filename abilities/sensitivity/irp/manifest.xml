@@ -9,7 +9,7 @@
     </test>
   </assert>
   <assert id="sensitivity-2" specnum="2" specid="#sensitivity-2">
-    <![CDATA[Every arrival scored (`bot.ability.listening.sensitivity.score` `{stimulus}`) comes back as `bot.ability.listening.sensitivity.output` `{sound, parent, perceived_level_db}`, its sound the stimulus's data and its parent the stimulus; quiet, the level is the sound's `received_level_db`, `null` when nothing was measured.]]>
+    <![CDATA[Every arrival scored (`bot.ability.listening.sensitivity.score` `{stimulus}`) comes back as `bot.ability.listening.sensitivity.output` `{sound, parent, perceived_level_db, producing}`, its sound the stimulus's data, its parent the stimulus, and `producing` whether it arrived while the body was producing (true for every arrival inside the window, whoever made it); quiet, `producing` is false and the level is the sound's `received_level_db`, `null` when nothing was measured.]]>
     <test id="510" conformance="mandatory" manual="false">
       <start uri="510/test510.scxml"/>
     </test>
@@ -18,9 +18,12 @@
     </test>
   </assert>
   <assert id="sensitivity-3" specnum="3" specid="#sensitivity-3">
-    <![CDATA[`bot.ability.speaking.efference` `{mouth, duration}` opens a producing window on that mouth; inside it, an arrival from another source is scored by its `received_level_db`.]]>
+    <![CDATA[`bot.ability.speaking.efference` `{mouth, duration}` with sound still to come (`duration` > 0) opens a producing window on that mouth, or re-arms the open one on the new duration; inside it, an arrival from another source is scored by its `received_level_db`.]]>
     <test id="520" conformance="mandatory" manual="false">
       <start uri="520/test520.scxml"/>
+    </test>
+    <test id="541" conformance="mandatory" manual="false">
+      <start uri="541/test541.scxml"/>
     </test>
   </assert>
   <assert id="sensitivity-4" specnum="4" specid="#sensitivity-4">
@@ -36,6 +39,15 @@
     <![CDATA[The window lasts the command's duration: once it has passed, an arrival from the mouth is scored as quiet.]]>
     <test id="540" conformance="mandatory" manual="false">
       <start uri="540/test540.scxml"/>
+    </test>
+  </assert>
+  <assert id="sensitivity-6" specnum="6" specid="#sensitivity-6">
+    <![CDATA[A silent copy, `bot.ability.speaking.efference` with `duration` 0 (the mouth has nothing left to play: a silent copy, decision D177), closes an open window at once, and in quiet opens none: an arrival from the mouth after it is scored as quiet.]]>
+    <test id="550" conformance="mandatory" manual="false">
+      <start uri="550/test550.scxml"/>
+    </test>
+    <test id="551" conformance="mandatory" manual="false">
+      <start uri="551/test551.scxml"/>
     </test>
   </assert>
 </assertions>

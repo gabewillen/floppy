@@ -2,17 +2,116 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "bot.ability.speaking.input",
   "additionalProperties": false,
-  "description": "A request to speak. text is the entire payload: it is required, must be non-empty, and is synthesized and played immediately, so this request is never silent and never partial. The ability owns speech synthesis and playout, so nothing downstream supplies, completes, or edits the words. Speaking does not end a turn — it can accompany other events that keep running alongside it.",
+  "description": "A request to speak. parts is the entire payload: it is required, its words must not be blank, and it is encoded to speech and played immediately, so this request is never silent and never partial. The ability owns speech encoding and playout, so nothing downstream supplies, completes, or edits the words. Speaking does not end a turn — it can accompany other events that keep running alongside it.",
   "properties": {
-    "text": {
-      "description": "The words to say, verbatim: exactly this string is spoken aloud in the bot's own voice to whoever is present, as soon as this is selected, and cannot be taken back once heard. It is plain spoken language — what a listener would hear, not markup, not a stage direction, not a label for an utterance and not a description of one, because every one of those is read out loud just as literally. Required and non-empty: there is no way to send this and stay silent, so the choice not to speak is made by not selecting speech at all.",
-      "minLength": 1,
-      "title": "Text",
-      "type": "string"
+    "parts": {
+      "description": "The reply, as one or more parts said in order in the bot's own voice to whoever is present, as soon as this is selected; it cannot be taken back once heard. Their words, joined exactly as written, are the reply. Words are plain spoken language — what a listener would hear, not markup, not a stage direction, not a label for an utterance and not a description of one, because every one of those is read out loud just as literally; how a part is said, and any sound or pause, belongs in its expression. Required: there is no way to send this and stay silent, so the choice not to speak is made by not selecting speech at all.",
+      "items": {
+        "additionalProperties": false,
+        "description": "One stretch of your reply and, optionally, how to say it. Split the reply into parts where the way you say it changes, or to put a sound or a pause between words. The words are only what is spoken; a laugh, sigh or other non-verbal sound is expression.sound and a silence is expression.pause, never written into the words, and either may be a part of its own with no words. Every part has words, a sound or a pause.",
+        "properties": {
+          "expression": {
+            "additionalProperties": false,
+            "description": "How to say this part, written before its words; omit it to say the words naturally.",
+            "properties": {
+              "instructions": {
+                "maxLength": 300,
+                "minLength": 1,
+                "type": "string",
+                "description": "Natural-language acting direction for this part."
+              },
+              "emotion": {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string",
+                "description": "A feeling, as free text. A voice with a closed vocabulary of emotions applies it only on an exact match."
+              },
+              "style": {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string",
+                "description": "A named style the voice declares; 'whisper' is the canonical name for whispering."
+              },
+              "intensity": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number",
+                "description": "How strongly to carry the emotion or style, from 0 to 1."
+              },
+              "pace": {
+                "maximum": 2,
+                "minimum": 0.5,
+                "type": "number",
+                "description": "Speaking rate relative to natural: 1 is natural, 2 twice as fast."
+              },
+              "pitch": {
+                "maximum": 12,
+                "minimum": -12,
+                "type": "number",
+                "description": "Pitch in semitones relative to natural: 0 is natural."
+              },
+              "volume": {
+                "maximum": 2,
+                "minimum": 0.25,
+                "type": "number",
+                "description": "Loudness relative to natural, linear: 1 is natural."
+              },
+              "emphasis": {
+                "default": false,
+                "description": "Stress the words of this part.",
+                "type": "boolean"
+              },
+              "pause": {
+                "enum": [
+                  "short",
+                  "long"
+                ],
+                "type": "string",
+                "description": "A silence, short or long, that opens this part, before its sound and words; a part may be only a pause, with no words. This is the only way to pause: a written pause would be read aloud. Every voice can pause."
+              },
+              "sound": {
+                "enum": [
+                  "laugh",
+                  "giggle",
+                  "chuckle",
+                  "sigh",
+                  "gasp",
+                  "breath",
+                  "cough",
+                  "clear_throat"
+                ],
+                "type": "string",
+                "description": "A non-verbal sound (a laugh, sigh, gasp and the like), one per part: made beside this part's words, placed by sound_at, or alone as a part of its own with no words. This is the only way to make one: a written 'sigh' would be read aloud as speech. A voice that cannot make the sound ignores it."
+              },
+              "sound_at": {
+                "default": "before",
+                "description": "Whether the sound comes before or after this part's words; meaningful only with a sound.",
+                "enum": [
+                  "before",
+                  "after"
+                ],
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "words": {
+            "description": "The words of this part; omit them for a part that is only a sound or a pause. The voice speaks every character exactly as written, so this is speech only: no stage directions, actions, emotes, markup or tags, and none of the characters * < > [ ] { } ( ): a cue such as (chuckle) or (pause) would be read aloud. For a sound (a laugh, chuckle or sigh) use expression.sound; for a pause use expression.pause; for how to say the words use expression. Continue the reply exactly, including any space or punctuation that joins this part to the one before it.",
+            "maxLength": 2000,
+            "minLength": 1,
+            "pattern": "^[^*<>\\[\\]{}()]+$",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array"
     }
   },
   "required": [
-    "text"
+    "parts"
   ],
   "type": "object"
 }

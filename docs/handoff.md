@@ -298,7 +298,11 @@ Last updated: 2026-10-22.
   or this branch. Reflection now stores a failed turn's episode (behavior
   null), so a turn whose reflection fails is not lost to the next turn's
   recall. `live_conversation` now asserts a behavior learned by turn 2 and
-  "green" in turn 4's answer (model-dependent).
+  "green" in turn 4's answer (model-dependent). **Amended by D176
+  (2026-10-22):** the conversation hands reasoning only the current
+  exchange, so turn 4 recalls "green" from
+  reflection's episode of turn 1 (`prior_episodes`), not from the
+  messages; `live_conversation` has not been rerun since.
 - **Speaking bound and self-hearing (2026-10-12, D98):** speaking's
   `encoding_timeout_ms` is 30 s (the communication passes 30 s and bounds
   a response by 36 s), since Gemini's unstreamed synthesis of a sentence

@@ -474,7 +474,7 @@ decisions are D76 to D79.
   `tests/fixtures/turn_detector/turn_detector_harness.scx` (assembly,
   ignored turns, failures, heard speech and the end-of-turn silence);
   `tests/tests/communication.rs` runs the conversation's turns
-  (`the_conversation_commits_each_message_into_its_history`,
+  (`the_conversation_commits_each_message_into_its_exchange`,
   `a_turn_its_detector_cannot_close_fails_the_input_and_commits_nothing`).
 
 ## Environment conventions

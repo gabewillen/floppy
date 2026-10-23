@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Test harness of abilities/conversation/conversation.scx (tests/tests/communication.rs,
-  the_conversation_commits_each_message_into_its_history): it invokes the
+  the_conversation_commits_each_message_into_its_exchange): it invokes the
   conversation as its child "conversation", forwards each external
   bot.ability.conversation.input and .append to it, and logs every
   bot.ability.conversation.output it answers, and the product of each

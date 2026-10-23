@@ -17,12 +17,12 @@
               "__reasoning__": 0.33
             }
           },
-          "bot.ability.communication.respond::text": {
+          "bot.ability.communication.respond::parts": {
             "type": "choice",
-            "choice": "hi",
+            "choice": "[{\"words\":\"hi\"}]",
             "confidence": 1.0,
             "probabilities": {
-              "hi": 1.0
+              "[{\"words\":\"hi\"}]": 1.0
             }
           }
         },
