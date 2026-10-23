@@ -469,7 +469,7 @@ fn predicate_document(params: &str) -> String {
     )
 }
 
-/// `predicate` (the reference decision processor): only the chosen event
+/// `predicate` (decision D150): only the chosen event
 /// comes back in `decision.selected`, with its data and its probability in
 /// the selection (D-R-28), and nothing is fired; the service's done data
 /// reports the request's bytes and the backend's usage.
