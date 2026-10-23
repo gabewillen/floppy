@@ -299,10 +299,11 @@ function hasLesson() {
   return selectedLesson() !== null;
 }
 
-// A turn that perceives a lesson's result selects no lesson of its own,
-// so a lesson cannot keep teaching another.
+// A turn the bot's own lesson or routine caused (it perceives a lesson's
+// result or a routine's tick) selects no lesson of its own, so neither a
+// lesson nor a routine can keep teaching the bot (decision D205).
 function perceivesLesson() {
-  return stimulus.event === 'bot.ability.learning.output' && hasLesson();
+  return (stimulus.event === 'bot.ability.learning.output' || stimulus.event === 'bot.behavior.tick') && hasLesson();
 }
 
 // The lesson with the turn it was taught on (decision D149).

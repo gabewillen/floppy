@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- learning-4: a lesson to stop a learned behavior breaks it, and the output says it stopped. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="learning" type="scxml" src="../../../learning.scx">
+    <param name="database" expr="'/memory/floppy.sqlite'"/>
+    <param name="select_timeout_ms" expr="300000"/>
+    <param name="revising_timeout_ms" expr="300000"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <onentry>
+      <send event="bot.ability.learning.lesson" target="#_learning"><content expr='{"turn": 1, "content": "When you hear a knock, say hello.", "media_type": null, "cognition_input": {"stimulus": {"event": "environment.sound", "data": {"label": "knock"}}, "focus": "door", "focus_candidates": ["door"]}, "cognition_output": [{"event": "bot.ability.communication.respond", "data": {"parts": [{"words": "Hello!"}]}, "reason": "a knock", "target": "communication"}, {"event": "bot.ability.learning.input", "data": {"content": "When you hear a knock, say hello."}, "reason": "I was taught", "target": "cognition"}], "participants": [{"id": "gabe", "kind": "person"}]}'/></send>
+    </onentry>
+    <transition event="bot.ability.learning.output" cond="_event.data.learned === true &amp;&amp; _event.data.turn === 1 &amp;&amp; _event.data.behavior.name === 'GreetOnKnock' &amp;&amp; _event.data.behavior.status === 'ACTIVE' &amp;&amp; _event.data.behavior.description === 'Say hello when a knock sound arrives.' &amp;&amp; _event.data.participants[0].id === 'gabe'" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.learning.lesson" target="#_learning"><content expr='{"turn": 2, "content": "Stop greeting a knock.", "media_type": null, "cognition_input": {"stimulus": {"event": "environment.sound", "data": {"label": "knock"}}, "focus": "door", "focus_candidates": ["door"]}, "cognition_output": [{"event": "bot.ability.communication.respond", "data": {"parts": [{"words": "Hello!"}]}, "reason": "a knock", "target": "communication"}, {"event": "bot.ability.learning.input", "data": {"content": "Stop greeting a knock."}, "reason": "I was taught", "target": "cognition"}], "participants": [{"id": "gabe", "kind": "person"}]}'/></send>
+    </onentry>
+    <transition event="bot.ability.learning.output" cond="_event.data.learned === true &amp;&amp; _event.data.turn === 2 &amp;&amp; _event.data.behavior.name === 'GreetOnKnock' &amp;&amp; _event.data.behavior.status === 'BROKEN'" target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

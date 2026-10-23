@@ -45,13 +45,13 @@ RESPOND_PARTS = {"type": "object", "properties": {"parts": {
                  "required": ["parts"], "additionalProperties": False}
 
 
-def turn(n, data=None, choices=(IGNORE,)):
+def turn(n, data=None, choices=(IGNORE,), event="bot.input", source="conversation"):
     # Tagged with their offering sessions' ids: the cognition's own ignore and lesson,
     # and respond offered by the harness (the run's root, "session").
     targets = {IGNORE: "session.cognition", LEARN: "session.cognition", RESPOND: "session"}
     schemas = {IGNORE: offered(IGNORE), LEARN: offered(LEARN), RESPOND: RESPOND_PARTS}
     return js({"turn": n,
-               "stimulus": {"event": "bot.input", "data": data or {"text": "hello"}, "source": "conversation"},
+               "stimulus": {"event": event, "data": data or {"text": "hello"}, "source": source},
                "focus": None, "focus_candidates": [],
                "choices": [{"event": e, "schema": schemas[e], "target": targets[e]} for e in choices]})
 
@@ -121,7 +121,7 @@ S.statement(7, "`bot.ability.cognition.cancel` `{turn}` for the turn in hand can
 S.statement(8, "`bot.ability.cognition.ignore` (its offer) is taken in `idle` and while processing, and only logged: it sends nothing and does not end a turn.")
 S.statement(11, "Until it is told the bot's name (`bot.ability.identity.named`), every return to `idle` sends `bot.ability.identity.ask` `{}` to its parent after its offers; once told, it asks no more.")
 S.statement(10, "With an `intuition_model` (the `<param>`; none by default composes no intuition tier, decision D144), a turn the decision layer leaves unhandled goes to the intuition tier first, offered the deliberative handoff `bot.ability.reasoning.input` as the cognition's own: its selections handle the turn, or, when they hold the handoff, the others are sent first and the turn goes on to reasoning, whose output follows them. An intuition that fails hands the same turn on to reasoning (`cognition.cascaded`).")
-S.statement(12, "A turn whose selections hold `bot.ability.learning.input` (taken in `idle` and while processing, and only logged) sends the lesson to its learning child after the turn's output; the lesson's result `bot.ability.learning.output` comes back to its parent as a `bot.ability.cognition.input` whose stimulus is that result (decision D149), a lesson the learning cannot learn (without a database) included, with `learned` false.")
+S.statement(12, "A turn whose selections hold `bot.ability.learning.input` (taken in `idle` and while processing, and only logged) sends the lesson to its learning child after the turn's output; the lesson's result `bot.ability.learning.output` comes back to its parent as a `bot.ability.cognition.input` whose stimulus is that result (decision D149), a lesson the learning cannot learn (without a database) included, with `learned` false. A turn whose stimulus is a lesson's result or a routine's `bot.behavior.tick` sends no lesson (`cognition.lesson` `bounded`, decision D205).")
 S.statement(9, "The events it takes are checked against `abilities/schemas/` where they are created: a `bot.ability.cognition.input` without a stimulus is refused at its sender (`error.execution` there) and starts no turn.")
 
 ASK = "bot.ability.identity.ask"
@@ -240,3 +240,8 @@ S.case(210, 12, "a turn that selects a lesson outputs it, and the lesson's resul
         expect(INPUT, f"_event.data.stimulus.event === 'bot.ability.learning.output' && _event.data.stimulus.data.learned === false"
                       " && _event.data.stimulus.data.lesson === 'say hi back' && _event.data.stimulus.data.behavior === null")],
        params=[SLOW], backend=[DECIDE_ABSTAIN, REASONED_LEARN], clock="logical", ignore=[OFFERS])
+S.case(211, 12, "a routine's tick turn that selects a lesson outputs it but sends no lesson.",
+       [READY, send(INPUT, turn(1, data={"name": "WaterReminder"}, choices=(IGNORE, LEARN), event="bot.behavior.tick", source="routines")),
+        output(1, f"_event.data.output.length === 1 && _event.data.output[0].event === {js(LEARN)}"), READY],
+       params=[SLOW], backend=[DECIDE_ABSTAIN, REASONED_LEARN], clock="logical", ignore=[OFFERS],
+       logs={"cognition.lesson": ["bounded"]})

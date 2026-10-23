@@ -134,7 +134,7 @@ function revisionFailedMessage(detail) {
 
 // The lesson's log lines name its turn, so a reader ties each to its lesson.
 function learnedLog() {
-  return lessonOf() + behavior.name + ' ' + behavior.source;
+  return lessonOf() + behavior.name + ' ' + behavior.source + (behavior.status === 'BROKEN' ? ' BROKEN' : '');
 }
 
 function failedLog() {
@@ -145,8 +145,29 @@ function lessonOf() {
   return 'lesson of turn ' + lesson.turn + ': ';
 }
 
+// breaking (decision D205)
+
+function breakStatements() {
+  return [{sql: break_behavior, parameters: [typeof intent.reason === 'string' ? intent.reason.trim() : '', intent.name]}];
+}
+
+function hasBroken(_event) {
+  return _event.data.results[0].rowcount === 1;
+}
+
+// The broken behavior as the lesson's result names it: its source is the
+// inventory's (a break builds nothing).
+function brokenBehavior() {
+  var row = behaviors.filter(function (b) { return b.name === intent.name; })[0];
+  return ({name: intent.name, source: row === undefined ? '' : row.source, description: row === undefined ? null : row.description, status: 'BROKEN'});
+}
+
+function breakFailedMessage(detail) {
+  return 'Learning break failed: ' + detail;
+}
+
 // The lesson's result: whether it took and the behavior it became, never
 // why it failed, with the teaching turn's participants.
 function learningOutput(learned) {
-  return ({lesson: lesson.content, turn: lesson.turn, learned: learned, behavior: learned ? {name: behavior.name, description: behavior.description === undefined ? null : behavior.description} : null, participants: lesson.participants});
+  return ({lesson: lesson.content, turn: lesson.turn, learned: learned, behavior: learned ? {name: behavior.name, description: behavior.description === undefined ? null : behavior.description, status: behavior.status === 'BROKEN' ? 'BROKEN' : 'ACTIVE'} : null, participants: lesson.participants});
 }

@@ -166,8 +166,10 @@
   bot.ability.cognition.input {stimulus: {event:
   "bot.ability.learning.output", data: {lesson, turn, learned, behavior},
   source: "learning"}, participants}, a turn the bot tells its teacher
-  in. Bounded: a turn that perceives a lesson's result sends no lesson
-  of its own.
+  in. Bounded: a turn that perceives a lesson's result or a routine's
+  tick sends no lesson of its own (decision D205). Each lesson's result
+  reconciles the routines at once, so a routine learned, changed or
+  broken starts or stops without waiting for the next reflection.
 
   Readiness: every entry into idle sends bot.ability.offers {ability,
   choices} to the parent: the choices <decision:choice events=...> reads,
@@ -637,7 +639,8 @@
           <param name="self" expr="selfFact()"/>
         </send>
         <!-- A lesson the turn selected goes to the learning with the turn
-             (decision D149), unless the turn perceives a lesson's result;
+             (decision D149), unless the turn perceives a lesson's result
+             or a routine's tick (decision D205);
              last: a send that fails ends the rest of this block. -->
         <if cond="perceivesLesson()">
           <log label="cognition.lesson" expr="'bounded'"/>
@@ -770,6 +773,9 @@
         <param name="bounds" expr="bounds"/>
       </invoke>
       <transition event="bot.ability.learning.output" event:schema="../schemas/bot.ability.learning.output.json">
+        <send event="bot.ability.routines.reconcile" target="#_routines">
+          <content expr="({})"/>
+        </send>
         <send event="bot.ability.cognition.input" target="#_parent">
           <param name="stimulus" expr="lessonStimulus(_event)"/>
           <param name="participants" expr="_event.data.participants"/>
