@@ -115,8 +115,8 @@ streamed reasoning reply's progress starts it over),
 `child_operation_ceiling_ms` (a stage in all), `revising_timeout_ms`
 (reflection's revision through the builder without progress) and
 `revising_ceiling_ms` (a revision in all); absent, each is the ability's
-default ([docs/defaults.md](../../docs/defaults.md#timeouts-and-bounds)). The memory ability (`abilities/memory/memory.scx`, the original's
-Memory) keeps the bot's database, `/memory/floppy.sqlite`, through the sql
+default ([docs/defaults.md](../../docs/defaults.md#timeouts-and-bounds)). The memory ability (`abilities/memory/memory.scx`)
+keeps the bot's database, `/memory/floppy.sqlite`, through the sql
 service (`services/sql`, SQLite), in the directory the run grants that
 service: `--dir
 https://github.com/stateforward/floppy/services/sql=HOST::/memory`

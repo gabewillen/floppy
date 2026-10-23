@@ -1,5 +1,5 @@
-//! The defaults floppy ships are stated in one place: docs/defaults.md's
-//! "Defaults" section, and `.env.example` for the variables.
+//! The defaults floppy ships are stated in one place: docs/defaults.md,
+//! and `.env.example` for the variables.
 //!
 //! Checked here, over every `.scx` under `bots/` and `abilities/`:
 //!
@@ -121,7 +121,7 @@ const SPEECH_DOCUMENTS: [&str; 6] = [
 #[test]
 fn every_model_data_is_the_default_model_and_the_name_appears_nowhere_else() {
     let quoted = format!("'{}'", support::DEFAULT_MODEL);
-    let readme = read(Path::new("docs/defaults.md"));
+    let page = read(Path::new("docs/defaults.md"));
     let mut models = 0;
     for path in documents() {
         let text = read(&path);
@@ -134,7 +134,7 @@ fn every_model_data_is_the_default_model_and_the_name_appears_nowhere_else() {
                 .get("model")
                 .unwrap_or_else(|| panic!("{}: a model <data>", path.display()));
             assert!(
-                model == "null" || readme.contains(&format!("`{}`", model.trim_matches('\''))),
+                model == "null" || page.contains(&format!("`{}`", model.trim_matches('\''))),
                 "{}: the speech model {model} is docs/defaults.md's",
                 path.display()
             );
@@ -189,8 +189,8 @@ fn the_env_example_names_exactly_the_variables_the_documents_read() {
 
 #[test]
 fn the_defaults_page_states_every_timeout_and_bound_the_documents_ship() {
-    let readme = read(Path::new("docs/defaults.md"));
-    let section = readme
+    let page = read(Path::new("docs/defaults.md"));
+    let section = page
         .split_once("## Timeouts and bounds")
         .expect("docs/defaults.md has the Timeouts and bounds table")
         .1;
@@ -393,10 +393,10 @@ fn the_runs_stream_setting_alone_decides_whether_a_call_streams() {
             "{document} never asks for a stream itself"
         );
     }
-    let readme = read(Path::new("docs/defaults.md"));
+    let page = read(Path::new("docs/defaults.md"));
     assert!(
-        readme.contains("| `FLOPPY_STREAM` |")
-            && readme.contains("unset (the default), no call is streamed"),
+        page.contains("| `FLOPPY_STREAM` |")
+            && page.contains("unset (the default), no call is streamed"),
         "docs/defaults.md states the default"
     );
 }
