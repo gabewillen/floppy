@@ -244,4 +244,4 @@ S.case(211, 12, "a routine's tick turn that selects a lesson outputs it but send
        [READY, send(INPUT, turn(1, data={"name": "WaterReminder"}, choices=(IGNORE, LEARN), event="bot.behavior.tick", source="routines")),
         output(1, f"_event.data.output.length === 1 && _event.data.output[0].event === {js(LEARN)}"), READY],
        params=[SLOW], backend=[DECIDE_ABSTAIN, REASONED_LEARN], clock="logical", ignore=[OFFERS],
-       logs={"cognition.lesson": ["bounded"]})
+       logs={"cognition.lesson": ["turn 1", "bounded"]})
