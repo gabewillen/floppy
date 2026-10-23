@@ -32,9 +32,9 @@
   frame_diff. The first refusal, in that order, ends Seeing in the final
   state degraded, logged as seeing.degraded with its closed reason, so its
   invoker gets done.invoke.seeing. Otherwise initializing goes on to
-  perceiving. Seeing attaches no children: each stage invokes its child for
-  one view, and invoke lifecycle starts and cancels it (decision D6), so
-  Seeing has no persistent child to wait for.
+  perceiving. There is no attach or detach step: each stage invokes its
+  child for one view, and invoke lifecycle starts and cancels it (decision
+  D6), so Seeing has no persistent child to wait for.
 
   Holding: environment.visual {image, media_type, kind, source,
   participants} is taken from wherever perception is, without interrupting
