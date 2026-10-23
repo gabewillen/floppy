@@ -29,9 +29,9 @@ def message(value):
     return f"_event.data.message === {js(value)} && Object.keys(_event.data).length === 1"
 
 
-S.statement(1, "It diarizes the utterance through the speech service's `diarize` (`POST {base}/audio/diarization`, model `pyannote-diarization` by default); its `bot.ability.hearing.voice.diarization.output` ends it in `applied` with the done data (`done.invoke.voice_diarization`) exactly `{segments}`: the original's OutputData, one clipped PCM segment per answered span, ascending by start, each `{audio: \"<output>-<index>\", media_type: \"audio/pcm\", sample_rate_hz, channels, start_seconds, end_seconds, confidence}` (`confidence` `null` when the answer has none); raw speaker labels never enter.")
+S.statement(1, "It diarizes the utterance through the speech service's `diarize` (`POST {base}/audio/diarization`, model `pyannote-diarization` by default); its `bot.ability.hearing.voice.diarization.output` ends it in `applied` with the done data (`done.invoke.voice_diarization`) exactly `{segments}`: one clipped PCM segment per answered span, ascending by start, each `{audio: \"<output>-<index>\", media_type: \"audio/pcm\", sample_rate_hz, channels, start_seconds, end_seconds, confidence}` (`confidence` `null` when the answer has none); raw speaker labels never enter.")
 S.statement(2, "The utterance is a WAV container (its own format) or raw 16-bit PCM in the `sample_rate_hz` and `channels` `<param>`s; raw PCM with no format is a failure.")
-S.statement(3, "When the service answers `bot.ability.failed` `{message}` (an error status, an answer with no spans, a span outside the utterance, a format it cannot read), the done data is exactly the original's FailureData `{message}`.")
+S.statement(3, "When the service answers `bot.ability.failed` `{message}` (an error status, an answer with no spans, a span outside the utterance, a format it cannot read), the done data is exactly `{message}`.")
 S.statement(4, "When the diarizer cannot run (a missing `output`, or a malformed `model`, rejects its start with `error.execution`), the done data is `{message: \"VoiceDiarization could not run (<error event>)\"}`.")
 
 # 1: segments.
@@ -41,7 +41,7 @@ S.case(100, 1, "spans come back as clipped PCM segments ascending by start, with
        backend=[{"path": DIARIZE, "body": {"segments": [
            {"start": 0.5, "end": 0.9, "speaker": "SPEAKER_01", "confidence": 0.8},
            {"start": 0.1, "end": 0.4, "speaker": "SPEAKER_00"}]}}])
-S.case(101, 1, "the original's start_seconds/end_seconds spans and a probability are read too.",
+S.case(101, 1, "spans with start_seconds/end_seconds and a probability are read too.",
        [expect(DONE, diarized([segment(0, 0, 1, 0.25)]))],
        params=WAV,
        backend=[{"path": DIARIZE, "body": {"segments": [{"start_seconds": 0, "end_seconds": 1, "probability": 0.25}]}}])
