@@ -220,8 +220,8 @@ fn decided_with(body: &Json, chosen: &str, share: f64, other: Option<f64>) -> Op
     Some(json!({"model": "fake", "answers": answers, "usage": {"input_tokens": 1, "output_tokens": 1}}).to_string())
 }
 
-/// Whether `body` is reflection's select call (the original
-/// `SELECT_INSTRUCTIONS` as its system message).
+/// Whether `body` is reflection's select call (its select instructions as
+/// the system message).
 fn is_reflection(body: &Json) -> bool {
     body["messages"].as_array().is_some_and(|messages| {
         messages.iter().any(|message| {
@@ -763,7 +763,7 @@ fn attribute(text: &str) -> String {
         .replace('>', "&gt;")
 }
 
-/// Runs `statements` (the reference `Statement`s) in one transaction of the
+/// Runs `statements` (`{sql, parameters}` statements) in one transaction of the
 /// Memory ability (`abilities/memory/memory.scx`) against `database` (a file in
 /// `grant`'s directory, or a Postgres connection URI); returns its output.
 fn transact(grant: &[String], database: &str, statements: &Json) -> Json {
@@ -801,7 +801,7 @@ fn transact(grant: &[String], database: &str, statements: &Json) -> Json {
     serde_json::from_str(&output.1).expect("the output is JSON")
 }
 
-/// `database` holding `learned` as the original's inventory rows
+/// `database` holding `learned` as behavior inventory rows
 /// (`bot_behavior`, `bot_behavior_trigger`), in a fresh memory directory
 /// for [`DATABASE`]; returns the run's grant. Each row's program is
 /// written as `<name>.scx` into the behaviors directory of `layout` (the
@@ -862,7 +862,7 @@ fn start_with(bot: &Bot, args: &[String]) -> Run {
     run
 }
 
-/// The original's Autonomy over the inventory: the ACTIVE turn behaviors the
+/// Autonomy over the inventory: the ACTIVE turn behaviors the
 /// stimulus triggers run in name order as candidates (the behavior double,
 /// `tests/fixtures/phase4/behavior_double.scx`, is one); a silent one, one
 /// that declines and one that cannot run advance, and the first that
@@ -1004,7 +1004,7 @@ fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
     );
 }
 
-/// The original's Autonomy dispatches a handled behavior's selections before it
+/// Autonomy dispatches a handled behavior's selections before it
 /// counts the use: one that cannot be sent (here one that names no target)
 /// marks the behavior failed, not used, and fails the turn; the decision layer never
 /// runs.
@@ -1154,7 +1154,7 @@ fn reasoning_selects_from_the_turns_choices() {
     // The body gives the cognition a database: reasoning recalls from
     // memory (no seam logs absent).
     assert!(texts(&records, "memory").is_empty(), "{records:?}");
-    // The model request: the original's dispatch tool of the choices, and
+    // The model request: the dispatch tool of the choices, and
     // a prompt that carries the stimulus and what memory recalled (a fresh
     // database holds nothing).
     let requests = reasoning_requests(&mock);
@@ -1176,7 +1176,7 @@ fn reasoning_selects_from_the_turns_choices() {
     let pinned: Vec<String> = branches
         .iter()
         .map(|branch| {
-            // The original's branch: event and target required, data when
+            // Each branch: event and target required, data when
             // its schema requires a field, reason optional.
             let data_required = branch["properties"]["data"]["required"]
                 .as_array()
@@ -1213,7 +1213,7 @@ fn reasoning_selects_from_the_turns_choices() {
         .and_then(|messages| messages.last())
         .and_then(|message| message["content"].as_str())
         .expect("the user message");
-    // The reference's model-facing content (decision D141): the situation
+    // The model-facing content (decision D141): the situation
     // (the environment block), then the stimulus as its own root; nothing
     // recalled yet, and no focus.
     assert!(
@@ -1280,7 +1280,7 @@ fn a_reasoned_response_is_said_through_the_communication() {
     );
 }
 
-/// The user message of each reasoning request (the original's model-facing XML).
+/// The user message of each reasoning request (the turn's model-facing XML).
 fn prompts(mock: &Mock) -> Vec<String> {
     reasoning_requests(mock)
         .iter()
@@ -1310,11 +1310,11 @@ fn tell(run: &mut Run, content: &str) {
     );
 }
 
-/// The original renders a conversation's messages (models) into the
-/// prompt: a turn the conversation hands reasoning carries its exchange
-/// (decision D99), which the next inbound message opens anew (D176), so the
-/// next turn's prompt holds the new message, and what was said before
-/// reaches it as the one episode reflection stored.
+/// A conversation's messages render into the prompt: a turn the
+/// conversation hands reasoning carries its exchange (decision D99), which
+/// the next inbound message opens anew (D176), so the next turn's prompt
+/// holds the new message, and what was said before reaches it as the one
+/// episode reflection stored.
 #[test]
 fn a_conversation_turn_carries_its_exchange_to_reasoning() {
     let mock = Mock::start();
@@ -1352,7 +1352,7 @@ fn a_conversation_turn_carries_its_exchange_to_reasoning() {
     );
 }
 
-/// The original's Reasoning recall: a reasoned turn's episode, which
+/// Reasoning's recall: a reasoned turn's episode, which
 /// reflection stores (decision D97), is the one the next turn's prompt
 /// carries: each turn records one episode.
 #[test]
@@ -1384,8 +1384,7 @@ fn a_prompt_over_its_context_has_its_recalled_memory_trimmed() {
     assert_eq!(texts(&second, "cognition.fit"), ["cut"]);
     let prompts = prompts(&mock);
     assert_eq!(prompts.len(), 2, "{prompts:?}");
-    // The trimmed episode is counted as omitted (the original's
-    // recalled.omitted).
+    // The trimmed episode is counted as omitted.
     assert!(
         prompts[1].contains("<prior_episodes count=\"0\" omitted=\"1\" />"),
         "{}",
@@ -1418,8 +1417,8 @@ fn reasoned_turns_recalled(database: &str, test: Option<&str>) {
     let mut run = start(&bot);
     say(&mut run, "remember this");
     run.until(WAIT, turn_ended);
-    // Reflection stores the turn's episode (the original Reflection
-    // `_store_activity`; reasoning retains none, decision D97); `say` waits
+    // Reflection stores the turn's episode (reasoning retains none,
+    // decision D97); `say` waits
     // for it, so the next turn's recall is fixed.
     say(&mut run, "and this");
     run.until(WAIT, turn_ended);
@@ -1464,7 +1463,7 @@ fn an_abstention_escalates_to_reasoning() {
 
 /// Reasoning's system channel is the bot's self block (decision D141):
 /// the cognition asks the identity for the bot's name until it is told,
-/// and a bot that has taken none says so (the reference's `SelfData`).
+/// and a bot that has taken none says so (the self block).
 #[test]
 fn reasoning_is_told_the_bots_self() {
     let mock = Mock::start();
@@ -1570,7 +1569,7 @@ fn intuition_answers_in_words_without_reasoning() {
 
 /// Intuition selecting the handoff hands the turn on to reasoning: what it
 /// said first is sent, rides the turn's acted into reasoning's prompt, and
-/// leads the turn's output (the reference's deliberation, D-R-52).
+/// leads the turn's output.
 #[test]
 fn intuition_hands_the_turn_to_reasoning_after_what_it_said() {
     let mock = Mock::start();
@@ -1614,7 +1613,7 @@ fn intuition_hands_the_turn_to_reasoning_after_what_it_said() {
 }
 
 /// A failing intuition hands the same turn on to reasoning, as a failing
-/// decision layer does (the reference `_cascade_intuition_failure`, D-R-36).
+/// decision layer does.
 #[test]
 fn a_failing_intuition_cascades_to_reasoning() {
     let mock = Mock::start();
@@ -1691,7 +1690,7 @@ fn after_the_warmup_the_threshold_follows_the_tuner() {
     let mut run = start(&bot);
     say(&mut run, "one");
     let first = run.until(WAIT, turn_ended);
-    // The original observes before it compares: delta = 80 - 95; mean = 95
+    // Intuition observes before it compares: delta = 80 - 95; mean = 95
     // + 0.08 * delta = 93.8; variance = max(100, 0.92 * 100 + 0.08 *
     // delta^2) = 110; the threshold is then max(35 / 2, mean -
     // sqrt(variance)), about 83.3, so a confidence of 80, well over the
@@ -1729,11 +1728,11 @@ fn offered_schema(event: &str) -> Json {
     schema
 }
 
-/// The original's `low_confidence` keeps the environment actions: the decision layer gets
+/// A low-confidence turn keeps the environment actions: the decision layer gets
 /// the chosen event with its confidence (respond 0.34 with the stimulus's
 /// parts), observes it, 34, and escalates under the floor 35, sending
-/// respond before reasoning runs. Reasoning's prompt is the original's
-/// model-facing content of its `InputData`.
+/// respond before reasoning runs. Reasoning's prompt is the turn's
+/// model-facing content.
 /// Runs one `hi` turn, offering ignore and respond (its stimulus carries
 /// respond's `parts`, the evidence the decision layer grounds respond in),
 /// through the cognition harness of `bot` (which offers respond itself) and
@@ -1797,7 +1796,7 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
     );
     // The escalating decision layer sent its environment action (respond's
     // grounded "hi") before reasoning ran; the output is that acted, then
-    // reasoning's (the reference ActedData).
+    // reasoning's.
     assert_eq!(
         texts(&records, "harness.sent"),
         strings(&[r#"{"parts":[{"words":"hi"}]}"#])
@@ -1809,8 +1808,8 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
             {"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "session.cognition"},
         ]})
     );
-    // The TypeSafe state is the stimulus's model-facing text (the reference
-    // D-R-50), and respond's parts are grounded in the stimulus's value.
+    // The TypeSafe state is the stimulus's model-facing text, and respond's
+    // parts are grounded in the stimulus's value.
     let decisions = mock.received("/systemone");
     assert_eq!(decisions.len(), 1);
     assert_eq!(
@@ -1829,7 +1828,7 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
         .and_then(|message| message["content"].as_str())
         .expect("a user message");
     // Reasoning is told what the decision layer already did, as a fact of
-    // the turn's situation (the reference's ActedData), before the stimulus.
+    // the turn's situation (`<cognition:acted>`), before the stimulus.
     assert_eq!(
         user,
         "<cognition:acted>\n  <percepts count=\"1\">\n    <item>0</item>\n  </percepts>\n  <acts count=\"1\">\n    <cognition:event target=\"session\" event=\"bot.ability.communication.respond\">\n      <data>\n        <entry key=\"parts\">\n          <value count=\"1\">\n            <item>\n              <entry key=\"words\" value=\"hi\" />\n            </item>\n          </value>\n        </entry>\n      </data>\n    </cognition:event>\n  </acts>\n</cognition:acted>\n<dict stimulus:event=\"bot.input\" stimulus:source=\"conversation\">\n  <content>\n    <entry key=\"parts\">\n      <value count=\"1\">\n        <item>\n          <entry key=\"words\" value=\"hi\" />\n        </item>\n      </value>\n    </entry>\n  </content>\n</dict>"
@@ -1841,11 +1840,11 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
     );
 }
 
-/// Each stage sends its own selections, as the original's do: when
-/// reasoning selects the very action the escalated decision layer already sent
-/// (respond with `hi`, the decision layer's environment action), it is sent again,
-/// after it, as the original's reasoning dispatches it again; the output
-/// is the decision layer's acted, then reasoning's.
+/// Each stage sends its own selections: when reasoning selects the very
+/// action the escalated decision layer already sent (respond with `hi`, the
+/// decision layer's environment action), it is sent again, after it, as
+/// reasoning's own selection; the output is the decision layer's acted,
+/// then reasoning's.
 #[test]
 fn reasoning_sends_its_selections_after_the_environment_actions() {
     let mock = Mock::start();
@@ -1948,8 +1947,8 @@ fn a_selection_outside_the_choices_never_becomes_output() {
     );
 }
 
-/// A failing decision layer hands the same turn on to reasoning (the
-/// reference `_cascade_decision_failure`, D-R-36): nothing is handed back.
+/// A failing decision layer hands the same turn on to reasoning: nothing
+/// is handed back.
 #[test]
 fn a_decision_layer_failure_cascades_to_reasoning() {
     let mock = Mock::start();
@@ -2223,9 +2222,8 @@ fn a_reasoning_reply_that_streams_past_the_ceiling_fails_its_turn() {
 }
 
 /// `stage` never answers; `hop_ms` is long enough for the stages before
-/// it to answer. The step fails only its turn (the reference
-/// `_fail_timed_out_step`): nothing reboots, and the failure is handed back
-/// to the body as the stimulus of a new turn.
+/// it to answer. The step fails only its turn: nothing reboots, and the
+/// failure is handed back to the body as the stimulus of a new turn.
 fn fails_its_turn_on_a_silent_stage(
     decision: Decision,
     generation: Generation,
@@ -2275,7 +2273,7 @@ fn fails_its_turn_on_a_silent_stage(
 
 /// A decision layer that outlasts the reflex tier's step fails its turn;
 /// the handed-back failure of reflex skips the decision layer, so reasoning
-/// answers the next turn (the reference `_takes_decision`).
+/// answers the next turn.
 #[test]
 fn a_silent_decision_layer_fails_only_its_turn() {
     let test = "a_silent_decision_layer_fails_only_its_turn";
@@ -2292,10 +2290,9 @@ fn a_silent_decision_layer_fails_only_its_turn() {
     close(run, &mock, test);
 }
 
-/// A tier's own step bound (the bot's `bounds`, the reference's
-/// `_tier_timeouts`, decision D140): the reflex tier's, shorter than the
-/// decision layer's own `decision_timeout_ms`, fails the turn before the
-/// decision can cascade, as the reference's step timeout does.
+/// A tier's own step bound (the bot's `bounds`, decision D140): the reflex
+/// tier's, shorter than the decision layer's own `decision_timeout_ms`,
+/// fails the turn before the decision can cascade.
 #[test]
 fn the_reflex_tiers_bound_fails_a_silent_decision_layers_turn() {
     let mock = Mock::start();
@@ -2524,7 +2521,7 @@ fn autonomy_harness(database: &str) -> PathBuf {
     harness
 }
 
-/// The original's `SpeechData` (its interpretation example, decoded) heard from
+/// A decoded speech product (`what is the weather like?`) heard from
 /// `source_ids`.
 fn speech(source_ids: &Json) -> Json {
     json!({
@@ -2554,8 +2551,8 @@ fn autonomy_turn(run: &mut Run, turn: u64, event: &str, data: &Json) -> Json {
     json_text(&records, "harness.output")
 }
 
-/// The selection the original's `SpeechHeard` makes: one
-/// `bot.ability.communication.input` carrying the speech as `TurnData`.
+/// The selection the speech-heard seed makes: one
+/// `bot.ability.communication.input` carrying the speech as its turn.
 fn admitted(turn: u64) -> Json {
     json!({
         "turn": turn,
@@ -2590,7 +2587,7 @@ fn admits(event: &str, data: &Json) -> bool {
     schema.admits(&value)
 }
 
-/// The original's `SpeechHeard` seed without memory (seed-only autonomy): speech
+/// The speech-heard seed without memory (seed-only autonomy): speech
 /// with a source becomes a `bot.ability.communication.input` selection
 /// whose data the communication's schema admits; speech with no source is
 /// unhandled; a stimulus no seed triggers runs nothing.
@@ -2630,7 +2627,7 @@ fn the_speech_heard_seed_admits_identified_speech_as_communication_input() {
     );
 }
 
-/// The reference `_prepare_match`: the seeds run before the learned inventory. A
+/// The seeds run before the learned inventory. A
 /// learned behavior the speech triggers runs only when the seed does not
 /// handle the turn, and only its use is counted.
 #[test]
@@ -2741,8 +2738,9 @@ fn reasonings_prompt_carries_the_environment_block() {
     let prompts = prompts(&mock);
     assert_eq!(prompts.len(), 1, "{prompts:?}");
     let prompt = &prompts[0];
-    // The original's nesting: <environment id><self state><owned_devices>
-    // <device ref id state> with the device's attributes.
+    // The block's nesting (decision D106): <environment id><self
+    // state><owned_devices><device ref id state> with the device's
+    // attributes.
     let start = prompt.find("<environment ").expect("the environment block");
     let block = &prompt[start..];
     let block = &block[..block.find("</environment>").expect("its end") + "</environment>".len()];
