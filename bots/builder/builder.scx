@@ -262,6 +262,8 @@
       <assign location="min_every_ms" expr="requestBound(_event.data.min_every_ms)"/>
       <assign location="turn_after_bound_ms" expr="requestBound(_event.data.turn_after_bound_ms)"/>
       <assign location="live_turn" expr="requestApply(_event)"/>
+      <!-- The request as the build reads it, once (decision D211). -->
+      <log label="builder.request" expr="requestLog()"/>
     </transition>
     <transition event="builder.request" target="failed">
       <assign location="failure_reason" expr="'invalid-request'"/>
@@ -466,7 +468,10 @@
         <param name="name" expr="draftFile('.js')"/>
         <param name="text" expr="draft.script"/>
       </invoke>
-      <transition event="done.invoke.write_script" target="validate"/>
+      <transition event="done.invoke.write_script" target="validate">
+        <!-- Each attempt's draft, by path and digest (decision D211). -->
+        <log label="builder.draft" expr="draftLog()"/>
+      </transition>
     </state>
   </state>
 

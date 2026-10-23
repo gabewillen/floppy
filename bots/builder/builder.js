@@ -230,6 +230,31 @@ function fileName() {
   return String(name !== null ? name : plan.name).replace(/[^A-Za-z0-9_-]+/g, '_');
 }
 
+// The request as the build reads it (decision D211): the name, the
+// spec, the constraints, the context's fields, the bounds, and the live
+// turn's turn, targets, choice events and handled.
+function requestLog() {
+  return JSON.stringify({name: name, spec: spec, constraints: constraints, context: Object.keys(context || {}), min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms,
+    apply: live_turn === null ? null : {turn: live_turn.turn, targets: live_turn.targets, choices: (live_turn.choices || []).map(function (c) { return c.event; }), handled: live_turn.handled !== false}});
+}
+
+// One attempt's draft (decision D211): the attempt, its path, and each
+// document's length and FNV-1a digest.
+function draftLog() {
+  return 'attempt ' + attempt + ' ' + draftPath() + ' scxml ' + digestOf(scxml_text) + ' schemas ' + digestOf(schemasText()) + ' script ' + digestOf(draft.script);
+}
+
+// A text's length and 32-bit FNV-1a digest of its UTF-16 code units.
+function digestOf(text) {
+  text = typeof text === 'string' ? text : '';
+  var h = 0x811c9dc5;
+  for (var i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return text.length + ':' + ('0000000' + h.toString(16)).slice(-8);
+}
+
 function draftFile(extension) {
   return fileName() + extension;
 }

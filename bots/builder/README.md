@@ -42,7 +42,13 @@ record labelled with the stage (`design`, `author`, `validate`,
 `retry_gate` record of each failure and the `failed` record name its first
 diagnostic's kind, code, and message, which carries the cause (for a
 generation, the generate service's failure code, a timeout, or which
-error event ended it). `intake` has
+error event ended it). Two records carry the build's evidence (decision
+D211): `builder.request`, once, the request as the build reads it (a JSON
+object of the name, spec, constraints, the context's field names, the
+lifetime bounds, and the live turn's turn, targets, choice events and
+`handled`), and `builder.draft`, once per written draft, `attempt N
+<path> scxml L:H schemas L:H script L:H`, each document's length and
+32-bit FNV-1a digest (hex). `intake` has
 no timeout: the invoker owns the builder's lifetime (cancel the invoke to
 stop it).
 
