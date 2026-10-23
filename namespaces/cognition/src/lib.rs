@@ -90,11 +90,14 @@
 //! `systemlocation` (optional) receives the system channel: the `instructions`
 //! (optional, a string; `null` is none), trimmed, then a blank line and the
 //! self block of `self` (optional; the cognition's `self` datum `{name?,
-//! traits?, description?}`): `<persona>` holding `<name taken_by="you">` for a
-//! `name` string or `<no_name_yet/>` for `null` (nothing without one), then,
-//! with traits, `<traits given_by="owner">` of `<trait>`s and `<description
-//! written_by="you">` (empty without one), every value escaped; `null` when
-//! both are empty.
+//! traits?, description?, behaviors?}`): `<persona>` holding `<name
+//! taken_by="you">` for a `name` string or `<no_name_yet/>` for `null`
+//! (nothing without one), then, with traits, `<traits given_by="owner">` of
+//! `<trait>`s and `<description written_by="you">` (empty without one), then,
+//! with behaviors (each `{name, lifetime, description?}`, the bot's active
+//! learned behaviors, decision D154), `<behaviors learned_by="you">` of
+//! `<behavior name lifetime>` holding its description, every value escaped;
+//! `null` when both are empty.
 //!
 //! A field renders so: `null` is skipped, a scalar is an attribute (a number as
 //! its JSON text), an object is an element of `<entry key>` elements each
@@ -892,11 +895,13 @@ pub fn system(instructions: &str, known: &Json) -> String {
 }
 
 /// The self block of the cognition's `self` datum (`{name?, traits?,
-/// description?}`, what identity and persona told it): `<persona>` holding the
-/// name (`<name taken_by="you">` for a string, `<no_name_yet/>` for `null`,
-/// nothing when absent) and, with traits, the owner's `<traits
-/// given_by="owner">`, then the self-written `<description written_by="you">`
-/// (empty without one); empty when `known` is not an object.
+/// description?, behaviors?}`, what identity and persona told it, and the
+/// active behaviors it has learned): `<persona>` holding the name (`<name
+/// taken_by="you">` for a string, `<no_name_yet/>` for `null`, nothing when
+/// absent) and, with traits, the owner's `<traits given_by="owner">`, then the
+/// self-written `<description written_by="you">` (empty without one), then,
+/// with behaviors, `<behaviors learned_by="you">` (decision D154); empty when
+/// `known` is not an object.
 fn self_block(known: &Json) -> String {
     let Some(known) = known.as_object() else {
         return String::new();
@@ -934,6 +939,35 @@ fn self_block(known: &Json) -> String {
             }
             None => block.push_str("<description written_by=\"you\"/>"),
         }
+    }
+    let behaviors: Vec<(&str, &str, &str)> = known
+        .get("behaviors")
+        .and_then(Json::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|behavior| {
+            Some((
+                behavior.get("name")?.as_str()?,
+                behavior.get("lifetime")?.as_str()?,
+                behavior
+                    .get("description")
+                    .and_then(Json::as_str)
+                    .unwrap_or_default(),
+            ))
+        })
+        .collect();
+    if !behaviors.is_empty() {
+        block.push_str("<behaviors learned_by=\"you\">");
+        for (name, lifetime, description) in behaviors {
+            block.push_str("<behavior name=\"");
+            block.push_str(&html_escape(name));
+            block.push_str("\" lifetime=\"");
+            block.push_str(&html_escape(lifetime));
+            block.push_str("\">");
+            block.push_str(&xml_escape(description));
+            block.push_str("</behavior>");
+        }
+        block.push_str("</behaviors>");
     }
     block.push_str("</persona>");
     block

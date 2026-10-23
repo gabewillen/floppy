@@ -36,7 +36,10 @@
   Prompt (built by <cognition:model_facing_content>): the system message
   is the system channel, its instructions (none: reasoning has no static
   policy, instructions "") then the self block of the
-  bot's self (the <param> self, what the cognition was told of itself),
+  bot's self (the <param> self, what the cognition was told of itself,
+  with the bot's active learned behaviors that recalling read, at most 32
+  {name, lifetime, description} by name, so the bot knows what it has
+  learned to do and which routines are running, decision D154),
   and is left out when both are empty; the user message is laid out most
   stable first: the recent turns heard and said (the <param> recent, the
   short-term register's, as <memory:turn> lines, uncounted but
@@ -204,6 +207,10 @@
     <data id="context_ref" expr="null"/>
     <data id="prior_episodes" expr="[]"/>
     <data id="standing_directives" expr="[]"/>
+    <!-- The bot's active learned behaviors, at most 32 by name, which the
+         self block names so the bot knows what it does (decision D154). -->
+    <data id="behaviors" expr="[]"/>
+    <data id="behavior_select" expr="'SELECT name, lifetime, description FROM bot_behavior WHERE status = \'ACTIVE\' ORDER BY name LIMIT 32'"/>
     <data id="statements" expr="[]"/>
     <data id="episode_select" expr="'SELECT content FROM (SELECT content, created_at, memory_id FROM bot_memory WHERE query_tags = ?1 AND (CAST(?2 AS TEXT) IS NULL OR context_ref IS NULL OR context_ref = ?2) AND content_format = \'application/json\' ORDER BY created_at DESC, memory_id DESC LIMIT 50) AS recent ORDER BY created_at, memory_id'"/>
   </datamodel>
@@ -235,6 +242,7 @@
       <onentry>
         <assign location="statements" expr="episodeSelectStatements()"/>
         <assign location="statements" expr="directiveSelectStatements()"/>
+        <assign location="statements" expr="behaviorSelectStatements()"/>
       </onentry>
       <invoke id="recall" type="scxml" src="../memory/memory.scx">
         <param name="database" expr="database"/>
@@ -243,6 +251,7 @@
       <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json">
         <memory:contents location="prior_episodes" result="_event.data.results[0]"/>
         <memory:contents location="standing_directives" result="_event.data.results[1]"/>
+        <assign location="behaviors" expr="recalledBehaviors(_event)"/>
         <send event="bot.ability.reasoning.recalled" target="#_internal">
           <param name="turn" expr="turn"/>
           <param name="host_input" expr="hostInput()"/>
@@ -280,7 +289,7 @@
       <assign location="budget" expr="fitBudget()"/>
       <log label="reasoning" expr="choices"/>
       <cognition:model_facing_content location="prompt" failurelocation="prompt_failure"
-                                      systemlocation="system" stimulus="stimulus" self="self" recent="recent"
+                                      systemlocation="system" stimulus="stimulus" self="knownSelf()" recent="recent"
                                       environment="environment" acted="acted" prior_episodes="prior_episodes"
                                       standing_directives="standing_directives" feedback="feedback"
                                       instructions="instructions" schema="schema" budget="budget"
