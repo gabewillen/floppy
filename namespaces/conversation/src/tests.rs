@@ -327,7 +327,7 @@ fn a_messages_participants_are_kept_and_malformed_ones_are_execution_errors() {
 /// `relationship_context_ref` writes each input's stored key byte for byte:
 /// these texts are the `context_ref`s memories are kept under.
 #[test]
-fn the_relationship_context_reference_is_the_original() {
+fn the_relationship_context_reference_is_the_stored_key_byte_for_byte() {
     for (source_ids, target_ids, expected) in [
         (
             json!(["zed", "alice", [0.5, 1]]),

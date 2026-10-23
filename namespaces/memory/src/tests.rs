@@ -360,7 +360,7 @@ fn projected(data: &Data) -> Result<Json, &'static str> {
 /// Each case of `testdata/cut_at_word.json` is cut to its text, with its
 /// `cut`, within the bound.
 #[test]
-fn cut_at_word_cuts_as_the_original_cuts() {
+fn cut_at_word_cuts_each_fixture_case_to_its_text_within_the_bound() {
     let cases: Json = serde_json::from_str(include_str!("testdata/cut_at_word.json"))
         .expect("the cases are JSON");
     for case in cases.as_array().expect("an array of cases") {
@@ -430,7 +430,7 @@ fn malformed_cut_at_word_raises_error_execution_and_assigns_nothing() {
 /// Each case of `testdata/stm_projection.json` (its data kept as JSON text
 /// so an object's fields keep their order) is projected to its projection.
 #[test]
-fn stm_projection_projects_as_the_original_projects() {
+fn stm_projection_projects_each_fixture_case_to_its_projection() {
     let cases: Json = serde_json::from_str(include_str!("testdata/stm_projection.json"))
         .expect("the cases are JSON");
     for case in cases.as_array().expect("an array of cases") {

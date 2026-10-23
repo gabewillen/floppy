@@ -111,7 +111,7 @@ fn run_on(directory: &Path, document: &str, clock: &str) -> Finished {
 }
 
 #[test]
-fn a_fresh_database_is_migrated_to_the_original_head_schema() {
+fn a_fresh_database_is_migrated_to_the_head_schema() {
     let directory = unique_scratch("memory");
     let finished = run(
         &directory,
@@ -310,7 +310,7 @@ fn an_operation_over_its_timeout_fails_as_timeout() {
 
 #[test]
 #[ignore = "needs a PGlite server: FLOPPY_PGLITE_SERVER"]
-fn postgres_a_fresh_database_is_migrated_to_the_original_head_schema() {
+fn postgres_a_fresh_database_is_migrated_to_the_head_schema() {
     let server = Pglite::start().expect("FLOPPY_PGLITE_SERVER is set");
     let database = server.database();
     let directory = unique_scratch("memory");

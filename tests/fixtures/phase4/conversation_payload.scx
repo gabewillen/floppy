@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Test harness of <memory:to_json> (tests/tests/communication.rs,
-  the_remembered_input_is_the_original_memory_json): it logs the memory
+  the_remembered_input_is_one_memory_json_text): it logs the memory
   JSON of each external payload event's data as the conversation's input
   (payload), as the conversation remembers it.
 -->

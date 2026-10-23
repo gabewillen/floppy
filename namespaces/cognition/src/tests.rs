@@ -394,7 +394,7 @@ fn text(value: &Json) -> Data {
 }
 
 #[test]
-fn the_projection_renders_what_the_reference_renders() {
+fn each_fixture_input_projects_to_its_expected_system_and_content() {
     let inputs: Map<String, Json> = serde_json::from_str(INPUTS).expect("the inputs parse");
     let expected: Map<String, Json> = serde_json::from_str(EXPECTED).expect("the outputs parse");
     assert_eq!(inputs.len(), expected.len());
@@ -425,7 +425,7 @@ fn failed(input: &Json) -> String {
 }
 
 #[test]
-fn a_projection_over_a_budget_fails_with_the_originals_message() {
+fn a_projection_over_a_budget_fails_with_the_exceeded_budgets_message() {
     let items: Vec<Json> = (0..4097).map(Json::from).collect();
     assert_eq!(
         failed(&stimulus_with(&json!({"items": items}))),

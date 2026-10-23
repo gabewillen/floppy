@@ -309,7 +309,8 @@ fn all_schemas() -> BTreeMap<String, Json> {
     all
 }
 
-fn reference_names() -> BTreeSet<String> {
+/// The event names `abilities/schemas/floppy-event-names.json` lists.
+fn listed_event_names() -> BTreeSet<String> {
     let names: Vec<String> = serde_json::from_value(read_json(&ability_schemas().join(NAMES_FILE)))
         .expect("the name list is an array of strings");
     names.into_iter().collect()
@@ -389,8 +390,8 @@ fn every_schema_is_2020_12_compiles_and_is_titled_by_its_file_name() {
     }
 }
 
-/// Whether `node` is a schema of the original's `Participant`: an object
-/// schema whose properties are its `ref` and `role`.
+/// Whether `node` is a participant schema: an object schema whose
+/// properties include `ref` and `role`.
 fn is_participant(node: &Json) -> bool {
     node.get("properties")
         .and_then(Json::as_object)
@@ -398,11 +399,11 @@ fn is_participant(node: &Json) -> bool {
 }
 
 #[test]
-fn every_participant_is_the_originals_one_participant() {
+fn every_schema_inlines_the_same_one_participant() {
     // scxml.rs bundles no schema from another file (a `$ref` that is not a
     // fragment is refused, `ReferenceReason::External`), so each schema
-    // that carries participants inlines the original's Participant, and
-    // every one is the same: its ref, role, own and resembles.
+    // that carries participants inlines the Participant schema, and every
+    // one is the same: its ref, role, own and resembles.
     let mut participants: Vec<(String, Json)> = Vec::new();
     for (event, schema) in all_schemas() {
         walk(&schema, &mut |node| {
@@ -530,8 +531,8 @@ fn every_reference_resolves_to_its_events_one_schema_file() {
 }
 
 #[test]
-fn every_event_name_is_the_original_or_a_marked_floppy_name() {
-    let reference = reference_names();
+fn every_event_name_is_a_listed_name_or_a_marked_floppy_name() {
+    let listed = listed_event_names();
     let schemas = all_schemas();
     let floppy = floppy_names(&schemas);
     assert_eq!(
@@ -544,8 +545,8 @@ fn every_event_name_is_the_original_or_a_marked_floppy_name() {
     );
     for event in schemas.keys() {
         assert!(
-            reference.contains(event) != floppy.contains(event),
-            "{event} is the original's, or floppy's and marked, never both"
+            listed.contains(event) != floppy.contains(event),
+            "{event} is on the event name list, or floppy's and marked, never both"
         );
     }
 }
@@ -1037,7 +1038,7 @@ fn contract_events() -> BTreeSet<String> {
 }
 
 fn known_names() -> BTreeSet<String> {
-    let mut known = reference_names();
+    let mut known = listed_event_names();
     known.extend(floppy_names(&all_schemas()));
     known
 }

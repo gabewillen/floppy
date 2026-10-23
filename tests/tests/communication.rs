@@ -890,7 +890,7 @@ fn the_conversation_commits_each_message_into_its_exchange() {
 /// (the memory namespace's statement memory-2): sorted keys, lists and
 /// mappings tagged, identities sorted.
 #[test]
-fn the_remembered_input_is_the_original_memory_json() {
+fn the_remembered_input_is_one_memory_json_text() {
     let dir = unique_scratch("conversation-payload");
     let harness = dir.join("payload.scx");
     std::fs::copy(
