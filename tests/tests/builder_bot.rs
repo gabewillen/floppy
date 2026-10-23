@@ -599,7 +599,7 @@ fn routine_draft(delay: &str, output: &str) -> String {
 }
 
 /// A persistent routine that does its own I/O on each schedule (decision
-/// D138): a BasicHTTP POST of `hourly.report` to a hook, whose refusal (no
+/// D138): a `BasicHTTP` POST of `hourly.report` to a hook, whose refusal (no
 /// origin admitted in the simulation) comes back as `error.communication`,
 /// and then its tick.
 fn http_routine_draft() -> String {
@@ -838,18 +838,11 @@ fn diagnostics_route_draft(path: &str, authors: usize) -> String {
     }
 }
 
-/// The mock's answer to one request on `path` requiring the function of
-/// `schema`, after `authors` draft and `plans` plan requests on that path.
-fn mock_reply(
-    path: &str,
-    schema: Option<&str>,
-    authors: usize,
-    plans: usize,
-    body: &[u8],
-) -> Option<String> {
-    match (path, schema) {
-        (
-            "/repair/v1/chat/completions"
+/// The routes whose every plan request is answered with [`PLAN`].
+fn answers_plan(path: &str) -> bool {
+    matches!(
+        path,
+        "/repair/v1/chat/completions"
             | "/truncated/v1/chat/completions"
             | "/broken/v1/chat/completions"
             | "/service/v1/chat/completions"
@@ -868,9 +861,21 @@ fn mock_reply(
             | "/changed/v1/chat/completions"
             | "/unloaded/v1/chat/completions"
             | "/throwing/v1/chat/completions"
-            | "/nested/v1/chat/completions",
-            Some("topology_plan"),
-        ) => Some(completion(PLAN)),
+            | "/nested/v1/chat/completions"
+    )
+}
+
+/// The mock's answer to one request on `path` requiring the function of
+/// `schema`, after `authors` draft and `plans` plan requests on that path.
+fn mock_reply(
+    path: &str,
+    schema: Option<&str>,
+    authors: usize,
+    plans: usize,
+    body: &[u8],
+) -> Option<String> {
+    match (path, schema) {
+        (_, Some("topology_plan")) if answers_plan(path) => Some(completion(PLAN)),
         ("/flaky/v1/chat/completions", Some("topology_plan")) => {
             (plans != 2).then(|| completion(PLAN))
         }
@@ -881,9 +886,16 @@ fn mock_reply(
         ("/slow/v1/chat/completions", Some("topology_plan")) => {
             Some(completion(if plans == 1 { LATE_PLAN } else { PLAN }))
         }
-        ("/slow/v1/chat/completions" | "/afterbound/v1/chat/completions", Some("scxml_draft")) => {
-            Some(completion(&draft(&traffic_light(&green_separate(), "red"))))
+        // Two replies a reasoning model cut off at its token bound, then a draft.
+        ("/truncated/v1/chat/completions", Some("scxml_draft")) if authors <= 2 => {
+            Some(truncated_completion())
         }
+        (
+            "/slow/v1/chat/completions"
+            | "/afterbound/v1/chat/completions"
+            | "/truncated/v1/chat/completions",
+            Some("scxml_draft"),
+        ) => Some(completion(&draft(&traffic_light(&green_separate(), "red")))),
         ("/service/v1/chat/completions", Some("scxml_draft")) => Some(completion(&service_draft())),
         // The draft's own generation: text, without a schema.
         ("/service/v1/chat/completions", None) => Some(completion("hello")),
@@ -931,13 +943,6 @@ fn mock_reply(
         }
         ("/nested/v1/chat/completions", Some("scxml_draft")) => {
             Some(completion(&nested_final_draft(authors > 1)))
-        }
-        // Two replies a reasoning model cut off at its token bound, then a draft.
-        ("/truncated/v1/chat/completions", Some("scxml_draft")) if authors <= 2 => {
-            Some(truncated_completion())
-        }
-        ("/truncated/v1/chat/completions", Some("scxml_draft")) => {
-            Some(completion(&draft(&traffic_light(&green_separate(), "red"))))
         }
         ("/repair/v1/chat/completions", Some("scxml_draft")) => Some(completion(&match authors {
             1 => invalid_draft(),
@@ -1841,7 +1846,7 @@ fn a_routine_under_the_minimum_interval_is_repaired_and_its_first_tick_is_forced
 }
 
 /// A routine may do its own I/O (decision D138): one that POSTs through
-/// the BasicHTTP Event I/O Processor before each tick is built, its forced
+/// the `BasicHTTP` Event I/O Processor before each tick is built, its forced
 /// first tick observed although the simulation admits no origin.
 #[test]
 fn a_routine_that_does_its_own_io_is_built() {
