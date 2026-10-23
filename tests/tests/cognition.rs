@@ -60,7 +60,7 @@ const STALLED_REASONING_BOUNDS: &str =
     "({child_operation_timeout_ms: 8000, reflex_timeout_ms: 30000})";
 /// A model context whose budget (three bytes a token) holds the first
 /// turn's prompt but not the second's with its recalled episode.
-const FITTED_TOKENS: u32 = 3_300;
+const FITTED_TOKENS: u32 = 4_000;
 /// The model a bot composing the intuition tier gives it.
 const INTUITION_MODEL: &str = "chat-model";
 const ADOPT: &str = "bot.ability.identity.adopt";
@@ -1348,10 +1348,7 @@ fn a_lesson_is_learned_and_its_result_perceived() {
         .and_then(|message| message["content"].as_str())
         .expect("the user message")
         .to_owned();
-    assert!(
-        second.contains("bot.ability.learning.output"),
-        "{second}"
-    );
+    assert!(second.contains("bot.ability.learning.output"), "{second}");
     let learning: Vec<Received> = mock
         .received("/chat/completions")
         .into_iter()
@@ -2119,7 +2116,7 @@ fn a_selection_outside_the_choices_never_becomes_output() {
     assert_eq!(
         json_text(&records, "bot.processing.failed"),
         json!({
-            "message": "Selection rejected: /events/0/event: value must be one of \"bot.ability.cognition.ignore\", \"bot.ability.communication.respond\", \"bot.ability.identity.adopt\"",
+            "message": "Selection rejected: /events/0/event: value must be one of \"bot.ability.cognition.ignore\", \"bot.ability.learning.input\", \"bot.ability.communication.respond\", \"bot.ability.identity.adopt\"",
             "turn": 1
         })
     );
