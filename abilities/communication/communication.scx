@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Communication ability (the reference abilities/communication/
-  communication.py): it holds the conversation, admits communication input
-  into it, and says the response the cognition selects through Speaking.
+  floppy's Communication ability: it holds the conversation, admits
+  communication input into it, and says the response the cognition selects through Speaking.
   The body (bots/floppy/floppy.scx) invokes it as its child
   "communication".
 
@@ -14,23 +13,21 @@
   Children: communication holds <invoke id="conversation"> (abilities/
   conversation/conversation.scx, the one active conversation) and <invoke
   id="speaking"> (abilities/speaking/speaking.scx). Each is ready with its
-  first bot.ability.offers; inactive waits for both (the original attaches the
-  conversation composite there). A child that cannot start, or ends, sends
+  first bot.ability.offers; inactive waits for both. A child that cannot start, or ends, sends
   bot.ability.communication.failed {message} to the body and ends this
   ability in its final state degraded.
 
   Input: bot.ability.communication.input {source_ids, target_ids, content,
   content_type, ...} in active or responding (hearing goes on while a
   response is said, decision D175) goes to the conversation as
-  bot.ability.conversation.routed_input {parent} (the original's routed input to
-  the active conversation; parent is the input event as an envelope). The
+  bot.ability.conversation.routed_input {parent} (the input routed to the
+  active conversation; parent is the input event as an envelope). The
   conversation hands a text product over as bot.ability.cognition.input
   {stimulus}, which goes on to the body unchanged (the body grants it a
   turn); its bot.ability.conversation.output goes on to the body unchanged
-  when its latest message is inbound (a product that is not text; the original
-  _has_conversation_product) and is the exchange only otherwise; and its
-  bot.ability.conversation.failed {stage, message} goes on to the body
-  unchanged (the original forwards these terminals).
+  when its latest message is inbound (a product that is not text) and is
+  the exchange only otherwise; and its bot.ability.conversation.failed
+  {stage, message} goes on to the body unchanged.
 
   Responding: bot.ability.communication.respond {parts} in active (decision
   D178: 1 to 64 parts {expression?, words?}, each with
@@ -41,8 +38,8 @@
   speaking child
   (dispatching_response), and waits in responding, bounded by the hop
   timer bot.ability.communication.response.hop.timed_out
-  (response_timeout_ms, 36 s: speaking's 30 s encoding bound plus the
-  original's 6 s, decision D98; the transition takes only the timer
+  (response_timeout_ms, 36 s: speaking's 30 s encoding bound plus 6 s, so
+  the hop never preempts the encoding it waits for, decision D98; the transition takes only the timer
   of the response in hand, _event.sendid). Speaking's output goes on to the
   body as bot.ability.speaking.output. A speaking failure
   (bot.ability.failed) or the hop timeout answers the body with
@@ -72,12 +69,11 @@
 
   Activate: bot.ability.communication.activate {} keeps the one
   conversation active (a catalog of conversations to switch between is
-  loaded through memory, phase 3); it is taken and logged in inactive only,
-  as the original's Communication takes it only there.
+  loaded through memory, phase 3); it is taken and logged in inactive only.
 
   Offers: every entry into active sends bot.ability.offers {ability:
   "communication", choices} to the body: <decision:choice events=
-  "bot.ability.communication.respond"> (the original's enabled transitions in
+  "bot.ability.communication.respond"> (the enabled transitions in
   active; activate is enabled only in inactive, and input is not a tool
   event), made model-facing by <processing:model_facing_schema>
   ($schema, title and examples dropped; over 32 KiB descriptions dropped
@@ -89,7 +85,7 @@
   created: a send whose data a schema rejects is not routed and raises
   error.execution in its sender. Each event it takes has one sender, so
   its name and the active state route it; conds only correlate (which
-  timer) and keep the original's non-blank response check.
+  timer) and keep the non-blank response check.
 
   Bindings: the decision and processing namespace packages; speaking's (the conversation
   namespace and vocal's speech service).
@@ -166,8 +162,8 @@
     <transition event="bot.ability.conversation.snapshot.output" event:schema="../schemas/bot.ability.conversation.snapshot.output.json">
       <log label="communication.snapshot" expr="_event.data.request_ref"/>
     </transition>
-    <!-- A conversation that could not take an input fails it (the original's
-         conversation failed terminal, forwarded unchanged). -->
+    <!-- A conversation that could not take an input fails it (its
+         bot.ability.conversation.failed, forwarded unchanged). -->
     <transition event="bot.ability.conversation.failed" event:schema="../schemas/bot.ability.conversation.failed.json">
       <log label="communication.rejected" expr="conversationFailedLog(_event)"/>
       <send event="bot.ability.conversation.failed" target="#_parent">
