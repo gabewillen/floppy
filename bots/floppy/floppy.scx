@@ -248,7 +248,7 @@
   and revising_ceiling_ms (likewise for a revision through the builder),
   [floppy fields]; the body passes those it was given to the cognition as
   <param name="bounds">, and each one absent is the ability's default
-  (README.md, "Defaults").
+  (docs/defaults.md).
 
   Memory: the body passes its database (a file in
   the directory the run grants the sql service at /memory, scx run's

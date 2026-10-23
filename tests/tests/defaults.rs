@@ -1,5 +1,5 @@
-//! The defaults floppy ships are stated in one place: README.md's
-//! "Defaults" section, and `.env.example` for the variables.
+//! The defaults floppy ships are stated in one place: docs/defaults.md,
+//! and `.env.example` for the variables.
 //!
 //! Checked here, over every `.scx` under `bots/` and `abilities/`:
 //!
@@ -9,7 +9,7 @@
 //! * the variables the documents' `env` attributes name are exactly
 //!   `.env.example`'s names (bare, without values) and
 //!   [`support::GRANTED`];
-//! * every row of README.md's "Timeouts and bounds" table names a document's
+//! * every row of docs/defaults.md's "Timeouts and bounds" table names a document's
 //!   top-level `<data>` and its value, and every `*_timeout_ms` `<data>` has
 //!   a row.
 //!
@@ -107,7 +107,7 @@ fn env_names(text: &str) -> BTreeSet<String> {
 /// The documents whose `model` is the speech service's (an audio or voice
 /// model: the speech decoder's, speech encoder's or voice classifier's
 /// own), not the generation model: each `model` `<data>` is `null` (the
-/// service's request names none of floppy's) or a model README.md's
+/// service's request names none of floppy's) or a model docs/defaults.md's
 /// "Speech and voice models" names.
 const SPEECH_DOCUMENTS: [&str; 6] = [
     "abilities/speaking/speaking.scx",
@@ -121,7 +121,7 @@ const SPEECH_DOCUMENTS: [&str; 6] = [
 #[test]
 fn every_model_data_is_the_default_model_and_the_name_appears_nowhere_else() {
     let quoted = format!("'{}'", support::DEFAULT_MODEL);
-    let readme = read(Path::new("README.md"));
+    let page = read(Path::new("docs/defaults.md"));
     let mut models = 0;
     for path in documents() {
         let text = read(&path);
@@ -134,8 +134,8 @@ fn every_model_data_is_the_default_model_and_the_name_appears_nowhere_else() {
                 .get("model")
                 .unwrap_or_else(|| panic!("{}: a model <data>", path.display()));
             assert!(
-                model == "null" || readme.contains(&format!("`{}`", model.trim_matches('\''))),
-                "{}: the speech model {model} is README.md's",
+                model == "null" || page.contains(&format!("`{}`", model.trim_matches('\''))),
+                "{}: the speech model {model} is docs/defaults.md's",
                 path.display()
             );
             continue;
@@ -156,8 +156,8 @@ fn every_model_data_is_the_default_model_and_the_name_appears_nowhere_else() {
         "builder, floppy, cognition, reasoning, reflection, reading, seeing, object detection and description"
     );
     assert!(
-        read(Path::new("README.md")).contains(&format!("`{}`", support::DEFAULT_MODEL)),
-        "README.md's Defaults names the model"
+        read(Path::new("docs/defaults.md")).contains(&format!("`{}`", support::DEFAULT_MODEL)),
+        "docs/defaults.md names the model"
     );
 }
 
@@ -188,11 +188,11 @@ fn the_env_example_names_exactly_the_variables_the_documents_read() {
 }
 
 #[test]
-fn the_readme_states_every_timeout_and_bound_the_documents_ship() {
-    let readme = read(Path::new("README.md"));
-    let section = readme
-        .split_once("### Timeouts and bounds")
-        .expect("README.md has the Timeouts and bounds table")
+fn the_defaults_page_states_every_timeout_and_bound_the_documents_ship() {
+    let page = read(Path::new("docs/defaults.md"));
+    let section = page
+        .split_once("## Timeouts and bounds")
+        .expect("docs/defaults.md has the Timeouts and bounds table")
         .1;
     let rows: Vec<(String, String, String)> = section
         .lines()
@@ -213,7 +213,7 @@ fn the_readme_states_every_timeout_and_bound_the_documents_ship() {
         assert_eq!(
             data.get(id),
             Some(value),
-            "README.md's row for {document} {id}"
+            "docs/defaults.md's row for {document} {id}"
         );
     }
     for path in documents() {
@@ -223,7 +223,7 @@ fn the_readme_states_every_timeout_and_bound_the_documents_ship() {
                 assert!(
                     rows.iter()
                         .any(|(row_document, row_id, _)| row_document == document && row_id == &id),
-                    "README.md's table has no row for {document} {id}"
+                    "docs/defaults.md's table has no row for {document} {id}"
                 );
             }
         }
@@ -365,7 +365,7 @@ fn every_inactivity_bound_has_a_backstop_and_the_stages_nest_in_the_turn() {
 /// Streaming is per backend (decision D101): every model call that is bounded
 /// by inactivity lets the run's `FLOPPY_STREAM` decide (the generate
 /// package's `stream` slot), and no document asks for a stream itself, so a
-/// run that does not set it streams nothing (the default README.md states).
+/// run that does not set it streams nothing (the default docs/defaults.md states).
 #[test]
 fn the_runs_stream_setting_alone_decides_whether_a_call_streams() {
     let manifest = read(Path::new("services/generate/package/generate.service.json"));
@@ -393,10 +393,10 @@ fn the_runs_stream_setting_alone_decides_whether_a_call_streams() {
             "{document} never asks for a stream itself"
         );
     }
-    let readme = read(Path::new("README.md"));
+    let page = read(Path::new("docs/defaults.md"));
     assert!(
-        readme.contains("| `FLOPPY_STREAM` |")
-            && readme.contains("unset (the default), no call is streamed"),
-        "README.md states the default"
+        page.contains("| `FLOPPY_STREAM` |")
+            && page.contains("unset (the default), no call is streamed"),
+        "docs/defaults.md states the default"
     );
 }

@@ -48,7 +48,7 @@ server: the request carries no key header at all (decision D127). floppy's docum
 `encode`, and `FLOPPY_VOICE_BASE_URL` and `FLOPPY_VOICE_API_KEY` (a LocalAI
 server) for `detect`, `diarize` and `identify`. The models are each
 document's `model` `<data>`
-([README Defaults](../../README.md#speech-and-voice-models)).
+([Defaults](../../docs/defaults.md#speech-and-voice-models)).
 
 ## Grants
 
