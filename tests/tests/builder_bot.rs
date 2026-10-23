@@ -2484,7 +2484,8 @@ fn a_draft_with_no_top_level_final_is_told_so_when_its_test_expects_done() {
     );
 }
 
-/// A redesign sends the plan it replaces as `previous_plan`.
+/// A redesign sends the plan it replaces as `previous_plan` (the request's
+/// cap of 2 ends the build after it).
 #[test]
 fn a_redesign_sends_the_previous_plan() {
     let mock = Mock::start();
@@ -2494,7 +2495,7 @@ fn a_redesign_sends_the_previous_plan() {
         "broken",
         "redesign",
         &ALL,
-        &json!({"spec": SPEC}),
+        &json!({"spec": SPEC, "max_attempts": 2}),
     );
     assert!(finished(&records), "{records:?}");
     let (label, failed) = answer(&records);
