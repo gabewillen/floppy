@@ -21,7 +21,7 @@
 
   Configuration (as <data>): the voice activity
   classifier is required, so voice detection always runs;
-  sound_classification (KindSoundClassifier), speech_decoding,
+  sound_classification (labelled from the sound's kind, no model), speech_decoding,
   voice_diarization and voice_identification say which optional stages are
   configured, product_threshold_db is 3 dB, stage_timeout_ms is 30 s, the
   stage operation timeout, and recognize_timeout_ms 2 s (decision D177).
