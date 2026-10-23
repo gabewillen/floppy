@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   The turn behavior template (docs/decisions.md D132): the one program shape
-  of a learned turn behavior, as the original's behavior program is one
-  program of fixed shape.
+  of a learned turn behavior, so the model writes only its script.
   <behavior:turn_program> writes it with the behavior's script in place of
   turn.js; the model writes only that script, which declares applies(input)
   and selections(input, turn). Its invoker sets turn and input with

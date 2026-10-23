@@ -30,14 +30,14 @@
                    ticks (required): an expression.
   behavior:verify_apply
                    location (required): receives the E0008 messages of a
-                   turn behavior's run on its live turn (the original's
-                   live-turn check).
+                   turn behavior's run on its live turn (the live-turn
+                   check, decision D131).
                    done, turn, input, targets (required), handled,
                    error (optional): expressions.
   behavior:turn_program
                    location (required): receives the turn behavior
-                   template's text naming the script (the original's one
-                   program shape of a behavior).
+                   template's text naming the script (one program of
+                   fixed shape, decision D132).
                    script (required): an expression.
                    None takes another attribute or content.
 -->

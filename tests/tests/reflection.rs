@@ -701,7 +701,7 @@ fn a_break_marks_the_behavior_broken_and_keeps_it_on(database: &str) {
 /// A break of a behavior the inventory does not hold is not offered
 /// (decision D100), so the generate service refuses a model that selects
 /// one as schema-mismatch; the model is asked again once, refused the same
-/// way, and the turn fails (the original's same rejection twice running,
+/// way, and the turn fails (the same rejection twice running,
 /// decision D130), its episode still stored, with no behavior (decision
 /// D97).
 #[test]
@@ -760,10 +760,10 @@ fn more_than_one_selection_is_refused_twice_and_fails_on(database: &str) {
     assert_eq!(json_log(&records, "inventory")[0]["status"], "ACTIVE");
 }
 
-/// The original's select repair (at most two repairs;
+/// The select repair (at most two repairs;
 /// decision D130): the live run's create without `data`, which the
 /// generate service refuses as schema-mismatch, is asked again with the
-/// same system prompt and the original's feedback after the select input,
+/// same system prompt and the repair feedback after the select input,
 /// carrying the rejection's message, and the repaired create is built.
 #[test]
 fn a_refused_selection_is_asked_again_with_its_diagnostic_and_learns() {
@@ -813,7 +813,7 @@ fn a_refused_selection_is_asked_again_with_its_diagnostic_and_learns() {
     );
 }
 
-/// Three different rejections: the original repairs two and fails on the
+/// Three different rejections: reflection repairs two and fails on the
 /// third with its message (decision D130), and the turn's episode is
 /// stored with no behavior (decision D97).
 #[test]
@@ -844,7 +844,7 @@ fn three_different_refusals_fail_after_two_repairs() {
 }
 
 /// Two rejections at the same place with different messages are not the
-/// same rejection: the original compares its whole diagnostic, so the
+/// same rejection: the whole diagnostic is compared, so the
 /// second is repaired too and the create is built (decision D130).
 #[test]
 fn a_refusal_at_the_same_place_with_another_message_is_repaired_again() {
@@ -1057,7 +1057,7 @@ fn the_builder_is_told_the_triggers_and_the_input_the_behavior_runs_with() {
     );
 }
 
-/// The original's live-turn check runs a turn behavior once on the live
+/// The live-turn check runs a turn behavior once on the live
 /// turn (decision D131): a script that answers only a knock and
 /// reads its label from `input` agrees with this turn only on its input, so
 /// its ACTIVE row proves reflection sent the turn and its input and the
@@ -1091,8 +1091,7 @@ fn a_create_passes_only_when_its_draft_selects_on_the_live_input() {
 
 /// A create whose script hardcodes a value of an earlier turn's input fails
 /// the run on the live turn the same way after its repair, so it is
-/// abandoned as a DRAFT, with the original's binding message adapted to
-/// `input`.
+/// abandoned as a DRAFT, with the binding message that names `input`.
 #[test]
 fn a_create_whose_draft_hardcodes_an_input_value_is_abandoned() {
     let mock = Mock::start();

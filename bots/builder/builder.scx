@@ -40,7 +40,7 @@
   (one that sends no bot.behavior.tick) also runs once on that live turn, as the
   candidates runner runs it, by <invoke srcexpr> with the params turn and input,
   within min(turn_after_bound_ms, 2000) ms, and <behavior:verify_apply> checks its
-  donedata, the original's live-turn check of a turn behavior, E0008, decision D131) -> done. Every failure goes through retry_gate, which takes its
+  donedata, the live-turn check of a turn behavior, E0008, decision D131) -> done. Every failure goes through retry_gate, which takes its
   fingerprint and gives up (no-progress) when any of its diagnostics is one an
   earlier failure of the build had, consecutive or not (decision D124), or at
   the request's optional max_attempts; triage then reads its enabled
@@ -50,8 +50,8 @@
   decision.failed or error.*), times out, or abstains, fallback decides by
   cond: redesign when there is no plan yet, else repair.
 
-  Template mode (the request's template 'turn', decision D132; the
-  original's one program shape of a behavior): routing
+  Template mode (the request's template 'turn': a turn behavior is one
+  program of fixed shape whose script the model writes, decision D132): routing
   skips design (the plan is the template's) and author asks for turn_script
   {lifetime, script, tests} (turn_author_system, script_schema), a script
   declaring applies(input) and selections(input, turn) and up to seven test
@@ -141,7 +141,7 @@
     <data id="min_every_ms" expr="null"/>
     <data id="turn_after_bound_ms" expr="null"/>
     <!-- The live turn a turn behavior is run on (the request's apply: {turn,
-         input, targets}, the input of the original's live-turn check), null for none. -->
+         input, targets}, the input of the live-turn check, decision D131), null for none. -->
     <data id="live_turn" expr="null"/>
     <!-- The request's template ('turn': the model writes only a turn
          behavior's script, decision D132), else null; a turn script that
@@ -223,8 +223,8 @@
     <data id="sim_tests" expr="[]"/>
     <!-- The data of each bot.behavior.tick the candidate sent. -->
     <data id="ticks" expr="[]"/>
-    <!-- The forced tick's or an apply run's E0008 messages (the original's
-         forced-tick and live-turn checks). -->
+    <!-- The forced tick's or an apply run's E0008 messages (the forced-tick
+         and live-turn checks, decisions D84 and D131). -->
     <data id="apply" expr="[]"/>
     <!-- An apply run's donedata, null until the draft finishes. -->
     <data id="child_data" expr="null"/>
@@ -632,7 +632,7 @@
       </transition>
     </state>
 
-    <!-- One apply run (the original's live-turn check of a turn behavior, D131; in
+    <!-- One apply run (the live-turn check of a turn behavior, D131; in
          template mode also each test input, D132): the draft runs once as a
          fresh invocation with the params turn and input, as the candidates
          runner runs it, and must finish within the test's settle time, armed

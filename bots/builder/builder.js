@@ -450,7 +450,7 @@ function hasLifetimeErrors() {
 
 // simulate
 
-// The original's behavior checks: a persistent routine is checked by one forced tick
+// The behavior checks: a persistent routine is checked by one forced tick
 // (D84); a turn behavior, given the request's live turn, by one run on that turn
 // (D131); a turn script by the live turn, then one run on each test input (D132).
 function simTests() {
@@ -467,7 +467,7 @@ function isRoutineTicked() {
 }
 
 // The routine's tick, forced by delivering its first schedule's event at once (the
-// original's timer clock fires its first schedule wait at once), within the original's 2 s.
+// timer clock fires its first schedule wait at once, decision D84), within 2 s.
 function firstTickTest() {
   return {name: 'first tick', events: [{name: schedules[0], data: '', delay_ms: 0}], settle_ms: 2000, expect_events: ['bot.behavior.tick'], expect_done: false, tick: true};
 }
@@ -483,7 +483,7 @@ function liveTurnTest() {
   return {name: 'live turn', events: [], settle_ms: liveTurnBoundMs(), expect_events: [], expect_done: true, apply: true, live: true, turn: live_turn.turn, input: live_turn.input, targets: live_turn.targets, handled: true};
 }
 
-// The original's 2 s verify timeout, within the turn's silence bound when the request names it.
+// The 2 s verify timeout (decision D131), within the turn's silence bound when the request names it.
 function liveTurnBoundMs() {
   return Math.min(turn_after_bound_ms === null ? 2000 : turn_after_bound_ms, 2000);
 }

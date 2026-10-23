@@ -52,8 +52,8 @@ function selectCeilingDelay() {
   return select_ceiling_ms + 'ms';
 }
 
-// The reference select input, with the original's repair feedback last when
-// this attempt repairs a rejection.
+// The select input, with the repair feedback (selection_feedback, decision
+// D130) last when this attempt repairs a rejection.
 function selectPrompt() {
   return selectInputJson() + selectFeedback();
 }
@@ -94,7 +94,7 @@ function isSelectRejection(_event) {
   return isGenerate(_event) && gen_rejection !== null;
 }
 
-// The original's message for a rejected selection.
+// The failure message for a rejected selection (decision D130).
 function rejectionMessage(r) {
   return 'Selection rejected: ' + r.message;
 }
@@ -127,15 +127,15 @@ function selectTimedOutMessage() {
 
 // routing_rejection
 
-// The original's same-rejection check: this hop's rejection is the one
-// it repaired. The original compares its whole normalized diagnostic; a
+// The same-rejection check (decision D130): this hop's rejection is the one
+// it repaired. The whole diagnostic is compared: a
 // D126 key names only where the arguments first fail, so its message is
 // compared too.
 function isSameSelectRejection() {
   return select_rejection !== null && select_rejection.key === gen_rejection.key && select_rejection.message === gen_rejection.message;
 }
 
-// Another repair is allowed: at most max_selection_repairs, as in the original.
+// Another repair is allowed: at most max_selection_repairs (decision D130).
 function canRepairSelect() {
   return select_attempt < max_selection_repairs;
 }
@@ -244,8 +244,8 @@ function usesTurnTemplate() {
   return existing_behavior.lifetime !== 'persistent';
 }
 
-// The live turn the builder runs a turn behavior on (the original's live-turn
-// check): this turn, its behavior_input as autonomy builds it, and the
+// The live turn the builder runs a turn behavior on (the live-turn
+// check, decision D131): this turn, its behavior_input as autonomy builds it, and the
 // sessions its output names (a learned behavior names its targets, D104).
 function liveTurn() {
   return ({turn: turn, input: behavior_input, targets: outputTargets()});

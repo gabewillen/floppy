@@ -6,9 +6,9 @@
     "kind": "namespace-irp",
     "source": "namespaces/behavior/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "2f37d30e9222d2317e396bca482008550f28031db8097c307a10de07f06116d1",
-    "source_digest": "186e88870233a14d7855c376adc1a4e1f5b10bdbb0177bc160ad87bf50c31a34",
-    "manifest_digest": "66467b78a7e06cf2ef956a2cb69157ff2bf9d4c2acdd5cf59b495bd1d8536155",
+    "corpus_digest": "bebbf3a00ff63fe05b74b99cc46cc787c52b3e9a29482aa3f3799e62b7026bc4",
+    "source_digest": "3f35028e4824997f7ea771a850a231d364f929a955203381c161389103fe8842",
+    "manifest_digest": "f4bf9cf25de29a5cb0cc3f4919f5496643b3b2fd1df2e4d8a7ef95561618d6bf",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
@@ -55,9 +55,9 @@
     {
       "namespace_uri": "https://github.com/stateforward/floppy/namespaces/behavior",
       "package_version": "0.1.0",
-      "manifest_sha256": "63d71629ee1f5a81d225d256d188671f27908e04b78eea80f1773d78433be8f5",
-      "schema_sha256": "1f8b84412f43f965955bc04793116dec6da1506fe33e012556b1a8abc539cb59",
-      "component_sha256": "36cabb362b7ed6159845ba78cae08a6737ec7ada6166fd729534bc1c9c74509d"
+      "manifest_sha256": "8ceb07f5cd8f5acfc4e159642dbe1b70ddc8f1884b0cef48664f8910dda4fc5e",
+      "schema_sha256": "e63d6529d4e49b434b977a433c05c292d62b7f3b06f686330747efc29791765d",
+      "component_sha256": "7a2517f4184fba81af75e9596372b7de3157e8ca69412ece3b0f16e6d7fbd753"
     }
   ],
   "ir_version": 5,
@@ -70,7 +70,7 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "ac58ce3f70caab4548a5831501aa536b6c97ed83c95ae7b69ffd1db979d56318",
+  "identity_digest": "2b15e78fe0c246a75a1eec294e2edaa65a9c9e014bca29f4fd3122c24bc46746",
   "summary": {
     "total_selected": 27,
     "applicable_selected": 27,

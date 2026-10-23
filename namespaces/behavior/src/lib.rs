@@ -99,7 +99,7 @@
 //!
 //! # `<behavior:verify_apply location="L" done="D" turn="T" input="I" targets="G" handled="H"? error="E"?/>`
 //!
-//! The original's live-turn check of a turn behavior (one run, then its
+//! The live-turn check of a turn behavior (decision D131: one run, then its
 //! selections' data checked against the live values): the
 //! behavior ran once, invoked with the params `turn` and `input` of the
 //! turn it is learned from. `done` (required) evaluates to the run's
@@ -108,9 +108,9 @@
 //! behavior input, an object; `targets` (required) to the sessions that
 //! turn's output names, an array of strings; and `error` (optional) to the
 //! name of the error event the run ended on, or `null`. `location`
-//! (required) receives `E0008` messages, at most 20 (the original's for
-//! nothing selected, its binding message adapted to `input`, and floppy's
-//! for the run, the donedata contract and the targets): none when the
+//! (required) receives `E0008` messages, at most 20 (for the run, the
+//! donedata contract, nothing selected, the targets, and selection data that
+//! disagrees with `input`): none when the
 //! donedata is `{turn, handled, selected}` with the live turn,
 //! `handled` true and at least one selection, each with an event, a target
 //! among `targets` (floppy's check, decision D104: the candidates runner
@@ -131,7 +131,7 @@
 //!
 //! # `<behavior:turn_program location="L" script="S"/>`
 //!
-//! The original's one program shape of a turn behavior
+//! The one program shape of a turn behavior
 //! (decision D132): `location`
 //! (required) receives [`TURN_TEMPLATE`], the text of
 //! `templates/turn.scx`, with its `<script src="turn.js"/>` naming the
@@ -1263,7 +1263,7 @@ pub fn verify_tick(ticks: &[Json]) -> Vec<String> {
     selection_binding_errors(selections, &live, "the tick")
 }
 
-/// The original's binding check after its shape checks: one
+/// The binding check after the shape checks (decisions D84 and D131): one
 /// message for each selection data member whose live value differs, in
 /// order; `source` names where the behavior reads the live values.
 fn selection_binding_errors(
@@ -1296,7 +1296,7 @@ fn selection_binding_errors(
 /// The most messages `<behavior:verify_apply>` writes.
 const MAX_APPLY_ERRORS: usize = 20;
 
-/// The original's message for an output that selects nothing.
+/// The message for an output that selects nothing (decision D131).
 const NO_SELECTION: &str =
     "behavior output must select at least one event for the observed pattern.";
 
@@ -1441,7 +1441,7 @@ pub struct Applied<'a> {
     pub error: Option<&'a str>,
 }
 
-/// The original's live-turn check of a turn behavior with floppy's donedata
+/// The live-turn check of a turn behavior (decision D131) with the donedata
 /// contract (the candidates runner's) and target check (decision D104), and
 /// the turn template's checks (decision D132); see the crate documentation,
 /// `<behavior:verify_apply>`.
@@ -1550,8 +1550,7 @@ fn unanswered_errors(done: Option<&Json>) -> Vec<String> {
     )]
 }
 
-/// The turn behavior template (decision D132; the original's one program
-/// shape).
+/// The turn behavior template (decision D132: one program of fixed shape).
 pub const TURN_TEMPLATE: &str = include_str!("../templates/turn.scx");
 
 /// The script reference the template carries, which `turn_program` names
@@ -1624,7 +1623,7 @@ fn turn_program_element<H: BehaviorHost>(
     Ok(Executed::Handled)
 }
 
-/// The live values of a data object, as the original binds them: its string,
+/// The live values of a data object (decision D131): its string,
 /// number and boolean members (not `null`, arrays or objects).
 fn live_binding_values(data: &Map<String, Json>) -> Map<String, Json> {
     data.iter()

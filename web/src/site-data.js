@@ -71,7 +71,7 @@ const P=[
   sum:'The original\u2019s memory module: a conversation memory row\u2019s JSON and the contents of a memory select. Never sends, never touches the database.',
   elements:['to_json','contents'],artifact:'floppy_memory.virtualized.wasm',wit:'stateforward:scxml/executable-content-extension 0.2.0',used:['abilities/conversation','abilities/reasoning']},
  {id:'behavior',kind:'namespace',prefix:'behavior',uri:GH+'namespaces/behavior',ver:'0.1.0',
-  sum:'The original\u2019s behavior package: inventory rows read as behaviors, the statements that replace one, a lifetime\u2019s schedule bounds, the check of a routine\u2019s forced tick, the check of a turn behavior\u2019s run on its live turn, and a turn behavior\u2019s one program shape. Never sends, never touches the database.',
+  sum:'The behavior package: inventory rows read as behaviors, the statements that replace one, a lifetime\u2019s schedule bounds, the check of a routine\u2019s forced tick, the check of a turn behavior\u2019s run on its live turn, and a turn behavior\u2019s one program shape. Never sends, never touches the database.',
   elements:['instances_from_behavior_results','replace_behavior_clauses','lifetime_errors','verify_tick','verify_apply','turn_program'],artifact:'floppy_behavior.virtualized.wasm',wit:'stateforward:scxml/executable-content-extension 0.2.0',used:['abilities/reflection','bots/builder']},
  {id:'autonomy',kind:'namespace',prefix:'autonomy',uri:GH+'namespaces/autonomy',ver:'0.1.0',
   sum:'The original\u2019s autonomy module: the input a learned behavior runs with, the stimulus data with the turn\u2019s focus. Never sends.',

@@ -14,7 +14,7 @@ Last updated: 2026-10-22.
 - **Learned behaviors are repaired, run on their live turn and built
   from a template (2026-10-22, D130 to D132):** reflection repairs a
   select call the generate service refuses (D126's `rejection`) at most
-  twice with the original's feedback, failing at once on the same
+  twice with repair feedback carrying the rejection, failing at once on the same
   rejection and then with `Selection rejected: <message>` (D130). The
   builder runs a turn behavior once on the live turn it is learned from
   (`builder.request`'s `apply`, which reflection always sends) and

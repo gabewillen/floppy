@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- behavior-6: a run that handles nothing is the original's message. -->
+<!-- behavior-6: a run that handles nothing writes the nothing-selected message (decision D131). -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior">
 <datamodel>
   <data id="a" expr="null"/>

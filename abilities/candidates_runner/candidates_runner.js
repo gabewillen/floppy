@@ -25,8 +25,8 @@ function isBehaviorHandled(event) {
 }
 
 // The candidate's run failed: its donedata names the error it ended on (the
-// turn template's error, decision D132; the original records a behavior run
-// that fails as failed).
+// turn template's error, decision D132, which counts a behavior run that
+// fails against that behavior).
 function isBehaviorFailed(event) {
   return event.data !== null && typeof event.data === 'object' && typeof event.data.error === 'string';
 }

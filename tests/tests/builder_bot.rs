@@ -1740,7 +1740,7 @@ fn a_routine_tick_with_no_selection_is_rejected_with_its_draft() {
     );
 }
 
-/// The original's live-turn check of a turn behavior (decision D131): with the
+/// The live-turn check of a turn behavior (decision D131): with the
 /// request's live turn, the draft also runs once as the candidates runner
 /// runs it, with the params turn and input, and its donedata selects on that
 /// input, so it is built; the draft's own tests are what it carried.
@@ -1799,7 +1799,7 @@ fn without_a_live_turn_a_turn_behavior_runs_only_its_own_tests() {
 }
 
 /// A routine (it sends `bot.behavior.tick`) is checked by its forced tick,
-/// not the live turn, as the original's check branches on the lifetime.
+/// not the live turn: the check branches on the lifetime (decision D131).
 #[test]
 fn a_routine_is_checked_by_its_first_tick_not_the_live_turn() {
     let mock = Mock::start();
@@ -1869,7 +1869,7 @@ fn a_live_turn_answering_another_turn_is_refused() {
 }
 
 /// A change whose lesson is not to answer the turn cannot pass: the
-/// original's live-turn check requires the live turn to select (decision D131).
+/// live-turn check requires the behavior to select on the live turn (decision D131).
 #[test]
 fn a_live_turn_that_selects_nothing_is_refused() {
     assert_live_refused(

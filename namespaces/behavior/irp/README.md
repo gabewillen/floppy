@@ -35,12 +35,12 @@ SAXON='java -jar /opt/saxon/saxon-he-12.8.jar' sh scripts/namespace-irp.sh prepa
 sh scripts/namespace-irp.sh baselines behavior
 ```
 
-The current baseline (manifest SHA-256 `66467b78a7e06cf2ef956a2cb69157ff2bf9d4c2acdd5cf59b495bd1d8536155`,
+The current baseline (manifest SHA-256 `f4bf9cf25de29a5cb0cc3f4919f5496643b3b2fd1df2e4d8a7ef95561618d6bf`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
 measured on Linux x86_64, the host `tests/tests/namespace_irp.rs` compares
-fuel on, when the turn template gained loading and behavior-6 its unloaded script)
+fuel on, when behavior-6 and the schema and template comments were reworded)
 measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 27 / 27 | 0 | `2f37d30e9222d2317e396bca482008550f28031db8097c307a10de07f06116d1` | `99cacd1201ade60e826d5a05743380b0ea94527993d5ff8502585d3eb06bdf05` |
+| ECMAScript | 27 / 27 | 0 | `bebbf3a00ff63fe05b74b99cc46cc787c52b3e9a29482aa3f3799e62b7026bc4` | `f1f565b8039dbb9fa0221e9ff37d1f2c83ed5ffa605462d224725c2fd78ee1f5` |
