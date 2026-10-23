@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.speaking.progress",
+  "additionalProperties": false,
+  "description": "How far the utterance in progress has got: a sign of life for whoever asked for it.",
+  "properties": {
+    "spoken_seconds": {
+      "description": "Seconds of this utterance's audio the mouth has reported played.",
+      "examples": [
+        1.2
+      ],
+      "minimum": 0,
+      "type": "number"
+    }
+  },
+  "required": [
+    "spoken_seconds"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "spoken_seconds": 1.2
+    }
+  ]
+}

@@ -2,13 +2,36 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "bot.ability.speaking.output",
   "additionalProperties": false,
-  "description": "Speak completed: original text plus audio format metadata used for playout.",
+  "description": "An utterance finished: the text it was asked to say, the part the mouth actually played, the part it did not, how it ended, the bot's own voice id (null for now), and the audio format it was said in.",
   "properties": {
     "text": {
-      "description": "Text that was spoken.",
+      "description": "The text this utterance was asked to say: its parts' words, joined exactly as written.",
       "minLength": 1,
       "title": "Text",
       "type": "string"
+    },
+    "spoken": {
+      "description": "The leading whole words of text, in proportion to the share of the audio the mouth reported played: all of text once all of it has played, and empty when nothing has. A piece cut short counts as unplayed.",
+      "type": "string"
+    },
+    "unspoken": {
+      "description": "The rest of text, after spoken: what was never played.",
+      "type": "string"
+    },
+    "outcome": {
+      "description": "How the utterance ended: completed (every piece played) or stopped (cut short on request). A failure answers bot.ability.failed instead.",
+      "enum": [
+        "completed",
+        "stopped"
+      ],
+      "examples": [
+        "completed"
+      ],
+      "type": "string"
+    },
+    "voice_id": {
+      "description": "The bot's own voice id. Always null: it is learned by the bot hearing itself, which waits on persona voicing the bot.",
+      "type": "null"
     },
     "media_type": {
       "anyOf": [
@@ -64,7 +87,20 @@
     }
   },
   "required": [
-    "text"
+    "text",
+    "outcome"
   ],
-  "type": "object"
+  "type": "object",
+  "examples": [
+    {
+      "text": "Sure. I can help with that.",
+      "spoken": "Sure. I can help with that.",
+      "unspoken": "",
+      "outcome": "completed",
+      "voice_id": null,
+      "media_type": "audio/pcm",
+      "sample_rate_hz": 24000,
+      "channels": 1
+    }
+  ]
 }

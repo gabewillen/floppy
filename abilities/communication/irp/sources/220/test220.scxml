@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- communication-13: a stop while a response is said stops speaking: nothing was played, so nothing is said or recorded. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="communication" type="scxml" src="../../../communication.scx">
+    <param name="environment" expr="_sessionid"/>
+    <param name="encoding_timeout_ms" expr="600000"/>
+    <param name="response_timeout_ms" expr="600000"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'communication' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === 'bot.ability.communication.respond' &amp;&amp; _event.data.choices[0].target === undefined &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[0].schema['$schema'] === undefined &amp;&amp; _event.data.choices[0].schema.required.indexOf('parts') &gt;= 0" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.communication.respond" target="#_communication"><content expr='{"parts": [{"words": "one two three four"}]}'/></send>
+    </onentry>
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'communication' &amp;&amp; _event.data.choices.length === 2 &amp;&amp; _event.data.choices.map(function (c) { return c.event; }).sort().join(' ') === 'bot.ability.communication.respond bot.ability.communication.stop' &amp;&amp; _event.data.choices.every(function (c) { return c.schema.title === undefined; })" target="step2"/>
+  </state>
+  <state id="step2">
+    <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 2 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step3"/>
+  </state>
+  <state id="step3">
+    <onentry>
+      <send event="bot.ability.communication.stop" target="#_communication"><content expr="{}"/></send>
+    </onentry>
+    <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 0 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step4"/>
+  </state>
+  <state id="step4">
+    <transition event="bot.ability.speaking.output" cond="_event.data.text === 'one two three four' &amp;&amp; _event.data.spoken === '' &amp;&amp; _event.data.unspoken === 'one two three four' &amp;&amp; _event.data.outcome === 'stopped'" target="step5"/>
+  </state>
+  <state id="step5">
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'communication' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === 'bot.ability.communication.respond' &amp;&amp; _event.data.choices[0].target === undefined &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[0].schema['$schema'] === undefined &amp;&amp; _event.data.choices[0].schema.required.indexOf('parts') &gt;= 0" target="step6"/>
+  </state>
+  <state id="step6">
+    <transition target="pass"/>
+  </state>
+  <transition event="environment.sound"/>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

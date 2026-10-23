@@ -207,7 +207,7 @@ them). Both directions therefore call the Gemini API, so
 | `abilities/autonomy/autonomy.scx` | `memory_timeout_ms` | `10000` | one memory transaction |
 | `abilities/candidates_runner/candidates_runner.scx` | `memory_timeout_ms` | `10000` | one candidate's memory transaction (autonomy passes its own) |
 | `abilities/conversation/conversation.scx` | `memory_timeout_ms` | `5000` | each of the conversation's memory operations, the recall before the turns and the remember after them (the original's 5 s turn stage timeout) |
-| `abilities/communication/communication.scx` | `response_timeout_ms` | `36000` | saying one response (speaking's 30 s synthesis bound plus the original's 6 s; decision D98) |
+| `abilities/communication/communication.scx` | `response_timeout_ms` | `36000` | speaking going quiet on one response, re-armed by each of its progress events (speaking's 30 s synthesis bound plus 6 s; decisions D98, D179) |
 | `abilities/communication/communication.scx` | `encoding_timeout_ms` | `30000` | speaking's speech synthesis (communication passes its own; decision D98) |
 | `abilities/reflection/reflection.scx` | `select_timeout_ms` | `30000` | reflection's select generation without progress once its reply streams (the original's 30 s; decision D101) |
 | `abilities/reflection/reflection.scx` | `select_ceiling_ms` | `600000` | reflection's select generation in all, the backstop (decision D101) |
@@ -224,6 +224,7 @@ them). Both directions therefore call the Gemini API, so
 | `abilities/turn_detector/turn_detector.scx` | `end_of_turn_silence_seconds` | `0.5` | the silence that closes an open or paused turn (the original's 0.5 s; at least 0.01 s) |
 | `abilities/speaking/speaking.scx` | `encoding_timeout_ms` | `30000` | one speech synthesis: Gemini answers only once the whole clip is synthesized, which outlasts the original's 5 s for a sentence, so the original's 30 s stage operation timeout (decision D98) |
 | `abilities/speaking/speaking.scx` | `recording_timeout_ms` | `5000` | recording the spoken words in the conversation (the original's 5 s) |
+| `abilities/speaking/speaking.scx` | `lookahead_ms` | `1000` | the most playout commanded ahead of the mouth; each played piece is at most half of it (decision D179) |
 | `abilities/listening/listening.scx` | `sensitivity_timeout_ms` | `30000` | scoring one sound (the original's 30 s stage operation timeout) |
 | `abilities/interpretation/interpretation.scx` | `stage_timeout_ms` | `30000` | each interpretation stage (the original's 30 s) |
 | `abilities/interpretation/interpretation.scx` | `recognize_timeout_ms` | `2000` | identification's extra time past the stage timeout (2 s; decision D177) |
