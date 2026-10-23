@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "properties": {
     "image": {
-      "description": "Reference (a URI reference) to the encoded image file in the media directory the run grants, standing for the original's image bytes; floppy passes media by reference, never as bytes [floppy field].",
+      "description": "Reference (a URI reference) to the encoded image file in the media directory the run grants; floppy passes media by reference, never as bytes [floppy field].",
       "examples": [
         "media/image-1"
       ],

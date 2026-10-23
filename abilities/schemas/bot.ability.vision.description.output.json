@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "properties": {
     "description": {
-      "description": "The describer's plain-text answer: non-blank, at most 4000 characters. The original's output is this text itself; floppy wraps it in an object [floppy field].",
+      "description": "The describer's plain-text answer: non-blank, at most 4000 characters [floppy field].",
       "examples": [
         "A person sits at a desk with a laptop and a coffee cup. A window behind them shows daylight."
       ],

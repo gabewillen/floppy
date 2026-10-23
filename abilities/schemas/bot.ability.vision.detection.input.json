@@ -25,7 +25,7 @@
         }
       ],
       "default": null,
-      "description": "Media type of the encoded bytes, such as image/png, image/jpeg or image/webp; null when the source did not name it. The original carries it inside its image [floppy field].",
+      "description": "Media type of the encoded bytes, such as image/png, image/jpeg or image/webp; null when the source did not name it [floppy field].",
       "examples": [
         "image/jpeg",
         "image/png"
