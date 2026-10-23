@@ -172,7 +172,7 @@ python3 tests/eval/eval.py builder --judges none --repeats 2 \
 
 The bot's backends are the live tests' (`FLOPPY_LIVE_ENV_FILE`,
 `FLOPPY_LIVE_MODEL`; floppy_live's module comment). On the maintainer's lab
-(mosfet's stack, docs/live-proof.md 2026-10-21: `gemma-4-26b-a4b` on the
+(docs/live-proof.md 2026-10-21: `gemma-4-26b-a4b` on the
 vLLM at `192.168.2.2:8100`, the systemone decision server at
 `192.168.2.2:8102`, reachable from the maintainer's network only), with
 `env.lab` and `env.speech` as there:
