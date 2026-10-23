@@ -80,6 +80,12 @@ fn builder_layout(builder: &str) -> PathBuf {
         )
         .expect("the schema is copyable");
     }
+    std::fs::create_dir_all(dir.join("xsd")).expect("the layout is creatable");
+    std::fs::copy(
+        builder_dir().join("xsd/scxml-1.0.json"),
+        dir.join("xsd/scxml-1.0.json"),
+    )
+    .expect("the builder's schema is copyable");
     write(&dir, "builder.scx", builder)
 }
 
@@ -599,9 +605,9 @@ fn routine_draft(delay: &str, output: &str) -> String {
 }
 
 /// A persistent routine that does its own I/O on each schedule (decision
-/// D138): a `BasicHTTP` POST of `hourly.report` to a hook, whose refusal (no
-/// origin admitted in the simulation) comes back as `error.communication`,
-/// and then its tick.
+/// D138): its tick, then a `BasicHTTP` POST of `hourly.report` to a hook,
+/// whose refusal (no origin admitted in the simulation) ends the rest of
+/// that block and comes back as `error.communication`.
 fn http_routine_draft() -> String {
     json!({
         "scxml": format!(
@@ -610,10 +616,10 @@ fn http_routine_draft() -> String {
     <onentry><send id="every" event="hourly.every" delay="3600s"/></onentry>
     <onexit><cancel sendid="every"/></onexit>
     <transition event="hourly.every" target="waiting">
-      <send event="hourly.report" type="http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor" target="https://hooks.example/hourly"/>
       <send event="bot.behavior.tick" target="#_parent">
         <content expr="({{name: 'Hourly', trigger: 'every', scheduled_at: new Date().toISOString(), fired_at: new Date().toISOString(), output: {CHIME}}})"/>
       </send>
+      <send event="hourly.report" type="http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor" target="https://hooks.example/hourly"/>
     </transition>
     <transition event="error.communication"/>
   </state>
@@ -1846,7 +1852,7 @@ fn a_routine_under_the_minimum_interval_is_repaired_and_its_first_tick_is_forced
 }
 
 /// A routine may do its own I/O (decision D138): one that POSTs through
-/// the `BasicHTTP` Event I/O Processor before each tick is built, its forced
+/// the `BasicHTTP` Event I/O Processor after each tick is built, its forced
 /// first tick observed although the simulation admits no origin.
 #[test]
 fn a_routine_that_does_its_own_io_is_built() {

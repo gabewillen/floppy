@@ -396,17 +396,6 @@ impl Mock {
     }
 }
 
-fn copy_dir(from: &Path, to: &Path) {
-    std::fs::create_dir_all(to).expect("the directory is creatable");
-    for entry in std::fs::read_dir(from).expect("the directory is readable") {
-        let path = entry.expect("a directory entry").path();
-        if path.is_file() {
-            std::fs::copy(&path, to.join(path.file_name().expect("a file name")))
-                .expect("the file is copyable");
-        }
-    }
-}
-
 /// The harness's SQLite database, in the directory each run is granted.
 const SQLITE: &str = "/memory/floppy.sqlite";
 
@@ -428,11 +417,7 @@ fn layout_bounded(
 ) -> (PathBuf, PathBuf) {
     let dir = unique_scratch("reflection");
     support::copy_tree(&workspace().join("abilities"), &dir.join("abilities"));
-    copy_dir(&workspace().join("bots/builder"), &dir.join("bots/builder"));
-    copy_dir(
-        &workspace().join("bots/builder/schemas"),
-        &dir.join("bots/builder/schemas"),
-    );
+    support::copy_tree(&workspace().join("bots/builder"), &dir.join("bots/builder"));
     let harness = std::fs::read_to_string(
         workspace().join("tests/fixtures/phase5/reflection_harness.scx"),
     )

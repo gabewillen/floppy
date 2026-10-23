@@ -100,6 +100,7 @@ fn scratch_bot() -> PathBuf {
         "bots/floppy/firmware",
         "bots/builder",
         "bots/builder/schemas",
+        "bots/builder/xsd",
     ] {
         copy_dir(&workspace().join(sub), &dir.join(sub));
     }
@@ -301,6 +302,7 @@ fn with_name(name: &str) -> PathBuf {
         "bots/floppy/firmware",
         "bots/builder",
         "bots/builder/schemas",
+        "bots/builder/xsd",
     ] {
         copy_dir(&workspace().join(sub), &dir.join(sub));
     }
