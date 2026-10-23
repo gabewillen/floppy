@@ -68,12 +68,16 @@ def load_job(out):
     return job
 
 
-def logs(records):
-    return [
-        (r.get("label") or "", r.get("text") if isinstance(r.get("text"), str) else json.dumps(r.get("text")))
-        for r in records
-        if r.get("type") == "log"
-    ]
+def logs(records, sessions=False):
+    """(label, text) of each log record; with `sessions`, (label, text,
+    session), the session path of the child that logged it."""
+    out = []
+    for r in records:
+        if r.get("type") != "log":
+            continue
+        line = (r.get("label") or "", r.get("text") if isinstance(r.get("text"), str) else json.dumps(r.get("text")))
+        out.append(line + (r.get("session") or "",) if sessions else line)
+    return out
 
 
 def _step(job, at):
@@ -242,21 +246,16 @@ def builds(job):
     or `failed` "<reason>: <diagnostic>". Two builders can
     run at once (reflection's and the learning ability's), so each build is
     followed by its record's `session`. A build the turn cancelled has no
-    final state; the next `author` attempt 1, or a `design` not following
-    `triage`, starts the next build. Each is {accepted, attempts, failures, reason, cause,
+    final state; the next `author` attempt 1, or a `design` that follows
+    neither `triage` nor `retry_gate`, starts the next build. Each is {accepted, attempts, failures, reason, cause,
     diagnostics}."""
     out = []
     for records in job["sessions"]:
         current = {}
-        for record in records:
-            if record.get("type") != "log":
-                continue
-            label = record.get("label") or ""
-            text = record.get("text") if isinstance(record.get("text"), str) else json.dumps(record.get("text"))
-            where = record.get("session") or ""
-            build = current.get(where)
+        for label, text, where in logs(records, sessions=True):
             if label not in BUILDER_LABELS:
                 continue
+            build = current.get(where)
             if label == "author":
                 match = re.search(r"attempt (\d+)$", text)
                 attempt = int(match.group(1)) if match else 1

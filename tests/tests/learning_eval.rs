@@ -183,10 +183,10 @@ fn lessons_settle(run: &Run, limit: Duration, before: Tally) -> (bool, usize) {
     let mut waited = false;
     loop {
         let now = Tally::of(run);
-        let opened = now.opened - before.opened;
-        let closed = now.closed - before.closed;
+        let opened = now.opened.saturating_sub(before.opened);
+        let closed = now.closed.saturating_sub(before.closed);
         // The step's own turn is the first settle.
-        let results = (now.settled - before.settled).saturating_sub(1);
+        let results = now.settled.saturating_sub(before.settled).saturating_sub(1);
         if opened <= closed && results >= closed {
             if waited {
                 wait(run, SAY_GRACE, |_| false);
@@ -265,14 +265,17 @@ fn run_job(job: &Json, clock: Instant) {
                     } else {
                         // A stuck turn may still have closed lessons: count
                         // them, so it reads apart from one that taught nothing.
-                        let lessons = Tally::of(&run).closed - before.closed;
+                        let lessons = Tally::of(&run).closed.saturating_sub(before.closed);
                         ("say", false, lessons, false)
                     }
                 } else {
                     let seconds = spec["wait_s"].as_u64().unwrap_or(0);
-                    // Nothing ends a wait but its time.
+                    let before = Tally::of(&run);
+                    // Nothing ends a wait but its time; the lessons a
+                    // routine's turns closed in it are counted, not awaited.
                     wait(&run, Duration::from_secs(seconds), |_| false);
-                    ("wait", true, 0, true)
+                    let lessons = Tally::of(&run).closed.saturating_sub(before.closed);
+                    ("wait", true, lessons, true)
                 };
             steps.push(json!({
                 "session": session,

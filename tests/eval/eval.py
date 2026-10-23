@@ -286,8 +286,14 @@ def cmd_grade(args):
     builder_json = os.path.join(args.dir, "builder.json")
     if os.path.exists(builder_json):
         with open(builder_json, encoding="utf-8") as handle:
-            columns = [{"label": label, "builder": column["builder"]} for label, column in json.load(handle)["columns"].items()]
-        write_builder(args.dir, columns, graded)
+            saved = json.load(handle)
+        # A builder.json from before "models" echoes each model in its summary.
+        models = saved.get("models") or {
+            label: column["builder"] for label, column in saved.get("columns", {}).items() if "builder" in column} or None
+        if models is None:
+            print(f"{builder_json} names no column models; builder.md is not rebuilt", file=sys.stderr)
+        else:
+            write_builder(args.dir, [{"label": label, "builder": model} for label, model in models.items()], graded)
     print(json.dumps(summary, indent=2))
 
 
@@ -526,7 +532,9 @@ def write_builder(out, columns, graded):
     """builder.json and builder.md of a builder track's run."""
     table, summary = builder_table(columns, graded)
     with open(os.path.join(out, "builder.json"), "w", encoding="utf-8") as handle:
-        json.dump({"columns": summary, "jobs": graded}, handle, indent=2)
+        # The models are the run's inputs: a regrade reads them back.
+        models = {column["label"]: column["builder"] for column in columns}
+        json.dump({"columns": summary, "models": models, "jobs": graded}, handle, indent=2)
     with open(os.path.join(out, "builder.md"), "w", encoding="utf-8") as handle:
         handle.write(table)
 

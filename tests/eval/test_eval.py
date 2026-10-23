@@ -170,6 +170,10 @@ class Builds(unittest.TestCase):
                    "builds": [build(0, 0, "unfinished"), build(0, 1, "unfinished"), build(1, 0, "done")]}]
         _, summary = runner.builder_table([{"label": "a", "builder": "m"}], graded)
         self.assertEqual((summary["a"]["builds"], summary["a"]["cut_before_draft"], summary["a"]["builder"]), (2, 1, "m"))
+        with tempfile.TemporaryDirectory() as directory:
+            runner.write_builder(directory, [{"label": "a", "builder": "m"}], graded)
+            with open(os.path.join(directory, "builder.json"), encoding="utf-8") as handle:
+                self.assertEqual(json.load(handle)["models"], {"a": "m"})
 
 class Codec(unittest.TestCase):
     def test_every_prompt_round_trips(self):
