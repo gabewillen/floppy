@@ -3,15 +3,13 @@
 //! `<processing:selection_confidence>` as a
 //! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
-//! The original's `abilities/processing.py` holds what a stage needs between
-//! the offered events and their dispatch: the model-facing schema of each
-//! offered event (`model_facing_event_json_schema`), the turn's offered
-//! events with the actors that offer each (`collect_offered_events`), the
-//! one `dispatch` function tool a model selects them with (`dispatch_tool`,
-//! `_selection_item_branch`), and the confidence of a selection
-//! (`normalize_confidence`, `selection_confidence`). These are synchronous
-//! and quick, so they are executable content here. Dispatching is SCXML's
-//! own `<send>` ("dispatch is obviously send"): this namespace works out
+//! What a stage needs between the offered events and their dispatch: the
+//! model-facing schema of each offered event, the turn's offered events
+//! with the sessions that offer each, the one `dispatch` function tool a
+//! model selects them with ([`dispatch_tool`]), and the confidence of a
+//! selection ([`normalize_confidence`], [`least_confidence`]). These are
+//! synchronous and quick, so they are executable content here. Dispatching
+//! is SCXML's own `<send>` ("dispatch is obviously send"): this namespace works out
 //! what may be sent and never sends. Documents bind [`NAMESPACE_URI`]
 //! (conventionally with the prefix `processing`):
 //!
@@ -37,8 +35,7 @@
 //! # `<processing:model_facing_schema location="L" bound="N" overlocation="O"/>`
 //!
 //! Rewrites the choice array at `location` (required) in place to what a
-//! model needs to fill each event (the original's
-//! `model_facing_event_json_schema`, with floppy's offer bound, decision
+//! model needs to fill each event (under floppy's offer bound, decision
 //! D35): every entry becomes `{event, schema, description?, target?}`,
 //! canonical JSON, in order, and every schema loses `$schema`, `title` and
 //! `examples` at every level, keeping property names (the members of
@@ -55,8 +52,7 @@
 //! # `<processing:collect_offered_events location="L" choices="X" offers="Y" devices="D" focus="F" bound="N" overlocation="O" sizelocation="S"/>`
 //!
 //! A turn's offered events, each tagged with the session id of the session
-//! that offers it (the original's `collect_offered_events`, which keys
-//! each offered event by the live actors that enable it): the choices
+//! that offers it: the choices
 //! `choices` (required) evaluates to are the document's own, each tagged
 //! with the document's `_sessionid`; each member of the object `offers`
 //! (optional) evaluates to (an invoke id of the document's child → its
@@ -80,21 +76,19 @@
 //!
 //! # `<processing:send location="L" choices="X" max="N"/>`
 //!
-//! `location` receives the original's `dispatch` tool for the choices
-//! `choices` evaluates to (`dispatch_tool` and `_selection_item_branch`)
-//! as one JSON Schema: the tool's `parameters`, with the tool's
+//! `location` receives the `dispatch` tool for the choices `choices`
+//! evaluates to as one JSON Schema: the tool's `parameters`, with the tool's
 //! description ([`DISPATCH_DESCRIPTION`]) as its root `description`, which
 //! the generate service sends as the function's `description`. The
 //! parameters are `{events: [anyOf one branch per offered event]}` (the
-//! events in choices order, each offered once; `events` required, with the
-//! original's description and examples: `[]`, and the first branch's
+//! events in choices order, each offered once; `events` required, with a
+//! fixed description and the examples `[]`, and the first branch's
 //! example when it has one), and with no choices an item is any
 //! `{event, data?}`. `max` (optional, a decimal integer) puts `maxItems`
-//! on `events` (floppy's, not in the original's tool: reflection selects at
-//! most one event). A branch is `{event, data, reason?, target?}` with the
-//! original's descriptions: `event` a one-value enum; `data` the first such
-//! choice's schema without its top-level `$schema` (an empty object for no
-//! schema or an empty one, the schema wrapped as the required property
+//! on `events` (reflection selects at most one event). A branch is
+//! `{event, data, reason?, target?}` with fixed descriptions: `event` a
+//! one-value enum; `data` the first such choice's schema without its
+//! top-level `$schema` (an empty object for no schema or an empty one, the schema wrapped as the required property
 //! `value` for one of another type without `properties`, else with `type`
 //! `object` and `additionalProperties` `false` when it names neither);
 //! `reason` an optional string; `target`, present and required when some
@@ -105,18 +99,16 @@
 //! `examples` starts with an object the branch has one example, `{event,
 //! data, target}` (`target` only for a single target). Nothing is
 //! normalized for strict decoding. The result is canonical JSON. The
-//! tool's name on the wire is the original's, `dispatch` (the generate
-//! service's `schemaname`).
+//! tool's name on the wire is `dispatch` (the generate service's
+//! `schemaname`).
 //!
 //! # `<processing:selection_confidence location="L" selections="X"/>`
 //!
 //! `location` receives the confidence of the selections `selections`
 //! evaluates to (an array of objects): the least of their `confidence`s,
-//! each normalized as the original's `normalize_confidence` does (a number
-//! in `(0, 1]` is a probability, scaled to 0–100; any other number is on
-//! the 0–100 scale already; rounded half to even, as Python's `round`
-//! does, and clamped to 0–100), as the original's `selection_confidence`
-//! takes it; a selection whose `confidence` is not a number is left out,
+//! each normalized by [`normalize_confidence`] (a number in `(0, 1]` is a
+//! probability, scaled to 0–100; any other number is on the 0–100 scale
+//! already; rounded half to even and clamped to 0–100); a selection whose `confidence` is not a number is left out,
 //! and with none left `location` receives `null`.
 //!
 //! # Failures
@@ -839,7 +831,7 @@ fn send<H: ProcessingHost>(
     Ok(Executed::Handled)
 }
 
-/// The original's `dispatch` tool of `choices` as one JSON Schema, canonical
+/// The `dispatch` tool of `choices` as one JSON Schema, canonical
 /// JSON: its `parameters`, with its `description` as the root
 /// `description` (the generate service sends that as the function's), and
 /// `maxItems` `max` on `events` when given. See the crate documentation
@@ -874,7 +866,7 @@ pub fn dispatch_tool(choices: &Json, max: Option<usize>) -> Result<String, &'sta
     let branches: Vec<Json> = offered
         .into_iter()
         .map(|(choice, mut targets)| {
-            // The original's `_normalized_targets`: sorted, distinct.
+            // The targets offering the event: sorted, distinct.
             targets.sort();
             selection_item_branch(
                 choice.get("event").cloned().unwrap_or(Json::Null),
@@ -923,7 +915,7 @@ pub fn dispatch_tool(choices: &Json, max: Option<usize>) -> Result<String, &'sta
     })))
 }
 
-/// The original's `dispatch` tool description, verbatim.
+/// The `dispatch` tool's description.
 pub const DISPATCH_DESCRIPTION: &str = "Dispatch all events necessary for the input. Call once. \
     Multi-select by listing every offered event this turn requires in the events array \
     (for example a device action and speech together when both are needed). \
@@ -932,13 +924,12 @@ pub const DISPATCH_DESCRIPTION: &str = "Dispatch all events necessary for the in
     the host cascade (e.g. deliberative reasoning); use an explicit ignore/pass event when \
     the stage should handle the turn with no environment actions.";
 
-/// The original's description of the `dispatch` tool's `events`, verbatim.
+/// The description of the `dispatch` tool's `events`.
 const DISPATCH_EVENTS_DESCRIPTION: &str = "All events necessary for the input this turn. Each item is one offered \
     event branch (enum-pinned name + that event's data schema). Include every action \
     required together; empty array selects none.";
 
-/// One offered event's branch, as the original's `_selection_item_branch`
-/// builds it: `event` a one-value enum, `data` the event's schema
+/// One offered event's branch: `event` a one-value enum, `data` the event's schema
 /// ([`selection_data`]), `reason` optional, `target` an enum of the
 /// `targets` offering it when there are any; `event` required, `data`
 /// required when its schema requires a field, `target` when present; the
@@ -1018,8 +1009,7 @@ fn selection_item_branch(event: Json, schema: &Json, targets: &[String]) -> Json
     Json::Object(branch)
 }
 
-/// A choice's schema as a branch's `data`, as the original projects an
-/// event's payload schema: no schema (or an empty one) is an empty object;
+/// A choice's schema as a branch's `data`: no schema (or an empty one) is an empty object;
 /// a schema of another type without `properties` is wrapped as the
 /// required property `value`; otherwise the schema (without a top-level
 /// `$schema`), `type` `object` and `additionalProperties` `false` when it
@@ -1096,9 +1086,9 @@ fn selection_confidence<H: ProcessingHost>(
     Ok(Executed::Handled)
 }
 
-/// The original's `normalize_confidence`: a number in `(0, 1]` is a
-/// probability, scaled to 0–100; any other is on the 0–100 scale; rounded
-/// half to even (Python's `round`) and clamped to 0–100.
+/// A confidence on the 0–100 scale: a number in `(0, 1]` is a probability,
+/// scaled to 0–100; any other is on the 0–100 scale; rounded half to even
+/// and clamped to 0–100.
 #[must_use]
 pub fn normalize_confidence(value: f64) -> u8 {
     let scaled = if value > 0.0 && value <= 1.0 {
@@ -1113,8 +1103,7 @@ pub fn normalize_confidence(value: f64) -> u8 {
         .unwrap_or(100)
 }
 
-/// The original's `selection_confidence` over normalized confidences: the
-/// least `confidence` of the `selections` that carry a number, `None` when
+/// The selection confidence over normalized confidences: the least `confidence` of the `selections` that carry a number, `None` when
 /// none does.
 ///
 /// # Errors

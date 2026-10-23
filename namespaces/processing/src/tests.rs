@@ -954,7 +954,7 @@ fn send_with_max_bounds_the_events_array() {
     .expect("built");
     let events = &assigned_any(&host, "schema")["properties"]["events"];
     assert_eq!(events["maxItems"], json!(1));
-    // Without max the array is unbounded, as the original's tool is.
+    // Without max the array is unbounded.
     let mut host = with_values(&[("choices", json!([deactivate_choice()]))]);
     execute(
         "send",
