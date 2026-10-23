@@ -1,9 +1,11 @@
 # Plan: episodic graph memory, embeddings and associative recall
 
-Gaps 9 and 10 ([open gaps](parity-gaps.md)), workstream item M6. This
-is a plan only: it needs the maintainer's decisions 3 (migrations; D165 is
-proposed), 7 (rest and consolidation) and, for persons, 6 (participant
-identity). Nothing here is built until they are answered.
+Graph memory and embeddings ([open work](../handoff.md#open-work)),
+workstream item M6. This is a plan only: it needs the maintainer's
+[decisions](../handoff.md#design-decisions-for-the-maintainer) 3
+(migrations; D165 is proposed), 7 (rest and consolidation) and, for
+persons, 6 (participant identity). Nothing here is built until they are
+answered.
 
 ## Target behavior
 

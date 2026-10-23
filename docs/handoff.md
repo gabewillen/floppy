@@ -143,7 +143,7 @@ Last updated: 2026-10-22.
   its own base URI, fetched each time it is invoked) came with it. Open: D121's "To
   review" list under "Open decisions" below.
 - **Parity gap 13's small part (2026-10-18,
-  [parity-gaps](plans/parity-gaps.md)):** `<conversation:ingest_content>`
+  [open work](#open-work)):** `<conversation:ingest_content>`
   no longer takes an image stimulus as `image/*` content, as the original's
   `0d0f5e2` deletes that branch; until the turn attachments are ported (the
   rest of gap 13), an image adds nothing to a turn, and a turn of images
@@ -151,7 +151,7 @@ Last updated: 2026-10-22.
   its baseline re-measured on macOS arm64.
 - **Q8: the decision service's kinds are OpenAI Decisions API's question
   types, with J16 and J17 (2026-10-18, D120,
-  [plan](plans/original-domains.md#to-review-q8)):** `choice` (the default;
+  [to review](#choices-to-review)):** `choice` (the default;
   was `choose`, and `classify` when given `labels`), `predicate` (was
   `select`, its behavior unchanged: each event's confidence is still its
   share of the one `selection` question) and `score` (was `rank`); the
@@ -161,7 +161,7 @@ Last updated: 2026-10-22.
   so intuition passes its `choices` and `stimulus` as they are. Open: the
   plan's "To review (Q8)" list.
 - **Parity gaps 3, 5 and 4 ported; gap 6 stopped (2026-10-18, D117 to
-  D119, [parity-gaps](plans/parity-gaps.md)):** recalled context trims to
+  D119, [open work](#open-work)):** recalled context trims to
   the prompt budget instead of failing the turn (D117; open: on wasm the
   data model's 64 KiB value bound refuses a prompt before it is big enough
   to trim, so the maintainer lowers the budget or the bound is raised
@@ -177,7 +177,7 @@ Last updated: 2026-10-22.
   `spoken`/`unspoken`/`outcome` are ported on unstreamed audio, `voice_id`
   null until decision 6.
 - **The behavior and autonomy namespaces, and no bot namespace (2026-10-18,
-  D116, [plan](plans/original-domains.md) step 4, the last):**
+  D116, the namespace plan's step 4, the last):**
   `namespaces/behavior` (`<behavior:instances_from_behavior_results>`,
   `<behavior:replace_behavior_clauses>`, `<behavior:lifetime_errors>`,
   `<behavior:verify_tick>`) and `namespaces/autonomy`
@@ -188,13 +188,13 @@ Last updated: 2026-10-22.
   `decision` keeps only `choice` and `pin`. Open: J7 (`next_after` stays
   JavaScript: `<scx:validate>` binds no extension package, so a routine
   draft cannot use a namespace element; an scxml.rs change), the plan's
-  "To review (step 4)" list and its [Map status](plans/original-domains.md#map-status);
+  "To review (step 4)" list and the [open work](#open-work);
   the behavior and autonomy namespace IRP baselines were measured on macOS
   arm64. On macOS, `scripts/namespace-irp.sh prepare` fails at
   `cache-create` (its `mktemp -d` is under the `/var` symlink); prepare
   with `scx conformance prepare` and a `--cache` in the scratchpad.
 - **The identity, conversation and memory namespaces (2026-10-18, D115,
-  [plan](plans/original-domains.md) step 3):** `namespaces/identity`
+  the namespace plan's step 3):** `namespaces/identity`
   (`<identity:hears_name>`, was `<bot:recognize>`;
   `<identity:sorted_identities>`), `namespaces/memory` (`<memory:to_json>`,
   `<memory:contents>`) and the `conversation` namespace's ten elements
@@ -208,7 +208,7 @@ Last updated: 2026-10-22.
   plan's "To review (step 3)" list; the bot, conversation, identity and
   memory namespace IRP baselines were measured on macOS arm64.
 - **The intuition and cognition namespaces (2026-10-18, D114,
-  [plan](plans/original-domains.md) step 2):** `namespaces/intuition`
+  the namespace plan's step 2):** `namespaces/intuition`
   (`<intuition:observe>`, `<intuition:escalate>`, the original's
   `ConfidenceTuner`, its state the `confidence_tuner` datum) replaces
   `<decision:tuner>`; `namespaces/cognition`
@@ -220,7 +220,7 @@ Last updated: 2026-10-22.
   "To review (step 2)" list; the four namespace IRP baselines touched were
   measured on macOS arm64.
 - **The processing namespace and every stage's sends (2026-10-18, D113,
-  [plan](plans/original-domains.md) step 1):** `namespaces/processing`
+  the namespace plan's step 1):** `namespaces/processing`
   (`<processing:model_facing_schema>`, `<processing:collect_offered_events>`,
   `<processing:send max?>`, `<processing:selection_confidence>`) replaces
   `<decision:compact>`, `<decision:assemble>`, `<decision:selection>` and
@@ -247,7 +247,7 @@ Last updated: 2026-10-22.
   the `dispatch` calls' events with nested `<foreach>` (D113), the builder
   takes its call by name, and `<processing:send>` builds the original's
   dispatch tool exactly. The maintainer's mapping of floppy's domains onto
-  the original's modules is [plans/original-domains.md](plans/original-domains.md);
+  the original's modules is retired; its open choices are under [Choices to review](#choices-to-review);
   its step 1 is done (above).
 
 - **The environment (2026-10-16, D102 to D111,
@@ -894,6 +894,259 @@ The remaining the original port runs as one ultracode run with these grants:
      fail their simulation on the turn behavior contract). (Resolved by
      D122: the draft whose simulation looped no longer ends the run; it
      fails its test and is repaired.)
+
+## Open work
+
+What is still to build, each item with its issue where one exists.
+
+- **The recall budget on wasm (D117).** `<cognition:model_facing_content>`
+  trims `prior_episodes` and `standing_directives` to the prompt budget,
+  newest first, but on wasm the data model's 64 KiB value bound refuses a
+  prompt before it is big enough to trim, so the trimming is proven only
+  natively (`namespaces/cognition/src/tests.rs`). Lower the budget, or
+  raise the bound in scxml.rs.
+- **Learning** (#14, #16): drafts staged before they are installed, an
+  end-to-end test of a learned behavior on a later real turn, examples
+  and byte budgets for reflection's select and builder prompts, and a
+  builder that works with small models (#14); reflection selecting
+  `bot.ability.persona.revise`, the Revision document and the Learning
+  ability (#16). A change does not yet keep the behavior's own triggers
+  as evidence: `evidenceStimulusNames()` in
+  `abilities/reflection/reflection.js` reads the turn's stimulus and the
+  prior episodes, not `existing_behavior.triggers` (#14, L6).
+- **Communication's rings** (#29, D175): the response and utterance
+  senders name their send ids, so the rings keyed on `_event.sendid`
+  catch a repeat.
+- **Interpretation reads `producing`** (#30, D177).
+- **Streaming speech** (S5 step B; step A, #18, is D179): streaming
+  encoding and per-chunk playout, drafts spoken while the reply is
+  generated with an `abandoned` outcome, and streaming decoding with an
+  end of turn. Today vocal encodes each stretch whole (D178) and speaking
+  paces its playout (D179). It waits on the maintainer: the chunk event's
+  name, whether to chunk a backend that answers one chunk per stretch,
+  how a draft is correlated with its final respond (an SCXML `<send>`
+  takes no id from an expression), who produces drafts, and the draft
+  timeout.
+- **Voicing**: voice catalogs, voice design and the bot's own voice;
+  `bot.ability.speaking.output`'s `voice_id` is null until then (D179).
+- **Graph memory and embeddings** ([plan](plans/graph-memory.md)):
+  episodes as nodes with vectors, associative recall,
+  `bot.ability.memory.recall`, an embedding ability for text and images
+  over a remote embedder, and consolidation while the cognition rests.
+  It waits on decisions 3, 7 and, for persons, 6.
+- **Hearing identity**: participant refs through an identification
+  registry, overlap while speaking, tone, and enrolling the bot's own
+  voice. Today the hearing gives voice embeddings and each embedding
+  source is its own participant (D79). It waits on decision 6.
+- **Multimodal turns**: `<conversation:ingest_content>` takes no
+  `image/*` content, so an image adds nothing to a turn and a turn of
+  images alone fails as empty (`Turn closed with neither text, audio, nor
+  modality-neutral content.`). Open: images attached to a completed turn
+  (a bound on their count, a failure past it, the conversation's
+  attachments and how long it keeps them), a typed image value, image
+  placeholders and content parts in a turn's content, and a typed
+  `environment.visual` image.
+- **Faces** (D188): face detection and face identity in seeing wait on
+  decision 6; an embedding change measure and a cascade of measures wait
+  on embeddings.
+- **Effort ceilings**: each stage narrowing the turn's frame to its own
+  effort ceiling (decision 8).
+- **Sandbox, devices and transport** (decision 5): a sandbox ability over
+  a Docker or Podman host; computer, HID keyboard and pointer, audio
+  microphone and speaker, and phone devices, with owner-command routing;
+  transform codecs, transport peers, yamux over WebSocket and a LiveKit
+  room. The tests use the lamp fixture.
+- **Example bots**: a building example (decision 4), and minimal,
+  listen-and-speak, phone and SMS chat bots, each after its abilities.
+- **Telemetry metrics**: no metrics are emitted. A voice embedding is
+  never written to the records (`<biometric:VoiceEmbedding>`,
+  `environment.rs` `a_voice_embedding_is_never_written_to_the_records`).
+- **Logic still in JavaScript that a namespace or a schema could hold:**
+  - A routine's `at` schedule: `next_after` is JavaScript text in
+    `reflection.js` that each routine carries as data. A
+    `<behavior:next_after>` element waits on scxml.rs: `<scx:validate>`
+    binds no extension package, so a draft that uses one fails with
+    `XSD001` (D116).
+  - Reflection's evidence and grounded triggers (`evidenceStimulusNames`,
+    `evidenceTriggerNames`, `groundedTriggers`, `acceptedTriggers`) as a
+    `<reflection:grounded_triggers>` element.
+  - Interpretation's `speechProduct` as a `<send>` with `<param>`s, its
+    `voice_embedding` behind an `<if>`.
+  - Interpretation's segment checks (`isSegmentSourceMismatch`,
+    `isSegmentRateMismatch`, `isSegmentFormatMismatch`,
+    `segmentSourceMismatch`, `segmentConversionFailure`), which compare
+    one field with another, in a `listening` namespace (its name open);
+    sensitivity's `receivedLevel`, `observedGain` and `perceivedLevel`
+    may join it.
+  - The body's `environmentField()` (`bots/floppy/floppy.js`) as an
+    `<environment:model_snapshot>` element.
+  - `<migration:plan>` writing the version guard and the ordered
+    statements (`versionGuard`, `appliedStatements` in `migration.js`;
+    `canRetry` stays).
+  - `builder.request`'s optional bounds (`isOptionalBound`,
+    `requestBound`, `requestConstraints`, `requestMaxAttempts`,
+    `requestModel`, `requestGenerateTimeoutMs`,
+    `requestGenerateCeilingMs`, `isOptionalGenerateBound` in
+    `builder.js`) in `bots/builder/schemas/builder.request.json` (D42).
+- **Session-id targets and the local model.** The dispatch tool's
+  `target` enum lists session ids (D113). Live on 2026-10-18,
+  `Qwen/Qwen3.8-Flash-Next` put `bot.focus_device`'s `device` beside
+  `event` instead of in `data`; with readable keys, or no `target` on
+  that branch, it filled the selection correctly (docs/live-proof.md).
+  Offering readable keys and sending to their sessions is open.
+
+## Design decisions for the maintainer
+
+Numbered as decisions.md and the open work cite them.
+
+| # | Question |
+| --- | --- |
+| 2 | **Postgres:** keep `services/pgsql` and D69 to D72, or keep only SQLite (the user chose SQLite for now, 2026-10-10)? |
+| 3 | **Migrations:** accept D165 (a schema change is a new revision: `0003_stm_turns`, the graph tables `0004`), or rewrite `0001` in place, which breaks every existing database? |
+| 4 | **The name "builder":** a user-facing example bot that builds things would clash with `bots/builder`, the behavior author; one of them needs another name. |
+| 5 | **Devices and transport:** they are out of scope; the sandbox, the devices, the building example and the transport need them. |
+| 6 | **Participant identity:** keep D79 (each embedding source is its own participant), or identify participants through a registry with `voice:` and `face:` refs? Faces (D188), `voice_id` (D179) and hearing identity wait on it. |
+| 7 | **Rest and consolidation:** give the cognition a rest state in which memory consolidates? |
+| 8 | **Effort ceilings:** have each stage narrow the turn's frame to its own effort ceiling? |
+| 9 | **A container image** for `scx run`? floppy has no runtime of its own (D14). |
+
+## Choices to review
+
+Choices the namespace steps (D113 to D116) and the decision kinds (D120)
+made where the plan left a question open, each for the maintainer to
+review. Q9 (a document with no functions drops its `.js`, amending D65)
+was taken on the recommendation and is not exercised: every document
+still has functions. Two names are open: `<processing:model_facing_schema>`
+(or `<processing:schema>`) and `<conversation:message_for_turn>`;
+`<decision:pin>` keeps its name until the maintainer names it (Q11).
+
+**D113, the processing namespace and every stage's sends:**
+
+1. The ignore is tagged with the cognition's session id, so every stage
+   sends it to the cognition, whose transitions log it.
+2. The body sends itself (`#_internal`) each selection whose `target` is
+   not a string (`hasNoTarget` in `floppy.js`): the trusted seed's
+   selection names none.
+3. `<processing:collect_offered_events>` takes the focused device's
+   events from `devices` and `focus`, tagged with its snapshot's `id` and
+   sorted by its reference among the children's invoke ids.
+4. Reflection's trailing self-send is `bot.ability.reflection.selected`;
+   the candidates runner raises
+   `bot.ability.autonomy.candidate.dispatch.succeeded` after its sends,
+   and an `error.*` before it fails the candidate (`Autonomy behavior
+   dispatch failed: <error>`).
+5. Intuition sends a selection no single session offers nowhere: the
+   decision service names a target only for a single offerer (D150).
+6. `<processing:selection_confidence>` reads a number in (0, 1] as a
+   probability; the data model cannot tell 1 from 1.0, so 1 is certainty
+   (100).
+7. Autonomy and the candidates runner take no `choices`; the turn
+   behavior contract asks a behavior to name each selection's `target`.
+8. The body's `bot.focus_device` guard holds whenever the turn has focus
+   candidates.
+9. The turn's output is the handling stage's selections; intuition sends
+   its environment actions itself, and they are not in the output.
+10. `<log expr="choices"/>` logs whole choices; tests read their names
+    with `support::choice_names`.
+11. A turn may focus the lamp twice (intuition's environment action, then
+    reasoning's selection), and the body sets the focus each time;
+    `live_choices` expects the lamp focused at least once.
+
+**D114, the intuition and cognition namespaces:**
+
+1. A budget's message goes to `failurelocation` (reasoning's
+   `prompt_failure`) and `null` to `location`; without
+   `failurelocation` it is `error.execution`.
+2. The element's inputs are `stimulus`, `prior_episodes`,
+   `standing_directives`, `environment`, `instructions` and `schema` (the
+   parameters `<processing:send>` built).
+3. Object members render in sorted order, the data model's canonical
+   JSON.
+4. Each input is bounded by the 64 KiB value bound; one over it fails
+   reasoning as `the reasoning could not run (error.execution)`.
+5. A null confidence never escalates.
+6. Intuition logs `turn N: <events> (confidence C, escalate B)`.
+7. The tuner datum, `<param>` and donedata field are `confidence_tuner`;
+   the log label `cognition.tuner` is kept.
+8. A tuner state that is not one reads as the initial state.
+9. The environment block is part of `<cognition:model_facing_content>`;
+   the body's `environmentField()` stays in `floppy.js` (open work).
+10. Malformed input (a `self` or a device's `attributes` that is a
+    string) renders nothing.
+
+**D115, the identity, conversation and memory namespaces:**
+
+1. `<conversation:message_for_turn>` has no `keylocation`;
+   `<conversation:relationship_for_input>` works out the relationship's
+   context reference.
+2. `identities_json` is part of `<memory:to_json>`, its only caller.
+3. `<memory:contents location result>` takes one statement's result,
+   parses each content as a JSON object and skips the rest.
+4. `<conversation:participant_for_source>` adds a participant on first
+   sight and `<conversation:fail_turn>` drops the one whose detector
+   failed; a failed remember restores the participants from the
+   `participants` datum, and an inbound commit appends its sequence with
+   `<assign>`.
+5. `isCommittedAppend` stays in `conversation.js`: it searches the
+   history, which never crosses the extension boundary.
+6. The turn detector's elements are `<conversation:ingest_content>` and
+   `<conversation:on_end>`, over one `turn_content` datum.
+7. `<conversation:new_track_ref>` runs in `turn_exchange`'s entry and
+   writes the unit vector as `JSON.stringify` does.
+8. The similarity threshold and margin are Rust constants
+   (`SIMILARITY_THRESHOLD` 0.85, `SIMILARITY_MARGIN` 0.05).
+9. An identity may be an embedding (an array of numbers).
+10. The relationships cross the extension boundary (64 KiB per value on
+    wasm), so a long conversation with many embedding participants can
+    fail an input as `error.execution`.
+11. `<conversation:complete_turn>` takes the relationship's
+    `session_ref` and commits the product itself.
+12. `<memory:to_json>` writes `null` for an input without content, and
+    `<memory:contents>` skips a row with a lone surrogate escape or a
+    number out of range.
+
+**D116, the behavior and autonomy namespaces:**
+
+1. The stimulus envelope is assigned member by member and sent with
+   `<param name="stimulus">`; a `bot.input`'s source is `null`.
+2. `<behavior:instances_from_behavior_results>` takes two statements'
+   results (`behaviors`, `triggers`); the first instance is a `prepared`
+   datum (`preparedBehavior()`).
+3. `<behavior:replace_behavior_clauses>` owns its SQL as Rust constants;
+   a create's draft is stored by it too (delete, delete, insert `DRAFT`,
+   then its triggers).
+4. A document is persistent when it has a `<send
+   event="bot.behavior.tick">`, read as XML (`lifetimelocation`).
+5. `<behavior:lifetime_errors>` takes `min_every` and `turn_after_bound`
+   in milliseconds and `scheduleslocation`; a draft that does not parse
+   has no diagnostics, and the validator's report decides it.
+6. `<behavior:verify_tick>` checks the forced tick; comparing a test's
+   outputs with its expectations stays in `builder.js`, gated by
+   `isTickTest()`.
+7. `<autonomy:behavior_input_payload>` always sets `focus` and
+   `focus_candidates` (`null` and `[]` included); array data is
+   `{event: data}`.
+8. Element outputs are canonical JSON, so behaviors in reflection's
+   select prompt and the turn contract's `INPUT` render with sorted keys.
+
+**D120, the decision service's kinds:**
+
+1. `predicate` is one kind, not one predicate per choice, so each
+   event's confidence is still its share of one `selection` question and
+   intuition can abstain as `declined`.
+2. `choice` takes `choices` (the chosen event) or `labels`
+   (`decision.classified`), exactly one, each with its own default
+   instructions.
+3. The service's events keep their names.
+4. The batch's question names follow the kinds for `score` and for
+   `choice` over labels.
+5. The service skips the handoff by name, `bot.ability.reasoning.input`,
+   for `choice` over events and for `predicate`; `isDeliberativeHandoff`
+   stays in `intuition.js` for `hasDeliberativeInput`.
+6. `stimulus` reads only `event` and `data`; its other members are
+   ignored.
+7. `services/decision` has no README: its contract is the crate
+   documentation in `src/lib.rs`.
 
 ## Backlog (agreed, not started)
 

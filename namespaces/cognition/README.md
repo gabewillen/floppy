@@ -29,8 +29,8 @@ output's messages render without `provenance`, `source_ids` and
 data model's boundary is bounded at 65536 bytes (scxml.rs's ECMAScript data
 model, `MAX_VALUE_BYTES`), so a prompt that would be trimmed is refused by
 the assignment first (`error.execution`); the trimming is tested natively
-([`src/tests.rs`](src/tests.rs)), and the bound is an open question in
-[parity-gaps.md](../../docs/plans/parity-gaps.md).
+([`src/tests.rs`](src/tests.rs)), and the bound is open work in
+[the handoff](../../docs/handoff.md#open-work).
 
 The exact semantics and failures are in [`src/lib.rs`](src/lib.rs); the
 structure is in [`package/cognition.xsd`](package/cognition.xsd), whose digest the
