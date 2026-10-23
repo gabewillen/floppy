@@ -1,11 +1,11 @@
 //! The Exif orientation `OpenCV` turns a decoded image by
 //! (`ApplyExifOrientation` after `imdecode`, unless
-//! `IMREAD_IGNORE_ORIENTATION`), which the original's reduced decode does.
-//! `OpenCV` reads it from a JPEG's `Exif` APP1 segment and a PNG's `eXIf`
-//! chunk (a WebP's only when metadata is asked for, which the original
-//! does not), with its own TIFF reader (`ExifReader`), whose quirks this
-//! keeps: it reads the first directory's entries in order, keeps the first
-//! orientation, and stops at the first entry it cannot read.
+//! `IMREAD_IGNORE_ORIENTATION`), which its reduced decode does. `OpenCV`
+//! reads it from a JPEG's `Exif` APP1 segment and a PNG's `eXIf` chunk (a
+//! WebP's only when metadata is asked for), with its own TIFF reader
+//! (`ExifReader`), whose quirks this keeps: it reads the first directory's
+//! entries in order, keeps the first orientation, and stops at the first
+//! entry it cannot read.
 
 use crate::Gray;
 
