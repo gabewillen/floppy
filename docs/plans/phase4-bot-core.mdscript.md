@@ -237,7 +237,7 @@ Body-received ability schemas: the body cannot reference `abilities/schemas/` (n
 * author topology: `inactive` → `live{activating, active{unfocused, focused, processing, cancelling_processing}}`, `deactivating`, `degraded` (sink with `<log label="bot.degraded">`)
 * hold `<invoke type="scxml" id="cognition" src="../../abilities/cognition/cognition.scx">` in `live`; leaving `live` is the cleanup, with no cleanup state of its own
 * make readiness the first `bot.ability.offers` from each expected invoke id; arm a run-tagged activation timer (30000 ms `<data>`); timer or `error.*` from a member raises `bot.activating.failed` → `inactive`
-* in `processing`: increment `turn`, compute focus candidates with an ECMAScript port of `attention_bias_for_turn`, send `bot.ability.cognition.input {turn, stimulus, focus, focus_candidates, choices, world}` to `#_cognition`, arm `bot.processing.timed_out` (300000 ms `<data>`), cancel it on exit
+* in `processing`: increment `turn`, compute focus candidates (the turn's attention bias) in ECMAScript, send `bot.ability.cognition.input {turn, stimulus, focus, focus_candidates, choices, world}` to `#_cognition`, arm `bot.processing.timed_out` (300000 ms `<data>`), cancel it on exit
 * correlate replies with `_event.invokeid === 'cognition' && _event.data.turn === turn`
 * on timeout send `bot.ability.cognition.cancel {turn}` → `cancelling_processing` with a cancel timer clamped to 100..5000 ms; cancelled → `bot.processing.failed`; cancel timeout → `degraded`
 * defer `bot.input` and `bot.ability.cognition.input` in `processing` and `cancelling_processing` with the data-model queue; replay on `focused`/`unfocused` entry with `<send target="#_internal">`, carrying `from` and guarding on `_event.invokeid || _event.data.from`
@@ -438,7 +438,7 @@ Body-received ability schemas: the body cannot reference `abilities/schemas/` (n
 
 * goal: hard-cutover docs and report phase 4
 * files: `docs/port-plan.md`, `docs/decisions.md`, `AGENTS.md`, `docs/handoff.md`
-* correct port-plan: attachment names are `attachment.*` plus `bot.ability.attachment.terminal` and none are ported; `.scx` not `.scxml`; stale phase 0 outbound-http text and phase 7 Nemotron text
+* correct port-plan: attachment names are `attachment.*` plus `bot.ability.attachment.terminal` and none are built; `.scx` not `.scxml`; stale phase 0 outbound-http text and phase 7 Nemotron text
 * record conventions in port-plan: defer queue, offers protocol, choices as data, memory seam, per-turn stage children, and the [Document Structure Map](#document-structure-map) table (unit → `.scx` child / service / namespace element / `event:schema`)
 * add decisions from D33 onward (D30-D32 exist): the flat `abilities/` layout, the body as the bot root, `bot.ability.offers`, `<decision:choice events>`, schema files by reference (G1 closed), generated body twins, text-mode speaking, no default generate origin, the document structure rule (one `.scx` per state machine; no `<script>`), the floppy namespaces `bot` and `conversation` and the new decision elements, and runtime `event:schema` enforcement (or its blocked state)
 * add `abilities/` and `namespaces/<name>/` to AGENTS.md's layout rule, and the no-`<script>` / `event:schema`-only rule to its normative rules
