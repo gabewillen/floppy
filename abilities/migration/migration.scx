@@ -29,7 +29,7 @@
   migrating it."). planning
   orders the steps with <migration:plan> (a linear history walked by
   revision and down_revision). applying runs, in one transaction,
-  Alembic's alembic_version creation (when missing, as Alembic does),
+  Alembic's alembic_version creation (when missing),
   the version row's guard and then every step's statements: the guard moves
   the row from the version read to the target and must touch exactly one
   row (the sql service's rowcount), so a migration that got there first
