@@ -9,12 +9,12 @@ function hasDecodedText(_event) {
   return typeof Object(_event.data).text === 'string';
 }
 
-// The original's decoded speech, as words.
+// The decoded speech, as words.
 function decodedOutput(_event) {
   return ({text: _event.data.text});
 }
 
-// The original's FailureData.
+// The failure: the service's message, or a fixed one.
 function failedOutput(_event) {
   return ({message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'SpeechDecoding failed.'});
 }

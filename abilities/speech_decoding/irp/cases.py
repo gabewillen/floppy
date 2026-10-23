@@ -17,10 +17,10 @@ def message(value):
     return f"_event.data.message === {js(value)} && Object.keys(_event.data).length === 1"
 
 
-S.statement(1, "By default it decodes through the original's gemini SpeechDecoder: the speech service's `decode` with provider `gemini` and model `gemini-3.5-flash`, `POST {base}/interactions`. The service's `bot.ability.hearing.speech.decoding.output` `{text}` ends it in `applied`, its done data (`done.invoke.speech_decoding`) exactly `{text}`: the answer's `output_text`, or its `model_output` steps' text, trimmed.")
+S.statement(1, "By default it decodes through Gemini: the speech service's `decode` with provider `gemini` and model `gemini-3.5-flash`, `POST {base}/interactions`. The service's `bot.ability.hearing.speech.decoding.output` `{text}` ends it in `applied`, its done data (`done.invoke.speech_decoding`) exactly `{text}`: the answer's `output_text`, or its `model_output` steps' text, trimmed.")
 S.statement(2, "Speech the backend heard none of decodes to empty words: done data `{text: \"\"}`, not a failure.")
 S.statement(3, "The `provider` and `model` `<param>`s choose the backend: provider `null` is the OpenAI-compatible `POST {base}/audio/transcriptions`, whose answer's `text` becomes the done data's `text`.")
-S.statement(4, "When the service answers `bot.ability.failed` `{message}` (an unreadable or empty audio file, an error status, a malformed answer), the done data is the original's FailureData, exactly `{message}` with the service's message.")
+S.statement(4, "When the service answers `bot.ability.failed` `{message}` (an unreadable or empty audio file, an error status, a malformed answer), the done data is exactly `{message}` with the service's message.")
 S.statement(5, "When the decoder cannot run (a missing `audio`, or a malformed `media_type`, rejects its start with `error.execution`), the done data is `{message: \"SpeechDecoding could not run (<error event>)\"}`.")
 
 # 1: the gemini default.
