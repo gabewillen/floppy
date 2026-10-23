@@ -30,9 +30,9 @@ final states and its parent receives that state's done data as
 
 | What | How | Data ([`schemas/`](schemas)) |
 | --- | --- | --- |
-| `builder.request` | an event to the builder (standard input when run directly) | `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?}`: the specification, the name the draft's documents are written under (default the plan's; each run of characters other than letters, digits, `_` and `-` becomes `_`; reflection sends the behavior's), extra constraints (strings), an optional failure cap (1 to 8, no default: without it only the no-progress rule ends the loop), the generate service's model (default `Qwen/Qwen3.8-Flash-Next`, a reasoning model), the time each streamed generation may go without progress, and each generation may take in all, before `builder.timeout` cancels it (1 ms to 1 h each, defaults 30000 and 1200000), and the lifetime bounds (1 ms to 1 day each, no default: without them neither the lifetime check nor the forced tick runs; reflection sends 60000 and 1000, `ROUTINE_MIN_EVERY` and `TURN_SILENCE_BOUND`, decision D84), and the live turn a turn behavior is run on before it is built (`{turn, input, targets}`: the turn, the behavior input as autonomy builds it, and the sessions that turn's output names, at most 32; no default: without it a turn behavior runs only its own tests; reflection sends its turn's, decision D131) |
+| `builder.request` | an event to the builder (standard input when run directly) | `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?}`: the specification, the name the draft's documents are written under (default the plan's; each run of characters other than letters, digits, `_` and `-` becomes `_`; reflection sends the behavior's), extra constraints (strings), the failure cap (1 to 8, default 8, decision D133), the generate service's model (default `Qwen/Qwen3.8-Flash-Next`, a reasoning model), the time each streamed generation may go without progress, and each generation may take in all, before `builder.timeout` cancels it (1 ms to 1 h each, defaults 30000 and 1200000), and the lifetime bounds (1 ms to 1 day each, no default: without them neither the lifetime check nor the forced tick runs; reflection sends 60000 and 1000, `ROUTINE_MIN_EVERY` and `TURN_SILENCE_BOUND`, decision D84), and the live turn a turn behavior is run on before it is built (`{turn, input, targets}`: the turn, the behavior input as autonomy builds it, and the sessions that turn's output names, at most 32; no default: without it a turn behavior runs only its own tests; reflection sends its turn's, decision D131) |
 | final state `done` | its `<donedata>` ([`schemas/done.json`](schemas/done.json)) | `{scxml, schemas, script, path, tests, report}`: the built document's three parts (its SCXML, its input event schemas as one object with `$defs` keyed by event, and its ECMAScript, `""` for none), the path of the `.scx` they were written as (`../../behaviors/<name>.scx`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
-| final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics, history, scxml?, path?}`: `invalid-request`, `unconfigured` (the run holds no `FLOPPY_BASE_URL`; the first generation ends the build at once), `no-progress` (a diagnostic an earlier failure of the build already had, consecutive or not; decision D124), `attempts-exhausted` (the request's cap), or `abandoned`, with the last diagnostics (`{kind, code, message}`), the failure history (every failure's attempt and diagnostics, as in `done`'s report), and `scxml`, the last draft a check (`validate`, the lifetime check, `simulate`) rejected, with `path`, where it was written, both absent when no draft was rejected (the original's revision drafts the rejected source) |
+| final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics, history, scxml?, path?}`: `invalid-request`, `unconfigured` (the run holds no `FLOPPY_BASE_URL`; the first generation ends the build at once), `attempts-exhausted` (the failure cap, decision D133), or `abandoned`, with the last diagnostics (`{kind, code, message}`), the failure history (every failure's attempt and diagnostics, as in `done`'s report), and `scxml`, the last draft a check (`validate`, the lifetime check, `simulate`) rejected, with `path`, where it was written, both absent when no draft was rejected (the original's revision drafts the rejected source) |
 
 The builder answers exactly once, by finishing. Run directly, `scx run`
 prints the done data in its `done` record and exits 0; invoked, the parent
@@ -200,12 +200,12 @@ intake -> design -> author -> writing -> validate -> simulate -> done
   timeout) passes through it. It counts the failure and takes its
   fingerprint, the sorted, distinct identities of its diagnostics, which
   the datamodel keeps (`fingerprint`, and those of every earlier failure
-  of the build in `fingerprints`), and a guarded transition ends the build
-  in `failed` with the reason `no-progress` and the repeated diagnostics as
-  soon as any diagnostic of the failure is one an earlier failure already
-  had, consecutive or not (decision D124, the maintainer's rule: "if it
-  gets the same failure more than once it should end"). A request's
-  optional `max_attempts` also ends it (`attempts-exhausted`). A
+  of the build in `fingerprints`), and the failure's diagnostics an earlier failure already had,
+  consecutive or not, go to the next author call as `repeated`, which
+  the author rules say to fix another way. The build ends in `failed`
+  with `attempts-exhausted` only at `max_attempts` failures, 8 unless the
+  request sets it (decision D133, which replaces D124's end at the first
+  repeat: the maintainer chose to retry to a cap). A
   diagnostic's identity is its kind and code and, taken from the canonical
   report rather than prose, for a validator diagnostic its primary label
   (not the source line it marks: the same mistake moves around between
@@ -367,7 +367,7 @@ simulated through it, a candidate's
 `sim.settle` and `sim.drive` being recorded as outputs, a cancelled
 candidate's `builder.timeout` not ending the next simulation, a failed
 invocation's `sim.drive` not driving the next test, the fallback triage
-ending in `no-progress` when a repair fails with the same diagnostic again,
+repairing on to the cap when a repair fails with the same diagnostic again,
 a different diagnostic each time repairing on until `done`, a request's
 `max_attempts` ending the build (`attempts-exhausted`), an invalid request,
 and, on the wall clock, a

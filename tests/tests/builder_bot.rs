@@ -1186,6 +1186,12 @@ fn run_deciding_in(
     finished.records
 }
 
+/// `request` with the failure cap `max_attempts` (decision D133).
+fn capped(mut request: Json, max_attempts: u64) -> Json {
+    request["max_attempts"] = json!(max_attempts);
+    request
+}
+
 fn chat_requests<'a>(received: &'a [Received], schema: &str) -> Vec<&'a Received> {
     received
         .iter()
@@ -1500,10 +1506,11 @@ fn a_builder_timeout_preempts_a_generation_in_flight_and_cancels_it() {
 
 /// Without the decision key the builder falls back to its cond-based
 /// triage; a repair that fails with the same diagnostic as the draft before
-/// it is no progress, so the builder ends in `failed` (`no-progress`) with
-/// the repeated diagnostics, without a cap from the request.
+/// it goes on (decision D133): the next author call carries that diagnostic
+/// as `repeated`, and the build ends in `failed` (`attempts-exhausted`) at
+/// the default cap of 8 failures, without a cap from the request.
 #[test]
-fn the_same_diagnostic_twice_ends_the_build_with_no_progress() {
+fn the_same_diagnostic_again_is_repeated_and_the_build_runs_to_its_cap() {
     let mock = Mock::start();
     let records = run(
         &mock,
@@ -1515,9 +1522,14 @@ fn the_same_diagnostic_twice_ends_the_build_with_no_progress() {
     assert!(finished(&records), "{records:?}");
     let (label, failed) = answer(&records);
     assert_eq!(label, "failed", "{failed}");
-    assert_eq!(failed["reason"], "no-progress");
+    assert_eq!(failed["reason"], "attempts-exhausted");
     assert_eq!(failed["diagnostics"][0]["kind"], "validate");
     assert_eq!(failed["diagnostics"][0]["code"], "SCXML005");
+    assert_eq!(
+        failed["history"].as_array().map(Vec::len),
+        Some(8),
+        "{failed}"
+    );
     // The last draft the validator rejected (the original drafts the rejected
     // source).
     assert_eq!(
@@ -1527,7 +1539,26 @@ fn the_same_diagnostic_twice_ends_the_build_with_no_progress() {
     );
     let received = mock.received();
     assert_eq!(chat_requests(&received, "topology_plan").len(), 1);
-    assert_eq!(chat_requests(&received, "scxml_draft").len(), 2);
+    let drafts = chat_requests(&received, "scxml_draft");
+    assert_eq!(drafts.len(), 8);
+    assert_eq!(drafts[0].user_input()["repeated"], json!([]));
+    assert_eq!(drafts[1].user_input()["repeated"], json!([]));
+    let repeated = drafts[2].user_input()["repeated"].clone();
+    assert!(
+        repeated
+            .as_array()
+            .is_some_and(|repeated| !repeated.is_empty()),
+        "the third draft is told the second's diagnostic repeats the first's: {repeated}"
+    );
+    assert_eq!(
+        repeated,
+        drafts[2].user_input()["diagnostics"]
+            .as_array()
+            .expect("the diagnostics")
+            .iter()
+            .map(|diagnostic| diagnostic["message"].clone())
+            .collect::<Json>()
+    );
     assert!(
         received
             .iter()
@@ -1634,11 +1665,17 @@ fn a_routine_under_the_minimum_interval_is_repaired_and_its_first_tick_is_forced
 #[test]
 fn a_routine_tick_with_no_selection_is_rejected_with_its_draft() {
     let mock = Mock::start();
-    let records = run(&mock, "emptytick", "emptytick", &ALL, &lifetime_request());
+    let records = run(
+        &mock,
+        "emptytick",
+        "emptytick",
+        &ALL,
+        &capped(lifetime_request(), 2),
+    );
     assert!(finished(&records), "{records:?}");
     let (label, failed) = answer(&records);
     assert_eq!(label, "failed", "{failed}");
-    assert_eq!(failed["reason"], "no-progress", "{failed}");
+    assert_eq!(failed["reason"], "attempts-exhausted", "{failed}");
     assert_eq!(
         failed["diagnostics"],
         json!([{"kind": "apply", "code": "E0008", "message": "behavior output must select at least one event for the observed pattern."}]),
@@ -1729,15 +1766,15 @@ fn a_routine_is_checked_by_its_first_tick_not_the_live_turn() {
 }
 
 /// Runs the live request on `route`, whose drafts all fail the live turn the
-/// same way, and asserts the build ends with `no-progress` on its one E0008
-/// `message`.
+/// same way, and asserts the build ends at a cap of 2 (`attempts-exhausted`)
+/// on its one E0008 `message`.
 fn assert_live_refused(route: &str, message: &str) {
     let mock = Mock::start();
-    let records = run(&mock, route, route, &ALL, &live_request());
+    let records = run(&mock, route, route, &ALL, &capped(live_request(), 2));
     assert!(finished(&records), "{records:?}");
     let (label, failed) = answer(&records);
     assert_eq!(label, "failed", "{failed}");
-    assert_eq!(failed["reason"], "no-progress", "{failed}");
+    assert_eq!(failed["reason"], "attempts-exhausted", "{failed}");
     assert_eq!(
         failed["diagnostics"],
         json!([{"kind": "apply", "code": "E0008", "message": message}]),
@@ -1856,11 +1893,17 @@ fn a_live_turn_failure_is_repaired_from_its_diagnostic() {
 #[test]
 fn a_turn_behaviors_delayed_send_beyond_the_silence_bound_is_rejected() {
     let mock = Mock::start();
-    let records = run(&mock, "afterbound", "afterbound", &ALL, &lifetime_request());
+    let records = run(
+        &mock,
+        "afterbound",
+        "afterbound",
+        &ALL,
+        &capped(lifetime_request(), 2),
+    );
     assert!(finished(&records), "{records:?}");
     let (label, failed) = answer(&records);
     assert_eq!(label, "failed", "{failed}");
-    assert_eq!(failed["reason"], "no-progress", "{failed}");
+    assert_eq!(failed["reason"], "attempts-exhausted", "{failed}");
     let diagnostics = failed["diagnostics"].as_array().expect("diagnostics");
     assert_eq!(diagnostics.len(), 3, "{failed}");
     assert!(
@@ -2014,54 +2057,59 @@ fn a_repair_is_told_the_line_of_each_diagnostic_and_of_a_draft_with_no_document(
 
 /// The same code and label on another line is the same failure (decision
 /// D124: the same mistake moves around between drafts, so a validate
-/// diagnostic's identity has no line). `/moved/v1` answers an unescaped
-/// `&&` in red's cond, then in yellow's, and the build ends there.
+/// diagnostic's identity has no line), so the next author call is told it
+/// repeats (decision D133). `/moved/v1` answers an unescaped `&&` in red's
+/// cond, then in yellow's; the build ends at the request's cap of 3.
 #[test]
-fn the_same_validate_diagnostic_on_another_line_ends_the_build_with_no_progress() {
+fn the_same_validate_diagnostic_on_another_line_is_repeated() {
     let mock = Mock::start();
     let records = run(
         &mock,
         "moved",
         "moved",
         &["FLOPPY_API_KEY", "FLOPPY_BASE_URL"],
-        &json!({"spec": SPEC}),
+        &json!({"spec": SPEC, "max_attempts": 3}),
     );
     assert!(finished(&records), "{records:?}");
     let (label, failed) = answer(&records);
     assert_eq!(label, "failed", "{failed}");
-    assert_eq!(failed["reason"], "no-progress", "{failed}");
+    assert_eq!(failed["reason"], "attempts-exhausted", "{failed}");
     assert_eq!(failed["diagnostics"][0]["code"], "XML001", "{failed}");
     assert_eq!(
         failed["history"].as_array().map(Vec::len),
-        Some(2),
+        Some(3),
         "{failed}"
     );
+    let received = mock.received();
+    let drafts = chat_requests(&received, "scxml_draft");
+    assert_eq!(drafts.len(), 3, "no fourth draft");
+    assert_eq!(drafts[1].user_input()["repeated"], json!([]));
     assert_eq!(
-        chat_requests(&mock.received(), "scxml_draft").len(),
-        2,
-        "no third draft"
+        drafts[2].user_input()["repeated"].as_array().map(Vec::len),
+        Some(1),
+        "the moved XML001 repeats"
     );
 }
 
-/// A failure that repeats an earlier one ends the build even when another
-/// failure came between them (decision D124: "if it gets the same failure
-/// more than once it should end"). `/again/v1` answers the invalid draft
-/// (`SCXML005`), one with a delayed internal send (`SCXML070`), then the
-/// invalid draft again.
+/// A failure that repeats an earlier one is repeated even when another
+/// failure came between them (decision D133). `/again/v1` answers the
+/// invalid draft (`SCXML005`), one with a delayed internal send
+/// (`SCXML070`), then the invalid draft again, so the fourth draft is
+/// told `SCXML005` repeats; the build ends at the request's cap of 4.
 #[test]
-fn a_failure_repeated_after_another_ends_the_build_with_no_progress() {
+fn a_failure_after_another_is_repeated() {
     let mock = Mock::start();
     let records = run(
         &mock,
         "again",
         "again",
         &["FLOPPY_API_KEY", "FLOPPY_BASE_URL"],
-        &json!({"spec": SPEC}),
+        &json!({"spec": SPEC, "max_attempts": 4}),
     );
     assert!(finished(&records), "{records:?}");
     let (label, failed) = answer(&records);
     assert_eq!(label, "failed", "{failed}");
-    assert_eq!(failed["reason"], "no-progress", "{failed}");
+    assert_eq!(failed["reason"], "attempts-exhausted", "{failed}");
     let codes: Vec<&Json> = failed["history"]
         .as_array()
         .expect("the history")
@@ -2070,31 +2118,45 @@ fn a_failure_repeated_after_another_ends_the_build_with_no_progress() {
         .collect();
     assert_eq!(
         codes,
-        [&json!("SCXML005"), &json!("SCXML070"), &json!("SCXML005")],
+        [
+            &json!("SCXML005"),
+            &json!("SCXML070"),
+            &json!("SCXML005"),
+            &json!("SCXML005")
+        ],
         "{failed}"
     );
-    assert_eq!(chat_requests(&mock.received(), "scxml_draft").len(), 3);
+    let received = mock.received();
+    let drafts = chat_requests(&received, "scxml_draft");
+    assert_eq!(drafts.len(), 4);
+    assert_eq!(drafts[2].user_input()["repeated"], json!([]));
+    assert!(
+        drafts[3].user_input()["repeated"]
+            .as_array()
+            .is_some_and(|repeated| !repeated.is_empty()),
+        "the third failure repeats the first"
+    );
 }
 
-/// A diagnostic an earlier failure had ends the build even when the rest of
-/// the failure's diagnostics changed (decision D124; the 2026-10-20 live
+/// Only the diagnostic an earlier failure had is repeated when the rest of
+/// the failure's diagnostics changed (decision D133; the 2026-10-20 live
 /// `PingPongResponder` repeated `E0009` four times among other diagnostics).
 /// `/changed/v1` answers a draft with `SCXML005` and `SCXML070`, then one
-/// with `SCXML005` and `SCXML014`.
+/// with `SCXML005` and `SCXML014`; the request's cap is 3.
 #[test]
-fn a_repeated_diagnostic_among_changed_ones_ends_the_build_with_no_progress() {
+fn a_repeated_diagnostic_among_changed_ones_is_repeated_alone() {
     let mock = Mock::start();
     let records = run(
         &mock,
         "changed",
         "changed",
         &["FLOPPY_API_KEY", "FLOPPY_BASE_URL"],
-        &json!({"spec": SPEC}),
+        &json!({"spec": SPEC, "max_attempts": 3}),
     );
     assert!(finished(&records), "{records:?}");
     let (label, failed) = answer(&records);
     assert_eq!(label, "failed", "{failed}");
-    assert_eq!(failed["reason"], "no-progress", "{failed}");
+    assert_eq!(failed["reason"], "attempts-exhausted", "{failed}");
     let codes = |attempt: &Json| {
         let mut codes: Vec<String> = attempt["diagnostics"]
             .as_array()
@@ -2106,10 +2168,23 @@ fn a_repeated_diagnostic_among_changed_ones_ends_the_build_with_no_progress() {
         codes
     };
     let history = failed["history"].as_array().expect("the history");
-    assert_eq!(history.len(), 2, "{failed}");
+    assert_eq!(history.len(), 3, "{failed}");
     assert_eq!(codes(&history[0]), ["SCXML005", "SCXML070"], "{failed}");
     assert_eq!(codes(&history[1]), ["SCXML005", "SCXML014"], "{failed}");
-    assert_eq!(chat_requests(&mock.received(), "scxml_draft").len(), 2);
+    let received = mock.received();
+    let drafts = chat_requests(&received, "scxml_draft");
+    assert_eq!(drafts.len(), 3);
+    let third = drafts[2].user_input();
+    assert_eq!(
+        third["diagnostics"].as_array().map(Vec::len),
+        Some(2),
+        "{third}"
+    );
+    assert_eq!(
+        third["repeated"].as_array().map(Vec::len),
+        Some(1),
+        "only SCXML005 repeats: {third}"
+    );
 }
 
 /// A draft whose script is not loaded, or whose cond calls a function no
@@ -2259,12 +2334,12 @@ fn a_fast_design_failure_keeps_its_cause_in_the_log_and_the_failed_done_data() {
         "fastfail",
         "fastfail",
         &["FLOPPY_API_KEY", "FLOPPY_BASE_URL"],
-        &json!({"spec": SPEC}),
+        &json!({"spec": SPEC, "max_attempts": 3}),
     );
     assert!(finished(&records), "{records:?}");
     let (label, failed) = answer(&records);
     assert_eq!(label, "failed", "{failed}");
-    assert_eq!(failed["reason"], "no-progress");
+    assert_eq!(failed["reason"], "attempts-exhausted");
     assert_eq!(failed["diagnostics"][0]["code"], "SCXML005");
     let logs: Vec<String> = records
         .iter()
@@ -2279,7 +2354,7 @@ fn a_fast_design_failure_keeps_its_cause_in_the_log_and_the_failed_done_data() {
     );
     assert!(
         logs.iter().any(|log| log.starts_with("\"failed\"")
-            && log.contains("no-progress")
+            && log.contains("attempts-exhausted")
             && log.contains("SCXML005")),
         "the failed log carries the reason and the cause that ended the build: {logs:?}"
     );
@@ -2308,12 +2383,12 @@ fn repair_is_not_offered_without_a_plan() {
         "noplan",
         "redesign",
         &ALL,
-        &json!({"spec": SPEC}),
+        &json!({"spec": SPEC, "max_attempts": 2}),
     );
     assert!(finished(&records), "{records:?}");
     let (label, failed) = answer(&records);
     assert_eq!(label, "failed", "{failed}");
-    assert_eq!(failed["reason"], "no-progress");
+    assert_eq!(failed["reason"], "attempts-exhausted");
     assert_eq!(failed["diagnostics"][0]["code"], "design-failed");
     let received = mock.received();
     assert_eq!(chat_requests(&received, "topology_plan").len(), 2);

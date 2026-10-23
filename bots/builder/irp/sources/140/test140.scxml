@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- builder-5: the same validator error twice is no progress: failed with the rejected draft. -->
+<!-- builder-5: the same validator error every time goes on to the default cap of 8: attempts-exhausted with the rejected draft. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="builder" type="scxml" src="../../../builder.scx"/>
@@ -11,7 +11,7 @@
     <onentry>
       <send event="builder.request" target="#_builder"><content expr='{"spec": "a pinger: answer a ping with pong and finish"}'/></send>
     </onentry>
-    <transition event="done.invoke.builder" cond="_event.data.reason === &quot;no-progress&quot; &amp;&amp; Array.isArray(_event.data.history) &amp;&amp; _event.data.diagnostics.some(function (d) { return d.kind === &quot;validate&quot; &amp;&amp; d.code === &quot;SCXML005&quot;; }) &amp;&amp; _event.data.scxml.indexOf('nowhere') &gt;= 0 &amp;&amp; _event.data.history.length === 2" target="step1"/>
+    <transition event="done.invoke.builder" cond="_event.data.reason === &quot;attempts-exhausted&quot; &amp;&amp; Array.isArray(_event.data.history) &amp;&amp; _event.data.diagnostics.some(function (d) { return d.kind === &quot;validate&quot; &amp;&amp; d.code === &quot;SCXML005&quot;; }) &amp;&amp; _event.data.scxml.indexOf('nowhere') &gt;= 0 &amp;&amp; _event.data.history.length === 8" target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

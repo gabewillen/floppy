@@ -123,8 +123,9 @@ shipped document.
 - Results are reported through the `<donedata>` of top-level finals.
 - The builder builds SCXML only; drafts pass `scx:validate` and a simulation
   as an invoked child before `done`, and the builder never restricts what a
-  draft may use (D28, D121). A repeated diagnostic ends a build with
-  `no-progress` (D124).
+  draft may use (D28, D121). A build retries to `max_attempts` (default
+  8) and ends with `attempts-exhausted`; a repeated diagnostic is passed to
+  the next author call as `repeated`, not an end (D133, replacing D124's).
 
 ## Removed names (hard cutovers)
 

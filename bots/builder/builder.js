@@ -176,7 +176,7 @@ function previousDraft(field) {
 
 function authorPrompt() {
   var repair = mode === 'repair';
-  return JSON.stringify({task: mode, name: fileName(), spec: spec, constraints: constraints, plan: plan, previous_scxml: repair ? scxml_text : null, previous_schemas: repair ? previous_schemas : null, previous_script: repair ? previous_script : null, previous_tests: repair ? previous_tests : null, diagnostics: diagnostics});
+  return JSON.stringify({task: mode, name: fileName(), spec: spec, constraints: constraints, plan: plan, previous_scxml: repair ? scxml_text : null, previous_schemas: repair ? previous_schemas : null, previous_script: repair ? previous_script : null, previous_tests: repair ? previous_tests : null, diagnostics: diagnostics, repeated: repeated.map(function (d) { return d.message; })});
 }
 
 function draftGenerated(_event) {
@@ -540,13 +540,17 @@ function hasTopLevelFinal() {
 
 // retry_gate
 
+function diagnosticIdentity(d) {
+  return d.kind + '|' + d.code + '|' + (d.kind === 'validate' ? d.label : d.message);
+}
+
 // The sorted, distinct identities of the failure's diagnostics: kind|code
 // and, for a validate diagnostic, its primary label (not the line it marks:
 // the same mistake moves around between drafts), else its message (a
 // simulate message names the test, its expected and observed outputs, its
 // done and its error; the rest are the builder's own or a namespace's).
 function diagnosticsFingerprint() {
-  return diagnostics.map(function (d) { return d.kind + '|' + d.code + '|' + (d.kind === 'validate' ? d.label : d.message); }).sort().filter(function (key, i, keys) { return i === 0 || key !== keys[i - 1]; });
+  return diagnostics.map(diagnosticIdentity).sort().filter(function (key, i, keys) { return i === 0 || key !== keys[i - 1]; });
 }
 
 // The last draft a check rejected (validate, lifetime, simulate, apply),
@@ -561,13 +565,14 @@ function nextAttemptLog() {
 }
 
 function retryGateLog() {
-  return 'failure ' + failures + (max_attempts === null ? '' : ' of ' + max_attempts) + firstDiagnosticSummary();
+  return 'failure ' + failures + ' of ' + max_attempts + (repeated.length > 0 ? ', ' + repeated.length + ' repeated' : '') + firstDiagnosticSummary();
 }
 
-// A diagnostic an earlier failure of this build already had, consecutive
-// or not: the same failure more than once ends the build (decision D124).
-function isNoProgress() {
-  return fingerprint.some(function (key) { return fingerprints.indexOf(key) >= 0; });
+// The failure's diagnostics whose identity an earlier failure of this build
+// already had, consecutive or not (decision D133): the build goes on, and
+// the next author call is told that its earlier fix of them did not work.
+function repeatedDiagnostics() {
+  return diagnostics.filter(function (d) { return fingerprints.indexOf(diagnosticIdentity(d)) >= 0; });
 }
 
 // The identities of every failure so far, this one's included.
@@ -576,7 +581,7 @@ function nextFingerprints() {
 }
 
 function isAttemptsExhausted() {
-  return max_attempts !== null && failures >= max_attempts;
+  return failures >= max_attempts;
 }
 
 // triage

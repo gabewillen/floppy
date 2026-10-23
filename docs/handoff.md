@@ -70,7 +70,14 @@ Last updated: 2026-10-22.
   out in a scratch directory must copy `abilities/schemas/` (and, for the
   body's events, `bots/floppy/schemas/`) beside them, as
   `support::copy_ability` and `support::environment_with_devices` do.
-- **The same failure more than once ends the build (2026-10-20, D124):**
+- **A build retries to its cap (2026-10-23, D133):** the maintainer chose
+  "Retry to a cap" over D124's end at the first repeat. `max_attempts`
+  defaults to 8 and is the only end of a failing build
+  (`attempts-exhausted`); a diagnostic an earlier failure had goes to the
+  next author call as `repeated`. The D124 entry below keeps its
+  fingerprint rules.
+- **The same failure more than once ends the build (2026-10-20, D124,
+  amended by D133):**
   the maintainer's rule, "if it gets the same failure more than once it
   should end". `retry_gate` ends with `no-progress` as soon as any
   diagnostic of a failure is one an earlier failure of the same build had,

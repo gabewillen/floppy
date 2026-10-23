@@ -1095,7 +1095,7 @@ fn a_create_whose_draft_hardcodes_an_input_value_is_abandoned() {
     assert_eq!(failed.len(), 1, "{records:?}");
     assert!(
         failed[0].starts_with(
-            "Reflection change abandoned: same diagnostic message after fix:\nbehavior validation failed:\n  error[E0008] apply: selection data[\"label\"]=\"doorbell\" does not match live event value \"knock\"; read identifiers from input at runtime."
+            "Reflection change abandoned: attempts exhausted:\nbehavior validation failed:\n  error[E0008] apply: selection data[\"label\"]=\"doorbell\" does not match live event value \"knock\"; read identifiers from input at runtime."
         ),
         "{failed:?}"
     );
@@ -1230,7 +1230,7 @@ fn a_failed_build_leaves_a_validation_draft_on(database: &str) {
     assert_eq!(failed.len(), 1, "{records:?}");
     assert!(
         failed[0].starts_with(
-            "Reflection change abandoned: same diagnostic message after fix:\nbehavior validation failed:\n  error[SCXML005] validate: "
+            "Reflection change abandoned: attempts exhausted:\nbehavior validation failed:\n  error[SCXML005] validate: "
         ),
         "{failed:?}"
     );
@@ -1333,8 +1333,9 @@ fn a_failed_change_call_drafts_nothing_on(database: &str) {
     let failed = texts(&records, "harness.failed");
     assert_eq!(failed.len(), 1, "{records:?}");
     assert!(
-        failed[0]
-            .starts_with("Reflection revision failed: no-progress: the author generation failed"),
+        failed[0].starts_with(
+            "Reflection revision failed: attempts-exhausted: the author generation failed"
+        ),
         "{failed:?}"
     );
     assert!(

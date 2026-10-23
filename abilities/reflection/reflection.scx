@@ -88,7 +88,7 @@
   (CHANGE_INSTRUCTIONS, ChangeWriteInput) and the turn behavior or
   persistent routine contract as constraints (docs/plans/
   phase5-behaviors.mdscript.md); the builder's own validate, simulate and
-  no-progress loop is the original's check-and-retry, and it writes the
+  repair loop, up to its 8 attempts (decision D133), is the check-and-retry, and it writes the
   documents under the intent's name. Its done is accepting: the
   document's path replaces the row ACTIVE (delete triggers, delete row, insert
   row, insert triggers, the original inventory.store_behavior), keeping the

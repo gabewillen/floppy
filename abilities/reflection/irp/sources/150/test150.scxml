@@ -15,7 +15,7 @@
     <onentry>
       <send event="bot.ability.reflection.input" target="#_reflection"><content expr='{"turn": 1, "cognition_input": {"stimulus": {"event": "environment.sound", "data": {"label": "knock"}}, "focus": "door", "focus_candidates": ["door"]}, "cognition_output": [{"event": "bot.ability.communication.respond", "data": {"parts": [{"words": "Hello!"}]}, "reason": "a knock", "target": "communication"}]}'/></send>
     </onentry>
-    <transition event="bot.ability.failed" cond='_event.data.message.indexOf("Reflection change abandoned: same diagnostic message after fix:\nbehavior validation failed:\n  error[SCXML005] validate: ") === 0' target="step1"/>
+    <transition event="bot.ability.failed" cond='_event.data.message.indexOf("Reflection change abandoned: attempts exhausted:\nbehavior validation failed:\n  error[SCXML005] validate: ") === 0' target="step1"/>
   </state>
   <state id="step1">
     <onentry>
