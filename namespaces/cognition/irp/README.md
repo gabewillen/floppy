@@ -35,7 +35,7 @@ SAXON='java -jar /opt/saxon/saxon-he-12.8.jar' sh scripts/namespace-irp.sh prepa
 sh scripts/namespace-irp.sh baselines cognition
 ```
 
-The current baseline (manifest SHA-256 `671c945c9daf3461eaea586edd151468b9fcd0ca99c809b3e43aed14054e4206`,
+The current baseline (manifest SHA-256 `083e2981a28648f95446a3f3274c53c58a7260bf1940a446d97d804f3aee7e39`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
 measured on Linux x86_64, the host `tests/tests/namespace_irp.rs` compares fuel on (re-measured
 2026-10-22 for the stable-first prompt layout and its optional stimulus, decision D141))
@@ -43,4 +43,4 @@ measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 21 / 21 | 0 | `047abeee43eac5fc8e206fc8d52623af3692f7e75b7c6d0c67fe1a25d4fe013b` | `a7c3f46ca2baae604fe7afe19d314e5aff33f394bdd54a9ccf4bb398e1dedcd1` |
+| ECMAScript | 21 / 21 | 0 | `be72e7308090b9fa68198af883b67407e0fa04a2f62e77df5a67eac33af13253` | `cef05132e02341728d6cb7110d76e62a96309d02b07c72d0986b6d9c2511a5f7` |

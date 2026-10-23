@@ -6,9 +6,9 @@
     "kind": "namespace-irp",
     "source": "namespaces/memory/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "54a7587bdee0d7026bf470b21edff34a98c8c3afd4d30c3a96f16fabc8bfdfc6",
-    "source_digest": "da2586612bea631d7ace0b365eeac61d874a79d2c8ca5632e251ca8c9d738a59",
-    "manifest_digest": "fde067bb51cbb9a6f1dc3a41dbc3c12c86b82485d35b496c90e609270b7378e3",
+    "corpus_digest": "e7dfcbdb67ed7768364583c1f5be01b5bd529c6b13336608ea81f1a3409d6319",
+    "source_digest": "8eef52ea310f22472575ffc0b89de10179008a61944edb45c1a39ce2806129ea",
+    "manifest_digest": "5cca582a33c3ddf4523adf12d0d71ced1dff0e40b6c3e2ec6f27b458289deb4e",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
@@ -18,7 +18,7 @@
       "command_argv": [
         "saxon"
       ],
-      "executable_digest": "5a0e355851c39835c20fd16a4663e049f352e2df4f1c33e2eac013315f55027d"
+      "executable_digest": "012b6e274f9fa87155e1527848af8d41f19c6e89d7266a3b50716d5891eb739b"
     },
     "datamodel": "ecmascript",
     "provenance": "baseuri=https://github.com/stateforward/floppy/tree/main/namespaces/memory/irp/sources"
@@ -53,9 +53,9 @@
     {
       "namespace_uri": "https://github.com/stateforward/floppy/namespaces/memory",
       "package_version": "0.1.0",
-      "manifest_sha256": "33d2210472159cb46f24898f2b5c813e041df60ca6e15c95870bb2b0cd52e3fe",
-      "schema_sha256": "c32ef093c63e7b40e374a860d5aeb443845d010745861b223e8829dc3e4f5ee9",
-      "component_sha256": "a25f7670ebf1362fc6978b7603755189cea645e4bbe52242e4bb920cf9711980"
+      "manifest_sha256": "b30c3ab7ad1bb4231f60dd28f4176aea71519898aacef260b1121b043cffd4b8",
+      "schema_sha256": "253d5a4f7977334f65bb7a0eba0cce212f5e577d84fc22d0932742635c8f5a8d",
+      "component_sha256": "a17177cb1847b326861a594a7bbf9e588250863d0ea611df611073aa1145ce36"
     }
   ],
   "ir_version": 5,
@@ -68,7 +68,7 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "abddf71e46a369f631d769b48885cd2fdddd400edb21357722fa701fdcb3532a",
+  "identity_digest": "5ca9462a2f3d1d98848632f3f0a40be3e9778954b09b042fab69148a483cbff8",
   "summary": {
     "total_selected": 17,
     "applicable_selected": 17,
