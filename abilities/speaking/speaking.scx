@@ -13,9 +13,9 @@
   encoding invokes the vocal SpeechEncoding (abilities/vocal/vocal.scx, its
   child "vocal", which invokes the speech service) and, once vocal is ready (its
   first bot.ability.offers), sends it bot.ability.vocal.speech.encoding.input
-  {parts}: the input's parts (the original's input: 1 to 64 parts
-  {expression?, words?}), whose words, joined exactly as written, are the
-  utterance's text of record (the original's said). Input that does not
+  {parts}: the input's parts (1 to 64 parts {expression?, words?},
+  decision D178), whose words, joined exactly as written, are the
+  utterance's text of record. Input that does not
   say something (a part with neither words, a sound nor a pause, an
   expression that directs no cue, or blank words) is refused with
   bot.ability.failed. The audio is written to output_prefix + operation + "." + the
@@ -47,8 +47,7 @@
   recording builds the outbound message with <conversation:message_for_turn>
   (the original's Message: direction outbound, content the text, content_type
   text/plain, and participants the bot's own voice stamped own, which it
-  has none of until it is voiced: the original stamps none without a
-  voice_id) and sends
+  has none of until it is voiced, decision D176) and sends
   bot.ability.conversation.append {message} to the parent, which holds the
   conversation (a sibling is out of a child's reach: SCXML sends go only to
   #_parent and to a session's own children). It is bounded by the original's 5 s
@@ -69,8 +68,8 @@
   and logged (speaking.late).
   Input for another utterance that arrives while one is in hand is held by
   <event:defer/> (scxml.rs namespaces/event), up to held_utterances_bound
-  (16), and past that is refused with bot.ability.failed (the original's
-  holding); held input is taken, in order, on the return to idle.
+  (16), and past that is refused with bot.ability.failed (decision D175);
+  held input is taken, in order, on the return to idle.
 
   Contracts: the input's contract is schemas/bot.ability.speaking.input.json:
   a send whose data it rejects is never routed here and raises
@@ -115,7 +114,7 @@
     <data id="timer" expr="null"/>
     <!-- The ids of the last finished_utterances_bound utterances said, so a
          late copy of one never reopens it, and how many other utterances
-         wait while one is said (the original's bounds on finished and held utterances). -->
+         wait while one is said (decision D175). -->
     <data id="finished_utterances_bound" expr="16"/>
     <data id="finished_utterances" expr="[]"/>
     <data id="held_utterances_bound" expr="16"/>
@@ -135,8 +134,8 @@
                 cond="isFinishedUtterance(_event)">
       <log label="speaking.late" expr="_event.sendid"/>
     </transition>
-    <!-- The original refuses a reply that says nothing, before it is an
-         utterance. -->
+    <!-- A reply that says nothing is refused before it is an utterance
+         (decision D178). -->
     <transition event="bot.ability.speaking.input" event:schema="../schemas/bot.ability.speaking.input.json"
                 cond="isUnspokenInput(_event)" target="idle">
       <send event="bot.ability.failed" target="#_parent">
@@ -151,8 +150,8 @@
     </transition>
   </state>
 
-  <!-- One utterance in hand, from its encoding to its record (the original
-       holds other input in voiced, around speaking and recording). -->
+  <!-- One utterance in hand, from its encoding to its record; other input
+       is held throughout, and leaving releases it (decision D175). -->
   <state id="speaking" initial="encoding">
     <onexit>
       <assign location="finished_utterances" expr="finishedUtterances()"/>
@@ -161,9 +160,8 @@
       <assign location="held_ids" expr="[]"/>
     </onexit>
     <!-- A late copy of a finished utterance, or another copy of this one or
-         of a held one, is dropped; another utterance waits its turn (the
-         original's holding), up to held_utterances_bound, and past that is
-         refused. -->
+         of a held one, is dropped; another utterance waits its turn, up to
+         held_utterances_bound, and past that is refused (decision D175). -->
     <transition event="bot.ability.speaking.input" event:schema="../schemas/bot.ability.speaking.input.json"
                 cond="isLateUtterance(_event)">
       <log label="speaking.late" expr="_event.sendid"/>

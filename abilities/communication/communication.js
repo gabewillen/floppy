@@ -54,8 +54,7 @@ function hasRespond(_event) {
   return offering || isSpokenReply(_event.data.parts);
 }
 
-// A reply that says something (the original's respond and Part
-// validators): every part has words (not blank), a sound or a pause, every
+// A reply that says something (decision D178): every part has words (not blank), a sound or a pause, every
 // expression directs a cue (sound_at only with a sound), and the words,
 // joined exactly as written, are not blank.
 function isSpokenReply(parts) {
@@ -80,14 +79,14 @@ function isSet(value) {
   return value !== undefined && value !== null;
 }
 
-// The text of record of a reply: its parts' words joined verbatim (the
-// original's said).
+// The text of record of a reply: its parts' words joined verbatim
+// (decision D178).
 function said(parts) {
   return parts.map(function (part) { return typeof part.words === 'string' ? part.words : ''; }).join('');
 }
 
-// A respond for a response that already finished (the original's
-// late-response check): only a respond whose sender named its id can be one.
+// A respond for a response that already finished (decision D175): only a
+// respond whose sender named its id can be one.
 function isClosedResponse(_event) {
   return !offering && !!_event.sendid && closed_responses.indexOf(_event.sendid) >= 0;
 }
@@ -125,8 +124,8 @@ function isCurrentResponse(_event) {
   return !!_event.sendid && _event.sendid === response_id;
 }
 
-// Another copy of a held response: the first copy is kept, where the
-// original replaces it with the newer one.
+// Another copy of a held response: the first copy is kept, as
+// <event:defer/> cannot replace an event it holds (decision D175).
 function isHeldResponse(_event) {
   return !!_event.sendid && held_ids.indexOf(_event.sendid) >= 0;
 }
@@ -145,7 +144,7 @@ function heldOverMessage() {
 }
 
 // The finished ids with the one in hand, the oldest dropped past the
-// bound (the original's closing of a response).
+// bound (decision D175).
 function closedResponses() {
   var ids = response_id === null ? closed_responses : closed_responses.concat([response_id]);
   return ids.slice(Math.max(0, ids.length - closed_responses_bound));

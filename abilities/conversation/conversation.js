@@ -131,9 +131,9 @@ function isOutboundAppend(_event) {
   return _event.data.message.direction === 'outbound';
 }
 
-// An append already committed to the exchange: the original matches its
-// event's id, source and target against each provenance in the exchange
-// (an append without an id is never one).
+// An append already committed to the exchange: its event's id, source and
+// target match a provenance in the exchange (an append without an id is
+// never one; decision D176).
 function isCommittedAppend(_event) {
   var given = _event.data.message.provenance;
   var id = stringOrNull(given.id);

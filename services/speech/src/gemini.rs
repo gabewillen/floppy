@@ -9,8 +9,8 @@
 //!   "response_format": {"type": "audio"}, "store": false}`, `W` one
 //!   stretch's words (one request per stretch); the answer's audio is the
 //!   first `steps[].content[]` part of `type` `audio`, base64 linear PCM
-//!   (16-bit mono at [`crate::PCM_SAMPLE_RATE_HZ`], the original's
-//!   default sample rate), written raw for `audio/pcm` or in a WAV
+//!   (16-bit mono at [`crate::PCM_SAMPLE_RATE_HZ`], the default sample
+//!   rate), written raw for `audio/pcm` or in a WAV
 //!   container for `audio/wav` ([`encoding_request`], [`audio`]).
 //! * decode: the body `{"input": [{"text": P, "type": "text"}, {"data": A,
 //!   "mime_type": M, "type": "audio"}], "model": M, "store": false}`, `P`

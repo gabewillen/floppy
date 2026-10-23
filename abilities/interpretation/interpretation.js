@@ -303,8 +303,8 @@ function activeSourceIds() {
   return [active_voice_embedding.embedding];
 }
 
-// The identification deadline (the original's identification deadline): a stage,
-// then the registry's answer.
+// The identification deadline (decision D177): a stage, then the
+// registry's answer.
 function identifyDelay() {
   return (stage_timeout_ms + recognize_timeout_ms) + 'ms';
 }

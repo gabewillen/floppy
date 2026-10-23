@@ -483,8 +483,8 @@ fn a_response_waits_for_the_one_in_flight_and_each_hop_times_out() {
 }
 
 /// Hearing goes on while a response is said, and every response that
-/// finished stays finished (the original's hearing while responding in `responding`, its
-/// ring of closed response ids, and its bound on held responses).
+/// finished stays finished (hearing in `responding`, the ring of closed
+/// response ids, and the bound on held responses; decision D175).
 #[test]
 fn communication_hears_while_responding_and_never_reopens_a_finished_response() {
     let harness = communication_alone(&[
@@ -587,8 +587,7 @@ const SPEAKING_HARNESS: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
 
 /// One utterance at a time: another copy of the one in hand, or of one
 /// already said, is dropped, and past the bound of held utterances a new
-/// one is refused (the original's bounds on finished and held
-/// utterances).
+/// one is refused (decision D175).
 #[test]
 fn speaking_never_reopens_a_finished_utterance_and_bounds_the_ones_it_holds() {
     let dir = unique_scratch("speaking-alone");
@@ -693,8 +692,8 @@ fn conversation_event(name: &str, data: &Json) -> (String, Json) {
 }
 
 /// The relationships' references in
-/// [`the_conversation_commits_each_message_into_its_exchange`]: the original's
-/// `relationship_context_ref`, the same in either direction.
+/// [`the_conversation_commits_each_message_into_its_exchange`]: each
+/// relationship's context reference, the same in either direction.
 const FIRST: &str = r#"relationship-{"identity_groups":[["a\"b","bot"],["alice","zed",[0.447213595499958,0.894427190999916]]]}"#;
 const AMBIENT: &str = r#"relationship-{"identity_groups":[[],["alice"]]}"#;
 const THIRD: &str =

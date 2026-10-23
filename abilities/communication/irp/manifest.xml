@@ -9,7 +9,7 @@
     </test>
   </assert>
   <assert id="communication-2" specnum="2" specid="#communication-2">
-    <![CDATA[`bot.ability.communication.input` in active, or in responding while a response is said (hearing goes on, the original's hearing while responding), goes to the conversation; a text product comes back to the body as `bot.ability.cognition.input` `{stimulus}` unchanged, its stimulus carrying the conversation's current exchange, which the input opens as its one, inbound, message, stamped with the turn's participants (its source and target ids).]]>
+    <![CDATA[`bot.ability.communication.input` in active, or in responding while a response is said (hearing goes on, decision D175), goes to the conversation; a text product comes back to the body as `bot.ability.cognition.input` `{stimulus}` unchanged, its stimulus carrying the conversation's current exchange, which the input opens as its one, inbound, message, stamped with the turn's participants (its source and target ids).]]>
     <test id="110" conformance="mandatory" manual="false">
       <start uri="110/test110.scxml"/>
     </test>
@@ -36,7 +36,7 @@
     </test>
   </assert>
   <assert id="communication-5" specnum="5" specid="#communication-5">
-    <![CDATA[`bot.ability.communication.respond` `{parts}` (the original's respond: 1 to 64 parts `{expression?, words?}`) that says something, in active, is said through speaking: in order, the body gets speaking's efference copy `bot.ability.speaking.efference` `{mouth: "speaking", duration, media_type, sample_rate_hz, channels}`, the communication puts speaking's `environment.sound` `{audio, media_type, sample_rate_hz, channels, source: "speaking"}` into the environment whose id its `environment` names (`#_scxml_` + that id), and the body gets `bot.ability.speaking.output` `{text, media_type, sample_rate_hz, channels}`, its text the parts' words joined exactly as written; the communication is active again and offers again, and the outbound record joins the conversation's exchange only.]]>
+    <![CDATA[`bot.ability.communication.respond` `{parts}` (1 to 64 parts `{expression?, words?}`, decision D178) that says something, in active, is said through speaking: in order, the body gets speaking's efference copy `bot.ability.speaking.efference` `{mouth: "speaking", duration, media_type, sample_rate_hz, channels}`, the communication puts speaking's `environment.sound` `{audio, media_type, sample_rate_hz, channels, source: "speaking"}` into the environment whose id its `environment` names (`#_scxml_` + that id), and the body gets `bot.ability.speaking.output` `{text, media_type, sample_rate_hz, channels}`, its text the parts' words joined exactly as written; the communication is active again and offers again, and the outbound record joins the conversation's exchange only.]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>
@@ -96,7 +96,7 @@
     </test>
   </assert>
   <assert id="communication-11" specnum="11" specid="#communication-11">
-    <![CDATA[A response's id is its respond's sendid (none when the sender names none). A finished response's id is kept among the last `closed_responses_bound` (16) finished ids, and a respond with a finished id, or another copy of the response in hand or of a held one, is dropped (logged `communication.late`): nothing is said or answered for it (the original's late-response check), and a re-sent held id takes no second slot toward `held_responses_bound` (the first copy is kept, where the original keeps the newer).]]>
+    <![CDATA[A response's id is its respond's sendid (none when the sender names none). A finished response's id is kept among the last `closed_responses_bound` (16) finished ids, and a respond with a finished id, or another copy of the response in hand or of a held one, is dropped (logged `communication.late`): nothing is said or answered for it, and a re-sent held id takes no second slot toward `held_responses_bound` (the first copy is kept, decision D175).]]>
     <test id="202" conformance="mandatory" manual="false">
       <start uri="202/test202.scxml"/>
     </test>
@@ -108,7 +108,7 @@
     </test>
   </assert>
   <assert id="communication-12" specnum="12" specid="#communication-12">
-    <![CDATA[At most `held_responses_bound` (16, a `<param>`) responses are held while one is in hand; past that a respond is refused with `bot.ability.communication.failed` `{message: "Communication is holding too many responses; this one is refused."}` (the original's holding a response), and the held ones are still said, in order.]]>
+    <![CDATA[At most `held_responses_bound` (16, a `<param>`) responses are held while one is in hand; past that a respond is refused with `bot.ability.communication.failed` `{message: "Communication is holding too many responses; this one is refused."}` (decision D175), and the held ones are still said, in order.]]>
     <test id="210" conformance="mandatory" manual="false">
       <start uri="210/test210.scxml"/>
     </test>

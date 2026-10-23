@@ -63,8 +63,8 @@
 //!   the audio is written to, created or replaced), `media_type` (optional,
 //!   one of [`FORMATS`], `audio/mpeg` without it, the default of both
 //!   backends; a reply with a pause needs `audio/pcm` or `audio/wav`), and
-//!   `provider` (optional, `elevenlabs` or `gemini`: the original's provider
-//!   of that name instead of the `OpenAI`-compatible API; Gemini encodes
+//!   `provider` (optional, `elevenlabs` or `gemini`: the backend of that
+//!   name instead of the `OpenAI`-compatible API; Gemini encodes
 //!   only `audio/pcm` and `audio/wav`).
 //!
 //! A parameter whose value is `null` is not given. Any other parameter, a
@@ -84,21 +84,19 @@
 //!
 //! # Parts
 //!
-//! An encoding's `parts` are the original's structured reply (its
-//! `vocal.speech.Part`s): each part is an object with only the optional
+//! An encoding's `parts` are a structured reply (decision D178): each part is an object with only the optional
 //! members `expression` and `words` (`null` is absent). `words` is a
 //! string of 1 to [`MAX_WORDS_CHARS`] characters, not blank, holding none
 //! of `* < > [ ] { } ( )`; `expression` is an object whose members are
-//! among the original's expression fields ([`EXPRESSION_FIELDS`]), of
+//! among the expression fields ([`EXPRESSION_FIELDS`]), of
 //! which the service reads only `pause` (`short` or `long`) and `sound` (a
 //! string). Each part has words, a pause, or a sound, and at least one part
 //! has words.
 //!
-//! The service applies no expression cue but a pause, as the original's
-//! `ElevenLabs` and Gemini encoders apply none: a sound and every other cue
-//! are ignored. Walking the parts in order, a part with a pause opens a new
+//! The service applies no expression cue but a pause (decision D178): a
+//! sound and every other cue are ignored. Walking the parts in order, a part with a pause opens a new
 //! [`Stretch`], the pause before its words; the words within a stretch are
-//! joined verbatim with nothing added (the original's joined words).
+//! joined verbatim with nothing added.
 //!
 //! # The requests
 //!
@@ -119,8 +117,7 @@
 //!   answers are joined as signed 16-bit little-endian PCM (raw `pcm` at
 //!   [`PCM_SAMPLE_RATE_HZ`] mono, a WAV answer at its own rate and
 //!   channels, which every stretch shares, Gemini's PCM), each pause is its
-//!   silence at its place ([`Pause::frames`], the original's
-//!   silence), and the PCM is written raw for `audio/pcm` or in a
+//!   silence at its place ([`Pause::frames`]), and the PCM is written raw for `audio/pcm` or in a
 //!   WAV container for `audio/wav`. The first failed answer ends the
 //!   invocation, and nothing is written.
 //! * with `provider` `gemini`, either direction: `POST {base}/interactions`
@@ -163,7 +160,7 @@
 //! ([`scxml_types::wasm_bound`]); the encoded audio of each request is
 //! bounded by the host's response-body bound. The parts ([`MAX_PARTS`])
 //! and each part's words ([`MAX_WORDS_CHARS`]) are bounded on every build,
-//! as the original's part is.
+//! as the schema's contract (decision D178).
 //!
 //! # Telemetry
 //!
@@ -242,11 +239,9 @@ pub const MAX_TEXT_BYTES: usize = wasm_bound(16 * 1024);
 pub const MAX_ASSEMBLED_BYTES: usize = wasm_bound(64 * 1024 * 1024);
 /// Upper bound on an encoding's parts.
 pub const MAX_PARTS: usize = 64;
-/// Upper bound on one part's words, in characters (the original's
-/// part words).
+/// Upper bound on one part's words, in characters.
 pub const MAX_WORDS_CHARS: usize = 2000;
-/// The members a part's `expression` may have: the original's expression
-/// fields.
+/// The members a part's `expression` may have.
 pub const EXPRESSION_FIELDS: [&str; 11] = [
     "instructions",
     "emotion",
@@ -261,7 +256,7 @@ pub const EXPRESSION_FIELDS: [&str; 11] = [
     "sound_at",
 ];
 /// What a part's words must not hold: the characters of stage directions
-/// and markup, which a voice would read aloud (the original's rule for spoken words).
+/// and markup, which a voice would read aloud.
 pub const UNSPOKEN_CHARS: [char; 9] = ['*', '<', '>', '[', ']', '{', '}', '(', ')'];
 /// Upper bound on the text a decoding returns (wasm builds only): under
 /// the session's 96 KiB event bound, leaving room for the envelope.
@@ -401,7 +396,7 @@ pub struct Decoding {
     pub provider: Provider,
 }
 
-/// A silence in a reply, short or long (as the original's).
+/// A silence in a reply, short or long.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Pause {
     /// `short`: a beat between phrases.
@@ -411,7 +406,7 @@ pub enum Pause {
 }
 
 impl Pause {
-    /// How long the pause is silent (the original's pause lengths): 0.4
+    /// How long the pause is silent: 0.4
     /// seconds short, 1 second long.
     #[must_use]
     pub const fn seconds(self) -> f64 {
@@ -421,8 +416,8 @@ impl Pause {
         }
     }
 
-    /// The whole frames of its silence at `sample_rate_hz` (the original's
-    /// silence): its seconds times the rate, rounded.
+    /// The whole frames of its silence at `sample_rate_hz`: its seconds
+    /// times the rate, rounded.
     #[must_use]
     pub fn frames(self, sample_rate_hz: u32) -> usize {
         #[expect(

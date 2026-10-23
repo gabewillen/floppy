@@ -24,9 +24,9 @@
   classifier is required, so voice detection always runs;
   sound_classification (KindSoundClassifier), speech_decoding,
   voice_diarization and voice_identification say which optional stages are
-  configured, product_threshold_db is the original's 3 dB, stage_timeout_ms
-  is the original's 30 s stage operation timeout, and recognize_timeout_ms
-  the original's 2 s recognize_timeout. floppy's bot configures voice
+  configured, product_threshold_db is 3 dB, stage_timeout_ms is 30 s, the
+  stage operation timeout, and recognize_timeout_ms 2 s (decision D177).
+  floppy's bot configures voice
   detection, sound classification and speech decoding (the phase 6 plan:
   speech is decoded in listening). Voice identification with speech
   decoding is refused, as the original's constructor refuses it (embedding
@@ -35,9 +35,9 @@
   state degraded, and the listening degrades.
 
   Input: bot.ability.listening.sensitivity.output {sound, parent,
-  perceived_level_db, producing} (the original's sensitivity output)
-  from the listening; producing is not read yet (the original's echo
-  handling, D177). Scored sounds that arrive while Working are held by
+  perceived_level_db, producing} (sensitivity's output) from the
+  listening; producing is not read yet (echo handling waits for the
+  hearing stream, D177). Scored sounds that arrive while Working are held by
   <event:defer/> (scxml.rs namespaces/event) and taken, in order, by Idle
   and HearingSpeech (the original defers them): interpretation is serial, and
   the score was taken on arrival.
@@ -83,10 +83,9 @@
     embedding becomes the window's source identity. IdentifyingVoice
     embeds each diarized segment. Exactly one embedding per segment. Both
     wait for their voices at most stage_timeout_ms + recognize_timeout_ms
-    (the original's identification deadline): past that deadline, or with no
-    opening embedding, identification completes as usual with nobody
-    identified (the original's identifying nobody): the window opens with no
-    source identity, or each segment is handed off with no embedding.
+    (decision D177): past that deadline, or with no opening embedding,
+    identification completes as usual with nobody identified: the window
+    opens with no source identity, or each segment is handed off with no embedding.
   * DecodingSpeech invokes abilities/speech_decoding/speech_decoding.scx (the speech
     service) on the utterance: decoding rewrites the observation into
     words.
@@ -138,7 +137,7 @@
     <data id="product_threshold_db" expr="3.0"/>
     <data id="stage_timeout_ms" expr="30000"/>
     <!-- How much longer than a stage an utterance waits for its voices
-         (the original's recognize_timeout, 2 s). -->
+         (2 s; decision D177). -->
     <data id="recognize_timeout_ms" expr="2000"/>
     <data id="sound_classifier" expr="true"/>
     <data id="speech_decoder" expr="true"/>
@@ -176,7 +175,7 @@
   </datamodel>
   <script src="interpretation.js"/>
 
-  <!-- The original's constructor refusals, in its order. -->
+  <!-- The configuration's refusals, checked in order (decision D177). -->
   <state id="initializing">
     <transition cond="hasNegativeThreshold()" target="degraded">
       <log label="interpretation.degraded" expr="'product_threshold_db must not be negative'"/>
@@ -508,8 +507,8 @@
           <param name="output" expr="voiceOutput()"/>
         </invoke>
         <!-- No embedding for the opening span, or none in time: the window
-             opens with this frame and nobody identified (the original's
-             identifying nobody). -->
+             opens with this frame and nobody identified (decision
+             D177). -->
         <transition event="done.invoke.direct_voice_identification"
                     cond="hasNoEmbedding(_event)" target="HearingSpeech">
           <log label="interpretation.unidentified" expr="'no embedding for the opening voice'"/>
@@ -560,7 +559,7 @@
           <assign location="completion.embeddings" expr="_event.data.embeddings"/>
         </transition>
         <!-- Nobody identified in time: identification completes as usual,
-             with no voice for any segment (the original's identifying nobody). -->
+             with no voice for any segment (decision D177). -->
         <transition event="IdentifyingVoice.after" cond="isIdentifyTimer(_event)" target="HandingOff">
           <log label="interpretation.unidentified" expr="identifyTimedOut(completion.segments.length)"/>
           <assign location="completion.kind" expr="'identification'"/>

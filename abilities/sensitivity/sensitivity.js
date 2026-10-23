@@ -14,8 +14,8 @@ function scoreOutput(sound, stimulus, perceived, producing) {
   return ({sound: sound, parent: stimulus, perceived_level_db: perceived, producing: producing});
 }
 
-// A copy with sound still to come from the mouth (the original
-// efference copy); one of duration 0 is silent.
+// A copy with sound still to come from the mouth (decision D177); one of
+// duration 0 is silent.
 function hasSoundToCome(_event) {
   return _event.data.duration > 0;
 }

@@ -104,19 +104,17 @@
   detector_refs, <conversation:detector_refs>; floppy invokes a detector per turn, so a participant
   stands for its detector).
 
-  Exchange (the original's Exchange): an inbound commit opens a new
-  exchange, [the inbound message], and its input becomes the exchange's
-  parent; each outbound commit joins it; the next inbound replaces it.
-  Nothing earlier is carried (what was said before is memory's). Every
-  message carries participants (the original's message participants,
-  stamped by its producer and never inferred): an inbound one the
-  participants <conversation:turn_participants> stamps for its turn (the
-  original's turn_participants: its string source_ids and target_ids, then
-  whatever its parent's data carries), an outbound one those its producer
-  stamped on the append (speaking stamps the bot's own voice once it has
-  one, own true). A message's provenance, source_ids and target_ids are
-  correlation, left out of what a model is shown (the original's
-  model-facing exclusion: the cognition renderer drops them).
+  Exchange (decision D176): an inbound commit opens a new exchange, [the
+  inbound message], and its input becomes the exchange's parent; each
+  outbound commit joins it; the next inbound replaces it. Nothing earlier
+  is carried (what was said before is memory's). Every message carries
+  participants (stamped by its producer and never inferred): an inbound
+  one the participants <conversation:turn_participants> stamps for its
+  turn (its string source_ids and target_ids, then whatever its parent's
+  data carries), an outbound one those its producer stamped on the append
+  (speaking stamps the bot's own voice once it has one, own true). A
+  message's provenance, source_ids and target_ids are correlation, left
+  out of what a model is shown (the cognition renderer drops them).
   An append is answered with the exchange's own parent, even while
   another input is in flight.
 
@@ -125,9 +123,8 @@
   envelope {event, data}) and messages the exchange in causal order. An
   inbound commit of text (string content, content_type text/*) hands it to
   the parent as a stimulus, bot.ability.cognition.input {stimulus,
-  participants} (the product's envelope with source "conversation", the
-  original's text contribution handoff; participants the turn's); every
-  other commit sends the product itself.
+  participants} (the product's envelope with source "conversation";
+  participants the turn's); every other commit sends the product itself.
 
   Readiness: the session's start sends bot.ability.offers
   {ability: "conversation", choices: []} to the parent; it offers nothing
@@ -163,12 +160,12 @@
     <data id="turn_content" expr="null"/>
     <data id="turns" expr="[]"/>
     <data id="timer" expr="null"/>
-    <!-- The current exchange (the original's _exchange): the inbound
+    <!-- The current exchange (decision D176): the inbound
          message that opened it, then the outbound ones committed since,
          and the input that opened it (its parent; null before one). -->
     <data id="exchange" expr="[]"/>
     <data id="exchange_parent" expr="null"/>
-    <!-- Relationships (the original relationship profile), in the order they
+    <!-- Relationships, in the order they
          began: {session_ref, context_ref, source_ids, target_ids,
          participants}; the relationship in hand, its
          participants before this input (the original's

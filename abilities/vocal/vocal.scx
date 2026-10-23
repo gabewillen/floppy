@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's vocal SpeechEncoding ability (the reference's speech encoding):
+  floppy's vocal speech encoding ability:
   a reply's parts to speech through the speech service
   (services/speech, operation encode). Speaking
   (abilities/speaking/speaking.scx) invokes it as its child "vocal" from
@@ -10,13 +10,12 @@
 
     idle -bot.ability.vocal.speech.encoding.input-> applying -> idle
 
-  Input: bot.ability.vocal.speech.encoding.input {parts} (the original's
-  input is the parts as a stream of Piece deltas; floppy carries them
-  whole). applying invokes the speech service with the
+  Input: bot.ability.vocal.speech.encoding.input {parts} (the parts
+  whole, decision D178). applying invokes the speech service with the
   <param>s operation "encode", provider (the invoker's, null for the
   OpenAI-compatible API), model and voice (the speech service requires
   both: the invoker names them), parts (the service says each pause as
-  silence and applies no other cue, as the original's encoders), output (where the
+  silence and applies no other cue, decision D178), output (where the
   service writes the audio: a path in the media directory the run grants
   it, which the invoker names) and media_type, and answers the parent with
   the service's bot.ability.vocal.speech.encoding.output {audio,

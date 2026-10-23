@@ -300,7 +300,7 @@ Last updated: 2026-10-22.
   recall. `live_conversation` now asserts a behavior learned by turn 2 and
   "green" in turn 4's answer (model-dependent). **Amended by D176
   (2026-10-22):** the conversation hands reasoning only the current
-  exchange, as the original does, so turn 4 recalls "green" from
+  exchange, so turn 4 recalls "green" from
   reflection's episode of turn 1 (`prior_episodes`), not from the
   messages; `live_conversation` has not been rerun since.
 - **Speaking bound and self-hearing (2026-10-12, D98):** speaking's

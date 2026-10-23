@@ -15,14 +15,14 @@ function delay(ms) {
 
 // idle
 
-// The text of record of a reply: its parts' words joined verbatim (the
-// original's said).
+// The text of record of a reply: its parts' words joined verbatim
+// (decision D178).
 function said(parts) {
   return parts.map(function (part) { return typeof part.words === 'string' ? part.words : ''; }).join('');
 }
 
-// An input for an utterance already said (the original's new-input check):
-// only one whose sender named its id can be one.
+// An input for an utterance already said (decision D175): only one whose
+// sender named its id can be one.
 function isFinishedUtterance(_event) {
   return !!_event.sendid && finished_utterances.indexOf(_event.sendid) >= 0;
 }
@@ -45,8 +45,8 @@ function isCurrentUtterance(_event) {
   return !!_event.sendid && _event.sendid === utterance_id;
 }
 
-// Another copy of a held utterance: the first copy is kept, where the
-// original replaces it with the newer one.
+// Another copy of a held utterance: the first copy is kept, as
+// <event:defer/> cannot replace an event it holds (decision D175).
 function isHeldUtterance(_event) {
   return !!_event.sendid && held_ids.indexOf(_event.sendid) >= 0;
 }
@@ -65,14 +65,13 @@ function heldOverMessage() {
 }
 
 // The finished ids with the one in hand, the oldest dropped past the
-// bound (the original's _clear).
+// bound (decision D175).
 function finishedUtterances() {
   var ids = utterance_id === null ? finished_utterances : finished_utterances.concat([utterance_id]);
   return ids.slice(Math.max(0, ids.length - finished_utterances_bound));
 }
 
-// A reply that says something (the original's input and part
-// validators): every part has words (not blank), a sound or a pause, every
+// A reply that says something (decision D178): every part has words (not blank), a sound or a pause, every
 // expression directs a cue (sound_at only with a sound), and the words,
 // joined exactly as written, are not blank.
 function isUnspokenInput(_event) {
@@ -160,8 +159,8 @@ function playoutFailure(_event) {
 // recording
 
 // What was said, as the outbound message the conversation commits: no
-// participants until speaking has a voice of its own (the original stamps
-// its voice_id's ref, own, and none without one).
+// participants until speaking has a voice of its own, when it stamps its
+// voice's ref, own (decision D176).
 function outboundMessage() {
   return ({source_ids: [], target_ids: [], content: text, content_type: 'text/plain', participants: []});
 }

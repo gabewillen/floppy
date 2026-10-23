@@ -102,7 +102,7 @@
     </test>
   </assert>
   <assert id="conversation-11" specnum="11" specid="#conversation-11">
-    <![CDATA[Every output is the current exchange (the original's Exchange), never the cumulative history: an inbound commit opens a new exchange, `[the inbound message]`, its input the exchange's `parent`; each outbound commit joins it; the next inbound replaces it, and nothing earlier is carried.]]>
+    <![CDATA[Every output is the current exchange (decision D176), never the cumulative history: an inbound commit opens a new exchange, `[the inbound message]`, its input the exchange's `parent`; each outbound commit joins it; the next inbound replaces it, and nothing earlier is carried.]]>
     <test id="200" conformance="mandatory" manual="false">
       <start uri="200/test200.scxml"/>
     </test>

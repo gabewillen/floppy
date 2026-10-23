@@ -19,14 +19,13 @@
   that delay, and leaving producing cancels it (the original's ballistic after()).
   Only a copy with sound still to come (duration > 0) opens or re-arms the
   window; a copy of duration 0 says the mouth has nothing left to play,
-  and closes it (the original's silent copy; quiet ignores one).
+  and closes it (a silent copy, decision D177; quiet ignores one).
 
   Scoring: bot.ability.listening.sensitivity.score {stimulus} (the original's
   ScoreData: the environment.sound envelope) answers the listening with
   bot.ability.listening.sensitivity.output {sound, parent,
-  perceived_level_db, producing} (the original's output; parent is the
-  stimulus; producing is true for every arrival in producing, whoever made
-  it). Every sound comes back; nothing is dropped or edited.
+  perceived_level_db, producing} (parent is the stimulus; producing is
+  true for every arrival in producing, whoever made it). Every sound comes back; nothing is dropped or edited.
 
   * quiet, or producing a sound whose stimulus source is not the
     producing mouth (the original _score_unproduced): perceived_level_db is the
