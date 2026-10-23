@@ -4,13 +4,14 @@
 //! (`<invoke type="https://github.com/stateforward/floppy/services/speech">`)
 //! against a deterministic fake backend on 127.0.0.1 that speaks the
 //! `OpenAI`-compatible audio API (`/audio/transcriptions`, `/audio/speech`)
-//! and `ElevenLabs`' `text-to-speech` (nothing reaches the network). Media
-//! moves by reference: the run grants the service a directory with
-//! `--dir URI=HOST::/media`, a decoding reads its audio from there, and an
-//! encoding writes its audio there. The service answers
+//! and `ElevenLabs`' streaming `text-to-speech` (nothing reaches the
+//! network). Media moves by reference: the run grants the service a
+//! directory with `--dir URI=HOST::/media`, a decoding reads its audio from
+//! there, and an encoding writes its audio there. The service answers
 //! `bot.ability.hearing.speech.decoding.output`,
-//! `bot.ability.vocal.speech.encoding.output`, or `bot.ability.failed`,
-//! then completes.
+//! `bot.ability.vocal.speech.encoding.output` (after each of its
+//! `bot.ability.vocal.speech.encoding.chunk`s, decision D203), or
+//! `bot.ability.failed`, then completes.
 //!
 //! The ignored `live_speech_round_trip_through_an_env_file` test makes two
 //! real calls (encode, then decode what was encoded):
@@ -77,11 +78,27 @@ struct Received {
     body: Vec<u8>,
 }
 
-/// A deterministic fake audio backend on 127.0.0.1: `/v1/...` answers, and
-/// `/fail/v1/...` answers 500; every request is recorded.
+/// The bytes of each piece of [`streamed_pcm`] the mock sends.
+const STREAM_PIECE: usize = 10_000;
+/// The bytes a stalled answer sends before it waits for the client.
+const STALLED_BYTES: usize = 30_000;
+
+/// What `/stream/v1/audio/speech` answers, in pieces: 1.25 s of 24 kHz
+/// mono 16-bit PCM, two whole chunks and a quarter-second rest.
+fn streamed_pcm() -> Vec<u8> {
+    (0..60_000_u32)
+        .map(|at| u8::try_from(at % 199).expect("below 199"))
+        .collect()
+}
+
+/// A deterministic fake audio backend on 127.0.0.1: `/v1/...` answers,
+/// `/fail/v1/...` answers 500, `/stream/v1/audio/speech` streams its PCM,
+/// and `/stall/v1/audio/speech` sends one chunk's bytes and then waits for
+/// the client to close; every request is recorded.
 struct Mock {
     origin: String,
     received: Arc<Mutex<Vec<Received>>>,
+    closed: Arc<Mutex<bool>>,
 }
 
 impl Mock {
@@ -93,7 +110,10 @@ impl Mock {
         );
         let received = Arc::new(Mutex::new(Vec::new()));
         let log = Arc::clone(&received);
+        let closed = Arc::new(Mutex::new(false));
+        let stalled = Arc::clone(&closed);
         std::thread::spawn(move || {
+            let closed = stalled;
             for stream in listener.incoming() {
                 let Ok(mut stream) = stream else { continue };
                 let mut reader = BufReader::new(stream.try_clone().expect("the stream clones"));
@@ -135,13 +155,48 @@ impl Mock {
                     content_type: header("content-type"),
                     body,
                 });
+                // A streamed answer: its PCM in chunked pieces as it is
+                // "synthesized", or its first chunk and then nothing until
+                // the client closes the connection.
+                if target == "/stream/v1/audio/speech" {
+                    let _ = write!(
+                        stream,
+                        "HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\nconnection: close\r\n\r\n"
+                    );
+                    for piece in streamed_pcm().chunks(STREAM_PIECE) {
+                        let _ = write!(stream, "{:x}\r\n", piece.len());
+                        let _ = stream.write_all(piece);
+                        let _ = stream.write_all(b"\r\n");
+                        let _ = stream.flush();
+                        std::thread::sleep(Duration::from_millis(50));
+                    }
+                    let _ = stream.write_all(b"0\r\n\r\n");
+                    continue;
+                }
+                if target == "/stall/v1/audio/speech" {
+                    let _ = write!(
+                        stream,
+                        "HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\nconnection: close\r\n\r\n{:x}\r\n",
+                        STALLED_BYTES
+                    );
+                    let _ = stream.write_all(&vec![0; STALLED_BYTES]);
+                    let _ = stream.write_all(b"\r\n");
+                    let _ = stream.flush();
+                    // Nothing more until the client goes away.
+                    let _ = stream.set_read_timeout(Some(Duration::from_secs(60)));
+                    let mut rest = [0_u8; 64];
+                    if matches!(reader.read(&mut rest), Ok(0)) {
+                        *closed.lock().expect("the closed lock") = true;
+                    }
+                    continue;
+                }
                 let (status, answer): (&str, Vec<u8>) = match target.as_str() {
                     "/v1/audio/transcriptions" => ("200 OK", HEARD.as_bytes().to_vec()),
                     "/v1/audio/speech" if speech_format.as_deref() == Some("wav") => {
                         ("200 OK", wav(22_050, 1))
                     }
                     "/v1/audio/speech" => ("200 OK", MP3.to_vec()),
-                    "/v1/text-to-speech/rachel?output_format=mp3_44100_128" => {
+                    "/v1/text-to-speech/rachel/stream?output_format=mp3_44100_128" => {
                         ("200 OK", ELEVENLABS_MP3.to_vec())
                     }
                     target if target.starts_with("/fail/") => (
@@ -158,7 +213,16 @@ impl Mock {
                 let _ = stream.write_all(&answer);
             }
         });
-        Self { origin, received }
+        Self {
+            origin,
+            received,
+            closed,
+        }
+    }
+
+    /// Whether the client closed a stalled answer's connection.
+    fn closed(&self) -> bool {
+        *self.closed.lock().expect("the closed lock")
     }
 
     fn received(&self) -> Vec<Received> {
@@ -322,6 +386,10 @@ fn an_encoding_writes_the_audio_and_answers_its_reference() {
         labelled(&[
             (
                 "event",
+                r#"bot.ability.vocal.speech.encoding.chunk {"audio":"media/said.0.mp3","channels":null,"duration":null,"media_type":"audio/mpeg","sample_rate_hz":null,"sequence":0}"#
+            ),
+            (
+                "event",
                 r#"bot.ability.vocal.speech.encoding.output {"audio":"media/said.mp3","channels":null,"duration":null,"media_type":"audio/mpeg","sample_rate_hz":null}"#
             ),
             ("final", "done"),
@@ -332,6 +400,11 @@ fn an_encoding_writes_the_audio_and_answers_its_reference() {
     assert_eq!(
         std::fs::read(media.join("said.mp3")).expect("the audio is in the granted directory"),
         MP3
+    );
+    assert_eq!(
+        std::fs::read(media.join("said.0.mp3")).expect("the chunk is in the granted directory"),
+        MP3,
+        "a short answer is one chunk"
     );
     let received = mock.received();
     assert_eq!(received.len(), 1);
@@ -359,6 +432,10 @@ fn a_wav_encoding_names_the_rate_and_channels_its_header_declares() {
         labelled(&[
             (
                 "event",
+                r#"bot.ability.vocal.speech.encoding.chunk {"audio":"/media/said.0.wav","channels":1,"duration":0.1,"media_type":"audio/wav","sample_rate_hz":22050,"sequence":0}"#
+            ),
+            (
+                "event",
                 r#"bot.ability.vocal.speech.encoding.output {"audio":"/media/said.wav","channels":1,"duration":0.1,"media_type":"audio/wav","sample_rate_hz":22050}"#
             ),
             ("final", "done"),
@@ -369,6 +446,119 @@ fn a_wav_encoding_names_the_rate_and_channels_its_header_declares() {
     assert_eq!(
         std::fs::read(media.join("said.wav")).expect("the audio is written"),
         wav(22_050, 1)
+    );
+}
+
+/// A streamed answer is returned chunk by chunk as it arrives, cut at
+/// fixed offsets (decision D203), then its output (the whole answer).
+#[test]
+fn a_streamed_answer_is_returned_chunk_by_chunk_before_its_output() {
+    let mock = Mock::start();
+    let (media, args) = granted("stream", &format!("{}/stream/v1", mock.origin), &[]);
+    let finished = open(
+        &args,
+        &encode(
+            r#"<param name="voice" expr="'alloy'"/>
+      <param name="output" expr="'media/said.pcm'"/>
+      <param name="media_type" expr="'audio/pcm'"/>"#,
+        ),
+    );
+    assert_eq!(
+        events(&finished),
+        labelled(&[
+            (
+                "event",
+                r#"bot.ability.vocal.speech.encoding.chunk {"audio":"media/said.0.pcm","channels":1,"duration":0.5,"media_type":"audio/pcm","sample_rate_hz":24000,"sequence":0}"#
+            ),
+            (
+                "event",
+                r#"bot.ability.vocal.speech.encoding.chunk {"audio":"media/said.1.pcm","channels":1,"duration":0.5,"media_type":"audio/pcm","sample_rate_hz":24000,"sequence":1}"#
+            ),
+            (
+                "event",
+                r#"bot.ability.vocal.speech.encoding.chunk {"audio":"media/said.2.pcm","channels":1,"duration":0.25,"media_type":"audio/pcm","sample_rate_hz":24000,"sequence":2}"#
+            ),
+            (
+                "event",
+                r#"bot.ability.vocal.speech.encoding.output {"audio":"media/said.pcm","channels":1,"duration":1.25,"media_type":"audio/pcm","sample_rate_hz":24000}"#
+            ),
+            ("final", "done"),
+        ]),
+        "{}",
+        finished.stderr
+    );
+    let pcm = streamed_pcm();
+    assert_eq!(
+        std::fs::read(media.join("said.pcm")).expect("the audio is written"),
+        pcm
+    );
+    let chunks: Vec<u8> = (0..3)
+        .flat_map(|at| {
+            std::fs::read(media.join(format!("said.{at}.pcm"))).expect("the chunk is written")
+        })
+        .collect();
+    assert_eq!(chunks, pcm, "the chunks in order are the answer");
+}
+
+/// The first chunk is returned while its answer is still arriving: a
+/// session that leaves the invoking state on it cancels the invocation,
+/// which closes the connection before the backend sends the rest.
+#[test]
+fn the_first_chunk_arrives_before_its_answer_ends() {
+    let mock = Mock::start();
+    let (media, args) = granted("stall", &format!("{}/stall/v1", mock.origin), &[]);
+    let finished = run_document(
+        "speech.scx",
+        &format!(
+            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       version="1.0" datamodel="ecmascript" initial="speaking">
+  <state id="speaking">
+    <invoke id="speech" type="{service}" env:apikey="FLOPPY_SPEECH_API_KEY" env:baseurl="FLOPPY_SPEECH_BASE_URL">
+      {params}
+    </invoke>
+    <transition event="bot.ability.vocal.speech.encoding.chunk" target="stopped">
+      <log label="event" expr="_event.name + ' ' + JSON.stringify(_event.data)"/>
+    </transition>
+    <transition event="*" target="unexpected"><log label="event" expr="_event.name"/></transition>
+  </state>
+  <final id="stopped"><onentry><log label="final" expr="'stopped'"/></onentry></final>
+  <final id="unexpected"/>
+</scxml>"#,
+            service = speech(),
+            params = encode(
+                r#"<param name="voice" expr="'alloy'"/>
+      <param name="output" expr="'media/said.pcm'"/>
+      <param name="media_type" expr="'audio/pcm'"/>"#
+            )
+        ),
+        &args,
+        &[],
+        Duration::from_secs(60),
+    );
+    assert_eq!(
+        events(&finished),
+        labelled(&[
+            (
+                "event",
+                r#"bot.ability.vocal.speech.encoding.chunk {"audio":"media/said.0.pcm","channels":1,"duration":0.5,"media_type":"audio/pcm","sample_rate_hz":24000,"sequence":0}"#
+            ),
+            ("final", "stopped"),
+        ]),
+        "{}",
+        finished.stderr
+    );
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while !mock.closed() && std::time::Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert!(
+        mock.closed(),
+        "the cancelled invocation closed its connection"
+    );
+    assert!(
+        !media.join("said.pcm").exists(),
+        "a cancelled encoding writes no output"
     );
 }
 
@@ -389,6 +579,10 @@ fn an_elevenlabs_encoding_uses_its_text_to_speech_api() {
         labelled(&[
             (
                 "event",
+                r#"bot.ability.vocal.speech.encoding.chunk {"audio":"file:///media/said.0.mp3","channels":null,"duration":null,"media_type":"audio/mpeg","sample_rate_hz":44100,"sequence":0}"#
+            ),
+            (
+                "event",
                 r#"bot.ability.vocal.speech.encoding.output {"audio":"file:///media/said.mp3","channels":null,"duration":null,"media_type":"audio/mpeg","sample_rate_hz":44100}"#
             ),
             ("final", "done"),
@@ -404,7 +598,7 @@ fn an_elevenlabs_encoding_uses_its_text_to_speech_api() {
     assert_eq!(received.len(), 1);
     assert_eq!(
         received[0].request_line,
-        "POST /v1/text-to-speech/rachel?output_format=mp3_44100_128 HTTP/1.1"
+        "POST /v1/text-to-speech/rachel/stream?output_format=mp3_44100_128 HTTP/1.1"
     );
     assert_eq!(received[0].xi_api_key.as_deref(), Some(FAKE_KEY));
     assert_eq!(
