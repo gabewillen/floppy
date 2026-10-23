@@ -1,11 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's TurnDetector (the reference abilities/communication/conversation/
-  turn_detector): one participant's turn lifecycle and content assembler.
+  floppy's TurnDetector: one participant's turn lifecycle and content assembler.
   The conversation (abilities/conversation/conversation.scx) invokes it as
   its child "turn_detector" once per source participant of each input
-  (the original Conversation's turn_detector stage) and exchanges one
-  start/end pair with it; any parent may drive it the same way, or stream
+  and exchanges one start/end pair with it; any parent may drive it the same way, or stream
   heard speech to it.
 
     idle -start or voiced speech-> open ⇄ paused
@@ -13,18 +11,17 @@
     open, paused -open.after, paused.after (end of turn silence)-> closing
       -silence.expired-> normalizing -> idle
 
-  Configuration: the <param>s participant_ref (the original's default "bot"),
+  Configuration: the <param>s participant_ref (default "bot"),
   conversation_ref ("conversation") and end_of_turn_silence_seconds (0.5;
-  each timer waits at least 0.01 s, as the original's does).
+  each timer waits at least 0.01 s).
 
   Readiness: on start it sends bot.ability.turn_detector.ready
   {participant_ref, conversation_ref} to the parent, which may then send
-  it turns (an SCXML child cannot be sent to before it starts). The original
-  answers a ready.request once its attachment group is live; floppy has no
-  attachment, so the request is not ported and the detector announces
-  itself, as floppy's abilities announce their offers.
+  it turns (an SCXML child cannot be sent to before it starts). It takes no
+  ready request: the detector announces itself, as floppy's abilities
+  announce their offers.
 
-  Turns (the original's guards and effects):
+  Turns:
   * bot.ability.turn_detector.turn.start opens a turn when its
     self_participant_ref is this detector's participant_ref and no turn is
     open, taking its turn_ref, conversation_ref and source_participant_ref;
@@ -38,48 +35,47 @@
     the observation's audio while its content_type is audio/pcm (decoded
     words carry no frames); without voice spans it moves open to paused.
   * open and paused each wait end_of_turn_silence_seconds from their
-    entry (the original's hsm.after, re-armed on every re-entry); the timer
-    closes the turn through closing, which raises the original's
-    bot.ability.turn_detector.turn.silence.expired to itself.
-  * Content (the original _ingest_content, <conversation:ingest_content>): text is stripped and kept when not
-    empty; audio chunks are kept in order by reference (the first chunk's
-    sample_rate_hz and channels win); content and event stimuli replace
+    entry (re-armed on every re-entry); the timer closes the turn through
+    closing, which raises bot.ability.turn_detector.turn.silence.expired
+    to itself.
+  * Content (<conversation:ingest_content>): text is stripped and kept
+    when not empty; audio chunks are kept in order by reference (the
+    first chunk's sample_rate_hz and channels win); content and event stimuli replace
     the modality-neutral content (content_type the stimulus's, or
-    application/event); an image stimulus changes nothing (the original's
-    images are turn attachments, parity gap 13).
+    application/event); an image stimulus changes nothing (a
+    completed turn carries no images).
 
-  Output (normalizing): the closed turn (the original _on_end,
-  <conversation:on_end>) answers the parent with
-  bot.ability.turn_detector.turn.complete (the original's TurnCompleteData): text
+  Output (normalizing): the closed turn (<conversation:on_end>)
+  answers the parent with bot.ability.turn_detector.turn.complete: text
   the kept texts joined by spaces, audio the chunk references, content the
   text, else the audio, else the modality-neutral content, with
   content_type text/plain, audio/pcm or the content's. A turn closed with
-  none of them, or with both text and audio (the original's TurnCompleteData
+  none of them, or with both text and audio (<conversation:on_end>
   refuses them), answers bot.ability.turn_detector.failed {stage: "turn",
   message, participant_ref, conversation_ref, turn_ref,
   source_participant_ref}. Either way the turn is cleared and the detector
-  is idle again. floppy's detector has no decoder (the original's Conversation
-  builds its detectors without one; floppy decodes speech in listening), so
-  normalizing hands the turn on as assembled.
+  is idle again. The detector has no decoder (floppy decodes speech in
+  listening), so normalizing hands the turn on as assembled.
 
   Contracts: the turn events reference abilities/schemas/ by event:schema
   (never inline); a send whose data a schema rejects is never routed here
   and raises error.execution in the sender. Fields a sender leaves out take
-  the original's defaults. Conds only correlate (which turn, which timer).
+  defaults (conversation_ref "conversation", source_participant_ref
+  "caller", self_participant_ref "bot"). Conds only correlate (which
+  turn, which timer).
 
-  Bindings: the conversation namespace package (the turn detector is a module
-  of the original's conversation).
+  Bindings: the conversation namespace package.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="turn_detector" initial="turn_detector">
   <datamodel>
-    <!-- The invoker's <param>s (the original's constructor defaults). -->
+    <!-- The invoker's <param>s, with their defaults. -->
     <data id="participant_ref" expr="'bot'"/>
     <data id="conversation_ref" expr="'conversation'"/>
     <data id="end_of_turn_silence_seconds" expr="0.5"/>
-    <!-- The open turn (the original's instance state). -->
+    <!-- The open turn. -->
     <data id="turn_ref" expr="null"/>
     <data id="active_conversation_ref" expr="null"/>
     <data id="source_participant_ref" expr="'caller'"/>
@@ -88,7 +84,7 @@
          (<conversation:ingest_content> reads it as the cleared content). -->
     <data id="turn_content" expr="null"/>
     <!-- Turns opened by voice so far, the timer in hand, and the closed
-         turn's product (the original's TurnCompleteData or FailedEventData). -->
+         turn's product (the completed turn or its failure). -->
     <data id="voice_turns" expr="0"/>
     <data id="timer" expr="null"/>
     <data id="closed" expr="null"/>
@@ -103,7 +99,7 @@
       </send>
     </onentry>
 
-    <!-- idle holds no turn (the original _clear_open). -->
+    <!-- idle holds no turn. -->
     <state id="idle">
       <onentry>
         <assign location="turn_ref" expr="null"/>
@@ -132,7 +128,7 @@
     </state>
 
     <!-- open and paused: the open turn, each waiting the end-of-turn
-         silence from its entry (the original's hsm.after). -->
+         silence from its entry. -->
     <state id="open">
       <onentry>
         <send idlocation="timer" event="open.after" delayexpr="silenceDelay()"/>
@@ -214,7 +210,7 @@
       <transition event="paused.after" cond="isTimer(_event)" target="closing"/>
     </state>
 
-    <!-- The end-of-turn silence expired: the original's closing raises its
+    <!-- The end-of-turn silence expired: closing raises its
          provenance to itself and ends the turn on it. -->
     <state id="closing">
       <onentry>

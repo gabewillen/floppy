@@ -2,29 +2,29 @@
 // root <script src="turn_detector.js">, so every function here is a global of the
 // document's data model, callable from its cond and expr attributes.
 
-// Shared: identities, the original's field defaults, and the timer in hand.
+// Shared: identities, field defaults, and the timer in hand.
 
 // Two identities (a string, or an array of numbers) are the same identity.
 function sameIdentity(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-// A turn event's conversation_ref (the original's default "conversation").
+// A turn event's conversation_ref (default "conversation").
 function conversationRef(_event) {
   return _event.data.conversation_ref === undefined ? 'conversation' : _event.data.conversation_ref;
 }
 
-// A turn event's source_participant_ref (the original's default "caller").
+// A turn event's source_participant_ref (default "caller").
 function sourceRef(_event) {
   return _event.data.source_participant_ref === undefined ? 'caller' : _event.data.source_participant_ref;
 }
 
-// A turn start's self_participant_ref (the original's default "bot").
+// A turn start's self_participant_ref (default "bot").
 function selfRef(_event) {
   return _event.data.self_participant_ref === undefined ? 'bot' : _event.data.self_participant_ref;
 }
 
-// The original's hsm.after delay: the end-of-turn silence, at least 10 ms.
+// The timer's delay: the end-of-turn silence, at least 10 ms.
 function silenceDelay() {
   return Math.max(Math.round(end_of_turn_silence_seconds * 1000), 10) + 'ms';
 }
@@ -33,7 +33,7 @@ function isTimer(_event) {
   return _event.sendid === timer;
 }
 
-// Guards (the original _has_start, _matches_active_turn, _has_voice).
+// Guards.
 
 // The event is for the open turn: its turn, conversation and source.
 function isActiveTurn(_event) {
@@ -50,14 +50,14 @@ function hasVoice(_event) {
   return (_event.data.voice_detection.segments || []).length > 0;
 }
 
-// The turn a voiced observation opens (the original: a fresh uuid).
+// The turn a voiced observation opens: the next "turn-<n>".
 function voiceTurnRef() {
   return 'turn-' + voice_turns;
 }
 
-// Content: <conversation:ingest_content> takes each stimulus in (the original
-// _ingest_content); a stimulus is the event's optional content, {kind,
-// source_participant_ref, content, ...}, or heard speech as one.
+// Content: <conversation:ingest_content> takes each stimulus in; a stimulus
+// is the event's optional content, {kind, source_participant_ref, content,
+// ...}, or heard speech as one.
 
 // Heard speech as an audio stimulus: its audio while acoustic (decoded
 // words carry no frames), with its rate and channels.
@@ -68,7 +68,7 @@ function voiceStimulus(_event) {
 
 // closing
 
-// The original's _TurnSilenceExpiredData: the provenance of the expiry.
+// The provenance of the expiry: the silence.expired event's data.
 function silenceExpired() {
   return {participant_ref: participant_ref, conversation_ref: active_conversation_ref, turn_ref: turn_ref, source_participant_ref: source_participant_ref};
 }
