@@ -230,8 +230,8 @@ fn a_streamed_generation_asks_for_server_sent_events() {
     );
 }
 
-/// A request's bytes are its body's as the original counts them
-/// (`OutputData.request_bytes`): everything but the streaming members.
+/// A request's bytes are its body's (decision D126): everything but the
+/// streaming members.
 #[test]
 fn a_requests_bytes_are_its_body_without_the_streaming_members() {
     let plain = parse(&[("model", text("m")), ("prompt", text("héllo"))]).expect("valid");
@@ -262,8 +262,8 @@ fn a_requests_bytes_are_its_body_without_the_streaming_members() {
     );
 }
 
-/// The usage a reply's backend reports is the result's `usage`, as the
-/// original's `Usage` reads it: the completion's, or the last stream chunk
+/// The usage a reply's backend reports is the result's `usage`: the
+/// completion's, or the last stream chunk
 /// that carries one; a count left out is absent, and no count is no usage.
 #[test]
 fn a_replys_usage_is_the_results_usage() {
@@ -378,9 +378,9 @@ fn max_completion_tokens_is_sent_and_bounded() {
     );
 }
 
-/// The original's sampling and token bounds (its image decoder's
-/// `temperature` 0 and 512 tokens; vLLM's `thinking_token_budget`) are sent
-/// as given and bounded.
+/// The sampling and token bounds (the reading ability's `temperature` 0
+/// and 512 tokens; vLLM's `thinking_token_budget`) are sent as given and
+/// bounded.
 #[test]
 fn temperature_and_the_thinking_budget_are_sent_and_bounded() {
     let generation = parse(&[
@@ -422,8 +422,7 @@ fn temperature_and_the_thinking_budget_are_sent_and_bounded() {
     }
 }
 
-/// `tool_choice` `auto` lets the model answer in its content, as the
-/// original's processor allows: a reply with no call is read as one call of
+/// `tool_choice` `auto` lets the model answer in its content: a reply with no call is read as one call of
 /// the tool whose arguments are the content, checked as any call's, and
 /// blank content selects nothing; a reply with calls is read as before.
 #[test]
@@ -520,8 +519,8 @@ fn under_auto_a_reply_without_a_call_is_read_from_its_content() {
     }
 }
 
-/// Arguments a local model encoded as JSON strings are decoded once, as the
-/// original's text generator and processing decode them: the whole
+/// Arguments a local model encoded as JSON strings are decoded once
+/// (decision D128): the whole
 /// arguments, and each string where the schema takes only an array or an
 /// object (through `$ref` and the first admitting `anyOf` branch); a string
 /// the schema also takes as a string is kept.
@@ -905,7 +904,7 @@ fn image_media_types_come_from_their_signatures() {
         image_media_type(&[0xff, 0xd8, 0xff, 0xe0]),
         Some("image/jpeg")
     );
-    // GIF is not one of the original's image media types.
+    // GIF is not one of the image media types.
     assert_eq!(image_media_type(b"GIF89a.."), None);
     assert_eq!(data_url(b"GIF89a.."), None);
     assert_eq!(
@@ -1163,8 +1162,7 @@ fn a_tool_reply_returns_every_call_its_schema_admits() {
     );
     // Every call is checked against the one function it was offered before
     // anything is returned: arguments its schema does not admit, or a call
-    // of a function the request did not offer (the original's processing:
-    // "expected tool 'dispatch', got: ..."), are a schema mismatch.
+    // of a function the request did not offer, are a schema mismatch.
     assert_eq!(
         outcome(
             &generation,
@@ -1262,7 +1260,7 @@ fn a_calls_undeclared_top_level_fields_are_dropped_and_nested_ones_still_fail() 
     ])
     .expect("valid");
     // A stray `reason` beside `events` is not the tool's: it is dropped
-    // before the check and not returned (the original reads only
+    // before the check and not returned (a stage's dispatch reads only
     // `args.events`).
     let event = serde_json::json!({"event": "bot.say", "data": {"text": "hi"}, "reason": "asked"});
     let stray = serde_json::json!({"events": [event], "reason": "why"}).to_string();
@@ -1305,8 +1303,8 @@ fn a_calls_undeclared_top_level_fields_are_dropped_and_nested_ones_still_fail() 
     }
 }
 
-/// A refused call's rejection names where its arguments first fail, as the
-/// original's selection rejection names the event and the failing keys: in
+/// A refused call's rejection names where its arguments first fail, the
+/// event and the failing keys: in
 /// the dispatch tool's `anyOf` of one branch per event, the branch of the
 /// event the call names, and an event no branch offers at its `event`.
 #[test]
@@ -1406,8 +1404,8 @@ fn a_tool_reply_needs_a_call_and_keeps_its_calls_in_index_order() {
     ])
     .expect("valid");
     let arguments = r#"{"score":41,"answer":"yes"}"#;
-    // JSON content without a tool call is no reply, streamed or not: the
-    // original's "did not include a required tool call".
+    // JSON content without a tool call is no reply, streamed or not: it
+    // "did not include a required tool call".
     assert_eq!(
         outcome(&generation, 0, ok(completion(arguments, "stop"))),
         Returned::failed(FailureCode::Malformed)

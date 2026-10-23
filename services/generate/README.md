@@ -8,7 +8,7 @@ events, the request, the reply, bounds, and telemetry.
 
 ## Events
 
-`generate.result` is the original's text-generator output with what the
+`generate.result` is the reply's content and tool calls with what the
 request cost (decision D126):
 
 ```json
@@ -18,14 +18,15 @@ request cost (decision D126):
 ```
 
 `request_bytes` is the UTF-8 length of the request body without its
-streaming members (`stream`, `stream_options`), as the original counts it;
+streaming members (`stream`, `stream_options`), so a streamed and an
+unstreamed call of the same request count the same;
 `usage` is what the backend reported (a non-streamed completion's `usage`,
 or a stream's last chunk, which a streamed call asks for with
 `stream_options.include_usage`), each count present only when reported and
 the whole member absent when none is.
 
 `generate.failed` is `{"code": C}`; a call refused as `not-json` or
-`schema-mismatch` also carries the original's selection rejection,
+`schema-mismatch` also carries its rejection,
 `"rejection": {"key": K, "message": M}`, so an invoking document can ask its
 model again with the diagnostic and stop when the same key repeats:
 
@@ -40,7 +41,7 @@ Neither repeats a value of the arguments, and each is one line of at most
 
 ## Tool choice, sampling and thinking
 
-These optional `<param>`s follow the original's provider (decision D128):
+These optional `<param>`s shape the request (decision D128):
 
 | Parameter | Value | Sent as |
 | --- | --- | --- |
@@ -49,7 +50,7 @@ These optional `<param>`s follow the original's provider (decision D128):
 | `max_completion_tokens` | a whole number from 1 to 1048576 | `max_completion_tokens` |
 | `thinking_token_budget` | a whole number from 1 to 1048576 | `thinking_token_budget` (vLLM's bound on a reasoning model's thinking) |
 
-A call's arguments are read as the original reads them: arguments sent as
+A call's arguments are read leniently (decision D128): arguments sent as
 a JSON string of the object are decoded once more, and so is each string
 where the tool's schema takes only an array or an object (through `$ref`,
 and the first `anyOf` branch that admits the decoded value); such a string
@@ -61,10 +62,9 @@ property and item counting one) fail `not-json`.
 
 ## Images
 
-A `messages` entry's `content` may be an array of the original's reading parts,
+A `messages` entry's `content` may be an array of reading parts,
 `{"kind": "text", "content": T}` and, in a `user` message,
-`{"kind": "image", "content": R}`, so a vision model reads an image as
-The original's `ImageDecoder` does:
+`{"kind": "image", "content": R}`, so a vision model reads an image:
 
 ```xml
 <invoke id="read" type="https://github.com/stateforward/floppy/services/generate"
@@ -80,17 +80,15 @@ Media moves by reference, never as bytes in a document. `R` is a path-only
 URI reference (no scheme, query, fragment, or `.`/`..` segment) resolved
 against the guest root, so `media/page.png` names `/media/page.png`. The
 service reads it from the directory the run grants and sends it as an
-`image_url` part with a `data:` URL (PNG, JPEG, or WebP, the original's
-image media types, by its
+`image_url` part with a `data:` URL (PNG, JPEG, or WebP, by its
 signature). The reply is the usual `generate.result` `{"content": T, "tool_calls": [], "request_bytes": B}`.
 
 A reference that names no readable file in a granted directory (a symlink
 out of it included), a file that is not such an image, or images over
 their bound (2 MiB together) reject the start: the `<invoke>` raises
-`error.execution` and nothing is sent. The original admits an image of up
-to 4 MiB, but the host bounds a request body to 4 MiB, and an image's
-base64 `data:` URL is a third larger than its bytes, so 2 MiB of images in
-all stays the bound, and no image over it is sent.
+`error.execution` and nothing is sent. The host bounds a request body to
+4 MiB, and an image's base64 `data:` URL is a third larger than its bytes,
+so 2 MiB of images in all is the bound, and no image over it is sent.
 
 ## Grants
 
