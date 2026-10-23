@@ -1,16 +1,14 @@
 //! The `speech` invoked service: one speech or voice operation per
 //! `<invoke>`, as a `stateforward:scxml/invoked-service` Wasm component. It
-//! is the original's `SpeechDecoder` (hearing's `SpeechDecoding`) and
-//! `SpeechEncoder` (vocal's `SpeechEncoding`) providers in one service
-//! (decision D57): both directions are one `OpenAI`-compatible audio API,
-//! or, with `provider` `gemini`, the Gemini API ([`gemini`], decision D94).
-//! It is also the local models of the original's hearing that floppy cannot run
-//! in a document: the voice activity classifier (`VoiceDetection`), the
-//! diarizer (`VoiceDiarization`) and the voice classifier
-//! (`VoiceIdentification`), through `LocalAI`'s voice APIs ([`voice`]), and
-//! the media steps the original's interpretation does on bytes in memory
-//! (normalizing a sound to PCM, joining the open speech, clipping a voice
-//! span), which floppy does on files.
+//! decodes speech for hearing's `SpeechDecoding` and encodes it for vocal's
+//! `SpeechEncoding` in one service (decision D57): both directions are one
+//! `OpenAI`-compatible audio API, or, with `provider` `gemini`, the Gemini
+//! API ([`gemini`], decision D94). It also runs the voice models a document
+//! cannot: voice activity detection (`VoiceDetection`), diarization
+//! (`VoiceDiarization`) and voice embedding (`VoiceIdentification`),
+//! through `LocalAI`'s voice APIs ([`voice`]), and the interpretation's
+//! media steps (normalizing a sound to PCM, joining the open speech,
+//! clipping a voice span), on files.
 //!
 //! A model call is slow I/O, so it is a service, never executable content:
 //! the invoking session keeps processing events and timers while the call is
@@ -44,9 +42,8 @@
 //!
 //! # Parameters (`<param>`)
 //!
-//! * `operation` (required): `decode` (speech to text, the original's
-//!   `SpeechDecoder`), `encode` (text to speech, the original's
-//!   `SpeechEncoder`), or one of the voice operations `detect`, `diarize`,
+//! * `operation` (required): `decode` (speech to text), `encode`
+//!   (text to speech), or one of the voice operations `detect`, `diarize`,
 //!   `identify`, `normalize`, `append`, and `clip` ([`voice`] documents
 //!   their parameters, requests, and results).
 //! * `model` (required for decode and encode, optional for the backend
@@ -56,7 +53,7 @@
 //!   `media_type` (optional, a `type/subtype` sent as the file part's
 //!   `content-type`, `application/octet-stream` without it, or as Gemini's
 //!   `mime_type`, `audio/wav` without it), and `provider` (optional,
-//!   exactly `gemini`: the original's `gemini` provider).
+//!   exactly `gemini`: the Gemini API).
 //! * encode: `parts` (required, the reply to say, a JSON array of 1 to
 //!   [`MAX_PARTS`] parts; see "Parts"), `voice` (required,
 //!   `[A-Za-z0-9_.-]{1,128}`), `output` (required, a reference to the file
@@ -78,7 +75,7 @@
 //! variable the run holds, the invocation reads, sends, and writes nothing
 //! and answers [`FAILED_EVENT`] ([`FailureCode::Unconfigured`]). When only
 //! the `apikey` slot names none, the backend is keyless (a local speech
-//! server that takes no key, as the original's keyless client asks one):
+//! server that takes no key):
 //! every request is sent with no key header at all, `authorization`,
 //! `xi-api-key`, or `x-goog-api-key` (decision D127).
 //!
@@ -130,7 +127,8 @@
 //! invoking session receives `done.invoke.<id>` after the event): with no
 //! data, except that a media step that succeeds writes no event and
 //! resolves with its result as the done data. The names and data are
-//! The original's (`services/speech/schemas/`):
+//! those of the event schemas (`services/speech/schemas/` and
+//! `abilities/schemas/`):
 //!
 //! * [`DECODING_OUTPUT_EVENT`] `{"text": T}`: the decoded speech (empty when
 //!   the backend heard none).
@@ -140,12 +138,12 @@
 //!   are numbers only when known ([`sound`]: raw `pcm` is 24 kHz mono
 //!   16-bit, a WAV file declares its own, and `ElevenLabs` names its `mp3`
 //!   rate), else `null`. `D` is the seconds of sound measured from the bytes
-//!   of linear PCM, the original's `Speaking._playout_duration`.
+//!   of linear PCM.
 //! * [`voice::DETECTION_OUTPUT_EVENT`], [`voice::DIARIZATION_OUTPUT_EVENT`],
 //!   and [`voice::IDENTIFICATION_OUTPUT_EVENT`]: the voice operations'
 //!   results ([`voice`]).
-//! * [`FAILED_EVENT`] `{"message": M}` (the original's `FailureData`), `M` one
-//!   closed message per [`FailureCode`] and direction.
+//! * [`FAILED_EVENT`] `{"message": M}`, `M` one closed message per
+//!   [`FailureCode`] and direction.
 //!
 //! The service reads no event: it drops the event stream `invoke` receives.
 //!
@@ -213,15 +211,14 @@ pub const DEFAULT_MEDIA_TYPE: &str = "audio/mpeg";
 /// The `content-type` of the decoded audio's file part when the invocation
 /// names none.
 pub const DEFAULT_AUDIO_MEDIA_TYPE: &str = "application/octet-stream";
-/// A Gemini decoding's audio `mime_type` when the invocation names none
-/// (the original's `gemini` `SpeechDecoder` default).
+/// A Gemini decoding's audio `mime_type` when the invocation names none.
 pub const GEMINI_AUDIO_MEDIA_TYPE: &str = "audio/wav";
 
-/// The decoded speech (the original's `SpeechDecoding.output_event`).
+/// The decoded speech.
 pub const DECODING_OUTPUT_EVENT: &str = "bot.ability.hearing.speech.decoding.output";
-/// The encoded speech (the original's `SpeechEncoding.output_event`).
+/// The encoded speech.
 pub const ENCODING_OUTPUT_EVENT: &str = "bot.ability.vocal.speech.encoding.output";
-/// The failure (the original's `Ability.failed_event`, `FailureData`).
+/// The failure.
 pub const FAILED_EVENT: &str = "bot.ability.failed";
 
 /// Upper bound on the audio a decoding reads (wasm builds only): the host's
@@ -285,7 +282,7 @@ pub struct Format {
 
 /// The formats an encoding may ask for: the `OpenAI` speech API's
 /// `response_format`s; `ElevenLabs` encodes `mp3` as `mp3_44100_128`
-/// (the original's `ElevenLabs` default) and `pcm` as `pcm_24000`.
+/// and `pcm` as `pcm_24000`.
 pub const FORMATS: [Format; 6] = [
     Format {
         media_type: "audio/mpeg",
@@ -369,16 +366,14 @@ pub struct Media {
     pub path: String,
 }
 
-/// The backend's API (the original's provider packages).
+/// The backend's API.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Provider {
-    /// An `OpenAI`-compatible audio API (the original's `openai_compat`).
+    /// An `OpenAI`-compatible audio API.
     OpenaiCompat,
-    /// `ElevenLabs`' `text-to-speech` API (the original's `elevenlabs`),
-    /// encode only.
+    /// `ElevenLabs`' `text-to-speech` API, encode only.
     Elevenlabs,
-    /// The Gemini API's Interactions API (the original's `gemini`)
-    /// ([`gemini`]).
+    /// The Gemini API's Interactions API ([`gemini`]).
     Gemini,
 }
 
@@ -1295,8 +1290,7 @@ pub struct Sound {
     pub sample_rate_hz: Option<u32>,
     /// Channels.
     pub channels: Option<u16>,
-    /// Seconds of sound, measured from the bytes of linear PCM (the original's
-    /// `Speaking._playout_duration`).
+    /// Seconds of sound, measured from the bytes of linear PCM.
     pub duration: Option<f64>,
 }
 
