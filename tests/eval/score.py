@@ -226,42 +226,47 @@ def evidence(job, limit=400):
 
 
 def builds(job):
-    """Every build the builder ran in the job (reflection invokes it for each
-    create or change), from its own logs: `author` "<mode> draft, attempt
-    N" (attempt 1 starts a build), `retry_gate` "failure N ...", and its
-    final state, `done` "built <name> in N attempt(s)" or `failed`
-    "<reason>: <diagnostic>". A build the turn cancelled has no final
-    state. Each is {accepted, attempts, reason, diagnostics}."""
+    """Every build the builder ran in the job (reflection or the learning
+    ability invokes it for each create or change), from its own logs:
+    `author` "<mode> draft, attempt N" (attempt 1 starts a build),
+    `retry_gate` "failure N ...", and its final state, `done` "built <name>
+    in N attempt(s)" or `failed` "<reason>: <diagnostic>". Two builders can
+    run at once (reflection's and the learning ability's), so each build is
+    followed by its record's `session`. A build the turn cancelled has no
+    final state. Each is {accepted, attempts, reason, cause, diagnostics}."""
     out = []
     for records in job["sessions"]:
-        current = None
-        for label, text in logs(records):
+        current = {}
+        for record in records:
+            if record.get("type") != "log":
+                continue
+            label = record.get("label") or ""
+            text = record.get("text") if isinstance(record.get("text"), str) else json.dumps(record.get("text"))
+            where = record.get("session") or ""
+            build = current.get(where)
             if label == "author":
                 match = re.search(r"attempt (\d+)$", text)
                 attempt = int(match.group(1)) if match else 1
-                if current is None or attempt == 1:
-                    if current is not None:
-                        out.append(current)
-                    current = {"accepted": False, "attempts": 0, "reason": "unfinished", "cause": "", "diagnostics": []}
-                current["attempts"] = max(current["attempts"], attempt)
-            elif current is not None and label == "retry_gate":
-                current["diagnostics"].append(text[:200])
-            elif current is not None and label == "done":
+                if build is None or attempt == 1:
+                    if build is not None:
+                        out.append(build)
+                    build = current[where] = {"accepted": False, "attempts": 0, "reason": "unfinished", "cause": "", "diagnostics": []}
+                build["attempts"] = max(build["attempts"], attempt)
+            elif build is not None and label == "retry_gate":
+                build["diagnostics"].append(text[:200])
+            elif build is not None and label == "done":
                 match = re.search(r"in (\d+) attempt", text)
-                current.update(accepted=True, reason="done", attempts=int(match.group(1)) if match else current["attempts"])
-                out.append(current)
-                current = None
-            elif current is not None and label == "failed":
-                # "<reason>: <kind> <code> ...": no-progress alone hides
+                build.update(accepted=True, reason="done", attempts=int(match.group(1)) if match else build["attempts"])
+                out.append(current.pop(where))
+            elif build is not None and label == "failed":
+                # "<reason>: <kind> <code> ...": the reason alone hides
                 # whether the draft failed its schema, validation or tests.
                 words = re.findall(r"[A-Za-z0-9_.-]+", text)
-                current["reason"] = words[0][:40] if words else "failed"
-                current["cause"] = " ".join(words[1:3])[:60]
-                current["diagnostics"].append(text[:200])
-                out.append(current)
-                current = None
-        if current is not None:
-            out.append(current)
+                build["reason"] = words[0][:40] if words else "failed"
+                build["cause"] = " ".join(words[1:3])[:60]
+                build["diagnostics"].append(text[:200])
+                out.append(current.pop(where))
+        out.extend(current.values())
     return out
 
 

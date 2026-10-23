@@ -160,7 +160,9 @@ model), so the bot reasons and reflects on its own model (`bot`, else
 served by the column's `FLOPPY_BASE_URL` (its `env` files, else
 `FLOPPY_LIVE_ENV_FILE`).
 
-`score.builds` reads each build from the builder's own logs (`author`
+`score.builds` reads each build from the builder's own logs, followed by
+each record's `session` since reflection's and the learning ability's
+builders can run at once (`author`
 attempt 1 starts one; `done` "built X in N attempt(s)" or `failed`
 "<reason>: ..." ends it; a build its turn cancelled stays `unfinished`),
 and `builder.md` gives, per column and scenario, the builds, the accepted

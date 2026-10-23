@@ -111,6 +111,22 @@ class Builds(unittest.TestCase):
         self.assertEqual([(b["accepted"], b["attempts"], b["reason"], b["cause"]) for b in found],
                          [(True, 2, "done", ""), (False, 2, "no-progress", "validate XML001"), (False, 1, "unfinished", "")])
 
+    def test_two_builders_at_once_are_two_builds(self):
+        def at(where, label, text):
+            return {**log(label, text), "session": where}
+        learning, reflection = "session.learning.builder", "session.reflection.builder"
+        session = [
+            at(learning, "author", "create draft, attempt 1"),
+            at(reflection, "author", "change draft, attempt 1"),
+            at(learning, "retry_gate", "failure 1 of 8: validate XML001"),
+            at(learning, "author", "repair draft, attempt 2"),
+            at(reflection, "done", "built PingPong in 1 attempt(s)"),
+            at(learning, "failed", "attempts-exhausted: simulate test-failed"),
+        ]
+        found = score.builds({"steps": [], "sessions": [session], "done": True})
+        self.assertEqual(sorted((b["accepted"], b["attempts"], b["reason"], len(b["diagnostics"])) for b in found),
+                         [(False, 2, "attempts-exhausted", 2), (True, 1, "done", 0)])
+
 
 class Codec(unittest.TestCase):
     def test_every_prompt_round_trips(self):
