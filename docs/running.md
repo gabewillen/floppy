@@ -113,11 +113,11 @@ ability grants both, as the floppy bot's command does. Before its statements,
 the memory ability brings the database to the head revision through the
 migration ability
 ([`abilities/migration/migration.scx`](../abilities/migration/migration.scx),
-an Alembic-style upgrade with `<migration:plan>`), with floppy's revisions
-`0001`, `0002` and `0003` in the engine's dialect
+an Alembic-style upgrade with `<migration:plan>`), with floppy's one
+revision, `0001`, in the engine's dialect
 ([`abilities/memory/sqlite/`](../abilities/memory/sqlite/),
 [`abilities/memory/postgresql/`](../abilities/memory/postgresql/)), and
-records the version in `alembic_version`, so every floppy database upgrades
-in place. A database whose revisions name a different schema than floppy's same ids is refused (decision
-D165, proposed). The bot ships with SQLite (the body's `database` `<data>`);
+records the version in `alembic_version`. A database whose
+`alembic_version` names a revision the history does not hold is refused
+untouched (decision D193). The bot ships with SQLite (the body's `database` `<data>`);
 Postgres support is tested on Postgres 16.

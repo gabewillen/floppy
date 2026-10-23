@@ -939,7 +939,7 @@ What is still to build, each item with its issue where one exists.
   episodes as nodes with vectors, associative recall,
   `bot.ability.memory.recall`, an embedding ability for text and images
   over a remote embedder, and consolidation while the cognition rests.
-  It waits on decisions 3, 7 and, for persons, 6.
+  It waits on decisions 7 and, for persons, 6 (decision 3 is D193).
 - **Hearing identity**: participant refs through an identification
   registry, overlap while speaking, tone, and enrolling the bot's own
   voice. Today the hearing gives voice embeddings and each embedding
@@ -1008,7 +1008,6 @@ Numbered as decisions.md and the open work cite them.
 | # | Question |
 | --- | --- |
 | 2 | **Postgres:** keep `services/pgsql` and D69 to D72, or keep only SQLite (the user chose SQLite for now, 2026-10-10)? |
-| 3 | **Migrations:** accept D165 (a schema change is a new revision: `0003_stm_turns`, the graph tables `0004`), or rewrite `0001` in place, which breaks every existing database? |
 | 4 | **The name "builder":** a user-facing example bot that builds things would clash with `bots/builder`, the behavior author; one of them needs another name. |
 | 5 | **Devices and transport:** they are out of scope; the sandbox, the devices, the building example and the transport need them. |
 | 6 | **Participant identity:** keep D79 (each embedding source is its own participant), or identify participants through a registry with `voice:` and `face:` refs? Faces (D188), `voice_id` (D179) and hearing identity wait on it. |
