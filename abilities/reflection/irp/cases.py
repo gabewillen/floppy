@@ -33,6 +33,12 @@ def outcome_turn(n, outcome, failure=None):
     return js(data)
 
 
+def taught_turn(n):
+    data = json.loads(turn(n))
+    data["cognition_output"].append({"event": "bot.ability.learning.input", "data": {"content": "greet a knock"}, "reason": "a lesson", "target": "cognition"})
+    return js(data)
+
+
 def persona_turn(n):
     data = json.loads(turn(n))
     data["self"] = {"traits": ["friendly"], "description": "I like company."}
@@ -130,6 +136,7 @@ S.statement(7, "`revising` is bounded by `revising_timeout_ms` without progress 
 S.statement(8, "A memory transaction that fails (here the recall, on a database the run does not grant) fails the turn with `Reflection memory recall failed: <detail>`; after any failure the turn's episode is stored with no behavior (unless storing it is what failed; decision D97) and the reflection is idle again and takes the next input.")
 S.statement(9, "An input that arrives while a reflection is in hand waits and runs after it, in order: each turn gets its own answer.")
 S.statement(10, "An input whose `outcome` is `failed` or `cancelled` (a turn that failed or was cancelled; `completed` by default) is only remembered: after the recall it goes to `storing`, asking no model, and its episode carries its `outcome` and `failure` (decision D139).")
+S.statement(12, "An input whose `cognition_output` holds a `bot.ability.learning.input` (a turn that taught the bot a lesson, which the learning learns itself) is only remembered too: after the recall it goes to `storing`, asking no model (decision D149).")
 S.statement(11, "With `self` holding the owner's traits, `processing` also offers `bot.ability.persona.revise` (its `events` at most two) and sends a selected revision to the invoker, before an inventory event of the same reply; more than one inventory event or more than one revision is refused as `over-selection` and repaired as any rejection (decision D145).")
 
 S.case(100, 1, "without a database each input is answered at once with an output.",
@@ -212,6 +219,9 @@ S.case(190, 10, "a failed turn and a cancelled one each answer the output asking
         send(INPUT, turn(3)), expect(OUTPUT)],
        params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select()], clock="wall")
 
+S.case(191, 12, "a taught turn answers the output asking no model; the next turn selects.",
+       [send(INPUT, taught_turn(1)), expect(OUTPUT), send(INPUT, turn(2)), expect(OUTPUT)],
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select()], clock="wall")
 S.case(200, 11, "a selected persona revision is sent to the invoker, then the output answers.",
        [send(INPUT, persona_turn(1)),
         expect(PERSONA_REVISE, "_event.data.text === 'I am a warm greeter.'"), expect(OUTPUT)],

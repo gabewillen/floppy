@@ -922,8 +922,8 @@ What is still to build, each item with its issue where one exists.
   end-to-end test of a learned behavior on a later real turn, examples
   and byte budgets for reflection's select and builder prompts, and a
   builder that works with small models (#14); reflection selecting
-  `bot.ability.persona.revise`, the Revision document and the Learning
-  ability (#16). A change does not yet keep the behavior's own triggers
+  `bot.ability.persona.revise` (#16). The Revision document (D148) and the
+  Learning ability (D149) are in review. A change does not yet keep the behavior's own triggers
   as evidence: `evidenceStimulusNames()` in
   `abilities/reflection/reflection.js` reads the turn's stimulus and the
   prior episodes, not `existing_behavior.triggers` (#14, L6).

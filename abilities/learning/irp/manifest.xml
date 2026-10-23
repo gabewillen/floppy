@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<!-- The learning document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/learning/irp/sources">
+  <assert id="learning-1" specnum="1" specid="#learning-1">
+    <![CDATA[A `bot.ability.learning.lesson` `{turn, content, media_type, cognition_input, cognition_output, participants}` recalls the prior episodes and the inventory, asks the generate service (schema `dispatch`, its `events` at most one) to implement the lesson as a `bot.behavior.create` or `bot.behavior.change` this session offers, and invokes the revision ability with the teaching turn and the lesson as its instruction; a built behavior answers `bot.ability.learning.output` `{lesson, learned: true, behavior: {name, description}, participants}` (decision D149).]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.scxml"/>
+    </test>
+  </assert>
+  <assert id="learning-2" specnum="2" specid="#learning-2">
+    <![CDATA[A lesson that does not take answers `bot.ability.learning.output` with `learned` false and `behavior` null, its failure only logged (`learning.failed`): without a database, for a lesson that is not text, for a reply that selects nothing, and for a build the revision fails.]]>
+    <test id="110" conformance="mandatory" manual="false">
+      <start uri="110/test110.scxml"/>
+    </test>
+    <test id="111" conformance="mandatory" manual="false">
+      <start uri="111/test111.scxml"/>
+    </test>
+    <test id="112" conformance="mandatory" manual="false">
+      <start uri="112/test112.scxml"/>
+    </test>
+    <test id="113" conformance="mandatory" manual="false">
+      <start uri="113/test113.scxml"/>
+    </test>
+  </assert>
+  <assert id="learning-3" specnum="3" specid="#learning-3">
+    <![CDATA[A lesson that arrives while another is in hand waits and runs after it, in order: each lesson gets its own answer.]]>
+    <test id="120" conformance="mandatory" manual="false">
+      <start uri="120/test120.scxml"/>
+    </test>
+  </assert>
+</assertions>

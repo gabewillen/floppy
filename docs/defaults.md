@@ -34,7 +34,8 @@ read `FLOPPY_TRACE_BLESS`. Those are test settings, not bot variables.
 the `model` `<data>` of `bots/builder/builder.scx` (a `builder.request`'s
 `model` overrides it), `bots/floppy/floppy.scx` (its environment's `model`
 `<param>` overrides it), `abilities/cognition/cognition.scx`,
-`abilities/reasoning/reasoning.scx` and `abilities/reflection/reflection.scx`
+`abilities/reasoning/reasoning.scx`, `abilities/reflection/reflection.scx`,
+`abilities/revision/revision.scx` and `abilities/learning/learning.scx`
 (each takes its invoker's by `<param>`), `abilities/reading/reading.scx`
 (the image decoder), and `abilities/seeing/seeing.scx`, which passes its own
 by `<param>` to `abilities/object_detection/object_detection.scx` and
@@ -89,6 +90,10 @@ Gemini API, so `FLOPPY_SPEECH_BASE_URL` is its version root,
 | `abilities/reflection/reflection.scx` | `select_ceiling_ms` | `600000` | reflection's select generation in all, the backstop (decision D101) |
 | `abilities/reflection/reflection.scx` | `revising_timeout_ms` | `30000` | reflection's revising through the builder without progress while a builder generation streams: its first progress arms it, each later one re-arms it, and the builder's next stage disarms it (decision D101; the bot's `bounds` param's `revising_timeout_ms` overrides it) |
 | `abilities/reflection/reflection.scx` | `revising_ceiling_ms` | `7200000` | reflection's revising in all, the backstop (live revisions on the maintainer's vLLM ran past 600 s while making progress; a small model's eight builder attempts ran past 1800 s, decision D146; decision D101; the bot's `bounds` param's `revising_ceiling_ms` overrides it) |
+| `abilities/learning/learning.scx` | `select_timeout_ms` | `30000` | the learning's select generation without progress once its reply streams (decision D101) |
+| `abilities/learning/learning.scx` | `select_ceiling_ms` | `600000` | the learning's select generation in all, the backstop (decision D101) |
+| `abilities/learning/learning.scx` | `revising_timeout_ms` | `30000` | the learning's revision of a lesson without progress while a builder generation streams, as reflection's (decision D101; the bot's `bounds` param's `revising_timeout_ms` overrides it) |
+| `abilities/learning/learning.scx` | `revising_ceiling_ms` | `7200000` | the learning's revision of a lesson in all, the backstop, as reflection's (decisions D101 and D146; the bot's `bounds` param's `revising_ceiling_ms` overrides it) |
 | `abilities/identity/identity.scx` | `recall_attempt_timeout_ms` | `1000` | one attempt to recall the adopted name from memory, asked again after `recall_retry_delay_ms` |
 | `abilities/identity/identity.scx` | `bring_up_timeout_ms` | `30000` | recalling the name until memory answers, then the identity wakes with the session's name and says so (the body passes half its `activation_timeout_ms`) |
 | `abilities/persona/persona.scx` | `recall_attempt_timeout_ms` | `1000` | one attempt to recall the self-written description from memory, asked again after `recall_retry_delay_ms` |

@@ -40,7 +40,9 @@
   episodes (query_tags cognitive_episode, the turn's focus or none, oldest
   first, at most 50) and every behavior row with its triggers, any status.
   A failed or cancelled turn goes on to storing: reflection selects
-  nothing for it and only remembers it (decision D139).
+  nothing for it and only remembers it (decision D139), and so does a
+  turn whose output selected bot.ability.learning.input: the learning
+  learns that lesson (decision D149).
 
   processing (the select call, select_instructions): its
   transitions for the three inventory events are the enabled transitions
@@ -275,9 +277,11 @@
       <param name="database" expr="database"/>
       <param name="statements" expr="statements"/>
     </invoke>
-    <!-- A failed or cancelled turn is only remembered (decision D139). -->
+    <!-- A failed or cancelled turn is only remembered (decision D139), and
+         so is a turn that taught the learning a lesson, which learns it
+         itself (decision D149). -->
     <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json"
-                cond="isUnreflected()" target="storing">
+                cond="isOnlyRemembered()" target="storing">
       <log label="reflection" expr="unreflectedLog()"/>
     </transition>
     <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="processing">

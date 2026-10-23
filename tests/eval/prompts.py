@@ -21,7 +21,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 # and change instructions) and how the builder writes it. Each is found in
 # whichever document of the bot declares it (`default_targets`), so a
 # prompt that moves to another document stays a default.
-DEFAULT_IDS = ("select_instructions", "change_instructions", "author_system")
+DEFAULT_IDS = ("select_instructions", "learn_instructions", "change_instructions", "author_system")
 
 
 # Any <data> whose id names a prompt, for `eval.py targets`.

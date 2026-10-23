@@ -285,3 +285,36 @@ function selfFact() {
 function personaDescription(_event) {
   return _event.data.description === undefined ? null : _event.data.description;
 }
+
+// completing
+
+// The lesson the turn selected (the cognition's own offer,
+// bot.ability.learning.input), the first if several; null: none.
+function selectedLesson() {
+  var lessons = selected.filter(function (s) { return s.event === 'bot.ability.learning.input'; });
+  return lessons.length > 0 ? lessons[0] : null;
+}
+
+function hasLesson() {
+  return selectedLesson() !== null;
+}
+
+// A turn that perceives a lesson's result selects no lesson of its own,
+// so a lesson cannot keep teaching another.
+function perceivesLesson() {
+  return stimulus.event === 'bot.ability.learning.output' && hasLesson();
+}
+
+// The lesson with the turn it was taught on (decision D149).
+function turnLesson() {
+  var data = Object(selectedLesson().data);
+  return ({turn: turn, content: data.content, media_type: data.media_type === undefined ? null : data.media_type, cognition_input: cognitionInput(), cognition_output: selected, participants: participants});
+}
+
+// learning_region
+
+// A lesson's result as the stimulus the body grants a turn: whether it
+// took and the behavior it became, without the participants it carries.
+function lessonStimulus(_event) {
+  return ({event: 'bot.ability.learning.output', data: {lesson: _event.data.lesson, learned: _event.data.learned, behavior: _event.data.behavior}, source: 'learning'});
+}

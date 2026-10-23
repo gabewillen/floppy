@@ -54,9 +54,14 @@ function revisionLog() {
   return (intent_event === 'bot.behavior.create' ? 'create ' : 'change ') + intent.name;
 }
 
-// The change input: the turn.
+// The change input: the turn, and the lesson taught when there is one
+// (decision D149).
 function changeWriteInput() {
-  return ({cognition_input: cognition_input, cognition_output: cognition_output, prior_episodes: prior_episodes});
+  var input = {cognition_input: cognition_input, cognition_output: cognition_output, prior_episodes: prior_episodes};
+  if (instruction !== null) {
+    input.instruction = instruction;
+  }
+  return input;
 }
 
 // write with the intent and the existing row.

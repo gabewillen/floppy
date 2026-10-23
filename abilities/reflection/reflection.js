@@ -57,8 +57,18 @@ function isUnreflected() {
   return outcome !== 'completed';
 }
 
+// A turn that taught the learning a lesson, which learns it itself
+// (decision D149).
+function isTaught() {
+  return cognition_output.some(function (s) { return s.event === 'bot.ability.learning.input'; });
+}
+
+function isOnlyRemembered() {
+  return isUnreflected() || isTaught();
+}
+
 function unreflectedLog() {
-  return 'turn ' + turn + ': ' + outcome;
+  return 'turn ' + turn + ': ' + (isUnreflected() ? outcome : 'taught');
 }
 
 function recallFailedMessage(detail) {
