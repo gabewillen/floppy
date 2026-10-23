@@ -2777,8 +2777,8 @@ fn a_cancelled_candidates_builder_timeout_does_not_end_the_simulation() {
 fn a_failed_invocations_sim_drive_does_not_drive_the_next_test() {
     let source = builder_source();
     let failing = source.replacen(
-        r#"srcexpr="draftPath()""#,
-        r#"srcexpr="sim_index === 0 ? 'missing.scx' : draftPath()""#,
+        r#"srcexpr="testPath()""#,
+        r#"srcexpr="sim_index === 0 ? 'missing.scx' : testPath()""#,
         1,
     );
     assert_ne!(failing, source, "the builder invokes the draft's path");
