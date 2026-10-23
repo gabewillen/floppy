@@ -95,6 +95,12 @@
       <start uri="191/test191.scxml"/>
     </test>
   </assert>
+  <assert id="reflection-13" specnum="13" specid="#reflection-13">
+    <![CDATA[An input whose stimulus is `bot.behavior.tick` or `bot.ability.learning.output` (a turn the bot's own routine or lesson caused) is only remembered too: after the recall it goes to `storing`, asking no model (decision D151).]]>
+    <test id="192" conformance="mandatory" manual="false">
+      <start uri="192/test192.scxml"/>
+    </test>
+  </assert>
   <assert id="reflection-11" specnum="11" specid="#reflection-11">
     <![CDATA[With `self` holding the owner's traits, `processing` also offers `bot.ability.persona.revise` (its `events` at most two) and sends a selected revision to the invoker, before an inventory event of the same reply; more than one inventory event or more than one revision is refused as `over-selection` and repaired as any rejection (decision D145).]]>
     <test id="200" conformance="mandatory" manual="false">
