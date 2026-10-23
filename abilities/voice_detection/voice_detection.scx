@@ -15,9 +15,10 @@
   by default).
 
   normalizing: the speech service's normalize step (a WAV container's
-  signed 16-bit PCM written to output; raw, audio/l16 or unnamed audio with a rate and channels is audio/pcm;
-  anything else, or a container that cannot be read, is unchanged). Its
-  done data is the sound as the rest of the interpretation reads it.
+  signed 16-bit PCM written to output; raw, audio/l16 or unnamed audio
+  with a rate and channels is audio/pcm; anything else, or a container
+  that cannot be read, is unchanged). Its done data is the sound as the
+  rest of the interpretation reads it.
 
   applying: the speech service's detect operation on the sound as it
   arrived (a WAV container keeps its true rate; raw PCM is read in the
