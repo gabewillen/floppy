@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's VoiceDetection (the reference abilities/hearing/voice/detection.py) as
-  the interpretation applies it (the original Interpretation._run_voice_detection):
-  the sound normalized to PCM, then its voice spans. The interpretation
+  floppy's VoiceDetection as the interpretation applies it: the sound
+  normalized to PCM, then its voice spans. The interpretation
   (abilities/interpretation/interpretation.scx) invokes it once per scored sound from
   DetectingVoice and FeedingSpeech; the interpretation's stage timer bounds
   it, and leaving the state cancels it and its service call (SCXML 6.4).
@@ -12,33 +11,29 @@
   Input: the <param>s audio (a reference to the sound's audio, as
   environment.sound carries it), media_type, sample_rate_hz and channels
   (the sound's), output (where the sound's PCM is written when it is a WAV
-  container), and model (the voice activity model; LocalAI's silero-vad,
-  the Silero VAD the original runs on MLX Audio, by default).
+  container), and model (the voice activity model; LocalAI's silero-vad
+  by default).
 
-  normalizing: the speech service's normalize step (the original's
-  _pcm_sound_data: a WAV container's signed 16-bit PCM written to output;
-  raw, audio/l16 or unnamed audio with a rate and channels is audio/pcm;
+  normalizing: the speech service's normalize step (a WAV container's
+  signed 16-bit PCM written to output; raw, audio/l16 or unnamed audio with a rate and channels is audio/pcm;
   anything else, or a container that cannot be read, is unchanged). Its
   done data is the sound as the rest of the interpretation reads it.
 
-  applying: the speech service's detect operation on the original sound
-  (a WAV container keeps its true rate, as the original prefers; raw PCM is read
-  in the sound's format, the original's 16 kHz mono when it names none): LocalAI's
+  applying: the speech service's detect operation on the sound as it
+  arrived (a WAV container keeps its true rate; raw PCM is read in the
+  sound's format, 16 kHz mono when it names none): LocalAI's
   POST {base}/vad, answered bot.ability.hearing.voice.detection.output
-  {segments} (the original's ApplyData: clip-local voice spans, empty for no
-  voice).
+  {segments} (clip-local voice spans, empty for no voice).
 
   Output: <donedata>, received by the interpretation as
   done.invoke.voice_detection: {sound, voice_detection} (the normalized
-  sound fields and the ApplyData), or {message} (the original's FailureData)
-  when a step answers bot.ability.failed, answers something else, or
-  cannot run.
+  sound fields and the segments), or {message} when a step answers
+  bot.ability.failed, answers something else, or cannot run.
 
-  Sticky presence: the original's VoiceDetection also emits Start and End when
-  voice opens and closes across clips. Nothing in the original's listening path
-  listens for them (the interpretation reads ApplyData only); the
-  interpretation's own open-speech window (HearingSpeech) is that presence
-  here, and each invocation judges one clip.
+  Presence: each invocation judges one clip and announces no start or end
+  of voice across clips (the interpretation reads the segments only); the
+  interpretation's own open-speech window (HearingSpeech) is that
+  presence.
 
   Bindings: the speech service package; env scopes FLOPPY_VOICE_BASE_URL
   and FLOPPY_VOICE_API_KEY to the detect <invoke> (no default backend,
@@ -66,7 +61,7 @@
   </datamodel>
   <script src="voice_detection.js"/>
 
-  <!-- Any failure ends the detection with the original's FailureData. -->
+  <!-- Any failure ends the detection with {message}. -->
   <state id="detecting" initial="normalizing">
     <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="applied">
       <assign location="result" expr="failedResult(_event)"/>
