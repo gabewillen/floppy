@@ -195,7 +195,7 @@ export FLOPPY_LIVE_ENV_FILE=env.lab:env.speech FLOPPY_LIVE_MODEL=gemma-4-26b-a4b
 python3 tests/eval/eval.py run --judge-env-file .env           # the suite once
 python3 tests/eval/eval.py run --scenario reflex --repeats 3   # one category
 python3 tests/eval/eval.py climb --judge-env-file .env --generations 6 --budget-hours 8
-python3 tests/eval/eval.py grade target/floppy-eval/run-<time>  # grade again
+python3 tests/eval/eval.py grade target/floppy-eval/run-<time>  # grade again (a builder run: its table too)
 python3 -m unittest discover -s tests/eval                     # offline tests
 ```
 

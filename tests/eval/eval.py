@@ -282,6 +282,12 @@ def cmd_grade(args):
         json.dump({"summary": summary, "jobs": graded}, handle, indent=2)
     with open(os.path.join(args.dir, "report.md"), "w", encoding="utf-8") as handle:
         handle.write(report_markdown(f"Learning eval {os.path.basename(args.dir)}", summary, graded))
+    # A builder track's run: its table again, from the same columns.
+    builder_json = os.path.join(args.dir, "builder.json")
+    if os.path.exists(builder_json):
+        with open(builder_json, encoding="utf-8") as handle:
+            columns = [{"label": label, "builder": column["builder"]} for label, column in json.load(handle)["columns"].items()]
+        write_builder(args.dir, columns, graded)
     print(json.dumps(summary, indent=2))
 
 
@@ -462,7 +468,7 @@ def builder_table(columns, graded):
     the attempts per accepted build; with each column's failure reasons."""
     lines = ["# Builder track", "",
              "Each column runs the bot's reflex and routine scenarios with its builder pinned to one model. A build is one "
-             "builder run reflection started (a create or change); attempts are its author attempts.", "",
+             "builder run reflection or the learning ability started (a create or change); attempts are its author attempts.", "",
              "| Column | Builder model | Scenario | Builds | Accepted | Success | Attempts per accepted | Learned |",
              "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     summary = {}
@@ -507,6 +513,15 @@ def builder_table(columns, graded):
     return "\n".join(lines) + "\n", summary
 
 
+def write_builder(out, columns, graded):
+    """builder.json and builder.md of a builder track's run."""
+    table, summary = builder_table(columns, graded)
+    with open(os.path.join(out, "builder.json"), "w", encoding="utf-8") as handle:
+        json.dump({"columns": summary, "jobs": graded}, handle, indent=2)
+    with open(os.path.join(out, "builder.md"), "w", encoding="utf-8") as handle:
+        handle.write(table)
+
+
 def cmd_builder(args):
     scenarios = load_scenarios(args.scenario or ["reflex", "routine"], args.scenarios_dir)
     columns = [parse_column(c) for c in args.column]
@@ -525,11 +540,7 @@ def cmd_builder(args):
     if args.dry:
         return
     graded = grade_all(jobs, judge_env(args), args.judge_names, args.check_weight)
-    table, summary = builder_table(columns, graded)
-    with open(os.path.join(out, "builder.json"), "w", encoding="utf-8") as handle:
-        json.dump({"columns": summary, "jobs": graded}, handle, indent=2)
-    with open(os.path.join(out, "builder.md"), "w", encoding="utf-8") as handle:
-        handle.write(table)
+    write_builder(out, columns, graded)
     with open(os.path.join(out, "report.md"), "w", encoding="utf-8") as handle:
         handle.write(report_markdown(f"Builder track {os.path.basename(out)}", aggregate(graded), graded))
     print(os.path.join(out, "builder.md"))
