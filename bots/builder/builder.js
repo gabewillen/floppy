@@ -75,7 +75,7 @@ function requestConstraints(_event) {
 }
 
 function requestMaxAttempts(_event) {
-  return _event.data.max_attempts === undefined ? null : _event.data.max_attempts;
+  return _event.data.max_attempts === undefined ? max_attempts : _event.data.max_attempts;
 }
 
 function requestModel(_event) {
