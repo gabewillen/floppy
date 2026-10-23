@@ -24,7 +24,7 @@ function relationshipRef() {
   return relationship().session_ref;
 }
 
-// turn_exchange (the original Conversation's turn_detector stage)
+// turn_exchange
 
 function turnDelay() {
   return turn_timeout_ms + 'ms';
@@ -83,8 +83,8 @@ function memoryTimeoutDelay() {
   return memory_timeout_ms + 'ms';
 }
 
-// recalling_memory: the relationship's memories (the original
-// conversation_memory_recall_input), kept under its context_ref.
+// recalling_memory: the relationship's memories, kept under its
+// context_ref.
 function memoryRecallStatements() {
   return [{sql: memory_select, parameters: ['conversation_memory', relationship().context_ref]}];
 }
@@ -93,7 +93,7 @@ function recalledCount(_event) {
   return _event.data.results[0].rowcount;
 }
 
-// remembering_memory: the input (the reference conversation_memory_insert_input).
+// remembering_memory: the input, a conversation memory of the relationship.
 function memoryInsertStatements() {
   return [{sql: memory_insert, parameters: ['memory', relationship().context_ref, 'conversation', 'standard', 'retain', memory_payload, 'application/json', 'conversation_memory']}];
 }
@@ -119,7 +119,7 @@ function isTextMessage() {
 }
 
 // A voice embedding is biometric and never logged: it is written as
-// <biometric:VoiceEmbedding>, as the original's capture writes it.
+// <biometric:VoiceEmbedding>.
 function inboundCommitLog() {
   var sources = turn_sources.map(function (id) { return Array.isArray(id) ? '<biometric:VoiceEmbedding>' : id; });
   return 'inbound from ' + JSON.stringify(sources) + ' in relationship ' + relationship_index;
