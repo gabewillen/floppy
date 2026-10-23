@@ -47,7 +47,7 @@ PINGER = """<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="https://
 INVALID = PINGER.replace('target="done"', 'target="nowhere"')
 # SCXML013 (a machine-applicable fix): a comma-separated descriptor list.
 FIXABLE = PINGER.replace('event="ping" event:schema="pinger.json#/$defs/ping"', 'event="ping,poke"')
-PING_TEST = {"name": "a ping is answered", "events": [{"name": "ping", "data": "{}", "delay_ms": 0}],
+PING_TEST = {"name": "a ping is answered", "events": [{"name": "ping", "data": {}, "delay_ms": 0}],
              "settle_ms": 1000, "expect_events": ["pong"], "expect_done": True}
 
 

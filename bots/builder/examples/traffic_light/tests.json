@@ -16,7 +16,7 @@
   {
     "events": [
       {
-        "data": "{}",
+        "data": {},
         "delay_ms": 3000,
         "name": "ped.button"
       }
@@ -36,7 +36,7 @@
   {
     "events": [
       {
-        "data": "{}",
+        "data": {},
         "delay_ms": 4500,
         "name": "ped.button"
       }
@@ -56,12 +56,12 @@
   {
     "events": [
       {
-        "data": "{}",
+        "data": {},
         "delay_ms": 2000,
         "name": "ped.button"
       },
       {
-        "data": "{}",
+        "data": {},
         "delay_ms": 9000,
         "name": "ped.button"
       }
