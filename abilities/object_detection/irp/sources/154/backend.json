@@ -12,7 +12,7 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "  "
+              "content": "{\"objects\": [{\"label\": \"cup\", \"confidence\": true, \"box\": {\"x\": 0, \"y\": 0, \"width\": 0.5, \"height\": 0.5}}]}"
             }
           }
         ]
