@@ -74,7 +74,7 @@
 //! # `<decision:pin location="L" event="E" property="P" values="X"/>`
 //!
 //! Pins one property of one event's schema in the choice array at
-//! `location` (as the body grounds `bot.focus_device`'s `device` in the
+//! `location` (as the floppy bot (`bots/floppy`) grounds `bot.focus_device`'s `device` in the
 //! turn's focus candidates): `values`, an expression that evaluates to a JSON
 //! array, becomes the `enum` of `schema.properties.<P>` of every entry whose
 //! event is `E`; when the array is empty those entries are removed instead
