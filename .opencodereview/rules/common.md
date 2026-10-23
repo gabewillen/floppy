@@ -1,4 +1,9 @@
-# floppy: review context
+# Every file
+
+This rule applies to files no area rule covers, beside Open Code Review's
+built-in checks.
+
+## Rules for every file
 
 floppy is a bot written entirely as SCXML documents, plus the Wasm packages
 (extension namespaces under `namespaces/`, invoked services under
@@ -7,8 +12,6 @@ under scxml.rs's `scx run`, and the scxml.rs engine selects transitions and
 runs macrosteps. `AGENTS.md` is normative (RFC 2119 MUST/SHOULD/MAY);
 `docs/decisions.md` records each decision as `D<n>` and is cited by number.
 Cite the AGENTS.md rule or decision a finding rests on.
-
-Apply these to every file, in addition to the file's own rule:
 
 - **No edits under `scxml.rs/`.** It is a squashed subtree; a change there goes
   upstream first and arrives only through `git subtree pull --squash`. Any

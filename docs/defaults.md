@@ -81,7 +81,7 @@ Gemini API, so `FLOPPY_SPEECH_BASE_URL` is its version root,
 | `abilities/autonomy/autonomy.scx` | `memory_timeout_ms` | `10000` | one memory transaction |
 | `abilities/candidates_runner/candidates_runner.scx` | `memory_timeout_ms` | `10000` | one candidate's memory transaction (autonomy passes its own) |
 | `abilities/conversation/conversation.scx` | `memory_timeout_ms` | `5000` | each of the conversation's memory operations, the recall before the turns and the remember after them |
-| `abilities/communication/communication.scx` | `response_timeout_ms` | `36000` | saying one response (speaking's 30 s synthesis bound plus 6 s; decision D98) |
+| `abilities/communication/communication.scx` | `response_timeout_ms` | `36000` | speaking going quiet on one response, re-armed by each of its progress events (speaking's 30 s synthesis bound plus 6 s; decisions D98, D179) |
 | `abilities/communication/communication.scx` | `encoding_timeout_ms` | `30000` | speaking's speech synthesis (communication passes its own; decision D98) |
 | `abilities/reflection/reflection.scx` | `select_timeout_ms` | `30000` | reflection's select generation without progress once its reply streams (decision D101) |
 | `abilities/reflection/reflection.scx` | `select_ceiling_ms` | `600000` | reflection's select generation in all, the backstop (decision D101) |
@@ -98,6 +98,7 @@ Gemini API, so `FLOPPY_SPEECH_BASE_URL` is its version root,
 | `abilities/turn_detector/turn_detector.scx` | `end_of_turn_silence_seconds` | `0.5` | the silence that closes an open or paused turn (at least 0.01 s) |
 | `abilities/speaking/speaking.scx` | `encoding_timeout_ms` | `30000` | one speech synthesis: Gemini answers only once the whole clip is synthesized, so the bound covers a whole clip, not a sentence (decision D98) |
 | `abilities/speaking/speaking.scx` | `recording_timeout_ms` | `5000` | recording the spoken words in the conversation |
+| `abilities/speaking/speaking.scx` | `lookahead_ms` | `1000` | the most playout commanded ahead of the mouth; each played piece is at most half of it (decision D179) |
 | `abilities/listening/listening.scx` | `sensitivity_timeout_ms` | `30000` | scoring one sound |
 | `abilities/interpretation/interpretation.scx` | `stage_timeout_ms` | `30000` | each interpretation stage |
 | `abilities/interpretation/interpretation.scx` | `recognize_timeout_ms` | `2000` | identification's extra time past the stage timeout (decision D177) |
