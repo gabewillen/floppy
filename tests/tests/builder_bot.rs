@@ -598,6 +598,34 @@ fn routine_draft(delay: &str, output: &str) -> String {
     .to_string()
 }
 
+/// A persistent routine that does its own I/O on each schedule (decision
+/// D138): a BasicHTTP POST of `hourly.report` to a hook, whose refusal (no
+/// origin admitted in the simulation) comes back as `error.communication`,
+/// and then its tick.
+fn http_routine_draft() -> String {
+    json!({
+        "scxml": format!(
+            r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="Hourly" initial="waiting">
+  <state id="waiting">
+    <onentry><send id="every" event="hourly.every" delay="3600s"/></onentry>
+    <onexit><cancel sendid="every"/></onexit>
+    <transition event="hourly.every" target="waiting">
+      <send event="hourly.report" type="http://www.w3.org/TR/scxml/#BasicHTTPEventProcessor" target="https://hooks.example/hourly"/>
+      <send event="bot.behavior.tick" target="#_parent">
+        <content expr="({{name: 'Hourly', trigger: 'every', scheduled_at: new Date().toISOString(), fired_at: new Date().toISOString(), output: {CHIME}}})"/>
+      </send>
+    </transition>
+    <transition event="error.communication"/>
+  </state>
+</scxml>"##
+        ),
+        "schemas": schemas(&[]),
+        "script": "",
+        "tests": [{"name": "waits", "events": [], "settle_ms": 1000, "expect_events": [], "expect_done": false}],
+    })
+    .to_string()
+}
+
 const CHIME: &str = "[{event: 'bot.speaking.say', data: {parts: [{words: 'Hourly chime.'}]}}]";
 
 /// The request with the original `check()`'s lifetime bounds (`ROUTINE_MIN_EVERY`,
@@ -831,6 +859,7 @@ fn mock_reply(
             | "/progress/v1/chat/completions"
             | "/lifetime/v1/chat/completions"
             | "/emptytick/v1/chat/completions"
+            | "/httproutine/v1/chat/completions"
             | "/afterbound/v1/chat/completions"
             | "/runaway/v1/chat/completions"
             | "/rendered/v1/chat/completions"
@@ -871,6 +900,9 @@ fn mock_reply(
                 1 => routine_draft("30s", CHIME),
                 _ => routine_draft("3600s", CHIME),
             }))
+        }
+        ("/httproutine/v1/chat/completions", Some("scxml_draft")) => {
+            Some(completion(&http_routine_draft()))
         }
         ("/emptytick/v1/chat/completions", Some("scxml_draft")) => {
             Some(completion(&routine_draft("3600s", "[]")))
@@ -1806,6 +1838,39 @@ fn a_routine_under_the_minimum_interval_is_repaired_and_its_first_tick_is_forced
     );
     // The draft's own tests are what it carried.
     assert_eq!(done["tests"].as_array().map(Vec::len), Some(1), "{done}");
+}
+
+/// A routine may do its own I/O (decision D138): one that POSTs through
+/// the BasicHTTP Event I/O Processor before each tick is built, its forced
+/// first tick observed although the simulation admits no origin.
+#[test]
+fn a_routine_that_does_its_own_io_is_built() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "httproutine",
+        "httproutine",
+        &ALL,
+        &lifetime_request(),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    let simulation = done["report"]["simulation"]
+        .as_array()
+        .expect("simulation results");
+    assert_eq!(simulation[1]["name"], "first tick", "{done}");
+    assert_eq!(
+        simulation[1]["observed"],
+        json!(["bot.behavior.tick"]),
+        "{done}"
+    );
+    assert!(
+        done["scxml"]
+            .as_str()
+            .is_some_and(|scxml| scxml.contains("#BasicHTTPEventProcessor")),
+        "{done}"
+    );
 }
 
 /// The original runtime and verify: a routine tick that selects nothing fails
