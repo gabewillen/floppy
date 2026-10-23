@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- object_detection-4: items that are not a detected object are skipped, the valid ones kept. -->
+<!-- object_detection-4: an object whose box passes the image's edge is skipped, the others kept. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="object_detection" type="scxml" src="../../../object_detection.scx">

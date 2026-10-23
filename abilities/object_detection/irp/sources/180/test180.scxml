@@ -1,19 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- object_detection-4: a reply with no valid item is no objects, not a failure. -->
+<!-- object_detection-8: more than 32 objects, when max_objects allows them, is an output its schema refuses. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="object_detection" type="scxml" src="../../../object_detection.scx">
     <param name="image" expr="'media/scene.png'"/>
     <param name="media_type" expr="'image/png'"/>
+    <param name="max_objects" expr="40"/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.vision.detection.output" cond='JSON.stringify(_event.data) === "{\"objects\":[]}"' target="step1"/>
+    <transition event="bot.ability.failed" cond='JSON.stringify(_event.data) === "{\"message\":\"Object detection produced output that does not match its output schema.\"}"' target="step1"/>
   </state>
   <state id="step1">
+    <transition event="done.invoke.object_detection" target="step2"/>
+  </state>
+  <state id="step2">
     <transition target="pass"/>
   </state>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>

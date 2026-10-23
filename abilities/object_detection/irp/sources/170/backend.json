@@ -3,19 +3,11 @@
   "answers": [
     {
       "path": "/chat/completions",
-      "status": 200,
+      "status": 500,
       "body": {
-        "object": "chat.completion",
-        "choices": [
-          {
-            "index": 0,
-            "finish_reason": "stop",
-            "message": {
-              "role": "assistant",
-              "content": "[{\"label\": \"o0\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o1\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o2\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o3\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o4\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o5\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o6\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o7\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o8\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o9\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o10\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o11\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o12\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o13\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o14\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o15\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o16\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o17\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o18\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o19\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o20\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o21\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o22\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o23\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o24\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o25\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o26\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o27\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o28\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o29\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o30\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o31\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}, {\"label\": \"o32\", \"confidence\": null, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}]"
-            }
-          }
-        ]
+        "error": {
+          "message": "boom"
+        }
       }
     }
   ]

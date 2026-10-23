@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- object_detection-2: the reply's objects come back, and the detection then ends. -->
+<!-- object_detection-2: the call's objects come back, and the detection then ends. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="object_detection" type="scxml" src="../../../object_detection.scx">
