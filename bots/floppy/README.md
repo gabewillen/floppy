@@ -1,18 +1,18 @@
 # floppy
 
-The floppy bot is the port of the original's Bot: an SCXML machine,
+The floppy bot is the body: an SCXML machine,
 [`floppy.scx`](floppy.scx), whose abilities are invoked children under
 [`../../abilities/`](../../abilities/). The body runs
 its lifecycle and processing turns, and its abilities are the
-[cognition](../../abilities/cognition/cognition.scx), the original's cascade of stages
-invoked per turn: [autonomy](../../abilities/autonomy/autonomy.scx) (the original's
+[cognition](../../abilities/cognition/cognition.scx), the cascade of stages
+invoked per turn: [autonomy](../../abilities/autonomy/autonomy.scx) (the
 SpeechHeard seed, then the learned turn behaviors the stimulus triggers,
 kept by memory), [intuition](../../abilities/intuition/intuition.scx) (the
 decision service selects every event it can ground, each with its
-confidence, gated by the original's self-tuning confidence tuner; low confidence
+confidence, gated by a self-tuning confidence tuner; low confidence
 hands out the environment actions and goes on to reasoning), and
 [reasoning](../../abilities/reasoning/reasoning.scx)
-(one structured model call over the turn's choices, prompted with the original's
+(one structured model call over the turn's choices, prompted with
 model-facing XML; it recalls the
 cognitive episodes reflection stored through memory), with
 [reflection](../../abilities/reflection/reflection.scx) (after each output it
@@ -23,32 +23,32 @@ the turns, and the [communication](../../abilities/communication/communication.s
 which holds the [conversation](../../abilities/conversation/conversation.scx) (the
 current exchange of committed messages, one relationship per participant set; each input
 is one turn per source, assembled by a [turn detector](../../abilities/turn_detector/turn_detector.scx);
-it recalls and remembers a relationship's memories, and matching an
-embedding source to an earlier participant's voice is not ported) and
+it recalls and remembers a relationship's memories, and does not match an
+embedding source to an earlier participant's voice) and
 [speaking](../../abilities/speaking/speaking.scx) (the words are encoded to speech
 by [vocal](../../abilities/vocal/vocal.scx) through the speech service, logged as
 `floppy.say`, played out as `environment.sound` after the efference copy to
 Listening, and recorded in the conversation), and the
 [listening](../../abilities/listening/listening.scx), its input ability
-(the original's Listening, phase 6: see Sound below). Each turn the body
+(phase 6: see Sound below). Each turn the body
 collects the choices (its own `bot.focus_device`, pinned to the turn's
 focus candidates, plus
 each ability's latest `bot.ability.offers` and the focused device's
 events, each tagged with the session id of its offerer as `target`, made
 model-facing and held to 32 KiB, `<processing:collect_offered_events>`);
 nothing the bot selects clears the focus: it stays on a device until the
-bot focuses another (the original's R-9).
-As in the original, each stage of the cognition sends its own selections,
+bot focuses another (decision D155).
+Each stage of the cognition sends its own selections,
 each to the session its target names (`#_scxml_` + target); the schemas
 the services check a selection against (the pinned focus device, each
-target an enum of its offerers) refuse what the original's attention
-policy refused, before anything is sent, and an ignore goes to the
+target an enum of its offerers) refuse what the attention
+policy does not allow, before anything is sent, and an ignore goes to the
 cognition, which only logs it. A selected
 `bot.ability.communication.respond` is said through speaking and recorded
 in the conversation. Input addressed to the bot as
 `bot.ability.communication.input` is admitted into the conversation, whose
 updated exchange is the next turn's stimulus; so is a turn's selected
-`bot.ability.communication.input` (the original's SpeechHeard seed admits heard
+`bot.ability.communication.input` (the SpeechHeard seed admits heard
 speech this way), which names no target, so the body sends it to itself. The full Contract, Topology, Bindings, and Proof sections come
 with the phase's saved live examples.
 
@@ -115,8 +115,7 @@ streamed reasoning reply's progress starts it over),
 `child_operation_ceiling_ms` (a stage in all), `revising_timeout_ms`
 (reflection's revision through the builder without progress) and
 `revising_ceiling_ms` (a revision in all); absent, each is the ability's
-default (the root README's "Timeouts and bounds"). The memory ability (`abilities/memory/memory.scx`, the original's
-Memory) keeps the bot's database, `/memory/floppy.sqlite`, through the sql
+default (the root README's "Timeouts and bounds"). The memory ability (`abilities/memory/memory.scx`) keeps the bot's database, `/memory/floppy.sqlite`, through the sql
 service (`services/sql`, SQLite), in the directory the run grants that
 service: `--dir
 https://github.com/stateforward/floppy/services/sql=HOST::/memory`
@@ -151,11 +150,11 @@ bounds this bot ships with.
 
 Sound (phase 6): `environment.sound` `{audio, media_type, sample_rate_hz,
 channels, kind, ...}` goes to the [listening](../../abilities/listening/listening.scx),
-the body's input ability (the original's Listening), and speaking's efference copy
+the body's input ability, and speaking's efference copy
 goes to it too, so the bot can tell its own voice apart. Its
 [sensitivity](../../abilities/sensitivity/sensitivity.scx) scores the sound against the
 body's prediction and its [interpretation](../../abilities/interpretation/interpretation.scx)
-(the original's Interpretation) works out what it was: voice detection on every
+works out what it was: voice detection on every
 sound, an open-speech window that joins voiced sounds into one utterance until
 a sound without voice closes it, then (as configured in its data) diarization,
 voice identification and speech decoding. floppy's default configuration is
@@ -209,7 +208,7 @@ and `bot.ability.conversation.output`; the body logs `environment.sound`
 `inactive` when its activation fails or it is deactivated, and in
 `degraded` when it degrades; the environment logs each as `done.invoke`
 with the bot's invoke id and its result. floppy's own
-records, which are not the original events, are labelled `floppy.*`:
+log records, which are not events, are labelled `floppy.*`:
 `floppy.output` is the turn's selected events, speaking logs the words as
 `floppy.say`, `floppy.choices` is each turn's choices (JSON, each tagged
 with its offering session's id as `target`), `floppy.focus` each focus
@@ -239,8 +238,8 @@ an earlier turn, `floppy.diagnostic` why activation failed, and
   `bot.ability.seeing.sight`, the look is offered); `FLOPPY_IRP_SUITE=seeing
   cargo test -p floppy-tests --test document_irp` runs seeing's own suite.
 - `cargo test -p floppy-tests --test reading`: reading and vision under a
-  harness, image decoding against a generate double (the original's Reading;
-  nothing in the bot invokes it yet).
+  harness, image decoding against a generate double (nothing in the bot
+  invokes reading yet).
 - `cargo test -p floppy-tests --test cognition`: the cascade against fake
   decision and model backends (each path, the tuner, failures, hop timeouts
   and reboot requests, cancels).

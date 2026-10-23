@@ -25,7 +25,7 @@
         "properties": {
           "stimulus": {
             "additionalProperties": false,
-            "description": "The stimulus unchanged, as the body took it: a device's bot.input as its envelope (its source null: it reaches the body from outside its session), or the stimulus an ability's bot.ability.cognition.input handed the body. The original passes the live stimulus object; floppy passes it as data [floppy field].",
+            "description": "The stimulus unchanged, as the body took it: a device's bot.input as its envelope (its source null: it reaches the body from outside its session), or the stimulus an ability's bot.ability.cognition.input handed the body. It is passed as data [floppy field].",
             "properties": {
               "event": {
                 "minLength": 1,
