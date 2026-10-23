@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Interpretation (the reference abilities/listening/interpretation.py):
-  the slow half of listening, which works out what a scored sound turns
+  floppy's Interpretation: the slow half of listening, which works out what a scored sound turns
   out to be. The listening (abilities/listening/listening.scx) invokes it
   as its long-lived child "interpretation" and hands it each scored sound.
 
@@ -20,7 +19,7 @@
         HandingOff -> Idle }
       Working -bot.ability.listening.stage.failed-> Idle }
 
-  Configuration (the original's constructor, as <data>): the voice activity
+  Configuration (as <data>): the voice activity
   classifier is required, so voice detection always runs;
   sound_classification (KindSoundClassifier), speech_decoding,
   voice_diarization and voice_identification say which optional stages are
@@ -29,8 +28,7 @@
   floppy's bot configures voice
   detection, sound classification and speech decoding (the phase 6 plan:
   speech is decoded in listening). Voice identification with speech
-  decoding is refused, as the original's constructor refuses it (embedding
-  correlation would be lost), as are a negative product_threshold_db and a
+  decoding is refused (embedding correlation would be lost), as are a negative product_threshold_db and a
   recognize_timeout_ms that is not positive: initializing ends in the final
   state degraded, and the listening degrades.
 
@@ -39,7 +37,7 @@
   listening; producing is not read yet (echo handling waits for the
   hearing stream, D177). Scored sounds that arrive while Working are held by
   <event:defer/> (scxml.rs namespaces/event) and taken, in order, by Idle
-  and HearingSpeech (the original defers them): interpretation is serial, and
+  and HearingSpeech: interpretation is serial, and
   the score was taken on arrival.
 
   Stages, each a child invoked from its state (leaving the state cancels
@@ -48,19 +46,18 @@
   timed out."} sent to this session after stage_timeout_ms.
 
   * DetectingVoice and FeedingSpeech invoke abilities/voice_detection/voice_detection.scx:
-    the sound normalized to PCM (the original's _pcm_sound_data; a WAV
+    the sound normalized to PCM (a WAV
     container's PCM is written beside it as floppy-sound-<n>.pcm) and its
-    voice spans (the original's ApplyData). With no voice: dropped when only
+    voice spans (its ApplyData). With no voice: dropped when only
     speech decoding is configured, handed off as a silence observation
     when nothing else is, else classified. With voice: identified directly
     (voice identification without diarization), else the open-speech
-    window opens (the original's VAD Start).
+    window opens (VAD Start).
   * HearingSpeech is the open-speech window: each scored sound goes to
     FeedingSpeech, still voiced it joins the utterance and the window stays
     open, and the first one without voice joins it and closes it
-    (the original's VAD End) in SpeechEnded. The utterance is the list
-    open_frames (each frame's PCM reference and format; the original appends the
-    bytes), and the loudest frame is open_sensed. While the window is open and neither speech
+    (VAD End) in SpeechEnded. The utterance is the list open_frames (each
+    frame's PCM reference and format), and the loudest frame is open_sensed. While the window is open and neither speech
     decoding nor diarization owns the product, each frame is streamed as
     an acoustic bot.ability.listening.speech.output (its PCM, its voice
     spans, and the identity direct identification found), when audible.
@@ -68,13 +65,12 @@
     speech service's append step when diarization or decoding will read
     it, then diarizes, else decodes, else returns to Idle. The utterance
     is a WAV container (floppy-utterance-<n>.wav) whenever its rate is
-    known: the original hands its decoder bytes in the ingress format, but floppy
-    hands the decoder a file, and transcription APIs read a container, not
-    raw PCM. Without a rate it stays raw PCM (floppy-utterance-<n>.pcm),
-    and decoding then fails as the original's does.
+    known: floppy hands the decoder a file, and transcription APIs read a
+    container, not raw PCM. Without a rate it stays raw PCM
+    (floppy-utterance-<n>.pcm), and decoding then fails.
   * ClassifyingSound invokes abilities/sound_classification/sound_classification.scx: a
-    labelled sound is non-speech and is handed off as the original
-    environment.sound's envelope; an unlabelled one is dropped when speech decoding
+    labelled sound is non-speech and is handed off as its
+    environment.sound envelope; an unlabelled one is dropped when speech decoding
     is configured, else handed off as a silence observation.
   * DiarizingVoice invokes abilities/voice_diarization/voice_diarization.scx on the
     utterance (its clipped segments are floppy-diarized-<n>-<index>).
@@ -89,21 +85,20 @@
   * DecodingSpeech invokes abilities/speech_decoding/speech_decoding.scx (the speech
     service) on the utterance: decoding rewrites the observation into
     words.
-  * HandingOff is the one comparison (the original _is_audible_product): a
+  * HandingOff is the one comparison: a
     product whose perceived_level_db is null or at least
     product_threshold_db goes to the listening; a quieter one is dropped.
-    The products (the original _dispatch_product_cognition_input): decoded
+    The products: decoded
     speech as bot.ability.listening.speech.output with content the words
-    and content_type text/plain (a sound with no sample rate fails, as in
-    the original); one speech product per diarized segment (its PCM, span,
+    and content_type text/plain (a sound with no sample rate fails); one speech product per diarized segment (its PCM, span,
     confidence, and, after identification, its embedding as its source
     identity); a silence observation as a speech product of the sound's
     PCM; a labelled sound, or a sound that is not PCM, as
-    bot.ability.cognition.input {stimulus} whose stimulus is the original
-    environment.sound's envelope (source "listening", the ability it hands
-    off for), as the original's interpretation hands it to the cognition.
+    bot.ability.cognition.input {stimulus} whose stimulus is the
+    environment.sound envelope (source "listening", the ability it hands
+    off for), for the cognition.
 
-  Participants (the original's f6c4e08): every scored sound taken adds the
+  Participants (producers stamp, transformers copy): every scored sound taken adds the
   participants stamped on it to active_participants, their ordered union
   (each {ref, role} once, at most 32), cleared with the open speech; every
   speech product carries them, and the labelled-sound handoff carries them
@@ -115,7 +110,7 @@
 
   Failure: a stage failure (its child's failure, an error, or its timer)
   answers the listening with bot.ability.listening.failed {stage, message}
-  (the original's FailedEventData) and returns to Idle; Idle clears the open
+  and returns to Idle; Idle clears the open
   speech.
 
   Readiness: on start it sends bot.ability.offers {ability:
@@ -133,7 +128,7 @@
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="interpretation" initial="initializing">
   <datamodel>
-    <!-- Configuration (the original's constructor). -->
+    <!-- Configuration. -->
     <data id="product_threshold_db" expr="3.0"/>
     <data id="stage_timeout_ms" expr="30000"/>
     <!-- How much longer than a stage an utterance waits for its voices
@@ -155,13 +150,13 @@
     <data id="detection" expr="null"/>
     <data id="completion" expr="null"/>
     <data id="result" expr="null"/>
-    <!-- The open speech (the original's open utterance). -->
+    <!-- The open speech (the open utterance). -->
     <data id="open_frames" expr="[]"/>
     <data id="open_sensed" expr="null"/>
     <data id="active_source_ids" expr="[]"/>
     <data id="active_voice_embedding" expr="null"/>
     <!-- The ordered union of the participants stamped on the sound taken
-         into the open utterance (the original's _active_participants). -->
+         into the open utterance. -->
     <data id="active_participants" expr="[]"/>
     <data id="open_wav" expr="false"/>
     <data id="utterance" expr="null"/>
@@ -278,7 +273,7 @@
             <content expr="stageFailure('Voice detection child produced a non-ApplyData terminal.')"/>
           </send>
         </transition>
-        <!-- The original's routes, in its order. -->
+        <!-- The routes, in order. -->
         <transition cond="dropsSilence()"
                     target="Idle"/>
         <transition cond="handsOffSilence()"
@@ -301,7 +296,7 @@
         <onentry>
           <assign location="stage" expr="null"/>
           <!-- The frame just heard, streamed when Listening owns no
-               decoder (the original _emit_speech_product). -->
+               decoder. -->
           <assign location="audible" expr="isAudible(detection.sensed)"/>
           <assign location="audible" expr="streamsFrame()"/>
           <if cond="streamsPcmFrame()">
@@ -671,7 +666,7 @@
         </transition>
         <!-- Labelled non-speech, or a sound that is not PCM: the
              completion's sound, normalized to PCM where detection did so
-             (the original hands off the completion chain's sensed sound). -->
+             (the completion chain's sensed sound is handed off). -->
         <transition target="Idle">
           <assign location="product" expr="({})"/>
           <assign location="product.event" expr="'environment.sound'"/>
