@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?><!-- behavior-3: a draft's absent fields are the original Instance's defaults. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior" xmlns:conf="http://www.w3.org/2005/scxml-conformance" initial="s0" version="1.0" datamodel="ecmascript">
+<?xml version="1.0" encoding="UTF-8"?><!-- behavior-3: a draft's absent fields are an instance's defaults. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior" xmlns:conf="http://www.w3.org/2005/scxml-conformance" initial="s0" version="1.0" datamodel="ecmascript">
 <datamodel>
   <data id="s" expr="null"/>
 </datamodel>
