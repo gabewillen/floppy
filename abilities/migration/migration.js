@@ -32,7 +32,7 @@ function knownTables() {
   return tables.filter(function (name) { return created.includes(name); }).sort();
 }
 
-// The original's store.py migrate: memory tables but no version table.
+// Unversioned: memory tables but no version table.
 function isUnversioned() {
   return !isVersioned() && knownTables().length > 0;
 }
