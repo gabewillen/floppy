@@ -34,8 +34,10 @@
   min_every_ms and turn_after_bound_ms, the lifetime bounds, E0009,
   <behavior:lifetime_errors>) -> simulate (each test script drives the draft as an invoked
   child, by <invoke srcexpr> on its path, with its own invoke id; with those bounds, a persistent routine,
-  a draft that sends bot.behavior.tick, also gets its first schedule's
-  event at once and must tick with a selection (the forced tick, E0008,
+  a draft that sends bot.behavior.tick, also runs as its forced tick copy
+  (<name>.tick.scx, written by writing_tick: each schedule 1500 ms away, sent
+  nothing, so its own schedule send must arm and fire, decision D153) and
+  must tick with a selection within 2 s (the forced tick, E0008,
   <behavior:verify_tick>); and, with the request's apply, a turn behavior
   (one that sends no bot.behavior.tick) also runs once on that live turn, as the
   candidates runner runs it, by <invoke srcexpr> with the params turn and input,
@@ -154,6 +156,10 @@
          and a persistent routine's schedule events, in document order. -->
     <data id="lifetime" expr="'turn'"/>
     <data id="schedules" expr="[]"/>
+    <!-- The forced tick's copy of the draft: each schedule's delay
+         shortened, so its own send must fire the first tick (decision
+         D153). -->
+    <data id="tick_scxml" expr="null"/>
     <!-- The last draft a check rejected (the failed donedata's scxml). -->
     <data id="rejected" expr="null"/>
     <!-- Model calls: the invocation in flight, its failure code, and the
@@ -466,7 +472,7 @@
       <assign location="fixed" expr="null"/>
       <behavior:lifetime_errors location="lifetime_errors" scxml="scxml_text"
           min_every="min_every_ms" turn_after_bound="turn_after_bound_ms"
-          lifetimelocation="lifetime" scheduleslocation="schedules"/>
+          lifetimelocation="lifetime" scheduleslocation="schedules" ticklocation="tick_scxml"/>
       <scx:validate location="report" expr="scxml_text" name="draft.scx"
                    applyfixes="machine-applicable" fixedlocation="fixed"/>
       <assign location="script_errors" expr="scriptErrors()"/>
@@ -479,6 +485,9 @@
     <!-- The lifetime check: E0009 when the request names the bounds. -->
     <transition cond="hasLifetimeErrors()" target="retry_gate">
       <assign location="diagnostics" expr="lifetime_errors"/>
+    </transition>
+    <transition cond="isReadyToTick()" target="writing_tick">
+      <assign location="warnings" expr="report.validator.counts.warnings"/>
     </transition>
     <transition cond="isReadyToSimulate()"
                 target="simulate">
@@ -494,6 +503,21 @@
     </transition>
     <transition event="error.execution" target="retry_gate">
       <assign location="diagnostics" expr="validatorFailedDiagnostics()"/>
+    </transition>
+  </state>
+
+  <!-- Writes a persistent routine's forced tick copy, <name>.tick.scx,
+       beside the draft (decision D153): the forced tick runs it, so the
+       routine's own schedule send must arm and fire, not an event the
+       builder delivers. -->
+  <state id="writing_tick">
+    <invoke id="write_tick" type="https://github.com/stateforward/floppy/services/files">
+      <param name="name" expr="draftFile('.tick.scx')"/>
+      <param name="text" expr="tick_scxml"/>
+    </invoke>
+    <transition event="done.invoke.write_tick" target="simulate"/>
+    <transition event="error.*" target="retry_gate">
+      <assign location="diagnostics" expr="writeFailedDiagnostics()"/>
     </transition>
   </state>
 
@@ -569,7 +593,7 @@
         </foreach>
         <cancel sendid="sim-settle"/>
       </onexit>
-      <invoke idlocation="candidate_id" type="scxml" srcexpr="draftPath()"/>
+      <invoke idlocation="candidate_id" type="scxml" srcexpr="testPath()"/>
       <!-- The builder's own control events never carry an invoke id and
            carry this run's tag; a candidate's events of the same names fall
            through to the recorder below, and an earlier run's are dropped. -->

@@ -257,6 +257,11 @@ function isReadyToSimulate() {
   return isValidatorClean() && hasTestsWithinBounds();
 }
 
+// A routine whose forced tick runs its copy (decision D153).
+function isReadyToTick() {
+  return isReadyToSimulate() && isRoutineTicked() && tick_scxml !== null;
+}
+
 function testsOutOfBoundsDiagnostics() {
   return [{kind: 'draft', code: 'tests-out-of-bounds', message: 'the draft must carry one to eight test scripts of at most 32 events each'}];
 }
@@ -416,10 +421,11 @@ function isRoutineTicked() {
   return isLifetimeChecked() && lifetime === 'persistent' && schedules.length > 0;
 }
 
-// The routine's tick, forced by delivering its first schedule's event at once (the
-// timer clock fires its first schedule wait at once, decision D84), within 2 s.
+// The routine's forced tick (decision D84): its copy with each schedule 1500 ms
+// away runs with no event sent to it, so its own schedule send must fire its first
+// tick within 2 s (decision D153).
 function firstTickTest() {
-  return {name: 'first tick', events: [{name: schedules[0], data: '', delay_ms: 0}], settle_ms: 2000, expect_events: ['bot.behavior.tick'], expect_done: false, tick: true};
+  return {name: 'first tick', events: [], settle_ms: 2000, expect_events: ['bot.behavior.tick'], expect_done: false, tick: true};
 }
 
 // lifetime is written by validate's <behavior:lifetime_errors>, with or without bounds.
@@ -461,6 +467,11 @@ function allTestsRun() {
 
 function currentTest() {
   return sim_tests[sim_index];
+}
+
+// The forced tick runs the routine's copy (decision D153), every other test the draft.
+function testPath() {
+  return isTickTest() ? '../../behaviors/' + draftFile('.tick.scx') : draftPath();
 }
 
 function currentTestEvents() {

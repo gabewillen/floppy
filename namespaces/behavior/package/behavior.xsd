@@ -18,8 +18,9 @@
                    an SCXML document (the lifetime check).
                    scxml (required), min_every, turn_after_bound (optional):
                    expressions.
-                   lifetimelocation, scheduleslocation (optional): receive
-                   the document's lifetime and its schedules' events.
+                   lifetimelocation, scheduleslocation, ticklocation
+                   (optional): receive the document's lifetime, its
+                   schedules' events and the forced tick's copy of it.
   behavior:verify_tick
                    location (required): receives the E0008 messages of a
                    persistent routine's forced tick.
@@ -56,6 +57,7 @@
       <xs:attribute name="turn_after_bound" type="xs:string"/>
       <xs:attribute name="lifetimelocation" type="xs:string"/>
       <xs:attribute name="scheduleslocation" type="xs:string"/>
+      <xs:attribute name="ticklocation" type="xs:string"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="verify_tick">

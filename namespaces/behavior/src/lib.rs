@@ -77,9 +77,15 @@
 //! schedule with a literal `target` (a schedule is a delayed send to the
 //! routine itself, which a send with no target reaches; any target, such
 //! as an invented `#_self`, sends it elsewhere and the routine never fires,
-//! decision D147), and a persistent routine with no schedule. `lifetimelocation` (optional)
-//! receives the lifetime, and `scheduleslocation` (optional) the events of
-//! the schedules in document order, each once. A text that does not parse
+//! decision D147), a schedule whose send carries an `event:schema` (which
+//! checks the data the schedule sends; a send whose data does not match
+//! fails and the routine never arms, decision D152), and a persistent
+//! routine with no schedule. `lifetimelocation` (optional)
+//! receives the lifetime, `scheduleslocation` (optional) the events of
+//! the schedules in document order, each once, and `ticklocation`
+//! (optional) the forced tick's copy of the document (decision D153): its
+//! text with each schedule's `delay` or `delayexpr` replaced by a `delay` of
+//! 1500ms, or `null` for a text that does not parse. A text that does not parse
 //! as XML has no sends: its lifetime is `turn`, and it has no diagnostics
 //! and no schedules.
 //!
@@ -152,6 +158,7 @@ use quick_xml::XmlVersion;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::name::ResolveResult;
 use quick_xml::reader::NsReader;
+use quick_xml::writer::Writer;
 use scxml_types::DataValue as Data;
 use serde_json::{Map, Value as Json};
 
@@ -167,6 +174,8 @@ pub const NAMESPACE_URI: &str = "https://github.com/stateforward/floppy/namespac
 /// The SCXML namespace, whose `<send>` and `<transition>` the lifetime
 /// check reads.
 const SCXML_NAMESPACE: &str = "http://www.w3.org/2005/07/scxml";
+/// The event namespace, whose `schema` attribute checks an event's data.
+const EVENT_NAMESPACE: &str = "https://github.com/stateforward/scxml.rs/namespaces/event";
 
 /// The event a persistent routine sends on every tick.
 const TICK_EVENT: &str = "bot.behavior.tick";
@@ -192,6 +201,11 @@ const LIFETIME_HELP: &str = " Help: A turn behavior lives for one turn and is si
 
 /// The most diagnostics the lifetime check writes.
 const MAX_LIFETIME_ERRORS: usize = 20;
+/// The delay of each schedule in the forced tick's copy of a routine
+/// (decision D153): the routine's own send fires its first tick within
+/// the tick's 2 s settle, and its next schedule is past it, so it ticks
+/// once.
+const FORCED_TICK_DELAY: &str = "1500ms";
 
 /// One attribute of an element.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -818,6 +832,7 @@ fn lifetime_element<H: BehaviorHost>(
         turn_after_bound,
         lifetime_location,
         schedules_location,
+        tick_location,
     ] = attribute_values(
         attributes,
         [
@@ -827,9 +842,10 @@ fn lifetime_element<H: BehaviorHost>(
             "turn_after_bound",
             "lifetimelocation",
             "scheduleslocation",
+            "ticklocation",
         ],
         [
-            "behavior:lifetime_errors takes only the location, scxml, min_every, turn_after_bound, lifetimelocation and scheduleslocation attributes",
+            "behavior:lifetime_errors takes only the location, scxml, min_every, turn_after_bound, lifetimelocation, scheduleslocation and ticklocation attributes",
             "behavior:lifetime_errors repeats an attribute",
             "behavior:lifetime_errors has an empty attribute",
         ],
@@ -894,7 +910,68 @@ fn lifetime_element<H: BehaviorHost>(
             "behavior:lifetime_errors could not assign the schedules",
         )?;
     }
+    if let Some(tick_location) = tick_location {
+        assign_to(
+            host,
+            tick_location,
+            &forced_tick_copy(&text).map_or(Json::Null, Json::String),
+            "behavior:lifetime_errors could not assign the forced tick's copy",
+        )?;
+    }
     Ok(Executed::Handled)
+}
+
+/// The forced tick's copy of a routine (decision D153): `text` with each
+/// schedule's `delay` or `delayexpr` replaced by a `delay` of
+/// [`FORCED_TICK_DELAY`], every other byte as written, so the routine's own
+/// send must arm and fire its first tick; `None` when `text` does not parse
+/// as XML.
+#[must_use]
+pub fn forced_tick_copy(text: &str) -> Option<String> {
+    let ticking = read_sends(text)?.ticking;
+    let mut reader = NsReader::from_str(text);
+    reader.config_mut().check_end_names = true;
+    let mut writer = Writer::new(Vec::new());
+    loop {
+        let (namespace, event) = reader.read_resolved_event().ok()?;
+        let scxml = matches!(namespace, ResolveResult::Bound(ns) if ns.as_ref() == SCXML_NAMESPACE.as_bytes());
+        let event = match event {
+            Event::Start(start) if scxml => Event::Start(scheduled_sooner(start, &ticking)?),
+            Event::Empty(start) if scxml => Event::Empty(scheduled_sooner(start, &ticking)?),
+            Event::Eof => break,
+            event => event,
+        };
+        writer.write_event(event).ok()?;
+    }
+    String::from_utf8(writer.into_inner()).ok()
+}
+
+/// `start` with a [`FORCED_TICK_DELAY`] delay in place of its own when it
+/// is a schedule: a delayed `<send>` of an event a ticking transition takes.
+fn scheduled_sooner<'a>(
+    start: BytesStart<'a>,
+    ticking: &BTreeSet<String>,
+) -> Option<BytesStart<'a>> {
+    if start.local_name().as_ref() != b"send" {
+        return Some(start);
+    }
+    let event = attribute(&start, "event").ok()?;
+    let delayed = attribute(&start, "delay").ok()?.is_some()
+        || attribute(&start, "delayexpr").ok()?.is_some();
+    if !delayed || !event.is_some_and(|event| ticking.contains(&event)) {
+        return Some(start);
+    }
+    let mut sooner = BytesStart::new(String::from_utf8(start.name().as_ref().to_vec()).ok()?);
+    for attribute in start.attributes() {
+        let attribute = attribute.ok()?;
+        let key = attribute.key;
+        if key.prefix().is_none() && matches!(key.local_name().as_ref(), b"delay" | b"delayexpr") {
+            continue;
+        }
+        sooner.push_attribute(attribute);
+    }
+    sooner.push_attribute(("delay", FORCED_TICK_DELAY));
+    Some(sooner)
 }
 
 /// What the lifetime check finds in one document.
@@ -916,6 +993,8 @@ struct DelayedSend {
     delay: Option<f64>,
     /// Its literal `target`, when it has one.
     target: Option<String>,
+    /// Whether it carries an `event:schema`.
+    schema: bool,
 }
 
 /// The sends of a document as the lifetime check reads them.
@@ -966,13 +1045,15 @@ fn read_sends(text: &str) -> Option<Sends> {
         let scxml = matches!(namespace, ResolveResult::Bound(ns) if ns.as_ref() == SCXML_NAMESPACE.as_bytes());
         match event {
             Event::Start(start) => {
-                let element = start_element(scxml, &start, &mut sends, &mut open)?;
+                let schema = has_event_schema(&reader, &start)?;
+                let element = start_element(scxml, schema, &start, &mut sends, &mut open)?;
                 open.push(element);
             }
             // An empty element is never open: an empty transition sends
             // nothing.
             Event::Empty(start) => {
-                start_element(scxml, &start, &mut sends, &mut open)?;
+                let schema = has_event_schema(&reader, &start)?;
+                start_element(scxml, schema, &start, &mut sends, &mut open)?;
             }
             Event::End(_) => {
                 if let Some(Open::Transition {
@@ -990,11 +1071,26 @@ fn read_sends(text: &str) -> Option<Sends> {
     Some(sends)
 }
 
+/// Whether `start` carries the `schema` attribute of the event namespace.
+fn has_event_schema(reader: &NsReader<&[u8]>, start: &BytesStart<'_>) -> Option<bool> {
+    for attribute in start.attributes() {
+        let attribute = attribute.ok()?;
+        let (namespace, local) = reader.resolver().resolve_attribute(attribute.key);
+        if local.as_ref() == b"schema"
+            && matches!(namespace, ResolveResult::Bound(ns) if ns.as_ref() == EVENT_NAMESPACE.as_bytes())
+        {
+            return Some(true);
+        }
+    }
+    Some(false)
+}
+
 /// Reads one start tag: a `<send>` is recorded (and marks the open
 /// transitions when it sends `bot.behavior.tick`); a `<transition>` opens
 /// with its event descriptors.
 fn start_element(
     scxml: bool,
+    schema: bool,
     start: &BytesStart<'_>,
     sends: &mut Sends,
     open: &mut [Open],
@@ -1020,6 +1116,7 @@ fn start_element(
                     event,
                     delay: delay.as_deref().and_then(delay_ms),
                     target: attribute(start, "target").ok()?,
+                    schema,
                 });
             }
             Some(Open::Other)
@@ -1121,6 +1218,17 @@ pub fn lifetime_errors(
                 .then(|| (event.clone(), target.clone()))
         })
         .collect();
+    // A schedule's event:schema: it checks the data the schedule sends,
+    // which a schedule needs none of, and a send whose data does not match
+    // fails, so the routine never arms (decision D152).
+    let checked: Vec<String> = sends
+        .delayed
+        .iter()
+        .filter_map(|send| {
+            let event = send.event.as_ref()?;
+            (send.schema && sends.ticking.contains(event)).then(|| event.clone())
+        })
+        .collect();
     let mut schedules: Vec<String> = Vec::new();
     for (event, _, schedule) in &delayed {
         if *schedule && !schedules.contains(event) {
@@ -1151,6 +1259,11 @@ pub fn lifetime_errors(
         for (event, target) in &misdirected {
             errors.push(lifetime_error(format!(
                 "the {event} schedule is sent to {target}, so it never reaches the routine and never fires: a schedule is a delayed send to the routine itself, with no target.{LIFETIME_HELP}"
+            )));
+        }
+        for event in &checked {
+            errors.push(lifetime_error(format!(
+                "the {event} schedule's send carries event:schema, which checks the data it sends: a send whose data does not match fails, so the routine never arms. A schedule is the routine's own event and needs no schema: remove event:schema from its send (a transition that takes it may keep one).{LIFETIME_HELP}"
             )));
         }
         if lifetime == "persistent" && !delayed.iter().any(|(_, _, schedule)| *schedule) {
