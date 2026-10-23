@@ -12,7 +12,7 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "[{\"label\": \"cup\", \"confidence\": 0.5, \"box\": {\"x\": 0.25, \"y\": 0.5, \"width\": 0.25, \"height\": 0.25}}]"
+              "content": "{\"objects\": [{\"label\": \"cup\", \"confidence\": 0.5, \"box\": {\"x\": 0.25, \"y\": 0.5, \"width\": 0.25, \"height\": 0.25}}]}"
             }
           }
         ]
@@ -29,7 +29,7 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "[{\"label\": \"person\", \"confidence\": 0.75, \"box\": {\"x\": 0, \"y\": 0, \"width\": 0.5, \"height\": 1}}]"
+              "content": "{\"objects\": [{\"label\": \"person\", \"confidence\": 0.75, \"box\": {\"x\": 0, \"y\": 0, \"width\": 0.5, \"height\": 1}}]}"
             }
           }
         ]
@@ -46,7 +46,7 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "[{\"label\": \"lamp\", \"confidence\": null, \"box\": {\"x\": 0.75, \"y\": 0.25, \"width\": 0.25, \"height\": 0.5}}]"
+              "content": "{\"objects\": [{\"label\": \"lamp\", \"confidence\": null, \"box\": {\"x\": 0.75, \"y\": 0.25, \"width\": 0.25, \"height\": 0.5}}]}"
             }
           }
         ]
@@ -63,7 +63,7 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "[]"
+              "content": "{\"objects\": []}"
             }
           }
         ]

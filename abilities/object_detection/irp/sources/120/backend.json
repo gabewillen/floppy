@@ -9,10 +9,36 @@
         "choices": [
           {
             "index": 0,
-            "finish_reason": "stop",
+            "finish_reason": "tool_calls",
             "message": {
               "role": "assistant",
-              "content": "\t\n  [{\"label\": \"cup\", \"confidence\": 0.87, \"box\": {\"x\": 0.4, \"y\": 0.5, \"width\": 0.1, \"height\": 0.15}}] \n\r"
+              "content": null,
+              "tool_calls": [
+                {
+                  "id": "call-0",
+                  "type": "function",
+                  "function": {
+                    "name": "detections",
+                    "arguments": "{\"objects\": [{\"label\": \"person\", \"confidence\": 0.5, \"box\": {\"x\": 0, \"y\": 0, \"width\": 0.5, \"height\": 1}}]}"
+                  }
+                },
+                {
+                  "id": "call-1",
+                  "type": "function",
+                  "function": {
+                    "name": "detections",
+                    "arguments": "{\"objects\": []}"
+                  }
+                },
+                {
+                  "id": "call-2",
+                  "type": "function",
+                  "function": {
+                    "name": "detections",
+                    "arguments": "{\"objects\": [{\"label\": \"cup\", \"confidence\": 0.87, \"box\": {\"x\": 0.4, \"y\": 0.5, \"width\": 0.1, \"height\": 0.15}}, {\"label\": \"lamp\", \"confidence\": null, \"box\": {\"x\": 0.75, \"y\": 0.25, \"width\": 0.25, \"height\": 0.5}}]}"
+                  }
+                }
+              ]
             }
           }
         ]
