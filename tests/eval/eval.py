@@ -286,14 +286,11 @@ def cmd_grade(args):
     builder_json = os.path.join(args.dir, "builder.json")
     if os.path.exists(builder_json):
         with open(builder_json, encoding="utf-8") as handle:
-            saved = json.load(handle)
-        # A builder.json from before "models" echoes each model in its summary.
-        models = saved.get("models") or {
-            label: column["builder"] for label, column in saved.get("columns", {}).items() if "builder" in column} or None
+            models = json.load(handle).get("models")
         if models is None:
-            print(f"{builder_json} names no column models; builder.md is not rebuilt", file=sys.stderr)
-        else:
-            write_builder(args.dir, [{"label": label, "builder": model} for label, model in models.items()], graded)
+            sys.exit(f"{builder_json} names no column models (a run from before they were saved): "
+                     "builder.md cannot be regraded")
+        write_builder(args.dir, [{"label": label, "builder": model} for label, model in models.items()], graded)
     print(json.dumps(summary, indent=2))
 
 
