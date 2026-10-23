@@ -1,33 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Communication ability: it holds the conversation, admits
-  communication input into it, and says the response the cognition selects through Speaking.
+  floppy's Communication ability (the reference abilities/communication/
+  communication.py): it holds the conversation, admits communication input
+  into it, and says the response the cognition selects through Speaking.
   The body (bots/floppy/floppy.scx) invokes it as its child
   "communication".
 
     communication { inactive -children ready-> active
                     active -respond-> preparing_response -> dispatching_response
-                      -> responding -speaking output, failure or hop timeout->
-                      active }
+                      -> responding { waiting } -speaking output, failure or
+                      hop timeout-> active }
 
   Children: communication holds <invoke id="conversation"> (abilities/
   conversation/conversation.scx, the one active conversation) and <invoke
   id="speaking"> (abilities/speaking/speaking.scx). Each is ready with its
-  first bot.ability.offers; inactive waits for both. A child that cannot start, or ends, sends
+  first bot.ability.offers; inactive waits for both (the original attaches the
+  conversation composite there). A child that cannot start, or ends, sends
   bot.ability.communication.failed {message} to the body and ends this
   ability in its final state degraded.
 
   Input: bot.ability.communication.input {source_ids, target_ids, content,
   content_type, ...} in active or responding (hearing goes on while a
   response is said, decision D175) goes to the conversation as
-  bot.ability.conversation.routed_input {parent} (the input routed to the
-  active conversation; parent is the input event as an envelope). The
+  bot.ability.conversation.routed_input {parent} (the original's routed input to
+  the active conversation; parent is the input event as an envelope). The
   conversation hands a text product over as bot.ability.cognition.input
   {stimulus}, which goes on to the body unchanged (the body grants it a
   turn); its bot.ability.conversation.output goes on to the body unchanged
-  when its latest message is inbound (a product that is not text) and is
-  the exchange only otherwise; and its bot.ability.conversation.failed
-  {stage, message} goes on to the body unchanged.
+  when its latest message is inbound (a product that is not text; the original
+  _has_conversation_product) and is the exchange only otherwise; and its
+  bot.ability.conversation.failed {stage, message} goes on to the body
+  unchanged (the original forwards these terminals).
 
   Responding: bot.ability.communication.respond {parts} in active (decision
   D178: 1 to 64 parts {expression?, words?}, each with
@@ -36,14 +39,19 @@
   refused with bot.ability.communication.failed) numbers the response
   (preparing_response), sends bot.ability.speaking.input {parts} to the
   speaking child
-  (dispatching_response), and waits in responding, bounded by the hop
-  timer bot.ability.communication.response.hop.timed_out
-  (response_timeout_ms, 36 s: speaking's 30 s encoding bound plus 6 s, so
-  the hop never preempts the encoding it waits for, decision D98; the transition takes only the timer
-  of the response in hand, _event.sendid). Speaking's output goes on to the
-  body as bot.ability.speaking.output. A speaking failure
+  (dispatching_response), and waits in responding's waiting, bounded by
+  the hop timer bot.ability.communication.response.hop.timed_out
+  (response_timeout_ms, 36 s: speaking's 30 s encoding bound plus 6 s,
+  decision D98; the transition takes only the timer of the response in
+  hand, _event.sendid). Each bot.ability.speaking.progress
+  {spoken_seconds} re-enters waiting, which re-arms the timer (decision
+  D179), so a long spoken reply is never cut off; until the first audio no progress comes, so the
+  first hop still covers the whole encoding. Speaking's output goes on to
+  the body as bot.ability.speaking.output. A speaking failure
   (bot.ability.failed) or the hop timeout answers the body with
-  bot.ability.communication.failed {message}. Input that arrives in
+  bot.ability.communication.failed {message}; the timeout also sends
+  speaking bot.ability.speaking.stop {}, so it does not go on saying a
+  response whose failure was already reported (decision D179). Input that arrives in
   inactive is held by <event:defer/> (scxml.rs namespaces/event) and comes
   back, in order, on the return to active. A response's id is its
   respond's sendid (none when the sender named none); leaving responding
@@ -57,6 +65,14 @@
   taken as on arrival; a response in inactive is not taken (inactive has no
   transition for it).
 
+  Stop: bot.ability.communication.stop {} (model-callable, decision D179)
+  is taken only in responding, so it is offered only while a response is
+  being spoken: it sends bot.ability.speaking.stop {} to speaking, which
+  stops the utterance in hand (an SCXML <send> takes no id from an
+  expression, so the stop cannot carry the response's id; speaking holds
+  one utterance at a time), and re-enters waiting; speaking's output
+  (outcome "stopped") ends the response as any other.
+
   Speaking's routes: speaking records the words it said as an outbound
   bot.ability.conversation.append, which the communication passes to the
   conversation (a sibling is out of speaking's reach), and its playout,
@@ -69,23 +85,25 @@
 
   Activate: bot.ability.communication.activate {} keeps the one
   conversation active (a catalog of conversations to switch between is
-  loaded through memory, phase 3); it is taken and logged in inactive only.
+  loaded through memory, phase 3); it is taken and logged in inactive only,
+  as the original's Communication takes it only there.
 
   Offers: every entry into active sends bot.ability.offers {ability:
   "communication", choices} to the body: <decision:choice events=
-  "bot.ability.communication.respond"> (the enabled transitions in
+  "bot.ability.communication.respond"> (the original's enabled transitions in
   active; activate is enabled only in inactive, and input is not a tool
   event), made model-facing by <processing:model_facing_schema>
   ($schema, title and examples dropped; over 32 KiB descriptions dropped
-  too; still over, the offer is empty and logged). The children offer
-  nothing, so nothing is relayed.
+  too; still over, the offer is empty and logged). Every entry into
+  responding offers the same way the events enabled there, respond (held)
+  and stop. The children offer nothing, so nothing is relayed.
 
   Contracts: the events it takes reference abilities/schemas/ by
   event:schema (never inline). scxml.rs checks them where each event is
   created: a send whose data a schema rejects is not routed and raises
   error.execution in its sender. Each event it takes has one sender, so
   its name and the active state route it; conds only correlate (which
-  timer) and keep the non-blank response check.
+  timer) and keep the original's non-blank response check.
 
   Bindings: the decision and processing namespace packages; speaking's (the conversation
   namespace and vocal's speech service).
@@ -162,8 +180,8 @@
     <transition event="bot.ability.conversation.snapshot.output" event:schema="../schemas/bot.ability.conversation.snapshot.output.json">
       <log label="communication.snapshot" expr="_event.data.request_ref"/>
     </transition>
-    <!-- A conversation that could not take an input fails it (its
-         bot.ability.conversation.failed, forwarded unchanged). -->
+    <!-- A conversation that could not take an input fails it (the original's
+         conversation failed terminal, forwarded unchanged). -->
     <transition event="bot.ability.conversation.failed" event:schema="../schemas/bot.ability.conversation.failed.json">
       <log label="communication.rejected" expr="conversationFailedLog(_event)"/>
       <send event="bot.ability.conversation.failed" target="#_parent">
@@ -205,8 +223,8 @@
         <param name="parent" expr="routedParent(_event)"/>
       </send>
     </transition>
-    <!-- A speaking answer for no response in hand. -->
-    <transition event="bot.ability.speaking.output bot.ability.failed">
+    <!-- A speaking answer, or progress, for no response in hand. -->
+    <transition event="bot.ability.speaking.output bot.ability.speaking.progress bot.ability.failed">
       <log label="communication.stale" expr="_event.name"/>
     </transition>
 
@@ -276,15 +294,24 @@
       <transition target="responding"/>
     </state>
 
-    <!-- Waits (bounded) for speaking's answer. -->
-    <state id="responding">
+    <!-- Waits for speaking's answer, bounded while speaking shows no
+         progress. -->
+    <state id="responding" initial="waiting">
       <onentry>
-        <send idlocation="hop_timer" event="bot.ability.communication.response.hop.timed_out" delayexpr="responseTimeoutDelay()">
-          <param name="operation" expr="operation"/>
+        <assign location="offering" expr="true"/>
+        <decision:choice location="offered" events="bot.ability.communication.respond bot.ability.communication.stop"/>
+        <assign location="offering" expr="false"/>
+        <processing:model_facing_schema location="offered" bound="32768" overlocation="offers_over"/>
+        <if cond="offers_over">
+          <log label="communication.offers.dropped" expr="'the offers are over 32768 bytes'"/>
+        </if>
+        <log label="communication.offers" expr="offered"/>
+        <send event="bot.ability.offers" target="#_parent">
+          <param name="ability" expr="'communication'"/>
+          <param name="choices" expr="offered"/>
         </send>
       </onentry>
       <onexit>
-        <cancel sendidexpr="hop_timer"/>
         <assign location="closed_responses" expr="closedResponses()"/>
         <assign location="response_id" expr="null"/>
         <assign location="held" expr="0"/>
@@ -298,13 +325,6 @@
       <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="active">
         <send event="bot.ability.communication.failed" target="#_parent">
           <param name="message" expr="_event.data.message"/>
-        </send>
-      </transition>
-      <transition event="bot.ability.communication.response.hop.timed_out" event:schema="../schemas/bot.ability.communication.response.hop.timed_out.json"
-                  cond="isResponseHopTimeout(_event)" target="active">
-        <log label="communication.hop.timed_out" expr="hopTimedOutMessage()"/>
-        <send event="bot.ability.communication.failed" target="#_parent">
-          <param name="message" expr="'Speaking response timed out.'"/>
         </send>
       </transition>
       <!-- A late copy of a finished response, or another copy of this one,
@@ -327,6 +347,41 @@
           <param name="message" expr="'Communication is holding too many responses; this one is refused.'"/>
         </send>
       </transition>
+
+      <!-- A stop while the response is said (taken here, not in waiting, so
+           responding's entry offers it): speaking stops it, and waiting
+           starts again for its answer. -->
+      <transition event="bot.ability.communication.stop" event:schema="../schemas/bot.ability.communication.stop.json"
+                  type="internal" target="waiting">
+        <log label="communication.stop" expr="operation"/>
+        <send event="bot.ability.speaking.stop" target="#_speaking">
+          <content expr="({})"/>
+        </send>
+      </transition>
+
+      <!-- Re-entered on every sign of progress, which restarts the hop
+           timer. -->
+      <state id="waiting">
+        <onentry>
+          <send idlocation="hop_timer" event="bot.ability.communication.response.hop.timed_out" delayexpr="responseTimeoutDelay()">
+            <param name="operation" expr="operation"/>
+          </send>
+        </onentry>
+        <onexit>
+          <cancel sendidexpr="hop_timer"/>
+        </onexit>
+        <transition event="bot.ability.speaking.progress" event:schema="../schemas/bot.ability.speaking.progress.json" target="waiting"/>
+        <transition event="bot.ability.communication.response.hop.timed_out" event:schema="../schemas/bot.ability.communication.response.hop.timed_out.json"
+                    cond="isResponseHopTimeout(_event)" target="active">
+          <log label="communication.hop.timed_out" expr="hopTimedOutMessage()"/>
+          <send event="bot.ability.speaking.stop" target="#_speaking">
+            <content expr="({})"/>
+          </send>
+          <send event="bot.ability.communication.failed" target="#_parent">
+            <param name="message" expr="'Speaking response timed out.'"/>
+          </send>
+        </transition>
+      </state>
     </state>
   </state>
 

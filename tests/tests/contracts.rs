@@ -94,7 +94,7 @@ const BODY_EVENTS: [&str; 12] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 98] = [
+const ABILITY_EVENTS: [&str; 102] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -119,6 +119,7 @@ const ABILITY_EVENTS: [&str; 98] = [
     "bot.ability.communication.respond",
     "bot.ability.communication.failed",
     "bot.ability.communication.response.hop.timed_out",
+    "bot.ability.communication.stop",
     "bot.ability.conversation.input",
     "bot.ability.conversation.routed_input",
     "bot.ability.conversation.append",
@@ -130,6 +131,11 @@ const ABILITY_EVENTS: [&str; 98] = [
     "bot.ability.speaking.output",
     "bot.ability.speaking.apply.failed",
     "bot.ability.speaking.efference",
+    "bot.ability.speaking.stop",
+    "bot.ability.speaking.progress",
+    // The mouth's report that a commanded piece played, which speaking
+    // times itself until the mouth (a device) is ported.
+    "devices.audio.played",
     "bot.ability.vocal.speech.encoding.input",
     "bot.ability.vocal.speech.encoding.output",
     // Speaking's playout, which the body puts into the environment.

@@ -1283,7 +1283,7 @@ fn the_listenings_products_are_turn_stimuli() {
             ("double.input", r#"1 reply "reply to me""#),
             (
                 "bot.ability.speaking.output",
-                r#"{"channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"text":"reply 1"}"#
+                r#"{"channels":1,"media_type":"audio/pcm","outcome":"completed","sample_rate_hz":24000,"spoken":"reply 1","text":"reply 1","unspoken":"","voice_id":null}"#
             ),
             ("double.input", r#"2 ignore "phone.ringing""#),
         ])
@@ -1334,7 +1334,7 @@ fn a_selected_communication_input_reaches_the_communication() {
             ("double.input", "2 reply 1"),
             (
                 "bot.ability.speaking.output",
-                r#"{"channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"text":"reply 2"}"#
+                r#"{"channels":1,"media_type":"audio/pcm","outcome":"completed","sample_rate_hz":24000,"spoken":"reply 2","text":"reply 2","unspoken":"","voice_id":null}"#
             ),
         ])
     );

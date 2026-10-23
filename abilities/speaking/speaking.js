@@ -142,14 +142,69 @@ function encodingRunFailure(_event) {
 
 // playing
 
-// No efference copy is sent without a duration.
-function hasDuration() {
-  return typeof encoded.duration === 'number' && encoded.duration > 0;
+// The playout's length in ms: the encoded speech's measured duration, 0
+// when it has none.
+function durationMs() {
+  return typeof encoded.duration === 'number' && encoded.duration > 0 ? Math.round(encoded.duration * 1000) : 0;
 }
 
-// The answer to the parent: bot.ability.speaking.output.
-function speechProduct() {
-  return ({text: text, media_type: encoded.media_type, sample_rate_hz: encoded.sample_rate_hz, channels: encoded.channels});
+// The original sends no efference copy without a duration.
+function hasDuration() {
+  return duration_ms > 0;
+}
+
+// The encoded speech's format, speaking's own before anything was encoded.
+function audioFormat() {
+  return encoded === null ? {media_type: media_type, sample_rate_hz: sample_rate_hz, channels: channels} : encoded;
+}
+
+// The efference copy of `seconds` of playout still to come.
+function efferenceCopy(seconds) {
+  var format = audioFormat();
+  return ({mouth: mouth, duration: seconds, media_type: format.media_type,
+    sample_rate_hz: format.sample_rate_hz, channels: format.channels});
+}
+
+function remainingSeconds() {
+  return (duration_ms - played_ms) / 1000;
+}
+
+// The next piece commanded to the mouth: at most half the lookahead, the
+// rest of the playout at the end (decision D179).
+function nextPieceMs() {
+  return Math.min(lookahead_ms / 2, duration_ms - played_ms);
+}
+
+// The mark of a commanded piece: u<utterance>.<piece> (decision D179).
+function markName() {
+  return 'u' + operation + '.' + commands;
+}
+
+// A piece is pending (none when the audio had no duration).
+function hasMark() {
+  return mark !== null;
+}
+
+// The mouth's report of the pending piece.
+function isMark(_event) {
+  return _event.sendid === mark;
+}
+
+// The report of the last piece.
+function isLastMark(_event) {
+  return isMark(_event) && played_ms + nextPieceMs() >= duration_ms;
+}
+
+// The words the played share of the audio covers, rounded down to whole
+// words (decision D179): all of them once all of it played.
+function spokenWords() {
+  if (played_ms >= duration_ms) {
+    return text;
+  }
+  var ends = [];
+  text.replace(/\S+/g, function (word, at) { ends.push(at + word.length); return word; });
+  var count = Math.floor(ends.length * played_ms / duration_ms);
+  return count > 0 ? text.slice(0, ends[count - 1]) : '';
 }
 
 function playoutFailure(_event) {
@@ -158,11 +213,23 @@ function playoutFailure(_event) {
 
 // recording
 
-// What was said, as the outbound message the conversation commits: no
-// participants until speaking has a voice of its own, when it stamps its
-// voice's ref, own (decision D176).
+// Only an utterance that spoke something is recorded (decision D179).
+function hasSpoken() {
+  return spoken.length > 0;
+}
+
+// What was spoken, as the outbound message the conversation commits: no
+// participants until speaking has a voice of its own (decision D176).
 function outboundMessage() {
-  return ({source_ids: [], target_ids: [], content: text, content_type: 'text/plain', participants: []});
+  return ({source_ids: [], target_ids: [], content: spoken, content_type: 'text/plain', participants: []});
+}
+
+// The answer to the parent: bot.ability.speaking.output (decision D179;
+// voice_id null until speaking is voiced).
+function speechProduct() {
+  var format = audioFormat();
+  return ({text: text, spoken: spoken, unspoken: unspoken, outcome: outcome, voice_id: null,
+    media_type: format.media_type, sample_rate_hz: format.sample_rate_hz, channels: format.channels});
 }
 
 function recordingTimedOutLog() {

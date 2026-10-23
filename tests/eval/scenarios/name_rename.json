@@ -1,0 +1,88 @@
+{
+  "category": "name",
+  "intent": "The user names the bot Juniper, then renames it Biscuit. The bot should end up called Biscuit, answer to Biscuit, and still be Biscuit after a restart.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "say": "Your name is Juniper."
+        },
+        {
+          "say": "Actually, I changed my mind. Your new name is Biscuit."
+        },
+        {
+          "say": "Biscuit, what's your name now?"
+        }
+      ]
+    },
+    {
+      "steps": [
+        {
+          "say": "Biscuit, hello again!"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "adopted_name",
+      "at": [
+        0,
+        0
+      ],
+      "name": "Juniper",
+      "weight": 1
+    },
+    {
+      "check": "adopted_name",
+      "at": [
+        0,
+        1
+      ],
+      "name": "Biscuit",
+      "weight": 3
+    },
+    {
+      "check": "addressed",
+      "at": [
+        0,
+        2
+      ],
+      "name": "Biscuit",
+      "weight": 1
+    },
+    {
+      "check": "says",
+      "at": [
+        0,
+        2
+      ],
+      "pattern": "biscuit",
+      "weight": 1
+    },
+    {
+      "check": "recalled_name",
+      "at": [
+        1,
+        0
+      ],
+      "name": "Biscuit",
+      "weight": 2
+    },
+    {
+      "check": "addressed",
+      "at": [
+        1,
+        0
+      ],
+      "name": "Biscuit",
+      "weight": 1
+    }
+  ],
+  "criteria": {
+    "adoption": "The bot takes each name it is given, and the second replaces the first.",
+    "addressing": "The bot answers to Biscuit after the rename.",
+    "persistence": "After the restart the bot is still Biscuit, not Juniper."
+  }
+}

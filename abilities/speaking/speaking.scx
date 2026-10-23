@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Speaking ability: it encodes a reply's parts to speech, plays
-  it out as environment.sound, and records the words in the conversation. The communication (abilities/
+  floppy's Speaking ability (the reference abilities/speaking/speaking.py): it
+  encodes a reply's parts to speech, plays it out as environment.sound, and
+  records the words in the conversation. The communication (abilities/
   communication/communication.scx) invokes it as its child "speaking" and routes each
-  selected response to it. Cognition never selects it directly
-  (bot.ability.speaking.input is not offered).
+  selected response to it. Cognition never selects it directly (the original:
+  bot.ability.speaking.input is not offered).
 
     idle -bot.ability.speaking.input-> speaking { encoding -> playing
       -> recording } -> idle
+    encoding, playing -bot.ability.speaking.stop-> recording
 
   encoding invokes the vocal SpeechEncoding (abilities/vocal/vocal.scx, its
   child "vocal", which invokes the speech service) and, once vocal is ready (its
@@ -21,42 +23,76 @@
   media subtype (a path in the media directory the run grants the speech
   service). Its bot.ability.vocal.speech.encoding.output is the encoded
   speech: the audio reference with its media_type, sample_rate_hz and
-  channels (speaking's own, 24000 Hz mono audio/pcm, where the encoder
-  leaves one null), and its duration when the encoder measured one
+  channels (speaking's own, the original's 24000 Hz mono audio/pcm, where the
+  encoder leaves one null), and its duration when the encoder measured one
   (the speech service measures it for linear PCM). Synthesis is bounded
-  by encoding_timeout_ms, 30 s (decision D98: Gemini's synthesis is not
-  streamed and answers only once the whole clip exists, so a sentence can
-  take longer than 5 s; 30 s is the stage_timeout_ms of the
-  interpretation, reading and seeing); leaving encoding cancels vocal and its request.
+  by encoding_timeout_ms, 30 s (decision D98: the original's 5 s is
+  shorter than Gemini's unstreamed synthesis of a sentence, which answers
+  only once the whole clip exists; 30 s is the original's stage operation
+  timeout); leaving encoding cancels vocal and its request.
 
-  playing issues the efference copy first, on entry (the copy leaves
-  before the sound does): bot.ability.speaking.efference
+  playing issues the efference copy first (the original's entry action: the
+  copy leaves before the sound does): bot.ability.speaking.efference
   {mouth, duration, media_type, sample_rate_hz, channels} to the parent,
   which carries it to the bot's Listening; mouth is the <data> mouth,
-  "speaking", the sound's source (devices are out of scope). No copy is sent
+  "speaking", the sound's source (the original's source when no speaker is
+  injected; devices are out of scope). As in the original, no copy is sent
   when the encoded form gives no duration. Then the words are logged as
   floppy.say and the audio is broadcast: environment.sound {audio,
   media_type, sample_rate_hz, channels, source} to the parent, which the
-  body puts into the environment. source is the mouth (a relayed SCXML
-  event keeps only its data, so the source travels in the sound): it is
-  how the listening's sensitivity tells the bot's own voice from a sound
-  that only arrives while it speaks.
+  body puts into the environment. source is the mouth (a relayed SCXML event
+  keeps only its data, so the source travels in the sound): it is how the listening's sensitivity
+  tells the bot's own voice from a sound that only arrives while it speaks.
+  The parent then gets bot.ability.speaking.progress {spoken_seconds: 0},
+  a sign of life as the first audio starts.
+
+  Playout lasts as long as the audio (decision D179): a mouth plays each
+  commanded piece (at most half of lookahead_ms, 1 s) in real time and
+  reports its mark, devices.audio.played {mark}; until the mouth (a device)
+  is ported, speaking times each report itself with a <send delay> of the
+  piece's length, one piece at a time, marks "u<operation>.<n>". Each
+  report is followed by an efference copy of the playout still to come (0
+  after the last piece, which closes the listening's window) and
+  bot.ability.speaking.progress {spoken_seconds} (the seconds reported
+  played), which re-arms the communication's response timer. Speech with
+  no measured duration has no pieces and counts as played at once.
+
+  Stop: bot.ability.speaking.stop {} names no utterance: it stops the one
+  in hand, since an SCXML <send> takes no id from an expression, so the
+  communication cannot name its response's id on it (decision D179). In
+  encoding it cancels vocal and its request; in playing it cancels the
+  next mark. Either way the efference copy {duration: 0} leaves at once
+  (nothing more is commanded, so the listening's window closes) and the
+  utterance is recorded with outcome "stopped". What was said is what the
+  reported marks cover: the words in proportion to the share of the audio
+  played, rounded down to whole words; a piece cut short counts as
+  unplayed (no mouth reports how much of it played).
+  The sound already in the environment stays there: the environment has
+  no flush, and the whole clip went into it at once. A stop in idle or in
+  recording has nothing to stop and is logged (speaking.stale).
 
   recording builds the outbound message with <conversation:message_for_turn>
-  (direction outbound, content the text, content_type
-  text/plain, and participants the bot's own voice stamped own, which it
-  has none of until it is voiced, decision D176) and sends
+  (direction outbound, content what was spoken, content_type text/plain,
+  and participants the bot's own voice stamped own, which it has none of
+  until it is voiced, decision D176) and sends
   bot.ability.conversation.append {message} to the parent, which holds the
   conversation (a sibling is out of a child's reach: SCXML sends go only to
-  #_parent and to a session's own children). It is bounded by 5 s
+  #_parent and to a session's own children); an utterance that spoke
+  nothing records nothing (decision D179). It is bounded by 5 s
   (recording_timeout_ms). Then it answers the parent with
-  bot.ability.speaking.output {text, media_type, sample_rate_hz, channels}.
+  bot.ability.speaking.output {text, spoken, unspoken, outcome, voice_id,
+  media_type, sample_rate_hz, channels} (decision D179: text the words
+  asked for, spoken what the played audio covers, unspoken the rest,
+  outcome "completed" or "stopped"; voice_id is null, as the bot has no
+  voice of its own until persona voices it, parity decision 6; no per-part
+  expression is reported, as no encoder applies a cue, D178).
 
   Failures: a vocal failure (its bot.ability.failed), an encoding or
   recording timeout, or a vocal that cannot run answers the parent with
-  bot.ability.failed {message} (the terminal failure) and returns to idle.
-  Timers are bot.ability.speaking.apply.failed {message} sends (speaking's
-  own failure event), taken only by the timer in hand (_event.sendid).
+  bot.ability.failed {message} (the original's terminal failure, FailureData)
+  and returns to idle. Timers are bot.ability.speaking.apply.failed
+  {message} sends (the original's own failure event), taken only by the timer
+  in hand (_event.sendid).
 
   Utterances: an utterance's id is its input's sendid (none when the
   sender named none). Leaving speaking retires it into the last
@@ -83,12 +119,13 @@
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="speaking" initial="idle">
   <datamodel>
-    <!-- Configuration: defaults and bounds. -->
+    <!-- Configuration (the original's Speaking defaults and bounds). -->
     <data id="sample_rate_hz" expr="24000"/>
     <data id="channels" expr="1"/>
     <data id="media_type" expr="'audio/pcm'"/>
     <!-- The speech provider, model and voice vocal asks the speech
-         service for (Gemini by default). -->
+         service for: the original's speech encoder defaults (its gemini
+         provider). -->
     <data id="provider" expr="'gemini'"/>
     <data id="model" expr="'gemini-3.1-flash-tts-preview'"/>
     <data id="voice" expr="'Kore'"/>
@@ -98,6 +135,9 @@
     <data id="mouth" expr="'speaking'"/>
     <data id="encoding_timeout_ms" expr="30000"/>
     <data id="recording_timeout_ms" expr="5000"/>
+    <!-- The most unplayed audio commanded ahead of the mouth: a piece is
+         at most half of it (decision D179). -->
+    <data id="lookahead_ms" expr="1000"/>
     <!-- The utterance in hand, its number, id (its input's sendid, null
          when the sender named none), the encoded speech and timer. -->
     <data id="operation" expr="0"/>
@@ -105,9 +145,18 @@
     <data id="parts" expr="null"/>
     <data id="text" expr="null"/>
     <data id="encoded" expr="null"/>
-    <data id="product" expr="null"/>
     <data id="message" expr="null"/>
     <data id="timer" expr="null"/>
+    <!-- The playout in hand: its length and what of it the mouth reported
+         played, in ms, how many pieces were commanded, the pending mark
+         (its send id), and how the utterance ends and what it said. -->
+    <data id="duration_ms" expr="0"/>
+    <data id="played_ms" expr="0"/>
+    <data id="commands" expr="0"/>
+    <data id="mark" expr="null"/>
+    <data id="outcome" expr="null"/>
+    <data id="spoken" expr="null"/>
+    <data id="unspoken" expr="null"/>
     <!-- The ids of the last finished_utterances_bound utterances said, so a
          late copy of one never reopens it, and how many other utterances
          wait while one is said (decision D175). -->
@@ -144,11 +193,23 @@
       <assign location="text" expr="said(parts)"/>
       <assign location="utterance_id" expr="utteranceId(_event)"/>
     </transition>
+    <!-- Nothing in hand to stop. -->
+    <transition event="bot.ability.speaking.stop" event:schema="../schemas/bot.ability.speaking.stop.json">
+      <log label="speaking.stale" expr="_event.name"/>
+    </transition>
   </state>
 
   <!-- One utterance in hand, from its encoding to its record; other input
        is held throughout, and leaving releases it (decision D175). -->
   <state id="speaking" initial="encoding">
+    <onentry>
+      <assign location="encoded" expr="null"/>
+      <assign location="duration_ms" expr="0"/>
+      <assign location="played_ms" expr="0"/>
+      <assign location="commands" expr="0"/>
+      <assign location="mark" expr="null"/>
+      <assign location="outcome" expr="'completed'"/>
+    </onentry>
     <onexit>
       <assign location="finished_utterances" expr="finishedUtterances()"/>
       <assign location="utterance_id" expr="null"/>
@@ -223,18 +284,25 @@
           <param name="message" expr="encodingRunFailure(_event)"/>
         </send>
       </transition>
+      <!-- Stopped before any sound: nothing was said. -->
+      <transition event="bot.ability.speaking.stop" event:schema="../schemas/bot.ability.speaking.stop.json" target="recording">
+        <assign location="outcome" expr="'stopped'"/>
+        <assign location="spoken" expr="''"/>
+        <assign location="unspoken" expr="text"/>
+        <send event="bot.ability.speaking.efference" target="#_parent">
+          <content expr="efferenceCopy(0)"/>
+        </send>
+      </transition>
     </state>
 
-    <!-- Playout: the copy leaves before the sound does. -->
+    <!-- Playout: the copy leaves before the sound does, and lasts as long
+         as the audio, piece by piece. -->
     <state id="playing">
       <onentry>
+        <assign location="duration_ms" expr="durationMs()"/>
         <if cond="hasDuration()">
           <send event="bot.ability.speaking.efference" target="#_parent">
-            <param name="mouth" expr="mouth"/>
-            <param name="duration" expr="encoded.duration"/>
-            <param name="media_type" expr="encoded.media_type"/>
-            <param name="sample_rate_hz" expr="encoded.sample_rate_hz"/>
-            <param name="channels" expr="encoded.channels"/>
+            <content expr="efferenceCopy(remainingSeconds())"/>
           </send>
         </if>
         <log label="floppy.say" expr="text"/>
@@ -245,10 +313,66 @@
           <param name="channels" expr="encoded.channels"/>
           <param name="source" expr="mouth"/>
         </send>
-        <assign location="product" expr="speechProduct()"/>
-        <raise event="bot.ability.speaking.apply.completed"/>
+        <send event="bot.ability.speaking.progress" target="#_parent">
+          <param name="spoken_seconds" expr="0"/>
+        </send>
+        <if cond="hasDuration()">
+          <send idlocation="mark" event="devices.audio.played" delayexpr="delay(nextPieceMs())">
+            <param name="mark" expr="markName()"/>
+          </send>
+          <assign location="commands" expr="commands + 1"/>
+        <else/>
+          <raise event="bot.ability.speaking.apply.completed"/>
+        </if>
       </onentry>
-      <transition event="bot.ability.speaking.apply.completed" target="recording"/>
+      <onexit>
+        <if cond="hasMark()">
+          <cancel sendidexpr="mark"/>
+        </if>
+      </onexit>
+      <!-- The mouth reported a piece played: the copy of what is still
+           to come, the progress, and the next piece. -->
+      <transition event="devices.audio.played" event:schema="../schemas/devices.audio.played.json"
+                  cond="isLastMark(_event)" target="recording">
+        <assign location="played_ms" expr="duration_ms"/>
+        <assign location="spoken" expr="text"/>
+        <assign location="unspoken" expr="''"/>
+        <send event="bot.ability.speaking.efference" target="#_parent">
+          <content expr="efferenceCopy(0)"/>
+        </send>
+        <send event="bot.ability.speaking.progress" target="#_parent">
+          <param name="spoken_seconds" expr="played_ms / 1000"/>
+        </send>
+      </transition>
+      <transition event="devices.audio.played" event:schema="../schemas/devices.audio.played.json"
+                  cond="isMark(_event)" type="internal">
+        <assign location="played_ms" expr="played_ms + nextPieceMs()"/>
+        <send event="bot.ability.speaking.efference" target="#_parent">
+          <content expr="efferenceCopy(remainingSeconds())"/>
+        </send>
+        <send event="bot.ability.speaking.progress" target="#_parent">
+          <param name="spoken_seconds" expr="played_ms / 1000"/>
+        </send>
+        <send idlocation="mark" event="devices.audio.played" delayexpr="delay(nextPieceMs())">
+          <param name="mark" expr="markName()"/>
+        </send>
+        <assign location="commands" expr="commands + 1"/>
+      </transition>
+      <!-- No measured duration: it counts as played at once. -->
+      <transition event="bot.ability.speaking.apply.completed" target="recording">
+        <assign location="spoken" expr="text"/>
+        <assign location="unspoken" expr="''"/>
+      </transition>
+      <!-- Stopped: nothing more plays; what was said is what the reported
+           pieces cover. -->
+      <transition event="bot.ability.speaking.stop" event:schema="../schemas/bot.ability.speaking.stop.json" target="recording">
+        <assign location="outcome" expr="'stopped'"/>
+        <assign location="spoken" expr="spokenWords()"/>
+        <assign location="unspoken" expr="text.slice(spoken.length)"/>
+        <send event="bot.ability.speaking.efference" target="#_parent">
+          <content expr="efferenceCopy(0)"/>
+        </send>
+      </transition>
       <transition event="error.*" target="idle">
         <send event="bot.ability.failed" target="#_parent">
           <param name="message" expr="playoutFailure(_event)"/>
@@ -262,11 +386,13 @@
         <send idlocation="timer" event="bot.ability.speaking.apply.failed" delayexpr="delay(recording_timeout_ms)">
           <param name="message" expr="'Conversation history recording timed out.'"/>
         </send>
-        <conversation:message_for_turn location="message" direction="outbound" event="'bot.ability.conversation.append'"
-                                       message="outboundMessage()" provenance="({id: 'speaking-' + operation})"/>
-        <send event="bot.ability.conversation.append" target="#_parent">
-          <param name="message" expr="message"/>
-        </send>
+        <if cond="hasSpoken()">
+          <conversation:message_for_turn location="message" direction="outbound" event="'bot.ability.conversation.append'"
+                                         message="outboundMessage()" provenance="({id: 'speaking-' + operation})"/>
+          <send event="bot.ability.conversation.append" target="#_parent">
+            <param name="message" expr="message"/>
+          </send>
+        </if>
         <raise event="bot.ability.speaking.conversation.recorded"/>
       </onentry>
       <onexit>
@@ -274,7 +400,7 @@
       </onexit>
       <transition event="bot.ability.speaking.conversation.recorded" target="idle">
         <send event="bot.ability.speaking.output" target="#_parent">
-          <content expr="product"/>
+          <content expr="speechProduct()"/>
         </send>
       </transition>
       <transition event="bot.ability.speaking.apply.failed" event:schema="../schemas/bot.ability.speaking.apply.failed.json"
@@ -288,6 +414,10 @@
         <send event="bot.ability.failed" target="#_parent">
           <param name="message" expr="recordingFailure(_event)"/>
         </send>
+      </transition>
+      <!-- Played out already: nothing left to stop. -->
+      <transition event="bot.ability.speaking.stop" event:schema="../schemas/bot.ability.speaking.stop.json">
+        <log label="speaking.stale" expr="_event.name"/>
       </transition>
     </state>
   </state>

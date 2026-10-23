@@ -1265,7 +1265,7 @@ fn a_reasoned_response_is_said_through_the_communication() {
     assert_eq!(
         texts(&records, "bot.ability.speaking.output"),
         strings(&[
-            r#"{"channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"text":"Hi! I am floppy."}"#
+            r#"{"channels":1,"media_type":"audio/pcm","outcome":"completed","sample_rate_hz":24000,"spoken":"Hi! I am floppy.","text":"Hi! I am floppy.","unspoken":"","voice_id":null}"#
         ])
     );
     assert_eq!(texts(&records, "conversation"), strings(&["outbound 0"]));
