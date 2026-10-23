@@ -925,14 +925,16 @@ What is still to build, each item with its issue where one exists.
   catch a repeat.
 - **Interpretation reads `producing`** (#30, D177).
 - **Streaming speech** (S5 step B; step A, #18, is D179): streaming
-  encoding and per-chunk playout, drafts spoken while the reply is
-  generated with an `abandoned` outcome, and streaming decoding with an
-  end of turn. Today vocal encodes each stretch whole (D178) and speaking
-  paces its playout (D179). It waits on the maintainer: the chunk event's
-  name, whether to chunk a backend that answers one chunk per stretch,
-  how a draft is correlated with its final respond (an SCXML `<send>`
-  takes no id from an expression), who produces drafts, and the draft
-  timeout.
+  encoding and per-chunk playout are built (D202, D203, #55): the speech
+  service returns `bot.ability.vocal.speech.encoding.chunk`s as its
+  answers arrive and speaking plays each as it comes. Still open: drafts
+  spoken while the reply is generated with an `abandoned` outcome (they
+  wait until something produces them, D202; how a draft is correlated
+  with its final respond, since an SCXML `<send>` takes no id from an
+  expression, and the draft timeout), streaming decoding with an end of
+  turn, a live run against a streaming backend (none has been measured),
+  and a `spoken` that knows the reply's total length while it still
+  streams (D203 counts the share of the audio received).
 - **Voicing**: voice catalogs, voice design and the bot's own voice;
   `bot.ability.speaking.output`'s `voice_id` is null until then (D179).
 - **Graph memory and embeddings** ([plan](plans/graph-memory.md)):

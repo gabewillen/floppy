@@ -19,7 +19,7 @@
     <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 2 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step2"/>
   </state>
   <state id="step2">
-    <transition event="environment.sound" cond="_event.data.audio === 'media/speaking-1.pcm' &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.source === 'speaking'" target="step3"/>
+    <transition event="environment.sound" cond="_event.data.audio === 'media/speaking-1.0.pcm' &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.source === 'speaking'" target="step3"/>
   </state>
   <state id="step3">
     <transition event="bot.ability.speaking.progress" cond="_event.data.spoken_seconds === 0" target="step4"/>

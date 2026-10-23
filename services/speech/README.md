@@ -17,7 +17,7 @@ telemetry.
 | Operation | Invoked by | Request | Answer |
 | --- | --- | --- | --- |
 | `decode` | `speech_decoding` | `POST {base}/audio/transcriptions`, or with `provider` `gemini` `POST {base}/interactions` | `bot.ability.hearing.speech.decoding.output {text}` |
-| `encode` | `vocal` | `POST {base}/audio/speech`, or with `provider` `elevenlabs` its `text-to-speech/{voice}` API, or with `gemini` `POST {base}/interactions` (`audio/pcm` or `audio/wav`) | `bot.ability.vocal.speech.encoding.output {audio, media_type, sample_rate_hz, channels, duration}` |
+| `encode` | `vocal` | `POST {base}/audio/speech`, or with `provider` `elevenlabs` its streaming `text-to-speech/{voice}/stream` API, or with `gemini` `POST {base}/interactions` (`audio/pcm` or `audio/wav`) | each `bot.ability.vocal.speech.encoding.chunk {audio, sequence, media_type, sample_rate_hz, channels, duration}` as it is encoded, then `bot.ability.vocal.speech.encoding.output {audio, media_type, sample_rate_hz, channels, duration}` |
 | `detect` | `voice_detection` | `POST {base}/vad` | `bot.ability.hearing.voice.detection.output` |
 | `diarize` | `voice_diarization` | `POST {base}/audio/diarization` | `bot.ability.hearing.voice.diarization.output` |
 | `identify` | `voice_identification` | `POST {base}/voice/embed` per segment | `bot.ability.hearing.voice.identification.output` |
@@ -27,6 +27,34 @@ A failure answers `bot.ability.failed {message}`.
 A malformed or missing parameter rejects the start: the `<invoke>` raises
 `error.execution` and nothing is read, sent, or written. The event schemas
 are in [schemas/](schemas/).
+
+## Streamed encoding
+
+`encode` reads each backend answer as it arrives (scxml.rs's
+`outbound-http.send`) and returns its audio in chunks before the answer
+has ended (decision D203), so speaking can start the first sound on the
+first chunk:
+
+- the OpenAI-compatible `/audio/speech` and ElevenLabs'
+  `/text-to-speech/{voice}/stream` send their audio as it is synthesized;
+  the service cuts it at fixed offsets of the answer, 24000 bytes at a
+  time (half a second of 24 kHz mono 16-bit PCM), whatever the reads
+  were: raw `pcm` as whole frames, `wav` as whole frames of its PCM, each
+  chunk in a WAV container of its own (an answer that is not 16-bit PCM
+  is one chunk, as it is), and any other format (`mp3`, `opus`, `aac`,
+  `flac`) at byte offsets, the chunks joined being the answer;
+- Gemini's Interactions API answers each stretch whole, so each stretch
+  is one chunk;
+- a pause is a chunk of its silence, before the stretch it opens.
+
+Chunk `n` is a file of its own, the `output` reference with `.<n>`
+before its extension (`media/speaking-1.pcm` is chunked as
+`media/speaking-1.0.pcm`, `media/speaking-1.1.pcm`, …), written before
+the chunk event names it; its sound fields are those its audio says, as
+the output's are. The output is still the whole reply, written once
+every answer has ended. A failure after some chunks answers
+`bot.ability.failed`, and cancelling the invocation (leaving the
+invoking state) closes the answer's connection mid-stream.
 
 ```xml
 <invoke id="decoder" type="https://github.com/stateforward/floppy/services/speech"
@@ -68,7 +96,10 @@ scx run --env-file .env \
 ## Tests
 
 `cargo test -p floppy-tests --test speech_service` runs the service against
-a fake backend on 127.0.0.1; `-- --ignored live_speech_round_trip_through_an_env_file`
+a fake backend on 127.0.0.1 (a streamed answer among them, and one a
+session cancels after its first chunk); the crate's
+[src/chunks/tests.rs](src/chunks/tests.rs) cuts answers that arrive in
+reads of every size; `-- --ignored live_speech_round_trip_through_an_env_file`
 encodes and decodes a sentence on the backend `FLOPPY_LIVE_ENV_FILE` names.
 The voice operations are tested in the crate ([src/voice/tests.rs](src/voice/tests.rs))
 and through the listening (`--test listening`).

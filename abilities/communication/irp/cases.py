@@ -108,7 +108,7 @@ def spoken(operation, text):
     """Response `operation` said: the offer while it is said, its playout
     (the copy, the sound, the copy of nothing left once the mouth reported
     its one piece) and its answer, in order."""
-    audio = f"media/speaking-{operation}.pcm"
+    audio = f"media/speaking-{operation}.0.pcm"
     return [
         RESPONDING,
         efference("0.1"),
@@ -196,7 +196,7 @@ S.case(130, 4, "input whose turn closes with nothing to show is failed by the co
 S.case(140, 5, "a response is spoken through the speech service, played out, answered, and offered again.",
        [READY, send(RESPOND, respond("Hi! I am floppy.")), *spoken(1, "Hi! I am floppy."), READY],
        params=SPEECH_BOUNDS, backend=[AUDIO], clock="wall")
-S.case(141, 5, "each response is numbered: the second plays out as speaking-2.",
+S.case(141, 5, "each response is numbered: the second plays out as speaking-2 (its one chunk, speaking-2.0).",
        [READY, send(RESPOND, respond("one")), *spoken(1, "one"), READY,
         send(RESPOND, respond("two")), *spoken(2, "two"), READY],
        params=SPEECH_BOUNDS, backend=[AUDIO], clock="wall")

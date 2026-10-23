@@ -314,7 +314,7 @@ fn a_routed_response_is_said_and_recorded_in_the_conversation() {
     assert_eq!(
         texts(&records, "environment.sound"),
         strings(&[
-            r#"{"audio":"media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"source":"speaking"}"#
+            r#"{"audio":"media/speaking-1.0.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"source":"speaking"}"#
         ])
     );
     assert_eq!(
@@ -656,6 +656,115 @@ fn a_stop_ends_the_response_with_what_was_played() {
         ])
     );
     close(run, "a_stop_ends_the_response_with_what_was_played");
+}
+
+/// Lays out the communication with the repository's speaking and a speech
+/// double that streams (decision D203): two chunks of 0.5 s at once, the
+/// third and the output 3 s later.
+fn communication_streaming() -> PathBuf {
+    let harness = communication_speaking(&[], &[]);
+    let abilities = harness.parent().expect("the harness is in abilities/");
+    rewrite(
+        &abilities.join("vocal/speech_double.scx"),
+        &[("mode", "'stream'")],
+    );
+    harness
+}
+
+/// A streamed response plays chunk by chunk as the chunks arrive (decision
+/// D203): the first sound starts on the first chunk, each chunk is its own
+/// sound, the copy before each sound covers the audio received, and when
+/// the received audio has played before the next chunk arrives speaking
+/// waits for it, sending no copy until it comes.
+#[test]
+fn a_streamed_response_plays_each_chunk_as_it_arrives() {
+    let harness = communication_streaming();
+    let mut run = Run::start(&[harness.display().to_string()], &[]);
+    let mut all = run.until(WAIT, label_is("harness.offers"));
+    let text = "alpha bravo charlie delta";
+    run.event("harness.r1", &json!({"parts": [{"words": text}]}));
+    all.extend(run.until(WAIT, label_is("harness.answer")));
+    assert_eq!(
+        texts(&all, "harness.sound"),
+        strings(&[
+            "media/speaking-1.0.pcm",
+            "media/speaking-1.1.pcm",
+            "media/speaking-1.2.pcm"
+        ])
+    );
+    // Chunk 0 (all that was received), chunk 1 queued behind it, then
+    // nothing until chunk 2 arrives, and nothing left after it.
+    assert_eq!(
+        texts(&all, "harness.efference"),
+        strings(&["0.5", "0.5", "0.5", "0"])
+    );
+    let order: Vec<String> = logs(&all)
+        .into_iter()
+        .filter(|(label, _)| ["harness.efference", "harness.sound"].contains(&label.as_str()))
+        .map(|(label, text)| format!("{label} {text}"))
+        .collect();
+    assert_eq!(
+        order,
+        strings(&[
+            "harness.efference 0.5",
+            "harness.sound media/speaking-1.0.pcm",
+            "harness.efference 0.5",
+            "harness.sound media/speaking-1.1.pcm",
+            "harness.efference 0.5",
+            "harness.sound media/speaking-1.2.pcm",
+            "harness.efference 0"
+        ])
+    );
+    assert_eq!(
+        texts(&all, "harness.answer"),
+        strings(&[
+            r#"bot.ability.speaking.output {"channels":1,"media_type":"audio/pcm","outcome":"completed","sample_rate_hz":24000,"spoken":"alpha bravo charlie delta","text":"alpha bravo charlie delta","unspoken":"","voice_id":null}"#
+        ])
+    );
+    close(run, "a_streamed_response_plays_each_chunk_as_it_arrives");
+}
+
+/// A stop while the reply still streams (decision D203) stops the playout
+/// and cancels the encoding: the chunk still to come never sounds, and
+/// what was said is the share of the received audio that played (0.5 s of
+/// the 1 s received: half the words).
+#[test]
+fn a_stop_mid_stream_says_what_played_and_cancels_the_rest() {
+    let harness = communication_streaming();
+    let mut run = Run::start(&[harness.display().to_string()], &[]);
+    let mut all = run.until(WAIT, label_is("harness.offers"));
+    let text = "alpha bravo charlie delta";
+    run.event("harness.r1", &json!({"parts": [{"words": text}]}));
+    all.extend(run.until(WAIT, |record| {
+        label_is("harness.sound")(record) && record["text"] == "media/speaking-1.1.pcm"
+    }));
+    run.event("harness.stop", &json!({}));
+    all.extend(run.until(WAIT, label_is("harness.answer")));
+    assert_eq!(
+        texts(&all, "harness.answer"),
+        strings(&[
+            r#"bot.ability.speaking.output {"channels":1,"media_type":"audio/pcm","outcome":"stopped","sample_rate_hz":24000,"spoken":"alpha bravo","text":"alpha bravo charlie delta","unspoken":" charlie delta","voice_id":null}"#
+        ])
+    );
+    // Past the double's 3 s: the third chunk was never sent.
+    std::thread::sleep(Duration::from_secs(4));
+    let finished = close(
+        run,
+        "a_stop_mid_stream_says_what_played_and_cancels_the_rest",
+    );
+    assert_eq!(
+        texts(&finished.all, "harness.sound"),
+        strings(&["media/speaking-1.0.pcm", "media/speaking-1.1.pcm"])
+    );
+    assert_eq!(
+        texts(&finished.all, "harness.efference"),
+        strings(&["0.5", "0.5", "0"])
+    );
+    assert!(
+        texts(&finished.all, "speech.encode").len() == 1,
+        "one encoding, cancelled: {:?}",
+        texts(&finished.all, "speech.encode")
+    );
 }
 
 /// Speaking's progress re-arms the response's hop timer (decision D179): a
@@ -1123,7 +1232,7 @@ fn a_spoken_response_reaches_listening_as_its_efference_copy_before_its_sound() 
     assert_eq!(
         texts(&records, "input.sound"),
         strings(&[
-            r#"{"audio":"media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"source":"speaking"}"#
+            r#"{"audio":"media/speaking-1.0.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"source":"speaking"}"#
         ])
     );
     let order: Vec<String> = logs(&records)
@@ -1346,7 +1455,7 @@ fn a_response_is_spoken_through_the_speech_service() {
     assert_eq!(
         texts(&records, "input.sound"),
         strings(&[
-            r#"{"audio":"media/speaking-1.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"source":"speaking"}"#
+            r#"{"audio":"media/speaking-1.0.pcm","channels":1,"media_type":"audio/pcm","sample_rate_hz":24000,"source":"speaking"}"#
         ])
     );
     assert_eq!(texts(&records, "floppy.say"), strings(&["reply 1"]));
