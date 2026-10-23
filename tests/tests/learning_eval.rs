@@ -18,13 +18,14 @@
 //! directory, so a later session is the bot restarted with what it
 //! learned. A session's steps are `{"say": text, "source"?, "timeout_s"?}`
 //! (one `bot.ability.communication.input`, waited on until its reflection
-//! settles or its turn fails, and then until each lesson the turn gave the
-//! learning ability is learned or fails and its result's turn settles) and `{"wait_s": seconds}` (the wall clock
+//! settles or its turn fails, and then, bounded again by its timeout, until
+//! each lesson the turn gave the learning ability is learned or fails and
+//! a turn settles for its result) and `{"wait_s": seconds}` (the wall clock
 //! passes with no input, for routines). A scenario's `bot_name`, when not
 //! null, is the name the identity starts with. Each job writes
 //! `<out>/session-<n>.json` (the records), `<out>/steps.json` (each step's
-//! range of records and wall-clock bounds) and `<out>/done.json`. Values of
-//! the env files are never printed.
+//! range of records, wall-clock bounds and lessons closed) and
+//! `<out>/done.json`. Values of the env files are never printed.
 
 #![allow(
     missing_docs,
@@ -133,12 +134,12 @@ fn start(body: &Path, memory: &Path, job: &Json) -> Run {
     Run::start(&args, &[])
 }
 
-/// The records that start a lesson the learning ability took (one per
-/// lesson, logged once it has recalled its memory) and that end one: it
-/// was learned or it failed. Its result then comes back as a turn of its
-/// own.
-const LESSON_STARTED: &[&str] = &["learning.recalled"];
-const LESSON_ENDED: &[&str] = &["learning.learned", "learning.failed"];
+/// The labels that open a lesson the learning ability took (logged once
+/// per lesson, when it has recalled its memory) and that close one: it was
+/// learned or it failed. Each closed lesson's result comes back as a turn
+/// of its own, which settles like any turn.
+const LESSON_OPEN_LABELS: &[&str] = &["learning.recalled"];
+const LESSON_CLOSE_LABELS: &[&str] = &["learning.learned", "learning.failed"];
 
 fn is_log_of(record: &Json, labels: &[&str]) -> bool {
     record["type"] == "log"
@@ -151,26 +152,53 @@ fn is_settled(record: &Json) -> bool {
     is_log_of(record, SETTLED)
 }
 
-/// Waits, after a said step's turn settled, until every lesson it started
-/// has ended and the turn carrying each lesson's result has settled, or
-/// until `deadline`; whether they did. `started` and `ended` are the
-/// lessons counted before the step.
-fn lessons_settle(run: &Run, deadline: Instant, started: usize, ended: usize) -> bool {
+/// The records of a run so far that open a lesson, close one, and settle a
+/// turn.
+#[derive(Clone, Copy)]
+struct Tally {
+    opened: usize,
+    closed: usize,
+    settled: usize,
+}
+
+impl Tally {
+    fn of(run: &Run) -> Self {
+        Self {
+            opened: run.count(|r| is_log_of(r, LESSON_OPEN_LABELS)),
+            closed: run.count(|r| is_log_of(r, LESSON_CLOSE_LABELS)),
+            settled: run.count(is_settled),
+        }
+    }
+}
+
+/// Waits, once a said step's own turn settled, until every lesson opened
+/// since `before` has closed and one more turn has settled for each closed
+/// lesson (the turn carrying its result), at most `limit`; whether they
+/// did, and how many lessons closed. A turn that settles in the meantime
+/// for another reason (a routine's tick) counts too, so this can end
+/// early, never late.
+fn lessons_settle(run: &Run, limit: Duration, before: Tally) -> (bool, usize) {
+    let deadline = Instant::now() + limit;
+    let mut waited = false;
     loop {
-        let open = run.count(|r| is_log_of(r, LESSON_STARTED)) - started;
-        let closed = run.count(|r| is_log_of(r, LESSON_ENDED)) - ended;
-        if open <= closed {
-            return true;
+        let now = Tally::of(run);
+        let opened = now.opened - before.opened;
+        let closed = now.closed - before.closed;
+        // The step's own turn is the first settle.
+        let results = (now.settled - before.settled).saturating_sub(1);
+        if opened <= closed && results >= closed {
+            if waited {
+                wait(run, SAY_GRACE, |_| false);
+            }
+            return (true, closed);
         }
         let left = deadline.saturating_duration_since(Instant::now());
-        if !wait(run, left, |r| is_log_of(r, LESSON_ENDED)) {
-            return false;
+        if !wait(run, left, |r| {
+            is_log_of(r, LESSON_CLOSE_LABELS) || is_settled(r)
+        }) {
+            return (false, closed);
         }
-        let left = deadline.saturating_duration_since(Instant::now());
-        if !wait(run, left, is_settled) {
-            return false;
-        }
-        wait(run, SAY_GRACE, |_| false);
+        waited = true;
     }
 }
 
@@ -207,8 +235,9 @@ fn run_job(job: &Json, clock: Instant) {
         {
             let start_index = run.count(|_| true);
             let started_ms = millis(clock);
-            let (kind, completed) = if let Some(content) = spec["say"].as_str() {
+            let (kind, completed, lessons) = if let Some(content) = spec["say"].as_str() {
                 let source = spec["source"].as_str().unwrap_or("gabe");
+                let before = Tally::of(&run);
                 run.event(
                     "bot.ability.communication.input",
                     &json!({
@@ -221,24 +250,24 @@ fn run_job(job: &Json, clock: Instant) {
                 let limit = spec["timeout_s"]
                     .as_u64()
                     .map_or(SAY_TIMEOUT, Duration::from_secs);
-                let deadline = Instant::now() + limit;
-                let started = run.count(|r| is_log_of(r, LESSON_STARTED));
-                let ended = run.count(|r| is_log_of(r, LESSON_ENDED));
-                let mut settled = wait(&run, limit, is_settled);
-                // The reply is spoken after the turn's reflection may have
-                // settled; let it land in this step, not the next.
+                let settled = wait(&run, limit, is_settled);
                 if settled {
+                    // The reply is spoken after the turn's reflection may
+                    // have settled; let it land in this step, not the next.
                     wait(&run, SAY_GRACE, |_| false);
                     // A lesson the turn selected is learned after the turn:
-                    // the step is what was taught, up to its result.
-                    settled = lessons_settle(&run, deadline, started, ended);
+                    // the step is what was taught, up to its result, with a
+                    // bound of its own.
+                    let (learned, lessons) = lessons_settle(&run, limit, before);
+                    ("say", learned, lessons)
+                } else {
+                    ("say", false, 0)
                 }
-                ("say", settled)
             } else {
                 let seconds = spec["wait_s"].as_u64().unwrap_or(0);
                 // Nothing ends a wait but its time.
                 wait(&run, Duration::from_secs(seconds), |_| false);
-                ("wait", true)
+                ("wait", true, 0)
             };
             steps.push(json!({
                 "session": session,
@@ -249,6 +278,7 @@ fn run_job(job: &Json, clock: Instant) {
                 "started_ms": started_ms,
                 "ended_ms": millis(clock),
                 "completed": completed,
+                "lessons": lessons,
             }));
             // A said step that never settled leaves the bot mid-turn: the
             // rest of the session would be scored on a stuck bot.

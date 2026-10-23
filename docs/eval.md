@@ -50,8 +50,14 @@ A scenario is `{category, intent, bot_name, sessions, checks, criteria}`.
 Each session is the bot started again on the same memory and behaviors
 directories (a restart with what it learned). A step is `{"say": text,
 "source"?: id, "timeout_s"?: n}`, one `bot.ability.communication.input`
-waited on until its reflection settles (or its turn fails) and then 15 s more, since its reply can be said after its reflection settles; a lesson the turn gives the learning ability (`learning.recalled`) is learned after the turn, so the step also waits until each one ends (`learning.learned` or `learning.failed`) and the turn carrying its result settles. Or `{"wait_s":
-n}`, the wall clock passing with no input. `criteria` are what the judges
+waited on until its reflection settles (or its turn fails) and then 15 s
+more, since its reply can be said after its reflection settles. A lesson
+the turn gave the learning ability (`learning.recalled`) is learned after
+the turn, so the step then also waits, bounded by `timeout_s` again, until
+each lesson closes (`learning.learned` or `learning.failed`) and one more
+turn has settled for each (the turn carrying its result); `steps.json`
+records the lessons each step closed. The other step is `{"wait_s": n}`,
+the wall clock passing with no input. `criteria` are what the judges
 score, 0 to 10 each.
 
 ### Checks

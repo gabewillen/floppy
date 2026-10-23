@@ -39,6 +39,7 @@ SUMMARY_LABELS = (
     "reflection.selected",
     "reflection.revision",
     "reflection.inventory",
+    "learning.recalled",
     "learning.selected",
     "learning.learned",
     "autonomy",
