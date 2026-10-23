@@ -1169,6 +1169,7 @@ fn a_build_that_is_not_streamed_is_bounded_by_the_backstop_alone() {
         [r#"GreetOnKnock ACTIVE turn ["environment.sound"] (accept)"#]
     );
     let drafts = mock.requests("scxml_draft");
+    assert!(!drafts.is_empty());
     assert!(
         drafts
             .iter()
@@ -1177,8 +1178,8 @@ fn a_build_that_is_not_streamed_is_bounded_by_the_backstop_alone() {
     assert!(
         drafts
             .iter()
-            .all(|request| request.body["max_completion_tokens"] == 8192),
-        "a draft's tokens are bounded"
+            .all(|request| request.body["max_completion_tokens"] == 16384),
+        "a whole document's tokens are bounded by document_max_completion_tokens"
     );
 }
 
