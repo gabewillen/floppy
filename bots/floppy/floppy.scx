@@ -27,8 +27,8 @@
   conversation and speaking), <invoke id="identity">
   (abilities/identity/identity.scx, the bot's name), <invoke id="listening">
   (abilities/listening/listening.scx, the ear), <invoke id="stm">
-  (abilities/stm/stm.scx, the short-term register), <invoke id="persona"> (abilities/persona/persona.scx,
-  the owner's traits and the bot's own description of itself) and <invoke
+  (abilities/stm/stm.scx, the short-term register), <invoke id="persona">
+  (abilities/persona/persona.scx, the owner's traits and the bot's own description of itself) and <invoke
   id="seeing"> (abilities/seeing/seeing.scx, the eye; see Seeing below);
   leaving live cancels every ability (SCXML
   6.4), and the body has no cleanup states: an SCXML invoke cancel is
@@ -415,8 +415,8 @@
     </transition>
     <!-- The cognition asks the identity for the bot's own name, and the
          identity's answer (also sent after each adoption) goes back to
-         the cognition, from the start of each run: the cognition may ask while the bot is
-         activating, and the identity answers once it knows. -->
+         the cognition, from the start of each run: the cognition may ask
+         while the bot is activating, and the identity answers once it knows. -->
     <transition event="bot.ability.identity.ask" event:schema="../../abilities/schemas/bot.ability.identity.ask.json">
       <send event="bot.ability.identity.ask" target="#_identity">
         <content expr="_event.data"/>
@@ -663,7 +663,7 @@
             <content expr="_event.data"/>
           </send>
         </transition>
-        <!-- The body's own choice (focus, on active), offered on
+        <!-- The body's own choice (bot.focus_device, on active), offered on
              processing entry and taken as a stage sends it (one that no
              longer applies is ignored).
              Nothing the bot selects clears the focus: it stays on a device
