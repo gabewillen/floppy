@@ -1280,7 +1280,7 @@ pub fn lifetime_errors(
         }
         if lifetime == "persistent" && !delayed.iter().any(|(_, _, schedule)| *schedule) {
             errors.push(lifetime_error(format!(
-                "a persistent routine must schedule at least one transition with every or at: a delayed send of an event whose transition sends bot.behavior.tick.{LIFETIME_HELP}"
+                "a persistent routine must schedule at least one transition with every or at: a delayed send of an event whose transition sends bot.behavior.tick. It is a persistent routine because it sends bot.behavior.tick; a turn behavior never sends bot.behavior.tick: it answers its one turn by its donedata.{LIFETIME_HELP}"
             )));
         }
         errors.truncate(MAX_LIFETIME_ERRORS);
