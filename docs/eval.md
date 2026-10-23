@@ -55,8 +55,13 @@ more, since its reply can be said after its reflection settles. A lesson
 the turn gave the learning ability (`learning.recalled`) is learned after
 the turn, so the step then also waits, bounded by `timeout_s` again, until
 each lesson closes (`learning.learned` or `learning.failed`) and one more
-turn has settled for each (the turn carrying its result); `steps.json`
-records the lessons each step closed. The other step is `{"wait_s": n}`,
+turn has settled for each (the turn carrying its result). A settle
+from another turn meanwhile (a routine's tick) also counts, so the wait
+can end early, never late. `steps.json` records, per step, whether its
+turn settled (`completed`), how many lessons closed during it
+(`lessons`, a count, not attributed to a lesson) and whether the lesson
+wait finished (`lessons_settled`); a step whose lessons did not finish
+still lets the session go on. The other step is `{"wait_s": n}`,
 the wall clock passing with no input. `criteria` are what the judges
 score, 0 to 10 each.
 

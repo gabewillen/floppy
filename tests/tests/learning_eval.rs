@@ -24,7 +24,8 @@
 //! passes with no input, for routines). A scenario's `bot_name`, when not
 //! null, is the name the identity starts with. Each job writes
 //! `<out>/session-<n>.json` (the records), `<out>/steps.json` (each step's
-//! range of records, wall-clock bounds and lessons closed) and
+//! range of records, wall-clock bounds, whether its turn settled, the
+//! number of lessons closed during it and whether they settled) and
 //! `<out>/done.json`. Values of the env files are never printed.
 
 #![allow(
@@ -235,40 +236,41 @@ fn run_job(job: &Json, clock: Instant) {
         {
             let start_index = run.count(|_| true);
             let started_ms = millis(clock);
-            let (kind, completed, lessons) = if let Some(content) = spec["say"].as_str() {
-                let source = spec["source"].as_str().unwrap_or("gabe");
-                let before = Tally::of(&run);
-                run.event(
-                    "bot.ability.communication.input",
-                    &json!({
-                        "source_ids": [source],
-                        "target_ids": ["floppy"],
-                        "content": content,
-                        "content_type": "text/plain"
-                    }),
-                );
-                let limit = spec["timeout_s"]
-                    .as_u64()
-                    .map_or(SAY_TIMEOUT, Duration::from_secs);
-                let settled = wait(&run, limit, is_settled);
-                if settled {
-                    // The reply is spoken after the turn's reflection may
-                    // have settled; let it land in this step, not the next.
-                    wait(&run, SAY_GRACE, |_| false);
-                    // A lesson the turn selected is learned after the turn:
-                    // the step is what was taught, up to its result, with a
-                    // bound of its own.
-                    let (learned, lessons) = lessons_settle(&run, limit, before);
-                    ("say", learned, lessons)
+            let (kind, completed, lessons, lessons_settled) =
+                if let Some(content) = spec["say"].as_str() {
+                    let source = spec["source"].as_str().unwrap_or("gabe");
+                    let before = Tally::of(&run);
+                    run.event(
+                        "bot.ability.communication.input",
+                        &json!({
+                            "source_ids": [source],
+                            "target_ids": ["floppy"],
+                            "content": content,
+                            "content_type": "text/plain"
+                        }),
+                    );
+                    let limit = spec["timeout_s"]
+                        .as_u64()
+                        .map_or(SAY_TIMEOUT, Duration::from_secs);
+                    let settled = wait(&run, limit, is_settled);
+                    if settled {
+                        // The reply is spoken after the turn's reflection may
+                        // have settled; let it land in this step, not the next.
+                        wait(&run, SAY_GRACE, |_| false);
+                        // A lesson the turn selected is learned after the turn:
+                        // the step is what was taught, up to its result, with a
+                        // bound of its own.
+                        let (learned, lessons) = lessons_settle(&run, limit, before);
+                        ("say", true, lessons, learned)
+                    } else {
+                        ("say", false, 0, false)
+                    }
                 } else {
-                    ("say", false, 0)
-                }
-            } else {
-                let seconds = spec["wait_s"].as_u64().unwrap_or(0);
-                // Nothing ends a wait but its time.
-                wait(&run, Duration::from_secs(seconds), |_| false);
-                ("wait", true, 0)
-            };
+                    let seconds = spec["wait_s"].as_u64().unwrap_or(0);
+                    // Nothing ends a wait but its time.
+                    wait(&run, Duration::from_secs(seconds), |_| false);
+                    ("wait", true, 0, true)
+                };
             steps.push(json!({
                 "session": session,
                 "step": step,
@@ -279,6 +281,7 @@ fn run_job(job: &Json, clock: Instant) {
                 "ended_ms": millis(clock),
                 "completed": completed,
                 "lessons": lessons,
+                "lessons_settled": lessons_settled,
             }));
             // A said step that never settled leaves the bot mid-turn: the
             // rest of the session would be scored on a stuck bot.
