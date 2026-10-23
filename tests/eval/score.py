@@ -76,7 +76,7 @@ def logs(records, sessions=False):
         if r.get("type") != "log":
             continue
         line = (r.get("label") or "", r.get("text") if isinstance(r.get("text"), str) else json.dumps(r.get("text")))
-        out.append(line + (r.get("session") or "",) if sessions else line)
+        out.append((line + (r.get("session") or "",)) if sessions else line)
     return out
 
 

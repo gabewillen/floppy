@@ -280,7 +280,7 @@ def cmd_grade(args):
     if os.path.exists(builder_json):
         with open(builder_json, encoding="utf-8") as handle:
             models = json.load(handle).get("models")
-        if models is None:
+        if not models or not isinstance(models, dict):
             sys.exit(f"{builder_json} names no column models (a run from before they were saved): "
                      "it cannot be regraded")
     for job in jobs:
