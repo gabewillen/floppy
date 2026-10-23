@@ -171,6 +171,28 @@ fn the_head_schema_keeps_the_short_term_turns() {
 }
 
 #[test]
+fn the_head_schema_keeps_the_people() {
+    // Decision D194: people and the embeddings heard for them are in the
+    // one revision, 0001 (D193).
+    let directory = unique_scratch("memory");
+    let finished = run(
+        &directory,
+        &harness(
+            None,
+            "[{sql: 'SELECT group_concat(name) FROM pragma_table_info(\\'bot_person\\')'}, {sql: 'SELECT group_concat(name) FROM pragma_table_info(\\'bot_person_embedding\\')'}, {sql: 'SELECT name FROM sqlite_master WHERE type = \\'index\\' AND tbl_name = \\'bot_person_embedding\\' AND sql IS NOT NULL'}]",
+        ),
+    );
+    assert_eq!(
+        logs(&finished.records),
+        output(
+            r#"[{"rowcount":1,"rows":[{"columns":["group_concat(name)"],"values":["person_id,created_at"]}]},{"rowcount":1,"rows":[{"columns":["group_concat(name)"],"values":["seq,person_id,kind,embedding,created_at"]}]},{"rowcount":1,"rows":[{"columns":["name"],"values":["bot_person_embedding_person_idx"]}]}]"#
+        ),
+        "{}",
+        finished.stderr
+    );
+}
+
+#[test]
 fn a_database_newer_than_the_ability_is_refused_untouched() {
     let directory = unique_scratch("memory");
     let finished = run(
