@@ -86,16 +86,16 @@ def draft(scxml):
 
 def not_learned(content="When you hear a knock, say hello.", turn=1):
     return expect(OUTPUT, f"_event.data.learned === false && _event.data.behavior === null && _event.data.lesson === {js(content)}"
-                          f" && _event.data.turn === {turn}"
+                          f" && _event.data.lesson_turn === {turn}"
                           f" && _event.data.participants[0].id === 'gabe'")
 
 
-LEARNED = expect(OUTPUT, "_event.data.learned === true && _event.data.turn === 1 && _event.data.behavior.name === 'GreetOnKnock'"
+LEARNED = expect(OUTPUT, "_event.data.learned === true && _event.data.lesson_turn === 1 && _event.data.behavior.name === 'GreetOnKnock'"
                          " && _event.data.behavior.status === 'ACTIVE'"
                          " && _event.data.behavior.description === 'Say hello when a knock sound arrives.'"
                          " && _event.data.participants[0].id === 'gabe'")
 
-S.statement(1, "A `bot.ability.learning.lesson` `{turn, content, media_type, cognition_input, cognition_output, participants}` recalls the prior episodes and the inventory, asks the generate service (schema `dispatch`, its `events` at most one) to implement the lesson as a `bot.behavior.create`, `bot.behavior.change` or `bot.behavior.break` this session offers, and invokes the revision ability with the teaching turn and the lesson as its instruction; a built behavior answers `bot.ability.learning.output` `{lesson, turn, learned: true, behavior: {name, description, status: \"ACTIVE\"}, participants}`, the turn the teaching turn's, and logs `learning.learned` with `lesson of turn <turn>: ` before the behavior's name and source (decisions D149 and D204).")
+S.statement(1, "A `bot.ability.learning.lesson` `{turn, content, media_type, cognition_input, cognition_output, participants}` recalls the prior episodes and the inventory, asks the generate service (schema `dispatch`, its `events` at most one) to implement the lesson as a `bot.behavior.create`, `bot.behavior.change` or `bot.behavior.break` this session offers, and invokes the revision ability with the teaching turn and the lesson as its instruction; a built behavior answers `bot.ability.learning.output` `{lesson, lesson_turn, learned: true, behavior: {name, description, status: \"ACTIVE\"}, participants}`, lesson_turn the teaching turn's, and logs `learning.learned` with `lesson of turn <turn>: ` before the behavior's name and source (decisions D149 and D204).")
 S.statement(2, "A lesson that does not take answers `bot.ability.learning.output` with `learned` false and `behavior` null, its failure only logged (`learning.failed`, `lesson of turn <turn>: ` before why): without a database, for a lesson that is not text, for a reply that selects nothing, and for a build the revision fails.")
 S.statement(3, "A lesson that arrives while another is in hand waits and runs after it, in order: each lesson gets its own answer.")
 S.statement(4, "A lesson implemented as `bot.behavior.break` sets the named behavior's status BROKEN with the trimmed reason, building nothing, and answers `bot.ability.learning.output` with `learned` true and the behavior's `status` `BROKEN`; a break of a name the inventory does not hold is not learned (decision D205).")
@@ -127,7 +127,7 @@ S.case(120, 3, "a second lesson sent while the first is in hand runs after it.",
 S.case(130, 4, "a lesson to stop a learned behavior breaks it, and the output says it stopped.",
        [send(LESSON, lesson(1)), LEARNED,
         send(LESSON, lesson(2, content="Stop greeting a knock.")),
-        expect(OUTPUT, "_event.data.learned === true && _event.data.turn === 2 && _event.data.behavior.name === 'GreetOnKnock'"
+        expect(OUTPUT, "_event.data.learned === true && _event.data.lesson_turn === 2 && _event.data.behavior.name === 'GreetOnKnock'"
                        " && _event.data.behavior.status === 'BROKEN'")],
        params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE), PLAN, draft(BEHAVIOR), select(BREAK)], clock="wall",
        logs={"learning.selected": ["bot.behavior.create", "bot.behavior.break"]})

@@ -35,7 +35,8 @@
   the cognition's bounds param may set both.
 
   Output: the lesson's result goes to the cognition,
-  bot.ability.learning.output {lesson, turn, learned, behavior, participants}
+  bot.ability.learning.output {lesson, lesson_turn, learned, behavior,
+  participants}
   (the teaching turn's participants), which the cognition hands to the
   body as a stimulus to perceive in a turn of its own, so the bot tells
   its teacher in its own words. A lesson that failed anywhere is

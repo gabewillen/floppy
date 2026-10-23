@@ -10,10 +10,10 @@
       "title": "Lesson",
       "type": "string"
     },
-    "turn": {
+    "lesson_turn": {
       "description": "The turn it was taught on [floppy field].",
       "minimum": 1,
-      "title": "Turn",
+      "title": "Lesson turn",
       "type": "integer"
     },
     "learned": {
@@ -69,7 +69,7 @@
   },
   "required": [
     "lesson",
-    "turn",
+    "lesson_turn",
     "learned",
     "behavior"
   ],
@@ -77,7 +77,7 @@
   "examples": [
     {
       "lesson": "Whenever I say exactly 'ping', reply with exactly 'pong'.",
-      "turn": 3,
+      "lesson_turn": 3,
       "learned": true,
       "behavior": {
         "name": "PingPong",
@@ -87,7 +87,7 @@
     },
     {
       "lesson": "Remind me to drink water every hour.",
-      "turn": 5,
+      "lesson_turn": 5,
       "learned": false,
       "behavior": null
     }

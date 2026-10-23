@@ -162,11 +162,11 @@
   bot.ability.learning.lesson {turn, content, media_type,
   cognition_input, cognition_output, participants}: the lesson with the
   turn it was taught on. Its bot.ability.learning.output {lesson,
-  learned, behavior, participants} is handed to the body as
+  lesson_turn, learned, behavior, participants} is handed to the body as
   bot.ability.cognition.input {stimulus: {event:
-  "bot.ability.learning.output", data: {lesson, turn, learned, behavior},
-  source: "learning"}, participants}, a turn the bot tells its teacher
-  in. Bounded: a turn that perceives a lesson's result or a routine's
+  "bot.ability.learning.output", data: {lesson, lesson_turn, learned,
+  behavior}, source: "learning"}, participants}, a turn the bot tells its
+  teacher in. Bounded: a turn that perceives a lesson's result or a routine's
   tick sends no lesson of its own (decision D205). Each lesson's result
   reconciles the routines at once, so a routine learned, changed or
   broken starts or stops without waiting for the next reflection.

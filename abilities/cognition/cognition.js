@@ -317,5 +317,5 @@ function turnLesson() {
 // A lesson's result as the stimulus the body grants a turn: whether it
 // took and the behavior it became, without the participants it carries.
 function lessonStimulus(_event) {
-  return ({event: 'bot.ability.learning.output', data: {lesson: _event.data.lesson, turn: _event.data.turn, learned: _event.data.learned, behavior: _event.data.behavior}, source: 'learning'});
+  return ({event: 'bot.ability.learning.output', data: {lesson: _event.data.lesson, lesson_turn: _event.data.lesson_turn, learned: _event.data.learned, behavior: _event.data.behavior}, source: 'learning'});
 }

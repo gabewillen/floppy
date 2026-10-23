@@ -169,5 +169,5 @@ function breakFailedMessage(detail) {
 // The lesson's result: whether it took and the behavior it became, never
 // why it failed, with the teaching turn's participants.
 function learningOutput(learned) {
-  return ({lesson: lesson.content, turn: lesson.turn, learned: learned, behavior: learned ? {name: behavior.name, description: behavior.description === undefined ? null : behavior.description, status: behavior.status === 'BROKEN' ? 'BROKEN' : 'ACTIVE'} : null, participants: lesson.participants});
+  return ({lesson: lesson.content, lesson_turn: lesson.turn, learned: learned, behavior: learned ? {name: behavior.name, description: behavior.description === undefined ? null : behavior.description, status: behavior.status === 'BROKEN' ? 'BROKEN' : 'ACTIVE'} : null, participants: lesson.participants});
 }
