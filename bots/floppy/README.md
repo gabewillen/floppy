@@ -130,7 +130,7 @@ though it is used only when the database is a Postgres connection URI
 (`postgresql://USER@IP:PORT/DBNAME`, for example PGlite served by
 `pglite-server` from `@electric-sql/pglite-socket`); the body's `database`
 `<data>` names the engine, and Postgres support is tested on Postgres 16
-([Memory engines](../../README.md#memory-engines)). The `generate` service
+([memory engines](../../docs/running.md#memory-engines)). The `generate` service
 imports `wasi:filesystem` too (it reads the images a message names), so
 the run grants it a media directory the same way (create `media/` first;
 it is ignored by git).
@@ -145,8 +145,8 @@ backend; `FLOPPY_SPEECH_API_KEY` too unless the backend is keyless) and the spee
 media directory its audio is written to (`--dir
 https://github.com/stateforward/floppy/services/speech=HOST::/media`);
 without them a response fails with `bot.ability.communication.failed`.
-[`.env.example`](../../.env.example) names the variables, and the README's
-[Defaults](../../README.md#defaults) lists the model, the timeouts and the
+[`.env.example`](../../.env.example) names the variables, and
+[docs/defaults.md](../../docs/defaults.md) lists the model, the timeouts and the
 bounds this bot ships with.
 
 Sound (phase 6): `environment.sound` `{audio, media_type, sample_rate_hz,
