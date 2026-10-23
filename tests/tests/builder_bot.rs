@@ -274,7 +274,7 @@ fn tests() -> Json {
     json!([
         {
             "name": "button ends green early",
-            "events": [{"name": "pedestrian.button", "data": "{}", "delay_ms": 1000}],
+            "events": [{"name": "pedestrian.button", "data": {}, "delay_ms": 1000}],
             "settle_ms": 6000,
             "expect_events": ["light.green", "light.yellow", "light.red", "walk.on"],
             "expect_done": false,
@@ -570,9 +570,9 @@ fn two_ping_draft() -> String {
         "schemas": schemas(&["ping"]),
         "script": "",
         "tests": [
-            {"name": "first run", "events": [{"name": "ping", "data": "{}", "delay_ms": 0}],
+            {"name": "first run", "events": [{"name": "ping", "data": {}, "delay_ms": 0}],
              "settle_ms": 1000, "expect_events": ["ready"], "expect_done": false},
-            {"name": "second run", "events": [{"name": "ping", "data": "{}", "delay_ms": 0}],
+            {"name": "second run", "events": [{"name": "ping", "data": {}, "delay_ms": 0}],
              "settle_ms": 1000, "expect_events": ["ready"], "expect_done": false},
         ],
     })

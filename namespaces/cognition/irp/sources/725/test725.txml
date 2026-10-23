@@ -11,7 +11,7 @@
     <cognition:model_facing_content location="p" failurelocation="f" environment="env" feedback="'fix it'"/>
   </onentry>
   <transition event="error.execution" conf:targetfail=""/>
-  <transition cond="f === null &amp;&amp; p.indexOf('&lt;environment id=&quot;room&quot;&gt;') === 0 &amp;&amp; p.indexOf('stimulus:') === -1 &amp;&amp; p.indexOf('none_type') === -1 &amp;&amp; p.slice(-7) === '\nfix it'" conf:targetpass=""/>
+  <transition cond="f === null &amp;&amp; p.indexOf('&lt;environment id=&quot;room&quot;&gt;') === 0 &amp;&amp; p.indexOf('stimulus:') === -1 &amp;&amp; p.indexOf('&lt;null') === -1 &amp;&amp; p.slice(-7) === '\nfix it'" conf:targetpass=""/>
   <transition conf:targetfail=""/>
 </state>
 <conf:pass/>

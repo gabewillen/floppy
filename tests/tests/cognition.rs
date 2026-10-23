@@ -1303,7 +1303,7 @@ fn reasoning_selects_from_the_turns_choices() {
         "{prompt}"
     );
     assert!(
-        prompt.ends_with("</dict>") && prompt.contains("what is the capital of France?"),
+        prompt.ends_with("</object>") && prompt.contains("what is the capital of France?"),
         "{prompt}"
     );
     assert!(
@@ -1939,7 +1939,7 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
     assert_eq!(decisions.len(), 1);
     assert_eq!(
         decisions[0].body["state"],
-        json!({"turn": "<dict stimulus:event=\"bot.input\" stimulus:source=\"conversation\">\n  <content>\n    <entry key=\"parts\">\n      <value count=\"1\">\n        <item>\n          <entry key=\"words\" value=\"hi\" />\n        </item>\n      </value>\n    </entry>\n  </content>\n</dict>"})
+        json!({"turn": "<object stimulus:event=\"bot.input\" stimulus:source=\"conversation\">\n  <content>\n    <entry key=\"parts\">\n      <value count=\"1\">\n        <item>\n          <entry key=\"words\" value=\"hi\" />\n        </item>\n      </value>\n    </entry>\n  </content>\n</object>"})
     );
     assert_eq!(
         decisions[0].body["questions"][format!("{RESPOND}::parts")]["criteria"],
@@ -1956,7 +1956,7 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
     // the turn's situation (`<cognition:acted>`), before the stimulus.
     assert_eq!(
         user,
-        "<cognition:acted>\n  <percepts count=\"1\">\n    <item>0</item>\n  </percepts>\n  <acts count=\"1\">\n    <cognition:event target=\"session\" event=\"bot.ability.communication.respond\">\n      <data>\n        <entry key=\"parts\">\n          <value count=\"1\">\n            <item>\n              <entry key=\"words\" value=\"hi\" />\n            </item>\n          </value>\n        </entry>\n      </data>\n    </cognition:event>\n  </acts>\n</cognition:acted>\n<dict stimulus:event=\"bot.input\" stimulus:source=\"conversation\">\n  <content>\n    <entry key=\"parts\">\n      <value count=\"1\">\n        <item>\n          <entry key=\"words\" value=\"hi\" />\n        </item>\n      </value>\n    </entry>\n  </content>\n</dict>"
+        "<cognition:acted>\n  <percepts count=\"1\">\n    <item>0</item>\n  </percepts>\n  <acts count=\"1\">\n    <cognition:event target=\"session\" event=\"bot.ability.communication.respond\">\n      <data>\n        <entry key=\"parts\">\n          <value count=\"1\">\n            <item>\n              <entry key=\"words\" value=\"hi\" />\n            </item>\n          </value>\n        </entry>\n      </data>\n    </cognition:event>\n  </acts>\n</cognition:acted>\n<object stimulus:event=\"bot.input\" stimulus:source=\"conversation\">\n  <content>\n    <entry key=\"parts\">\n      <value count=\"1\">\n        <item>\n          <entry key=\"words\" value=\"hi\" />\n        </item>\n      </value>\n    </entry>\n  </content>\n</object>"
     );
     close(
         run,

@@ -541,7 +541,7 @@ fn recent_turns_claim_the_budget_first_and_keep_the_newest_uncounted() {
     // The stable part took what the directive needed: the varying part is
     // left with its frame and the directive omitted, or left out.
     assert!(!rendered.contains(&"d".repeat(100)));
-    assert!(rendered.ends_with("<dict stimulus:event=\"bot.input\" stimulus:source=\"gabe\">\n  <content>\n    <entry key=\"text\" value=\"now\" />\n  </content>\n</dict>"));
+    assert!(rendered.ends_with("<object stimulus:event=\"bot.input\" stimulus:source=\"gabe\">\n  <content>\n    <entry key=\"text\" value=\"now\" />\n  </content>\n</object>"));
 }
 
 #[test]
@@ -733,7 +733,7 @@ fn the_optional_inputs_may_be_left_out() {
     let mut host = content_host(&input);
     let attributes = [attr("location", "prompt"), attr("stimulus", "stimulus")];
     execute(CONTENT, &attributes, &[], &mut host).expect("handled");
-    let prompt = "<str stimulus:event=\"bot.input\" stimulus:source=\"gabe\">hi</str>";
+    let prompt = "<string stimulus:event=\"bot.input\" stimulus:source=\"gabe\">hi</string>";
     assert_eq!(
         host.assigned,
         [("prompt".to_owned(), Data::String(prompt.to_owned()))]
@@ -769,13 +769,13 @@ fn an_acted_fact_over_its_bound_is_kept_as_its_bare_element() {
     let mut input = stimulus_with(&json!({}));
     input["instructions"] = Json::Null;
     input["acted"] = json!([{"target": "t", "event": "e", "data": {"text": "a".repeat(20_000)}}]);
-    assert!(prompt(&input).starts_with("<cognition:acted omitted=\"size\" />\n<dict "));
+    assert!(prompt(&input).starts_with("<cognition:acted omitted=\"size\" />\n<object "));
     input["acted"] = json!({"percepts": [0, 2], "acts": [{"target": "t", "event": "e"}]});
     assert!(prompt(&input).starts_with(
         "<cognition:acted>\n  <percepts count=\"2\">\n    <item>0</item>\n    <item>2</item>\n  </percepts>"
     ));
     input["acted"] = json!([]);
-    assert!(prompt(&input).starts_with("<dict "));
+    assert!(prompt(&input).starts_with("<object "));
 }
 
 #[test]
@@ -961,7 +961,7 @@ fn without_a_stimulus_the_content_has_no_stimulus_block() {
     assert!(prompt.starts_with("<cognition:acted>"), "{prompt}");
     assert!(prompt.ends_with("</cognition:acted>\nfix it"), "{prompt}");
     assert!(
-        !prompt.contains("stimulus:") && !prompt.contains("none_type"),
+        !prompt.contains("stimulus:") && !prompt.contains("<null"),
         "{prompt}"
     );
 }

@@ -38,9 +38,9 @@ sh scripts/namespace-irp.sh baselines cognition
 The current baseline (manifest SHA-256 `083e2981a28648f95446a3f3274c53c58a7260bf1940a446d97d804f3aee7e39`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
 measured on Linux x86_64, the host `tests/tests/namespace_irp.rs` compares fuel on (re-measured
-2026-10-22 for the stable-first prompt layout and its optional stimulus, decision D141))
+2026-10-23 for the stimulus tagged with JSON Schema type names, decision D192))
 measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 21 / 21 | 0 | `be72e7308090b9fa68198af883b67407e0fa04a2f62e77df5a67eac33af13253` | `cef05132e02341728d6cb7110d76e62a96309d02b07c72d0986b6d9c2511a5f7` |
+| ECMAScript | 21 / 21 | 0 | `eeb30efd046d5f84a541207982d112d1e6cf9b806fc44e69db14abde64d17bea` | `67860b482e7276423fce53eaee9948acab8272d979cb40c7a365caf162dccf5f` |
