@@ -140,8 +140,8 @@ fn utter(run: &mut Run, voiced: &Json, silent: &Json) {
     run.event("environment.sound", silent);
 }
 
-/// The speech product the original's interpretation makes of the utterance that
-/// `sound` opened, decoded into `text`.
+/// The speech product listening's interpretation makes of the utterance
+/// that `sound` opened, decoded into `text`.
 fn speech(text: &str, sound: &Json) -> Json {
     json!({
         "content": text,
@@ -192,7 +192,7 @@ fn a_heard_utterance_is_decoded_into_a_speech_product() {
     let decoded = backend.received_at("/interactions");
     assert_eq!(decoded.len(), 1, "the utterance is decoded once");
     assert_eq!(decoded[0]["keyed"], true);
-    // speech decoding's defaults, the original's gemini speech decoder.
+    // speech decoding's defaults: the gemini speech decoder.
     assert_eq!(decoded[0]["model"], "gemini-3.5-flash");
     assert_eq!(decoded[0]["mime_type"], "audio/wav");
     assert_eq!(
@@ -218,7 +218,7 @@ fn a_speech_product_carries_the_participants_stamped_on_its_sounds() {
             ("silence.wav", silent_wav()),
         ],
     );
-    // Producers stamp, transformers copy (the original's f6c4e08): the
+    // Producers stamp, transformers copy (decision D119): the
     // product carries the ordered union of what was stamped on the sounds
     // the utterance took, each once.
     let caller = json!({"ref": "person-42", "role": "source"});
@@ -282,8 +282,7 @@ fn labelled_non_speech_passes_through_as_environment_sound() {
         run,
         "labelled_non_speech_passes_through_as_environment_sound",
     );
-    // Handed off as the detection normalized it (the original's pcm_sensed),
-    // its label kept.
+    // Handed off as the detection normalized it, its label kept.
     assert_eq!(
         json_texts(&finished.all, "harness.sound"),
         vec![json!({
@@ -515,7 +514,7 @@ fn the_efference_copy_opens_a_window_that_closes_itself() {
 /// The bot's own speech, as speaking emits it (its source the mouth its
 /// efference copy names, no levels to compare), is scored against the
 /// prediction while the copy's window is open: it is still interpreted
-/// (the original runs the pipeline on its own voice), but fully predicted,
+/// (the pipeline runs on the bot's own voice too), but fully predicted,
 /// its product is withheld. A sound from no source arriving in the same
 /// window is still heard.
 #[test]
