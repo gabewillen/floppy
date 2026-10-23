@@ -15,7 +15,7 @@
     </test>
   </assert>
   <assert id="revision-3" specnum="3" specid="#revision-3">
-    <![CDATA[A builder that fails with the last draft it rejected (`abandoning`) keeps that draft's path in the row as DRAFT and fails with `Reflection change abandoned: attempts exhausted:` and the rendered diagnostics (decision D133); a builder that fails with no draft fails with `Reflection revision failed: <reason>: <first diagnostic>`.]]>
+    <![CDATA[A builder that fails with the last draft it rejected (`abandoning`) keeps that draft's path in the row as DRAFT (unless the row was ACTIVE, which keeps its program, decision D209) and fails with `Reflection change abandoned: attempts exhausted:` and the rendered diagnostics (decision D133); a builder that fails with no draft fails with `Reflection revision failed: <reason>: <first diagnostic>`.]]>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>

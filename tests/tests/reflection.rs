@@ -227,7 +227,7 @@ fn selection(route: &str) -> Option<Json> {
         "create" | "buildfail" | "genfail" | "slowbuild" | "stallbuild" | "slowplain"
         | "livebound" | "livehardcoded" => Some(create_selection()),
         "break" => Some(break_selection("GreetOnKnock")),
-        "change" => Some(change_selection()),
+        "change" | "changefail" => Some(change_selection()),
         "breakunknown" => Some(break_selection("Nobody")),
         "two" => Some(json!([
             break_selection("GreetOnKnock")[0].clone(),
@@ -257,7 +257,9 @@ fn answer(target: &str, body: &Json, attempt: usize) -> Option<String> {
     match schema {
         "dispatch" => dispatch_reply(route, attempt, body).map(|args| completion(&args)),
         "topology_plan" => Some(completion(PLAN)),
-        "scxml_draft" if route == "buildfail" => Some(completion(&draft(&rejected_behavior()))),
+        "scxml_draft" if route == "buildfail" || route == "changefail" => {
+            Some(completion(&draft(&rejected_behavior())))
+        }
         "scxml_draft" if route == "genfail" => None,
         "scxml_draft" if route == "livebound" => {
             Some(completion(&scripted_draft(GROUNDED, GROUNDED_SCRIPT)))
@@ -1328,6 +1330,51 @@ fn a_change_reads_the_stored_documents_back_for_the_builder() {
         BEHAVIOR,
         "the revision is written over the stored chart"
     );
+}
+
+/// A failed change of an ACTIVE behavior keeps it (decision D209): the
+/// stored documents the builder's rejected drafts were written over are
+/// written back, the row stays ACTIVE on its path, and the turn fails
+/// with the abandon message.
+#[test]
+fn a_failed_change_of_an_active_behavior_keeps_it() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "changefail", SEED_STORED, SQLITE);
+    let stored_dir = behaviors(&harness);
+    std::fs::create_dir_all(&stored_dir).expect("the behaviors directory is creatable");
+    let old = BEHAVIOR.replace("Hello!", "Hi!");
+    let schemas = r#"{"$defs": {"knock": {"type": "object"}}}"#;
+    std::fs::write(stored_dir.join("GreetOnKnock.scx"), &old).expect("writable");
+    std::fs::write(stored_dir.join("GreetOnKnock.json"), schemas).expect("writable");
+    std::fs::write(stored_dir.join("GreetOnKnock.js"), "// stored\n").expect("writable");
+    let mut run = start(&harness, &env);
+    let records = reflect(&mut run, 1);
+    drop(run.close(WAIT));
+    let failed = texts(&records, "harness.failed");
+    assert_eq!(failed.len(), 1, "{records:?}");
+    assert!(
+        failed[0].starts_with("Reflection change abandoned: attempts exhausted:"),
+        "{failed:?}"
+    );
+    assert!(
+        texts(&records, "reflection.inventory")
+            .contains(&"GreetOnKnock ACTIVE kept (change abandoned)".to_owned()),
+        "{records:?}"
+    );
+    let row = &json_log(&records, "inventory")[0];
+    assert_eq!(row["status"], "ACTIVE", "{row}");
+    assert_eq!(row["source"], GREET_PATH, "{row}");
+    for (file, text) in [
+        ("GreetOnKnock.scx", old.as_str()),
+        ("GreetOnKnock.json", schemas),
+        ("GreetOnKnock.js", "// stored\n"),
+    ] {
+        assert_eq!(
+            std::fs::read_to_string(stored_dir.join(file)).expect("readable"),
+            text,
+            "{file} is the working program's again"
+        );
+    }
 }
 
 /// A change call that fails without a draft to check (every generation

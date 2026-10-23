@@ -47,7 +47,11 @@
   live-turn check, decision D131). Its failed with the last draft it
   rejected is abandoning: the row keeps that draft's path as DRAFT with
   status_reason validation, and the revision fails with "Reflection
-  change abandoned: attempts exhausted:" and the rendered diagnostics.
+  change abandoned: attempts exhausted:" and the rendered diagnostics;
+  a change of an ACTIVE behavior instead writes the documents it read
+  back over the rejected draft (restoring) and keeps the row as it was,
+  ACTIVE on its working program, failing with the same message
+  (decision D209).
   Its failed with no draft (no backend, generation failures) fails the
   revision with no draft.
 
@@ -99,6 +103,9 @@
          answer. -->
     <data id="prepared" expr="[]"/>
     <data id="existing_behavior" expr="null"/>
+    <!-- The stored schemas document as it was read, which restoring
+         writes back (decision D209). -->
+    <data id="existing_schemas" expr="''"/>
     <data id="write" expr="null"/>
     <data id="request" expr="null"/>
     <data id="written" expr="null"/>
@@ -203,6 +210,7 @@
       </invoke>
       <transition event="done.invoke.read_schemas" target="reading_script">
         <assign location="existing_behavior.schemas" expr="seededSchemas(_event)"/>
+        <assign location="existing_schemas" expr="_event.data.seed"/>
       </transition>
     </state>
     <state id="reading_script">
@@ -254,6 +262,11 @@
       <assign location="written" expr="_event.data.scxml"/>
       <assign location="path" expr="_event.data.path"/>
     </transition>
+    <!-- A failed change of an ACTIVE behavior keeps it ACTIVE: the
+         working program stays in autonomy (decision D209). -->
+    <transition event="done.invoke.builder" cond="hasRejectedDraft(_event) &amp;&amp; isActive()" target="restoring">
+      <assign location="failure" expr="abandonedMessage(_event)"/>
+    </transition>
     <!-- Abandoning: a failed check drafts the rejected source. -->
     <transition event="done.invoke.builder" cond="hasRejectedDraft(_event)" target="abandoning">
       <assign location="written" expr="_event.data.scxml"/>
@@ -291,6 +304,36 @@
     <transition event="error.*" target="failed">
       <assign location="failure" expr="revisionFailedMessage(_event.name)"/>
     </transition>
+  </state>
+
+  <!-- Restoring: the builder wrote each rejected draft over the ACTIVE
+       behavior's documents, so the documents read are written back and
+       the row is kept as it was; the turn fails (decision D209). -->
+  <state id="restoring" initial="restoring_scxml">
+    <transition event="error.*" target="failed"/>
+    <state id="restoring_scxml">
+      <invoke id="restore_scxml" type="https://github.com/stateforward/floppy/services/files">
+        <param name="name" expr="documentFile('.scx')"/>
+        <param name="text" expr="existing_behavior.scxml"/>
+      </invoke>
+      <transition event="done.invoke.restore_scxml" target="restoring_schemas"/>
+    </state>
+    <state id="restoring_schemas">
+      <invoke id="restore_schemas" type="https://github.com/stateforward/floppy/services/files">
+        <param name="name" expr="documentFile('.json')"/>
+        <param name="text" expr="existing_schemas"/>
+      </invoke>
+      <transition event="done.invoke.restore_schemas" target="restoring_script"/>
+    </state>
+    <state id="restoring_script">
+      <invoke id="restore_script" type="https://github.com/stateforward/floppy/services/files">
+        <param name="name" expr="documentFile('.js')"/>
+        <param name="text" expr="existing_behavior.script"/>
+      </invoke>
+      <transition event="done.invoke.restore_script" target="failed">
+        <log label="reflection.inventory" expr="keptLog()"/>
+      </transition>
+    </state>
   </state>
 
   <!-- Abandoning: the row keeps the

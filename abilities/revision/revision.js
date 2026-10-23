@@ -178,6 +178,15 @@ function renderedReport(diagnostics) {
 }
 
 // A build that used its attempts ends with its last diagnostics (decision D133).
+// Whether the revised row is ACTIVE: a failed change keeps it (D209).
+function isActive() {
+  return existing_behavior !== null && existing_behavior !== undefined && existing_behavior.status === 'ACTIVE';
+}
+
+function keptLog() {
+  return intent.name + ' ACTIVE kept (change abandoned)';
+}
+
 function abandonedMessage(_event) {
   return _event.data.reason === 'attempts-exhausted' ? 'Reflection change abandoned: attempts exhausted:\n' + renderedReport(_event.data.diagnostics) : 'Reflection change abandoned: ' + _event.data.reason + '.';
 }
