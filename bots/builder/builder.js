@@ -174,6 +174,12 @@ function previousDraft(field) {
   return draft === null ? null : draft[field];
 }
 
+// The author rules and the SCXML schema the draft is written against
+// (decision D134).
+function authorSystem() {
+  return author_system + '\n\nThe SCXML 1.0 XML Schema (W3C), whose modules follow, each after its file name: the document is valid against it, and every element, attribute and child it holds is one the schema declares for that place (attributes of another namespace, such as event:schema, are allowed where the schema allows ##other).\n\n' + scxml_xsd;
+}
+
 function authorPrompt() {
   var repair = mode === 'repair';
   return JSON.stringify({task: mode, name: fileName(), spec: spec, constraints: constraints, plan: plan, previous_scxml: repair ? scxml_text : null, previous_schemas: repair ? previous_schemas : null, previous_script: repair ? previous_script : null, previous_tests: repair ? previous_tests : null, diagnostics: diagnostics, repeated: repeated.map(function (d) { return d.message; })});

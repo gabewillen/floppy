@@ -105,8 +105,15 @@ intake -> design -> author -> writing -> validate -> simulate -> done
   `scxml_draft` schema: the three documents (above), told the `name` they
   reference, and one to eight test scripts (input events with
   delays, a settle time, the outputs expected in order, and whether the
-  machine finishes). A repair sees the failed draft, its schemas, its
-  script, its tests, and the diagnostics; `unconfigured` ends the build in
+  machine finishes). Its system prompt is the author rules followed by
+  the W3C SCXML 1.0 XML Schema (`scxml_xsd`, loaded by `<data src>` from
+  [`xsd/scxml-1.0.json`](xsd/scxml-1.0.json): the scxml.rs subtree's
+  schema modules without comments or annotations, decision D134), so the
+  model writes against the schema the validator holds it to, with no
+  template or example document. A repair sees the failed draft, its
+  schemas, its script, its tests, the diagnostics, and which of them an
+  earlier draft already failed with (`repeated`, decision D133);
+  `unconfigured` ends the build in
   `failed` as in `design`. A draft whose `scxml` holds no `<scxml`
   element (empty, or a placeholder a model's stub call holds) is a `draft`
   diagnostic, `no-document`, quoting what it held, before anything is

@@ -1215,6 +1215,76 @@ fn builder_validates_clean_with_its_repository_packages() {
     );
 }
 
+/// The W3C SCXML 1.0 schema modules the author is given (decision D134), in
+/// the order `scxml.xsd` includes them, from the scxml.rs subtree's copy.
+const SCXML_XSD_MODULES: [&str; 7] = [
+    "scxml.xsd",
+    "scxml-module-core.xsd",
+    "scxml-module-data.xsd",
+    "scxml-module-external.xsd",
+    "scxml-contentmodels.xsd",
+    "scxml-attribs.xsd",
+    "scxml-datatypes.xsd",
+];
+
+/// `text` without each span from `open` to the next `close` (both removed).
+fn without_spans(text: &str, open: &str, close: &str) -> String {
+    let mut kept = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find(open) {
+        kept.push_str(&rest[..start]);
+        let after = &rest[start + open.len()..];
+        let end = after.find(close).expect("every span is closed");
+        rest = &after[end + close.len()..];
+    }
+    kept.push_str(rest);
+    kept
+}
+
+/// The schema modules as the author reads them: each module headed by its
+/// file name, without its XML declaration, comments, annotations, blank
+/// lines and indentation.
+fn author_xsd() -> String {
+    let dir = workspace().join("scxml.rs/crates/scxml-validator-xsd/schemas/w3c-scxml-1.0");
+    SCXML_XSD_MODULES
+        .iter()
+        .map(|module| {
+            let text = std::fs::read_to_string(dir.join(module)).expect("the schema module reads");
+            let text = without_spans(&text, "<?xml", "?>");
+            let text = without_spans(&text, "<!--", "-->");
+            let text = without_spans(&text, "<xsd:annotation>", "</xsd:annotation>");
+            let lines: Vec<&str> = text
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .collect();
+            format!("{module}:\n{}", lines.join("\n"))
+        })
+        .collect::<Vec<String>>()
+        .join("\n")
+}
+
+/// `bots/builder/xsd/scxml-1.0.json`, the `<data src>` of `scxml_xsd`, is the
+/// subtree's SCXML schema as one JSON string (decision D134);
+/// `FLOPPY_XSD_BLESS=1` rewrites it after a subtree pull.
+#[test]
+fn the_authors_xsd_is_the_subtrees_scxml_schema() {
+    let path = builder_dir().join("xsd/scxml-1.0.json");
+    let expected = format!("{}\n", Json::String(author_xsd()));
+    if std::env::var_os("FLOPPY_XSD_BLESS").is_some() {
+        std::fs::write(&path, &expected).expect("the xsd writes");
+    }
+    let actual = std::fs::read_to_string(&path).expect("bots/builder/xsd/scxml-1.0.json reads");
+    assert!(
+        actual == expected,
+        "bots/builder/xsd/scxml-1.0.json differs from the subtree's schema: rerun with FLOPPY_XSD_BLESS=1"
+    );
+    assert!(
+        builder_source().contains(r#"<data id="scxml_xsd" src="xsd/scxml-1.0.json"/>"#),
+        "builder.scx loads it"
+    );
+}
+
 /// Every `event:schema` of builder.scx references `schemas/<event>.json`
 /// (an event taken in two states references the same file in both) or, on
 /// a final state's `<donedata>`, `schemas/<final state id>.json`, and every
@@ -1541,6 +1611,16 @@ fn the_same_diagnostic_again_is_repeated_and_the_build_runs_to_its_cap() {
     assert_eq!(chat_requests(&received, "topology_plan").len(), 1);
     let drafts = chat_requests(&received, "scxml_draft");
     assert_eq!(drafts.len(), 8);
+    // Each author call's system prompt carries the SCXML schema (decision D134).
+    let xsd = author_xsd();
+    assert!(
+        drafts.iter().all(|draft| draft.body["messages"]
+            .as_array()
+            .and_then(|messages| messages.iter().find(|message| message["role"] == "system"))
+            .and_then(|message| message["content"].as_str())
+            .is_some_and(|system| system.ends_with(&xsd))),
+        "every author call is given the schema"
+    );
     assert_eq!(drafts[0].user_input()["repeated"], json!([]));
     assert_eq!(drafts[1].user_input()["repeated"], json!([]));
     let repeated = drafts[2].user_input()["repeated"].clone();
