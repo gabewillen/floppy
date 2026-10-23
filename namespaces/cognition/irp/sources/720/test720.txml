@@ -5,7 +5,7 @@
   <data id="p" expr="null"/>
   <data id="f" expr="'unset'"/>
   <data id="s" expr='{"event": "bot.input", "data": "hi", "source": "gabe"}'/>
-  <data id="expected" expr='"&lt;str stimulus:event=\"bot.input\" stimulus:source=\"gabe\"&gt;hi&lt;/str&gt;"'/>
+  <data id="expected" expr='"&lt;string stimulus:event=\"bot.input\" stimulus:source=\"gabe\"&gt;hi&lt;/string&gt;"'/>
 </datamodel>
 <state id="s0">
   <onentry>

@@ -9,7 +9,7 @@
   <data id="me" expr='({name: "Floppy"})'/>
   <data id="r" expr='[{at: "2026-07-07T12:00:01.5Z", direction: "heard", speakers: [{ref: "voice:1", role: "source"}], text: "hi"}]'/>
   <data id="a" expr='[{target: "session.lamp", event: "bot.device.lamp.on", reason: "asked"}]'/>
-  <data id="expected" expr='["&lt;cognition:recalled&gt;", "  &lt;recent&gt;", "    &lt;memory:turn at=\"12:00:01Z\" direction=\"heard\" who=\"voice:1\"&gt;hi&lt;/memory:turn&gt;", "  &lt;/recent&gt;", "&lt;/cognition:recalled&gt;", "&lt;cognition:acted&gt;", "  &lt;percepts count=\"1\"&gt;", "    &lt;item&gt;0&lt;/item&gt;", "  &lt;/percepts&gt;", "  &lt;acts count=\"1\"&gt;", "    &lt;cognition:event target=\"session.lamp\" event=\"bot.device.lamp.on\" reason=\"asked\" /&gt;", "  &lt;/acts&gt;", "&lt;/cognition:acted&gt;", "&lt;str stimulus:event=\"bot.input\" stimulus:source=\"gabe\"&gt;hi&lt;/str&gt;", "fix it"].join("\n")'/>
+  <data id="expected" expr='["&lt;cognition:recalled&gt;", "  &lt;recent&gt;", "    &lt;memory:turn at=\"12:00:01Z\" direction=\"heard\" who=\"voice:1\"&gt;hi&lt;/memory:turn&gt;", "  &lt;/recent&gt;", "&lt;/cognition:recalled&gt;", "&lt;cognition:acted&gt;", "  &lt;percepts count=\"1\"&gt;", "    &lt;item&gt;0&lt;/item&gt;", "  &lt;/percepts&gt;", "  &lt;acts count=\"1\"&gt;", "    &lt;cognition:event target=\"session.lamp\" event=\"bot.device.lamp.on\" reason=\"asked\" /&gt;", "  &lt;/acts&gt;", "&lt;/cognition:acted&gt;", "&lt;string stimulus:event=\"bot.input\" stimulus:source=\"gabe\"&gt;hi&lt;/string&gt;", "fix it"].join("\n")'/>
   <data id="expected_system" expr='"sys\n\n&lt;persona&gt;&lt;name taken_by=\"you\"&gt;Floppy&lt;/name&gt;&lt;/persona&gt;"'/>
 </datamodel>
 <state id="s0">
