@@ -9,7 +9,7 @@
     <cognition:model_facing_content location="p" failurelocation="f" environment="env" feedback="'fix it'"/>
   </onentry>
   <transition event="error.execution" target="fail"/>
-  <transition cond="f === null &amp;&amp; p.indexOf('&lt;environment id=&#34;room&#34;&gt;') === 0 &amp;&amp; p.indexOf('stimulus:') === -1 &amp;&amp; p.indexOf('none_type') === -1 &amp;&amp; p.slice(-7) === '\nfix it'" target="pass"/>
+  <transition cond="f === null &amp;&amp; p.indexOf('&lt;environment id=&#34;room&#34;&gt;') === 0 &amp;&amp; p.indexOf('stimulus:') === -1 &amp;&amp; p.indexOf('&lt;null') === -1 &amp;&amp; p.slice(-7) === '\nfix it'" target="pass"/>
   <transition target="fail"/>
 </state>
 <final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
