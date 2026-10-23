@@ -1,6 +1,6 @@
 <!-- Contract fixture, broken on purpose: an inline event:schema, a send
-     to the child that no child transition takes, and a bot.* name the original
-     never declared. -->
+     to the child that no child transition takes, and a bot.* name no event
+     schema declares. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" initial="invoking">

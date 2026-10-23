@@ -43,8 +43,8 @@
     blank words (the second waits for the first);
   * adopt: selects bot.ability.identity.adopt for the observation's data;
   * admit: selects bot.ability.communication.input (no choice offers it), the
-    speech's words after the first from source "caller" (as the original's
-    SpeechHeard seed admits heard speech);
+    speech's words after the first from source "caller" (as the SpeechHeard
+    seed admits heard speech);
   * ignore: selects bot.ability.cognition.ignore (the cognition's own offer,
     so the double sends it to itself);
   * focus: selects bot.focus_device for the observation's data;
