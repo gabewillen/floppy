@@ -4,8 +4,8 @@ The implementation report plan of the `cognition` namespace, in the format of th
 [W3C SCXML IRP](../../../scxml.rs/tests/conformance/w3c-irp/README.md) and of
 scxml.rs's own namespace suites
 ([scxml.rs/docs/conformance.md](../../../scxml.rs/docs/conformance.md#namespace-suites)):
-5 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
-("Statements"), tested by 17 mandatory documents. It runs through exactly
+6 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
+("Statements"), tested by 19 mandatory documents. It runs through exactly
 the pipeline the W3C IRP runs through (the canonical compiler, the shipped
 Wasm components under the Wasmtime session host, the same oracles and report
 envelope), with the namespace's own extension package and component bound,

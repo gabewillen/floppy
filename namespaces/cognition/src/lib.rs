@@ -1,5 +1,5 @@
-//! The `cognition` extension namespace: `<cognition:attention_bias_for_turn>`
-//! and `<cognition:model_facing_content>` as a
+//! The `cognition` extension namespace: `<cognition:attention_bias_for_turn>`,
+//! `<cognition:model_facing_content>` and `<cognition:model_facing_data>` as a
 //! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
 //! The turn's attention policy, and the projection of a turn for a model,
@@ -15,11 +15,28 @@
 //!     environment="environment" acted="acted" prior_episodes="prior_episodes"
 //!     standing_directives="standing_directives" feedback="feedback" instructions="instructions"
 //!     schema="schema" budget="budget"/>
+//! <cognition:model_facing_data location="prompt" root="lesson" data="lessonInput()"/>
 //! ```
 //!
 //! Every attribute but `location`, `focuslocation`, `failurelocation`,
-//! `systemlocation` and `fitlocation` is an expression of the document's data model. Each element writes to its
-//! locations and never sends.
+//! `systemlocation`, `fitlocation` and `root` is an expression of the
+//! document's data model. Each element writes to its locations and never
+//! sends.
+//!
+//! # `<cognition:model_facing_data location="L" root="R" data="D"/>`
+//!
+//! Any data as model-facing XML, so no prompt holds JSON text (decision
+//! D201): `root` (an XML name, not an expression) names the root element,
+//! and `data` evaluates to the value it holds. An object's members are the
+//! root's fields, in key order: a single-line scalar an attribute, a string
+//! over one line (such as a document) an element holding its text, as one
+//! CDATA section when it holds markup, so the model reads a document as it
+//! would write it, an array an element of `item`s (its `count` an
+//! attribute), an object an element of its own fields, a member whose key is
+//! not an XML name an `<entry key>`, and `null` and empty collections left
+//! out. Any other value is the root's `content` field. The projection's
+//! budgets hold; over one, the element raises `error.execution` and assigns
+//! nothing.
 //!
 //! # `<cognition:attention_bias_for_turn location="L" focuslocation="F" stimulus="X" devices="D" focus="G"/>`
 //!
@@ -291,6 +308,7 @@ pub fn execute<H: CognitionHost>(
     match local_name {
         "attention_bias_for_turn" => attention_bias_for_turn(attributes, content, host),
         "model_facing_content" => model_facing_content(attributes, content, host),
+        "model_facing_data" => model_facing_data_element(attributes, content, host),
         _ => Ok(Executed::NotHandled),
     }
 }
@@ -617,6 +635,157 @@ fn model_facing_content<H: CognitionHost>(
     Ok(Executed::Handled)
 }
 
+/// Executes `<cognition:model_facing_data>`.
+fn model_facing_data_element<H: CognitionHost>(
+    attributes: &[Attribute],
+    content: &[Content],
+    host: &mut H,
+) -> Result<Executed, Failure<H::Error>> {
+    let [location, root, data] = attribute_values(
+        attributes,
+        ["location", "root", "data"],
+        [
+            "cognition:model_facing_data takes only the location, root and data attributes",
+            "cognition:model_facing_data repeats an attribute",
+            "cognition:model_facing_data has an empty attribute",
+        ],
+    )?;
+    let location = location.ok_or(Failure::Execution(
+        "cognition:model_facing_data requires a location",
+    ))?;
+    let root = root.ok_or(Failure::Execution(
+        "cognition:model_facing_data requires a root",
+    ))?;
+    let data = data.ok_or(Failure::Execution(
+        "cognition:model_facing_data requires data",
+    ))?;
+    no_content(content, "cognition:model_facing_data holds no content")?;
+    if !is_xml_name(root) {
+        return Err(Failure::Execution(
+            "cognition:model_facing_data root is not an XML name",
+        ));
+    }
+    let data = read_json(host, Some(data), "data")?.unwrap_or(Json::Null);
+    let text = model_facing_data(root, &data).map_err(Failure::Execution)?;
+    assign_to(
+        host,
+        location,
+        &Data::String(text),
+        "cognition:model_facing_data could not assign the content",
+    )?;
+    Ok(Executed::Handled)
+}
+
+/// `data` as model-facing XML under the root element `root` (see the crate
+/// documentation): an object's members as the root's fields, a string over
+/// one line as an element holding it (a CDATA section when it holds markup).
+///
+/// # Errors
+///
+/// The message of the first projection budget exceeded.
+pub fn model_facing_data(root: &str, data: &Json) -> Result<String, &'static str> {
+    let mut budget = Budget {
+        bytes: 0,
+        nodes: 0,
+        items: 0,
+    };
+    let mut element = budget.element(root)?;
+    match data {
+        Json::Object(object) => data_fields(&mut element, object, &mut budget)?,
+        value => data_field(&mut element, "content", value, &mut budget)?,
+    }
+    Ok(element.text(0))
+}
+
+/// An object's members as `element`'s fields, each a member whose key is
+/// not an XML name as an `<entry key>`.
+fn data_fields(
+    element: &mut Element,
+    object: &serde_json::Map<String, Json>,
+    budget: &mut Budget,
+) -> Result<(), &'static str> {
+    for (key, value) in object {
+        if is_xml_name(key) {
+            data_field(element, key, value, budget)?;
+        } else {
+            let mut entry = budget.element("entry")?;
+            budget.attribute(&mut entry, "key", key.clone())?;
+            data_field(&mut entry, "value", value, budget)?;
+            element.children.push(entry);
+        }
+    }
+    Ok(())
+}
+
+/// `value` as `element`'s field `name`: a single-line scalar an attribute, a
+/// string over one line an element holding it, an array an element of
+/// `item`s, an object an element of its fields; `null` and empty
+/// collections are left out.
+fn data_field(
+    element: &mut Element,
+    name: &str,
+    value: &Json,
+    budget: &mut Budget,
+) -> Result<(), &'static str> {
+    match value {
+        Json::Null => Ok(()),
+        Json::Array(items) if items.is_empty() => Ok(()),
+        Json::Object(object) if object.is_empty() => Ok(()),
+        Json::String(text) if text.contains('\n') => {
+            let mut field = budget.text_element(name, text.clone())?;
+            field.cdata = true;
+            element.children.push(field);
+            Ok(())
+        }
+        Json::Bool(_) | Json::Number(_) | Json::String(_) => {
+            let text = scalar_text(value).unwrap_or_default();
+            budget.attribute(element, name, text)
+        }
+        Json::Array(items) => {
+            budget.collection(items.len())?;
+            let mut list = budget.element(name)?;
+            budget.attribute(&mut list, "count", items.len().to_string())?;
+            for item in items {
+                let mut entry = match item {
+                    Json::Object(_) | Json::Array(_) | Json::Null => budget.element("item")?,
+                    Json::String(text) => {
+                        let mut entry = budget.text_element("item", text.clone())?;
+                        entry.cdata = true;
+                        entry
+                    }
+                    scalar => {
+                        budget.text_element("item", scalar_text(scalar).unwrap_or_default())?
+                    }
+                };
+                match item {
+                    Json::Object(object) => data_fields(&mut entry, object, budget)?,
+                    Json::Array(_) => data_field(&mut entry, "item", item, budget)?,
+                    _ => {}
+                }
+                list.children.push(entry);
+            }
+            element.children.push(list);
+            Ok(())
+        }
+        Json::Object(object) => {
+            let mut field = budget.element(name)?;
+            data_fields(&mut field, object, budget)?;
+            element.children.push(field);
+            Ok(())
+        }
+    }
+}
+
+/// Whether `name` is an XML name a field may take: a letter or `_`, then
+/// letters, digits, `_`, `-` and `.`.
+fn is_xml_name(name: &str) -> bool {
+    let mut characters = name.chars();
+    characters
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
+        && characters.all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+}
+
 /// Assigns a projection to `[failurelocation, systemlocation,
 /// fitlocation, location]`, each that is given: on success `null`, the
 /// system channel (`null` when empty), the fit (`null` without a budget)
@@ -727,6 +896,10 @@ fn input_failures(name: &str) -> (&'static str, &'static str) {
         "instructions" => (
             "cognition:model_facing_content instructions did not evaluate",
             "cognition:model_facing_content instructions is not a string",
+        ),
+        "data" => (
+            "cognition:model_facing_data data did not evaluate",
+            "cognition:model_facing_data data is not a JSON value",
         ),
         _ => (
             "cognition:model_facing_content schema did not evaluate",
@@ -1368,6 +1541,7 @@ impl Budget {
             attributes: Vec::new(),
             children: Vec::new(),
             text: None,
+            cdata: false,
         })
     }
 
@@ -1418,6 +1592,9 @@ struct Element {
     attributes: Vec<(String, String)>,
     children: Vec<Element>,
     text: Option<String>,
+    /// Whether its text, when it holds markup, is written as one CDATA
+    /// section (a document a model-facing data field holds), not escaped.
+    cdata: bool,
 }
 
 impl Element {
@@ -1452,7 +1629,13 @@ impl Element {
                 out.push_str(" />");
             } else {
                 out.push('>');
-                for character in text.chars() {
+                let cdata = self.cdata && text.contains(['<', '&']);
+                if cdata {
+                    out.push_str("<![CDATA[");
+                    out.push_str(&text.replace("]]>", "]]]]><![CDATA[>"));
+                    out.push_str("]]>");
+                }
+                for character in text.chars().filter(|_| !cdata) {
                     match character {
                         '&' => out.push_str("&amp;"),
                         '<' => out.push_str("&lt;"),
