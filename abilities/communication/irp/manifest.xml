@@ -75,7 +75,7 @@
     </test>
   </assert>
   <assert id="communication-8" specnum="8" specid="#communication-8">
-    <![CDATA[A response is bounded by `response_timeout_ms` (36000 by default, a `<param>`: speaking's 30 s encoding bound plus the original's 6 s): when it passes before speaking answers, the body gets `bot.ability.communication.failed` `{message: "Speaking response timed out."}` and the communication is active again; speaking's late answer is not forwarded. `encoding_timeout_ms` (30000 by default, a `<param>`; decision D98) is passed to speaking as its encoding bound.]]>
+    <![CDATA[A response is bounded by `response_timeout_ms` (36000 by default, a `<param>`), which bounds speaking's silence on a response: each `bot.ability.speaking.progress` re-arms it (D179). When it passes before speaking answers, the body gets `bot.ability.communication.failed` `{message: "Speaking response timed out."}` and the communication is active again; speaking's late answer is not forwarded. `encoding_timeout_ms` (30000 by default, a `<param>`; decision D98) is passed to speaking as its encoding bound.]]>
     <test id="170" conformance="mandatory" manual="false">
       <start uri="170/test170.scxml"/>
     </test>

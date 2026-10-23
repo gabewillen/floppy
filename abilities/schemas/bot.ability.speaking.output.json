@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "bot.ability.speaking.output",
   "additionalProperties": false,
-  "description": "An utterance finished: the text it was asked to say, the part the mouth actually played, the part it did not, how it ended, the bot's own voice id once learned, and the audio format it was said in.",
+  "description": "An utterance finished: the text it was asked to say, the part the mouth actually played, the part it did not, how it ended, the bot's own voice id (null for now), and the audio format it was said in.",
   "properties": {
     "text": {
       "description": "The text this utterance was asked to say: its parts' words, joined exactly as written.",
@@ -11,20 +11,18 @@
       "type": "string"
     },
     "spoken": {
-      "description": "The words of the audio the mouth reported played, in order, as the encoder aligned them: what the room actually heard. Audio cut short partway through the words aligned to it says those words in proportion to the share of it that played, rounded down to whole words. Empty when nothing was played.",
+      "description": "The leading whole words of text, in proportion to the share of the audio the mouth reported played: all of text once all of it has played, and empty when nothing has. A piece cut short counts as unplayed.",
       "type": "string"
     },
     "unspoken": {
-      "description": "The rest of the words the encoder read: what was never played, in order.",
+      "description": "The rest of text, after spoken: what was never played.",
       "type": "string"
     },
     "outcome": {
-      "description": "How the utterance ended: completed (every piece played), stopped (cut short on request), abandoned (its text stopped coming before it was final), or failed (encoding failed, or the mouth dropped audio unplayed or stopped reporting playout).",
+      "description": "How the utterance ended: completed (every piece played) or stopped (cut short on request). A failure answers bot.ability.failed instead.",
       "enum": [
         "completed",
-        "stopped",
-        "abandoned",
-        "failed"
+        "stopped"
       ],
       "examples": [
         "completed"
@@ -32,16 +30,8 @@
       "type": "string"
     },
     "voice_id": {
-      "description": "The bot's own voice id, once it has learned it by hearing itself; null until then. Heard voices carry it as voice:<voice_id>.",
-      "examples": [
-        "3f2a9c41d07e4b6a9c2f1e8d5b7a0c63",
-        null
-      ],
-      "pattern": "^[a-z0-9][a-z0-9:._-]{0,127}$",
-      "type": [
-        "string",
-        "null"
-      ]
+      "description": "The bot's own voice id. Always null: it is learned by the bot hearing itself, which waits on persona voicing the bot.",
+      "type": "null"
     },
     "media_type": {
       "anyOf": [
