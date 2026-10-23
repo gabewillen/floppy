@@ -36,7 +36,7 @@
     </test>
   </assert>
   <assert id="cognition-3" specnum="3" specid="#cognition-3">
-    <![CDATA[<cognition:model_facing_content> writes the reference's model-facing content of a turn (processing InputData.model_facing_content), each block indented as ElementTree writes it and the blocks joined by newlines, most stable first: the recent turns (a cognition:recalled holding an uncounted recent of memory:turn lines), the situation (the environment block, then a cognition:acted of what earlier stages already did), the recalled episodes and directives (a cognition:recalled), the stimulus, when given, as the root element of its own block (tagged by its payload's type, stamped stimulus:event, then stimulus:id, stimulus:source and stimulus:target when set), then the feedback; systemlocation receives the instructions then the self block (a persona element), and failurelocation null.]]>
+    <![CDATA[<cognition:model_facing_content> writes the model-facing content of a turn, each block indented two spaces per level and the blocks joined by newlines, most stable first: the recent turns (a cognition:recalled holding an uncounted recent of memory:turn lines), the situation (the environment block, then a cognition:acted of what earlier stages already did), the recalled episodes and directives (a cognition:recalled), the stimulus, when given, as the root element of its own block (tagged by its payload's type, stamped stimulus:event, then stimulus:id, stimulus:source and stimulus:target when set), then the feedback; systemlocation receives the instructions then the self block (a persona element), and failurelocation null.]]>
     <test id="720" conformance="mandatory" manual="false">
       <start uri="720/test720.txml"/>
     </test>
@@ -54,7 +54,7 @@
     </test>
   </assert>
   <assert id="cognition-4" specnum="4" specid="#cognition-4">
-    <![CDATA[Over one of the reference's projection budgets (262144 encoded bytes, 4096 nodes, 4096 collection items, 65536 characters per scalar, and 65536 characters for the system channel, the situation and the feedback; the system channel and the schema reserved first from the prompt's 262144 bytes), failurelocation receives the reference's message and location null; without failurelocation the element raises error.execution and assigns nothing. Recalled memory never fails the projection: it keeps its newest items that fit, or is left out when its frame does not fit. With a budget (a fitted request size in bytes), fitlocation receives fit when the content fits whole beside the system channel and the schema, cut when recalled memory was trimmed to fit, and overflow when it is still over.]]>
+    <![CDATA[Over one of the projection budgets (262144 encoded bytes, 4096 nodes, 4096 collection items, 65536 characters per scalar, and 65536 characters for the system channel, the situation and the feedback; the system channel and the schema reserved first from the prompt's 262144 bytes), failurelocation receives the exceeded budget's message and location null; without failurelocation the element raises error.execution and assigns nothing. Recalled memory never fails the projection: it keeps its newest items that fit, or is left out when its frame does not fit. With a budget (a fitted request size in bytes), fitlocation receives fit when the content fits whole beside the system channel and the schema, cut when recalled memory was trimmed to fit, and overflow when it is still over.]]>
     <test id="730" conformance="mandatory" manual="false">
       <start uri="730/test730.txml"/>
     </test>

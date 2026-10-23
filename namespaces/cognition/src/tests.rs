@@ -319,10 +319,8 @@ fn malformed_attention_elements_or_values_raise_error_execution() {
 const CONTENT: &str = "model_facing_content";
 
 /// The inputs of the projection checks, and what the element writes for
-/// each: the system channel (`null` for none) and the content. Each case
-/// without an environment or recalled episodes and directives (floppy's
-/// own) is what the reference's `processing.InputData.model_facing_content`
-/// renders for the same turn, checked against it when it was written.
+/// each: the system channel (`null` for none) and the content, each checked
+/// when it was written (decision D141).
 const INPUTS: &str = include_str!("testdata/model_facing_content.inputs.json");
 const EXPECTED: &str = include_str!("testdata/model_facing_content.expected.json");
 
