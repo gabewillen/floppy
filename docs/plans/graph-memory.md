@@ -64,6 +64,6 @@ Each step keeps the document structure rule (D39) and puts I/O in services.
 
 Each step brings its IRP suite (`abilities/<name>/irp`), namespace unit
 tests for the pure elements (the scoring and statement builders against
-recorded fixtures), `tests/tests/memory.rs` cases on SQLite and the
+fixtures), `tests/tests/memory.rs` cases on SQLite and the
 `postgres_` variants, and a live run through the environment once
 cognition associates.
