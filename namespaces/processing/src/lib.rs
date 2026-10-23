@@ -9,9 +9,9 @@
 //! model selects them with ([`dispatch_tool`]), and the confidence of a
 //! selection ([`normalize_confidence`], [`least_confidence`]). These are
 //! synchronous and quick, so they are executable content here. Dispatching
-//! is SCXML's own `<send>` ("dispatch is obviously send"): this namespace works out
-//! what may be sent and never sends. Documents bind [`NAMESPACE_URI`]
-//! (conventionally with the prefix `processing`):
+//! is SCXML's own `<send>` ("dispatch is obviously send"): this namespace
+//! works out what may be sent and never sends. Documents bind
+//! [`NAMESPACE_URI`] (conventionally with the prefix `processing`):
 //!
 //! ```xml
 //! <onentry><processing:send location="schema" choices="choices"/></onentry>
@@ -88,9 +88,10 @@
 //! on `events` (reflection selects at most one event). A branch is
 //! `{event, data, reason?, target?}` with fixed descriptions: `event` a
 //! one-value enum; `data` the first such choice's schema without its
-//! top-level `$schema` (an empty object for no schema or an empty one, the schema wrapped as the required property
-//! `value` for one of another type without `properties`, else with `type`
-//! `object` and `additionalProperties` `false` when it names neither);
+//! top-level `$schema` (an empty object for no schema or an empty one, the
+//! schema wrapped as the required property `value` for one of another type
+//! without `properties`, else with `type` `object` and
+//! `additionalProperties` `false` when it names neither);
 //! `reason` an optional string; `target`, present and required when some
 //! choice of the event has one, an enum of the distinct targets offering
 //! it, sorted. `event` is required, and `data` when its schema requires a
@@ -108,8 +109,9 @@
 //! evaluates to (an array of objects): the least of their `confidence`s,
 //! each normalized by [`normalize_confidence`] (a number in `(0, 1]` is a
 //! probability, scaled to 0–100; any other number is on the 0–100 scale
-//! already; rounded half to even and clamped to 0–100); a selection whose `confidence` is not a number is left out,
-//! and with none left `location` receives `null`.
+//! already; rounded half to even and clamped to 0–100); a selection whose
+//! `confidence` is not a number is left out, and with none left `location`
+//! receives `null`.
 //!
 //! # Failures
 //!
@@ -929,8 +931,8 @@ const DISPATCH_EVENTS_DESCRIPTION: &str = "All events necessary for the input th
     event branch (enum-pinned name + that event's data schema). Include every action \
     required together; empty array selects none.";
 
-/// One offered event's branch: `event` a one-value enum, `data` the event's schema
-/// ([`selection_data`]), `reason` optional, `target` an enum of the
+/// One offered event's branch: `event` a one-value enum, `data` the event's
+/// schema ([`selection_data`]), `reason` optional, `target` an enum of the
 /// `targets` offering it when there are any; `event` required, `data`
 /// required when its schema requires a field, `target` when present; the
 /// schema's description (else the event name) and, when its `examples`
@@ -1009,9 +1011,9 @@ fn selection_item_branch(event: Json, schema: &Json, targets: &[String]) -> Json
     Json::Object(branch)
 }
 
-/// A choice's schema as a branch's `data`: no schema (or an empty one) is an empty object;
-/// a schema of another type without `properties` is wrapped as the
-/// required property `value`; otherwise the schema (without a top-level
+/// A choice's schema as a branch's `data`: no schema (or an empty one) is an
+/// empty object; a schema of another type without `properties` is wrapped
+/// as the required property `value`; otherwise the schema (without a top-level
 /// `$schema`), `type` `object` and `additionalProperties` `false` when it
 /// names neither.
 fn selection_data(schema: &Json) -> Json {
@@ -1103,8 +1105,9 @@ pub fn normalize_confidence(value: f64) -> u8 {
         .unwrap_or(100)
 }
 
-/// The selection confidence over normalized confidences: the least `confidence` of the `selections` that carry a number, `None` when
-/// none does.
+/// The selection confidence over normalized confidences: the least
+/// `confidence` of the `selections` that carry a number, `None` when none
+/// does.
 ///
 /// # Errors
 ///
