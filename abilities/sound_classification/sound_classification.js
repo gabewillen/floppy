@@ -9,7 +9,7 @@ function trimmedKind() {
   return typeof kind === 'string' ? kind.trim() : '';
 }
 
-// Unlabeled for a blank kind, else the one label (the original's OutputData).
+// Unlabeled for a blank kind, else the one label.
 function classifiedOutput() {
   return label === '' ? ({labels: []}) : ({labels: [label], confidence: confidence});
 }
