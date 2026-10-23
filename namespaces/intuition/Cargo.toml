@@ -1,6 +1,6 @@
 [package]
 name = "floppy-intuition"
-description = "The `intuition` namespace: `<intuition:observe>` and `<intuition:escalate>`, the original's intuition ConfidenceTuner (its observe and should_escalate), as a Wasm extension component"
+description = "The `intuition` namespace: `<intuition:observe>` and `<intuition:escalate>` (the fast stage's self-tuning confidence baseline) as a Wasm extension component"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
