@@ -51,7 +51,7 @@
     </test>
   </assert>
   <assert id="turn_detector-5" specnum="5" specid="#turn_detector-5">
-    <![CDATA[Audio stimuli are kept in order by reference: the turn's audio and content are the references, content_type `audio/pcm`, and its sample_rate_hz and channels the first chunk's that carries them. Content and event stimuli replace the modality-neutral content: a content stimulus's content and content_type, an event as `{event, payload}` (payload default `{}`) with `application/event`; with no text or audio the turn hands that content on. An image stimulus changes nothing (the original's images are turn attachments).]]>
+    <![CDATA[Audio stimuli are kept in order by reference: the turn's audio and content are the references, content_type `audio/pcm`, and its sample_rate_hz and channels the first chunk's that carries them. Content and event stimuli replace the modality-neutral content: a content stimulus's content and content_type, an event as `{event, payload}` (payload default `{}`) with `application/event`; with no text or audio the turn hands that content on. An image stimulus changes nothing (a completed turn carries no images).]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>

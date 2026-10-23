@@ -35,12 +35,12 @@ SAXON='java -jar /opt/saxon/saxon-he-12.8.jar' sh scripts/namespace-irp.sh prepa
 sh scripts/namespace-irp.sh baselines behavior
 ```
 
-The current baseline (manifest SHA-256 `6ec951a679ce5840adc3365644c2c8e794b4406310fb56f8a04820b6ca34d2db`,
+The current baseline (manifest SHA-256 `533609314879380163193f277a74df5c247d8a4b29d0441262338947b91ea20a`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
 measured on Linux x86_64, the host `tests/tests/namespace_irp.rs` compares
-fuel on, when `<behavior:verify_apply>` was added and behavior-6 and the schema comments were reworded)
+fuel on, when `<behavior:verify_apply>` was added and behavior-6 and the schema comments and assertions were stated in floppy's own terms)
 measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 23 / 23 | 0 | `9c75c71c9755aab55263c63f1da5e2fd2112e5c30f327a8167ba8977beadf41f` | `706ba0083e2bce6674c687a1e53f4b5d4f8315ca0d76523a3d0452d073a5721e` |
+| ECMAScript | 23 / 23 | 0 | `d25e1f4e963ca676f6ea224f3fc507d9478751b51add4b9eea2c6ab19f538e47` | `d8df24feb9d47f6695ed3bfc7f9de2a4fbb1a02463bfd7cb32fdbea4337d6066` |

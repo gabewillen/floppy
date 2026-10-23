@@ -43,4 +43,4 @@ processing namespace; regenerate it on Linux x86_64, the host
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 11 / 11 | 0 | `d3eaad47b850a6b685df59c004e1bca6af6b4da48e307915db270eddce60b173` | `a6601212f90c530d4e535efb62395856dab622805bb0679c471d813459e8c3be` |
+| ECMAScript | 11 / 11 | 0 | `3d57615f8280ba36ab4fb8912df25be4087ec3a17a6d6f0a4310dd2faa62e511` | `54261be5ace9ff64d20cda2b2ebbaf05023895ecaf83bf3746943b269a5f319e` |

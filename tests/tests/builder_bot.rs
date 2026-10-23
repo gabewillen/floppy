@@ -634,8 +634,8 @@ fn http_routine_draft() -> String {
 
 const CHIME: &str = "[{event: 'bot.speaking.say', data: {parts: [{words: 'Hourly chime.'}]}}]";
 
-/// The request with the original `check()`'s lifetime bounds (`ROUTINE_MIN_EVERY`,
-/// `TURN_SILENCE_BOUND`), as reflection sends it.
+/// The request with the lifetime bounds (`min_every_ms`,
+/// `turn_after_bound_ms`), as reflection sends it.
 fn lifetime_request() -> Json {
     json!({"spec": "chime every hour", "min_every_ms": 60000, "turn_after_bound_ms": 1000})
 }
@@ -1721,8 +1721,8 @@ fn the_same_diagnostic_again_is_repeated_and_the_build_runs_to_its_cap() {
         Some(8),
         "{failed}"
     );
-    // The last draft the validator rejected (the original drafts the rejected
-    // source).
+    // The last draft the validator rejected (the reflection stores the
+    // rejected source as a draft).
     assert_eq!(
         failed["scxml"].as_str(),
         Some(traffic_light(&green_separate(), "amber").as_str()),
@@ -1816,10 +1816,10 @@ fn without_a_model_base_url_the_build_fails_fast_unconfigured() {
     );
 }
 
-/// The original `check()` (E0009): with the request's lifetime bounds, a routine
+/// The lifetime check (E0009): with the request's lifetime bounds, a routine
 /// whose schedule is shorter than the minimum interval is rejected and
-/// repaired; the repaired routine is verified by one forced tick (the original
-/// `verify_apply`), its schedule's event delivered at once, whose output
+/// repaired; the repaired routine is verified by one forced tick
+/// (`<behavior:verify_tick>`), its schedule's event delivered at once, whose output
 /// selects an event.
 #[test]
 fn a_routine_under_the_minimum_interval_is_repaired_and_its_first_tick_is_forced() {
@@ -1861,9 +1861,6 @@ fn a_routine_under_the_minimum_interval_is_repaired_and_its_first_tick_is_forced
     assert_eq!(done["tests"].as_array().map(Vec::len), Some(1), "{done}");
 }
 
-/// A routine may do its own I/O (decision D138): one that POSTs through
-/// the `BasicHTTP` Event I/O Processor after each tick is built, its forced
-/// first tick observed although the simulation admits no origin.
 /// A schedule sent to a literal target never reaches the routine (the
 /// Sparks builder's `#_self`, decision D147): the forced tick would pass it,
 /// so the lifetime check rejects it, and the repaired routine is built.
@@ -1892,6 +1889,9 @@ fn a_schedule_sent_to_a_target_is_rejected_and_repaired() {
     );
 }
 
+/// A routine may do its own I/O (decision D138): one that POSTs through
+/// the `BasicHTTP` Event I/O Processor after each tick is built, its forced
+/// first tick observed although the simulation admits no origin.
 #[test]
 fn a_routine_that_does_its_own_io_is_built() {
     let mock = Mock::start();
@@ -1922,7 +1922,7 @@ fn a_routine_that_does_its_own_io_is_built() {
     );
 }
 
-/// The original runtime and verify: a routine tick that selects nothing fails
+/// The forced tick's check: a routine tick that selects nothing fails
 /// (E0008), and the build ends with that draft in its failed data.
 #[test]
 fn a_routine_tick_with_no_selection_is_rejected_with_its_draft() {
@@ -2147,7 +2147,7 @@ fn a_live_turn_failure_is_repaired_from_its_diagnostic() {
     );
 }
 
-/// The original `check()` (E0009): with the request's lifetime bounds, a turn
+/// The lifetime check (E0009): with the request's lifetime bounds, a turn
 /// behavior's delayed send longer than the silence bound never fires, so
 /// the traffic light (a turn machine with 30 s, 3 s and 20 s timers) is
 /// rejected each time; without the bounds the same draft is built (the

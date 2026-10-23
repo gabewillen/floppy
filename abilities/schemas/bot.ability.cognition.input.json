@@ -45,7 +45,7 @@
     },
     "stimulus": {
       "additionalProperties": false,
-      "description": "The event the body took for this turn, as an envelope: its name, its data, and optionally its id, source and target. The original passes the live stimulus object (SkipJsonSchema); floppy passes it as data [floppy field].",
+      "description": "The event the body took for this turn, as an envelope: its name, its data, and optionally its id, source and target [floppy field].",
       "properties": {
         "event": {
           "minLength": 1,
@@ -123,7 +123,7 @@
       "type": "array"
     },
     "environment": {
-      "description": "The bot's environment this turn, from its own perspective and in the original's layout, which the cognition passes to reasoning (its prompt renders it as the environment block) and intuition (in its decision instructions): the environment's id, and the bot itself, its state and its own attributes, owned_devices holding each held device it could read this turn under its reference (its reference, session id, state and data model, and the object it sits on), and firmware, the bot's firmware read the same way when its owner wrote one [floppy field].",
+      "description": "The bot's environment this turn, from its own perspective, which the cognition passes to reasoning (its prompt renders it as the environment block) and intuition (in its decision instructions): the environment's id, and the bot itself, its state and its own attributes, owned_devices holding each held device it could read this turn under its reference (its reference, session id, state and data model, and the object it sits on), and firmware, the bot's firmware read the same way when its owner wrote one [floppy field].",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -148,7 +148,7 @@
               "minLength": 1
             },
             "firmware": {
-              "description": "The bot's firmware (the original's Firmware), read this turn, when its owner wrote one: rendered as <firmware ref id state>, as a device is.",
+              "description": "The bot's firmware, read this turn, when its owner wrote one: rendered as <firmware ref id state>, as a device is.",
               "type": "object",
               "additionalProperties": false,
               "required": [
@@ -200,7 +200,7 @@
                     "type": "object"
                   },
                   "on": {
-                    "description": "The id of the object the device sits on (the original's Placement.on: a desk, a table, a shelf), when it rests on one.",
+                    "description": "The id of the object the device sits on (a desk, a table, a shelf), when it rests on one.",
                     "type": "string",
                     "pattern": "^[a-z][a-z0-9_-]{0,62}$"
                   }

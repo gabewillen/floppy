@@ -541,7 +541,7 @@ const SEED_STORED: &str = "[{sql: &quot;INSERT INTO bot_behavior (name, source, 
 /// A seed of one ACTIVE turn behavior named `GreetOnKnock`, used once.
 const SEED_BEHAVIOR: &str = "[{sql: &quot;INSERT INTO bot_behavior (name, source, description, status, used_count, last_used_at) VALUES ('GreetOnKnock', '&lt;scxml/&gt;', 'Say hello.', 'ACTIVE', '1', '2026-10-09T00:00:00Z')&quot;}, {sql: &quot;INSERT INTO bot_behavior_trigger (behavior_name, \\&quot;trigger\\&quot;) VALUES ('GreetOnKnock', 'environment.sound')&quot;}]";
 
-/// The original's select step: with nothing selected the turn's episode is
+/// The select step: with nothing selected the turn's episode is
 /// stored, and the next turn's select recalls it.
 #[test]
 fn an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it() {
@@ -617,7 +617,7 @@ fn offered_names(body: &Json) -> Json {
         .into()
 }
 
-/// The reference `_apply_break`: the row is kept, BROKEN with the trimmed reason,
+/// A break: the row is kept, BROKEN with the trimmed reason,
 /// and the episode records the break.
 #[test]
 fn a_break_marks_the_behavior_broken_and_keeps_it() {
@@ -706,7 +706,7 @@ fn a_break_outside_the_inventory_is_refused_on(database: &str) {
     assert_eq!(json_log(&records, "episodes"), stored(&unapplied_episode()));
 }
 
-/// The original's select returns at most one inventory event: the dispatch
+/// The select returns at most one inventory event: the dispatch
 /// tool's `events` admits one (`<processing:send max="1">`), so the
 /// generate service refuses a reply with two before anything is sent; the
 /// model, asked again, repeats it, and the same rejection twice running
@@ -878,7 +878,7 @@ fn each_turn_starts_its_select_unrepaired() {
     );
 }
 
-/// The original Revision through the builder: a create stores the built document
+/// A revision through the builder: a create stores the built document
 /// ACTIVE with its grounded triggers, and the episode records it.
 #[test]
 fn a_create_is_built_and_stored_active_with_grounded_triggers() {
@@ -950,7 +950,7 @@ fn a_create_is_built_and_stored_active_with_grounded_triggers_on(database: &str)
     assert!(spec.contains(r#""status":"DRAFT""#), "{spec}");
     assert!(spec.contains(r#""name":"GreetOnKnock""#), "{spec}");
     // The persistent routine contract carries the at schedule's
-    // next_after (the reference hsm.at) for the routine's data model.
+    // next_after for the routine's data model.
     let prompt: Json =
         serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
     assert!(
@@ -1169,7 +1169,8 @@ fn a_build_that_is_not_streamed_is_bounded_by_the_backstop_alone() {
 }
 
 /// A build whose generation stops arriving fails the revision at the
-/// inactivity bound (decision D101), with the original's message.
+/// inactivity bound (decision D101), with "Reflection child cancellation
+/// timed out.".
 #[test]
 fn a_build_that_stalls_fails_at_the_inactivity_bound() {
     let mock = Mock::start();
@@ -1190,8 +1191,8 @@ fn a_build_that_stalls_fails_at_the_inactivity_bound() {
 }
 
 /// A build that fails its checks drafts the rejected source as DRAFT with
-/// `status_reason` validation, and the turn fails with the original's abandon
-/// message and rendered report (the reference `_abandon`, `_persist_draft`);
+/// `status_reason` validation, and the turn fails with the abandon message
+/// and the rendered report;
 /// the turn's episode is stored with no behavior (decision D97).
 #[test]
 fn a_failed_build_leaves_a_validation_draft() {
@@ -1295,7 +1296,7 @@ fn a_change_reads_the_stored_documents_back_for_the_builder() {
 
 /// A change call that fails without a draft to check (every generation
 /// fails) fails the turn and drafts nothing: the create's stub stays as
-/// The original's `_prepare` stored it (the reference `_fail_child`). The
+/// preparing stored it. The
 /// turn's episode is stored with no behavior (decision D97).
 #[test]
 fn a_failed_change_call_drafts_nothing() {

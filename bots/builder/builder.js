@@ -393,8 +393,8 @@ function validatorFailedDiagnostics() {
   return [{kind: 'draft', code: 'validator-failed', message: 'the validator could not check the draft (an oversized or unreadable document)'}];
 }
 
-// validate: the original check()'s lifetime bounds (instance._lifetime_errors,
-// E0009, <behavior:lifetime_errors>), checked only when the request names them.
+// validate: the lifetime bounds (E0009, <behavior:lifetime_errors>), checked
+// only when the request names them.
 
 function isLifetimeChecked() {
   return min_every_ms !== null || turn_after_bound_ms !== null;
@@ -528,7 +528,7 @@ function nextSimResults() {
 }
 
 // Whether the current test is a routine's forced tick, whose ticks
-// <behavior:verify_tick> checks (the original verify._verify_tick, E0008).
+// <behavior:verify_tick> checks (E0008).
 function isTickTest() {
   return currentTest().tick === true;
 }
@@ -594,7 +594,8 @@ function diagnosticsFingerprint() {
 }
 
 // The last draft a check rejected (validate, lifetime, simulate, apply),
-// else rejected unchanged: the original drafts the rejected source.
+// else rejected unchanged: the reflection stores the rejected source as a
+// draft.
 // One that could not be written is not.
 function rejectedDraft() {
   return diagnostics.length > 0 && ['draft', 'validate', 'lifetime', 'simulate', 'apply'].indexOf(diagnostics[0].kind) >= 0 && diagnostics[0].code !== 'write-failed' && typeof scxml_text === 'string' ? scxml_text : rejected;

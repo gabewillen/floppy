@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/reading/irp/sources">
   <assert id="reading-1" specnum="1" specid="#reading-1">
-    <![CDATA[It offers nothing and answers only what it is given: on start it sends its parent nothing, and an input `bot.ability.reading.input` `{kind, content}` whose data its schema refuses (a kind other than `text` or `image`, or an empty `content`, the original's `min_length=1`) is never routed to it (`error.execution` in the sender).]]>
+    <![CDATA[It offers nothing and answers only what it is given: on start it sends its parent nothing, and an input `bot.ability.reading.input` `{kind, content}` whose data its schema refuses (a kind other than `text` or `image`, or an empty `content`) is never routed to it (`error.execution` in the sender).]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -33,7 +33,7 @@
     </test>
   </assert>
   <assert id="reading-4" specnum="4" specid="#reading-4">
-    <![CDATA[An image input with a reference is classified as image and read by the generate service (one user message: the original's ImageDecoder prompt as a text part and the reference as an image part, the image read from the granted media directory); the reply, trimmed, comes back as `bot.ability.reading.output` `{text, source_kind: "image", confidence: 1}`.]]>
+    <![CDATA[An image input with a reference is classified as image and read by the generate service (one user message: the image decoder's prompt as a text part and the reference as an image part, the image read from the granted media directory); the reply, trimmed, comes back as `bot.ability.reading.output` `{text, source_kind: "image", confidence: 1}`.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>

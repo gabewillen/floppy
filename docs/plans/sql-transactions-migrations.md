@@ -3,7 +3,7 @@
 Status: built on both engines (2026-10-10, decisions D48 to D51): SQLite
 through `services/sql` and Postgres through `services/pgsql`.
 As built, the migration ability answers `bot.ability.migration.output
-{from, to}` and `bot.ability.failed {message}` (the original's ability events)
+{from, to}` and `bot.ability.failed {message}` (ability events)
 rather than `<donedata>` and `migration.failed`, and the version guard's
 failure code is the sql service's `rowcount`.
 Context: `services/sql` today runs one transaction per `<invoke>` and knows
@@ -29,7 +29,7 @@ document: `<data>` or `<data src="...sql">`, with bind values in
 ```
 
 * One invocation is one `BEGIN IMMEDIATE ... COMMIT` of the statements, all
-  or nothing (the original's `InputData`).
+  or nothing.
 * The service answers `sql.result {results}` or `sql.failed`, then
   `done.invoke.<id>`.
 * Most callers need only this: recall, insert, or a read-modify-write that
@@ -116,9 +116,8 @@ Revisions are data, like Alembic's script directory. One file per revision
   layer itself is agnostic. It never parses SQL, and phase 7's PGlite engine
   reuses the same runner.
 * The version lives in Alembic's own table, `alembic_version (version_num)`,
-  not SQLite's `PRAGMA user_version`. That is portable, it is what the original's
-  databases already carry, and an existing the original SQLite file migrates in
-  place.
+  not SQLite's `PRAGMA user_version`. That is portable, and an existing
+  SQLite file that already carries the table migrates in place.
 
 Postgres (built, D51):
 

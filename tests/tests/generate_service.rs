@@ -401,7 +401,7 @@ fn a_reply_that_mismatches_the_schema_is_never_returned() {
     assert_eq!(mock.received().len(), 2);
 }
 
-/// A result carries what its request cost, as the original's output does:
+/// A result carries what its request cost (decision D126):
 /// the request body's bytes (without its streaming members) and the tokens
 /// the backend counted, from the completion or a stream's last chunk, which
 /// the request asks for (`stream_options.include_usage`).
@@ -523,7 +523,7 @@ fn media(dir: &Path) -> Vec<String> {
     ]
 }
 
-/// The parameters of the original's `ImageDecoder` reading the image `reference`.
+/// The parameters of the reading ability's call reading the image `reference`.
 fn image_params(reference: &str) -> String {
     format!(
         r#"<param name="model" expr="'mock-model'"/>
@@ -674,8 +674,7 @@ fn malformed_parameters_reject_the_start_and_send_nothing() {
 }
 
 /// A run that holds a base URL and no key asks a keyless backend: the
-/// request carries no `authorization` header at all, as the original's
-/// keyless client asks one (decision D127).
+/// request carries no `authorization` header at all (decision D127).
 #[test]
 fn without_a_held_key_the_request_carries_no_authorization() {
     let mock = Mock::start();
@@ -971,10 +970,10 @@ fn live_generate_through_an_env_file() {
     assert!(pass, "the live generation did not pass");
 }
 
-/// One real image reading through an env file, as the original's `ImageDecoder`
-/// reads (`FLOPPY_LIVE_ENV_FILE`; `FLOPPY_LIVE_MODEL`, a vision model): the
-/// fixture `tests/fixtures/total-due.png` (the original's reading example, "Total
-/// due: $14.21") is granted at `/media` and read by reference.
+/// One real image reading through an env file, as the reading ability reads
+/// (`FLOPPY_LIVE_ENV_FILE`; `FLOPPY_LIVE_MODEL`, a vision model): the
+/// fixture `tests/fixtures/total-due.png` (a reading example, "Total due:
+/// $14.21") is granted at `/media` and read by reference.
 /// Prints nothing but pass or fail.
 #[test]
 #[ignore = "makes one real model call; needs FLOPPY_LIVE_ENV_FILE and a vision model"]

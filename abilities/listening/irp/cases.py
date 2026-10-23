@@ -52,7 +52,7 @@ S.statement(3, "A sound is scored at its `received_level_db`: a product the inte
 S.statement(4, "The interpretation's own `bot.ability.cognition.input` (labelled non-speech) and its `bot.ability.listening.failed` `{stage, message}` go on to the parent unchanged.")
 S.statement(5, "`bot.ability.speaking.efference` goes to the sensitivity from wherever perception is, without interrupting it; the score request's stimulus carries the sound's `source` (none when the sound names none), so while the copy's window is open a sound off the copy's `mouth` (speaking stamps its own sound `source: \"speaking\"`) is scored against the prediction, fully predicted at 0 dB, and its product is withheld, while a sound from any other source is scored at its received level; a silent copy (`duration` 0) closes the window, so the mouth's sound after it is scored at its received level again.")
 S.statement(6, "Sounds that arrive before the children are ready, or while one is being scored, are held (`<event:defer/>`) and taken in order.")
-S.statement(7, "Scoring is bounded by `sensitivity_timeout_ms` (the original's 30 s): its timer answers `bot.ability.listening.failed` `{stage: \"sensitivity\", message: \"Listening sensitivity timed out.\"}` and returns to `Listening`.")
+S.statement(7, "Scoring is bounded by `sensitivity_timeout_ms` (30 s): its timer answers `bot.ability.listening.failed` `{stage: \"sensitivity\", message: \"Listening sensitivity timed out.\"}` and returns to `Listening`.")
 S.statement(8, "A sound its schema refuses (no audio reference) is never routed here: the send raises `error.execution` in the sender.")
 
 S.case(100, 1, "the listening offers nothing once its children are ready.", [READY])

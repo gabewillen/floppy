@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  A room: floppy's environment (the original's Environment, decision D102),
+  A room: floppy's environment (decision D102),
   run as the root session. Its invoked children are its participants: join
   is an invoke starting, leave is the invoke ending (cancelled, done, or
   failed). It keeps membership, delivers what enters it, and supervises
@@ -29,13 +29,13 @@
   data (the bot's donedata). A failed send (error.communication with no
   invokeid) removes nobody.
 
-  Supervision (decision D158, the original's runtime Supervisor): each bot
+  Supervision (decision D158): each bot
   runs in its own region of present, supervising.<bot>, which invokes it in
   running.<bot>. A bot that leaves degraded (its donedata has a reason),
   after a failed activation (it sent bot.activating.failed), or failed
   (error.communication.<bot>) is restarted: recovering.<bot> counts the
-  failed attempt and waits in backoff.<bot> (the original's doubling
-  backoff from backoff_initial_ms, capped at backoff_max_ms) before
+  failed attempt and waits in backoff.<bot> (a doubling backoff from
+  backoff_initial_ms, capped at backoff_max_ms) before
   running.<bot> invokes it again, logged room.restarted {participant,
   attempt, delay_ms}; when another attempt would not fit max_restarts the
   bot is left, logged room.exhausted {participant, attempts}
@@ -55,7 +55,7 @@
   run's records, and goes to every participant that perceives it, the
   emitter included (its efference copy withholds its own speech). A visual
   stimulus reaches every participant. A sound's level where a participant
-  is follows the original's free-field law, from the emitter's amplitude_db
+  is follows the free-field law, from the emitter's amplitude_db
   (dB SPL at 1 m) and the distance d between the sender's placement (the
   origin: placements[_event.invokeid], so only a placed child has one) and
   the participant's: received_level_db = amplitude_db - 20 log10(max(d,
@@ -68,16 +68,15 @@
   Host input (decision D108) enters the environment and is routed by what
   its payload says, never by who sent it: bot.ability.communication.input
   goes to each participant its target_ids names, and to every participant
-  when target_ids is empty (the original: the input is ambient);
-  environment.sound and environment.visual go to every participant (the
-  original's broadcast); bot.deactivate and bot.input go to every bot.
+  when target_ids is empty (the input is ambient);
+  environment.sound and environment.visual go to every participant (a
+  broadcast); bot.deactivate and bot.input go to every bot.
 
   Records: each event a bot sends its parent (bot.activated,
   bot.processing.completed, ...) is logged as <log label="EVENT"> with its
   data as JSON, which keeps the run's records. A voice embedding is
   biometric and is never written: an identity in source_ids or target_ids
-  that is an array of numbers is written as <biometric:VoiceEmbedding>, as
-  the original's capture writes its VoiceEmbedding.
+  that is an array of numbers is written as <biometric:VoiceEmbedding>.
 
   Contracts: every event the room takes references its one schema file
   (../../bots/floppy/schemas/ for the body's events,
@@ -104,11 +103,11 @@
          threshold_db in dB SPL, on?: an object's id}. A participant with
          none hears every sound. -->
     <data id="placements" expr="({})"/>
-    <!-- The physical things participants sit on (the original's
-         environment.Object: a desk, a table, a shelf): their ids. An
+    <!-- The physical things participants sit on (a desk, a table, a
+         shelf): their ids. An
          object does nothing; it shows only through what sits on it. -->
     <data id="objects" expr="[]"/>
-    <!-- Supervision (the original's runtime Policy defaults): the
+    <!-- Supervision (decision D158): the
          consecutive failed attempts each bot may make, its backoff, and
          how long it runs before its attempts are reset; each bot's failed
          attempts and whether its last activation failed. -->
@@ -138,9 +137,9 @@
           <param name="owned_devices" expr="ownedDevices('floppy')"/>
           <param name="placed_on" expr="placedOn('floppy')"/>
         </invoke>
-        <!-- Stable after stable_after_ms from its first bot.activated (the
-             original arms it once, in running, which it enters on
-             activation); a reboot's activation does not re-arm it. -->
+        <!-- Stable after stable_after_ms from its first bot.activated (armed
+             once, in serving, which it enters on activation); a reboot's
+             activation does not re-arm it. -->
         <state id="starting.floppy">
           <transition event="room.activated" cond="isFor(_event, 'floppy')" target="serving.floppy"/>
         </state>
@@ -174,8 +173,7 @@
         <onexit>
           <cancel sendid="restart.floppy"/>
         </onexit>
-        <!-- A stop while it waits: it is not restarted (the original's
-             backoff goes to stopped). -->
+        <!-- A stop while it waits: it is not restarted. -->
         <transition event="bot.deactivate" event:schema="../../bots/floppy/schemas/bot.deactivate.json" target="left.floppy"/>
         <transition event="room.restart" cond="isFor(_event, 'floppy')" target="running.floppy">
           <log label="room.restarted" expr="restartedJson('floppy')"/>

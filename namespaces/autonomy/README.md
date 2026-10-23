@@ -1,15 +1,14 @@
 # autonomy namespace
 
 `https://github.com/stateforward/floppy/namespaces/autonomy` (prefix
-`autonomy` by convention): the original's autonomy module
-(`abilities/cognition/autonomy.py`) as a Wasm executable-content extension
-component (`floppy_autonomy`): the input a learned behavior runs with. The
+`autonomy` by convention): a Wasm executable-content extension component
+(`floppy_autonomy`) that builds the input a learned behavior runs with. The
 element reads its expressions and assigns its result through the data
 model; it never sends, and it does no I/O.
 
-| Element | The original | Writes |
-| --- | --- | --- |
-| `<autonomy:behavior_input_payload location stimulus focus focus_candidates>` | `behavior_input_payload` | the stimulus data (or `{event: data}`) with the turn's focus |
+| Element | Writes |
+| --- | --- |
+| `<autonomy:behavior_input_payload location stimulus focus focus_candidates>` | the stimulus data (or `{event: data}`) with the turn's focus |
 
 The exact semantics and failures are in [`src/lib.rs`](src/lib.rs); the
 structure is in [`package/autonomy.xsd`](package/autonomy.xsd), whose digest the

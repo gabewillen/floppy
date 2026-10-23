@@ -142,7 +142,7 @@ fn other_local_names_are_not_handled() {
 }
 
 #[test]
-fn observe_keeps_the_original_confidence_baseline() {
+fn observe_sets_the_first_mean_then_moves_the_baseline_by_the_ema() {
     // The first observation sets the mean and resets the variance.
     assert_eq!(
         observed(

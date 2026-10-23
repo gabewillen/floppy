@@ -1,25 +1,25 @@
 # conversation namespace
 
 `https://github.com/stateforward/floppy/namespaces/conversation` (prefix
-`conversation` by convention): the original's conversation module
-(`abilities/communication/conversation`) and its turn detector as a Wasm
+`conversation` by convention): the conversation's and its turn
+detector's bookkeeping as a Wasm
 executable-content extension component (`floppy_conversation`). The
 elements read their expressions and assign their results through the data
 model; they never send, never hold the exchange, and do no I/O.
 
-| Element | The original | Writes |
-| --- | --- | --- |
-| `<conversation:message_for_turn location direction event message provenance?>` | message for a turn, `MessageProvenance` | the committed message |
-| `<conversation:relationship_for_input location indexlocation input>` | `Conversation._relationship_for_input`, `_stable_context_ref`, `_new_relationship_ref` | the relationships, a new one appended, and the input's index (`indexlocation`) |
-| `<conversation:participant_for_source location source>` | `Conversation._participant_for_source` | the relationship with the source a participant |
-| `<conversation:fail_turn location source>` | `Conversation._fail_turn` (its participants) | the relationship without the source |
-| `<conversation:detector_refs location relationships>` | `Conversation.detector_refs` | `[session_ref, participant]` pairs |
-| `<conversation:new_track_ref location source>` | `_new_track_ref` | the source's track |
-| `<conversation:content_for_detector location input source>` | `_content_for_detector` | the stimulus that opens the source's turn |
-| `<conversation:complete_turn location event input turns session_ref participants?>` | `Conversation._complete_turn` | the turns' committed message |
-| `<conversation:ingest_content location content>` | `TurnDetector._ingest_content` | the open turn's content |
-| `<conversation:on_end location turn participant_ref conversation_ref turn_ref source_participant_ref>` | `TurnDetector._on_end` | the closed turn, `{turn}` or `{failure}` |
-| `<conversation:turn_participants location input parent?>` | `turn_participants` (`f6c4e08`) | the participants the turn's cognition handoff stamps |
+| Element | Writes |
+| --- | --- |
+| `<conversation:message_for_turn location direction event message provenance?>` | the committed message, with its provenance |
+| `<conversation:relationship_for_input location indexlocation input>` | the relationships, a new one appended, and the input's index (`indexlocation`) |
+| `<conversation:participant_for_source location source>` | the relationship with the source a participant |
+| `<conversation:fail_turn location source>` | the relationship without the source |
+| `<conversation:detector_refs location relationships>` | `[session_ref, participant]` pairs |
+| `<conversation:new_track_ref location source>` | the source's track |
+| `<conversation:content_for_detector location input source>` | the stimulus that opens the source's turn |
+| `<conversation:complete_turn location event input turns session_ref participants?>` | the turns' committed message |
+| `<conversation:ingest_content location content>` | the open turn's content |
+| `<conversation:on_end location turn participant_ref conversation_ref turn_ref source_participant_ref>` | the closed turn, `{turn}` or `{failure}` |
+| `<conversation:turn_participants location input parent?>` | the participants the turn's cognition handoff stamps (decision D176) |
 
 The document keeps the current exchange itself, opening it with an
 inbound message and appending outbound ones with `<assign>`, so the
@@ -51,4 +51,4 @@ through the pipeline of scxml.rs's namespace suites.
 - <a id="conversation-6"></a>**conversation-6**. `<conversation:complete_turn>` writes the inbound message of the turns' product: their texts joined by spaces as text/plain when any has text, each distinct text once; else no content for audio/*; else the input's content; with the first turn's turn_ref, the given session_ref, and the given participants (none when absent).
 - <a id="conversation-7"></a>**conversation-7**. `<conversation:ingest_content>` takes a stimulus into the open turn's content (a text's stripped text when not empty, an audio chunk with the first rate and channels, a content, an event as application/event; an image changes nothing), and `<conversation:on_end>` writes the closed turn {turn} with its text, audio or content, or {failure} at stage turn when it has neither text, audio nor content, or both text and audio.
 - <a id="conversation-8"></a>**conversation-8**. A value of the wrong kind (relationships that are not an array of relationships, a source that is not an identity, no turns, a stimulus that is not an object or null) raises `error.execution` and assigns nothing.
-- <a id="conversation-9"></a>**conversation-9**. `<conversation:turn_participants>` writes the participants a cognition handoff stamps for the turn: the input's string identities, source_ids as sources then target_ids as targets, each group in the original's identity order, then the parent's data's participants, each once, at most 32; an embedding, an empty name, or a name over 200 characters is never stamped; an input without source_ids and target_ids, or carried participants that are not {ref, role}, raise `error.execution` and assign nothing.
+- <a id="conversation-9"></a>**conversation-9**. `<conversation:turn_participants>` writes the participants a cognition handoff stamps for the turn: the input's string identities, source_ids as sources then target_ids as targets, each group in identity order, then the parent's data's participants, each once, at most 32; an embedding, an empty name, or a name over 200 characters is never stamped; an input without source_ids and target_ids, or carried participants that are not {ref, role}, raise `error.execution` and assign nothing.

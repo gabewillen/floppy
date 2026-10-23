@@ -237,19 +237,46 @@ fn sorted(ids: &Data) -> Result<Json, &'static str> {
     }
 }
 
-/// The identities `sortedIdentities()` in `abilities/conversation/conversation.js`
-/// sorted, before this element replaced it (`testdata/sorted_identities.json`,
-/// written by that JavaScript), are sorted identically.
+/// Names sort by their text and embeddings by their JSON text, both in
+/// code point order.
 #[test]
-fn sorted_identities_sorts_as_the_javascript_it_replaces() {
-    let cases: Json = serde_json::from_str(include_str!("testdata/sorted_identities.json"))
-        .expect("the parity cases are JSON");
-    for case in cases.as_array().expect("an array of cases") {
-        assert_eq!(
-            sorted(&data(&case["ids"])),
-            Ok(case["sorted"].clone()),
-            "{case}"
-        );
+fn sorted_identities_sorts_names_and_embeddings_by_their_text() {
+    for (ids, expected) in [
+        (
+            json!(["zed", "alice", [0.5, 1], "Bob", "\u{e9}", "alice"]),
+            json!(["Bob", "alice", "alice", "zed", "\u{e9}", [0.5, 1]]),
+        ),
+        (
+            json!([
+                [1e-5, 2],
+                [3, 4],
+                "q\"\n",
+                [0.1, 0.2],
+                [-1, 2],
+                [10_000_000_000_000_000_u64, 1],
+                "b"
+            ]),
+            json!([
+                "b",
+                "q\"\n",
+                [-1, 2],
+                [1e-5, 2],
+                [0.1, 0.2],
+                [10_000_000_000_000_000_u64, 1],
+                [3, 4]
+            ]),
+        ),
+        (json!([]), json!([])),
+        (
+            json!([[], "a", [1e-7], [1.5], [1.5, 0], [1.25]]),
+            json!(["a", [1.25], [1.5, 0], [1.5], [1e-7], []]),
+        ),
+        (
+            json!(["\u{1f600}", "\u{ffff}", "z", "Z", ""]),
+            json!(["", "Z", "z", "\u{ffff}", "\u{1f600}"]),
+        ),
+    ] {
+        assert_eq!(sorted(&data(&ids)), Ok(expected), "{ids}");
     }
 }
 
@@ -333,18 +360,13 @@ fn a_failed_assignment_or_host_failure_is_reported() {
 }
 
 #[test]
-fn python_float_writes_python_repr() {
-    for (value, text) in [
-        (1.0, "1.0"),
-        (0.5, "0.5"),
-        (1e-5, "1e-05"),
-        (1e-4, "0.0001"),
-        (1e16, "1e+16"),
-        (1e15, "1000000000000000.0"),
-        (-2.5, "-2.5"),
-        (0.0, "0.0"),
-        (12_345_678_901_234_567_890.5, "1.2345678901234567e+19"),
+fn a_sort_key_is_a_names_text_or_an_embeddings_json_text() {
+    for (id, key) in [
+        (json!("alice"), "0alice"),
+        (json!([0.5, 1]), "1[0.5,1]"),
+        (json!([1e-5, -2.5]), "1[0.00001,-2.5]"),
+        (json!([1e21, 0]), "1[1e+21,0]"),
     ] {
-        assert_eq!(python_float(value), text);
+        assert_eq!(sort_key(&id), key, "{id}");
     }
 }

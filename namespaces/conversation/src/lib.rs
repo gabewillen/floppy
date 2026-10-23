@@ -1,21 +1,21 @@
 //! The `conversation` extension namespace as a
 //! `stateforward:scxml/executable-content-extension` Wasm component: the
-//! original's conversation module (`abilities/communication/conversation`)
-//! and its turn detector, whose bookkeeping is synchronous and quick.
+//! conversation's and its turn detector's bookkeeping, which is
+//! synchronous and quick.
 //!
-//! | Element | The original |
+//! | Element | Writes |
 //! | --- | --- |
-//! | `<conversation:message_for_turn>` | message for a turn and its provenance |
-//! | `<conversation:relationship_for_input>` | `Conversation._relationship_for_input` (its identity collection score), `_stable_context_ref`, `_new_relationship_ref` |
-//! | `<conversation:participant_for_source>` | `Conversation._participant_for_source` |
-//! | `<conversation:fail_turn>` | `Conversation._fail_turn`'s participants |
-//! | `<conversation:detector_refs>` | `Conversation.detector_refs` |
-//! | `<conversation:new_track_ref>` | `_new_track_ref` |
-//! | `<conversation:content_for_detector>` | `_content_for_detector` |
-//! | `<conversation:complete_turn>` | `Conversation._complete_turn` |
-//! | `<conversation:ingest_content>` | `TurnDetector._ingest_content` |
-//! | `<conversation:on_end>` | `TurnDetector._on_end` |
-//! | `<conversation:turn_participants>` | `turn_participants` |
+//! | `<conversation:message_for_turn>` | the committed message for a turn and its provenance |
+//! | `<conversation:relationship_for_input>` | the relationship an input belongs to (by identity collection score), or a new one with its context reference |
+//! | `<conversation:participant_for_source>` | the relationship with the source as a participant |
+//! | `<conversation:fail_turn>` | the relationship without the failed source's participant |
+//! | `<conversation:detector_refs>` | every participant's `[session_ref, participant]` |
+//! | `<conversation:new_track_ref>` | a participant's track |
+//! | `<conversation:content_for_detector>` | the stimulus that opens a source's turn |
+//! | `<conversation:complete_turn>` | the inbound message the completed turns make |
+//! | `<conversation:ingest_content>` | the open turn's content with a stimulus taken in |
+//! | `<conversation:on_end>` | the closed turn, or its failure |
+//! | `<conversation:turn_participants>` | the participants a cognition handoff stamps for a turn |
 //!
 //! Documents bind [`NAMESPACE_URI`] (conventionally with the prefix
 //! `conversation`). Every attribute but `location` and `indexlocation` is
@@ -31,7 +31,7 @@
 //!
 //! An identity is a name (a string) or an embedding (an array of numbers).
 //! Two identities are the same when their sort keys are (a name's text,
-//! an embedding's compact Python JSON). A relationship is an object
+//! an embedding's JSON text). A relationship is an object
 //! `{session_ref, context_ref, source_ids, target_ids, participants}`;
 //! its other members are kept as they are.
 //!
@@ -61,8 +61,7 @@
 //!   `turn_ref`, else `null`.
 //! * `provenance.session_ref`: the provenance's `session_ref` when it is a
 //!   string; else, inbound, the message's own relationship reference
-//!   `relationship-<context_ref>` (the original's `_new_relationship_ref`),
-//!   and outbound `null`.
+//!   `relationship-<context_ref>`, and outbound `null`.
 //!
 //! # `<conversation:relationship_for_input location="L" indexlocation="I" input="X"/>`
 //!
@@ -131,26 +130,24 @@
 //! `kind`, or `null` for none) taken in: a text's stripped text when not
 //! empty; an audio chunk that has content, the first rate and channels
 //! winning; a content's content and type; an event as `{event, payload}`
-//! of type `application/event`. An image is not the turn's content (the
-//! original's `0d0f5e2` deleted its `image/*` branch: images are a turn's
-//! attachments, parity gap 13), so it changes nothing.
+//! of type `application/event`. An image is not the turn's content
+//! (images are a turn's attachments), so it changes nothing.
 //!
 //! # `<conversation:on_end location="L" turn="T" participant_ref="P" conversation_ref="C" turn_ref="R" source_participant_ref="S"/>`
 //!
-//! The closed turn of the content `T`: `{turn}` (the original's
-//! `TurnCompleteData`: the refs, `self_participant_ref` the participant's,
-//! the joined and stripped text, the audio, the content and type of the
-//! text, else the audio, else the content, and the rate and channels when
-//! there is audio), or `{failure}` (the original's `FailedEventData`, stage
-//! `turn`) when the turn has neither text, audio nor content, or both text
-//! and audio.
+//! The closed turn of the content `T`: `{turn}` (the refs,
+//! `self_participant_ref` the participant's, the joined and stripped text,
+//! the audio, the content and type of the text, else the audio, else the
+//! content, and the rate and channels when there is audio), or `{failure}`
+//! (stage `turn`) when the turn has neither text, audio nor content, or
+//! both text and audio.
 //!
 //! # `<conversation:turn_participants location="L" input="X" parent="P"/>`
 //!
 //! The participants a cognition handoff stamps for the inbound turn that
-//! caused it (the original's `turn_participants`, `f6c4e08`): the input
+//! caused it (decision D176): the input
 //! `X`'s (an object with `source_ids` and `target_ids`) string identities,
-//! in the original's identity order, `source_ids` as `{ref, role:
+//! in identity order, `source_ids` as `{ref, role:
 //! "source"}` and then `target_ids` as `{ref, role: "target"}`, followed by
 //! the participants the turn's parent `P` (optional; an envelope, `null`
 //! for none) already carries in its data's `participants` (each `{ref,
@@ -206,11 +203,11 @@ pub const NAMESPACE_NAME: &str = "conversation";
 pub const NAMESPACE_URI: &str = "https://github.com/stateforward/floppy/namespaces/conversation";
 
 /// The least cosine similarity at which two embeddings are the same
-/// participant (the original's identity collection threshold).
+/// participant.
 pub const SIMILARITY_THRESHOLD: f64 = 0.85;
 
 /// The least lead the best one-to-one assignment of two identity groups
-/// needs over any other (the original's identity collection margin).
+/// needs over any other.
 pub const SIMILARITY_MARGIN: f64 = 0.05;
 
 /// One attribute of an element.
@@ -654,8 +651,8 @@ fn is_identity(value: &Json) -> bool {
     }
 }
 
-/// One identity as the original's relationship key holds it: a name, or an
-/// embedding.
+/// One identity as a relationship context reference holds it: a name, or
+/// an embedding.
 #[derive(Clone, Debug, PartialEq)]
 enum Identity {
     Name(String),
@@ -676,36 +673,38 @@ impl Identity {
         }
     }
 
-    /// The reference `identity_sort_key`: names before embeddings, a name by its
-    /// text, an embedding by its compact Python JSON text.
+    /// Its key within a context reference: names before embeddings, a name
+    /// by its text, an embedding by its [`key_vector`] text.
     fn sort_key(&self) -> (u8, String) {
         match self {
             Self::Name(name) => (0, name.clone()),
-            Self::Embedding(components) => (1, python_vector(components)),
+            Self::Embedding(components) => (1, key_vector(components)),
         }
     }
 
-    /// The identity as Python's `json.dumps(..., ensure_ascii=True)` writes
-    /// it.
+    /// The identity as a context reference writes it: a name as
+    /// [`ascii_json_string`], an embedding as [`key_vector`].
     fn json(&self) -> String {
         match self {
             Self::Name(name) => ascii_json_string(name),
-            Self::Embedding(components) => python_vector(components),
+            Self::Embedding(components) => key_vector(components),
         }
     }
 }
 
 /// The relationship context reference of a source and a target identity
-/// set: the reference `relationship_context_ref` of `_stable_identity_basis` of
-/// each (`_stable_context_ref`), the canonical JSON text
-/// `{"identity_groups":[<group>,<group>]}`. Each embedding is normalized to
-/// its unit vector twice, as that composition does (an embedding without
-/// one, empty or zero, is kept as given: the original refuses it at its input);
-/// each group drops repeated identities (a set) and is sorted by
-/// [`Identity::sort_key`]; the two groups are ordered by their keys, so the
-/// reference is the same in either direction. Numbers are written as
-/// Python's `repr` writes a float and text as `json.dumps` with
-/// `ensure_ascii` (every character outside printable ASCII escaped).
+/// set: the JSON text `{"identity_groups":[<group>,<group>]}`. Each
+/// embedding is normalized to its unit vector twice (an embedding without
+/// one, empty or zero, is kept as given); each group drops repeated
+/// identities (a set) and is sorted by [`Identity::sort_key`]; the two
+/// groups are ordered by their keys, so the context reference is the same in
+/// either direction. Numbers are written by [`key_number`] and names as
+/// JSON strings in printable ASCII (every other character escaped).
+///
+/// A context reference is a stored key: a relationship's memories are kept and
+/// recalled by it (`bot_memory.context_ref`, matched byte for byte), and
+/// its `session_ref` is `relationship-` and it. Its bytes stay as they are
+/// so every stored memory is still recalled.
 #[must_use]
 pub fn relationship_context_ref(source_ids: &[Json], target_ids: &[Json]) -> String {
     let group = |ids: &[Json]| {
@@ -741,8 +740,8 @@ pub fn relationship_context_ref(source_ids: &[Json], target_ids: &[Json]) -> Str
     format!("{{\"identity_groups\":[{}]}}", groups.join(","))
 }
 
-/// The reference `normalize_embedding`: the vector over its L2 norm (the squares
-/// summed exactly, as `math.fsum`; scaled by the largest magnitude first
+/// The vector over its L2 norm (the squares summed exactly by [`fsum`];
+/// scaled by the largest magnitude first
 /// when they overflow), each zero component a positive zero; an empty or
 /// zero vector is returned as given.
 fn unit_vector(components: &[f64]) -> Vec<f64> {
@@ -773,8 +772,8 @@ fn unit_vector(components: &[f64]) -> Vec<f64> {
         .collect()
 }
 
-/// Python's `math.fsum`: the correctly rounded sum (Shewchuk's partials,
-/// rounded half to even); a non-finite partial makes the sum non-finite.
+/// The correctly rounded sum of `values` (Shewchuk's partials, rounded
+/// half to even); a non-finite partial makes the sum non-finite.
 fn fsum(values: impl Iterator<Item = f64>) -> f64 {
     let mut partials: Vec<f64> = Vec::new();
     for value in values {
@@ -816,8 +815,8 @@ fn fsum(values: impl Iterator<Item = f64>) -> f64 {
     {
         let y = low * 2.0;
         let x = high + y;
-        // Exact float equality is the algorithm (CPython's msum): the
-        // doubled remainder survived the addition unrounded.
+        // Exact float equality is the algorithm: the doubled remainder
+        // survived the addition unrounded.
         #[allow(clippy::float_cmp, reason = "fsum's exact rounding test")]
         let exact = y == x - high;
         if exact {
@@ -827,17 +826,19 @@ fn fsum(values: impl Iterator<Item = f64>) -> f64 {
     high
 }
 
-/// An embedding as Python's compact `json.dumps` writes a list of floats.
-fn python_vector(components: &[f64]) -> String {
-    let texts: Vec<String> = components.iter().copied().map(python_float).collect();
+/// An embedding as a context reference writes it: `[` and its components
+/// as [`key_number`] writes them, comma-separated, then `]`.
+fn key_vector(components: &[f64]) -> String {
+    let texts: Vec<String> = components.iter().copied().map(key_number).collect();
     format!("[{}]", texts.join(","))
 }
 
-/// Python's `repr` of a finite float (`float_repr_style` `short`): the
-/// shortest round-trip digits, positional with at least one fraction digit
-/// when the decimal exponent is from -4 to 15, else `d[.ddd]e±XX`.
+/// A finite number as a context reference writes it: the shortest
+/// round-trip digits, positional with at least one fraction digit when the
+/// decimal exponent is from -4 to 15 (`1.0`, `0.0001`), else
+/// `d[.ddd]e±XX` with at least two exponent digits (`1e-05`, `1e+16`).
 #[must_use]
-pub fn python_float(value: f64) -> String {
+pub fn key_number(value: f64) -> String {
     if !value.is_finite() {
         return "NaN".into();
     }
@@ -871,8 +872,8 @@ pub fn python_float(value: f64) -> String {
     format!("{sign}{body}")
 }
 
-/// A string as Python's `json.dumps(..., ensure_ascii=True)` writes it:
-/// quote, backslash and the control characters `\b \f \n \r \t` escaped
+/// A string as a context reference writes it, a JSON string in printable
+/// ASCII: quote, backslash and the control characters `\b \f \n \r \t` escaped
 /// short, every other character outside `' '..='~'` as lower-case `\uxxxx`
 /// (UTF-16 surrogate pairs beyond the BMP).
 fn ascii_json_string(text: &str) -> String {
@@ -941,24 +942,19 @@ fn identities_of<'a>(
     }
 }
 
-/// The original's identity order of one identity: a name's text, else an
-/// embedding's compact Python JSON, names first; two identities are the
+/// One identity's key in identity order, compared in code point order: a
+/// name's text, else an embedding's JSON text, names first (as
+/// `<identity:sorted_identities>` orders them); two identities are the
 /// same when their keys are.
 fn identity_key(id: &Json) -> String {
     match id {
         Json::String(name) => format!("0{name}"),
-        Json::Array(components) => {
-            let components: Vec<f64> = components
-                .iter()
-                .map(|component| component.as_f64().unwrap_or(f64::NAN))
-                .collect();
-            format!("1{}", python_vector(&components))
-        }
+        other @ Json::Array(_) => format!("1{other}"),
         other => format!("2{other}"),
     }
 }
 
-/// The identities in the original's order (stable, repeats kept).
+/// The identities in identity order (stable, repeats kept).
 fn sorted_identities(ids: &[Json]) -> Vec<Json> {
     let mut keyed: Vec<(String, &Json)> = ids.iter().map(|id| (identity_key(id), id)).collect();
     keyed.sort_by(|left, right| left.0.cmp(&right.0));
@@ -994,7 +990,7 @@ fn ordered_unit_vector(components: &[f64]) -> Option<Vec<f64>> {
     })
 }
 
-/// The original's `value.cosine_similarity`: `None` for vectors of other
+/// The cosine similarity of two vectors: `None` for vectors of other
 /// sizes or without a norm.
 fn cosine_similarity(left: &[f64], right: &[f64]) -> Option<f64> {
     let left = ordered_unit_vector(left)?;
@@ -1067,7 +1063,7 @@ fn best_assignment(
     best
 }
 
-/// The original's identity collection score of two identity groups: the
+/// The identity collection score of two identity groups: the
 /// mean of their best one-to-one match, refused when another assignment
 /// comes within [`SIMILARITY_MARGIN`]; `None` for groups of other sizes,
 /// empty ones, or no match.
@@ -1285,7 +1281,7 @@ fn relationship_for_input<H: ConversationHost>(
     Ok(Executed::Handled)
 }
 
-/// The original's `_relationship_for_input`: the index of the input's
+/// The index of the input's
 /// relationship among `relationships`, appending a new one when none
 /// matches.
 ///
@@ -1451,7 +1447,7 @@ fn detector_refs_element<H: ConversationHost>(
     Ok(Executed::Handled)
 }
 
-/// The original's `Conversation.detector_refs`: `[session_ref,
+/// `[session_ref,
 /// participant]` of every participant, ordered by `session_ref` (UTF-16
 /// code units) and then identity.
 ///
@@ -1527,7 +1523,7 @@ fn new_track_ref_element<H: ConversationHost>(
     Ok(Executed::Handled)
 }
 
-/// The original's `_new_track_ref` of one identity: a name is its own
+/// The track of one identity: a name is its own
 /// track, an embedding `track-` and its unit vector (the squares summed in
 /// order) as ECMAScript's `JSON.stringify` writes it.
 #[must_use]
@@ -1633,7 +1629,7 @@ fn content_for_detector_element<H: ConversationHost>(
     Ok(Executed::Handled)
 }
 
-/// The original's `_content_for_detector`: the stimulus that opens the
+/// The stimulus that opens the
 /// source's turn (see the crate documentation).
 ///
 /// # Errors
@@ -1778,7 +1774,7 @@ fn complete_turn<H: ConversationHost>(
 /// A JSON object's members.
 type Members = Map<String, Json>;
 
-/// The original's `_complete_turn`'s product of the input and the turns, and
+/// The inbound message the input and the turns make, and
 /// its provenance (the first turn's `turn_ref`, the relationship's
 /// `session_ref`).
 ///
@@ -1853,7 +1849,7 @@ pub struct TurnContent {
 }
 
 impl TurnContent {
-    /// The cleared content (the original's `_clear_content`).
+    /// The cleared content.
     #[must_use]
     pub fn cleared() -> Self {
         Self {
@@ -1904,7 +1900,7 @@ impl TurnContent {
         Json::Object(members)
     }
 
-    /// The original's `_ingest_content` of one stimulus (see the crate
+    /// Takes in one stimulus (see the crate
     /// documentation, `<conversation:ingest_content>`).
     pub fn ingest(&mut self, stimulus: &Json) {
         let Json::Object(stimulus) = stimulus else {
@@ -1953,7 +1949,7 @@ impl TurnContent {
         }
     }
 
-    /// The original's `_on_end`: the closed turn, `{turn}` or `{failure}`
+    /// The closed turn, `{turn}` or `{failure}`
     /// (see the crate documentation, `<conversation:on_end>`).
     #[must_use]
     pub fn closed(&self, refs: &TurnRefs) -> Json {
@@ -2202,12 +2198,10 @@ fn on_end_element<H: ConversationHost>(
     Ok(Executed::Handled)
 }
 
-/// The most participants a payload carries (the original's
-/// `_MAX_PARTICIPANTS`).
+/// The most participants a payload carries.
 pub const MAX_PARTICIPANTS: usize = 32;
 
-/// The longest participant ref, in characters (the original's
-/// `_MAX_PARTICIPANT_REF_LENGTH`).
+/// The longest participant ref, in characters.
 pub const MAX_PARTICIPANT_REF_CHARACTERS: usize = 200;
 
 /// The most identities a participant resembles.
@@ -2306,7 +2300,8 @@ fn participant_of(reference: &str, role: &str) -> Json {
     Json::Object(participant)
 }
 
-/// The original's `turn_participants` (see the crate documentation).
+/// The participants a cognition handoff stamps for a turn (see the crate
+/// documentation, `<conversation:turn_participants>`).
 #[must_use]
 pub fn turn_participants(sources: &[Json], targets: &[Json], carried: &[Json]) -> Vec<Json> {
     let stamped = sorted_identities(sources)

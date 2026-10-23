@@ -1,19 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   XML Schema of floppy's `intuition` extension namespace
-  (namespaces/intuition), the original's intuition ConfidenceTuner. It
-  governs structure only; the extension component governs what the element
+  (namespaces/intuition): a self-tuning confidence baseline that decides
+  when the fast stage escalates a turn. It governs structure only; the extension component governs what the element
   does. Bind it with the prefix `intuition` by convention.
 
   intuition:observe
                    location (required): the tuner state {mean, var, n} it
-                   updates with the confidence (the original's observe).
+                   updates with the confidence.
                    confidence (required): an expression of the reported
                    confidence (0-100), null when there is none.
   intuition:escalate
                    location (required): receives whether the confidence is
-                   below the tuner's threshold (the original's
-                   should_escalate).
+                   below the tuner's threshold.
                    confidence, tuner (required): expressions.
                    Neither takes another attribute or content.
 -->

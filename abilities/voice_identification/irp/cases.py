@@ -49,11 +49,11 @@ def answers(*vectors):
     return [{"path": EMBED, "body": {"embedding": vector, "dim": len(vector)}} for vector in vectors]
 
 
-S.statement(1, "Given the `segments` `<param>` (the original's InputData), it clips nothing: the speech service's `identify` (one `POST {base}/voice/embed` per segment) answers `bot.ability.hearing.voice.identification.output` `{embeddings}`, and the done data (`done.invoke.voice_identification`) is exactly `{segments, embeddings}`: the segments as given and one embedding per segment, in segment order, each `{embedding, model, confidence: null}`.")
+S.statement(1, "Given the `segments` `<param>`, it clips nothing: the speech service's `identify` (one `POST {base}/voice/embed` per segment) answers `bot.ability.hearing.voice.identification.output` `{embeddings}`, and the done data (`done.invoke.voice_identification`) is exactly `{segments, embeddings}`: the segments as given and one embedding per segment, in segment order, each `{embedding, model, confidence: null}`.")
 S.statement(2, "The `model` `<param>` names the embedding model (`voice-detect-wespeaker-resnet34` by default), and each embedding reports it.")
 S.statement(3, "Without `segments` it identifies directly: `clipping` invokes the speech service's `clip` on `audio` (`sample_rate_hz`, `channels`) over `start_seconds`..`end_seconds` (the end clamped to the sound) into `output`, and the one clipped segment `{audio: output, media_type: \"audio/pcm\", sample_rate_hz, channels, start_seconds, end_seconds}` is what it identifies and returns as `segments`.")
 S.statement(4, "When the clip answers `bot.ability.failed` `{message}` (a span that holds no audio, a sound that cannot be read), the done data is `{message: \"Voice identification opening segment conversion failed: <message>\"}` and nothing is identified.")
-S.statement(5, "When the identification answers `bot.ability.failed` `{message}` (an error status, a malformed embedding), the done data is exactly the original's FailureData `{message}`.")
+S.statement(5, "When the identification answers `bot.ability.failed` `{message}` (an error status, a malformed embedding), the done data is exactly `{message}`.")
 S.statement(6, "When a step cannot run (segments that are not ascending `audio/pcm` voice segments, or no segments and no sound to clip, reject its start with `error.execution`), the done data is `{message: \"VoiceIdentification could not run (<error event>)\"}`.")
 
 # 1: given segments.

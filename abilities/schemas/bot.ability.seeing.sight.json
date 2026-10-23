@@ -67,7 +67,7 @@
               }
             ],
             "default": null,
-            "description": "The image's media type as the stimulus gave it, such as image/png or image/jpeg (the original's Image.media_type) [floppy field].",
+            "description": "The image's media type as the stimulus gave it, such as image/png or image/jpeg [floppy field].",
             "examples": [
               "image/png",
               "image/jpeg"

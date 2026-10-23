@@ -1,59 +1,58 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   XML Schema of floppy's `conversation` extension namespace
-  (namespaces/conversation), the original's conversation module and its
-  turn detector. It governs structure only; the extension component
+  (namespaces/conversation): the conversation's and its turn detector's
+  bookkeeping. It governs structure only; the extension component
   governs what the element does. Bind it with the prefix `conversation` by
   convention.
 
   conversation:message_for_turn
                    location (required): receives the committed message
-                   (the original's _message_for_turn).
+                   for the turn and its provenance.
                    direction (required): the literal inbound or outbound.
                    event, message (required), provenance (optional):
                    expressions.
   conversation:relationship_for_input
                    location (required): holds and receives the
                    relationships, a new one appended when none matches
-                   (the original's _relationship_for_input).
+                   the input.
                    indexlocation (required): receives the relationship's
                    index. input (required): an expression.
   conversation:participant_for_source, conversation:fail_turn
                    location (required): holds and receives one
-                   relationship, the source added as a participant (the
-                   original's _participant_for_source) or dropped (its
-                   _fail_turn). source (required): an expression.
+                   relationship, the source added as a participant
+                   (participant_for_source) or dropped (fail_turn).
+                   source (required): an expression.
   conversation:detector_refs
-                   location (required): receives the participants'
-                   (session_ref, source) pairs (the original's
-                   detector_refs). relationships (required): an
-                   expression.
+                   location (required): receives every participant's
+                   [session_ref, participant] pair, ordered by
+                   session_ref, then identity. relationships (required):
+                   an expression.
   conversation:new_track_ref
-                   location (required): receives the source's track (the
-                   original's _new_track_ref). source (required): an
-                   expression.
+                   location (required): receives the source's track.
+                   source (required): an expression.
   conversation:content_for_detector
                    location (required): receives the stimulus that opens
-                   the source's turn (the original's _content_for_detector).
+                   the source's turn.
                    input, source (required): expressions.
   conversation:complete_turn
-                   location (required): receives the turns' committed
-                   message (the original's _complete_turn).
+                   location (required): receives the inbound message the
+                   completed turns make.
                    event, input, turns, session_ref (required),
                    participants (optional): expressions.
   conversation:ingest_content
                    location (required): holds and receives the open
-                   turn's content (the turn detector's _ingest_content).
+                   turn's content with the stimulus taken in.
                    content (required): an expression.
   conversation:on_end
-                   location (required): receives the closed turn (the
-                   turn detector's _on_end). turn, participant_ref,
+                   location (required): receives the closed turn, or its
+                   failure. turn, participant_ref,
                    conversation_ref, turn_ref, source_participant_ref
                    (required): expressions.
   conversation:turn_participants
                    location (required): receives the participants a
-                   cognition handoff stamps for the turn (the original's
-                   turn_participants). input (required), parent
+                   cognition handoff stamps for the turn. input
+                   (required), parent
                    (optional): expressions.
                    None takes another attribute or content.
 -->

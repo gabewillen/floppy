@@ -12,8 +12,7 @@ function delay(ms) {
   return ms + 'ms';
 }
 
-// The original's Trait (persona/trait.py) strips the white space around each
-// trait; what is left is judged by bot.ability.persona.output's schema when
+// The white space around each trait is stripped; what is left is judged by bot.ability.persona.output's schema when
 // it is told. Anything but a list of strings is kept as given, for the schema
 // to refuse.
 function ownerTraits() {
@@ -22,20 +21,19 @@ function ownerTraits() {
 
 // recalling
 
-// The original description.py: the 50 most recent descriptions, oldest first.
+// The 50 most recent descriptions, oldest first.
 function descriptionSelectStatements() {
   return [{sql: description_select, parameters: ['self_persona', 'self']}];
 }
 
-// A string of `min` to `max` characters (code points) that is not blank
-// (the original's Field bounds and _not_blank).
+// A string of `min` to `max` characters (code points) that is not blank.
 function isText(value, min, max) {
   return typeof value === 'string' && Array.from(value).length >= min && Array.from(value).length <= max && /\S/.test(value);
 }
 
-// One stored row's content as the original's Description, or null when it
-// does not decode as one (the original latest_description skips such a row,
-// so one damaged row never costs the bot the description written before it).
+// One stored row's content as a description ({text, reason, traits,
+// kind}), or null when it does not decode as one (the recall skips such a
+// row, so one damaged row never costs the bot the description written before it).
 // This decodes a stored row, which no event:schema describes; the recalled
 // event's schema judges the result again.
 function storedDescription(content) {
@@ -83,14 +81,12 @@ function recalledLog() {
 
 // revising
 
-// The original Persona._revise: the selected text and reason, under the
-// owner's traits.
+// The revision: the selected text and reason, under the owner's traits.
 function revisedDescription() {
   return ({text: revision.text, reason: revision.reason, traits: traits, kind: 'fact'});
 }
 
-// The original description.py (memory.self_fact_insert_input): the insert's
-// parameters ?1 to ?6.
+// The self-fact insert's parameters ?1 to ?6.
 function descriptionInsertParameters() {
   return ['long_term', 'self', 'fact', 'standard', 'retain', JSON.stringify(revisedDescription())];
 }

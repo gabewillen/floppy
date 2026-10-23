@@ -1,6 +1,6 @@
 [package]
 name = "floppy-identity"
-description = "The `identity` namespace: `<identity:hears_name>` and `<identity:sorted_identities>`, the original's identity module (its text name recognition and canonical identity order), as a Wasm extension component"
+description = "The `identity` namespace: `<identity:hears_name>` and `<identity:sorted_identities>` (text name recognition and the canonical identity order), as a Wasm extension component"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

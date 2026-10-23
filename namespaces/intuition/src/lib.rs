@@ -2,12 +2,11 @@
 //! `<intuition:escalate>` as a
 //! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
-//! The original's `abilities/cognition/intuition.py` owns a
-//! `ConfidenceTuner`: a self-tuning confidence baseline on the 0–100 scale
-//! that decides when the fast stage escalates a turn to reasoning. Its
-//! `_tune_confidence` observes the turn's confidence first and then asks
-//! `should_escalate` against the updated threshold. Both are synchronous
-//! and quick, so they are executable content here, named after the class's
+//! A [`ConfidenceTuner`] is a self-tuning confidence baseline on the 0–100
+//! scale that decides when the fast stage escalates a turn to reasoning.
+//! Each turn observes the turn's confidence first and then asks whether it
+//! escalates against the updated threshold (D114). Both are synchronous
+//! and quick, so they are executable content here, named after the tuner's
 //! own methods (`should_` dropped, Q6). The tuner state lives in the data
 //! model (a `confidence_tuner` datum) and crosses turns by `<param>` and
 //! `<donedata>`. Documents bind [`NAMESPACE_URI`] (conventionally with the
@@ -21,25 +20,24 @@
 //! # The tuner state
 //!
 //! `{mean, var, n}`: numbers, `n` a non-negative integer, with the
-//! original's defaults (floor [`CONFIDENCE_FLOOR`], EMA alpha
+//! tuner's defaults (floor [`CONFIDENCE_FLOOR`], EMA alpha
 //! [`TUNER_ALPHA`], `k_sigma` [`TUNER_K_SIGMA`], warmup [`TUNER_WARMUP`]
 //! observations, variance floor [`TUNER_VAR_FLOOR`]). Any other value is
 //! read as the initial state `{mean:` [`TUNER_MEAN`]`, var:`
-//! [`TUNER_VAR_FLOOR`]`, n: 0}`, the original's fresh `ConfidenceTuner()`.
+//! [`TUNER_VAR_FLOOR`]`, n: 0}`, a fresh [`ConfidenceTuner::default`].
 //!
 //! # `<intuition:observe location="L" confidence="X"/>`
 //!
-//! The original's `ConfidenceTuner.observe`. `location` (required) holds
+//! [`ConfidenceTuner::observed`]. `location` (required) holds
 //! the tuner state; `confidence` (required) is an expression of the turn's
 //! reported confidence. A number (clamped to 0–100) is observed: the first
 //! sets the mean, later ones move the mean and variance by the EMA
 //! (variance never under the floor). `null` (also `undefined`) is not
-//! observed, as the original observes only a confidence that is not
-//! `None`. `location` receives the resulting state, canonical JSON.
+//! observed. `location` receives the resulting state, canonical JSON.
 //!
 //! # `<intuition:escalate location="L" confidence="X" tuner="T"/>`
 //!
-//! The original's `ConfidenceTuner.should_escalate`. `location` (required)
+//! [`ConfidenceTuner::should_escalate`]. `location` (required)
 //! receives `true` when `confidence` (required, an expression) is a number
 //! below the threshold of the tuner state `tuner` (required, an
 //! expression), else `false`; a `null` (also `undefined`) confidence never
@@ -88,26 +86,22 @@ pub const NAMESPACE_NAME: &str = "intuition";
 /// it too.
 pub const NAMESPACE_URI: &str = "https://github.com/stateforward/floppy/namespaces/intuition";
 
-/// The tuner's absolute confidence floor (the original's
-/// `_DEFAULT_CONFIDENCE_FLOOR`).
+/// The tuner's absolute confidence floor.
 pub const CONFIDENCE_FLOOR: f64 = 35.0;
 
-/// The tuner's EMA weight (the original's `_DEFAULT_TUNER_ALPHA`).
+/// The tuner's EMA weight.
 pub const TUNER_ALPHA: f64 = 0.08;
 
-/// The tuner's standard deviations under the mean (the original's
-/// `_DEFAULT_TUNER_K_SIGMA`).
+/// The tuner's standard deviations under the mean.
 pub const TUNER_K_SIGMA: f64 = 1.0;
 
-/// Observations before the tuner leaves its floor (the original's
-/// `_DEFAULT_TUNER_WARMUP`).
+/// Observations before the tuner leaves its floor.
 pub const TUNER_WARMUP: u64 = 8;
 
-/// The tuner's variance floor and initial variance (the original's
-/// `_DEFAULT_TUNER_VAR_FLOOR`).
+/// The tuner's variance floor and initial variance.
 pub const TUNER_VAR_FLOOR: f64 = 100.0;
 
-/// The tuner's initial mean (the original's `_DEFAULT_TUNER_MEAN`).
+/// The tuner's initial mean.
 pub const TUNER_MEAN: f64 = 70.0;
 
 /// One attribute of an element.
@@ -362,7 +356,7 @@ fn escalate<H: IntuitionHost>(
     Ok(Executed::Handled)
 }
 
-/// The original's `ConfidenceTuner` state on the 0–100 scale: see the crate
+/// The confidence tuner's state on the 0–100 scale: see the crate
 /// documentation.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ConfidenceTuner {
@@ -410,7 +404,7 @@ impl ConfidenceTuner {
         })
     }
 
-    /// The original's `observe`: the state after observing `confidence`
+    /// The state after observing `confidence`
     /// (clamped to 0–100).
     #[must_use]
     pub fn observed(self, confidence: f64) -> Self {
@@ -430,8 +424,7 @@ impl ConfidenceTuner {
         }
     }
 
-    /// The original's `threshold`: the escalation threshold on the 0–100
-    /// scale.
+    /// The escalation threshold on the 0–100 scale.
     #[must_use]
     pub fn threshold(self) -> f64 {
         if self.n < TUNER_WARMUP {
@@ -441,8 +434,7 @@ impl ConfidenceTuner {
         (0.5 * CONFIDENCE_FLOOR).max(self.mean - TUNER_K_SIGMA * std)
     }
 
-    /// The original's `should_escalate`: a confidence below the threshold;
-    /// none never escalates.
+    /// Whether `confidence` is below the threshold; none never escalates.
     #[must_use]
     pub fn should_escalate(self, confidence: Option<f64>) -> bool {
         confidence.is_some_and(|confidence| confidence < self.threshold())

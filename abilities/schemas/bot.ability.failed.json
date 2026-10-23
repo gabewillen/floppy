@@ -220,7 +220,7 @@
                       }
                     ],
                     "default": null,
-                    "description": "Optional typed domain payload for the selected event. Trusted native abilities may retain a typed Pydantic payload through internal dispatch; model and learned-behavior JSON projections omit raw media. Do not put selection rationale here — use reason on this envelope.",
+                    "description": "Optional typed domain payload for the selected event. Model and learned-behavior JSON projections omit raw media. Do not put selection rationale here — use reason on this envelope.",
                     "examples": [
                       {
                         "device": "device-a"
@@ -415,7 +415,7 @@
                             }
                           ],
                           "default": null,
-                          "description": "Optional typed domain payload for the selected event. Trusted native abilities may retain a typed Pydantic payload through internal dispatch; model and learned-behavior JSON projections omit raw media. Do not put selection rationale here — use reason on this envelope.",
+                          "description": "Optional typed domain payload for the selected event. Model and learned-behavior JSON projections omit raw media. Do not put selection rationale here — use reason on this envelope.",
                           "examples": [
                             {
                               "device": "device-a"

@@ -27,7 +27,7 @@
     </test>
   </assert>
   <assert id="routines_runner-4" specnum="4" specid="#routines_runner-4">
-    <![CDATA[A tick whose `name` is none of the chain's routines' names is not forwarded (the original's stale tick).]]>
+    <![CDATA[A tick whose `name` is none of the chain's routines' names is stale and not forwarded.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>

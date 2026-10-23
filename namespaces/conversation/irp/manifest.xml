@@ -111,7 +111,7 @@
     </test>
   </assert>
   <assert id="conversation-9" specnum="9" specid="#conversation-9">
-    <![CDATA[<conversation:turn_participants> writes the participants a cognition handoff stamps for the turn: the input's string identities, source_ids as sources then target_ids as targets, each group in the original's identity order, then the parent's data's participants, each once, at most 32; an embedding, an empty name, or a name over 200 characters is never stamped; an input without source_ids and target_ids, or carried participants that are not {ref, role}, raise error.execution and assign nothing.]]>
+    <![CDATA[<conversation:turn_participants> writes the participants a cognition handoff stamps for the turn: the input's string identities, source_ids as sources then target_ids as targets, each group in identity order, then the parent's data's participants, each once, at most 32; an embedding, an empty name, or a name over 200 characters is never stamped; an input without source_ids and target_ids, or carried participants that are not {ref, role}, raise error.execution and assign nothing.]]>
     <test id="380" conformance="mandatory" manual="false">
       <start uri="380/test380.txml"/>
     </test>

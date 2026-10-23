@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Autonomy stage (the reference abilities/cognition/autonomy): the
-  cognition (abilities/cognition/cognition.scx) invokes it first in each turn. It
+  floppy's Autonomy stage: the cognition (abilities/cognition/cognition.scx)
+  invokes it first in each turn. It
   runs the trusted seeds the turn's stimulus triggers, then recalls the
   learned turn behaviors whose triggers name the stimulus, and runs them
   one at a time as candidates; the first that handles the turn answers it,
@@ -17,48 +17,44 @@
   (seeding runs only when the percept triggers a seed; inventory ends at
   once without memory.)
 
-  Percepts (the reference's _Slot and _Agenda, 9d3119a): a turn that
-  perceived several stimuli together (the body's bot.perceived) is matched
-  percept by percept, in arrival order, each by its own name, and each
+  Percepts: a turn that perceived several stimuli together (the body's
+  bot.perceived) is matched percept by percept, in arrival order, each by its own name, and each
   matching behavior runs on the turn as that percept alone presents it
   (the percept's stimulus is the stimulus, view). A turn of one stimulus is
   its own one percept. The first behavior that handles a percept settles
   it; the turn is handled only when every percept was, with what the
   handling behaviors selected in the percepts' arrival order. Otherwise it
   is unhandled, and its answer carries those selections as acted
-  {percepts, acts} (the reference's ActedData: the handled percepts'
-  positions and their selections). A selection that names no target (the
-  trusted seed's) is not sent here: it reaches the body only when the
+  {percepts, acts} (the handled percepts' positions and their
+  selections). A selection that names no target (the trusted seed's) is not sent here: it reaches the body only when the
   cognition carries acted.acts into the turn's output.
 
-  Input: the <param>s turn, input (focus and focus_candidates, the original's
+  Input: the <param>s turn, input (focus and focus_candidates,
   bot.ability.autonomy.input, schemas/bot.ability.autonomy.input.json),
   stimulus (the turn's stimulus envelope) and database (the memory database; null means no learned inventory,
   and only the seeds run).
 
-  Seeds (the reference _prepare_match: the seeded behaviors ride before the
-  learned inventory, with or without memory): SpeechHeard
-  (abilities/behaviors/speech_heard/speech_heard.scx), triggered by
+  Seeds (the seeded behaviors run before the learned inventory, with or
+  without memory): SpeechHeard (abilities/behaviors/speech_heard/speech_heard.scx),
+  triggered by
   bot.ability.listening.speech.output, runs as the child "seed" with the
   <param>s turn, input and stimulus (its input_adapter keeps the
   cognition's input unchanged). It answers as a candidate does: handled
   answers {turn, handled: true, selected, candidates, reason: "behavior"}
   with no usage persisted (a seed is not an inventory row); not handled,
   or silent within silence_ms, goes on to the inventory; an error.* for it
-  fails autonomy ("Autonomy native seed 'SpeechHeard' failed: ...", the original
-  _emit_native_start_failure). candidates names it first. A seed's
-  selections are trusted (the reference DispatchTrust.TRUSTED_BEHAVIOR may name
+  fails autonomy ("Autonomy native seed 'SpeechHeard' failed: ...").
+  candidates names it first. A seed's selections are trusted (they may name
   any event a recipient declares, not only the offered ones) and name no
   target: the turn's output carries them to the body, which sends itself
   the ones that name no target (its own bot.ability.communication.input).
 
-  Matching (the reference _prepare_match, _match_activity): one memory
-  transaction per percept selects the ACTIVE behaviors of lifetime 'turn' that have a
+  Matching: one memory transaction per percept selects the ACTIVE behaviors of lifetime 'turn' that have a
   trigger equal to the percept's event name, in inventory order (by name).
   No match answers {turn, handled: false, candidates: [], reason:
   "no-behaviors"}.
 
-  Candidates (the reference _CandidateRun): running invokes the chain
+  Candidates (decision D93): running invokes the chain
   abilities/candidates_runner/candidates_runner.scx as the child
   "candidates", which tries them one at a time, one runner each, and
   answers {tried, handled, selected, rejection}. Each behavior's source is
@@ -67,32 +63,27 @@
   D121), run as the runner's child "candidate" by <invoke srcexpr>, with the <param>s
   turn and input
   (the stimulus's data, or {event: data} when it is not an object, plus
-  focus and focus_candidates: the original's behavior_input_payload,
-  <autonomy:behavior_input_payload>). It answers by
+  focus and focus_candidates: <autonomy:behavior_input_payload>). It answers by
   its final state's <donedata> {turn, handled, selected}:
     * handled with selections: dispatching sends each to the session its
-      target names, as the original's _dispatch_candidate_activity
-      dispatches them (cognition.types.dispatch_selected_events; a learned
-      behavior names its targets, the session ids of its turn's
-      selections). Sent, its used_count and last_used_at are persisted,
-      then autonomy answers {turn, handled: true, selected, candidates,
-      reason: "behavior"}. A send that fails (the reference
-      persisting_dispatch_failed), its failed_count and last_failed_at are
-      persisted and autonomy fails with the failure's message
-      (_fail_after_dispatch_persistence), so the turn fails;
-    * not handled (the reference candidate.advance), or no answer within
-      silence_ms (TURN_SILENCE_BOUND, candidate.silent): the next one runs;
+      target names (decision D113; a learned behavior names its targets,
+      the session ids of its turn's selections). Sent, its used_count and
+      last_used_at are persisted, then autonomy answers {turn, handled: true, selected, candidates,
+      reason: "behavior"}. A send that fails, its failed_count and
+      last_failed_at are persisted and autonomy fails with the failure's
+      message, so the turn fails;
+    * not handled (candidate.advance), or no answer within silence_ms
+      (candidate.silent, decision D74): the next one runs;
     * an error.* for it (candidate.failed): its failed_count and
       last_failed_at are persisted, then the next one runs.
   When none handles the turn: {turn, handled: false, candidates, reason:
   "unhandled"}. candidates names the behaviors tried, in order.
 
   Memory: each transaction invokes the Memory ability (abilities/memory/memory.scx)
-  with the database and the original's statements. A transaction that fails or
-  outlasts memory_timeout_ms (floppy's bound) is logged and the turn goes
-  on, as in the original: a failed load matches no inventory rows
-  (_on_load_behaviors_failure), and a failed usage or failure record (the
-  runner's) takes the same effect as a persisted one (persistence_failed).
+  with the database and its statements. A transaction that fails or
+  outlasts memory_timeout_ms is logged and the turn goes on: a failed
+  load matches no inventory rows, and a failed usage or failure record
+  (the runner's) takes the same effect as a persisted one.
 
   Timers: seeding and loading are entered once per percept, so each
   cancels its own timeout on exit, and a later percept's state never takes
@@ -203,7 +194,7 @@
         <assign location="rows" expr="behaviorsFromMemoryOutput(_event)"/>
       </transition>
       <transition event="done.invoke.load" target="matched"/>
-      <!-- the reference _on_load_behaviors_failure: a failed load is a warning, and the turn goes on with no inventory rows. -->
+      <!-- A failed load is a warning, and the turn goes on with no inventory rows. -->
       <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="matched">
         <log label="autonomy.behaviors.load.failed" expr="loadFailedReason(_event.data.message)"/>
         <assign location="rows" expr="[]"/>

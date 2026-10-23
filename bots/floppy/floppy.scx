@@ -1,20 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  The floppy bot: the original's Bot body as a participant its environment
-  invokes (environments/room/room.scx, decision D102). It owns the bot
+  The floppy bot: the body, a participant its environment invokes
+  (environments/room/room.scx, decision D102). It owns the bot
   lifecycle and processing turns; its abilities are invoked children
-  (decision D6: invoke lifecycle replaces the original's attachment protocol).
+  (decision D6: the invoke lifecycle is their attach and detach).
 
     live { activating -> active { unfocused, focused,
       processing { reading_turns, deciding }, cancelling_processing } }
     live -bot.deactivate-> deactivating -> inactive (final)
     live -bot.reboot (the cognition asks for one)-> live (re-entered:
       every ability is cancelled and invoked again)
-    activating -bot.deactivate-> deactivating (the original's activation_cancelling)
+    activating -bot.deactivate-> deactivating
     cancelling_processing -cancel timeout-> degraded (a final sink)
 
-  Joining (decision D107): the environment's <invoke> is the original's
-  attach. Its <param>s are the activation settings (model,
+  Joining (decision D107): the environment's <invoke> attaches the
+  body. Its <param>s are the activation settings (model,
   intuition_model, bounds, traits, database, environment: the environment's
   id), and the body starts in
   live and activates at once; nothing sends bot.activate. inactive is a
@@ -27,34 +27,30 @@
   conversation and speaking), <invoke id="identity">
   (abilities/identity/identity.scx, the bot's name), <invoke id="listening">
   (abilities/listening/listening.scx, the ear), <invoke id="stm">
-  (abilities/stm/stm.scx, the short-term register, the original's
-  bot.register), <invoke id="persona"> (abilities/persona/persona.scx,
-  the owner's traits and the bot's own description of itself) and <invoke
+  (abilities/stm/stm.scx, the short-term register), <invoke id="persona">
+  (abilities/persona/persona.scx, the owner's traits and the bot's own description of itself) and <invoke
   id="seeing"> (abilities/seeing/seeing.scx, the eye; see Seeing below);
   leaving live cancels every ability (SCXML
-  6.4), which replaces the original's cleanup states: an SCXML invoke cancel is
-  synchronous, so there is nothing for the original's 5 min deactivation
-  timeout or its reboot preserve/reset cleanup to wait on, and every
-  reboot restarts the abilities from their documents (the original's reset). An ability is ready when it
+  6.4), and the body has no cleanup states: an SCXML invoke cancel is
+  synchronous, so deactivation and reboot have no cleanup to wait on or
+  time out, and every reboot restarts the abilities from their documents. An ability is ready when it
   sends its first bot.ability.offers; the body is active when every
   expected ability is ready. A run-tagged activation timer
   (activation_timeout_ms), an error event, or an ability ending while
   activating (seeing only while its switch is on) fails the activation (bot.activating.failed) and ends the
   session in inactive; an ability ending while active degrades the bot.
 
-  Lifecycle answers (the original's a2cbaa8): the activator is the
+  Lifecycle answers (decision D118): the activator is the
   environment that invoked the body, and every terminal goes to it, its
   parent. Every bot.deactivate is answered once: from activating or
   active by bot.deactivated (leaving live cancels the abilities at once,
-  so the original's activation_cancelling and its timeout have nothing to
-  wait on). The original stamps a terminal with its request's envelope id;
-  an SCXML <send> cannot take its id from an expression, and the only
-  requester is the parent, so nothing is stamped. The transition into
+  so there is no cancelling state or timeout to wait on). No terminal
+  carries its request's id: an SCXML <send> cannot take its id from an
+  expression, and the only requester is the parent. The transition into
   degraded on an unacknowledged cancel announces bot.degraded {stage:
-  "processing_cancel"}; the original's other stages are cleanups that
-  SCXML's synchronous invoke cancel never leaves unfinished, and an
-  ability ending while active, which floppy degrades on, has no stage in
-  the original, so it ends with its reason only.
+  "processing_cancel"}, the only stage: SCXML's synchronous invoke cancel
+  leaves no cleanup unfinished, and an ability ending while active, which
+  also degrades the bot, has no stage, so it ends with its reason only.
 
   Communication: bot.ability.communication.input from outside, while
   active, goes to the communication, which admits it into its
@@ -82,9 +78,8 @@
   through the body: the request's descriptor matches the answer's name
   too, and scxml.rs judges an arriving event by every matching
   transition's schema, so a body taking both would refuse the answer.
-  Nothing in floppy reads the register's stimuli yet (the original's
-  Learning is not ported), so a bot.ability.memory.stm.recent.output is
-  taken and dropped.
+  Nothing in floppy reads the register's stimuli yet, so a
+  bot.ability.memory.stm.recent.output is taken and dropped.
 
   Self: the body relays the cognition's bot.ability.identity.ask to the
   identity and the identity's bot.ability.identity.named (its answer, and
@@ -92,20 +87,19 @@
   tell its own name from a visitor's. It relays the persona's
   bot.ability.persona.output {traits, description} (on waking and after
   each revision written down) to the cognition, which keeps what it was
-  last told (the original's Cognition._know_persona).
+  last told.
 
-  Persona (the original's bot.traits, which give a bot a persona): the
+  Persona (the owner's traits, which give a bot a persona): the
   body passes its traits (the activation setting traits, a <param> the
-  environment may set; the original's companion example's owner traits by
-  default, since the original composes a persona only from traits and
-  floppy's body always has one) and its database to the persona. The
+  environment may set; warm, patient, curious and honest by default, so
+  the body always has a persona) and its database to the persona. The
   persona's offer (bot.ability.persona.revise) is its readiness but is
-  kept out of the turn's choices (turnOffers()): in the original only
-  reflection, composed with the same persona, may select a revision.
+  kept out of the turn's choices (turnOffers()): only reflection,
+  composed with the same persona, may select a revision.
 
   Speaking: the communication relays speaking's efference copy,
   bot.ability.speaking.efference (sent on to each Listening ability in
-  listening, the original's Speaking listening peers); right after it, the
+  listening_abilities); right after it, the
   communication puts speaking's sound, environment.sound, into the
   environment whose id the body passes it (decision D103, amended
   2026-10-15: the copy reaches the listening first), and the sound comes
@@ -113,14 +107,14 @@
 
   Environment: environment.sound and environment.visual from the
   environment, while active, are first recorded in the short-term
-  register (the original's _fan_out_input: bot.ability.memory.stm.record
+  register (bot.ability.memory.stm.record
   {stimulus_name, payload, source?}, the payload the stimulus data's
   bounded scalar projection, <memory:stm_projection>, and source a
-  sound's own source, which floppy carries in the sound for the original's
+  sound's own source, which the sound carries in place of an
   envelope source; floppy has no envelope id or target to record; a
   one-way message, so registration never blocks admitting the stimulus),
   then go to
-  each input ability (input, the original's Bot input: the invoke ids
+  each input ability (input: the invoke ids
   of the abilities that perceive raw stimuli; the identity and the
   listening), in
   order, by <foreach>; never to the cognition, which hears of a stimulus
@@ -142,17 +136,17 @@
   so the bot behaves as without it.
 
   Turns: bot.input, or an ability's bot.ability.cognition.input handoff
-  (the original grants any ability product the turn, blind to its content),
+  (any ability product is granted the turn, whatever its content),
   is held as a percept {stimulus, source, participants} in arrival order
-  (held, the original's _held): the stimulus is the envelope {event, data,
+  (held): the stimulus is the envelope {event, data,
   source} assigned for bot.input (its source null: it reaches the body from
   outside its session, the environment or the host), or the handoff's
-  stimulus as given, with the participants its producer stamped (the
-  original's f6c4e08 copies them forward unchanged; a bot.input's own
+  stimulus as given, with the participants its producer stamped (copied
+  forward unchanged, decision D119; a bot.input's own
   participants, none when the device knows no one). In unfocused or
   focused the percept starts a processing turn at once (unfocused, a
-  bot.input from a held device first focuses that device, the original's
-  reflex floor, so its events are the turn's choices); during a turn
+  bot.input from a held device first focuses that device, the reflex
+  floor, so its events are the turn's choices); during a turn
   (processing, cancelling_processing) it waits. Each turn takes the
   longest arrival-order prefix of what is held, at least one percept and
   at most 8, 65536 bytes of serialized stimuli and 32 participants in
@@ -167,25 +161,23 @@
   floppy.released {count, reason} (deactivated, rebooted or degraded),
   and never replayed. The body counts the turn, computes the
   turn's attention bias with <cognition:attention_bias_for_turn> (focus, focus_candidates:
-  the original's attention_bias_for_turn from device identity only, percept by percept), assembles the turn's choices (below), arms bot.processing.timed_out
+  from device identity only, percept by percept), assembles the turn's choices (below), arms bot.processing.timed_out
   (processing_timeout_ms) for the turn, and, once the recent turns are
   read (reading_turns, below), sends bot.ability.cognition.input
   {turn, stimulus, focus, focus_candidates, participants, choices,
   environment} to the cognition in deciding. Replies count only when they carry
   the current turn. A timeout sends
   bot.ability.cognition.cancel {turn} and waits in cancelling_processing,
-  bounded by processing_timeout_ms clamped to 100..5000 ms (the original's
-  cancel wait): the acknowledgement
+  bounded by processing_timeout_ms clamped to 100..5000 ms: the acknowledgement
   fails the turn (bot.processing.failed); no acknowledgement degrades the
   bot.
 
-  Choices (the original's per-turn dispatch inventory,
-  collect_offered_events): on processing entry the body reads its own
+  Choices (the per-turn dispatch inventory): on processing entry the body reads its own
   choices with <decision:choice location="body_choices"
   events="bot.focus_device"> (the transition on active: bot.focus_device
-  when the turn has focus candidates; the original's 178094a removes
-  bot.clear_focus, so focus stays on a device until the bot focuses
-  another), <decision:pin> pins bot.focus_device's device to an
+  when the turn has focus candidates; nothing clears the focus, so it
+  stays on a device until the bot focuses another, decision D155),
+  <decision:pin> pins bot.focus_device's device to an
   enum of the turn's focus_candidates, and
   <processing:collect_offered_events> tags every choice with the session id
   of the session that offers it (the target a stage sends it to): the
@@ -202,18 +194,17 @@
   they are still over the turn fails without reaching the cognition.
 
   Dispatch: the cognition's stages send their own selections, each to the
-  session its target names (#_scxml_ + target, decision D104), as the
-  original's stages dispatch theirs (cognition.types.dispatch_selected_events):
+  session its target names (#_scxml_ + target, decision D104):
   a selection of the body's own bot.focus_device reaches the body during
-  the turn and is taken by active's transition, whose cond is the
-  original's guard (_ability_selected_configured_focus_device). The schemas the generate
+  the turn and is taken by active's transition while the body offers it
+  (focusDeviceEnabled()). The schemas the generate
   service and the decision service check a selection against (the focus
   device's enum pinned to the turn's candidates, each target an enum of
-  the offering sessions) refuse what the original's attention policy
-  refused before anything is sent. On the turn's output the body logs
+  the offering sessions) refuse what the attention policy does not
+  allow before anything is sent. On the turn's output the body logs
   bot.processing.completed and sends itself the selections that name no
   target: the trusted SpeechHeard seed's bot.ability.communication.input
-  (the original dispatches it to a declared event of the bot), which it
+  (a declared event of the bot), which it
   takes as outside communication input.
 
   Outputs: each event the body emits is sent to its parent, the
@@ -225,7 +216,7 @@
   bot.ability.conversation.failed and bot.ability.conversation.output, the
   listening's bot.ability.listening.failed, and any ability's
   bot.ability.failed that is not a turn's reply;
-  floppy's own records are labelled floppy.* (not the original events):
+  floppy's own log records, which are not events, are labelled floppy.*:
   floppy.output the turn's selected events (one record per completed turn),
   floppy.choices each turn's choices, floppy.focus each focus change,
   floppy.held the number held after each arrival during a turn, and
@@ -250,16 +241,16 @@
   Time bounds (decision D101): the bounds param may set the cognition's
   child_operation_timeout_ms and child_operation_ceiling_ms (a stage's
   inactivity bound and its backstop), its per-tier reflex_timeout_ms,
-  intuition_timeout_ms and reasoning_timeout_ms (one tier's step bound,
-  the reference's _tier_timeouts), reasoning's max_context_tokens and
+  intuition_timeout_ms and reasoning_timeout_ms (one tier's step bound),
+  reasoning's max_context_tokens and
   completion_reserve_tokens (its model's context fit, decision D143) and
   reflection's revising_timeout_ms
   and revising_ceiling_ms (likewise for a revision through the builder),
   [floppy fields]; the body passes those it was given to the cognition as
   <param name="bounds">, and each one absent is the ability's default
-  (README.md, "Defaults").
+  (docs/defaults.md).
 
-  Memory (the original's sqlite_memory): the body passes its database (a file in
+  Memory: the body passes its database (a file in
   the directory the run grants the sql service at /memory, scx run's
   dir option) to the cognition, the communication, the identity, the
   short-term register and the persona as <param name="database">;
@@ -289,24 +280,22 @@
          backstop, and reflection's revising; decision D101): each absent one
          is the ability's own default. -->
     <data id="bounds" expr="({})"/>
-    <!-- The memory database file (the original's sqlite_memory
-         database), in the directory the run grants the service at /memory. -->
+    <!-- The memory database file, in the directory the run grants the
+         service at /memory. -->
     <data id="database" expr="'/memory/floppy.sqlite'"/>
     <!-- The environment's id (its root's _sessionid, decision D106), which
          the environment gives as a <param>. -->
     <data id="environment" expr="null"/>
-    <!-- The owner's traits (the original's bot.traits: one to 24, each at
-         most 200 characters), which the environment's <invoke> may set as
-         a <param>; by default the original's companion example's
-         DEFAULT_TRAITS. -->
+    <!-- The owner's traits (one to 24, each at most 200 characters), which
+         the environment's <invoke> may set as a <param>; by default four
+         companion traits. -->
     <data id="traits" expr="['warm', 'patient', 'curious', 'honest']"/>
     <data id="activation_timeout_ms" expr="30000"/>
-    <!-- The owner-written firmware (the original's bot file partials, its
-         Firmware): a document's URI, relative to this one, that the
+    <!-- The owner-written firmware: a document's URI, relative to this one, that the
          environment's <invoke> may give as a <param>; null runs
          firmware/firmware.scx, the firmware of a bot that has none, which offers
          nothing and is not shown to the cognition. Its start is bounded
-         by firmware_timeout_ms (the original's attachment bound). -->
+         by firmware_timeout_ms. -->
     <data id="firmware_src" expr="null"/>
     <data id="firmware_timeout_ms" expr="30000"/>
     <!-- The firmware read this turn (<device:snapshot>), or null. -->
@@ -323,8 +312,8 @@
     <data id="owned_devices" expr="({})"/>
     <data id="devices" expr="[]"/>
     <!-- What each held device sits on, which the environment gives as a
-         <param> (decision D159): reference to an object's id (the
-         original's Placement.on); a device standing free is absent. -->
+         <param> (decision D159): reference to an object's id; a device
+         standing free is absent. -->
     <data id="placed_on" expr="({})"/>
     <!-- This turn's snapshots of the held devices (<device:snapshot>):
          reference to {id, state, attributes, events}. -->
@@ -338,7 +327,7 @@
     <data id="offers" expr="({})"/>
     <data id="waiting" expr="[]"/>
     <!-- The input abilities each environment.* stimulus fans out to
-         (the original's Bot input, as invoke ids), and the one being sent to. -->
+         (as invoke ids), and the one being sent to. -->
     <data id="input" expr="['identity', 'listening']"/>
     <!-- Whether the eye perceives (decision D189): on, seeing is expected,
          takes every environment.visual and offers its look. -->
@@ -348,12 +337,12 @@
          short-term register (<memory:stm_projection>). -->
     <data id="stm_payload" expr="({})"/>
     <!-- The Listening abilities that receive speaking's efference copy
-         (the original's Speaking listening peers, as invoke ids). -->
+         (as invoke ids). -->
     <data id="listening_abilities" expr="['listening']"/>
     <!-- Turns. -->
     <data id="turn" expr="0"/>
     <!-- What reached the body while it was busy, in arrival order, for the
-         next turn to perceive (the original's _held): each {stimulus,
+         next turn to perceive: each {stimulus,
          source, participants}; and the turn's take of it (takePercepts:
          {count, stimulus, participants}). -->
     <data id="held" expr="[]"/>
@@ -361,7 +350,7 @@
     <data id="focused_device" expr="null"/>
     <data id="stimulus" expr="null"/>
     <!-- Who took part in the turn's stimulus, as its producer stamped them
-         (the original's f6c4e08); a device's bot.input names no one. -->
+         (decision D119); a device's bot.input names no one. -->
     <data id="participants" expr="[]"/>
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
@@ -387,7 +376,7 @@
       <assign location="turn_reads" expr="0"/>
     </onentry>
     <onexit>
-      <!-- The original _clear_focus on every reboot and deactivate. -->
+      <!-- Every reboot and deactivate clears the focus. -->
       <assign location="focused_device" expr="null"/>
     </onexit>
     <invoke id="cognition" type="scxml" src="../../abilities/cognition/cognition.scx">
@@ -426,9 +415,8 @@
     </transition>
     <!-- The cognition asks the identity for the bot's own name, and the
          identity's answer (also sent after each adoption) goes back to
-         the cognition (the original's AskEvent and NamedEvent), from the
-         start of each run: the cognition may ask while the bot is
-         activating, and the identity answers once it knows. -->
+         the cognition, from the start of each run: the cognition may ask
+         while the bot is activating, and the identity answers once it knows. -->
     <transition event="bot.ability.identity.ask" event:schema="../../abilities/schemas/bot.ability.identity.ask.json">
       <send event="bot.ability.identity.ask" target="#_identity">
         <content expr="_event.data"/>
@@ -439,8 +427,8 @@
         <content expr="_event.data"/>
       </send>
     </transition>
-    <!-- The short-term register (the original's bot.register, reached by
-         message only): the turns a child writes. -->
+    <!-- The short-term register (reached by message only): the turns a
+         child writes. -->
     <transition event="bot.ability.memory.stm.turn" event:schema="../../abilities/schemas/bot.ability.memory.stm.turn.json">
       <send event="bot.ability.memory.stm.turn" target="#_stm">
         <content expr="_event.data"/>
@@ -474,8 +462,8 @@
       </send>
     </transition>
     <!-- What is still held when the body leaves is released, counted and
-         logged by each leaving transition with its reason, never replayed
-         (the original's _release_held); live's entry empties it. -->
+         logged by each leaving transition with its reason, never replayed;
+         live's entry empties it. -->
     <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json" target="deactivating">
       <if cond="holdsPercepts()">
         <log label="floppy.released" expr="releasedLog('deactivated')"/>
@@ -523,19 +511,19 @@
           <content expr="emptyData()"/>
         </send>
       </transition>
-      <!-- The original's activation_cancelling (a2cbaa8): every accepted
+      <!-- Deactivating while activating (decision D118): every accepted
            bot.deactivate is answered, so leaving live cancels the
            abilities and deactivating answers bot.deactivated. -->
       <transition event="bot.deactivate" event:schema="schemas/bot.deactivate.json" target="deactivating"/>
     </state>
 
-    <!-- The abilities are ready: the firmware (the owner-written machinery,
-         the original's Firmware) starts on top of them, and stays while
+    <!-- The abilities are ready: the firmware (the owner-written machinery)
+         starts on top of them, and stays while
          the bot is active. -->
     <state id="started" initial="firmware_starting">
       <invoke id="firmware" type="scxml" srcexpr="firmwareSrc()"/>
 
-      <!-- The last activation step (the original's firmware_starting): the
+      <!-- The last activation step: the
            firmware is started when it sends its first bot.ability.offers;
            a failure, an ability or the firmware ending, or no offers
            within firmware_timeout_ms fails the activation. -->
@@ -579,8 +567,8 @@
             <log label="floppy.released" expr="releasedLog('deactivated')"/>
           </if>
         </transition>
-        <!-- A product the firmware hands over as it starts waits for active
-             (the original defers it). -->
+        <!-- A product the firmware hands over as it starts is held until
+             active. -->
         <transition event="bot.ability.cognition.input" event:schema="../../abilities/schemas/bot.ability.cognition.input.json">
           <assign location="held" expr="heldWithHandoff(_event)"/>
         </transition>
@@ -663,8 +651,7 @@
             <content expr="_event.data"/>
           </send>
         </transition>
-        <!-- A conversation product that is not text (the original's bot grants no
-             turn for it). -->
+        <!-- A conversation product that is not text (it gets no turn). -->
         <transition event="bot.ability.conversation.output" event:schema="../../abilities/schemas/bot.ability.conversation.output.json">
           <send event="bot.ability.conversation.output" target="#_parent">
             <content expr="_event.data"/>
@@ -676,11 +663,11 @@
             <content expr="_event.data"/>
           </send>
         </transition>
-        <!-- The body's own choice (the original: focus on active), offered on
+        <!-- The body's own choice (bot.focus_device, on active), offered on
              processing entry and taken as a stage sends it (one that no
-             longer applies is ignored, as the original's guard ignores it).
+             longer applies is ignored).
              Nothing the bot selects clears the focus: it stays on a device
-             until the bot focuses another (the original's R-9, 178094a). -->
+             until the bot focuses another (decision D155). -->
         <transition event="bot.focus_device" event:schema="schemas/bot.focus_device.json"
                     cond="focusDeviceEnabled()">
           <if cond="isFocusCandidate(_event)">
@@ -696,7 +683,7 @@
           </onentry>
           <!-- What the firmware handed over while it started. -->
           <transition cond="holdsPercepts()" target="processing"/>
-          <!-- The original's reflex floor (_focus_event_target): an
+          <!-- The reflex floor (decision D155): an
                unoccupied body turns to the device an input came from, on
                its identity alone, so that device's events are this turn's
                choices. A handoff comes from an ability, never a device, so
@@ -724,8 +711,8 @@
           </transition>
         </state>
 
-        <!-- One turn of the cognition: it takes what is held (the original's
-             _dispatch_bot_processing, at least one percept) and perceives
+        <!-- One turn of the cognition: it takes what is held (at least one
+             percept) and perceives
              it: the recent turns first, then the turn's input. -->
         <state id="processing" initial="reading_turns">
           <onentry>
@@ -901,7 +888,7 @@
             <send event="bot.processing.failed" target="#_parent">
               <content expr="cancelledFailure()"/>
             </send>
-            <!-- The original's transition into degraded announces it. -->
+            <!-- The transition into degraded announces it (decision D118). -->
             <send event="bot.degraded" target="#_parent">
               <param name="stage" expr="'processing_cancel'"/>
             </send>
@@ -918,7 +905,7 @@
           </transition>
         </state>
 
-        <!-- Every turn ends here (the original's turn_ended choice). Something
+        <!-- Every turn ends here. Something
              held starts the next turn at once, which perceives it with
              whatever else is held; an unfocused body first turns to the
              device of what arrived first (the reflex floor). Otherwise the
@@ -958,10 +945,10 @@
   <final id="inactive"/>
 
   <!-- A sink: the cognition did not acknowledge a cancel, or ended while
-       active. The bot takes no more turns. The original's degraded is a state
-       with no way out; here it is a top-level final state (scx validate
-       refuses a state that can never exit, LINT002), so the session ends
-       with the reason as its result. -->
+       active. The bot takes no more turns. Degraded has no way out, so it
+       is a top-level final state (scx validate refuses a state that can
+       never exit, LINT002), and the session ends with the reason as its
+       result. -->
   <final id="degraded">
     <onentry>
       <log label="floppy.degraded" expr="degraded_reason"/>

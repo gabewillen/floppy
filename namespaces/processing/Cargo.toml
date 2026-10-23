@@ -1,6 +1,6 @@
 [package]
 name = "floppy-processing"
-description = "The `processing` namespace: `<processing:model_facing_schema>`, `<processing:collect_offered_events>`, `<processing:send>` and `<processing:selection_confidence>`, the original's processing module (the model-facing schemas of the offered events, the turn's offered events tagged with their offering sessions, the dispatch tool, and the selection confidence), as a Wasm extension component"
+description = "The `processing` namespace: `<processing:model_facing_schema>`, `<processing:collect_offered_events>`, `<processing:send>` and `<processing:selection_confidence>` (the model-facing schemas of the offered events, the turn's offered events tagged with their offering sessions, the dispatch tool, and the selection confidence), as a Wasm extension component"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

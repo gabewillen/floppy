@@ -1,11 +1,10 @@
 # The room
 
-[`room.scx`](room.scx) is floppy's environment (the original's
-`Environment`, decision D102): the root session `scx run` runs, whose
-invoked children are its participants. It invokes the floppy bot
-([`bots/floppy/floppy.scx`](../../bots/floppy/floppy.scx)) as `floppy`,
-which activates on joining (D107), and holds no device (no device is
-ported yet; the tests add the lamp fixture, `tests/fixtures/environment/lamp/`).
+[`room.scx`](room.scx) is floppy's environment (decision D102): the root
+session `scx run` runs, whose invoked children are its participants. It
+invokes the floppy bot ([`bots/floppy/floppy.scx`](../../bots/floppy/floppy.scx))
+as `floppy`, which activates on joining (D107), and holds no device (floppy
+ships none yet; the tests add the lamp fixture, `tests/fixtures/environment/lamp/`).
 
 | Data | What |
 | --- | --- |
@@ -13,10 +12,10 @@ ported yet; the tests add the lamp fixture, `tests/fixtures/environment/lamp/`).
 | `holdings` | bot invoke id to the device invoke ids it holds (D105); its keys are the bots |
 | `placements` | invoke id to `{position: {x, y, z}, threshold_db}` (D103); a participant with none hears every sound |
 | `objects` | the ids of the physical things participants sit on (D159); a placement's `on` names one |
-| `supervision` | `{max_restarts, backoff_initial_ms, backoff_max_ms, stable_after_ms}` (D158; the original's defaults 5, 1 s, 1 min, 1 min) |
+| `supervision` | `{max_restarts, backoff_initial_ms, backoff_max_ms, stable_after_ms}` (D158; by default 5, 1 s, 1 min, 1 min) |
 | `attempts`, `activation_failed` | each bot's consecutive failed attempts, and whether its last activation failed |
 
-What it does (the original's behavior, decisions D103, D105, D108):
+What it does (decisions D103, D105, D108):
 
 - **Host input** is routed by its payload: `bot.ability.communication.input`
   to the participants its `target_ids` names, to every bot when empty;
@@ -28,7 +27,7 @@ What it does (the original's behavior, decisions D103, D105, D108):
   that perceives them: a sound's `received_level_db` follows the free-field
   law from the sender's placement (1 m reference, 1 cm clamp), and a
   participant below its threshold receives nothing.
-- **Supervision** (D158, the original's runtime Supervisor): each bot runs
+- **Supervision** (D158): each bot runs
   in its own region of `present` (`supervising.<bot>`). A bot that leaves
   degraded, after a failed activation, or failed is invoked again after a
   doubling backoff (`room.restarted`), until another attempt would not fit
@@ -38,7 +37,7 @@ What it does (the original's behavior, decisions D103, D105, D108):
   are logged as `<log label="EVENT">` with their data. A voice embedding is
   never written: an identity that is an array of numbers in `source_ids` or
   `target_ids`, and an embedding's JSON inside a `*_ref`, are written as
-  `<biometric:VoiceEmbedding>`, as the original's capture writes it.
+  `<biometric:VoiceEmbedding>`.
 
 Each bot gets `environment` (the room's `_sessionid`, D106),
 `owned_devices` (each held device's reference to its address,

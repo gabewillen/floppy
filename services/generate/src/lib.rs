@@ -25,64 +25,60 @@
 //! * the conversation, exactly one of `prompt` (a non-empty string: one
 //!   `user` message, used exactly) or `messages` (a non-empty JSON array of
 //!   objects with exactly `role`, one of `system`, `user`, `assistant`, and
-//!   `content`, a string or a non-empty array of the original's parts, see
+//!   `content`, a string or a non-empty array of reading parts, see
 //!   "Images").
 //! * `system` (optional, a non-empty string): a `system` message before the
 //!   conversation.
 //! * `schema` (optional): a JSON Schema (a JSON object, or a string holding
 //!   one) that satisfies its dialect's metaschema (2020-12 unless `$schema`
 //!   names another supported dialect) and references nothing outside itself.
-//!   With it the request offers one function tool, as the original's Chat
-//!   Completions provider offers its `dispatch` tool (decision D112; it
-//!   never sends `response_format`): the schema's root `description` is
+//!   With it the request offers one function tool, as reasoning and
+//!   reflection offer their `dispatch` tool (decision D112; it never sends
+//!   `response_format`): the schema's root `description` is
 //!   the function's `description` and the rest of the schema its
 //!   `parameters`, and a call is required (`tool_choice` `required`, unless
 //!   the invocation asks `auto`). The
-//!   reply's calls are returned as the original's text generator returns
-//!   them, every call's `arguments` a JSON object (arguments the model sent
-//!   as a JSON string of the object are decoded once more, as the original
-//!   decodes them), and every call is of
+//!   reply's calls are returned in order, every call's `arguments` a JSON
+//!   object (arguments the model sent as a JSON string of the object are
+//!   decoded once more, decision D128), and every call is of
 //!   the function with arguments the schema admits **before** anything is
 //!   returned (a call of another name, or arguments it does not admit, fail
-//!   `schema-mismatch`, as the original's processing refuses a call that is
-//!   not its `dispatch`). A top-level field of the arguments that the
-//!   schema's root `properties` do not declare is dropped before the check
-//!   and is not returned (the original's processing reads only `events`);
+//!   `schema-mismatch`, so a stage never reads a call that is not its
+//!   `dispatch`). A top-level field of the arguments that the schema's root
+//!   `properties` do not declare is dropped before the check and is not
+//!   returned (a stage's dispatch reads only `events`);
 //!   nested objects are checked strictly, after each string the model sent
 //!   where the schema takes only an array or an object is decoded once
-//!   (an `anyOf`'s first branch that admits the decoded value wins), as the
-//!   original's processing decodes them for a local model that encodes a
-//!   nested array or object as a JSON string; such a string that is not
+//!   (an `anyOf`'s first branch that admits the decoded value wins), for a
+//!   local model that encodes a nested array or object as a JSON string; such a string that is not
 //!   JSON, or holds neither, is `not-json`. `schemaname` (a string matching
 //!   `[A-Za-z0-9_-]{1,64}`, [`DEFAULT_SCHEMA_NAME`] without it, requiring
 //!   a schema) is the function's `name`.
 //! * `reasoning_effort` (optional, one of `none`, `minimal`, `low`,
 //!   `medium`, `high`, `xhigh`): sent as `reasoning_effort`, and
 //!   [`DEFAULT_REASONING_EFFORT`] without it. With a schema only `none` is
-//!   admitted and it is [`TOOLS_REASONING_EFFORT`] (`none`) without it, as
-//!   the original sends function tools on Chat Completions: reasoning models
-//!   reject them with any other effort.
+//!   admitted and it is [`TOOLS_REASONING_EFFORT`] (`none`) without it:
+//!   reasoning models reject function tools on Chat Completions with any
+//!   other effort.
 //! * `stream` (optional, a boolean, `false` without it): `true` asks for a
 //!   streamed reply (`"stream": true`, server-sent events); without it the
-//!   call is one non-streamed completion, as the original's `OpenAI`-compatible
-//!   provider makes it.
+//!   call is one non-streamed completion.
 //! * `tool_choice` (optional, `required` or `auto`, requiring a schema;
 //!   [`TOOL_CHOICE`] without it): sent as `tool_choice`. Under `auto` the
-//!   model may answer in its content instead of calling the tool, as the
-//!   original's processor allows for a backend whose guided decoding of a
-//!   required call degrades what the model writes: a reply with no call is
+//!   model may answer in its content instead of calling the tool, for a
+//!   backend whose guided decoding of a required call degrades what the
+//!   model writes: a reply with no call is
 //!   read as one call whose `id` is [`CONTENT_CALL_ID`] and whose arguments
 //!   are the content, checked as any call's; blank content is a result
 //!   with no call.
 //! * `temperature` (optional, a number from 0 to [`MAX_TEMPERATURE`]): sent
-//!   as `temperature` (the original's image decoder reads at `0`).
+//!   as `temperature` (the reading ability reads at `0`).
 //! * `max_completion_tokens` (optional, a whole number from 1 to
 //!   [`MAX_COMPLETION_TOKENS`]): sent as `max_completion_tokens` (the
-//!   original's image decoder writes at most `512`).
+//!   reading ability writes at most `512`).
 //! * `thinking_token_budget` (optional, a whole number from 1 to
 //!   [`MAX_COMPLETION_TOKENS`]): sent as `thinking_token_budget`, the
-//!   extra body key with which vLLM bounds a reasoning model's thinking, as
-//!   the original's processor reserves it.
+//!   extra body key with which vLLM bounds a reasoning model's thinking.
 //!
 //! Any other parameter, a parameter given twice, or a malformed value
 //! rejects the start: the `<invoke>` raises `error.execution` and nothing is
@@ -90,12 +86,11 @@
 //!
 //! # Images
 //!
-//! A message's `content` may be an array of the original's parts (its reading
-//! input's `kind` and `content`): `{"kind": "text", "content": T}` and, in a
-//! `user` message, `{"kind": "image", "content": R}`, so a vision model reads
-//! an image as the original's `ImageDecoder` does (the document sends the original's
-//! prompt, "Read all visible text in this image. Return only the text.", as a
-//! text part). Media moves by reference: `R` is a path-only URI reference
+//! A message's `content` may be an array of reading parts (`kind` and
+//! `content`): `{"kind": "text", "content": T}` and, in a `user` message,
+//! `{"kind": "image", "content": R}`, so a vision model reads an image (the
+//! reading ability sends its prompt, "Read all visible text in this image.
+//! Return only the text.", as a text part). Media moves by reference: `R` is a path-only URI reference
 //! (no scheme, authority, query, fragment, or empty, `.`, or `..` segment),
 //! percent-decoded and resolved against the guest root ([`image_path`]), so
 //! `media/page.png` and `/media/page.png` both name `/media/page.png`. The
@@ -119,7 +114,7 @@
 //! no variable the run holds, the invocation fails fast: it sends nothing
 //! and returns [`FAILED_EVENT`] with `unconfigured` ([`endpoint`]). When
 //! only the `apikey` slot names none, the backend is keyless (a local
-//! server that takes no key, as the original's keyless client asks one):
+//! server that takes no key):
 //! the request is sent with no `authorization` header (decision D127). The
 //! component holds opaque references only; the host substitutes the values
 //! into the one admitted request.
@@ -131,13 +126,12 @@
 //! with no data (the invoking session receives `done.invoke.<id>` after the
 //! event):
 //!
-//! * [`RESULT_EVENT`] the original's text-generator output, `{"content":
+//! * [`RESULT_EVENT`] the reply, `{"content":
 //!   C, "tool_calls": [{"id": I, "name": N, "args": A}], "request_bytes":
 //!   B, "usage": U}`: `C` the reply's content (never empty without a
 //!   schema; empty when a call has none), and every call of the reply in
-//!   order (the original's `TextToolCall`, `A` a JSON object; at least one
-//!   with a schema, none without); with what the request cost, as the
-//!   original's Chat Completions output carries it (decision D126): `B` the
+//!   order (`A` a JSON object; at least one with a schema, none without);
+//!   with what the request cost (decision D126): `B` the
 //!   UTF-8 bytes of the request body without its streaming members
 //!   ([`Request::request_bytes`]), and `U` the tokens the backend counted
 //!   ([`Usage`]: `input_tokens`, `output_tokens`, `reasoning_tokens`,
@@ -145,8 +139,8 @@
 //!   absent), absent when the reply carried no count.
 //! * [`FAILED_EVENT`] `{"code": C}` with one closed [`FailureCode`]; a call
 //!   refused as `not-json` or `schema-mismatch` also carries `"rejection":
-//!   {"key": K, "message": M}` ([`Rejection`], the original's selection
-//!   rejection): `K` a stable key (`not-json`, `schema-mismatch:name` for a
+//!   {"key": K, "message": M}` ([`Rejection`], what a selection repair
+//!   answers): `K` a stable key (`not-json`, `schema-mismatch:name` for a
 //!   call of another function, or `schema-mismatch:<P>`, `P` the JSON
 //!   pointer of where the arguments first fail), and `M` a one-line
 //!   diagnostic a model can repair from that repeats no argument value,
@@ -192,11 +186,10 @@
 //! invocation (SCXML 6.4): the host drops it and closes the request's
 //! connection at once.
 //!
-//! A call is not streamed unless the invocation asks (`stream`), as the original's
-//! provider calls the API. A streamed request (`"stream": true`,
+//! A call is not streamed unless the invocation asks (`stream`). A streamed
+//! request (`"stream": true`,
 //! server-sent events) also asks for the usage on the stream's last chunk
-//! (`"stream_options": {"include_usage": true}`, as the original's client
-//! does). A call the run's `stream` slot decides cannot ask for it (a
+//! (`"stream_options": {"include_usage": true}`). A call the run's `stream` slot decides cannot ask for it (a
 //! backend refuses `stream_options` without `stream`, and the slot's one
 //! value is the `stream` member), so its usage is the completion's when
 //! the backend does not stream, and only what a streaming backend sends
@@ -232,8 +225,7 @@
 //!
 //! # The reply
 //!
-//! The reply is read as the original's Chat Completions provider reads it
-//! ([`Reply`]). A non-streamed reply is the completion's first choice
+//! The reply is read as a Chat Completions reply ([`Reply`]). A non-streamed reply is the completion's first choice
 //! ([`completion_reply`]): its `message.content`, its `message.tool_calls`
 //! (each a `function` call with a non-blank `id` and name and string
 //! `arguments`), and its `finish_reason`. A streamed reply is put back
@@ -254,7 +246,7 @@
 //! schema the answer is the content, and tool calls or no content (empty
 //! counts as none: a reasoning model's stream opens with an empty
 //! `content`) are malformed. With a schema the answer is the content and
-//! every call, as the original's text generator checks them: a reply with
+//! every call, checked so: a reply with
 //! no tool call ("did not include a required tool call") is malformed
 //! under `required` and read from its content under `auto`, and
 //! a call whose arguments are not a JSON object is not JSON, and a call of
@@ -317,13 +309,12 @@ pub const MAX_COMPLETION_TOKENS: u32 = 1_048_576;
 /// The path appended to the base URL.
 pub const CHAT_COMPLETIONS_PATH: &str = "/chat/completions";
 /// `tool_choice` with a schema when the invocation names none: a call of
-/// the one tool is required, as the original's Chat Completions provider
-/// asks by default.
+/// the one tool is required (decision D112).
 pub const TOOL_CHOICE: &str = "required";
 /// The `tool_choice` values the service sends with a schema: `required`, or
-/// `auto`, which lets the model answer in its content as well, as the
-/// original's processor offers it for a backend whose guided decoding of a
-/// required call degrades what the model writes.
+/// `auto`, which lets the model answer in its content as well, for a
+/// backend whose guided decoding of a required call degrades what the model
+/// writes.
 pub const TOOL_CHOICES: [&str; 2] = ["required", "auto"];
 /// The `id` of a call read from a reply's content under `auto`.
 pub const CONTENT_CALL_ID: &str = "content";
@@ -333,8 +324,8 @@ pub const MAX_TEMPERATURE: f64 = 2.0;
 pub const DEFAULT_SCHEMA_NAME: &str = "result";
 /// `reasoning_effort` when the invocation names none and gives no schema.
 pub const DEFAULT_REASONING_EFFORT: &str = "low";
-/// `reasoning_effort` with a schema (`tools`), the only one admitted there,
-/// as the original's Chat Completions provider sends it.
+/// `reasoning_effort` with a schema (`tools`), the only one admitted there:
+/// reasoning models reject function tools with any other.
 pub const TOOLS_REASONING_EFFORT: &str = "none";
 /// The `reasoning_effort` values the Chat Completions API defines.
 pub const REASONING_EFFORTS: [&str; 6] = ["none", "minimal", "low", "medium", "high", "xhigh"];
@@ -368,12 +359,10 @@ pub const MAX_PARTS: usize = wasm_bound(256);
 /// Upper bound on the bytes of every image the conversation reads together
 /// (wasm builds only). Their base64 `data:` URLs and the conversation stay
 /// inside the host's 4 MiB request-body bound, so it is also the bound of
-/// one image: the original's 4 MiB per image (`media.MAX_IMAGE_BYTES`)
-/// cannot fit a request's body once encoded.
+/// one image: a 4 MiB image cannot fit a request's body once encoded.
 pub const MAX_IMAGE_BYTES: usize = wasm_bound(2 * 1024 * 1024);
 /// The image media types the service sends, by their leading bytes
-/// ([`image_media_type`]): the original's `ImageMediaType`, the types every
-/// image-capable provider accepts (a producer transcodes any other).
+/// ([`image_media_type`]): the types every image-capable provider accepts (a producer transcodes any other).
 pub const IMAGE_MEDIA_TYPES: [&str; 3] = ["image/png", "image/jpeg", "image/webp"];
 
 /// One part of a URL or header value: literal text, or an opaque reference
@@ -398,9 +387,9 @@ pub struct Request {
     /// The reference whose value (`true` or `false`) is the body's `stream`
     /// member, when the run's `stream` slot decides it ([`STREAM_SLOT`]).
     pub stream: Option<u32>,
-    /// The bytes of the body as the original counts a request's
-    /// (`OutputData.request_bytes`): the canonical body without its
-    /// streaming members (`stream`, `stream_options`).
+    /// The bytes of the body as a result reports them (decision D126): the
+    /// canonical body without its streaming members (`stream`,
+    /// `stream_options`).
     pub request_bytes: usize,
 }
 
@@ -475,8 +464,8 @@ impl Role {
     }
 }
 
-/// One part of a message's content: the original's reading parts, `kind` `text`
-/// or `image`.
+/// One part of a message's content: a reading part, `kind` `text` or
+/// `image`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ContentPart {
     /// `{"kind": "text", "content": T}`: sent as a `text` part.
@@ -495,7 +484,7 @@ pub struct Image {
     pub url: String,
 }
 
-/// A message's content: a string, or the original's parts.
+/// A message's content: a string, or reading parts.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Content {
     /// A string, sent as one.
@@ -613,8 +602,7 @@ pub const MAX_REJECTION_CHARS: usize = 200;
 /// that a [`Rejection`] repeats.
 pub const MAX_REJECTED_NAME_CHARS: usize = 64;
 
-/// Why a reply's call was refused, as the original's `SelectionRejectionData`
-/// carries it, for a [`FailureCode::NotJson`] or
+/// Why a reply's call was refused (decision D126), for a [`FailureCode::NotJson`] or
 /// [`FailureCode::SchemaMismatch`] failure: a stable `key` an invoking
 /// document may compare (the same refusal twice has the same key) and a
 /// one-line `message` its model may repair from. Neither carries a value of
@@ -699,8 +687,8 @@ pub fn one_line(text: &str, max: usize) -> String {
         .collect()
 }
 
-/// The tokens a reply's backend said it counted, as the original's `Usage`
-/// reads a completion's `usage`: `input_tokens` (`prompt_tokens`),
+/// The tokens a reply's backend said it counted, read from a completion's
+/// `usage`: `input_tokens` (`prompt_tokens`),
 /// `output_tokens` (`completion_tokens`), `reasoning_tokens`
 /// (`completion_tokens_details.reasoning_tokens`), and `total_tokens`. A
 /// count the usage leaves out, or that is not a whole number, is absent.
@@ -875,7 +863,7 @@ fn text_parameter(value: &Data, invalid: &'static str) -> Result<String, &'stati
 }
 
 /// The messages of a JSON array: objects with exactly `role` and `content`,
-/// a string or a non-empty array of the original's parts (objects with exactly
+/// a string or a non-empty array of reading parts (objects with exactly
 /// `kind`, `text` or `image`, and `content`, a string; an image's is a
 /// reference [`image_path`] resolves). An image part is read with `read`
 /// (its path and the bytes the images' bound has left) and is valid only in
@@ -934,7 +922,7 @@ pub fn messages_from_json(
         .collect()
 }
 
-/// One of the original's parts: `{"kind": "text", "content": T}` or
+/// One reading part: `{"kind": "text", "content": T}` or
 /// `{"kind": "image", "content": R}` (in a `user` message only), its image
 /// read with `read` within the `left` bytes of the images' bound.
 fn content_part(
@@ -1115,7 +1103,7 @@ fn boolean_parameter(
 
 /// The `reasoning_effort` an invocation asks: one of [`REASONING_EFFORTS`],
 /// or [`DEFAULT_REASONING_EFFORT`] without the parameter. With a schema
-/// (`tools`), as the original does: `none` without the parameter, and any
+/// (`tools`): `none` without the parameter, and any
 /// other value is refused, since reasoning models reject function tools on
 /// Chat Completions unless the effort is `none`.
 fn reasoning_effort_parameter(
@@ -1498,7 +1486,7 @@ fn content_json(content: &Content) -> Json {
     }
 }
 
-/// One completion's reply, as the original reads it: the first choice's
+/// One completion's reply: the first choice's
 /// content, its tool calls, and its finish reason.
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct Reply {
@@ -1524,8 +1512,8 @@ pub struct ToolCall {
     pub arguments: String,
 }
 
-/// The reply of a streamed Chat Completions result, put back together as
-/// the original's stream assembly does: the `choices` of `index` 0 of every
+/// The reply of a streamed Chat Completions result, put back together: the
+/// `choices` of `index` 0 of every
 /// `data:` chunk before `data: [DONE]`, their `delta.content` joined in
 /// order, each `delta.tool_calls` fragment folded into the call its `index`
 /// names (its `id` and `function.name` when given, its `function.arguments`
@@ -1744,11 +1732,9 @@ pub fn completion_reply(body: &[u8]) -> Result<Reply, FailureCode> {
 }
 
 impl Reply {
-    /// What the reply answers, as the original's Chat Completions text
-    /// generator returns it (its output's `content` and `tool_calls`):
+    /// What the reply answers, its `content` and `tool_calls`:
     /// `{"content": C, "tool_calls": [{"id", "name", "args"}]}`, every
-    /// call (the original's `TextToolCall`, its arguments a JSON object) in
-    /// order, and `usage` when the reply counted any tokens ([`Usage`]).
+    /// call (its arguments a JSON object) in order, and `usage` when the reply counted any tokens ([`Usage`]).
     /// With a tool whose call is `required` there is at least one call;
     /// under `auto` a reply without one is read from its content (one call
     /// [`CONTENT_CALL_ID`] of its JSON object, none when it is blank);
@@ -1802,7 +1788,7 @@ impl Reply {
         let calls = if self.tool_calls.is_empty() {
             // Under `auto` the model may answer in its content: it is read
             // as the arguments of one call of the tool, and blank content
-            // selects nothing, as the original's processor reads it.
+            // selects nothing.
             if tool.tool_choice != "auto" {
                 return Err(FailureCode::Malformed.into());
             }
@@ -1832,7 +1818,7 @@ impl Reply {
 }
 
 /// The arguments of one call of `tool`, as a JSON object its parameters
-/// admit, read as the original's text generator and processor read them:
+/// admit, read leniently (decision D128):
 /// arguments that are a JSON string of the object decoded once more,
 /// undeclared top-level fields dropped ([`undeclared_dropped`]), and each
 /// string where the parameters take only an array or an object decoded
@@ -1924,8 +1910,7 @@ fn pointer_token(token: &str) -> String {
 }
 
 /// The JSON strings a model sent where a tool's parameters take only an
-/// array or an object, each decoded once, as the original's processing
-/// decodes them (`_decoded_json_strings`): local models often encode a
+/// array or an object, each decoded once: local models often encode a
 /// nested array or object as a JSON string.
 struct Decoder<'a> {
     /// The parameters, which a `$ref` resolves against.
@@ -2292,9 +2277,9 @@ fn described(kind: &boon::ErrorKind<'_, '_>) -> String {
 }
 
 /// Drops each top-level field of a call's arguments that the root
-/// `properties` of the tool's `parameters` do not declare, as the
-/// original's processing reads only the fields it knows (its dispatch
-/// parser reads `args.events` alone): a model's stray `reason` beside
+/// `properties` of the tool's `parameters` do not declare, since a stage
+/// reads only the fields it knows (its dispatch reads `args.events` alone):
+/// a model's stray `reason` beside
 /// `events` is not the tool's. Only the root is touched; nested objects are
 /// checked as the schema says. Parameters whose root declares no
 /// `properties` object leave the arguments as they are.

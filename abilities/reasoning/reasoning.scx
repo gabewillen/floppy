@@ -1,15 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Reasoning stage (the reference abilities/cognition/reasoning): the slow
-  System 2 pass. The cognition (abilities/cognition/cognition.scx) invokes it once
+  floppy's Reasoning stage: the slow System 2 pass. The cognition (abilities/cognition/cognition.scx) invokes it once
   per turn that its earlier stages left unhandled.
 
-  Tiers (the reference's deliberation.Deliberation, which reasoning and
-  intuition share; decision D144): the <param> tier is reasoning, or
+  Tiers (one chart that reasoning and intuition share; decision D144): the <param> tier is reasoning, or
   intuition, the chat tier the cognition invokes this chart as when the bot
   composes one. Intuition asks its own model (both tiers ask with
-  reasoning_effort none, the generate service's only one with a schema, as
-  the reference's Chat Completions provider asks) and is offered the
+  reasoning_effort none, the generate service's only one with a schema)
+  and is offered the
   deliberative handoff,
   bot.ability.reasoning.input, among its choices: selecting it sends the
   stage's other selections, in order, and hands the turn on, its donedata
@@ -19,30 +17,25 @@
 
     recalling -> applying (an invoked generate service) -> done
 
-  Memory (the original Reasoning._recall_activity): with a
+  Memory: with a
   database (the <param> database, the memory database file), recalling
   invokes the memory ability (abilities/memory/memory.scx) with one
-  transaction of the original's two selects, prior cognitive episodes
+  transaction of two selects, prior cognitive episodes
   (query_tags cognitive_episode) and standing directives (query_tags
   standing_directive), each for the turn's context or none, oldest first,
   at most 50, and sends itself bot.ability.reasoning.recalled with them and
   memory_consulted true. Reasoning writes nothing: the turn's episode is
-  stored once, by reflection after the turn's output (decision D97; the
-  original's _retain_activity inserted a second copy of it). The context is
-  the stimulus's target_device (the original _context_ref_from_input). The
-  recalled rows are read with <memory:contents> (the original's
-  OutputData.contents): a row that is not a JSON object is skipped, as the
-  original skips one that does not validate. A memory failure fails the stage ("Reasoning memory recall
-  failed: ..."). Without
-  a database (the original's Reasoning without a memory collaborator) recalling
+  stored once, by reflection after the turn's output (decision D97). The
+  context is the stimulus's target_device. The recalled rows are read
+  with <memory:contents>: a row that is not a JSON object is skipped. A
+  memory failure fails the stage ("Reasoning memory recall
+  failed: ..."). Without a database recalling
   logs <log label="memory" expr="'absent'"> and sends its event with
   memory_consulted false and nothing recalled.
 
-  Prompt (the reference's processing.py InputData.model_facing_content over
-  cognition/event.py model_facing_content, built by
-  <cognition:model_facing_content>): the system message is the reference's
-  system channel, its instructions (none: the reference's reasoning has
-  no static policy, DEFAULT_INSTRUCTIONS "") then the self block of the
+  Prompt (built by <cognition:model_facing_content>): the system message
+  is the system channel, its instructions (none: reasoning has no static
+  policy, instructions "") then the self block of the
   bot's self (the <param> self, what the cognition was told of itself),
   and is left out when both are empty; the user message is laid out most
   stable first: the recent turns heard and said (the <param> recent, the
@@ -53,30 +46,25 @@
   stages already did on the turn, the <param> acted), then the stimulus as
   the root element of its own block, stamped stimulus:event, stimulus:id,
   stimulus:source and stimulus:target. The stimulus's data is JSON here,
-  so it renders as the reference renders a payload that is not a model: a
-  content field, an object as entry elements, an array as item elements,
-  each object or array item filled as one (decision D99). ElementTree's
-  indent and serialization (two spaces, an empty element as <name />) are
-  reproduced. The reference's budgets hold: 262144 encoded bytes, 4096
+  so it renders as plain data: a content field, an object as entry elements, an array as item elements,
+  each object or array item filled as one (decision D99), indented by two
+  spaces, an empty element written as <name />. The budgets hold: 262144 encoded bytes, 4096
   nodes, 4096 collection items and 65536 characters per scalar for the
   projection; the system channel and the dispatch schema are reserved
   first, and the projection renders into the bytes they leave of the
   prompt's 262144. Recalled context never fails the turn: prior_episodes
   and standing_directives keep their newest items that fit and count the
-  rest as omitted="<n>" (the original's b1654d6). Over a budget otherwise
-  (the stimulus alone overflows), the element writes the reference's
-  message to prompt_failure and the stage fails without a model call with
+  rest as omitted="<n>". Over a budget otherwise (the stimulus alone
+  overflows), the element writes the budget's message to prompt_failure and the stage fails without a model call with
   it (for example "prompt projection encoded byte budget exceeded").
-  applying ends on the generate service's done.invoke, which
-  stands in for the original's private bot.ability.reasoning.reasoned
-  completion. The call streams its reply when the run's FLOPPY_STREAM
+  applying ends on the generate service's done.invoke. The call streams its reply when the run's FLOPPY_STREAM
   says the backend does (env:stream), and each generate.progress the
   service returns while the reply arrives is sent on to the parent
   cognition, whose stage bound is then one of inactivity (decision D101).
 
   Choices: the body's collected choices for the turn (the <param>
   choices: the body's own and each ability's offers, each tagged with the
-  session id of its offerer as target). The original's dispatch tool is
+  session id of its offerer as target). The dispatch tool is
   built from the choices by <processing:send> and offered as generate's
   one tool, named dispatch: {events: [anyOf one branch per offered
   event]}, each branch {event (a one-value enum), data (the event's
@@ -84,34 +72,29 @@
   it)}. The generate service returns the reply's tool calls only once every
   one is a dispatch call whose arguments the tool's schema admits, so a
   selection outside the choices (event, target or data) or a call of
-  another tool fails the stage as schema-mismatch before anything is sent
-  (the original's _events_from_dispatch_tool_calls and
-  events_from_dispatch_args checks). With no choices the stage fails
+  another tool fails the stage as schema-mismatch before anything is sent.
+  With no choices the stage fails
   without a model call.
 
-  Dispatch (the original's apply activity dispatches the reasoned
-  selections before bot.ability.reasoning.reasoned,
-  cognition.types.dispatch_selected_events): generate.result's events, of
+  Dispatch (decision D113): generate.result's events, of
   every dispatch call in order, are each sent to the session their target
   names (#_scxml_ + target, decision D104) and kept, in order, as the
   stage's selected. A send that fails (error.*) fails the stage. A
   selected bot.ability.cognition.ignore goes to the cognition, which only
   logs it.
 
-  Repair (the reference's deliberation selection repair, types.py
-  MAX_SELECTION_REPAIRS and with_selection_feedback; decision D142): a
+  Repair (decision D142): a
   reply the dispatch tool's schema refuses (generate.failed not-json or
   schema-mismatch, its rejection {key, message}, or its code as both
   without one) is not yet a failure: applying is entered again, so the
-  call is made again with the reference's repair feedback (the rejection
+  call is made again with repair feedback (the rejection
   message, marked as untrusted validator diagnostic data) rendered last
   in the prompt, at most max_selection_repairs (2) times. The same
   rejection key twice running, or a rejection once the repairs are
-  spent, fails the stage with the reference's "Selection rejected:
+  spent, fails the stage with "Selection rejected:
   <message>".
 
-  Context fit (the reference's ContextFit and its providers' fitting,
-  decision D143): with a max_context_tokens, each call's prompt is fitted
+  Context fit (decision D143): with a max_context_tokens, each call's prompt is fitted
   to floor((max_context_tokens - completion_reserve_tokens) *
   bytes_per_token) bytes of request, the system channel and the dispatch
   schema included: the prompt renders whole, or with its recalled memory
@@ -175,8 +158,7 @@
          the cognition), rendered first, uncounted, and trimmed to the
          newest that fit. -->
     <data id="recent" expr="[]"/>
-    <!-- The reference reasoning's static policy: none
-         (DEFAULT_INSTRUCTIONS ""). -->
+    <!-- Reasoning's static policy: none. -->
     <data id="instructions" expr="''"/>
     <!-- The system channel <cognition:model_facing_content> writes, null for
          none. -->
@@ -189,17 +171,16 @@
     <!-- Whether the selections held the deliberative handoff. -->
     <data id="handed_on" expr="false"/>
     <data id="gen_failure" expr="null"/>
-    <!-- Selection repair (the reference's deliberation, decision D142): the
-         rejection of this attempt ({key, message}), the attempts repaired
-         so far (at most max_selection_repairs, the reference's
-         MAX_SELECTION_REPAIRS), the key of the rejection just before, and
+    <!-- Selection repair (decision D142): the rejection of this attempt
+         ({key, message}), the attempts repaired so far (at most
+         max_selection_repairs), the key of the rejection just before, and
          the feedback the next attempt renders last. -->
     <data id="rejection" expr="null"/>
     <data id="attempt" expr="0"/>
     <data id="max_selection_repairs" expr="2"/>
     <data id="last_rejection_key" expr="null"/>
     <data id="feedback" expr="null"/>
-    <!-- Context fit (the reference's ContextFit, decision D143): the model's
+    <!-- Context fit (decision D143): the model's
          context and the tokens reserved for its reply, from the
          cognition's <param>s (null fits nothing), the request bytes a token
          (3 until a reply's usage teaches it fewer), and this call's fitted
@@ -214,12 +195,11 @@
          items). -->
     <data id="call" expr="null"/>
     <data id="s" expr="null"/>
-    <!-- Memory: the database file (null: no memory) and the original's
-         episode and directive select, with ?2 the context. The SQL runs on both
+    <!-- Memory: the database file (null: no memory) and the episode and
+         directive select, with ?2 the context. The SQL runs on both
          engines (SQLite and Postgres); JSON rows are told by their
          content_format, the 50 most recent by created_at,
-         then memory_id (the insertion order), read oldest first (the original's
-         recent_select). -->
+         then memory_id (the insertion order), read oldest first. -->
     <data id="database" expr="null"/>
     <data id="context_ref" expr="null"/>
     <data id="prior_episodes" expr="[]"/>

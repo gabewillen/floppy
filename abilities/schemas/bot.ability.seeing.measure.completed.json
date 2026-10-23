@@ -73,7 +73,7 @@
             }
           ],
           "default": null,
-          "description": "Optional visual source: the transducer this view came off (a camera, a screen capture), as its emitter stamps it. The original carries it as the visual event's source; an SCXML event relayed through the body keeps only its data, so floppy carries it in the view [floppy field]. Seeing holds the newest view of each source and drops a view without one.",
+          "description": "Optional visual source: the transducer this view came off (a camera, a screen capture), as its emitter stamps it. An SCXML event relayed through the body keeps only its data, so the source travels in the view itself [floppy field]. Seeing holds the newest view of each source and drops a view without one.",
           "examples": [
             "camera-1",
             "screen"
@@ -216,7 +216,7 @@
       "type": "object"
     },
     "received_at": {
-      "description": "When the view arrived, on Seeing's clock, in milliseconds since the epoch (the original's timezone-aware datetime; floppy reads the session clock, Date.now()) [floppy field].",
+      "description": "When the view arrived, on Seeing's clock, in milliseconds since the epoch (Seeing reads the session clock, Date.now()) [floppy field].",
       "examples": [
         1441065600000
       ],

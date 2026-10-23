@@ -1,7 +1,7 @@
 //! The `pgsql` invoked service: one Postgres transaction of parameterized
 //! statements per `<invoke>`, as a `stateforward:scxml/invoked-service` Wasm
-//! component. It is the Postgres engine under the original's Memory ability
-//! (`providers/postgres_memory`), beside the SQLite engine
+//! component. It is the Postgres engine under the memory ability,
+//! beside the SQLite engine
 //! `services/sql`, and answers exactly as that service does: the same
 //! `statements`, the same `sql.result` and `sql.failed` events. Like it, it
 //! knows no schema of its own.
@@ -29,13 +29,12 @@
 //!   lookup. It names no password (a document carries no secret), so the
 //!   server must accept the user without one (`PGlite` does; a Postgres
 //!   needs `trust` for it).
-//! * `statements` (required): exactly as `services/sql` takes them
-//!   (the original's `Statement`): a non-empty JSON array of objects with `sql`
+//! * `statements` (required): exactly as `services/sql` takes them:
+//!   a non-empty JSON array of objects with `sql`
 //!   (one statement with positional `?` or numbered `?NNN` placeholders,
 //!   which the service rewrites to `$1`, `$2`, ... (`?NNN` to `$NNN`)
 //!   outside string literals, quoted
-//!   identifiers, dollar-quoted strings, and comments, as the original's
-//!   `postgres_memory` rewrites them for a `NUMERIC` adapter) and
+//!   identifiers, dollar-quoted strings, and comments) and
 //!   optionally `parameters` (strings, finite numbers, booleans as 1 or 0,
 //!   and nulls), and optionally `rowcount` (the rowcount the statement
 //!   must have, else the whole transaction fails with code `rowcount`).
@@ -183,7 +182,7 @@ impl Parameter {
     }
 }
 
-/// One parameterized statement (the original's `Statement`), its placeholders
+/// One parameterized statement, its placeholders
 /// already rewritten to `$n`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Statement {

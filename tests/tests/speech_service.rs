@@ -7,7 +7,7 @@
 //! and `ElevenLabs`' `text-to-speech` (nothing reaches the network). Media
 //! moves by reference: the run grants the service a directory with
 //! `--dir URI=HOST::/media`, a decoding reads its audio from there, and an
-//! encoding writes its audio there. The service answers the original's
+//! encoding writes its audio there. The service answers
 //! `bot.ability.hearing.speech.decoding.output`,
 //! `bot.ability.vocal.speech.encoding.output`, or `bot.ability.failed`,
 //! then completes.
@@ -474,8 +474,7 @@ fn an_unconfigured_backend_answers_failed_and_reads_and_sends_nothing() {
 }
 
 /// A run that holds a base URL and no key asks a keyless speech server:
-/// the request carries no key header at all, as the original's keyless
-/// client asks one (decision D127).
+/// the request carries no key header at all (decision D127).
 #[test]
 fn without_a_held_key_the_request_carries_no_key_header() {
     let mock = Mock::start();

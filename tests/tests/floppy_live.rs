@@ -215,8 +215,8 @@ fn live_choices() {
         .and_then(|text| serde_json::from_str::<Json>(&text).ok());
     let reasoned = names(texts(&all, "reasoning"));
     // Every focus is on the lamp, and an output that focuses it has focused
-    // it at least once: as in the original, the decision layer's environment action
-    // and reasoning may both send `bot.focus_device` in one turn, with no
+    // it at least once: the decision layer's environment action and
+    // reasoning may both send `bot.focus_device` in one turn, with no
     // dedupe (D113, J12), so the lamp may be focused twice.
     let focuses = texts(&all, "floppy.focus");
     let focuses_output = output.as_ref().is_some_and(|output| {
@@ -238,7 +238,7 @@ fn live_choices() {
     );
 }
 
-/// One text turn through the original's communication path: a
+/// One text turn through the communication path: a
 /// `bot.ability.communication.input` addressed to the bot is admitted into
 /// the conversation, whose product is the turn's stimulus; the cascade
 /// selects `bot.ability.communication.respond`, which reasoning sends to

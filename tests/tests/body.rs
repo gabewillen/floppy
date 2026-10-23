@@ -1,5 +1,5 @@
-//! The floppy bot's body (`bots/floppy/floppy.scx`): the original's Bot lifecycle
-//! and processing turns, run through `scx run` on the wall clock as the one
+//! The floppy bot's body (`bots/floppy/floppy.scx`): its lifecycle and
+//! processing turns, run through `scx run` on the wall clock as the one
 //! participant (`floppy`) of the room (`environments/room/room.scx`, laid
 //! out beside it by `support::environment`), which activates it on joining.
 //!
@@ -25,8 +25,9 @@
 //! name no target). `tests/tests/communication.rs` covers what the
 //! communication does with what it is sent.
 //!
-//! One test sets `input` (the original's Bot input) to `['identity']` and puts
-//! `tests/fixtures/phase4/input_double.scx` in the identity's place; the
+//! One test sets `input` (the input abilities each stimulus fans out to) to
+//! `['identity']` and puts `tests/fixtures/phase4/input_double.scx` in the
+//! identity's place; the
 //! double logs `input.sound` and `input.visual` for each `environment.*`
 //! stimulus the body fans out to it.
 //!
@@ -302,9 +303,9 @@ fn deactivate_while_activating_is_answered_and_cancels_the_abilities() {
     // The silent cognition never offers, so the bot is still activating.
     run.event("bot.deactivate", &json!({}));
     let records = run.until(WAIT, label_is("done.invoke"));
-    // Every accepted bot.deactivate is answered (the original's
-    // activation_cancelling, a2cbaa8): never activated, the bot still
-    // reports bot.deactivated once its abilities are cancelled.
+    // Every accepted bot.deactivate is answered (decision D118): never
+    // activated, the bot still reports bot.deactivated once its abilities
+    // are cancelled.
     assert_eq!(
         only(
             &records,
@@ -397,7 +398,7 @@ fn a_turn_completes_with_the_cognitions_output() {
         ),
         pairs(&[
             ("double.input", r#"1 reply "hello""#),
-            // A device's bot.input names no one (the original's f6c4e08).
+            // A device's bot.input names no one (decision D119).
             ("double.participants", "[]"),
             (
                 "floppy.output",
@@ -905,8 +906,7 @@ fn an_unacknowledged_cancel_degrades_the_bot() {
                 "bot.processing.failed",
                 r#"{"message":"Bot processing timed out after 0.3 seconds.","turn":1}"#
             ),
-            // The transition into degraded announces it (the original's
-            // a2cbaa8).
+            // The transition into degraded announces it (decision D118).
             ("bot.degraded", r#"{"stage":"processing_cancel"}"#),
         ])
     );
@@ -1081,8 +1081,8 @@ fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
     );
     let mut run = Run::start(&[room.display().to_string()], &[]);
     activated(&mut run);
-    // Unfocused, the input names the lamp: the body turns to it (the
-    // original's reflex floor), its only candidate. The body offers
+    // Unfocused, the input names the lamp: the body turns to it
+    // (decision D155), its only candidate. The body offers
     // bot.focus_device pinned to it, then the double's offer, compacted
     // and tagged.
     run.event("bot.input", &device_input("focus", "lamp", "lamp"));
@@ -1101,7 +1101,7 @@ fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
     // Focused on the lamp, an input for the lamp again: the same choices
     // (nothing clears the focus). A focus on the fan, outside the turn's candidates (which
     // the generate service's pinned enum would refuse), is not taken: the
-    // body's guard is the original's _ability_selected_configured_focus_device.
+    // body takes a focus only on one of the turn's candidates.
     run.event("bot.input", &device_input("focus", "fan", "lamp"));
     let records = run.until(WAIT, label_is("bot.processing.completed"));
     assert_eq!(
@@ -1134,9 +1134,8 @@ fn an_ignore_selection_goes_to_the_cognition_and_ends_the_turn() {
     let body = layout(&Cognition::Double("'ready'"), &[]);
     let mut run = start(&body);
     activated(&mut run);
-    // The reference without_ignore_selections ("cognition only"): the
-    // ignore goes to the cognition that offers it, and the turn completes
-    // with it as its output.
+    // An ignore selection goes to the cognition that offers it, and the
+    // turn completes with it as its output.
     run.event("bot.input", &input("ignore", "noise"));
     // The double logs the ignore it sent itself and the environment the
     // outcome, in either order.
@@ -1313,7 +1312,7 @@ fn a_selected_communication_input_reaches_the_communication() {
     let mut run = Run::start(&args, &[]);
     activated(&mut run);
     // Heard speech whose turn selects bot.ability.communication.input (as
-    // the original's SpeechHeard seed does), naming no target: the body
+    // the SpeechHeard seed does), naming no target: the body
     // sends it to itself and relays it to the communication, whose
     // conversation product is the next turn's stimulus.
     let speech = json!({"audio": "media/admit.wav", "media_type": "audio/wav"});

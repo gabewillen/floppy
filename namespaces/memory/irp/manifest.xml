@@ -21,7 +21,7 @@
     </test>
   </assert>
   <assert id="memory-2" specnum="2" specid="#memory-2">
-    <![CDATA[<memory:to_json> writes the original's Memory.to_json of a message as one JSON text: {content, content_type, source_ids, target_ids} with sorted keys and compact separators, the content's arrays and objects tagged __stateforward_memory_content__ list and mapping (a mapping's entries ordered by their keys' ASCII JSON), a number that is not a safe integer as a Python float, and the identities sorted without repeats, embeddings as Python floats; a message without identity arrays raises error.execution and assigns nothing.]]>
+    <![CDATA[<memory:to_json> writes a message's memory JSON as one JSON text: {content, content_type, source_ids, target_ids} with sorted keys and compact separators, the content's arrays and objects tagged __stateforward_memory_content__ list and mapping (a mapping's entries ordered by their keys in code point order), every number as its JSON number, and the identities sorted without repeats, each embedding its JSON array; a message without identity arrays raises error.execution and assigns nothing.]]>
     <test id="910" conformance="mandatory" manual="false">
       <start uri="910/test910.txml"/>
     </test>
@@ -45,7 +45,7 @@
     </test>
   </assert>
   <assert id="memory-4" specnum="4" specid="#memory-4">
-    <![CDATA[<memory:cut_at_word> writes {text, cut} as the original's _cut_at_word returns them: words of at most 2048 UTF-8 bytes unchanged and cut false; longer words cut, cut true, to their whole characters within the bound, less the partial word the bound falls inside when an earlier word break exists, trailing white space (Unicode White_Space) removed; words that are not a string raise error.execution and assign nothing.]]>
+    <![CDATA[<memory:cut_at_word> writes {text, cut}: words of at most 2048 UTF-8 bytes unchanged and cut false; longer words cut, cut true, to their whole characters within the bound, less the partial word the bound falls inside when an earlier word break exists, trailing white space (Unicode White_Space) removed; words that are not a string raise error.execution and assign nothing.]]>
     <test id="930" conformance="mandatory" manual="false">
       <start uri="930/test930.txml"/>
     </test>
@@ -57,7 +57,7 @@
     </test>
   </assert>
   <assert id="memory-5" specnum="5" specid="#memory-5">
-    <![CDATA[<memory:stm_projection> writes the original's _payload_projection of a value: an object's fields in their order, keeping each with a non-empty key and a boolean, number, or string of at most 40 characters, at most 16 fields, every other field dropped, never truncated; a bare boolean, number or bounded string as {value}; anything else {}.]]>
+    <![CDATA[<memory:stm_projection> writes the bounded scalar projection of a value: an object's fields in their order, keeping each with a non-empty key and a boolean, number, or string of at most 40 characters, at most 16 fields, every other field dropped, never truncated; a bare boolean, number or bounded string as {value}; anything else {}.]]>
     <test id="940" conformance="mandatory" manual="false">
       <start uri="940/test940.txml"/>
     </test>

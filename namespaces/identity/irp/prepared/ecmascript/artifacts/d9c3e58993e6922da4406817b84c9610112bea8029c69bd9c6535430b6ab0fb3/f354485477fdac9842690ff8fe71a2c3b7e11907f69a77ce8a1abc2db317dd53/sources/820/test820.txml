@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- identity-3: names come first in code point order, then embeddings by their JSON text; repeats are kept. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:identity="https://github.com/stateforward/floppy/namespaces/identity">
+<datamodel>
+  <data id="ids" expr="['zed', [0.5, 1], 'alice', [0.25, 3], 'Bob', 'alice']"/>
+  <data id="s" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <identity:sorted_identities location="s" ids="ids"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="JSON.stringify(s) === '[&quot;Bob&quot;,&quot;alice&quot;,&quot;alice&quot;,&quot;zed&quot;,[0.25,3],[0.5,1]]'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

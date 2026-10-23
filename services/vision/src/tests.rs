@@ -57,7 +57,7 @@ fn after(measure: Measure, previous: Signature) -> VisionRequest {
     }
 }
 
-/// `OpenCV`'s grids for the original's pipeline
+/// `OpenCV`'s grids for the frame difference pipeline
 /// (`cv2.GaussianBlur(cv2.resize(cv2.imdecode(image,
 /// cv2.IMREAD_REDUCED_GRAYSCALE_8), (32, 32), interpolation=cv2.INTER_AREA),
 /// (3, 3), 0)`, `OpenCV` 5.0.0 with libpng 1.6.58, libjpeg-turbo 3.1.2 and

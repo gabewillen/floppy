@@ -1,6 +1,5 @@
-//! floppy's `TurnDetector` (`abilities/turn_detector/turn_detector.scx`,
-//! The original's `abilities/communication/conversation/turn_detector`) run
-//! through `scx run` on the wall clock under
+//! floppy's `TurnDetector` (`abilities/turn_detector/turn_detector.scx`)
+//! run through `scx run` on the wall clock under
 //! `tests/fixtures/turn_detector/turn_detector_harness.scx`, which forwards
 //! each external turn event and heard speech to it and logs what it
 //! answers (`harness.ready`, `harness.complete`, `harness.failed`, their

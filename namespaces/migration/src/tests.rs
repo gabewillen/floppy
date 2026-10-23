@@ -62,7 +62,7 @@ fn data(value: &Json) -> Data {
     }
 }
 
-/// The original's two revisions, with one marker statement each way.
+/// Two revisions, with one marker statement each way.
 fn reference_revisions() -> Json {
     json!([
         {"revision": "0002", "down_revision": "0001", "upgrade": [{"sql": "up 2"}], "downgrade": [{"sql": "down 2"}]},

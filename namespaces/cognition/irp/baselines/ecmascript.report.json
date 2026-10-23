@@ -6,9 +6,9 @@
     "kind": "namespace-irp",
     "source": "namespaces/cognition/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "047abeee43eac5fc8e206fc8d52623af3692f7e75b7c6d0c67fe1a25d4fe013b",
-    "source_digest": "76382267a4f5d3f7eb2f6495abf950c25691571cbb28c66375e57d5be2036f7b",
-    "manifest_digest": "671c945c9daf3461eaea586edd151468b9fcd0ca99c809b3e43aed14054e4206",
+    "corpus_digest": "be72e7308090b9fa68198af883b67407e0fa04a2f62e77df5a67eac33af13253",
+    "source_digest": "eac95872856bc41bee18b14d022ab25323c4e8379c7b3b73eee62f8c2797f220",
+    "manifest_digest": "083e2981a28648f95446a3f3274c53c58a7260bf1940a446d97d804f3aee7e39",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
@@ -16,11 +16,9 @@
       "name": "saxon-process",
       "version": "SaxonJ-HE 12.8 from Saxonica",
       "command_argv": [
-        "java",
-        "-jar",
-        "saxon-he-12.8.jar"
+        "saxon"
       ],
-      "executable_digest": "56444c4a59b4ccda95e4693045645c083c89112a5fe66f8f8622c1a2a3c254c2"
+      "executable_digest": "012b6e274f9fa87155e1527848af8d41f19c6e89d7266a3b50716d5891eb739b"
     },
     "datamodel": "ecmascript",
     "provenance": "baseuri=https://github.com/stateforward/floppy/tree/main/namespaces/cognition/irp/sources"
@@ -55,9 +53,9 @@
     {
       "namespace_uri": "https://github.com/stateforward/floppy/namespaces/cognition",
       "package_version": "0.1.0",
-      "manifest_sha256": "f7ab8f0764d69616e8e7f7fdf095e72de6150fd01d4d3fe15f2d2d9e06a071ed",
-      "schema_sha256": "9feaf3d566eecf693ec0f88fe9c5e338d584f56e48d0d3f90ad222918bb6e398",
-      "component_sha256": "2eeb6e66c31a3e5d6585a2da1cdc1030882c4a32dde56d0f1fdab3d071a20c29"
+      "manifest_sha256": "c3803310bb98f56e650ab7d6c0e3adb78f12d1d50d15456a62d969ceb5435d15",
+      "schema_sha256": "8bbe54b7c48afd3d3dbbf43838fc2d5b04b17effbfaf0776d6762693683911de",
+      "component_sha256": "220d11836f0829b815cb26918b3d2147f261e73bf5bb2af5d8a8ccb2502c2262"
     }
   ],
   "ir_version": 5,
@@ -70,7 +68,7 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "beaf8f1a11521de447fe45fc273f29bfe0b4dd1d1e6478c24054e48ff2a9ef8b",
+  "identity_digest": "62e94f7fbb8ba208274085c163434bab527153e8839dd16f6ec9ef1a74156900",
   "summary": {
     "total_selected": 21,
     "applicable_selected": 21,

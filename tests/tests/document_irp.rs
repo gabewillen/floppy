@@ -293,6 +293,17 @@ fn run_case(document: &Path, case: &Path, test: &str) -> Option<String> {
     )
     .expect("the env file is writable");
     let mut args = vec!["--env-file".to_owned(), env.display().to_string()];
+    // A bot's case starts the bot and every ability it invokes in one host
+    // call, as a bot in its environment does: it runs with the run's fuel
+    // (decision D111).
+    if document
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::file_name)
+        == Some("bots".as_ref())
+    {
+        args.extend(["--fuel".to_owned(), support::FUEL.to_owned()]);
+    }
     // The builder writes a draft's documents into the layout's behaviors
     // directory: a layout of the case's own.
     let start = if binds(document, "files") {

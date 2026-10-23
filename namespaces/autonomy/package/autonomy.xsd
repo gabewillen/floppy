@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  XML Schema of floppy's `autonomy` extension namespace (namespaces/autonomy),
-  the original's autonomy module. It governs structure only; the extension
-  component governs what the element does. Bind it with the prefix
-  `autonomy` by convention.
+  XML Schema of floppy's `autonomy` extension namespace (namespaces/autonomy):
+  the input a learned behavior runs with. It governs structure only; the
+  extension component governs what the element does. Bind it with the
+  prefix `autonomy` by convention.
 
   autonomy:behavior_input_payload
                    location (required): receives the input a learned
-                   behavior runs with (the original's
-                   behavior_input_payload).
+                   behavior runs with: the stimulus data with the turn's
+                   focus added.
                    stimulus, focus, focus_candidates (required):
                    expressions.
                    It takes no other attribute and no content.

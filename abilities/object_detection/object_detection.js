@@ -24,11 +24,11 @@ function generatorFailedMessage(_event) {
   return typeof Object(_event.data).code === 'string' ? 'Object detection generator failed: ' + _event.data.code + '.' : 'Object detection generator failed.';
 }
 
-// replied: the original's GenerativeDetector.
+// replied: the detector on the reply.
 
 // {objects, skipped} (the valid items, at most max_objects, most confident
-// first, and how many were not a DetectedObject), or {message} (the
-// original's detection.Error) when the reply cannot be read at all.
+// first, and how many were not a detected object), or {message} when the
+// reply cannot be read at all.
 function detectedReply() {
   var size = utf8Bytes(reply);
   if (size > max_reply_bytes) {
@@ -101,8 +101,8 @@ function isNumberIn(value, low, high) {
   return typeof value === 'number' && value >= low && value <= high;
 }
 
-// The original's geometry.Box, or null: x and y in 0..1, width and height in
-// (0, 1], inside the image up to the original's 1e-6 slack.
+// A box, or null: x and y in 0..1, width and height in (0, 1], inside the
+// image up to 1e-6 slack.
 function detectedBox(value) {
   if (!isRecord(value) || !hasExactly(value, ['x', 'y', 'width', 'height'])) {
     return null;
@@ -120,7 +120,7 @@ function detectedBox(value) {
   return {x: x, y: y, width: width, height: height};
 }
 
-// The original's DetectedObject, or null: label a string of 1..100
+// A detected object, or null: label a string of 1..100
 // characters, confidence 0..1 or null, and a box.
 function detectedObject(item) {
   if (!isRecord(item) || !hasExactly(item, ['label', 'confidence', 'box'])) {
@@ -144,7 +144,7 @@ function detectedObject(item) {
   return {label: item.label, confidence: confidence, box: box};
 }
 
-// The original's OutputData order: descending confidence, unrated last;
+// The output order: descending confidence, unrated last;
 // stable, so equally rated objects keep the detector's order.
 function mostConfidentFirst(objects) {
   return objects

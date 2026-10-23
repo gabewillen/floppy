@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- cognition-4: over the collection item budget, failurelocation receives the budget's message and location null. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition" xmlns:conf="http://www.w3.org/2005/scxml-conformance" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="p" expr="'unset'"/>
+  <data id="f" expr="null"/>
+  <data id="s" expr="({event: 'bot.input', source: 'gabe', data: {items: Array.from({length: 4097}, (_, i) =&gt; i)}})"/>
+  <data id="e" expr="[]"/>
+  <data id="d" expr="[]"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <cognition:model_facing_content location="p" failurelocation="f" stimulus="s" prior_episodes="e" standing_directives="d"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="p === null &amp;&amp; f === 'prompt projection collection item budget exceeded'" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

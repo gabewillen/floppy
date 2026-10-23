@@ -34,7 +34,7 @@
       "type": "number"
     },
     "turn": {
-      "description": "The body's processing turn that failed, counted from 1; the original's turn_id [floppy field].",
+      "description": "The body's processing turn that failed, counted from 1 [floppy field].",
       "minimum": 1,
       "type": "integer"
     },

@@ -71,9 +71,8 @@ function visualInput() {
 }
 
 // The abilities' offers a turn may select from: every ability's but the
-// persona's, whose revision only reflection may select (the original's
-// Cognition, which shows the persona every turn and lets reflection alone
-// revise it).
+// persona's, whose revision only reflection may select (the cognition
+// shows the persona every turn and lets reflection alone revise it).
 function turnOffers() {
   var turn = Object.assign({}, offers);
   delete turn.persona;
@@ -174,10 +173,10 @@ function isTurnReadFailure(_event) {
   return _event.data.message.indexOf('short-term memory bot.ability.memory.stm.recent_turns failed') === 0;
 }
 
-// The short-term register's record of an admitted stimulus (the original's
-// event_record): its name, its data's bounded projection (stm_payload), and
-// the source a sound names (floppy carries the original's envelope source
-// in the sound); floppy has no envelope id or target.
+// The short-term register's record of an admitted stimulus: its name, its
+// data's bounded projection (stm_payload), and the source a sound names
+// (the sound carries it in place of an envelope source); floppy has no
+// envelope id or target.
 function stmRecord(name, _event) {
   const record = {stimulus_name: name, payload: stm_payload};
   if (typeof _event.data.source === 'string' && _event.data.source !== '') {
@@ -186,7 +185,7 @@ function stmRecord(name, _event) {
   return record;
 }
 
-// Percepts (the original's _hold_percept and _dispatch_bot_processing)
+// Percepts
 
 // held with a bot.input as its percept: the envelope, no source (it reaches
 // the body from outside its session), the participants its device stamped.
@@ -252,8 +251,7 @@ function joinedParticipants(participants, more) {
 
 // The turn's take of held: its longest arrival-order prefix, at least one
 // percept, within 8 percepts, 65536 bytes of serialized stimuli and 32
-// participants in their union (the original's MAX_PERCEPTS,
-// _MAX_PERCEIVED_BYTES and _MAX_PERCEIVED_PARTICIPANTS). One percept is
+// participants in their union. One percept is
 // the turn's stimulus as itself; more are perceived together as
 // bot.perceived, with the union as the turn's participants. Pure: the
 // state changes are the <assign>s that read it.
@@ -284,7 +282,7 @@ function heldAfterTake() {
 }
 
 // What a leaving transition releases, with its reason (deactivated,
-// rebooted or degraded; the original's _release_held).
+// rebooted or degraded).
 function releasedLog(reason) {
   return JSON.stringify({count: held.length, reason: reason});
 }
@@ -303,8 +301,8 @@ function cognitionInput() {
   return {turn: turn, stimulus: stimulus, focus: focus, focus_candidates: focus_candidates, participants: participants, choices: choices, environment: environmentField()};
 }
 
-// The turn's environment from the bot's perspective (decision D106), in
-// the original's layout: the environment's id, then the bot itself, its
+// The turn's environment from the bot's perspective (decision D106): the
+// environment's id, then the bot itself, its
 // state and its own attributes (owned_devices, each held device that was
 // read this turn under its reference with its id, state and attributes,
 // and on, the object it sits on (decision D159), a device that is not
@@ -362,13 +360,13 @@ function turnData() {
 
 // cancelling_processing
 
-// processing_timeout_ms clamped to 100..5000 ms (the original's cancel wait).
+// processing_timeout_ms clamped to 100..5000 ms.
 function cancelDelay() {
   return delay(Math.min(5000, Math.max(100, processing_timeout_ms)));
 }
 
-// The original _dispatch_processing_timeout_failure, after an acknowledged cancel
-// and after an unacknowledged one alike.
+// The turn's timeout failure, after an acknowledged cancel and after an
+// unacknowledged one alike.
 function cancelledFailure() {
   return {message: 'Bot processing timed out after ' + processing_timeout_ms / 1000 + ' seconds.', turn: turn};
 }
@@ -390,8 +388,8 @@ function staleReplyLog(_event) {
   return _event.name + ' for turn ' + _event.data.turn + ' (current ' + turn + ')';
 }
 
-// The data a selection is sent with, as the original's dispatch_selected_events
-// takes it: its data object, else {} (no data, null, or a non-object).
+// The data a selection is sent with: its data object, else {} (no data,
+// null, or a non-object).
 function selectionData(s) {
   return s.data !== null && typeof s.data === 'object' && !Array.isArray(s.data) ? s.data : ({});
 }
