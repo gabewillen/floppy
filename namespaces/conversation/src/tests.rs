@@ -1217,3 +1217,246 @@ fn turn_participants_of_the_wrong_kind_raise_error_execution() {
     );
     assert!(host.assigned.is_empty());
 }
+
+/// The attributes of `<conversation:people_for_input>`.
+fn people_attributes() -> Vec<Attribute> {
+    vec![
+        attr("location", "people"),
+        attr("input", "input"),
+        attr("voices", "voices"),
+        attr("count", "count"),
+    ]
+}
+
+/// What `<conversation:people_for_input>` assigns for `input`, the
+/// `voices` memory holds and its `count` of people.
+fn people_of(input: &Json, voices: &Json, count: f64) -> Json {
+    let assigned = run(
+        "people_for_input",
+        &people_attributes(),
+        &[
+            ("input", data(input)),
+            ("voices", data(voices)),
+            ("count", number(count)),
+        ],
+    );
+    let [(location, people)] = assigned.as_slice() else {
+        panic!("one assignment: {assigned:?}");
+    };
+    assert_eq!(location, "people");
+    people.clone()
+}
+
+/// Decision D194: a voice memory holds is its person, by D90's match
+/// (cosine at 0.85, margin 0.05).
+#[test]
+fn a_voice_memory_holds_is_its_person() {
+    let input = json!({"source_ids": [[0.3, 0.95]], "target_ids": ["floppy"], "content": "hi"});
+    let voices = json!([["person-1", "[0.28,0.96]"], ["person-2", "[0.96,-0.28]"]]);
+    assert_eq!(
+        people_of(&input, &voices, 2.0),
+        json!({
+            "input": {"source_ids": ["person-1"], "target_ids": ["floppy"], "content": "hi"},
+            "people": [],
+            "voices": [["person-1", "[0.3,0.95]"]],
+        })
+    );
+}
+
+#[test]
+fn a_voice_no_one_has_is_a_new_person_numbered_on_from_the_count() {
+    let input = json!({"source_ids": [[0.96, -0.28], "alice"], "target_ids": []});
+    let voices = json!([["person-1", "[0.28,0.96]"]]);
+    assert_eq!(
+        people_of(&input, &voices, 1.0),
+        json!({
+            "input": {"source_ids": ["person-2", "alice"], "target_ids": []},
+            "people": ["person-2"],
+            "voices": [["person-2", "[0.96,-0.28]"]],
+        })
+    );
+    // With no people held, the first is person-1.
+    assert_eq!(
+        people_of(
+            &json!({"source_ids": [[1, 0]], "target_ids": []}),
+            &json!([]),
+            0.0
+        )["people"],
+        json!(["person-1"])
+    );
+}
+
+#[test]
+fn the_same_voice_twice_in_one_input_is_one_person() {
+    let input = json!({"source_ids": [[1, 0], [0.99, 0.05], [0, 1]], "target_ids": [[0, 1]]});
+    assert_eq!(
+        people_of(&input, &json!([]), 4.0),
+        json!({
+            "input": {"source_ids": ["person-5", "person-6"], "target_ids": ["person-6"]},
+            "people": ["person-5", "person-6"],
+            "voices": [
+                ["person-5", "[1,0]"],
+                ["person-5", "[0.99,0.05]"],
+                ["person-6", "[0,1]"],
+                ["person-6", "[0,1]"],
+            ],
+        })
+    );
+}
+
+#[test]
+fn a_person_scores_their_closest_voice_and_two_close_people_are_no_ones() {
+    let known = |pairs: &[(&str, [f64; 2])]| -> Vec<(String, Vec<f64>)> {
+        pairs
+            .iter()
+            .map(|(person, voice)| ((*person).to_owned(), voice.to_vec()))
+            .collect()
+    };
+    // Below the threshold (cos 0.8): no one.
+    assert_eq!(
+        person_for_voice(&[1.0, 0.0], &known(&[("p", [0.8, 0.6])])),
+        None
+    );
+    // At the threshold or above: the person.
+    assert_eq!(
+        person_for_voice(&[1.0, 0.0], &known(&[("p", [0.85, 0.526_782_687_642_637])])),
+        Some("p")
+    );
+    // A person scores their closest voice.
+    assert_eq!(
+        person_for_voice(
+            &[1.0, 0.0],
+            &known(&[
+                ("p", [0.0, 1.0]),
+                ("q", [0.9, 0.435_889_894_354_067_4]),
+                ("p", [1.0, 0.0])
+            ])
+        ),
+        Some("p")
+    );
+    // Two people within the margin of each other: no one's.
+    assert_eq!(
+        person_for_voice(
+            &[1.0, 0.0],
+            &known(&[("p", [1.0, 0.0]), ("q", [0.96, 0.28])])
+        ),
+        None
+    );
+    // A voice of another size, or without a norm, matches no one.
+    assert_eq!(
+        person_for_voice(&[1.0, 0.0, 0.0], &known(&[("p", [1.0, 0.0])])),
+        None
+    );
+    assert_eq!(
+        person_for_voice(&[0.0, 0.0], &known(&[("p", [1.0, 0.0])])),
+        None
+    );
+}
+
+#[test]
+fn a_damaged_voice_row_matches_no_one() {
+    let input = json!({"source_ids": [[1, 0]], "target_ids": []});
+    let voices = json!([
+        ["", "[1,0]"],
+        ["person-1", "not json"],
+        ["person-2", "[]"],
+        ["person-3", "{}"],
+        ["person-4"],
+        7
+    ]);
+    assert_eq!(
+        people_of(&input, &voices, 4.0)["input"]["source_ids"],
+        json!(["person-5"])
+    );
+}
+
+#[test]
+fn malformed_people_for_input_raises_error_execution_and_assigns_nothing() {
+    let input = data(&json!({"source_ids": [[1, 0]], "target_ids": []}));
+    for (attributes, values, detail) in [
+        (
+            vec![
+                attr("location", "people"),
+                attr("input", "input"),
+                attr("voices", "voices"),
+            ],
+            vec![],
+            "conversation:people_for_input requires a count",
+        ),
+        (
+            [people_attributes(), vec![attr("other", "x")]].concat(),
+            vec![],
+            "conversation:people_for_input takes only the location, input, voices and count attributes",
+        ),
+        (
+            people_attributes(),
+            vec![
+                ("input", data(&json!([]))),
+                ("voices", data(&json!([]))),
+                ("count", number(0.0)),
+            ],
+            "conversation:people_for_input input is not an object",
+        ),
+        (
+            people_attributes(),
+            vec![
+                (
+                    "input",
+                    data(&json!({"source_ids": [{"a": 1}], "target_ids": []})),
+                ),
+                ("voices", data(&json!([]))),
+                ("count", number(0.0)),
+            ],
+            "conversation:people_for_input input source_ids or target_ids is not an array of identities",
+        ),
+        (
+            people_attributes(),
+            vec![
+                ("input", input.clone()),
+                ("voices", data(&json!({}))),
+                ("count", number(0.0)),
+            ],
+            "conversation:people_for_input voices is not an array",
+        ),
+        (
+            people_attributes(),
+            vec![
+                ("input", input.clone()),
+                ("voices", data(&json!([]))),
+                ("count", number(1.5)),
+            ],
+            "conversation:people_for_input count is not a whole number of people",
+        ),
+        (
+            people_attributes(),
+            vec![
+                ("input", input.clone()),
+                ("voices", data(&json!([]))),
+                ("count", number(-1.0)),
+            ],
+            "conversation:people_for_input count is not a whole number of people",
+        ),
+        (
+            people_attributes(),
+            vec![
+                ("input", input.clone()),
+                ("voices", data(&json!([]))),
+                ("count", Data::String("1".into())),
+            ],
+            "conversation:people_for_input count is not a whole number of people",
+        ),
+    ] {
+        let mut host = FakeHost {
+            values: values
+                .into_iter()
+                .map(|(expression, value)| (expression.to_owned(), value))
+                .collect(),
+            ..FakeHost::default()
+        };
+        assert_eq!(
+            execution(execute("people_for_input", &attributes, &[], &mut host)),
+            detail
+        );
+        assert!(host.assigned.is_empty());
+    }
+}

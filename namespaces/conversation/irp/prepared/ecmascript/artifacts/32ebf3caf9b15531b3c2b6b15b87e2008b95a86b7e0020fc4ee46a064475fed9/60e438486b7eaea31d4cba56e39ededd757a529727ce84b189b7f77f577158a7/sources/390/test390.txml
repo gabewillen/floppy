@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- conversation-10: a voice memory holds is its person, a voice no one has a new person numbered on from count, and every voice heard is to be stored. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation">
+<datamodel>
+  <data id="p" expr="null"/>
+  <data id="input" expr="({source_ids: [[0.3, 0.95], 'alice', [0.96, -0.28]], target_ids: ['floppy'], content: 'hi'})"/>
+  <data id="voices" expr="[['person-1', '[0.28,0.96]']]"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:people_for_input location="p" input="input" voices="voices" count="1"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="p.input.content === 'hi' &amp;&amp; p.input.source_ids.join() === 'person-1,alice,person-2' &amp;&amp; p.input.target_ids.join() === 'floppy' &amp;&amp; p.people.join() === 'person-2' &amp;&amp; JSON.stringify(p.voices) === '[[&quot;person-1&quot;,&quot;[0.3,0.95]&quot;],[&quot;person-2&quot;,&quot;[0.96,-0.28]&quot;]]'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

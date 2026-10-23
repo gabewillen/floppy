@@ -18,6 +18,11 @@
                    the input.
                    indexlocation (required): receives the relationship's
                    index. input (required): an expression.
+  conversation:people_for_input
+                   location (required): receives the input with each voice
+                   embedding replaced by its person, the people created,
+                   and the voices to store (decision D194).
+                   input, voices, count (required): expressions.
   conversation:participant_for_source, conversation:fail_turn
                    location (required): holds and receives one
                    relationship, the source added as a participant
@@ -80,6 +85,14 @@
       <xs:attribute name="location" type="xs:string" use="required"/>
       <xs:attribute name="indexlocation" type="xs:string" use="required"/>
       <xs:attribute name="input" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="people_for_input">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="input" type="xs:string" use="required"/>
+      <xs:attribute name="voices" type="xs:string" use="required"/>
+      <xs:attribute name="count" type="xs:string" use="required"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="participant_for_source">

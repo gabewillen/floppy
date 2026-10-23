@@ -4,8 +4,8 @@ The implementation report plan of the `conversation` namespace, in the format of
 [W3C SCXML IRP](../../../scxml.rs/tests/conformance/w3c-irp/README.md) and of
 scxml.rs's own namespace suites
 ([scxml.rs/docs/conformance.md](../../../scxml.rs/docs/conformance.md#namespace-suites)):
-9 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
-("Statements"), tested by 30 mandatory documents. It runs through exactly
+10 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
+("Statements"), tested by 33 mandatory documents. It runs through exactly
 the pipeline the W3C IRP runs through (the canonical compiler, the shipped
 Wasm components under the Wasmtime session host, the same oracles and report
 envelope), with the namespace's own extension package and component bound,
@@ -35,12 +35,12 @@ SAXON='java -jar /opt/saxon/saxon-he-12.8.jar' sh scripts/namespace-irp.sh prepa
 sh scripts/namespace-irp.sh baselines conversation
 ```
 
-The current baseline (manifest SHA-256 `768b57857088adcaeccfb95b8da5c2289729580d645c84212762cf7c714167ff`,
+The current baseline (manifest SHA-256 `0394544312798fb806c222421e57933b852c8686531bb8c1bdc24d5f23b75f85`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
 measured on Linux x86_64, the host `tests/tests/namespace_irp.rs` compares
-fuel on, when the namespace took message participants (with `resembles`)
-and dropped `sequence`, decision D176, 2026-10-22) measures:
+fuel on, when the namespace took `<conversation:people_for_input>`,
+decision D204, 2026-10-23) measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 30 / 30 | 0 | `e8ff927591447857d2437bcc7a3bfd7242484487cb3c2f8f170031c98f40d4ac` | `d0ccbb98ca223695b3240828f092392ba96e26bd38edc9ea4851934535221dc8` |
+| ECMAScript | 33 / 33 | 0 | `632d5dbdbf5d39d325782f1e52175be04f288a49bf9770269ff07eb50f97f5d0` | `6264c784e5db09237bbf53e083a28c2a510cd0cbc1c1f3d588530749faefae28` |
