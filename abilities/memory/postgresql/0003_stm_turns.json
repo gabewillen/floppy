@@ -1,7 +1,7 @@
 {
   "revision": "0003",
   "down_revision": "0002",
-  "doc": "Short-term memory of turns in Postgres: what the bot heard and said (the reference 0002_stm_turns.py, which revises the reference 0001; floppy keeps its own 0001 and 0002 and adds it as 0003, decision D165). One row per message a Conversation committed, in words, beside the short-term register of admitted stimuli. No data moves.",
+  "doc": "Short-term memory of turns in Postgres: what the bot heard and said, added after 0002 so every existing database upgrades in place (decision D165). One row per message a Conversation committed, in words, beside the short-term register of admitted stimuli. No data moves.",
   "upgrade": [
     {
       "sql": "CREATE TABLE bot_stm_turn (seq SERIAL NOT NULL, turn_id TEXT NOT NULL, at TEXT NOT NULL, direction TEXT NOT NULL, speakers_json TEXT DEFAULT '[]' NOT NULL, text TEXT NOT NULL, cut INTEGER DEFAULT '0' NOT NULL, conversation TEXT NOT NULL, PRIMARY KEY (seq))"

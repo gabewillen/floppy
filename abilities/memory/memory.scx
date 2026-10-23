@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Memory ability (the reference abilities/memory: memory.py Memory,
-  store.py MemoryStore on providers/sqlite_memory or
-  providers/postgres_memory): one transaction of the original's Statements
+  floppy's Memory ability: one transaction of statements
   against the bot's memory database, through the sql service (services/sql,
   SQLite) or the pgsql service (services/pgsql, Postgres over its wire
   protocol). An ability that remembers invokes it from the state that needs
@@ -13,8 +11,8 @@
 
     opening -> busy { migrating -> applying } -> applied (final)
 
-  Input: the <param>s database and statements (the original's
-  InputData.statements: [{sql, parameters?}], at least one). The database
+  Input: the <param>s database and statements ([{sql, parameters?}], at
+  least one). The database
   names the engine: a file path is a SQLite database in the directory the
   run grants the sql service; a Postgres connection URI
   (postgresql://USER@IP:PORT/DBNAME) is a Postgres database the run lets
@@ -24,35 +22,29 @@
   opening picks the engine. migrating invokes the migration ability
   (abilities/migration/migration.scx, Alembic's upgrade head) with
   floppy's revisions in the engine's dialect (abilities/memory/sqlite/ and
-  abilities/memory/postgresql/): 0001 and 0002 have the same tables,
-  columns, defaults and indexes as the original's Alembic scripts did when
-  floppy took them (the original's 0001 and 0002_behavior_lifetime), and
-  0003 is the original's 0002_stm_turns (proposed decision D165: the
-  original has since rewritten its 0001 in place and renumbered, so the
-  same revision id names a different schema in each, and a database the
-  original's Alembic wrote is not used in place). On Postgres the
-  defaulted created_at and updated_at are TIMESTAMPTZ DEFAULT NOW(), as
-  postgres_memory declares created_at. The database carries Alembic's
-  alembic_version as the original's does. A database at a revision the
-  history does not hold is refused untouched. applying then runs the
-  statements in one transaction.
+  abilities/memory/postgresql/): 0001 creates the memory, behavior,
+  behavior trigger and short-term register tables, 0002 adds
+  bot_behavior's lifetime, and 0003 adds bot_stm_turn, the short-term
+  memory of turns (proposed decision D165: floppy keeps its revision ids
+  and adds new revisions after them, so every existing floppy database
+  upgrades in place). On Postgres the defaulted created_at and updated_at
+  are TIMESTAMPTZ DEFAULT NOW(). The database carries Alembic's
+  alembic_version. A database at a revision the history does not hold is
+  refused untouched. applying then runs the statements in one
+  transaction.
 
-  busy bounds the operation by operation_timeout_ms (the <param>, the
-  original's operation timeout, 60 s by default): when it runs out,
+  busy bounds the operation by operation_timeout_ms (the <param>, 60 s by
+  default): when it runs out,
   leaving busy cancels the migration or the transaction, and the memory
   fails with kind timeout ("Memory did not finish within 60s.").
 
-  Output (to the parent, as the original's Memory answers): bot.ability.memory.output
-  {results} (the original's OutputData: one result per statement, in order), or
-  bot.ability.failed {message, kind} (the original's payload.FailureData)
-  when nothing was committed, kind the original's FailureKind: unavailable
-  when the database could not be brought to the head revision (the
-  original's memory is then not serving) or a service could not run,
-  invalid_input when the service refused the statements, store_failed
-  when the transaction failed and rolled back, timeout as above. Then
-  the session ends. (The original names the failure
-  bot.ability.memory.failed; floppy's invokers take bot.ability.failed
-  until they move together.)
+  Output (to the parent): bot.ability.memory.output {results} (one result
+  per statement, in order), or bot.ability.failed {message, kind} when
+  nothing was committed, kind one of: unavailable when the database could
+  not be brought to the head revision (the memory is then not serving) or
+  a service could not run, invalid_input when the service refused the
+  statements, store_failed when the transaction failed and rolled back,
+  timeout as above. Then the session ends.
 
   Bindings: the migration namespace package (through the migration
   ability) and the sql and pgsql service packages; a run grants both (scx
@@ -77,11 +69,12 @@
     <data id="postgresql_0003" src="postgresql/0003_stm_turns.json"/>
     <!-- The engine: Postgres for a postgresql:// URI, else SQLite. -->
     <data id="postgres" expr="false"/>
-    <!-- The operation's time bound (the original's operation timeout, 60 s),
-         which an invoker may set as a <param>. -->
+    <!-- The operation's time bound (60 s), which an invoker may set as a
+         <param>. -->
     <data id="operation_timeout_ms" expr="60000"/>
     <data id="failure" expr="null"/>
-    <!-- The original's payload.FailureKind of the failure. -->
+    <!-- The failure's kind: unavailable, invalid_input, store_failed or
+         timeout. -->
     <data id="failure_kind" expr="null"/>
   </datamodel>
   <script src="memory.js"/>
