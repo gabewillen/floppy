@@ -158,7 +158,7 @@
     <data id="select_timeout_ms" expr="30000"/>
     <data id="select_ceiling_ms" expr="600000"/>
     <data id="revising_timeout_ms" expr="30000"/>
-    <data id="revising_ceiling_ms" expr="1800000"/>
+    <data id="revising_ceiling_ms" expr="7200000"/>
     <data id="bounds" expr="({})"/>
     <!-- The turn in hand (the reference InputData). -->
     <data id="turn" expr="0"/>
