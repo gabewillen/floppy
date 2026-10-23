@@ -37,7 +37,7 @@ def failed(text):
 
 S.statement(1, "On start, and on every later entry into `idle`, it offers nothing: it sends `bot.ability.offers` `{ability: \"vocal\", choices: []}` to its parent.")
 S.statement(2, "`bot.ability.vocal.speech.encoding.input` `{parts}` (1 to 64 parts `{expression?, words?}`) in `idle` is encoded by the speech service's `encode` with the `<param>`s `parts`, `model`, `voice`, `output` and `media_type` (`audio/pcm` by default); with provider `null` (the default) that is the OpenAI-compatible `POST {base}/audio/speech`. The service's answer is sent to the parent as `bot.ability.vocal.speech.encoding.output` `{audio, media_type, sample_rate_hz, channels, duration}` (the audio as the `output` reference; raw PCM is 24 kHz mono, its duration measured from its bytes; a format the service cannot measure has `null`s), and it returns to `idle`.")
-S.statement(3, "The `provider` `<param>` names the original's provider instead: `elevenlabs` is `POST {base}/text-to-speech/{voice}?output_format=…`, `gemini` is `POST {base}/interactions` (its answer's base64 audio part), each answered as above.")
+S.statement(3, "The `provider` `<param>` names another provider instead: `elevenlabs` is `POST {base}/text-to-speech/{voice}?output_format=…`, `gemini` is `POST {base}/interactions` (its answer's base64 audio part), each answered as above.")
 S.statement(4, "When the service answers `bot.ability.failed` `{message}` (an error status, an empty answer, an `output` that cannot be written), it sends the parent `bot.ability.failed` with the service's message and returns to `idle`.")
 S.statement(5, "When the service cannot run (a missing `voice`, rejecting its start with `error.execution`), it sends the parent `bot.ability.failed` `{message: \"The speech service could not run (<error event>).\"}` and returns to `idle`.")
 S.statement(6, "An input that arrives while `applying` is dropped: only the input in hand is encoded and answered.")
@@ -56,7 +56,7 @@ S.case(111, 2, "an mp3 encoding has no measured format.",
        params=[("model", "'tts-1'"), ("voice", "'alloy'"), ("output", "'media/reply.mp3'"), ("media_type", "'audio/mpeg'")],
        backend=[{"path": SPEECH, "body": "ID3 not really mp3"}])
 
-# 3: the original's providers.
+# 3: the named providers.
 S.case(120, 3, "provider elevenlabs encodes through its text-to-speech API in the named voice.",
        [READY, say(), encoded(), READY],
        params=PARAMS + [("provider", "'elevenlabs'")],
