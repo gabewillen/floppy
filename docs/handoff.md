@@ -41,7 +41,7 @@ Last updated: 2026-10-23.
   detection and description are its per-view stage children over generate.
   The body invokes it always, and its `seeing_enabled` switch (off by
   default) decides whether it is expected, fed and offered; every bot run
-  now grants the vision service a media directory. Faces wait on decision 6.
+  now grants the vision service a media directory. Faces follow D194 (#49).
   `frame_diff` decodes as OpenCV 5.0.0 does (its own
   JPEG DC decoder, libpng's gray and gamma, `image-webp`, Exif
   orientation), checked against OpenCV fixtures in
@@ -199,7 +199,7 @@ Last updated: 2026-10-23.
   `<conversation:turn_participants>` (D119).
   `bot.ability.speaking.stop` came later (D179, 2026-10-22): the stop,
   progress and `spoken`/`unspoken`/`outcome` on unstreamed audio,
-  `voice_id` null until decision 6.
+  `voice_id` null until D194 is built (#49).
 - **The behavior and autonomy namespaces, and no bot namespace (2026-10-18,
   D116, the namespace plan's step 4, the last):**
   `namespaces/behavior` (`<behavior:instances_from_behavior_results>`,
@@ -946,11 +946,11 @@ What is still to build, each item with its issue where one exists.
   episodes as nodes with vectors, associative recall,
   `bot.ability.memory.recall`, an embedding ability for text and images
   over a remote embedder, and consolidation while the cognition rests.
-  It waits on decisions 3, 7 and, for persons, 6.
+  Persons are D194 and consolidation D195 (#49); the schema is one revision (D193).
 - **Hearing identity**: participant refs through an identification
   registry, overlap while speaking, tone, and enrolling the bot's own
   voice. Today the hearing gives voice embeddings and each embedding
-  source is its own participant (D79). It waits on decision 6.
+  source is its own participant (D79); people in long-term memory are D194 (#49).
 - **Multimodal turns**: `<conversation:ingest_content>` takes no
   `image/*` content, so an image adds nothing to a turn and a turn of
   images alone fails as empty (`Turn closed with neither text, audio, nor
@@ -959,17 +959,17 @@ What is still to build, each item with its issue where one exists.
   attachments and how long it keeps them), a typed image value, image
   placeholders and content parts in a turn's content, and a typed
   `environment.visual` image.
-- **Faces** (D188): face detection and face identity in seeing wait on
-  decision 6; an embedding change measure and a cascade of measures wait
+- **Faces** (D188): face detection and face identity in seeing follow
+  D194's voices (#49); an embedding change measure and a cascade of measures wait
   on embeddings.
 - **Effort ceilings**: each stage narrowing the turn's frame to its own
-  effort ceiling (decision 8).
-- **Sandbox, devices and transport** (decision 5): a sandbox ability over
+  effort ceiling (D196, #50).
+- **Sandbox, devices and transport** (D200, #53): a sandbox ability over
   a Docker or Podman host; computer, HID keyboard and pointer, audio
   microphone and speaker, and phone devices, with owner-command routing;
   transform codecs, transport peers, yamux over WebSocket and a LiveKit
   room. The tests use the lamp fixture.
-- **Example bots**: a building example (decision 4), and minimal,
+- **Example bots**: a building example (the name freed by D198), and minimal,
   listen-and-speak, phone and SMS chat bots, each after its abilities.
 - **Telemetry metrics**: no metrics are emitted. A voice embedding is
   never written to the records (`<biometric:VoiceEmbedding>`,
@@ -1010,18 +1010,7 @@ What is still to build, each item with its issue where one exists.
 
 ## Design decisions for the maintainer
 
-Numbered as decisions.md and the open work cite them.
-
-| # | Question |
-| --- | --- |
-| 2 | **Postgres:** keep `services/pgsql` and D69 to D72, or keep only SQLite (the user chose SQLite for now, 2026-10-10)? |
-| 3 | **Migrations:** accept D165 (a schema change is a new revision: `0003_stm_turns`, the graph tables `0004`), or rewrite `0001` in place, which breaks every existing database? |
-| 4 | **The name "builder":** a user-facing example bot that builds things would clash with `bots/builder`, the behavior author; one of them needs another name. |
-| 5 | **Devices and transport:** they are out of scope; the sandbox, the devices, the building example and the transport need them. |
-| 6 | **Participant identity:** keep D79 (each embedding source is its own participant), or identify participants through a registry with `voice:` and `face:` refs? Faces (D188), `voice_id` (D179) and hearing identity wait on it. |
-| 7 | **Rest and consolidation:** give the cognition a rest state in which memory consolidates? |
-| 8 | **Effort ceilings:** have each stage narrow the turn's frame to its own effort ceiling? |
-| 9 | **A container image** for `scx run`? floppy has no runtime of its own (D14). |
+All answered on 2026-10-23: decision 2 by D199, 3 by D193, 4 by D198, 5 by D200, 6 by D194, 7 by D195, 8 by D196, 9 by D197. D192, D201 and D202 were decided with them.
 
 ## Choices to review
 
