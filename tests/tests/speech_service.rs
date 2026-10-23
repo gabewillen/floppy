@@ -91,6 +91,51 @@ fn streamed_pcm() -> Vec<u8> {
         .collect()
 }
 
+/// Answers `/stream/v1/audio/speech` (its PCM in chunked pieces as it is
+/// "synthesized") and `/stall/v1/audio/speech` (its first chunk's bytes,
+/// then nothing until the client closes the connection, which sets
+/// `closed`); whether `target` was one of them.
+fn streamed(
+    target: &str,
+    stream: &mut std::net::TcpStream,
+    reader: &mut BufReader<std::net::TcpStream>,
+    closed: &Mutex<bool>,
+) -> bool {
+    const CHUNKED: &str =
+        "HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\nconnection: close\r\n\r\n";
+    match target {
+        "/stream/v1/audio/speech" => {
+            let _ = stream.write_all(CHUNKED.as_bytes());
+            for piece in streamed_pcm().chunks(STREAM_PIECE) {
+                let _ = write!(stream, "{:x}\r\n", piece.len());
+                let _ = stream.write_all(piece);
+                let _ = stream.write_all(b"\r\n");
+                let _ = stream.flush();
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            let _ = stream.write_all(b"0\r\n\r\n");
+            true
+        }
+        "/stall/v1/audio/speech" => {
+            let _ = stream.write_all(CHUNKED.as_bytes());
+            let _ = write!(stream, "{STALLED_BYTES:x}\r\n");
+            let _ = stream.write_all(&vec![0; STALLED_BYTES]);
+            let _ = stream.write_all(b"\r\n");
+            let _ = stream.flush();
+            // Nothing more until the client goes away.
+            let _ = reader
+                .get_ref()
+                .set_read_timeout(Some(Duration::from_secs(60)));
+            let mut rest = [0_u8; 64];
+            if matches!(reader.read(&mut rest), Ok(0)) {
+                *closed.lock().expect("the closed lock") = true;
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
 /// A deterministic fake audio backend on 127.0.0.1: `/v1/...` answers,
 /// `/fail/v1/...` answers 500, `/stream/v1/audio/speech` streams its PCM,
 /// and `/stall/v1/audio/speech` sends one chunk's bytes and then waits for
@@ -155,39 +200,7 @@ impl Mock {
                     content_type: header("content-type"),
                     body,
                 });
-                // A streamed answer: its PCM in chunked pieces as it is
-                // "synthesized", or its first chunk and then nothing until
-                // the client closes the connection.
-                if target == "/stream/v1/audio/speech" {
-                    let _ = write!(
-                        stream,
-                        "HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\nconnection: close\r\n\r\n"
-                    );
-                    for piece in streamed_pcm().chunks(STREAM_PIECE) {
-                        let _ = write!(stream, "{:x}\r\n", piece.len());
-                        let _ = stream.write_all(piece);
-                        let _ = stream.write_all(b"\r\n");
-                        let _ = stream.flush();
-                        std::thread::sleep(Duration::from_millis(50));
-                    }
-                    let _ = stream.write_all(b"0\r\n\r\n");
-                    continue;
-                }
-                if target == "/stall/v1/audio/speech" {
-                    let _ = write!(
-                        stream,
-                        "HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\nconnection: close\r\n\r\n{:x}\r\n",
-                        STALLED_BYTES
-                    );
-                    let _ = stream.write_all(&vec![0; STALLED_BYTES]);
-                    let _ = stream.write_all(b"\r\n");
-                    let _ = stream.flush();
-                    // Nothing more until the client goes away.
-                    let _ = stream.set_read_timeout(Some(Duration::from_secs(60)));
-                    let mut rest = [0_u8; 64];
-                    if matches!(reader.read(&mut rest), Ok(0)) {
-                        *closed.lock().expect("the closed lock") = true;
-                    }
+                if streamed(&target, &mut stream, &mut reader, &closed) {
                     continue;
                 }
                 let (status, answer): (&str, Vec<u8>) = match target.as_str() {
