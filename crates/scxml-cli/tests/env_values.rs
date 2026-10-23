@@ -447,3 +447,74 @@ fn env_files_supply_values_that_are_masked_in_cli_output() {
         text(&missing.stderr)
     );
 }
+
+/// A short, common value (`true`, a number) is masked only inside the JSON
+/// strings a record holds, never in its literals or numbers: every record
+/// stays one JSON line, a `done` record's boolean and number are intact, and
+/// the values are still masked within the strings that echo them. (A value
+/// is held, and so masked, only when an `<invoke>` names it.)
+#[test]
+fn masking_keeps_every_record_valid_json() {
+    let release = release();
+    let directory = scratch("env-file-literals");
+    let env_file = directory.join(".env");
+    fs::write(&env_file, "FLAG=true\nCOUNT=1234\nKEY=sk-file-secret-2\n").expect("the env file");
+    let document = directory.join("literals.scxml");
+    fs::write(
+        &document,
+        format!(
+            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:env="{ENV_NAMESPACE}" version="1.0" datamodel="ecmascript" initial="a">
+  <state id="a">
+    <invoke type="{ECHO_URI}" id="flag" env:endpoint="COUNT" env:token="FLAG"/>
+    <invoke type="{ECHO_URI}" id="key" env:token="KEY"/>
+    <onentry><log label="leak" expr="'sk-file-secret-2 is true, 1234'"/></onentry>
+    <transition target="done"/>
+  </state>
+  <final id="done">
+    <donedata><param name="ok" expr="true"/><param name="count" expr="1234"/></donedata>
+  </final>
+</scxml>"#
+        ),
+    )
+    .expect("the document");
+    let mut args = strings(&[
+        "run",
+        &document.display().to_string(),
+        "--components",
+        &release.dir,
+        "--components-manifest-sha256",
+        &release.manifest_sha256,
+        "--clock",
+        "logical",
+        "--env-file",
+        &env_file.display().to_string(),
+    ]);
+    args.extend(echo_package(&directory, &[]));
+    let live = cli(&args);
+    let stdout = text(&live.stdout);
+    assert_eq!(
+        live.status.code(),
+        Some(0),
+        "{}{stdout}",
+        text(&live.stderr)
+    );
+    let records: Vec<serde_json::Value> = stdout
+        .lines()
+        .map(|line| {
+            serde_json::from_str(line)
+                .unwrap_or_else(|error| panic!("every record is one JSON line ({error}): {line}"))
+        })
+        .collect();
+    let log = records
+        .iter()
+        .find(|record| record["type"] == "log")
+        .expect("a log record");
+    assert_eq!(log["text"], "[masked] is [masked], [masked]", "{stdout}");
+    let done = records
+        .iter()
+        .find(|record| record["type"] == "done")
+        .expect("a done record");
+    assert_eq!(done["data"]["ok"], true, "{stdout}");
+    assert_eq!(done["data"]["count"].as_f64(), Some(1234.0), "{stdout}");
+    assert!(!stdout.contains("sk-file-secret-2"), "{stdout}");
+}

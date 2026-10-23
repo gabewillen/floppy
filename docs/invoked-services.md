@@ -322,7 +322,8 @@ the variable whose value the host binds, in the host's `env` vocabulary
   slot can name is dropped. Nothing by default; there is no
   whole-environment form. Before the run it lists each variable the document
   names and the `<invoke>`s it goes to (names only). Values are masked
-  (`[masked]`) in the text the CLI writes; canonical snapshot documents are
+  (`[masked]`) in the text the CLI writes (in a live-session record only
+  inside its JSON strings, so every record stays one JSON line); canonical snapshot documents are
   written exactly (their `sha256` covers their bytes). The echo example
   declares the slots `endpoint` and `token`.
 
