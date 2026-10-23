@@ -41,19 +41,17 @@
   speaking child
   (dispatching_response), and waits in responding's waiting, bounded by
   the hop timer bot.ability.communication.response.hop.timed_out
-  (response_timeout_ms, 36 s: speaking's 30 s encoding bound plus the
-  original's 6 s, decision D98; the transition takes only the timer of the
-  response in hand, _event.sendid). Each bot.ability.speaking.progress
-  {spoken_seconds} re-enters waiting, which re-arms the timer (the
-  original's waiting re-entered on Speaking's progress), so a long spoken
-  reply is never cut off; until the first audio no progress comes, so the
+  (response_timeout_ms, 36 s: speaking's 30 s encoding bound plus 6 s,
+  decision D98; the transition takes only the timer of the response in
+  hand, _event.sendid). Each bot.ability.speaking.progress
+  {spoken_seconds} re-enters waiting, which re-arms the timer (decision
+  D179), so a long spoken reply is never cut off; until the first audio no progress comes, so the
   first hop still covers the whole encoding. Speaking's output goes on to
   the body as bot.ability.speaking.output. A speaking failure
   (bot.ability.failed) or the hop timeout answers the body with
   bot.ability.communication.failed {message}; the timeout also sends
   speaking bot.ability.speaking.stop {}, so it does not go on saying a
-  response whose failure was already reported (the original's
-  _dispatch_response_timeout). Input that arrives in
+  response whose failure was already reported (decision D179). Input that arrives in
   inactive is held by <event:defer/> (scxml.rs namespaces/event) and comes
   back, in order, on the return to active. A response's id is its
   respond's sendid (none when the sender named none); leaving responding
@@ -67,14 +65,13 @@
   taken as on arrival; a response in inactive is not taken (inactive has no
   transition for it).
 
-  Stop: bot.ability.communication.stop {} (the original's StopData,
-  model-callable) is taken only in responding (the original's waiting, its
-  only state), so it is offered only while a response is being spoken: it sends bot.ability.speaking.stop {} to
-  speaking, which stops the utterance in hand (an SCXML <send> takes no id
-  from an expression, so the stop cannot carry the response's id as the
-  original's does; speaking holds one utterance at a time), and re-enters
-  waiting; speaking's output (outcome "stopped") ends the response as any
-  other.
+  Stop: bot.ability.communication.stop {} (model-callable, decision D179)
+  is taken only in responding, so it is offered only while a response is
+  being spoken: it sends bot.ability.speaking.stop {} to speaking, which
+  stops the utterance in hand (an SCXML <send> takes no id from an
+  expression, so the stop cannot carry the response's id; speaking holds
+  one utterance at a time), and re-enters waiting; speaking's output
+  (outcome "stopped") ends the response as any other.
 
   Speaking's routes: speaking records the words it said as an outbound
   bot.ability.conversation.append, which the communication passes to the

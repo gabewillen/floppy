@@ -169,13 +169,13 @@ function remainingSeconds() {
   return (duration_ms - played_ms) / 1000;
 }
 
-// The next piece commanded to the mouth: at most half the lookahead (the
-// original's piece), the rest of the playout at the end.
+// The next piece commanded to the mouth: at most half the lookahead, the
+// rest of the playout at the end (decision D179).
 function nextPieceMs() {
   return Math.min(lookahead_ms / 2, duration_ms - played_ms);
 }
 
-// The original's mark of a commanded piece: u<utterance>.<piece>.
+// The mark of a commanded piece: u<utterance>.<piece> (decision D179).
 function markName() {
   return 'u' + operation + '.' + commands;
 }
@@ -196,14 +196,14 @@ function isLastMark(_event) {
 }
 
 // The words the played share of the audio covers, rounded down to whole
-// words (the original's _Span.said): all of them once all of it played.
+// words (decision D179): all of them once all of it played.
 function spokenWords() {
   if (played_ms >= duration_ms) {
     return text;
   }
   var ends = [];
   text.replace(/\S+/g, function (word, at) { ends.push(at + word.length); return word; });
-  var count = Math.floor(ends.length * played_ms / duration_ms + 1e-9);
+  var count = Math.floor(ends.length * played_ms / duration_ms);
   return count > 0 ? text.slice(0, ends[count - 1]) : '';
 }
 
@@ -224,8 +224,8 @@ function outboundMessage() {
   return ({source_ids: [], target_ids: [], content: spoken, content_type: 'text/plain', participants: []});
 }
 
-// The answer to the parent: bot.ability.speaking.output (the original's
-// OutputData; voice_id null until speaking is voiced).
+// The answer to the parent: bot.ability.speaking.output (decision D179;
+// voice_id null until speaking is voiced).
 function speechProduct() {
   var format = audioFormat();
   return ({text: text, spoken: spoken, unspoken: unspoken, outcome: outcome, voice_id: null,

@@ -630,11 +630,8 @@ const SPEAKING_HARNESS: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
 </scxml>
 "##;
 
-/// One utterance at a time: another copy of the one in hand, or of one
-/// already said, is dropped, and past the bound of held utterances a new
-/// one is refused (decision D175).
-/// A stop while a response is said (the original's `stop`, offered only
-/// while responding) stops speaking: the copy of nothing left closes the
+/// A stop while a response is said (offered only while responding,
+/// decision D179) stops speaking: the copy of nothing left closes the
 /// listening's window, and the response ends `stopped` with what was
 /// played. With 2 s pieces, the 4 s reply is stopped after its first piece:
 /// half its audio, so half its words.
@@ -662,9 +659,8 @@ fn a_stop_ends_the_response_with_what_was_played() {
     close(run, "a_stop_ends_the_response_with_what_was_played");
 }
 
-/// Speaking's progress re-arms the response's hop timer (the original's
-/// `waiting`, re-entered on progress): a 4 s reply played in 0.5 s pieces
-/// is said whole under a 1.5 s hop.
+/// Speaking's progress re-arms the response's hop timer (decision D179): a
+/// 4 s reply played in 0.5 s pieces is said whole under a 1.5 s hop.
 #[test]
 fn speaking_progress_keeps_a_long_response_from_timing_out() {
     let harness = communication_speaking(&[("response_timeout_ms", "1500")], &[]);
@@ -690,6 +686,9 @@ fn speaking_progress_keeps_a_long_response_from_timing_out() {
     );
 }
 
+/// One utterance at a time: another copy of the one in hand, or of one
+/// already said, is dropped, and past the bound of held utterances a new
+/// one is refused (decision D175).
 #[test]
 fn speaking_never_reopens_a_finished_utterance_and_bounds_the_ones_it_holds() {
     let dir = unique_scratch("speaking-alone");

@@ -44,51 +44,49 @@
   it as the sound event's source; a relayed SCXML event keeps only its
   data, so it travels in the sound): it is how the listening's sensitivity
   tells the bot's own voice from a sound that only arrives while it speaks.
-  The parent then gets bot.ability.speaking.progress {spoken_seconds: 0}
-  (the original's sign of life as the first audio starts).
+  The parent then gets bot.ability.speaking.progress {spoken_seconds: 0},
+  a sign of life as the first audio starts.
 
-  Playout lasts as long as the audio: the original's mouth plays each
-  commanded piece (at most half the lookahead_ms, 1 s, the original's
-  _LOOKAHEAD) in real time and reports its mark, devices.audio.played
-  {mark}; until the mouth (a device) is ported, speaking times each report
-  itself with a <send delay> of the piece's length, one piece at a time,
-  marks "u<operation>.<n>" as the original's. Each report is followed, as
-  in the original, by an efference copy of the playout still to come (0
+  Playout lasts as long as the audio (decision D179): a mouth plays each
+  commanded piece (at most half of lookahead_ms, 1 s) in real time and
+  reports its mark, devices.audio.played {mark}; until the mouth (a device)
+  is ported, speaking times each report itself with a <send delay> of the
+  piece's length, one piece at a time, marks "u<operation>.<n>". Each
+  report is followed by an efference copy of the playout still to come (0
   after the last piece, which closes the listening's window) and
   bot.ability.speaking.progress {spoken_seconds} (the seconds reported
   played), which re-arms the communication's response timer. Speech with
   no measured duration has no pieces and counts as played at once.
 
-  Stop: bot.ability.speaking.stop {} (the original's StopData; it names
-  no utterance: it stops the one in hand, since an SCXML <send> takes no id
-  from an expression, so the communication cannot name its response's id
-  on it) in encoding cancels vocal and its request; in playing it cancels
-  the next mark. Either way the efference copy {duration: 0} leaves at once
+  Stop: bot.ability.speaking.stop {} names no utterance: it stops the one
+  in hand, since an SCXML <send> takes no id from an expression, so the
+  communication cannot name its response's id on it (decision D179). In
+  encoding it cancels vocal and its request; in playing it cancels the
+  next mark. Either way the efference copy {duration: 0} leaves at once
   (nothing more is commanded, so the listening's window closes) and the
   utterance is recorded with outcome "stopped". What was said is what the
-  reported marks cover: the original's span split, the words in proportion
-  to the share of the audio played, rounded down to whole words; a piece
-  cut short counts as unplayed (no mouth reports how much of it played).
+  reported marks cover: the words in proportion to the share of the audio
+  played, rounded down to whole words; a piece cut short counts as
+  unplayed (no mouth reports how much of it played).
   The sound already in the environment stays there: the environment has
   no flush, and the whole clip went into it at once. A stop in idle or in
   recording has nothing to stop and is logged (speaking.stale).
 
   recording builds the outbound message with <conversation:message_for_turn>
-  (the original's Message: direction outbound, content what was spoken,
-  content_type text/plain, and participants the bot's own voice stamped
-  own, which it has none of until it is voiced: the original stamps none
-  without a voice_id) and sends bot.ability.conversation.append {message}
-  to the parent, which holds the conversation (a sibling is out of a
-  child's reach: SCXML sends go only to #_parent and to a session's own
-  children); an utterance that spoke nothing records nothing, as the
-  original. It is bounded by the original's 5 s (recording_timeout_ms).
-  Then it answers the parent with bot.ability.speaking.output {text, spoken,
-  unspoken, outcome, voice_id, media_type, sample_rate_hz, channels} (the
-  original's OutputData: text the words asked for, spoken what the played
-  audio covers, unspoken the rest, outcome "completed" or "stopped";
-  voice_id is null, as the bot has no voice of its own until persona
-  voices it, parity decision 6; the original's per-part expression
-  report is not ported, as no encoder applies a cue, D178).
+  (direction outbound, content what was spoken, content_type text/plain,
+  and participants the bot's own voice stamped own, which it has none of
+  until it is voiced, decision D176) and sends
+  bot.ability.conversation.append {message} to the parent, which holds the
+  conversation (a sibling is out of a child's reach: SCXML sends go only to
+  #_parent and to a session's own children); an utterance that spoke
+  nothing records nothing (decision D179). It is bounded by 5 s
+  (recording_timeout_ms). Then it answers the parent with
+  bot.ability.speaking.output {text, spoken, unspoken, outcome, voice_id,
+  media_type, sample_rate_hz, channels} (decision D179: text the words
+  asked for, spoken what the played audio covers, unspoken the rest,
+  outcome "completed" or "stopped"; voice_id is null, as the bot has no
+  voice of its own until persona voices it, parity decision 6; no per-part
+  expression is reported, as no encoder applies a cue, D178).
 
   Failures: a vocal failure (its bot.ability.failed), an encoding or
   recording timeout, or a vocal that cannot run answers the parent with
@@ -138,8 +136,8 @@
     <data id="mouth" expr="'speaking'"/>
     <data id="encoding_timeout_ms" expr="30000"/>
     <data id="recording_timeout_ms" expr="5000"/>
-    <!-- The most unplayed audio commanded ahead of the mouth (the
-         original's _LOOKAHEAD): a piece is at most half of it. -->
+    <!-- The most unplayed audio commanded ahead of the mouth: a piece is
+         at most half of it (decision D179). -->
     <data id="lookahead_ms" expr="1000"/>
     <!-- The utterance in hand, its number, id (its input's sendid, null
          when the sender named none), the encoded speech and timer. -->

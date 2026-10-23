@@ -11,19 +11,15 @@
       "type": "string"
     },
     "spoken": {
-      "default": "",
       "description": "The words of the audio the mouth reported played, in order, as the encoder aligned them: what the room actually heard. Audio cut short partway through the words aligned to it says those words in proportion to the share of it that played, rounded down to whole words. Empty when nothing was played.",
-      "title": "Spoken",
       "type": "string"
     },
     "unspoken": {
-      "default": "",
       "description": "The rest of the words the encoder read: what was never played, in order.",
-      "title": "Unspoken",
       "type": "string"
     },
     "outcome": {
-      "description": "How the utterance ended: completed (every chunk played), stopped (cut short on request), abandoned (its text stopped coming before it was final), or failed (encoding failed, or the mouth dropped audio unplayed or stopped reporting playout).",
+      "description": "How the utterance ended: completed (every piece played), stopped (cut short on request), abandoned (its text stopped coming before it was final), or failed (encoding failed, or the mouth dropped audio unplayed or stopped reporting playout).",
       "enum": [
         "completed",
         "stopped",
@@ -33,26 +29,19 @@
       "examples": [
         "completed"
       ],
-      "title": "Outcome",
       "type": "string"
     },
     "voice_id": {
-      "anyOf": [
-        {
-          "pattern": "^[a-z0-9][a-z0-9:._-]{0,127}$",
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
       "description": "The bot's own voice id, once it has learned it by hearing itself; null until then. Heard voices carry it as voice:<voice_id>.",
       "examples": [
         "3f2a9c41d07e4b6a9c2f1e8d5b7a0c63",
         null
       ],
-      "title": "Voice Id"
+      "pattern": "^[a-z0-9][a-z0-9:._-]{0,127}$",
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "media_type": {
       "anyOf": [

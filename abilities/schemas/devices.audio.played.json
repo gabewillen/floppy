@@ -2,16 +2,15 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "devices.audio.played",
   "additionalProperties": false,
-  "description": "Speaker report to the commanding controller: the chunk that carried ``mark`` has finished playing.",
+  "description": "The mouth's report to the ability that commanded it: the piece of playout that carried `mark` has finished playing.",
   "properties": {
     "mark": {
-      "description": "The mark of the devices.audio.output chunk whose last frame has just finished playing.",
+      "description": "The mark of the commanded piece whose last frame has just finished playing.",
       "examples": [
         "u1.3"
       ],
       "maxLength": 64,
       "minLength": 1,
-      "title": "Mark",
       "type": "string"
     }
   },

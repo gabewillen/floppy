@@ -9,8 +9,7 @@
       "examples": [
         1.2
       ],
-      "minimum": 0.0,
-      "title": "Spoken Seconds",
+      "minimum": 0,
       "type": "number"
     }
   },
