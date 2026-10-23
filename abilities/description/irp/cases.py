@@ -33,10 +33,10 @@ def message(value):
     return f"JSON.stringify(_event.data) === {js(json_text({'message': value}))}"
 
 
-S.statement(1, "Its input is its `<param>`s: it sends itself `bot.ability.vision.description.input` `{image, media_type}` (the original's media.Image, by reference), which its schema checks, so an `image` that is missing or empty sends nothing to the model and answers `bot.ability.failed` `{message: \"Description could not run (error.execution)\"}`; nothing reaches the parent before its one answer.")
-S.statement(2, "It asks the generate service once, with one user message (the original's DESCRIBE_INSTRUCTIONS as a text part and the image's reference as an image part, the image read from the granted media directory), and answers its parent `bot.ability.vision.description.output` `{description}`, the reply trimmed of white space; then it ends (`done.invoke.<id>` follows the answer).")
+S.statement(1, "Its input is its `<param>`s: it sends itself `bot.ability.vision.description.input` `{image, media_type}` (the image by reference), which its schema checks, so an `image` that is missing or empty sends nothing to the model and answers `bot.ability.failed` `{message: \"Description could not run (error.execution)\"}`; nothing reaches the parent before its one answer.")
+S.statement(2, "It asks the generate service once, with one user message (its instructions as a text part and the image's reference as an image part, the image read from the granted media directory), and answers its parent `bot.ability.vision.description.output` `{description}`, the reply trimmed of white space; then it ends (`done.invoke.<id>` follows the answer).")
 S.statement(3, "A reply that is empty once stripped answers `bot.ability.failed` `{message: \"the generator answered with an empty description\"}`.")
-S.statement(4, "A description of at most 4000 characters (the original's MAX_DESCRIPTION_CHARS, counted in characters, not bytes) is answered; a longer one is an output its schema refuses and answers `bot.ability.failed` `{message: \"Description produced output that does not match its output schema.\"}`, the original's invalid-output failure.")
+S.statement(4, "A description of at most 4000 characters (counted in characters, not bytes) is answered; a longer one is an output its schema refuses and answers `bot.ability.failed` `{message: \"Description produced output that does not match its output schema.\"}`.")
 S.statement(5, "A model call that fails answers `bot.ability.failed` `{message: \"Description generator failed: <code>.\"}`, the generate service's failure code in the message, and an image reference the generate service cannot read rejects its start: `{message: \"Description could not run (error.execution)\"}`.")
 
 # 1: the input.
