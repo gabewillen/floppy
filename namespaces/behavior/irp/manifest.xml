@@ -3,7 +3,7 @@
      numbered statement of namespaces/behavior/README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/namespaces/behavior/irp/sources">
   <assert id="behavior-1" specnum="1" specid="#behavior-1">
-    <![CDATA[Each element (instances_from_behavior_results, replace_behavior_clauses, lifetime_errors, verify_tick, verify_apply, turn_program) takes exactly its declared attributes, the required ones present and none empty, and no content, and the namespace has no other element: a malformed element raises error.execution and assigns nothing (its schema, package/behavior.xsd, rejects it before any run under scx validate).]]>
+    <![CDATA[Each element (instances_from_behavior_results, replace_behavior_clauses, lifetime_errors, verify_tick, verify_apply) takes exactly its declared attributes, the required ones present and none empty, and no content, and the namespace has no other element: a malformed element raises error.execution and assigns nothing (its schema, package/behavior.xsd, rejects it before any run under scx validate).]]>
     <test id="200" conformance="mandatory" manual="false">
       <start uri="200/test200.txml"/>
     </test>
@@ -18,9 +18,6 @@
     </test>
     <test id="254" conformance="mandatory" manual="false">
       <start uri="254/test254.txml"/>
-    </test>
-    <test id="262" conformance="mandatory" manual="false">
-      <start uri="262/test262.txml"/>
     </test>
   </assert>
   <assert id="behavior-2" specnum="2" specid="#behavior-2">
@@ -78,7 +75,7 @@
     </test>
   </assert>
   <assert id="behavior-6" specnum="6" specid="#behavior-6">
-    <![CDATA[<behavior:verify_apply> writes E0008 messages for a turn behavior's run on the live turn (for the run, the donedata contract, nothing selected, the targets, and selection data that disagrees with input; decision D131): none when its donedata is {turn, handled, selected} with the live turn, handled true, and at least one selection, each with an event, a target among targets, and data agreeing with input's scalar members; else why (an error, or no donedata, first); a donedata whose error is a string (the turn template's: script when the script did not load, else the script's call that threw) writes only that, and with handled false the run must finish with handled false and nothing selected; an input that is not an object or targets that are not strings raise error.execution and assign nothing.]]>
+    <![CDATA[<behavior:verify_apply> writes E0008 messages for a turn behavior's run on the live turn (for the run, the donedata contract, nothing selected, the targets, and selection data that disagrees with input; decision D131): none when its donedata is {turn, handled, selected} with the live turn, handled true, and at least one selection, each with an event, a target among targets, and data agreeing with input's scalar members; else why (an error, or no donedata, first); an input that is not an object or targets that are not strings raise error.execution and assign nothing.]]>
     <test id="250" conformance="mandatory" manual="false">
       <start uri="250/test250.txml"/>
     </test>
@@ -90,18 +87,6 @@
     </test>
     <test id="253" conformance="mandatory" manual="false">
       <start uri="253/test253.txml"/>
-    </test>
-    <test id="263" conformance="mandatory" manual="false">
-      <start uri="263/test263.txml"/>
-    </test>
-  </assert>
-  <assert id="behavior-7" specnum="7" specid="#behavior-7">
-    <![CDATA[<behavior:turn_program> writes the turn behavior template, templates/turn.scx, with its one <script src="turn.js"/> naming the script instead; a script that is not a plain .js file name (letters, digits, _ and -, then .js) raises error.execution and assigns nothing.]]>
-    <test id="260" conformance="mandatory" manual="false">
-      <start uri="260/test260.txml"/>
-    </test>
-    <test id="261" conformance="mandatory" manual="false">
-      <start uri="261/test261.txml"/>
     </test>
   </assert>
 </assertions>

@@ -54,7 +54,7 @@ S.statement(2, "The handled candidate's selections are sent, in order, each to t
 S.statement(3, "An answer that does not handle this turn (`handled` not `true`, no selections, or another turn) is not handled: with no candidates left, the runner ends with `{tried: [name], handled: false, selected: null, rejection: null}`.")
 S.statement(4, "When its candidate does not handle the turn and candidates are left, the runner invokes itself for the rest (with the same turn, input, database and bounds) and ends with the rest's donedata, its own candidate first in `tried`.")
 S.statement(5, "A candidate that does not answer within `silence_ms` is passed over, and the rest run.")
-S.statement(6, "A candidate whose source cannot run, or whose donedata names an `error` (a string: the turn template's script that did not load or threw, decision D132), has its failure persisted, and the rest run.")
+S.statement(6, "A candidate whose source cannot run has its failure persisted, and the rest run.")
 S.statement(7, "A handled candidate a selection of which cannot be sent (a send that raises `error.*`) has its failure persisted, and the runner ends with `{tried: [name], handled: false, selected: null, rejection}`, rejection `Autonomy behavior dispatch failed: <error>`; the rest do not run.")
 S.statement(8, "Each persistence is one transaction of the Memory ability on the `database` <param>; one that fails or outlasts `memory_timeout_ms` takes the same effect as one persisted.")
 
@@ -98,10 +98,6 @@ S.case(150, 6, "a source that cannot run is passed over, and the rest run.",
        [answer(["Broken", "B"], True, extra=HANDLED_SELECTED)], params=run([("Broken", BROKEN), ("B", HANDLES)]))
 S.case(151, 6, "a last source that cannot run leaves the turn unhandled.",
        [answer(["Broken"], False)], params=run([("Broken", BROKEN)]))
-S.case(152, 6, "a donedata that names an error is a failure, even with selections, and the rest run.",
-       [answer(["Threw", "B"], True, extra=HANDLED_SELECTED)],
-       params=run([("Threw", behavior(f"({{turn: turn, handled: true, selected: [{{event: 'bot.say', data: {{}}, target: '{HARNESS}'}}], error: 'selections'}})")),
-                   ("B", HANDLES)]))
 
 S.case(160, 7, "a selection that names no target cannot be sent, and the rest do not run.",
        [answer(["Untargeted"], False, "Autonomy behavior dispatch failed: error.communication")],

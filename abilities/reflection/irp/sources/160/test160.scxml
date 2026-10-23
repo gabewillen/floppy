@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- reflection-7: a revision that outlasts revising_ceiling_ms (its turn script asks for a routine, whose whole document's test waits 20 s) fails the turn. -->
+<!-- reflection-7: a revision that outlasts revising_ceiling_ms fails the turn. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="reflection" type="scxml" src="../../../reflection.scx">

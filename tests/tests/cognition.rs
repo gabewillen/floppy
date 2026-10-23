@@ -1115,48 +1115,6 @@ fn when_no_learned_behavior_handles_the_turn_the_decision_layer_runs() {
     assert_eq!(usage(&grant, DATABASE), json!([["Declines", "0", "0"]]));
 }
 
-/// A behavior whose run names an error (the turn template's script that
-/// threw, decision D132) is recorded as failed, counted against that
-/// behavior, and the cascade goes on to intuition.
-#[test]
-fn a_learned_behavior_whose_script_threw_is_recorded_as_failed() {
-    let mock = Mock::start();
-    let throws = turn_behavior("({turn: turn, handled: false, selected: [], error: 'selections'})");
-    let memory = format!("'{DATABASE}'");
-    let bot = layout(
-        &mock,
-        Decision::Ignore,
-        Generation::Fail,
-        &[(
-            "abilities/cognition/cognition.scx",
-            &[("database", memory.as_str())],
-        )],
-    );
-    let grant = inventory(
-        DATABASE,
-        bot_layout(&bot),
-        &[Learned {
-            name: "Throws",
-            trigger: "bot.input",
-            status: "ACTIVE",
-            source: &throws,
-        }],
-    );
-    let mut run = start_with(&bot, &grant);
-    say(&mut run, "background noise");
-    let records = run.until(WAIT, label_is("bot.processing.completed"));
-    assert_eq!(
-        texts(&records, "autonomy.candidate.failed"),
-        strings(&["Throws (selections)"])
-    );
-    assert_eq!(
-        texts(&records, "cognition.stage"),
-        strings(&["autonomy unhandled (unhandled)", "intuition handled (none)"])
-    );
-    close_as(run, &mock, None);
-    assert_eq!(usage(&grant, DATABASE), json!([["Throws", "0", "1"]]));
-}
-
 /// The choices logged under `label`, each as `event@target` names.
 fn logged_choices(records: &[Json], label: &str) -> Vec<String> {
     texts(records, label)

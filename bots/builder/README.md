@@ -30,7 +30,7 @@ final states and its parent receives that state's done data as
 
 | What | How | Data ([`schemas/`](schemas)) |
 | --- | --- | --- |
-| `builder.request` | an event to the builder (standard input when run directly) | `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?, template?}`: the specification, the name the draft's documents are written under (default the plan's; each run of characters other than letters, digits, `_` and `-` becomes `_`; reflection sends the behavior's), extra constraints (strings), an optional failure cap (1 to 8, no default: without it only the no-progress rule ends the loop), the generate service's model (default `Qwen/Qwen3.8-Flash-Next`, a reasoning model), the time each streamed generation may go without progress, and each generation may take in all, before `builder.timeout` cancels it (1 ms to 1 h each, defaults 30000 and 1200000), and the lifetime bounds (1 ms to 1 day each, no default: without them neither the lifetime check nor the forced tick runs; reflection sends 60000 and 1000, `ROUTINE_MIN_EVERY` and `TURN_SILENCE_BOUND`, decision D84), and the live turn a turn behavior is run on before it is built (`{turn, input, targets}`: the turn, the behavior input as autonomy builds it, and the sessions that turn's output names, at most 32; no default: without it a turn behavior runs only its own tests; reflection sends its turn's, decision D131), and `template` `'turn'` (it then requires `name` and `apply`; reflection sends it for every behavior but a persistent routine): the model writes only a turn behavior's script, below ("Template mode", decision D132) |
+| `builder.request` | an event to the builder (standard input when run directly) | `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?}`: the specification, the name the draft's documents are written under (default the plan's; each run of characters other than letters, digits, `_` and `-` becomes `_`; reflection sends the behavior's), extra constraints (strings), an optional failure cap (1 to 8, no default: without it only the no-progress rule ends the loop), the generate service's model (default `Qwen/Qwen3.8-Flash-Next`, a reasoning model), the time each streamed generation may go without progress, and each generation may take in all, before `builder.timeout` cancels it (1 ms to 1 h each, defaults 30000 and 1200000), and the lifetime bounds (1 ms to 1 day each, no default: without them neither the lifetime check nor the forced tick runs; reflection sends 60000 and 1000, `ROUTINE_MIN_EVERY` and `TURN_SILENCE_BOUND`, decision D84), and the live turn a turn behavior is run on before it is built (`{turn, input, targets}`: the turn, the behavior input as autonomy builds it, and the sessions that turn's output names, at most 32; no default: without it a turn behavior runs only its own tests; reflection sends its turn's, decision D131) |
 | final state `done` | its `<donedata>` ([`schemas/done.json`](schemas/done.json)) | `{scxml, schemas, script, path, tests, report}`: the built document's three parts (its SCXML, its input event schemas as one object with `$defs` keyed by event, and its ECMAScript, `""` for none), the path of the `.scx` they were written as (`../../behaviors/<name>.scx`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
 | final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics, history, scxml?, path?}`: `invalid-request`, `unconfigured` (the run holds no `FLOPPY_BASE_URL`; the first generation ends the build at once), `no-progress` (a diagnostic an earlier failure of the build already had, consecutive or not; decision D124), `attempts-exhausted` (the request's cap), or `abandoned`, with the last diagnostics (`{kind, code, message}`), the failure history (every failure's attempt and diagnostics, as in `done`'s report), and `scxml`, the last draft a check (`validate`, the lifetime check, `simulate`) rejected, with `path`, where it was written, both absent when no draft was rejected (the original's revision drafts the rejected source) |
 
@@ -79,49 +79,15 @@ and from every document that invokes a learned behavior (each two levels
 below the layout root); scxml.rs loads its schema file and script against
 its own base URI, as they are when it is invoked.
 
-## Template mode
-
-A request with `template` `'turn'` builds a turn behavior from one fixed
-document, one program of fixed shape (decision D132), so the model
-never writes SCXML for it: the 2026-10-21 lab runs lost nearly every
-revision to document syntax (`XML001`, XSD errors, `no-document`,
-`truncated`), not to behavior logic. `routing` skips `design` (the plan is
-the template's, so `triage` offers repair and abandon, never redesign),
-and `author` asks for `turn_script` (`turn_author_system`,
-`script_schema`): `{lifetime, script, tests}`, a script that declares
-`applies(input)` and `selections(input, turn)`, and up to seven test
-inputs `{name, input, handled}` (`input` an object's JSON text). The chart
-is the namespace's turn behavior template,
-[`namespaces/behavior/templates/turn.scx`](../../namespaces/behavior/templates/turn.scx),
-which `<behavior:turn_program>` writes naming `<name>.js`; `<name>.json`
-is `{"$defs":{}}`. Its invoker sets `turn` and `input`; it calls
-`applies(input)` and, when that is `true`, `selections(input, turn)`, and
-ends at once with `{turn, handled, selected, error}`, `error` the name of
-the call that threw, `script` when the script did not load (it does not
-parse, or its top level throws), else `null`; the candidates runner
-records a run whose `error` is a string as failed. `validate` checks that the script
-declares both (`draft` `undeclared-function`) and that each test input is
-an object's JSON text (`draft` `test-input`); `simulate` runs the live
-turn first, then each test input the same way (`sim_apply`, with the live
-turn's turn and targets), and `<behavior:verify_apply>` checks each run:
-the live turn and an input whose `handled` is true must be answered, one
-whose `handled` is false must finish with `handled` false and nothing
-selected, and a call that threw or a script that did not load is told
-so; a test input's `E0008`
-messages name the test. A `turn_script` whose `lifetime` is `persistent`
-(a recurring or time-based routine) ends template mode: the build goes on
-once as a whole document, planned by `design` and authored as
-`scxml_draft`.
-
 ## Topology
 
 ```
-intake -> routing -> design -> author -> writing -> validate -> simulate -> done
-                |                ^ ^        ^          |           |
-                +----------------+ |        +-- apply_fixes        |
-                                   |                   v           v
-                                   +---------- triage <- retry_gate -> failed
-                                               fallback
+intake -> design -> author -> writing -> validate -> simulate -> done
+                       ^          ^          |           |
+                       |          +-- apply_fixes        |
+                       |                     v           v
+                       +--------- triage <- retry_gate -> failed
+                                  fallback
 ```
 
 * `design`: invokes the generate service
@@ -255,8 +221,8 @@ intake -> routing -> design -> author -> writing -> validate -> simulate -> done
 * `triage`: `decision:choice` (synchronous executable content) writes the
   state's enabled `event:schema` transitions as the canonical choices:
   `triage.repair` (guarded by `plan !== null`, so it is among the choices only
-  when there is a plan to repair from), `triage.redesign` (not in template
-  mode, whose plan is the template's), and `triage.abandon`. The decision service
+  when there is a plan to repair from), `triage.redesign`, and
+  `triage.abandon`. The decision service
   (`https://github.com/stateforward/floppy/services/decision`),
   invoked with those choices and the failure state, picks one, validates its
   data against the choices' schema, and returns it.
@@ -273,9 +239,9 @@ the topology. `design` and `author` each arm `builder.timeout` after
 (the run's `FLOPPY_STREAM` is `true`), after `generate_timeout_ms` without
 progress (default 30 s; the first `generate.progress` arms it, each later
 one re-arms it), the request may set either; each reply is bounded by
-`max_completion_tokens` (8192, reasoning included), but a whole
-document's author reply by `document_max_completion_tokens` (16384: the
-2026-10-21 runs truncated whole documents at 8192; decision D132); and `triage` arms it
+`max_completion_tokens` (8192, reasoning included), but the author reply (a
+whole document) by `document_max_completion_tokens` (16384: the 2026-10-21
+runs truncated whole documents at 8192; decision D131); and `triage` arms it
 after `decision_timeout_ms` (60 s), tagged with the stage run
 (`stage_run`) and cancelled on exit (decision D101). Invoked with the
 `<param>` `progress_target` `'#_parent'` (reflection does), the builder

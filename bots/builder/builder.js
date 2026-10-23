@@ -43,7 +43,7 @@ function firstDiagnosticSummary() {
 
 // Whether the builder.request data satisfies schemas/builder.request.json.
 function satisfiesBuilderRequest(_event) {
-  return _event.data !== null && typeof _event.data === 'object' && !Array.isArray(_event.data) && Object.keys(_event.data).every(function (k) { return ['spec', 'name', 'constraints', 'max_attempts', 'model', 'generate_timeout_ms', 'generate_ceiling_ms', 'min_every_ms', 'turn_after_bound_ms', 'apply', 'template'].indexOf(k) >= 0; }) && isOptionalBound(_event.data.min_every_ms) && isOptionalBound(_event.data.turn_after_bound_ms) && isOptionalApply(_event.data.apply) && isOptionalTemplate(_event.data) && typeof _event.data.spec === 'string' && _event.data.spec.trim().length > 0 && (_event.data.name === undefined || (typeof _event.data.name === 'string' && _event.data.name.length > 0)) && (_event.data.constraints === undefined || (Array.isArray(_event.data.constraints) && _event.data.constraints.length <= 32 && _event.data.constraints.every(function (c) { return typeof c === 'string'; }))) && (_event.data.max_attempts === undefined || (Number.isInteger(_event.data.max_attempts) && _event.data.max_attempts >= 1 && _event.data.max_attempts <= 8)) && (_event.data.model === undefined || (typeof _event.data.model === 'string' && _event.data.model.length > 0)) && isOptionalGenerateBound(_event.data.generate_timeout_ms) && isOptionalGenerateBound(_event.data.generate_ceiling_ms);
+  return _event.data !== null && typeof _event.data === 'object' && !Array.isArray(_event.data) && Object.keys(_event.data).every(function (k) { return ['spec', 'name', 'constraints', 'max_attempts', 'model', 'generate_timeout_ms', 'generate_ceiling_ms', 'min_every_ms', 'turn_after_bound_ms', 'apply'].indexOf(k) >= 0; }) && isOptionalBound(_event.data.min_every_ms) && isOptionalBound(_event.data.turn_after_bound_ms) && isOptionalApply(_event.data.apply) && typeof _event.data.spec === 'string' && _event.data.spec.trim().length > 0 && (_event.data.name === undefined || (typeof _event.data.name === 'string' && _event.data.name.length > 0)) && (_event.data.constraints === undefined || (Array.isArray(_event.data.constraints) && _event.data.constraints.length <= 32 && _event.data.constraints.every(function (c) { return typeof c === 'string'; }))) && (_event.data.max_attempts === undefined || (Number.isInteger(_event.data.max_attempts) && _event.data.max_attempts >= 1 && _event.data.max_attempts <= 8)) && (_event.data.model === undefined || (typeof _event.data.model === 'string' && _event.data.model.length > 0)) && isOptionalGenerateBound(_event.data.generate_timeout_ms) && isOptionalGenerateBound(_event.data.generate_ceiling_ms);
 }
 
 // An absent lifetime bound, or one of 1 ms to 1 day.
@@ -59,16 +59,6 @@ function isOptionalApply(value) {
 // The request's live turn, else null (a turn behavior runs only its own tests).
 function requestApply(_event) {
   return _event.data.apply === undefined ? null : _event.data.apply;
-}
-
-// An absent template, or 'turn' with the name and the live turn it needs (decision D132).
-function isOptionalTemplate(data) {
-  return data.template === undefined || (data.template === 'turn' && typeof data.name === 'string' && data.apply !== undefined);
-}
-
-// The request's template ('turn'), else null (the model writes the whole document).
-function requestTemplate(_event) {
-  return _event.data.template === undefined ? null : _event.data.template;
 }
 
 // A lifetime bound of the request, else null (not checked).
@@ -146,22 +136,6 @@ function generationCommunicationFailedDiagnostics(stage) {
   return [{kind: 'generate', code: stage + '-failed', message: 'the ' + stage + ' generation failed after it started (error.communication: the generate service returned an error, trapped, or returned an invalid event)'}];
 }
 
-// routing (decision D132)
-
-function isTemplated() {
-  return template !== null;
-}
-
-function isWholeDocument() {
-  return template === null;
-}
-
-// The turn behavior template's plan (its states), so repair is offered and
-// the done report names it.
-function templatePlan() {
-  return ({name: name, summary: 'The turn behavior template: applies(input) decides whether the behavior answers, selections(input, turn) answers.', states: [{id: 'loading', kind: 'atomic', parent: '', purpose: 'Answers unhandled when the script did not load.'}, {id: 'applying', kind: 'atomic', parent: '', purpose: 'Calls applies(input).'}, {id: 'selecting', kind: 'atomic', parent: '', purpose: 'Calls selections(input, turn).'}, {id: 'answered', kind: 'final', parent: '', purpose: 'Answers {turn, handled, selected}.'}], events: [], transitions: [{source: 'loading', event: 'loaded', target: 'applying', description: 'The script loaded.'}, {source: 'applying', event: 'applied', target: 'selecting', description: 'applies(input) is true.'}, {source: 'applying', event: 'applied', target: 'answered', description: 'It does not apply.'}, {source: 'selecting', event: 'selected', target: 'answered', description: 'The selections answer the turn.'}]});
-}
-
 // design
 
 // A failed redesign leaves plan null: keep the plan it replaces.
@@ -200,29 +174,8 @@ function previousDraft(field) {
   return draft === null ? null : draft[field];
 }
 
-// The author call's system prompt, tool and token bound: a turn script's in
-// template mode, else a whole document's (decision D132).
-function authorSystem() {
-  return template === null ? author_system : turn_author_system;
-}
-
-function authorSchema() {
-  return template === null ? draft_schema : script_schema;
-}
-
-function authorSchemaName() {
-  return template === null ? 'scxml_draft' : 'turn_script';
-}
-
-function authorMaxCompletionTokens() {
-  return template === null ? document_max_completion_tokens : max_completion_tokens;
-}
-
 function authorPrompt() {
   var repair = mode === 'repair';
-  if (template !== null) {
-    return JSON.stringify({task: mode, name: fileName(), spec: spec, constraints: constraints, previous_script: repair ? previous_script : null, previous_tests: repair ? previous_tests : null, diagnostics: diagnostics});
-  }
   return JSON.stringify({task: mode, name: fileName(), spec: spec, constraints: constraints, plan: plan, previous_scxml: repair ? scxml_text : null, previous_schemas: repair ? previous_schemas : null, previous_script: repair ? previous_script : null, previous_tests: repair ? previous_tests : null, diagnostics: diagnostics});
 }
 
@@ -232,22 +185,7 @@ function draftGenerated(_event) {
 
 // A generated draft whose scxml has no scxml element.
 function draftWithoutDocument(_event) {
-  return template === null && draftGenerated(_event) && draft.scxml.indexOf('<scxml') < 0;
-}
-
-// A turn script whose author asks for a persistent routine (decision D132).
-function isRoutineAsked(_event) {
-  return draftGenerated(_event) && template !== null && draft.lifetime === 'persistent';
-}
-
-function isScriptGenerated(_event) {
-  return draftGenerated(_event) && template !== null;
-}
-
-// A turn script as a draft: the template naming its script is the chart, and
-// it has no input event schemas.
-function templatedDraft() {
-  return ({lifetime: 'turn', scxml: scxml_text, schemas: {$defs: {}}, script: draft.script, tests: draft.tests});
+  return draftGenerated(_event) && draft.scxml.indexOf('<scxml') < 0;
 }
 
 function noDocumentDiagnostics() {
@@ -295,9 +233,8 @@ function isValidatorClean() {
   return report !== null && validatorErrors().length === 0;
 }
 
-// A turn script's test inputs leave room for the live turn (decision D132).
 function hasTestsWithinBounds() {
-  return template !== null ? Array.isArray(draft.tests) && draft.tests.length <= max_tests - 1 : Array.isArray(draft.tests) && draft.tests.length >= 1 && draft.tests.length <= max_tests && draft.tests.every(function (t) { return t.events.length <= 32; });
+  return Array.isArray(draft.tests) && draft.tests.length >= 1 && draft.tests.length <= max_tests && draft.tests.every(function (t) { return t.events.length <= 32; });
 }
 
 function isReadyToSimulate() {
@@ -305,7 +242,7 @@ function isReadyToSimulate() {
 }
 
 function testsOutOfBoundsDiagnostics() {
-  return [{kind: 'draft', code: 'tests-out-of-bounds', message: template !== null ? 'a turn script carries at most seven test inputs (the builder adds the live turn)' : 'the draft must carry one to eight test scripts of at most 32 events each'}];
+  return [{kind: 'draft', code: 'tests-out-of-bounds', message: 'the draft must carry one to eight test scripts of at most 32 events each'}];
 }
 
 // The draft's script checks (decision D123): a script that is not empty is
@@ -313,12 +250,8 @@ function testsOutOfBoundsDiagnostics() {
 // by its bare name is declared by the script, or is In or an ECMAScript
 // global. A cond that throws (its function undeclared) on an eventless
 // transition is retried every microstep, and scxml.rs ends the whole run
-// there, not only the simulated child. A turn script has its own checks.
+// there, not only the simulated child.
 function scriptErrors() {
-  return template === null ? documentScriptErrors() : turnScriptErrors();
-}
-
-function documentScriptErrors() {
   var errors = [];
   if (draft.script.trim() !== '' && scxml_text.indexOf('src="' + draftFile('.js') + '"') < 0) {
     errors.push({kind: 'draft', code: 'script-not-loaded', message: 'script is not empty, but the document has no <script src="' + draftFile('.js') + '"/> as the first child of its root after datamodel, so none of its functions is defined'});
@@ -359,23 +292,6 @@ function declaredFunctions() {
     return declaration;
   });
   return names;
-}
-
-// A turn script declares the two names the template calls, and each test
-// input is the text of a JSON object (decision D132).
-function turnScriptErrors() {
-  var missing = ['applies', 'selections'].filter(function (n) { return declaredFunctions().indexOf(n) < 0; });
-  return (missing.length > 0 ? [{kind: 'draft', code: 'undeclared-function', message: 'script does not declare ' + missing.join(', ') + ': a turn script declares function applies(input) and function selections(input, turn), which the template calls'}] : [])
-    .concat(draft.tests.filter(function (t) { return !isObjectText(t.input); }).map(function (t) { return {kind: 'draft', code: 'test-input', message: 'test ' + t.name + '\'s input is not the text of a JSON object (it was ' + JSON.stringify(String(t.input).slice(0, 80)) + ')'}; }));
-}
-
-function isObjectText(text) {
-  try {
-    var value = JSON.parse(text);
-    return value !== null && typeof value === 'object' && !Array.isArray(value);
-  } catch (e) {
-    return false;
-  }
 }
 
 function hasScriptErrors() {
@@ -451,15 +367,9 @@ function hasLifetimeErrors() {
 // simulate
 
 // The behavior checks: a persistent routine is checked by one forced tick
-// (D84); a turn behavior, given the request's live turn, by one run on that turn
-// (D131); a turn script by the live turn, then one run on each test input (D132).
+// (D84); a turn behavior, given the request's live turn, by one run on that turn (D131).
 function simTests() {
-  return template !== null ? [liveTurnTest()].concat(draft.tests.map(inputTest)) : isRoutineTicked() ? draft.tests.concat([firstTickTest()]) : isLiveTurnChecked() ? draft.tests.concat([liveTurnTest()]) : draft.tests;
-}
-
-// A turn script's test input as a run on the live turn's turn and targets.
-function inputTest(t) {
-  return {name: t.name, events: [], settle_ms: liveTurnBoundMs(), expect_events: [], expect_done: true, apply: true, live: false, turn: live_turn.turn, input: JSON.parse(t.input), targets: live_turn.targets, handled: t.handled};
+  return isRoutineTicked() ? draft.tests.concat([firstTickTest()]) : isLiveTurnChecked() ? draft.tests.concat([liveTurnTest()]) : draft.tests;
 }
 
 function isRoutineTicked() {
@@ -558,11 +468,6 @@ function testTargets() {
   return currentTest().targets;
 }
 
-// Whether the run must answer its input (false: a turn script's test input it must not answer).
-function testHandled() {
-  return currentTest().handled;
-}
-
 // done.invoke's donedata, which scxml.rs does not check; none is {}, which
 // <behavior:verify_apply> refuses (null in child_data: the draft never finished).
 function appliedData(_event) {
@@ -579,7 +484,7 @@ function applyError() {
 // sim_results with the current test's result: expect_events in order
 // (other outputs may come between), and expect_done.
 function nextSimResults() {
-  return sim_results.concat([(function (t) { var next = 0; observed.forEach(function (name) { if (next < t.expect_events.length && name === t.expect_events[next]) { next += 1; } }); return {name: t.name, live: t.live === true, tick: t.tick === true, invokeid: candidate_id, passed: sim_error === null && next === t.expect_events.length && child_done === t.expect_done && apply.length === 0, observed: observed, expected: t.expect_events, done: child_done, expect_done: t.expect_done, error: sim_error, apply: apply}; })(currentTest())]);
+  return sim_results.concat([(function (t) { var next = 0; observed.forEach(function (name) { if (next < t.expect_events.length && name === t.expect_events[next]) { next += 1; } }); return {name: t.name, invokeid: candidate_id, passed: sim_error === null && next === t.expect_events.length && child_done === t.expect_done && apply.length === 0, observed: observed, expected: t.expect_events, done: child_done, expect_done: t.expect_done, error: sim_error, apply: apply}; })(currentTest())]);
 }
 
 // Whether the current test is a routine's forced tick, whose ticks
@@ -594,10 +499,8 @@ function allTestsPassed() {
   return sim_results.every(function (r) { return r.passed; });
 }
 
-// An apply run's messages, each naming its test unless it is the live turn or
-// the forced tick (decision D132).
 function simulateDiagnostics() {
-  return sim_results.filter(function (r) { return !r.passed; }).map(function (r) { return r.apply.length > 0 ? r.apply.map(function (m) { return {kind: 'apply', code: 'E0008', message: r.live || r.tick ? m : 'test ' + r.name + ': ' + m}; }) : [{kind: 'simulate', code: 'test-failed', message: 'test ' + r.name + ' expected the outputs ' + JSON.stringify(r.expected) + ' in order and done=' + r.expect_done + ', observed ' + JSON.stringify(r.observed) + ' and done=' + r.done + (r.error === null ? '' : ', error ' + simError(r)) + doneMismatch(r)}]; }).reduce(function (all, d) { return all.concat(d); }, []);
+  return sim_results.filter(function (r) { return !r.passed; }).map(function (r) { return r.apply.length > 0 ? r.apply.map(function (m) { return {kind: 'apply', code: 'E0008', message: m}; }) : [{kind: 'simulate', code: 'test-failed', message: 'test ' + r.name + ' expected the outputs ' + JSON.stringify(r.expected) + ' in order and done=' + r.expect_done + ', observed ' + JSON.stringify(r.observed) + ' and done=' + r.done + (r.error === null ? '' : ', error ' + simError(r)) + doneMismatch(r)}]; }).reduce(function (all, d) { return all.concat(d); }, []);
 }
 
 // A test's error event name without the candidate's generated invoke id

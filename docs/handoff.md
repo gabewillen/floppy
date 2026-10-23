@@ -11,21 +11,19 @@ Last updated: 2026-10-22.
 
 ## Current state (2026-10-09) — resume here
 
-- **Learned behaviors are repaired, run on their live turn and built
-  from a template (2026-10-22, D130 to D132):** reflection repairs a
+- **Learned behaviors are repaired and run on their live turn
+  (2026-10-22, D130 and D131):** reflection repairs a
   select call the generate service refuses (D126's `rejection`) at most
   twice with repair feedback carrying the rejection, failing at once on the same
   rejection and then with `Selection rejected: <message>` (D130). The
   builder runs a turn behavior once on the live turn it is learned from
   (`builder.request`'s `apply`, which reflection always sends) and
   checks the run with `<behavior:verify_apply>` (D131); a routine keeps
-  its forced tick. A turn behavior is built from the fixed template
-  `namespaces/behavior/templates/turn.scx` (`template` `'turn'`,
-  `<behavior:turn_program>`), so the model writes only its script,
-  `applies(input)` and `selections(input, turn)`, with at most seven test
-  inputs; a script whose `lifetime` is persistent falls back once to a
-  whole document, and a whole document's author call is bounded by
-  `document_max_completion_tokens` (16384) (D132). The build-time half
+  its forced tick; the author call (a whole document) is bounded by
+  `document_max_completion_tokens` (16384). D132 (a fixed turn template
+  whose script the model writes) is withdrawn: the maintainer wants no
+  templates in the builder, and the bar is whether the model builds whole
+  documents itself (to be tried on sparks). The build-time half
   of "nothing tests learned behaviors on real input" is done by D131;
   the runtime half is pending (gap L5).
 - **Seeing (2026-10-22, D185 to D189):** `abilities/seeing/seeing.scx`

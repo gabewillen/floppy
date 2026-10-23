@@ -6,9 +6,9 @@
     "kind": "namespace-irp",
     "source": "namespaces/behavior/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "bebbf3a00ff63fe05b74b99cc46cc787c52b3e9a29482aa3f3799e62b7026bc4",
-    "source_digest": "3f35028e4824997f7ea771a850a231d364f929a955203381c161389103fe8842",
-    "manifest_digest": "f4bf9cf25de29a5cb0cc3f4919f5496643b3b2fd1df2e4d8a7ef95561618d6bf",
+    "corpus_digest": "9c75c71c9755aab55263c63f1da5e2fd2112e5c30f327a8167ba8977beadf41f",
+    "source_digest": "84182183083a41aae58c877d1a4f8b45b64c9accde278051f2eb0e72a720deda",
+    "manifest_digest": "6ec951a679ce5840adc3365644c2c8e794b4406310fb56f8a04820b6ca34d2db",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
@@ -55,9 +55,9 @@
     {
       "namespace_uri": "https://github.com/stateforward/floppy/namespaces/behavior",
       "package_version": "0.1.0",
-      "manifest_sha256": "8ceb07f5cd8f5acfc4e159642dbe1b70ddc8f1884b0cef48664f8910dda4fc5e",
-      "schema_sha256": "e63d6529d4e49b434b977a433c05c292d62b7f3b06f686330747efc29791765d",
-      "component_sha256": "7a2517f4184fba81af75e9596372b7de3157e8ca69412ece3b0f16e6d7fbd753"
+      "manifest_sha256": "e0d705c7230bb08440213f88ff97fc62d1fc9a5a28debed4a3f6caeabb842163",
+      "schema_sha256": "d5be72c57e45e73120c06617c5a7dc7866b1636002b2d6a54a6c294381461daa",
+      "component_sha256": "5ac75c5a1ba6b22cdf48b07da50082d978b5e17b5d81ddde432e121281c89567"
     }
   ],
   "ir_version": 5,
@@ -70,11 +70,11 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "2b15e78fe0c246a75a1eec294e2edaa65a9c9e014bca29f4fd3122c24bc46746",
+  "identity_digest": "9d4c8d1020427da094d3f81680d17c935dca1144ba2c1b731ff87ce21f622cdd",
   "summary": {
-    "total_selected": 27,
-    "applicable_selected": 27,
-    "passed": 27,
+    "total_selected": 23,
+    "applicable_selected": 23,
+    "passed": 23,
     "failed": 0,
     "unsupported": 0,
     "invalid": 0,
@@ -84,8 +84,8 @@
     "not_passing": 0,
     "passed_under_erratum": 0,
     "mandatory": {
-      "applicable_selected": 27,
-      "passed": 27,
+      "applicable_selected": 23,
+      "passed": 23,
       "failed": 0,
       "unsupported": 0,
       "invalid": 0,
@@ -109,8 +109,8 @@
     },
     "by_spec": {
       "#behavior-1": {
-        "applicable_selected": 6,
-        "passed": 6,
+        "applicable_selected": 5,
+        "passed": 5,
         "failed": 0,
         "unsupported": 0,
         "invalid": 0,
@@ -169,20 +169,8 @@
         "passed_under_erratum": 0
       },
       "#behavior-6": {
-        "applicable_selected": 5,
-        "passed": 5,
-        "failed": 0,
-        "unsupported": 0,
-        "invalid": 0,
-        "harness_error": 0,
-        "skipped": 0,
-        "not_applicable": 0,
-        "not_passing": 0,
-        "passed_under_erratum": 0
-      },
-      "#behavior-7": {
-        "applicable_selected": 2,
-        "passed": 2,
+        "applicable_selected": 4,
+        "passed": 4,
         "failed": 0,
         "unsupported": 0,
         "invalid": 0,
@@ -195,8 +183,8 @@
     },
     "by_datamodel": {
       "ecmascript": {
-        "applicable_selected": 27,
-        "passed": 27,
+        "applicable_selected": 23,
+        "passed": 23,
         "failed": 0,
         "unsupported": 0,
         "invalid": 0,
@@ -764,106 +752,6 @@
       "assertion_id": "behavior-1",
       "spec_num": "1",
       "spec_id": "#behavior-1",
-      "datamodel": "ecmascript",
-      "conformance": "mandatory",
-      "manual": false,
-      "stage": "complete",
-      "disposition": "passed",
-      "diagnostics": [
-        {
-          "code": "LINT010",
-          "severity": "note",
-          "message": "expressions of this `ecmascript` machine were not syntax-checked"
-        }
-      ],
-      "configuration": [
-        "pass"
-      ],
-      "terminal_status": "finished",
-      "commands": 2,
-      "fuel_consumed": 2,
-      "oracle": "outcome-log"
-    },
-    {
-      "id": "260",
-      "assertion_id": "behavior-7",
-      "spec_num": "7",
-      "spec_id": "#behavior-7",
-      "datamodel": "ecmascript",
-      "conformance": "mandatory",
-      "manual": false,
-      "stage": "complete",
-      "disposition": "passed",
-      "diagnostics": [
-        {
-          "code": "LINT010",
-          "severity": "note",
-          "message": "expressions of this `ecmascript` machine were not syntax-checked"
-        }
-      ],
-      "configuration": [
-        "pass"
-      ],
-      "terminal_status": "finished",
-      "commands": 2,
-      "fuel_consumed": 2,
-      "oracle": "outcome-log"
-    },
-    {
-      "id": "261",
-      "assertion_id": "behavior-7",
-      "spec_num": "7",
-      "spec_id": "#behavior-7",
-      "datamodel": "ecmascript",
-      "conformance": "mandatory",
-      "manual": false,
-      "stage": "complete",
-      "disposition": "passed",
-      "diagnostics": [
-        {
-          "code": "LINT010",
-          "severity": "note",
-          "message": "expressions of this `ecmascript` machine were not syntax-checked"
-        }
-      ],
-      "configuration": [
-        "pass"
-      ],
-      "terminal_status": "finished",
-      "commands": 2,
-      "fuel_consumed": 2,
-      "oracle": "outcome-log"
-    },
-    {
-      "id": "262",
-      "assertion_id": "behavior-1",
-      "spec_num": "1",
-      "spec_id": "#behavior-1",
-      "datamodel": "ecmascript",
-      "conformance": "mandatory",
-      "manual": false,
-      "stage": "complete",
-      "disposition": "passed",
-      "diagnostics": [
-        {
-          "code": "LINT010",
-          "severity": "note",
-          "message": "expressions of this `ecmascript` machine were not syntax-checked"
-        }
-      ],
-      "configuration": [
-        "pass"
-      ],
-      "terminal_status": "finished",
-      "commands": 2,
-      "fuel_consumed": 2,
-      "oracle": "outcome-log"
-    },
-    {
-      "id": "263",
-      "assertion_id": "behavior-6",
-      "spec_num": "6",
-      "spec_id": "#behavior-6",
       "datamodel": "ecmascript",
       "conformance": "mandatory",
       "manual": false,

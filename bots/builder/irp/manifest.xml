@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/bots/builder/irp/sources">
   <assert id="builder-1" specnum="1" specid="#builder-1">
-    <![CDATA[It waits in `intake` for `builder.request` `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?, template?}`; data its schema refuses is refused at the sender (its send raises `error.execution` there) and the builder keeps waiting; a request whose spec is only whitespace ends in the final state `failed` with `{reason: "invalid-request", diagnostics: [{kind: "request", code: "invalid-request"}]}`, which the invoker receives as `done.invoke.<id>`.]]>
+    <![CDATA[It waits in `intake` for `builder.request` `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?}`; data its schema refuses is refused at the sender (its send raises `error.execution` there) and the builder keeps waiting; a request whose spec is only whitespace ends in the final state `failed` with `{reason: "invalid-request", diagnostics: [{kind: "request", code: "invalid-request"}]}`, which the invoker receives as `done.invoke.<id>`.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -93,18 +93,6 @@
     </test>
     <test id="181" conformance="mandatory" manual="false">
       <start uri="181/test181.scxml"/>
-    </test>
-  </assert>
-  <assert id="builder-10" specnum="10" specid="#builder-10">
-    <![CDATA[With the request's `template` `'turn'` (it then requires `name` and `apply`; decision D132) there is no `design`: the plan is the turn behavior template's, `author` asks for `turn_script` `{lifetime, script, tests}`, the chart written is the template naming `<name>.js` (`<behavior:turn_program>`) and `<name>.json` is `{"$defs":{}}`; the simulation runs the live turn, then each test input the same way, and a test input whose `handled` is false must not be answered (else an `apply` diagnostic `E0008` naming the test); a `turn_script` whose `lifetime` is `persistent` is planned and authored once as a whole document (`scxml_draft`).]]>
-    <test id="190" conformance="mandatory" manual="false">
-      <start uri="190/test190.scxml"/>
-    </test>
-    <test id="191" conformance="mandatory" manual="false">
-      <start uri="191/test191.scxml"/>
-    </test>
-    <test id="192" conformance="mandatory" manual="false">
-      <start uri="192/test192.scxml"/>
     </test>
   </assert>
 </assertions>

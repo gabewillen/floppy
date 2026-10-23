@@ -281,7 +281,6 @@ D33 to D43.
 | behavior `storage.instances_from_behavior_results`, `storage.replace_behavior_clauses` (`inventory.load_behavior`, `store_behavior`) | `<behavior:instances_from_behavior_results>`, `<behavior:replace_behavior_clauses>` (D116) | `namespaces/behavior` elements |
 | behavior `instance._lifetime_errors` and the lifetime, `verify._verify_tick`, `_selection_binding_errors` | `<behavior:lifetime_errors>`, `<behavior:verify_tick>` (D116) | `namespaces/behavior` elements |
 | the behavior package's live-turn check of a turn behavior (one run on the turn it is learned from, its selections' data checked against the live values) | `<behavior:verify_apply>` (D131) | `namespaces/behavior` element |
-| the behavior package's one program shape of a behavior (the model writes only its logic) | `<behavior:turn_program>` and the turn template `namespaces/behavior/templates/turn.scx` (D132) | `namespaces/behavior` element and template |
 | behavior `schedule.At.next_after` | `next_after` in `abilities/reflection/reflection.js`, carried by a routine as data (a draft cannot use a namespace element: `<scx:validate>` binds no package, D116) | routine ECMAScript |
 | autonomy `behavior_input_payload` | `<autonomy:behavior_input_payload>` (D116) | `namespaces/autonomy` element |
 | `cognition.py` Cognition | `abilities/cognition/cognition.scx` | ability `.scx` child |
