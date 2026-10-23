@@ -157,8 +157,9 @@ intake -> design -> author -> writing -> validate -> simulate -> done
   draft that sends `bot.behavior.tick` is a persistent routine (decision
   D61), and a delayed send of an event that a transition sending the tick
   takes is one of its schedules (`every`, `at`). A schedule's literal
-  `delay` shorter than `min_every_ms` is rejected, a persistent routine
-  without a schedule is rejected, and in a turn behavior (any other draft)
+  `delay` shorter than `min_every_ms` is rejected, a schedule with a
+  literal `target` is rejected (it is sent elsewhere and never fires,
+  decision D147), a persistent routine without a schedule is rejected, and in a turn behavior (any other draft)
   a literal `delay` longer than `turn_after_bound_ms` is rejected, since
   autonomy silences a turn behavior then. A `delayexpr` is not judged.
 * `simulate`: each test script runs the draft as a fresh invoked child

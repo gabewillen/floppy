@@ -366,6 +366,42 @@ fn the_lifetime_check_reads_the_document_as_xml() {
     );
 }
 
+/// A schedule sent to a literal target never reaches the routine (the
+/// Sparks builder's `#_self`, which never armed in the room, decision
+/// D147): it is a diagnostic, and a schedule with no target is not.
+#[test]
+fn a_schedule_with_a_target_is_a_lifetime_error() {
+    let routine = |target: &str| {
+        format!(
+            r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+  <state id="wait">
+    <onentry><send event="timer.expire"{target} delay="60s" id="t"/></onentry>
+    <transition event="timer.expire" target="wait"><send event="bot.behavior.tick" target="#_parent"/></transition>
+  </state>
+</scxml>"##
+        )
+    };
+    let misdirected = lifetime_errors(
+        &routine(r##" target="#_self""##),
+        Some(60000.0),
+        Some(1000.0),
+    );
+    assert_eq!(misdirected.lifetime, "persistent");
+    assert_eq!(misdirected.schedules, ["timer.expire"]);
+    assert_eq!(misdirected.errors.len(), 1, "{:?}", misdirected.errors);
+    assert!(
+        misdirected.errors[0]["message"]
+            .as_str()
+            .is_some_and(|message| message.starts_with(
+                "the timer.expire schedule is sent to #_self, so it never reaches the routine"
+            )),
+        "{:?}",
+        misdirected.errors
+    );
+    let own = lifetime_errors(&routine(""), Some(60000.0), Some(1000.0));
+    assert_eq!(own.errors, Vec::<Json>::new());
+}
+
 #[test]
 fn malformed_lifetime_checks_raise_error_execution_and_assign_nothing() {
     assert_eq!(

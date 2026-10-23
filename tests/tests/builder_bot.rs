@@ -859,6 +859,7 @@ fn answers_plan(path: &str) -> bool {
             | "/lifetime/v1/chat/completions"
             | "/emptytick/v1/chat/completions"
             | "/httproutine/v1/chat/completions"
+            | "/selfschedule/v1/chat/completions"
             | "/afterbound/v1/chat/completions"
             | "/runaway/v1/chat/completions"
             | "/rendered/v1/chat/completions"
@@ -916,6 +917,15 @@ fn mock_reply(
         ("/lifetime/v1/chat/completions", Some("scxml_draft")) => {
             Some(completion(&match authors {
                 1 => routine_draft("30s", CHIME),
+                _ => routine_draft("3600s", CHIME),
+            }))
+        }
+        ("/selfschedule/v1/chat/completions", Some("scxml_draft")) => {
+            Some(completion(&match authors {
+                1 => routine_draft("3600s", CHIME).replace(
+                    r#"event=\"hourly.every\" delay"#,
+                    r##"event=\"hourly.every\" target=\"#_self\" delay"##,
+                ),
                 _ => routine_draft("3600s", CHIME),
             }))
         }
@@ -1854,6 +1864,34 @@ fn a_routine_under_the_minimum_interval_is_repaired_and_its_first_tick_is_forced
 /// A routine may do its own I/O (decision D138): one that POSTs through
 /// the `BasicHTTP` Event I/O Processor after each tick is built, its forced
 /// first tick observed although the simulation admits no origin.
+/// A schedule sent to a literal target never reaches the routine (the
+/// Sparks builder's `#_self`, decision D147): the forced tick would pass it,
+/// so the lifetime check rejects it, and the repaired routine is built.
+#[test]
+fn a_schedule_sent_to_a_target_is_rejected_and_repaired() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "selfschedule",
+        "selfschedule",
+        &ALL,
+        &lifetime_request(),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    let rejected = &done["report"]["history"][0]["diagnostics"][0];
+    assert_eq!(rejected["code"], "E0009", "{done}");
+    assert!(
+        rejected["message"]
+            .as_str()
+            .is_some_and(|message| message.starts_with(
+                "the hourly.every schedule is sent to #_self, so it never reaches the routine"
+            )),
+        "{done}"
+    );
+}
+
 #[test]
 fn a_routine_that_does_its_own_io_is_built() {
     let mock = Mock::start();

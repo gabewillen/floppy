@@ -76,8 +76,11 @@
 //! nothing is checked. `location` (required) receives at most 20
 //! diagnostics `{kind: "lifetime", code: "E0009", message}`: a schedule
 //! whose literal delay is shorter than `min_every`, a turn behavior's
-//! `after` whose literal delay is longer than `turn_after_bound`, and a
-//! persistent routine with no schedule. `lifetimelocation` (optional)
+//! `after` whose literal delay is longer than `turn_after_bound`, a
+//! schedule with a literal `target` (a schedule is a delayed send to the
+//! routine itself, which a send with no target reaches; any target, such
+//! as an invented `#_self`, sends it elsewhere and the routine never fires,
+//! decision D147), and a persistent routine with no schedule. `lifetimelocation` (optional)
 //! receives the lifetime, and `scheduleslocation` (optional) the events of
 //! the schedules in document order, each once. A text that does not parse
 //! as XML has no sends: its lifetime is `turn`, and it has no diagnostics
@@ -914,6 +917,8 @@ struct DelayedSend {
     event: Option<String>,
     /// Its literal `delay` in milliseconds, when it has one that parses.
     delay: Option<f64>,
+    /// Its literal `target`, when it has one.
+    target: Option<String>,
 }
 
 /// The sends of a document as the lifetime check reads them.
@@ -1017,6 +1022,7 @@ fn start_element(
                 sends.delayed.push(DelayedSend {
                     event,
                     delay: delay.as_deref().and_then(delay_ms),
+                    target: attribute(start, "target").ok()?,
                 });
             }
             Some(Open::Other)
@@ -1104,6 +1110,20 @@ pub fn lifetime_errors(
             )
         })
         .collect();
+    // A schedule's literal target: the routine's own events go to its
+    // external queue, which a send with no target reaches (decision D147).
+    let misdirected: Vec<(String, String)> = sends
+        .delayed
+        .iter()
+        .filter_map(|send| {
+            let event = send.event.as_ref()?;
+            let target = send.target.as_ref()?;
+            sends
+                .ticking
+                .contains(event)
+                .then(|| (event.clone(), target.clone()))
+        })
+        .collect();
     let mut schedules: Vec<String> = Vec::new();
     for (event, _, schedule) in &delayed {
         if *schedule && !schedules.contains(event) {
@@ -1130,6 +1150,11 @@ pub fn lifetime_errors(
                     seconds(bound)
                 )));
             }
+        }
+        for (event, target) in &misdirected {
+            errors.push(lifetime_error(format!(
+                "the {event} schedule is sent to {target}, so it never reaches the routine and never fires: a schedule is a delayed send to the routine itself, with no target.{LIFETIME_HELP}"
+            )));
         }
         if lifetime == "persistent" && !delayed.iter().any(|(_, _, schedule)| *schedule) {
             errors.push(lifetime_error(format!(
