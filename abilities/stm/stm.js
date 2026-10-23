@@ -27,9 +27,9 @@ function openFailedMessage(_event) {
   return 'short-term memory could not open its database: ' + failureText(_event);
 }
 
-// record (the original's _record)
+// record
 
-// The projection as the original stores it: sorted keys, compact.
+// The projection as stored: sorted keys, compact.
 function payloadJson(payload) {
   return JSON.stringify(payload, Object.keys(payload).sort());
 }
@@ -45,7 +45,7 @@ function recordStatements() {
   return [{sql: record_insert, parameters: parameters}, {sql: record_evict, parameters: [capacity]}];
 }
 
-// reinforce (the original's _reinforce): at most 128 ids a statement, so
+// reinforce: at most 128 ids a statement, so
 // each stays within the services' 256 parameters.
 
 function reinforceStatements() {
@@ -59,7 +59,7 @@ function reinforceStatements() {
   return statements;
 }
 
-// recent (the original's _recent)
+// recent
 
 function recentStatements() {
   const cutoff = utcText(Date.now() - recency_window_ms);
@@ -70,7 +70,7 @@ function recentStatements() {
   return [{sql: sql, parameters: parameters}];
 }
 
-// The original's _projection_payload_from_json: only bounded scalar fields.
+// A stored payload: only its scalar fields with non-empty keys.
 function storedPayload(text) {
   let payload = {};
   try {
@@ -88,7 +88,7 @@ function storedPayload(text) {
   return fields;
 }
 
-// The original's _observed_from_row, newest effective clock first.
+// The entries read, newest effective clock first.
 function recentEntries(_event) {
   return _event.data.results[0].rows.map((row) => {
     const v = row.values;
@@ -97,7 +97,7 @@ function recentEntries(_event) {
   });
 }
 
-// turn (the original's _record_turn)
+// turn
 
 function turnCut() {
   return bounded.cut || request.cut === true;
@@ -122,7 +122,7 @@ function turnRecordedLog() {
   return request.direction + ' cut=' + turnCut();
 }
 
-// recent_turns (the original's _recent_turns)
+// recent_turns
 
 // within (ms) narrows the register's window, never widens it.
 function turnWindowMs() {
@@ -153,14 +153,14 @@ function isText(value) {
   return typeof value === 'string' && value.length > 0;
 }
 
-// One stored speaker as the original's Participant would take it: a ref of
+// One stored speaker as a participant: a ref of
 // 1 to 200 characters and a known role (own and resembles as stored).
 function isSpeaker(speaker) {
   return speaker !== null && typeof speaker === 'object' && isText(speaker.ref) &&
     Array.from(speaker.ref).length <= 200 && (speaker.role === 'source' || speaker.role === 'target');
 }
 
-// One stored row as the original's Turn, or null when it does not decode as
+// One stored row as a turn, or null when it does not decode as
 // one (a damaged row is skipped, so it never costs the read the turns
 // around it).
 function storedTurn(v) {
@@ -184,7 +184,7 @@ function failureText(_event) {
   return _event.data && typeof _event.data.message === 'string' ? _event.data.message : _event.name;
 }
 
-// The original's failure message for a request it could not serve.
+// The failure message for a request it could not serve.
 function operationFailedMessage(name, _event) {
   return 'short-term memory ' + name + ' failed: ' + failureText(_event);
 }
