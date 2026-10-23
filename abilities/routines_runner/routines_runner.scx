@@ -36,7 +36,7 @@
 
   Bindings: none of its own (no service, no I/O). A routine's own sends
   and invokes (any SCXML Event I/O Processor, such as basichttp to an
-  origin the run admits with --http-allow, or a service the run binds) are
+  origin the run admits (scx run http-allow), or a service the run binds) are
   the routine's, run by scxml.rs in its child session (decision D138).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
