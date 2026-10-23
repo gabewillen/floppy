@@ -12,7 +12,7 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "[{\"label\": \"skipped\"}, {\"label\": \"lamp\", \"confidence\": null, \"box\": {\"x\": 0.75, \"y\": 0.25, \"width\": 0.25, \"height\": 0.5}}, {\"label\": \"cup\", \"confidence\": 0.87, \"box\": {\"x\": 0.4, \"y\": 0.5, \"width\": 0.1, \"height\": 0.15}}, {\"label\": \"person\", \"confidence\": 0.5, \"box\": {\"x\": 0, \"y\": 0, \"width\": 0.5, \"height\": 1}}]"
+              "content": "{\"objects\": [{\"label\": \"past\", \"confidence\": 1, \"box\": {\"x\": 0.75, \"y\": 0, \"width\": 0.5, \"height\": 0.5}}, {\"label\": \"lamp\", \"confidence\": null, \"box\": {\"x\": 0.75, \"y\": 0.25, \"width\": 0.25, \"height\": 0.5}}, {\"label\": \"cup\", \"confidence\": 0.87, \"box\": {\"x\": 0.4, \"y\": 0.5, \"width\": 0.1, \"height\": 0.15}}, {\"label\": \"person\", \"confidence\": 0.5, \"box\": {\"x\": 0, \"y\": 0, \"width\": 0.5, \"height\": 1}}]}"
             }
           }
         ]
