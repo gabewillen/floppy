@@ -276,6 +276,7 @@
       <param name="cognition_output" expr="lesson.cognition_output"/>
       <param name="prior_episodes" expr="prior_episodes"/>
       <param name="instruction" expr="lessonInstruction()"/>
+      <param name="turn_choices" expr="lessonChoices()"/>
     </invoke>
     <transition event="revising.after" target="failing">
       <assign location="failure" expr="'Learning revision timed out.'"/>

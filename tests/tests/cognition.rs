@@ -1120,7 +1120,7 @@ fn a_learned_behavior_whose_selection_cannot_be_sent_fails_the_turn() {
     let mut run = start_with(&bot, &grant);
     say(&mut run, "background noise");
     let records = until_turn_ended(&run, 1);
-    let message = "Autonomy behavior dispatch failed: error.communication";
+    let message = "Autonomy behavior dispatch failed: error.communication (selected bot.ability.reasoning.input with no target)";
     assert_eq!(
         texts(&records, "autonomy.candidate.failed"),
         strings(&[&format!("Unoffered ({message})")])

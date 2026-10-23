@@ -57,7 +57,7 @@ function revisionLog() {
 // The change input: the turn, and the lesson taught when there is one
 // (decision D149).
 function changeWriteInput() {
-  var input = {cognition_input: cognition_input, cognition_output: cognition_output, prior_episodes: prior_episodes};
+  var input = {cognition_input: cognition_input, cognition_output: cognition_output, prior_episodes: prior_episodes, turn_choices: turn_choices};
   if (instruction !== null) {
     input.instruction = instruction;
   }
@@ -80,7 +80,7 @@ function builderRequest() {
 // check, decision D131): this turn, its behavior_input as autonomy builds it, and the
 // sessions its output names (a learned behavior names its targets, D104).
 function liveTurn() {
-  return ({turn: turn, input: behavior_input, targets: outputTargets()});
+  return ({turn: turn, input: behavior_input, targets: outputTargets(), choices: turn_choices});
 }
 
 // The distinct targets of this turn's cognition_output, at most 32.

@@ -19,6 +19,11 @@ function inputFailure(input) {
 }
 
 // What the bot knows of itself (decision D145), null when not told.
+// The turn's choices (decision D206), none when the input has none.
+function inputChoices(input) {
+  return Array.isArray(input.choices) ? input.choices : [];
+}
+
 function inputSelf(input) {
   return input.self === undefined ? null : input.self;
 }

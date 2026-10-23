@@ -162,6 +162,9 @@
     <data id="outcome" expr="'completed'"/>
     <data id="turn_failure" expr="null"/>
     <data id="self" expr="null"/>
+    <!-- The turn's choices, which the revision's live-turn check holds a
+         behavior's selections to (decision D206). -->
+    <data id="turn_choices" expr="[]"/>
     <!-- Recalled (with the turn, the select input). -->
     <data id="prior_episodes" expr="[]"/>
     <data id="behaviors" expr="[]"/>
@@ -234,6 +237,7 @@
       <assign location="outcome" expr="inputOutcome(deferred[0])"/>
       <assign location="turn_failure" expr="inputFailure(deferred[0])"/>
       <assign location="self" expr="inputSelf(deferred[0])"/>
+      <assign location="turn_choices" expr="inputChoices(deferred[0])"/>
       <assign location="deferred" expr="deferred.slice(1)"/>
       <assign location="prior_episodes" expr="[]"/>
       <assign location="behaviors" expr="[]"/>
@@ -251,6 +255,7 @@
       <assign location="outcome" expr="inputOutcome(_event.data)"/>
       <assign location="turn_failure" expr="inputFailure(_event.data)"/>
       <assign location="self" expr="inputSelf(_event.data)"/>
+      <assign location="turn_choices" expr="inputChoices(_event.data)"/>
       <assign location="prior_episodes" expr="[]"/>
       <assign location="behaviors" expr="[]"/>
       <assign location="behavior" expr="null"/>
@@ -504,6 +509,7 @@
       <param name="cognition_input" expr="cognition_input"/>
       <param name="cognition_output" expr="cognition_output"/>
       <param name="prior_episodes" expr="prior_episodes"/>
+      <param name="turn_choices" expr="turn_choices"/>
     </invoke>
     <transition event="bot.ability.reflection.revision.output"
                 event:schema="../schemas/bot.ability.reflection.revision.output.json" target="storing">

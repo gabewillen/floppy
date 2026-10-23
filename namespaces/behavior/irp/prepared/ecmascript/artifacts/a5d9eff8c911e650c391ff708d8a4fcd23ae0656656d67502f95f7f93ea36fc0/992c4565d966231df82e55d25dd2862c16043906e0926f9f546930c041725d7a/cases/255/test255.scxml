@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- behavior-6: verify_apply with the turn's choices writes one E0008 message for a selection whose data its choice's schema refuses, and none for one it admits. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior" xmlns:conf="http://www.w3.org/2005/scxml-conformance" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="refused" expr="null"/>
+  <data id="admitted" expr="null"/>
+  <data id="choices" expr="[{event: 'respond', target: 'communication', schema: {type: 'object', properties: {parts: {type: 'array'}}, required: ['parts'], additionalProperties: false}}]"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <behavior:verify_apply location="refused" done="({turn: 1, handled: true, selected: [{event: 'respond', target: 'communication', data: {content: 'pong'}}]})" turn="1" input="({})" targets="['communication']" choices="choices"/>
+    <behavior:verify_apply location="admitted" done="({turn: 1, handled: true, selected: [{event: 'respond', target: 'communication', data: {parts: []}}]})" turn="1" input="({})" targets="['communication']" choices="choices"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="executed" cond="refused.length === 1 &amp;&amp; refused[0].indexOf('refuses') &gt; 0 &amp;&amp; admitted.length === 0" target="pass"/>
+  <transition event="*" target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

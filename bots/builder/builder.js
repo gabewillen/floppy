@@ -51,9 +51,9 @@ function isOptionalBound(value) {
   return value === undefined || (Number.isInteger(value) && value >= 1 && value <= 86400000);
 }
 
-// An absent live turn, or {turn, input, targets} as schemas/builder.request.json has it.
+// An absent live turn, or {turn, input, targets, choices?} as schemas/builder.request.json has it.
 function isOptionalApply(value) {
-  return value === undefined || (value !== null && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every(function (k) { return ['turn', 'input', 'targets'].indexOf(k) >= 0; }) && Number.isInteger(value.turn) && value.turn >= 1 && value.input !== null && typeof value.input === 'object' && !Array.isArray(value.input) && Array.isArray(value.targets) && value.targets.length <= 32 && value.targets.every(function (t) { return typeof t === 'string' && t.length > 0; }));
+  return value === undefined || (value !== null && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every(function (k) { return ['turn', 'input', 'targets', 'choices'].indexOf(k) >= 0; }) && (value.choices === undefined || (Array.isArray(value.choices) && value.choices.every(function (c) { return c !== null && typeof c === 'object' && typeof c.event === 'string'; }))) && Number.isInteger(value.turn) && value.turn >= 1 && value.input !== null && typeof value.input === 'object' && !Array.isArray(value.input) && Array.isArray(value.targets) && value.targets.length <= 32 && value.targets.every(function (t) { return typeof t === 'string' && t.length > 0; }));
 }
 
 // The request's live turn, else null (a turn behavior runs only its own tests).
@@ -443,7 +443,7 @@ function isLiveTurnChecked() {
 // The run on the live turn (sim_apply): expect_events [] admits any outputs, and
 // <behavior:verify_apply> judges its donedata.
 function liveTurnTest() {
-  return {name: 'live turn', events: [], settle_ms: liveTurnBoundMs(), expect_events: [], expect_done: true, apply: true, live: true, turn: live_turn.turn, input: live_turn.input, targets: live_turn.targets, handled: true};
+  return {name: 'live turn', events: [], settle_ms: liveTurnBoundMs(), expect_events: [], expect_done: true, apply: true, live: true, turn: live_turn.turn, input: live_turn.input, targets: live_turn.targets, choices: live_turn.choices === undefined ? null : live_turn.choices, handled: true};
 }
 
 // The 2 s verify timeout (decision D131), within the turn's silence bound when the request names it.
@@ -520,6 +520,12 @@ function testInput() {
 
 function testTargets() {
   return currentTest().targets;
+}
+
+// The live turn's choices its selections are held to (decision D206),
+// null for none.
+function testChoices() {
+  return currentTest().choices === undefined ? null : currentTest().choices;
 }
 
 // done.invoke's donedata, which scxml.rs does not check; none is {}, which

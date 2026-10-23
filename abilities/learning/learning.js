@@ -112,6 +112,11 @@ function progressTarget() {
 }
 
 // The lesson as the revision's instruction (decision D149).
+// The teaching turn's choices (decision D206).
+function lessonChoices() {
+  return Array.isArray(lesson.choices) ? lesson.choices : [];
+}
+
 function lessonInstruction() {
   return ({text: lesson.content, kind: 'instruction'});
 }

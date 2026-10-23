@@ -34,9 +34,16 @@ function candidateFailedLog(event) {
 
 // dispatching and recorded_failure
 
-// A dispatch that failed, with the error.
+// A dispatch that failed, with the error and what the candidate selected
+// (an error.execution is most often data its target's schema refuses,
+// decision D206).
 function dispatchFailure(_event) {
-  return 'Autonomy behavior dispatch failed: ' + _event.name;
+  return 'Autonomy behavior dispatch failed: ' + _event.name + ' (selected ' + answer.map(selectionText).join(', ') + ')';
+}
+
+function selectionText(s) {
+  var selection = Object(s);
+  return String(selection.event) + (typeof selection.target === 'string' ? ' to ' + selection.target : ' with no target');
 }
 
 function isRejected() {

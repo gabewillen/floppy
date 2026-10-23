@@ -24,7 +24,8 @@
 //!     lifetimelocation="lifetime" scheduleslocation="schedules"/>
 //! <behavior:verify_tick location="apply" ticks="ticks"/>
 //! <behavior:verify_apply location="apply" done="child_data" turn="testTurn()"
-//!     input="testInput()" targets="testTargets()" error="applyError()"/>
+//!     input="testInput()" targets="testTargets()" error="applyError()"
+//!     choices="testChoices()"/>
 //! ```
 //!
 //! Every attribute but the locations is an expression of the document's
@@ -99,7 +100,7 @@
 //! and `fired_at` and its `output` selects at least one event whose data
 //! holds the tick's own values for any of those fields.
 //!
-//! # `<behavior:verify_apply location="L" done="D" turn="T" input="I" targets="G" error="E"?/>`
+//! # `<behavior:verify_apply location="L" done="D" turn="T" input="I" targets="G" error="E"? choices="C"?/>`
 //!
 //! The live-turn check of a turn behavior (decision D131: one run, then its
 //! selections' data checked against the live values): the
@@ -119,7 +120,12 @@
 //! sends each selection to its target, so an empty `targets` refuses every
 //! selection) and data whose members agree with the string, number and
 //! boolean members of `input` of the same names (compared as JSON
-//! values); else why, an error or no donedata first.
+//! values); else why, an error or no donedata first. `choices` (optional)
+//! evaluates to the turn's choices, `[{event, target, schema}]`, or `null`:
+//! with any, a selection whose event is not one its target takes on that
+//! turn, or whose data its choice's schema does not admit, is a message too
+//! (decision D206), since the candidates runner's send of it is checked
+//! against the receiving transition and fails with `error.execution`.
 //!
 //! # Failures
 //!
@@ -159,6 +165,7 @@ use quick_xml::events::{BytesStart, Event};
 use quick_xml::name::ResolveResult;
 use quick_xml::reader::NsReader;
 use quick_xml::writer::Writer;
+use scxml_event_schema::{CompiledSchema, canonical_json};
 use scxml_types::DataValue as Data;
 use serde_json::{Map, Value as Json};
 
@@ -1416,6 +1423,9 @@ const NOT_THE_CONTRACT: &str = "turn behavior donedata must be the object {turn,
 /// `<behavior:verify_apply>`'s targets that are not strings.
 const NOT_STRINGS: &str = "behavior:verify_apply targets is not an array of strings";
 
+/// `<behavior:verify_apply>`'s choices that are not objects.
+const NOT_CHOICES: &str = "behavior:verify_apply choices is not an array of objects or null";
+
 /// `<behavior:verify_apply>`'s error that is not a name.
 const NOT_AN_ERROR: &str = "behavior:verify_apply error is not a string or null";
 
@@ -1425,11 +1435,13 @@ fn verify_apply_element<H: BehaviorHost>(
     content: &[Content],
     host: &mut H,
 ) -> Result<Executed, Failure<H::Error>> {
-    let [location, done, turn, input, targets, error] = attribute_values(
+    let [location, done, turn, input, targets, error, choices] = attribute_values(
         attributes,
-        ["location", "done", "turn", "input", "targets", "error"],
         [
-            "behavior:verify_apply takes only the location, done, turn, input, targets and error attributes",
+            "location", "done", "turn", "input", "targets", "error", "choices",
+        ],
+        [
+            "behavior:verify_apply takes only the location, done, turn, input, targets, error and choices attributes",
             "behavior:verify_apply repeats an attribute",
             "behavior:verify_apply has an empty attribute",
         ],
@@ -1490,11 +1502,26 @@ fn verify_apply_element<H: BehaviorHost>(
             _ => return Err(Failure::Execution(NOT_AN_ERROR)),
         },
     };
+    let choices = match choices {
+        None => Vec::new(),
+        Some(choices) => match evaluate(host, choices, NOT_CHOICES, NOT_CHOICES)? {
+            Json::Null => Vec::new(),
+            Json::Array(choices) if choices.iter().all(Json::is_object) => choices,
+            _ => return Err(Failure::Execution(NOT_CHOICES)),
+        },
+    };
     let done = (!done.is_null()).then_some(done);
-    let messages = verify_apply(done.as_ref(), &turn, &input, &targets, error.as_deref())
-        .into_iter()
-        .map(Json::String)
-        .collect();
+    let messages = verify_apply(
+        done.as_ref(),
+        &turn,
+        &input,
+        &targets,
+        &choices,
+        error.as_deref(),
+    )
+    .into_iter()
+    .map(Json::String)
+    .collect();
     assign_to(
         host,
         location,
@@ -1513,6 +1540,7 @@ pub fn verify_apply(
     turn: &Json,
     input: &Map<String, Json>,
     targets: &[String],
+    choices: &[Json],
     error: Option<&str>,
 ) -> Vec<String> {
     if let Some(error) = error {
@@ -1560,6 +1588,8 @@ pub fn verify_apply(
                         "selected[{index}] ({event}) names the target {}, which is not one of this turn's targets {offered}: name the session exactly as this turn's cognition_output names it.",
                         js_string(target)
                     ));
+                } else if let Some(error) = choice_error(index, event, target, selection, choices) {
+                    errors.push(error);
                 }
             }
             _ => errors.push(format!(
@@ -1574,6 +1604,81 @@ pub fn verify_apply(
     ));
     errors.truncate(MAX_APPLY_ERRORS);
     errors
+}
+
+/// Why the target would refuse a selection (decision D206): the candidates
+/// runner's send to it is checked against the receiving transition's
+/// schema, so data the turn's choice of that event and target does not
+/// admit fails the dispatch with `error.execution`. `None` without choices,
+/// or when the choice admits the data.
+fn choice_error(
+    index: usize,
+    event: &str,
+    target: &str,
+    selection: &Json,
+    choices: &[Json],
+) -> Option<String> {
+    if choices.is_empty() {
+        return None;
+    }
+    // A choice with no target is the body's own, whatever session id the
+    // selection names it by.
+    let choice = choices.iter().find(|choice| {
+        choice.get("event").and_then(Json::as_str) == Some(event)
+            && choice
+                .get("target")
+                .and_then(Json::as_str)
+                .is_none_or(|offered| offered == target)
+    });
+    let Some(choice) = choice else {
+        let offered: Vec<&str> = choices
+            .iter()
+            .filter(|choice| choice.get("target").and_then(Json::as_str) == Some(target))
+            .filter_map(|choice| choice.get("event").and_then(Json::as_str))
+            .collect();
+        return Some(format!(
+            "selected[{index}] ({event}) is not an event the target {} takes on this turn: it takes {}, as context's turn_choices lists them.",
+            js_string(target),
+            if offered.is_empty() {
+                "none".to_owned()
+            } else {
+                offered.join(", ")
+            }
+        ));
+    };
+    let schema = choice.get("schema")?;
+    let compiled = CompiledSchema::new(&canonical_json(schema)).ok()?;
+    let data = data_of(selection.get("data").unwrap_or(&Json::Null))?;
+    (!compiled.admits(&data)).then(|| {
+        format!(
+            "selected[{index}] ({event}) carries data its target {} refuses: the data must match the schema of {event} in context's turn_choices{}.",
+            js_string(target),
+            schema_outline(schema)
+        )
+    })
+}
+
+/// A schema's top-level outline for a message: the members its data may
+/// hold and the ones it must.
+fn schema_outline(schema: &Json) -> String {
+    let Some(properties) = schema.get("properties").and_then(Json::as_object) else {
+        return String::new();
+    };
+    let names: Vec<&str> = properties.keys().map(String::as_str).collect();
+    let required: Vec<&str> = schema
+        .get("required")
+        .and_then(Json::as_array)
+        .map(|required| required.iter().filter_map(Json::as_str).collect())
+        .unwrap_or_default();
+    let required = if required.is_empty() {
+        String::new()
+    } else {
+        format!(", {} required", required.join(", "))
+    };
+    format!(
+        " (an object whose members are among {}{required})",
+        names.join(", ")
+    )
 }
 
 /// The live values of a data object (decision D131): its string,

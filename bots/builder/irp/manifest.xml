@@ -87,12 +87,15 @@
     </test>
   </assert>
   <assert id="builder-9" specnum="9" specid="#builder-9">
-    <![CDATA[With the request's `apply` `{turn, input, targets}`, a draft that sends no `bot.behavior.tick` also runs once with the params `turn` and `input` (the simulation result `live turn`) and must end within min(`turn_after_bound_ms`, 2000) ms in a top-level final state whose donedata is `{turn, handled: true, selected}` with the live turn and selections naming targets among `targets` with data agreeing with `input`, else an `apply` diagnostic `E0008` (`<behavior:verify_apply>`, decision D131).]]>
+    <![CDATA[With the request's `apply` `{turn, input, targets, choices?}`, a draft that sends no `bot.behavior.tick` also runs once with the params `turn` and `input` (the simulation result `live turn`) and must end within min(`turn_after_bound_ms`, 2000) ms in a top-level final state whose donedata is `{turn, handled: true, selected}` with the live turn and selections naming targets among `targets` with data agreeing with `input` and, with `choices`, each an event its target takes with data its schema admits, else an `apply` diagnostic `E0008` (`<behavior:verify_apply>`, decisions D131 and D206).]]>
     <test id="180" conformance="mandatory" manual="false">
       <start uri="180/test180.scxml"/>
     </test>
     <test id="181" conformance="mandatory" manual="false">
       <start uri="181/test181.scxml"/>
+    </test>
+    <test id="182" conformance="mandatory" manual="false">
+      <start uri="182/test182.scxml"/>
     </test>
   </assert>
 </assertions>
