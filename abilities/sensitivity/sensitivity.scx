@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Sensitivity (the reference abilities/listening/sensitivity.py): the
-  front of listening, which holds the body's prediction of its own sound
+  floppy's Sensitivity: the front of listening, which holds the body's prediction of its own sound
   and scores every arrival against it. The listening
   (abilities/listening/listening.scx) invokes it as its long-lived child
   "sensitivity".
@@ -13,28 +12,26 @@
     producing -playout delay-> quiet
 
   Efference copy: bot.ability.speaking.efference {mouth, duration, ...}
-  (the original's EfferenceData, which the listening forwards) remembers which
-  mouth is producing and opens the window for exactly duration seconds:
-  producing arms producing.after (the original's hsm.after on producing) with
-  that delay, and leaving producing cancels it (the original's ballistic after()).
+  (which the listening forwards) remembers which mouth is producing and
+  opens the window for exactly duration seconds: producing arms
+  producing.after with that delay, and leaving producing cancels it.
   Only a copy with sound still to come (duration > 0) opens or re-arms the
   window; a copy of duration 0 says the mouth has nothing left to play,
   and closes it (a silent copy, decision D177; quiet ignores one).
 
-  Scoring: bot.ability.listening.sensitivity.score {stimulus} (the original's
-  ScoreData: the environment.sound envelope) answers the listening with
+  Scoring: bot.ability.listening.sensitivity.score {stimulus} (the
+  environment.sound envelope) answers the listening with
   bot.ability.listening.sensitivity.output {sound, parent,
   perceived_level_db, producing} (parent is the stimulus; producing is
   true for every arrival in producing, whoever made it). Every sound comes back; nothing is dropped or edited.
 
   * quiet, or producing a sound whose stimulus source is not the
-    producing mouth (the original _score_unproduced): perceived_level_db is the
-    sound's received_level_db (null when nothing was measured).
-  * producing, off the producing mouth (the original _score_against_prediction):
-    with no levels to compare, 0; with no learned path gain yet, the
-    observed gain (received_level_db - amplitude_db) is learned and the
-    level is 0; else the level is |observed - learned|. The gain is
-    learned once and never retaught.
+    producing mouth: perceived_level_db is the sound's received_level_db
+    (null when nothing was measured).
+  * producing, off the producing mouth: with no levels to compare, 0;
+    with no learned path gain yet, the observed gain (received_level_db -
+    amplitude_db) is learned and the level is 0; else the level is
+    |observed - learned|. The gain is learned once and never retaught.
 
   Readiness: on start it sends bot.ability.offers {ability:
   "sensitivity", choices: []} to the listening; it offers nothing.
@@ -48,7 +45,7 @@
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="sensitivity" initial="Sensitivity">
   <datamodel>
-    <!-- The original's attributes: the command in hand and the learned gain. -->
+    <!-- The command in hand and the learned gain. -->
     <data id="sensitivity_playout_seconds" expr="0"/>
     <data id="sensitivity_producing_mouth" expr="null"/>
     <data id="sensitivity_path_gain_db" expr="null"/>
