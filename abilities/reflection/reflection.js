@@ -18,6 +18,11 @@ function inputFailure(input) {
   return typeof input.failure === 'string' ? input.failure : null;
 }
 
+// What the bot knows of itself (decision D145), null when not told.
+function inputSelf(input) {
+  return input.self === undefined ? null : input.self;
+}
+
 // recalling
 
 function hasNoDatabase() {
@@ -77,7 +82,42 @@ function selectPrompt() {
 }
 
 function selectInputJson() {
-  return JSON.stringify({cognition_input: cognition_input, cognition_output: cognition_output, prior_episodes: prior_episodes, behaviors: behaviors});
+  var input = {cognition_input: cognition_input, cognition_output: cognition_output, prior_episodes: prior_episodes, behaviors: behaviors};
+  if (hasPersona()) {
+    input.self = self;
+  }
+  return JSON.stringify(input);
+}
+
+// A persona to revise: the bot was told its owner's traits (decision D145).
+function hasPersona() {
+  return self !== null && Array.isArray(self.traits) && self.traits.length > 0;
+}
+
+// The selections of this hop's reply, every dispatch call's.
+function replySelections(_event) {
+  var calls = Array.isArray(_event.data.tool_calls) ? _event.data.tool_calls : [];
+  return calls.reduce(function (all, call) { return all.concat(Array.isArray(Object(call.args).events) ? call.args.events : []); }, []);
+}
+
+function isRevision(s) {
+  return s.event === 'bot.ability.persona.revise';
+}
+
+// More than one inventory event or more than one revision (decision D145).
+function isOverSelection(_event) {
+  var selections = replySelections(_event);
+  var revisions = selections.filter(isRevision).length;
+  return revisions > 1 || selections.length - revisions > 1;
+}
+
+function overSelectionRejection() {
+  return ({key: 'over-selection', message: 'select at most one of bot.behavior.create, bot.behavior.change or bot.behavior.break, and at most one bot.ability.persona.revise'});
+}
+
+// A call's selections with a revision first.
+function revisionsFirst(events) {
+  return events.filter(isRevision).concat(events.filter(function (s) { return !isRevision(s); }));
 }
 
 function selectFeedback() {

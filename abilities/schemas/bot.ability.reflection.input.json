@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "bot.ability.reflection.input",
   "additionalProperties": false,
-  "description": "Reflection input after the host handled a cognition result. Reflection recalls prior episodes, may select create/change/break, runs a change pass for create/change, marks break, and stores this turn; a failed or cancelled turn is only stored.",
+  "description": "Reflection input after the host handled a cognition result. Reflection recalls prior episodes, may select create/change/break and a persona revision, runs a change pass for create/change, marks break, and stores this turn; a failed or cancelled turn is only stored.",
   "properties": {
     "cognition_input": {
       "additionalProperties": false,
@@ -211,6 +211,48 @@
       "default": null,
       "description": "Why a failed turn failed, the message of the cognition's bot.ability.failed; null otherwise.",
       "title": "Failure"
+    },
+    "self": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "traits": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "description": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "What the bot knows of itself, as its prompts' self block renders it: its name once the identity told it, its owner's traits and the description it wrote of itself. With traits, reflection may select bot.ability.persona.revise (decision D145) [floppy field].",
+      "title": "Self"
     },
     "turn": {
       "description": "The body's processing turn this event belongs to, counted from 1 [floppy field].",

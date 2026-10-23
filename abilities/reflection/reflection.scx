@@ -9,8 +9,8 @@
   child "reflection" (the original composes Reflection), with the <param>s
   database (the memory database; null: no memory) and
   model, and sends it bot.ability.reflection.input {turn,
-  cognition_input, cognition_output} after each turn's output, and
-  {turn, cognition_input, outcome, failure} after each turn that
+  cognition_input, cognition_output, self} after each turn's output, and
+  {turn, cognition_input, outcome, failure, self} after each turn that
   failed or was cancelled (outcome failed or cancelled; decision D139).
 
     idle -bot.ability.reflection.input-> recalling -> processing
@@ -55,7 +55,15 @@
   original's dispatch tool with at most one event (the original's "at most
   one"), which the generate service offers as its one tool, from
   {cognition_input, cognition_output, prior_episodes, behaviors}, and
-  refuses as schema-mismatch a reply that selects more. The events of
+  refuses as schema-mismatch a reply that selects more. With a persona
+  (self holds the owner's traits, which the cognition passes), the select
+  input also carries self, bot.ability.persona.revise is offered too and
+  the tool takes two events: a reply with more than one inventory event or
+  more than one revision is refused as over-selection, a rejection to
+  repair (decision D145). A revision is sent first and processing takes it
+  by sending it to the cognition, which sends it up to the body and the
+  body to the persona; an inventory event beside it is then applied as
+  alone. The events of
   every dispatch call it returns are each sent to this session at its
   target (#_scxml_ + target), where scxml.rs checks its data against the
   event's schema and the transition taking it applies it (the original's
@@ -170,9 +178,11 @@
     <data id="turn" expr="0"/>
     <data id="cognition_input" expr="null"/>
     <data id="cognition_output" expr="[]"/>
-    <!-- How the turn ended and why it failed (decision D139). -->
+    <!-- How the turn ended and why it failed (decision D139), and what the
+         bot knows of itself (decision D145). -->
     <data id="outcome" expr="'completed'"/>
     <data id="turn_failure" expr="null"/>
+    <data id="self" expr="null"/>
     <!-- Recalled (the reference SelectInput). -->
     <data id="prior_episodes" expr="[]"/>
     <data id="behaviors" expr="[]"/>
@@ -283,6 +293,7 @@
       <assign location="cognition_output" expr="deferred[0].cognition_output"/>
       <assign location="outcome" expr="inputOutcome(deferred[0])"/>
       <assign location="turn_failure" expr="inputFailure(deferred[0])"/>
+      <assign location="self" expr="inputSelf(deferred[0])"/>
       <assign location="deferred" expr="deferred.slice(1)"/>
       <assign location="prior_episodes" expr="[]"/>
       <assign location="behaviors" expr="[]"/>
@@ -299,6 +310,7 @@
       <assign location="cognition_output" expr="_event.data.cognition_output"/>
       <assign location="outcome" expr="inputOutcome(_event.data)"/>
       <assign location="turn_failure" expr="inputFailure(_event.data)"/>
+      <assign location="self" expr="inputSelf(_event.data)"/>
       <assign location="prior_episodes" expr="[]"/>
       <assign location="behaviors" expr="[]"/>
       <assign location="behavior" expr="null"/>
@@ -355,13 +367,19 @@
       <assign location="deferred" expr="deferred.concat([_event.data])"/>
     </transition>
     <onentry>
-      <decision:choice location="choices" events="bot.behavior.create bot.behavior.change bot.behavior.break"/>
+      <decision:choice location="choices" events="bot.behavior.create bot.behavior.change bot.behavior.break bot.ability.persona.revise"/>
       <processing:collect_offered_events location="choices" choices="choices"/>
       <!-- A change or a break names a behavior the inventory holds; with
            none, neither is offered (decision D100). -->
       <decision:pin location="choices" event="bot.behavior.change" property="name" values="behaviorNames()"/>
       <decision:pin location="choices" event="bot.behavior.break" property="name" values="behaviorNames()"/>
-      <processing:send location="schema" choices="choices" max="1"/>
+      <!-- At most one inventory event, and with a persona at most one
+           revision beside it (decision D145): more is refused below. -->
+      <if cond="hasPersona()">
+        <processing:send location="schema" choices="choices" max="2"/>
+      <else/>
+        <processing:send location="schema" choices="choices" max="1"/>
+      </if>
       <assign location="selected" expr="null"/>
       <assign location="gen_failure" expr="null"/>
       <assign location="gen_rejection" expr="null"/>
@@ -390,10 +408,16 @@
     </transition>
     <!-- The answer of this hop's call (gen_id: a late answer from an
          earlier hop's cancelled call is not this one). -->
+    <transition event="generate.result" cond="isGenerate(_event) &amp;&amp; isOverSelection(_event)">
+      <assign location="gen_failure" expr="'schema-mismatch'"/>
+      <assign location="gen_rejection" expr="overSelectionRejection()"/>
+    </transition>
+    <!-- A revision goes first, so it is taken here before an inventory
+         event leaves processing. -->
     <transition event="generate.result" cond="isGenerate(_event)">
       <assign location="selected" expr="[]"/>
       <foreach array="_event.data.tool_calls" item="call">
-        <foreach array="call.args.events" item="s">
+        <foreach array="revisionsFirst(call.args.events)" item="s">
           <log label="reflection.selected" expr="s.event"/>
           <send eventexpr="s.event" targetexpr="'#_scxml_' + s.target">
             <content expr="selectionData(s)"/>
@@ -419,6 +443,17 @@
     </transition>
     <transition event="bot.behavior.break" event:schema="../schemas/bot.behavior.break.json" target="breaking">
       <assign location="behavior" expr="_event.data"/>
+    </transition>
+
+    <!-- The persona's revision (decision D145), which the persona takes: the
+         cognition and the body pass it on. Reflection stays in processing,
+         for an inventory event selected beside it. -->
+    <transition event="bot.ability.persona.revise" event:schema="../schemas/bot.ability.persona.revise.json"
+                cond="hasPersona()">
+      <log label="reflection.persona" expr="_event.data.reason"/>
+      <send event="bot.ability.persona.revise" target="#_parent">
+        <content expr="_event.data"/>
+      </send>
     </transition>
 
     <!-- After the selection, if any: none was selected. -->

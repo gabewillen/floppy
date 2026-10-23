@@ -1,0 +1,39 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "{\"events\": [{\"event\": \"bot.ability.persona.revise\", \"target\": \"session.reflection\", \"data\": {\"text\": \"I am a warm greeter.\", \"reason\": \"I noticed I like greeting people.\"}, \"reason\": \"I see myself differently\"}, {\"event\": \"bot.ability.persona.revise\", \"target\": \"session.reflection\", \"data\": {\"text\": \"I am a warm greeter.\", \"reason\": \"I noticed I like greeting people.\"}, \"reason\": \"I see myself differently\"}]}"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "{\"events\": [{\"event\": \"bot.ability.persona.revise\", \"target\": \"session.reflection\", \"data\": {\"text\": \"I am a warm greeter.\", \"reason\": \"I noticed I like greeting people.\"}, \"reason\": \"I see myself differently\"}, {\"event\": \"bot.ability.persona.revise\", \"target\": \"session.reflection\", \"data\": {\"text\": \"I am a warm greeter.\", \"reason\": \"I noticed I like greeting people.\"}, \"reason\": \"I see myself differently\"}]}"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
