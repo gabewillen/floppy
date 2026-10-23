@@ -325,7 +325,31 @@ function isValidated() {
 // Each error with rendered, the form scx validate prints it in (rustc's):
 // a repair is told the line and column of what it names, not only its code.
 function validateDiagnostics() {
-  return validatorErrors().slice(0, 20).map(function (d) { var at = sourceAt(d.primary.span); return {kind: 'validate', code: d.code, label: d.primary.message ? d.primary.message : d.message, line: at.text.trim(), message: d.help ? d.message + ' Help: ' + d.help : d.message, rendered: renderedDiagnostic(d, at)}; });
+  return validatorErrors().slice(0, 20).map(function (d) { var at = sourceAt(d.primary.span); return {kind: 'validate', code: d.code, label: d.primary.message ? d.primary.message : d.message, line: at.text.trim(), message: d.help ? d.message + ' Help: ' + d.help : d.message, rendered: renderedDiagnostic(d, at), schema: elementSchema(elementAt(d.primary.span))}; });
+}
+
+// The SCXML element whose start tag holds or begins at a span: the name
+// after the last < at or before it, null for another namespace's element
+// or none (decision D137).
+function elementAt(span) {
+  var text = report.validator.source_text;
+  var start = charIndexOfByte(text, span.start);
+  var open = text.lastIndexOf('<', text.charAt(start) === '<' ? start : start - 1);
+  var name = open < 0 ? null : /^<\/?([A-Za-z_][A-Za-z0-9_.-]*)(?=[\s/>])/.exec(text.slice(open, open + 64));
+  return name === null ? null : name[1];
+}
+
+// What the SCXML schema declares for an element (decision D137): its
+// attributes, its content and the element itself, the scxml_xsd lines from
+// its attlist to its element declaration; '' when it declares none.
+function elementSchema(element) {
+  if (element === null) {
+    return '';
+  }
+  var from = scxml_xsd.indexOf('<xsd:attributeGroup name="scxml.' + element + '.attlist">');
+  var declared = '<xsd:element name="' + element + '" type="scxml.' + element + '.type"/>';
+  var to = scxml_xsd.indexOf(declared, from);
+  return from < 0 || to < 0 ? '' : scxml_xsd.slice(from, to + declared.length);
 }
 
 // The character index of the UTF-8 byte offset of the report's source text

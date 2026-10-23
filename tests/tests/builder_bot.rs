@@ -1489,6 +1489,17 @@ fn assert_repair_requests(received: &[Received]) {
     let second = authors[1].user_input();
     assert_eq!(second["task"], "repair");
     assert_eq!(second["diagnostics"][0]["code"], "SCXML005");
+    // The diagnostic carries what the schema declares for the element it
+    // marks, the transition whose target is unknown (decision D137).
+    assert!(
+        second["diagnostics"][0]["schema"]
+            .as_str()
+            .is_some_and(|schema| schema
+                .starts_with(r#"<xsd:attributeGroup name="scxml.transition.attlist">"#)
+                && schema
+                    .ends_with(r#"<xsd:element name="transition" type="scxml.transition.type"/>"#)),
+        "{second}"
+    );
     assert!(
         second["previous_scxml"]
             .as_str()
