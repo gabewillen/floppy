@@ -25,8 +25,8 @@
   stm.open.failed, "short-term memory could not open its database: ...")
   or does not open within open_timeout_ms leaves it degraded, without an
   offer, so the body's activation fails at its timeout; on entering
-  degraded it sends bot.ability.failed {message: "unavailable:
-  StmMemory is degraded."} to the parent.
+  degraded it sends bot.ability.failed {message: "unavailable: short-term
+  memory is degraded."} to the parent.
   Without a database it logs <log label="memory" expr="'absent'">, offers,
   and holds nothing: notifications are dropped and reads answer empty.
 
@@ -87,7 +87,7 @@
   namespaces/event) and taken, in order, once the register is idle.
 
   degraded: requests are answered bot.ability.failed {message:
-  "unavailable: StmMemory is degraded."}; notifications are dropped and
+  "unavailable: short-term memory is degraded."}; notifications are dropped and
   logged as stm.dropped.
 
   Logs: memory ('absent'), stm.open.failed, stm.turn.recorded ("<direction>
@@ -360,7 +360,7 @@
   <state id="degraded">
     <onentry>
       <send event="bot.ability.failed" target="#_parent">
-        <param name="message" expr="'unavailable: StmMemory is degraded.'"/>
+        <param name="message" expr="'unavailable: short-term memory is degraded.'"/>
       </send>
     </onentry>
     <transition event="bot.ability.memory.stm.record" event:schema="../schemas/bot.ability.memory.stm.record.json">
@@ -374,12 +374,12 @@
     </transition>
     <transition event="bot.ability.memory.stm.recent" event:schema="../schemas/bot.ability.memory.stm.recent.json">
       <send event="bot.ability.failed" target="#_parent">
-        <param name="message" expr="'unavailable: StmMemory is degraded.'"/>
+        <param name="message" expr="'unavailable: short-term memory is degraded.'"/>
       </send>
     </transition>
     <transition event="bot.ability.memory.stm.recent_turns" event:schema="../schemas/bot.ability.memory.stm.recent_turns.json">
       <send event="bot.ability.failed" target="#_parent">
-        <param name="message" expr="'unavailable: StmMemory is degraded.'"/>
+        <param name="message" expr="'unavailable: short-term memory is degraded.'"/>
       </send>
     </transition>
   </state>

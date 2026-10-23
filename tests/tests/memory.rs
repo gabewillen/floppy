@@ -636,7 +636,7 @@ fn run_stm(document: &str, clock: &str) -> Finished {
 
 const STM_READY: (&str, &str) = ("offers", r#"{"ability":"stm","choices":[]}"#);
 const STM_DATABASE: &str = "'/memory/floppy.sqlite'";
-const DEGRADED: &str = "unavailable: StmMemory is degraded.";
+const DEGRADED: &str = "unavailable: short-term memory is degraded.";
 
 #[test]
 fn stm_records_are_read_newest_first_and_evicted_beyond_capacity() {
