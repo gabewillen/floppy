@@ -142,7 +142,7 @@ function encodingRunFailure(_event) {
 
 // playing
 
-// The original sends no efference copy without a duration.
+// No efference copy is sent without a duration.
 function hasDuration() {
   return typeof encoded.duration === 'number' && encoded.duration > 0;
 }

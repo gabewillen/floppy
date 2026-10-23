@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Speaking ability (the reference abilities/speaking/speaking.py): it
-  encodes a reply's parts to speech, plays it out as environment.sound, and
+  floppy's Speaking ability: it encodes a reply's parts to speech, plays it out as environment.sound, and
   records the words in the conversation. The communication (abilities/
   communication/communication.scx) invokes it as its child "speaking" and routes each
-  selected response to it. Cognition never selects it directly (the original:
-  bot.ability.speaking.input is not offered).
+  selected response to it. Cognition never selects it directly
+  (bot.ability.speaking.input is not offered).
 
     idle -bot.ability.speaking.input-> speaking { encoding -> playing
       -> recording } -> idle
@@ -22,43 +21,41 @@
   media subtype (a path in the media directory the run grants the speech
   service). Its bot.ability.vocal.speech.encoding.output is the encoded
   speech: the audio reference with its media_type, sample_rate_hz and
-  channels (speaking's own, the original's 24000 Hz mono audio/pcm, where the
-  encoder leaves one null), and its duration when the encoder measured one
+  channels (speaking's own, 24000 Hz mono audio/pcm, where the encoder
+  leaves one null), and its duration when the encoder measured one
   (the speech service measures it for linear PCM). Synthesis is bounded
-  by encoding_timeout_ms, 30 s (decision D98: the original's 5 s is
-  shorter than Gemini's unstreamed synthesis of a sentence, which answers
-  only once the whole clip exists; 30 s is the original's stage operation
-  timeout); leaving encoding cancels vocal and its request.
+  by encoding_timeout_ms, 30 s (decision D98: Gemini's synthesis is not
+  streamed and answers only once the whole clip exists, so a sentence can
+  take longer than 5 s; 30 s is the stage operation timeout of the other
+  model-backed stages); leaving encoding cancels vocal and its request.
 
-  playing issues the efference copy first (the original's entry action: the
-  copy leaves before the sound does): bot.ability.speaking.efference
+  playing issues the efference copy first, on entry (the copy leaves
+  before the sound does): bot.ability.speaking.efference
   {mouth, duration, media_type, sample_rate_hz, channels} to the parent,
   which carries it to the bot's Listening; mouth is the <data> mouth,
-  "speaking", the sound's source (the original's source when no speaker is
-  injected; devices are out of scope). As in the original, no copy is sent
+  "speaking", the sound's source (devices are out of scope). No copy is sent
   when the encoded form gives no duration. Then the words are logged as
   floppy.say and the audio is broadcast: environment.sound {audio,
   media_type, sample_rate_hz, channels, source} to the parent, which the
-  body puts into the environment. source is the mouth (the original stamps
-  it as the sound event's source; a relayed SCXML event keeps only its
-  data, so it travels in the sound): it is how the listening's sensitivity
-  tells the bot's own voice from a sound that only arrives while it speaks.
+  body puts into the environment. source is the mouth (a relayed SCXML
+  event keeps only its data, so the source travels in the sound): it is
+  how the listening's sensitivity tells the bot's own voice from a sound
+  that only arrives while it speaks.
 
   recording builds the outbound message with <conversation:message_for_turn>
-  (the original's Message: direction outbound, content the text, content_type
+  (direction outbound, content the text, content_type
   text/plain, and participants the bot's own voice stamped own, which it
   has none of until it is voiced, decision D176) and sends
   bot.ability.conversation.append {message} to the parent, which holds the
   conversation (a sibling is out of a child's reach: SCXML sends go only to
-  #_parent and to a session's own children). It is bounded by the original's 5 s
+  #_parent and to a session's own children). It is bounded by 5 s
   (recording_timeout_ms). Then it answers the parent with
   bot.ability.speaking.output {text, media_type, sample_rate_hz, channels}.
 
   Failures: a vocal failure (its bot.ability.failed), an encoding or
   recording timeout, or a vocal that cannot run answers the parent with
-  bot.ability.failed {message} (the original's terminal failure, FailureData)
-  and returns to idle. Timers are bot.ability.speaking.apply.failed
-  {message} sends (the original's own failure event), taken only by the timer
+  bot.ability.failed {message} (the terminal failure) and returns to idle.
+  Timers are bot.ability.speaking.apply.failed {message} sends (speaking's own failure event), taken only by the timer
   in hand (_event.sendid).
 
   Utterances: an utterance's id is its input's sendid (none when the
@@ -86,13 +83,12 @@
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="speaking" initial="idle">
   <datamodel>
-    <!-- Configuration (the original's Speaking defaults and bounds). -->
+    <!-- Configuration: defaults and bounds. -->
     <data id="sample_rate_hz" expr="24000"/>
     <data id="channels" expr="1"/>
     <data id="media_type" expr="'audio/pcm'"/>
     <!-- The speech provider, model and voice vocal asks the speech
-         service for: the original's speech encoder defaults (its gemini
-         provider). -->
+         service for (Gemini by default). -->
     <data id="provider" expr="'gemini'"/>
     <data id="model" expr="'gemini-3.1-flash-tts-preview'"/>
     <data id="voice" expr="'Kore'"/>

@@ -39,7 +39,7 @@ READY = expect("bot.ability.offers", "_event.data.ability === 'speaking' && _eve
 # PCM (0.1 s).
 PCM = {"path": "/interactions", "status": 200,
        "body": {"steps": [{"type": "model_output", "content": [{"type": "audio", "data": "A" * 6400}]}]}}
-# Synthesis under a loaded host can outlast the original's 5 s bound: cases
+# Synthesis under a loaded host can take longer than 5 s: cases
 # that reach the backend wait longer (statement 7 tests the bound itself).
 PATIENT = [("encoding_timeout_ms", "600000")]
 ERROR = {"path": "/interactions", "status": 500, "body": {"error": {"message": "boom"}}}
@@ -104,7 +104,7 @@ S.statement(3, "`playing` sends the efference copy `bot.ability.speaking.efferen
 S.statement(4, "`recording` sends `bot.ability.conversation.append` `{message}` to its parent, the outbound message `<conversation:message_for_turn>` builds (content the text, content_type `text/plain`, participants `[]` until the speaking has a voice of its own, provenance id `speaking-<n>` and event `bot.ability.conversation.append`), then answers `bot.ability.speaking.output` `{text, media_type, sample_rate_hz, channels}` and returns to `idle`.")
 S.statement(5, "An utterance that says nothing (its words, joined, blank; a part whose words are blank; a part with neither words, a pause nor a sound; an expression that directs no cue) is refused before any encoding: `bot.ability.failed` `{message: \"A reply must say something: every part needs words, a sound or a pause, and the words must not be blank.\"}`, and back to `idle`; one its schema refuses (no parts, empty words) never arrives: the send raises `error.execution` in the sender.")
 S.statement(6, "A vocal failure (its `bot.ability.failed`) answers the parent with `bot.ability.failed` `{message}` carrying the vocal's message, and back to `idle`, where the next input is spoken.")
-S.statement(7, "Encoding is bounded by `encoding_timeout_ms` (30 s by default, decision D98; the original's 5 s is shorter than Gemini's unstreamed synthesis of a sentence): its timer answers `bot.ability.failed` `{message: \"Speech encoding timed out.\"}` and returns to `idle`.")
+S.statement(7, "Encoding is bounded by `encoding_timeout_ms` (30 s by default, decision D98): its timer answers `bot.ability.failed` `{message: \"Speech encoding timed out.\"}` and returns to `idle`.")
 S.statement(8, "Input for another utterance that arrives outside `idle` is held (`<event:defer/>`), up to `held_utterances_bound` (16, a `<param>`), and taken, in order, on the return to `idle`; past that bound it is refused with `bot.ability.failed` `{message: \"Speaking is holding too many utterances; this one is refused.\"}` (decision D175).")
 S.statement(9, "An utterance's id is its input's sendid (none when the sender names none). A finished utterance's id is kept among the last `finished_utterances_bound` (16) finished ids, and an input with a finished id, or another copy of the utterance in hand or of a held one, is dropped (logged `speaking.late`): nothing is said or answered for it, and a re-sent held id takes no second slot toward `held_utterances_bound` (the first copy is kept, decision D175).")
 
