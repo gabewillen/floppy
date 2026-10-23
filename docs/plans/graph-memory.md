@@ -2,10 +2,11 @@
 
 Graph memory and embeddings ([open work](../handoff.md#open-work)),
 workstream item M6. This is a plan only: it needs the maintainer's
-[decisions](../handoff.md#design-decisions-for-the-maintainer) 3
-(migrations; D165 is proposed), 7 (rest and consolidation) and, for
-persons, 6 (participant identity). Nothing here is built until they are
-answered.
+[decisions](../handoff.md#design-decisions-for-the-maintainer) 7 (rest
+and consolidation) and, for persons, 6 (participant identity). Nothing
+here is built until they are answered. Decision 3 (migrations) is
+answered: the memory schema is one revision, `0001` (D193, superseding
+D165).
 
 ## Target behavior
 
@@ -40,9 +41,9 @@ Each step keeps the document structure rule (D39) and puts I/O in services.
    scalar function (rusqlite `create_scalar_function`, deterministic) and
    accepts `{blob: hex}` parameters; `services/pgsql` maps the same
    statement to `pgvector` or a SQL expression (to decide with decision 2).
-3. **Schema.** The graph tables as revision `0004` in both dialects
-   (D165's non-breaking path), unless decision 3 chooses rewriting `0001`
-   instead.
+3. **Schema.** The graph tables in both dialects, beside the memory
+   schema's one revision `0001` (D193); whether they join `0001` or follow
+   it as `0002` depends on whether a floppy database exists by then.
 4. **Memory serving.** `abilities/memory/memory.scx` keeps its one-shot
    transaction and gains a long-lived serving state for remember, search,
    fetch, recent and backfill, its SQL built by pure namespace elements

@@ -12,7 +12,7 @@
   {
     "events": [
       {
-        "data": "{}",
+        "data": {},
         "delay_ms": 100,
         "name": "pedestrian.button"
       }
@@ -34,12 +34,12 @@
   {
     "events": [
       {
-        "data": "{}",
+        "data": {},
         "delay_ms": 0,
         "name": "pedestrian.button"
       },
       {
-        "data": "{}",
+        "data": {},
         "delay_ms": 1000,
         "name": "pedestrian.button"
       }
