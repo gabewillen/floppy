@@ -253,7 +253,7 @@ D33 to D43.
 | Loading and storing behavior rows | `<behavior:instances_from_behavior_results>`, `<behavior:replace_behavior_clauses>` (D116) | `namespaces/behavior` elements |
 | A behavior's lifetime and its bounds, the forced tick's check | `<behavior:lifetime_errors>`, `<behavior:verify_tick>` (D116) | `namespaces/behavior` elements |
 | A turn behavior's live-turn check (one run on the turn it is learned from, its selections' data checked against the live values) | `<behavior:verify_apply>` (D131) | `namespaces/behavior` element |
-| A routine's next `at` occurrence | `next_after` in `abilities/reflection/reflection.js`, carried by a routine as data (a draft cannot use a namespace element: `<scx:validate>` binds no package, D116) | routine ECMAScript |
+| A routine's next `at` occurrence | `next_after` in `abilities/revision/revision.js`, carried by a routine as data (a draft cannot use a namespace element: `<scx:validate>` binds no package, D116) | routine ECMAScript |
 | A behavior's input | `<autonomy:behavior_input_payload>` (D116) | `namespaces/autonomy` element |
 | Cognition | `abilities/cognition/cognition.scx` | ability `.scx` child |
 | Autonomy | `abilities/autonomy/autonomy.scx` (phase 5: the inventory's ACTIVE turn behaviors the stimulus triggers run as `<invoke srcexpr>` children of the chain `abilities/candidates_runner/candidates_runner.scx`, D93, each by its row's path, D121) | stage `.scx` child |
