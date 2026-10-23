@@ -486,10 +486,6 @@ function stepDelay(step) {
   return delay(Math.min(Math.max(step.delay_ms, 0), 60000));
 }
 
-function stepData(step) {
-  return step.data === '' ? null : JSON.parse(step.data);
-}
-
 // The settle time: the script's settle_ms, after its last event, within sim_test_cap_ms.
 function settleDelay() {
   return delay(Math.min(sim_test_cap_ms, Math.max.apply(null, [1, currentTest().settle_ms].concat(currentTest().events.map(function (e) { return e.delay_ms + 1; })))));

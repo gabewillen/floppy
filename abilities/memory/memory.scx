@@ -22,12 +22,10 @@
   opening picks the engine. migrating invokes the migration ability
   (abilities/migration/migration.scx, Alembic's upgrade head) with
   floppy's revisions in the engine's dialect (abilities/memory/sqlite/ and
-  abilities/memory/postgresql/): 0001 creates the memory, behavior,
-  behavior trigger and short-term register tables, 0002 adds
-  bot_behavior's lifetime, and 0003 adds bot_stm_turn, the short-term
-  memory of turns (proposed decision D165: floppy keeps its revision ids
-  and adds new revisions after them, so every existing floppy database
-  upgrades in place). On Postgres the defaulted created_at and updated_at
+  abilities/memory/postgresql/): one revision, 0001 (decision D193),
+  creates the memory, behavior (with its lifetime), behavior trigger and
+  short-term register tables and bot_stm_turn, the short-term memory of
+  turns. On Postgres the defaulted created_at and updated_at
   are TIMESTAMPTZ DEFAULT NOW(). The database carries Alembic's
   alembic_version. A database at a revision the history does not hold is
   refused untouched. applying then runs the statements in one
@@ -59,14 +57,10 @@
     <!-- The invoker's <param>s. -->
     <data id="database" expr="null"/>
     <data id="statements" expr="[]"/>
-    <!-- The schema: floppy's Alembic revisions, one file each per engine
-         (decision D165). -->
+    <!-- The schema: floppy's Alembic revision, one file per engine
+         (decision D193). -->
     <data id="sqlite_0001" src="sqlite/0001_initial_memory_schema.json"/>
-    <data id="sqlite_0002" src="sqlite/0002_behavior_lifetime.json"/>
-    <data id="sqlite_0003" src="sqlite/0003_stm_turns.json"/>
     <data id="postgresql_0001" src="postgresql/0001_initial_memory_schema.json"/>
-    <data id="postgresql_0002" src="postgresql/0002_behavior_lifetime.json"/>
-    <data id="postgresql_0003" src="postgresql/0003_stm_turns.json"/>
     <!-- The engine: Postgres for a postgresql:// URI, else SQLite. -->
     <data id="postgres" expr="false"/>
     <!-- The operation's time bound (60 s), which an invoker may set as a
