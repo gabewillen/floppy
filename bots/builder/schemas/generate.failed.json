@@ -18,7 +18,7 @@
       ]
     },
     "rejection": {
-      "description": "Why a not-json or schema-mismatch call was refused, as the original's selection rejection: key a stable string (not-json, schema-mismatch:name, or schema-mismatch:<JSON pointer of where the arguments first fail>), message a one-line diagnostic that repeats no argument value; each at most 200 characters.",
+      "description": "Why a not-json or schema-mismatch call was refused, the rejection a selection repair answers (D126): key a stable string (not-json, schema-mismatch:name, or schema-mismatch:<JSON pointer of where the arguments first fail>), message a one-line diagnostic that repeats no argument value; each at most 200 characters.",
       "type": "object",
       "properties": {
         "key": {

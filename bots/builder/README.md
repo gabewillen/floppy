@@ -32,7 +32,7 @@ final states and its parent receives that state's done data as
 | --- | --- | --- |
 | `builder.request` | an event to the builder (standard input when run directly) | `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?}`: the specification, the name the draft's documents are written under (default the plan's; each run of characters other than letters, digits, `_` and `-` becomes `_`; reflection sends the behavior's), extra constraints (strings), an optional failure cap (1 to 8, no default: without it only the no-progress rule ends the loop), the generate service's model (default `Qwen/Qwen3.8-Flash-Next`, a reasoning model), the time each streamed generation may go without progress, and each generation may take in all, before `builder.timeout` cancels it (1 ms to 1 h each, defaults 30000 and 1200000), and the lifetime bounds (1 ms to 1 day each, no default: without them neither the lifetime check nor the forced tick runs; reflection sends 60000 and 1000, `ROUTINE_MIN_EVERY` and `TURN_SILENCE_BOUND`, decision D84), and the live turn a turn behavior is run on before it is built (`{turn, input, targets}`: the turn, the behavior input as autonomy builds it, and the sessions that turn's output names, at most 32; no default: without it a turn behavior runs only its own tests; reflection sends its turn's, decision D131) |
 | final state `done` | its `<donedata>` ([`schemas/done.json`](schemas/done.json)) | `{scxml, schemas, script, path, tests, report}`: the built document's three parts (its SCXML, its input event schemas as one object with `$defs` keyed by event, and its ECMAScript, `""` for none), the path of the `.scx` they were written as (`../../behaviors/<name>.scx`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
-| final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics, history, scxml?, path?}`: `invalid-request`, `unconfigured` (the run holds no `FLOPPY_BASE_URL`; the first generation ends the build at once), `no-progress` (a diagnostic an earlier failure of the build already had, consecutive or not; decision D124), `attempts-exhausted` (the request's cap), or `abandoned`, with the last diagnostics (`{kind, code, message}`), the failure history (every failure's attempt and diagnostics, as in `done`'s report), and `scxml`, the last draft a check (`validate`, the lifetime check, `simulate`) rejected, with `path`, where it was written, both absent when no draft was rejected (the original's revision drafts the rejected source) |
+| final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics, history, scxml?, path?}`: `invalid-request`, `unconfigured` (the run holds no `FLOPPY_BASE_URL`; the first generation ends the build at once), `no-progress` (a diagnostic an earlier failure of the build already had, consecutive or not; decision D124), `attempts-exhausted` (the request's cap), or `abandoned`, with the last diagnostics (`{kind, code, message}`), the failure history (every failure's attempt and diagnostics, as in `done`'s report), and `scxml`, the last draft a check (`validate`, the lifetime check, `simulate`) rejected, with `path`, where it was written, both absent when no draft was rejected (the reflection stores the rejected source as a draft) |
 
 The builder answers exactly once, by finishing. Run directly, `scx run`
 prints the done data in its `done` record and exits 0; invoked, the parent
@@ -145,8 +145,8 @@ intake -> design -> author -> writing -> validate -> simulate -> done
   events, or reached one the test did not expect); only the `live turn`
   run below is invoked with params. With the
   request's `min_every_ms` and `turn_after_bound_ms`, a clean draft is then
-  checked against the reference `check()`'s lifetime bounds (`instance.py`
-  `_lifetime_errors`, diagnostics of kind `lifetime`, code `E0009`): a
+  checked against the lifetime bounds (`<behavior:lifetime_errors>`,
+  diagnostics of kind `lifetime`, code `E0009`): a
   draft that sends `bot.behavior.tick` is a persistent routine (decision
   D61), and a delayed send of an event that a transition sending the tick
   takes is one of its schedules (`every`, `at`). A schedule's literal
@@ -171,14 +171,14 @@ intake -> design -> author -> writing -> validate -> simulate -> done
   its invocation is cancelled, dropped), and a control event an earlier run
   left on the queue (for example the `sim.drive` of a run whose invocation
   failed to start) is dropped. With the lifetime bounds, a persistent
-  routine also runs one more test, `first tick` (the reference `verify_apply`,
-  which forces one tick on a fake timer clock): its first schedule's event
-  is sent to a fresh child at once, and within 2 s (the original's verify
-  timeout) the child must send `bot.behavior.tick` whose data carries
+  routine also runs one more test, `first tick` (the forced tick, which
+  stands in for waiting on the schedule's clock): its first schedule's event
+  is sent to a fresh child at once, and within 2 s (the verify timeout) the
+  child must send `bot.behavior.tick` whose data carries
   `name`, `trigger` (`every` or `at`), `scheduled_at` and `fired_at`, and
   whose `output` is a non-empty list of selections (objects with an
   `event`) whose data reads the tick's own values; otherwise the
-  diagnostics are the original's (kind `apply`, code `E0008`). So a routine whose
+  diagnostics are `<behavior:verify_tick>`'s (kind `apply`, code `E0008`). So a routine whose
   schedule is minutes or days away is verified in the builder's own time,
   within the 2 s verify timeout (decision D131), while revising is bounded only
   by inactivity (`revising_timeout_ms`) and its ceiling

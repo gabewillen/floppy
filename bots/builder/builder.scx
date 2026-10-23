@@ -31,12 +31,12 @@
   so the model never escapes one inside another; decision D121) -> validate
   (scx:validate; EVENT004, the schema file it is not given, waived; machine-applicable
   fixes through apply_fixes and writing, at most 2 passes per draft; with the request's
-  min_every_ms and turn_after_bound_ms, the original check()'s lifetime bounds,
-  E0009, <behavior:lifetime_errors>) -> simulate (each test script drives the draft as an invoked
+  min_every_ms and turn_after_bound_ms, the lifetime bounds, E0009,
+  <behavior:lifetime_errors>) -> simulate (each test script drives the draft as an invoked
   child, by <invoke srcexpr> on its path, with its own invoke id; with those bounds, a persistent routine,
   a draft that sends bot.behavior.tick, also gets its first schedule's
-  event at once and must tick with a selection, the reference verify_apply,
-  E0008, <behavior:verify_tick>; and, with the request's apply, a turn behavior
+  event at once and must tick with a selection (the forced tick, E0008,
+  <behavior:verify_tick>); and, with the request's apply, a turn behavior
   (one that sends no bot.behavior.tick) also runs once on that live turn, as the
   candidates runner runs it, by <invoke srcexpr> with the params turn and input,
   within min(turn_after_bound_ms, 2000) ms, and <behavior:verify_apply> checks its
@@ -123,7 +123,7 @@
          generation's reply arriving) as builder.progress: '#_parent' for an
          invoker that bounds the build by inactivity, null for none. -->
     <data id="progress_target" expr="null"/>
-    <!-- The original check()'s lifetime bounds (min_every, turn_after_bound),
+    <!-- The lifetime bounds (min_every, turn_after_bound),
          null (not checked) unless the request names them. -->
     <data id="min_every_ms" expr="null"/>
     <data id="turn_after_bound_ms" expr="null"/>
@@ -461,7 +461,7 @@
     <transition cond="hasScriptErrors()" target="retry_gate">
       <assign location="diagnostics" expr="script_errors"/>
     </transition>
-    <!-- The original check(): E0009 when the request names the bounds. -->
+    <!-- The lifetime check: E0009 when the request names the bounds. -->
     <transition cond="hasLifetimeErrors()" target="retry_gate">
       <assign location="diagnostics" expr="lifetime_errors"/>
     </transition>
