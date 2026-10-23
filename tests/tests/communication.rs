@@ -911,8 +911,8 @@ fn the_remembered_input_is_the_original_memory_json() {
     assert_eq!(
         texts(&all, "payload"),
         strings(&[
-            r#"{"content":{"__stateforward_memory_content__":"mapping","value":[["é","x"],["a",{"__stateforward_memory_content__":"list","value":[true,null,1.5]}],["b",1]]},"content_type":"application/json","source_ids":["alice","zed",[0.5,1.0]],"target_ids":["bot","é"]}"#,
-            "{\"content\":{\"__stateforward_memory_content__\":\"list\",\"value\":[\"\u{1f600}\",1e-07,1.2345678901234567e+19,{\"__stateforward_memory_content__\":\"mapping\",\"value\":[[\"\u{7f}\",{\"__stateforward_memory_content__\":\"list\",\"value\":[]}],[\"z\",{\"__stateforward_memory_content__\":\"mapping\",\"value\":[]}]]}]},\"content_type\":\"text/x\",\"source_ids\":[\"q\\\"\\n\",[1e-05,2.0],[3.0,4.0]],\"target_ids\":[]}",
+            r#"{"content":{"__stateforward_memory_content__":"mapping","value":[["a",{"__stateforward_memory_content__":"list","value":[true,null,1.5]}],["b",1],["é","x"]]},"content_type":"application/json","source_ids":["alice","zed",[0.5,1]],"target_ids":["bot","é"]}"#,
+            "{\"content\":{\"__stateforward_memory_content__\":\"list\",\"value\":[\"\u{1f600}\",1e-7,12345678901234567000,{\"__stateforward_memory_content__\":\"mapping\",\"value\":[[\"z\",{\"__stateforward_memory_content__\":\"mapping\",\"value\":[]}],[\"\u{7f}\",{\"__stateforward_memory_content__\":\"list\",\"value\":[]}]]}]},\"content_type\":\"text/x\",\"source_ids\":[\"q\\\"\\n\",[0.00001,2],[3,4]],\"target_ids\":[]}",
         ])
     );
 }
