@@ -741,8 +741,9 @@ const ROOM_BOT: &str = r#"    <!-- The bot floppy, supervised. -->
           <param name="owned_devices" expr="ownedDevices('floppy')"/>
           <param name="placed_on" expr="placedOn('floppy')"/>
         </invoke>
-        <!-- Stable after stable_after_ms from its first bot.activated; a
-             reboot's activation does not re-arm it. -->
+        <!-- Stable after stable_after_ms from its first bot.activated (armed
+             once, in serving, which it enters on activation); a reboot's
+             activation does not re-arm it. -->
         <state id="starting.floppy">
           <transition event="room.activated" cond="isFor(_event, 'floppy')" target="serving.floppy"/>
         </state>
