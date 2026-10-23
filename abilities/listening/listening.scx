@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Listening ability (the reference abilities/listening/listening.py):
-  the ear. It hears an environment.sound, scores it against what the body
+  floppy's Listening ability: the ear. It hears an environment.sound, scores it against what the body
   predicted, and hands it on to be interpreted. The body
   (bots/floppy/floppy.scx) invokes it as its child "listening", one of its
   input abilities.
@@ -21,7 +20,7 @@
   Sensing: environment.sound {audio, ...} from the body goes to the
   sensitivity as bot.ability.listening.sensitivity.score {stimulus} (the
   sound's envelope {event, data, source}: source is the sound's own, the
-  transducer it came off, and absent when it names none), bounded by the original's 30 s stage
+  transducer it came off, and absent when it names none), bounded by a 30 s stage
   operation timeout (sensitivity_timeout_ms): the sensitivity's
   bot.ability.listening.sensitivity.output goes on to the interpretation
   and Sensing returns to Listening; the timer,
@@ -29,34 +28,33 @@
   message: "Listening sensitivity timed out."} sent to this session with
   that delay, answers the body with bot.ability.listening.failed. Sounds
   that arrive outside Listening are held by <event:defer/> (scxml.rs
-  namespaces/event) and taken by Listening, in order (the original defers them):
+  namespaces/event) and taken by Listening, in order:
   scoring is the only stop between the ear and the prediction.
 
   Products: the interpretation's bot.ability.listening.speech.output
-  (the original's SpeechData: decoded speech, diarized or identified voice
+  (decoded speech, diarized or identified voice
   segments, or the PCM of an acoustic observation) is handed to the body
   as bot.ability.cognition.input {stimulus} (the product's envelope, source
-  "listening"; the original's interpretation terminal handoff), which the
+  "listening"; the interpretation's terminal handoff), which the
   body grants a turn; the interpretation hands labelled non-speech over
   as its own bot.ability.cognition.input, and that and its
   bot.ability.listening.failed go on to the body unchanged. Either leaves
   from wherever perception is.
 
-  Efference copy: bot.ability.speaking.efference (the original's EfferenceData)
-  goes to the sensitivity from wherever perception is: the report
+  Efference copy: bot.ability.speaking.efference goes to the sensitivity from wherever perception is: the report
   modulates perception, it does not interrupt it. The body sends it here
-  (its listening_abilities list, the original's Speaking listening peers) just
+  (its listening_abilities list) just
   before the bot's own speech comes back as environment.sound, so the bot
   can tell its own voice apart: while the copy's window is open the
   sensitivity scores a sound whose source is the copy's mouth against the
   prediction (fully predicted its level is 0, below the interpretation's
   threshold, so its product is withheld), and any other sound at its
   received level. The interpretation still runs on the bot's own voice
-  (the original: the one comparison is made at the end of the pipeline),
+  (the one comparison is made at the end of the pipeline),
   so a voice detection backend the run does not configure fails it there.
 
   Readiness: the entry into Perceiving sends bot.ability.offers {ability:
-  "listening", choices: []} to the body; it offers nothing (the original: the
+  "listening", choices: []} to the body; it offers nothing (the
   listening's input is not a tool event).
 
   Contracts: the events it takes reference abilities/schemas/ by

@@ -48,7 +48,7 @@
     </test>
   </assert>
   <assert id="listening-7" specnum="7" specid="#listening-7">
-    <![CDATA[Scoring is bounded by `sensitivity_timeout_ms` (the original's 30 s): its timer answers `bot.ability.listening.failed` `{stage: "sensitivity", message: "Listening sensitivity timed out."}` and returns to `Listening`.]]>
+    <![CDATA[Scoring is bounded by `sensitivity_timeout_ms` (30 s): its timer answers `bot.ability.listening.failed` `{stage: "sensitivity", message: "Listening sensitivity timed out."}` and returns to `Listening`.]]>
     <test id="160" conformance="mandatory" manual="false">
       <start uri="160/test160.scxml"/>
     </test>
