@@ -1,9 +1,10 @@
-//! The memory ability (`abilities/memory/memory.scx`, the original's Memory) run as a
-//! harness document's child through `scx run`: it migrates the database to
-//! The original's head schema and applies one transaction of statements through
-//! the sql service (the migration ability, `abilities/migration/migration.scx`,
-//! brings it to the original's Alembic head first), answering its parent with `bot.ability.memory.output`
-//! (the statements' results only) or `bot.ability.failed`.
+//! The memory ability (`abilities/memory/memory.scx`) run as a harness
+//! document's child through `scx run`: the migration ability
+//! (`abilities/migration/migration.scx`) brings the database to the head
+//! revision first, then the memory applies one transaction of statements
+//! through the sql service, answering its parent with
+//! `bot.ability.memory.output` (the statements' results only) or
+//! `bot.ability.failed`.
 //!
 //! The `postgres_` tests run the same cases on the Postgres engine (the
 //! pgsql service), each against a fresh `PGlite` server the test starts
@@ -12,8 +13,8 @@
 //! `FLOPPY_PGLITE_SERVER=<path> cargo test -p floppy-tests --test memory
 //! -- --include-ignored`.
 //!
-//! The `stm_` tests run the short-term register (`abilities/stm/stm.scx`,
-//! the original's `StmMemory`) as a harness's child over the same memory
+//! The `stm_` tests run the short-term register (`abilities/stm/stm.scx`)
+//! as a harness's child over the same memory
 //! ability: records and their recent read, capacity eviction, heard and
 //! said turns and their recent read, the turns' shedding by halves, both
 //! windows, and a register without a database or with one it cannot open.
@@ -150,7 +151,7 @@ fn a_fresh_database_is_migrated_to_the_original_head_schema() {
 
 #[test]
 fn the_head_schema_keeps_the_short_term_turns() {
-    // Decision D165: the original's 0002_stm_turns, floppy's 0003.
+    // Decision D165: the short-term turns are revision 0003_stm_turns.
     let directory = unique_scratch("memory");
     let finished = run(
         &directory,
@@ -248,7 +249,7 @@ fn output(results: &str) -> Vec<(String, String)> {
 
 #[test]
 fn an_operation_over_its_timeout_fails_as_timeout() {
-    // The original's operation timeout, set as the invoker's <param>. A
+    // The operation timeout, set as the invoker's <param>. A
     // service answers within the host call that starts it, so the timer
     // can only win over an operation that waits: here a migration that
     // never answers.
@@ -452,7 +453,7 @@ fn recall_select(path: &str, id: &str) -> String {
 }
 
 /// Every recall takes the most recent window of its rows and reads it
-/// oldest first (the original's `recent_select`): newest by `created_at`,
+/// oldest first: newest by `created_at`,
 /// ties by `memory_id` (the insertion order floppy's ids keep), so once
 /// more rows match than the window holds, the oldest are the ones left
 /// out.
