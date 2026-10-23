@@ -263,7 +263,10 @@ fn run_job(job: &Json, clock: Instant) {
                         let (learned, lessons) = lessons_settle(&run, limit, before);
                         ("say", true, lessons, learned)
                     } else {
-                        ("say", false, 0, false)
+                        // A stuck turn may still have closed lessons: count
+                        // them, so it reads apart from one that taught nothing.
+                        let lessons = Tally::of(&run).closed - before.closed;
+                        ("say", false, lessons, false)
                     }
                 } else {
                     let seconds = spec["wait_s"].as_u64().unwrap_or(0);

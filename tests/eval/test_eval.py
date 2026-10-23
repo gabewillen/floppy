@@ -151,6 +151,15 @@ class Builds(unittest.TestCase):
                          [(False, 2, "attempts-exhausted", 2), (True, 1, "done", 0)])
 
 
+    def test_a_build_cut_before_a_draft_is_apart_unless_it_failed(self):
+        def build(attempts, failures, reason):
+            return {"accepted": reason == "done", "attempts": attempts, "failures": failures, "reason": reason,
+                    "cause": "", "diagnostics": []}
+        graded = [{"id": "a-pingpong-r0", "scenario": "pingpong", "learned_any": True,
+                   "builds": [build(0, 0, "unfinished"), build(0, 1, "unfinished"), build(1, 0, "done")]}]
+        _, summary = runner.builder_table([{"label": "a", "builder": "m"}], graded)
+        self.assertEqual((summary["a"]["builds"], summary["a"]["cut_before_draft"], summary["a"]["builder"]), (2, 1, "m"))
+
 class Codec(unittest.TestCase):
     def test_every_prompt_round_trips(self):
         for target in prompts.discover():

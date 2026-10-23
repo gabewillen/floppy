@@ -479,10 +479,11 @@ def builder_table(columns, graded):
         totals = {"builds": 0, "accepted": 0, "attempts": [], "reasons": {}, "learned": [], "cut": 0}
         for scenario in sorted({g["scenario"] for g in rows}):
             runs = [g for g in rows if g["scenario"] == scenario]
-            # A revision its turn cut before the builder wrote a draft
-            # measures the turn, not the builder: counted apart.
+            # A revision its turn cut before the builder wrote a draft or
+            # failed once measures the turn, not the builder: counted apart.
+            # A log cut at the job's end before a draft lands here too.
             started = [b for g in runs for b in g["builds"]]
-            built = [b for b in started if b["attempts"] or b["reason"] != "unfinished"]
+            built = [b for b in started if b["attempts"] or b["failures"] or b["reason"] != "unfinished"]
             totals["cut"] += len(started) - len(built)
             accepted = [b for b in built if b["accepted"]]
             # Learned anywhere in the job, not only on the teaching turn: a
