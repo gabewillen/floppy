@@ -257,7 +257,8 @@ the topology. `design` and `author` each arm `builder.timeout` after
 (the run's `FLOPPY_STREAM` is `true`), after `generate_timeout_ms` without
 progress (default 30 s; the first `generate.progress` arms it, each later
 one re-arms it), the request may set either; each reply is bounded by
-`max_completion_tokens` (8192, reasoning included), but the author reply (a
+`max_completion_tokens` (8192, reasoning included; a truncated design
+generation doubles it for the next design call, up to 65536, decision D208), but the author reply (a
 whole document) by `document_max_completion_tokens` (16384: the 2026-10-21
 runs truncated whole documents at 8192; decision D131); and `triage` arms it
 after `decision_timeout_ms` (60 s), tagged with the stage run

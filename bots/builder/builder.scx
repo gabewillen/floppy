@@ -121,6 +121,10 @@
          max_completion_tokens): a model that reasons on without answering
          stops there, as truncated, and the build goes on (decision D101). -->
     <data id="max_completion_tokens" expr="8192"/>
+    <!-- A design generation that is truncated doubles it for the next
+         design call, up to document_token_ceiling, as the author call's
+         bound grows (decision D208: a reasoning model's plan ran past 8192
+         on the 2026-10-23 learning runs). -->
     <!-- The author call's token bound: a whole document needs more than
          8192 tokens, which truncated whole documents on 2026-10-21
          (decision D131); design keeps max_completion_tokens. The request
@@ -332,6 +336,7 @@
     </transition>
     <transition event="done.invoke" cond="isFrom(_event, gen_id)" target="retry_gate">
       <assign location="diagnostics" expr="generationFailedDiagnostics('design', 'plan')"/>
+      <assign location="max_completion_tokens" expr="grownDesignTokens()"/>
     </transition>
     <!-- Only this stage run's own timeout; it preempts the call in flight
          (leaving design cancels the invocation). -->

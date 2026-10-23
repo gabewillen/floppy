@@ -851,6 +851,7 @@ fn answers_plan(path: &str) -> bool {
         path,
         "/repair/v1/chat/completions"
             | "/truncated/v1/chat/completions"
+            | "/truncatedplan/v1/chat/completions"
             | "/broken/v1/chat/completions"
             | "/service/v1/chat/completions"
             | "/impostor/v1/chat/completions"
@@ -883,6 +884,10 @@ fn mock_reply(
     body: &[u8],
 ) -> Option<String> {
     match (path, schema) {
+        // Two plans a reasoning model cut off at its token bound, then a plan.
+        ("/truncatedplan/v1/chat/completions", Some("topology_plan")) if plans <= 2 => {
+            Some(truncated_completion())
+        }
         (_, Some("topology_plan")) if answers_plan(path) => Some(completion(PLAN)),
         ("/flaky/v1/chat/completions", Some("topology_plan")) => {
             (plans != 2).then(|| completion(PLAN))
@@ -901,7 +906,8 @@ fn mock_reply(
         (
             "/slow/v1/chat/completions"
             | "/afterbound/v1/chat/completions"
-            | "/truncated/v1/chat/completions",
+            | "/truncated/v1/chat/completions"
+            | "/truncatedplan/v1/chat/completions",
             Some("scxml_draft"),
         ) => Some(completion(&draft(&traffic_light(&green_separate(), "red")))),
         ("/service/v1/chat/completions", Some("scxml_draft")) => Some(completion(&service_draft())),
@@ -1694,6 +1700,41 @@ fn a_truncated_author_generation_doubles_the_next_token_bound() {
         .map(|request| &request.body["max_completion_tokens"])
         .collect();
     assert_eq!(bounds, [&json!(16384), &json!(32768), &json!(65536)]);
+}
+
+/// A design generation cut off at its token bound doubles the bound for
+/// the next design call, up to 65536 (decision D208): 8192 becomes 16384
+/// and then 32768, and the third plan is built.
+#[test]
+fn a_truncated_design_generation_doubles_the_next_token_bound() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "truncatedplan",
+        "truncatedplan",
+        &["FLOPPY_API_KEY", "FLOPPY_BASE_URL"],
+        &json!({"spec": SPEC}),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    let history = done["report"]["history"].as_array().expect("the history");
+    assert_eq!(history.len(), 2, "{done}");
+    assert!(
+        history.iter().all(
+            |failure| failure["diagnostics"][0]["code"] == "design-failed"
+                && failure["diagnostics"][0]["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains("(truncated)"))
+        ),
+        "{done}"
+    );
+    let received = mock.received();
+    let bounds: Vec<&Json> = chat_requests(&received, "topology_plan")
+        .iter()
+        .map(|request| &request.body["max_completion_tokens"])
+        .collect();
+    assert_eq!(bounds, [&json!(8192), &json!(16384), &json!(32768)]);
 }
 
 /// Without the decision key the builder falls back to its cond-based

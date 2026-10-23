@@ -92,6 +92,12 @@ function grownDocumentTokens() {
   return gen_failure === 'truncated' ? Math.min(document_max_completion_tokens * 2, document_token_ceiling) : document_max_completion_tokens;
 }
 
+// The next design call's token bound: doubled after a truncated design
+// generation, up to document_token_ceiling (decision D208).
+function grownDesignTokens() {
+  return gen_failure === 'truncated' ? Math.min(max_completion_tokens * 2, document_token_ceiling) : max_completion_tokens;
+}
+
 function requestModel(_event) {
   return _event.data.model === undefined ? model : _event.data.model;
 }
