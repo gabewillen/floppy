@@ -39,7 +39,7 @@ created: 2026-10-10
 
 ### Persistent Routine Contract
 
-* no params; each scheduled transition is a `<send delay>` loop (at least 60 s) that sends `bot.behavior.tick` `{name, trigger, scheduled_at, fired_at, output}` to `#_parent`, `output` a non-empty selection list
+* no params; each scheduled transition is a `<send delay>` loop (at least 60 s, reflection's `min_every_ms`) that sends `bot.behavior.tick` `{name, trigger, scheduled_at, fired_at, output}` to `#_parent`, `output` a non-empty selection list
 
 ## Done So Far
 
