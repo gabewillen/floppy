@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's short-term memory register (the original
-  abilities/memory/stm.py StmMemory, the body's bot.register): a bounded
+  floppy's short-term memory register (the body's bot.register): a bounded
   rolling record of the stimuli the body admitted and of the turns, in
   words, the bot heard and said. It is sensory short-term memory at the
   event layer, not a durable memory stream. The body (bots/floppy/floppy.scx)
@@ -12,33 +11,30 @@
     opening -open failed or timed out-> degraded
 
   Input: the <param>s database (the memory database file, or a Postgres
-  connection URI; none: absent), and the original's injected bounds:
+  connection URI; none: absent), and its bounds:
   capacity (64 stimuli), recency_window_ms (5 min), turn_capacity (32
-  turns), turn_window_ms (10 min), open_timeout_ms (30 s, the original's
-  attachment timeout).
+  turns), turn_window_ms (10 min), open_timeout_ms (30 s).
 
-  opening (the original's opening and initializing) invokes the memory
+  opening invokes the memory
   ability (abilities/memory/memory.scx, which migrates the database to
   floppy's head revision, bot_stm_memory since 0001 and bot_stm_turn since
-  0003, the original's 0002_stm_turns) with one read of bot_stm_turn, then
+  0003) with one read of bot_stm_turn, then
   sends bot.ability.offers {ability: "stm", choices: []} to the parent
   once: the register offers nothing to the cognition, and that first
   offer is its readiness. A database that cannot be opened (logged as
   stm.open.failed, "short-term memory could not open its database: ...")
   or does not open within open_timeout_ms leaves it degraded, without an
-  offer, so the body's activation fails at its timeout (the original's
-  attach fails it at once); on
-  entering degraded it sends bot.ability.failed {message: "unavailable:
+  offer, so the body's activation fails at its timeout; on entering
+  degraded it sends bot.ability.failed {message: "unavailable:
   StmMemory is degraded."} to the parent.
   Without a database it logs <log label="memory" expr="'absent'">, offers,
   and holds nothing: notifications are dropped and reads answer empty.
 
   Notifications (no reply; the sender never waits on perception upkeep):
   - bot.ability.memory.stm.record {stimulus_name, payload, event_id?,
-    source?, target?} (the original's RecordData, which the producer builds
-    with <memory:stm_projection>; its schema holds the payload to non-empty
-    keys and strings of at most 40 characters, as RecordData's validator
-    does) inserts one row into bot_stm_memory
+    source?, target?} (which the producer builds with
+    <memory:stm_projection>; its schema holds the payload to non-empty keys
+    and strings of at most 40 characters) inserts one row into bot_stm_memory
     (payload_json the projection with sorted keys and compact separators,
     created_at now) and, in the same transaction, evicts every row beyond
     capacity by the effective clock COALESCE(last_accessed_at, created_at),
@@ -46,7 +42,7 @@
   - bot.ability.memory.stm.reinforce {stm_ids} stamps last_accessed_at
     now on those rows, so used signals outlive arrival churn.
   - bot.ability.memory.stm.turn {id, direction, speakers, text, cut,
-    conversation} (the original's TurnRecordData) inserts one row into
+    conversation} inserts one row into
     bot_stm_turn (at now) and, in the same transaction, when the table is
     over turn_capacity, sheds the older half at once (the newest
     turn_capacity - floor(turn_capacity / 2) stay), so the oldest turn a
@@ -54,28 +50,26 @@
     <memory:cut_at_word>; the register cuts them again (a no-op on cut
     words) because no schema can bound UTF-8 bytes, and cut is true when
     either cut them. Words that cut to nothing (only white space before
-    the bound, which the original's TurnRecordData refuses) are not
+    the bound) are not
     written, and are logged as stm.failed.
   A notification that fails is logged as stm.failed ("short-term memory
-  <event> failed: ...", the original's warning); nobody is told.
+  <event> failed: ..."); nobody is told.
 
   Requests (each answered to the parent, in arrival order):
   - bot.ability.memory.stm.recent {stimulus_name?, limit?} reads the rows
     whose effective clock is inside recency_window_ms, optionally for one
-    stimulus, newest first, at most limit (default recent_limit, 64, the
-    original's RecentData default), and answers
-    bot.ability.memory.stm.recent.output {entries} (the original's
-    ObservedEvent: stm_id, stimulus_name, payload, event_id, source,
-    target, created_at, last_accessed_at).
+    stimulus, newest first, at most limit (default recent_limit, 64), and
+    answers bot.ability.memory.stm.recent.output {entries} (each stm_id,
+    stimulus_name, payload, event_id, source, target, created_at,
+    last_accessed_at).
   - bot.ability.memory.stm.recent_turns {limit?, within?} reads the
-    newest turns, at most limit (default recent_turns_limit, 32, the
-    original's RecentTurnsData default), written at or
-    after the floor, and answers
-    bot.ability.memory.stm.recent_turns.output {turns} oldest first (the
-    original's Turn: id, at, direction, speakers, text, cut,
-    conversation; a stored row that does not decode as one is skipped). The window is turn_window_ms, or within (milliseconds,
-    the original's timedelta) when that is shorter; the floor is now less the window,
-    moved down to a whole step of half the window since the Unix epoch, so
+    newest turns, at most limit (default recent_turns_limit, 32), written
+    at or after the floor, and answers
+    bot.ability.memory.stm.recent_turns.output {turns} oldest first (each
+    id, at, direction, speakers, text, cut, conversation; a stored row that
+    does not decode as one is skipped). The window is turn_window_ms, or
+    within (milliseconds) when that is shorter; the floor is now less the
+    window, moved down to a whole step of half the window since the Unix epoch, so
     a turn is read for at least the window and at most one and a half.
   A request that fails is answered bot.ability.failed {message: "short-term
   memory <event> failed: ..."}. SCXML stamps no reply with its request's
@@ -88,7 +82,7 @@
   invocations in Wasm), so id order is insertion order. The SQL runs on
   both engines (SQLite and Postgres).
 
-  Deferral (the original's defer): every request and notification that
+  Deferral: every request and notification that
   arrives while opening or applying is held by <event:defer/> (scxml.rs
   namespaces/event) and taken, in order, once the register is idle.
 
@@ -97,8 +91,7 @@
   logged as stm.dropped.
 
   Logs: memory ('absent'), stm.open.failed, stm.turn.recorded ("<direction>
-  cut=<true|false>", the original's bot.memory.stm.turn.recorded.count
-  dimensions), stm.failed, stm.dropped.
+  cut=<true|false>"), stm.failed, stm.dropped.
 
   Contracts: every event it takes names its abilities/schemas/ file by
   event:schema. A send or raise whose data does not satisfy it is
@@ -115,22 +108,21 @@
        version="1.0" datamodel="ecmascript" name="stm" initial="opening">
   <datamodel>
     <!-- The invoker's <param>s: the database (null: absent) and the
-         original's injected bounds. -->
+         bounds. -->
     <data id="database" expr="null"/>
     <data id="capacity" expr="64"/>
     <data id="recency_window_ms" expr="300000"/>
     <data id="turn_capacity" expr="32"/>
     <data id="turn_window_ms" expr="600000"/>
     <data id="open_timeout_ms" expr="30000"/>
-    <!-- The reads' default limits (the original's RecentData and
-         RecentTurnsData defaults, fixed whatever the capacities are). -->
+    <!-- The reads' default limits (fixed whatever the capacities are). -->
     <data id="recent_limit" expr="64"/>
     <data id="recent_turns_limit" expr="32"/>
     <!-- The operation in hand: its event's data, and a turn's words as
          <memory:cut_at_word> bounds them. -->
     <data id="request" expr="null"/>
     <data id="bounded" expr="null"/>
-    <!-- The original's statements (stm.py, compiled for both engines). -->
+    <!-- The statements (written for both engines). -->
     <data id="open_select" expr="'SELECT COUNT(*) FROM bot_stm_turn'"/>
     <data id="record_insert" expr="'INSERT INTO bot_stm_memory (stm_id, stimulus_name, payload_json, event_id, source, target, created_at) VALUES ((SELECT substr(\'00000000000000000000000000000000\', 1, 32 - length(n)) || n FROM (SELECT CAST(COALESCE(MAX(CAST(stm_id AS BIGINT)), 0) + 1 AS TEXT) AS n FROM bot_stm_memory) AS c), ?1, ?2, ?3, ?4, ?5, ?6)'"/>
     <data id="record_evict" expr="'DELETE FROM bot_stm_memory WHERE stm_id NOT IN (SELECT stm_id FROM bot_stm_memory ORDER BY COALESCE(last_accessed_at, created_at) DESC, stm_id DESC LIMIT ?1)'"/>
@@ -363,8 +355,8 @@
     </transition>
   </state>
 
-  <!-- The database could not be opened: nothing is served (the original's
-       degraded), and the parent is told why. -->
+  <!-- The database could not be opened: nothing is served, and the
+       parent is told why. -->
   <state id="degraded">
     <onentry>
       <send event="bot.ability.failed" target="#_parent">
