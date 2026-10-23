@@ -2,12 +2,10 @@
 //! `<identity:sorted_identities>` as a
 //! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
-//! The original's identity module (`abilities/identity/recognition.py`,
-//! `value.py`): whether a text names the bot (`hears_name`, the text
-//! recognizer), and the canonical order of a collection of participant
-//! identities (`sorted_identities`). Both are synchronous and quick, so
-//! they are executable content, named after the original's functions.
-//! Documents bind [`NAMESPACE_URI`] (conventionally with the prefix
+//! Whether a text names the bot (`hears_name`, the text recognizer), and
+//! the canonical order of a collection of participant identities
+//! (`sorted_identities`). Both are synchronous and quick, so they are
+//! executable content. Documents bind [`NAMESPACE_URI`] (conventionally with the prefix
 //! `identity`):
 //!
 //! ```xml
@@ -21,13 +19,12 @@
 //! # Identities
 //!
 //! An identity is a name (a string) or an embedding (an array of numbers);
-//! floppy's conversation still carries voice embeddings as identities,
-//! which the original's earlier `IdentityValue` did.
+//! floppy's conversation carries voice embeddings as identities.
 //!
 //! # `<identity:hears_name location="L" name="N" text="T"/>`
 //!
-//! Whether `text` names the bot (the original's `recognition.hears_name`,
-//! the text recognizer). `name` and `text` (required) each evaluate to a
+//! Whether `text` names the bot (the text recognizer). `name` and `text`
+//! (required) each evaluate to a
 //! string, or to `null` (also `undefined`) when there is none. Each is
 //! split on white space into tokens kept to their letters and digits and
 //! lowercased, the empty ones dropped; the name is heard when its tokens
@@ -37,12 +34,11 @@
 //!
 //! # `<identity:sorted_identities location="L" ids="I"/>`
 //!
-//! The original's `value.sorted_identities`. `ids` (required) evaluates to
-//! an array of identities; `location` (required) receives them in the
-//! original's identity order ([`sort_key`]): names first, by their text in
-//! code point order, then embeddings by their compact Python JSON text
-//! (each component as Python's `repr` writes a float). The sort is stable
-//! and keeps repeated identities.
+//! `ids` (required) evaluates to an array of identities; `location`
+//! (required) receives them in identity order ([`sort_key`]): names first,
+//! by their text in code point order, then embeddings by their JSON text
+//! in code point order (each component the JSON number the data model
+//! hands over). The sort is stable and keeps repeated identities.
 //!
 //! # Failures
 //!
@@ -283,8 +279,7 @@ fn hears_name_element<H: IdentityHost>(
     Ok(Executed::Handled)
 }
 
-/// The original's `recognition._tokens`: the white-space separated words of
-/// `text`, each kept to its letters and digits and lowercased, the empty
+/// The white-space separated words of `text`, each kept to its letters and digits and lowercased, the empty
 /// ones dropped.
 fn tokens(text: &str) -> Vec<String> {
     text.split_whitespace()
@@ -298,7 +293,7 @@ fn tokens(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// The original's `recognition.hears_name`: whether `name`'s tokens appear
+/// Whether `name`'s tokens appear
 /// as a whole run among `text`'s; a name with no tokens is never heard.
 #[must_use]
 pub fn hears_name(text: &str, name: &str) -> bool {
@@ -365,7 +360,7 @@ pub fn is_identity(value: &Json) -> bool {
     }
 }
 
-/// The original's `value.sorted_identities`: `ids` in identity order
+/// `ids` in identity order
 /// ([`sort_key`]), stable, repeats kept.
 #[must_use]
 pub fn sorted_identities(ids: &[Json]) -> Vec<Json> {
@@ -374,60 +369,16 @@ pub fn sorted_identities(ids: &[Json]) -> Vec<Json> {
     keyed.into_iter().map(|(_, id)| id.clone()).collect()
 }
 
-/// The original's `identity_sort_key` as one text, compared in code point
-/// order: `0` and a name's text, or `1` and an embedding's compact Python
-/// JSON (so every name sorts before every embedding).
+/// An identity's sort key, compared in code point order: `0` and a
+/// name's text, or `1` and an embedding's JSON text (so every name sorts
+/// before every embedding).
 #[must_use]
 pub fn sort_key(id: &Json) -> String {
     match id {
         Json::String(name) => format!("0{name}"),
-        Json::Array(components) => {
-            let texts: Vec<String> = components
-                .iter()
-                .map(|component| python_float(component.as_f64().unwrap_or(f64::NAN)))
-                .collect();
-            format!("1[{}]", texts.join(","))
-        }
+        other @ Json::Array(_) => format!("1{other}"),
         other => format!("2{other}"),
     }
-}
-
-/// Python's `repr` of a finite float (`float_repr_style` `short`): the
-/// shortest round-trip digits, positional with at least one fraction digit
-/// when the decimal exponent is from -4 to 15, else `d[.ddd]e±XX`.
-#[must_use]
-pub fn python_float(value: f64) -> String {
-    if !value.is_finite() {
-        return "NaN".into();
-    }
-    let sign = if value.is_sign_negative() { "-" } else { "" };
-    if value == 0.0 {
-        return format!("{sign}0.0");
-    }
-    // Rust's `{:e}` writes the shortest round-trip digits: `d[.ddd]e<exp>`.
-    let scientific = format!("{:e}", value.abs());
-    let Some((mantissa, exponent)) = scientific.split_once('e') else {
-        return scientific;
-    };
-    let Ok(exponent) = exponent.parse::<i64>() else {
-        return scientific;
-    };
-    if !(-4..16).contains(&exponent) {
-        let exponent_sign = if exponent < 0 { "-" } else { "+" };
-        return format!("{sign}{mantissa}e{exponent_sign}{:02}", exponent.abs());
-    }
-    let digits: String = mantissa.chars().filter(char::is_ascii_digit).collect();
-    let whole_digits = usize::try_from(exponent + 1).unwrap_or(0);
-    let body = if exponent < 0 {
-        let zeros = usize::try_from(-exponent - 1).unwrap_or(0);
-        format!("0.{}{digits}", "0".repeat(zeros))
-    } else if digits.len() <= whole_digits {
-        format!("{digits}{}.0", "0".repeat(whole_digits - digits.len()))
-    } else {
-        let (whole, fraction) = digits.split_at(whole_digits);
-        format!("{whole}.{fraction}")
-    };
-    format!("{sign}{body}")
 }
 
 #[cfg(target_arch = "wasm32")]
