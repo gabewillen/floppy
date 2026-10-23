@@ -40,9 +40,8 @@ pub const EMBED_PATH: &str = "/voice/embed";
 
 /// The rate voice detection samples are sent at: Silero VAD's 16 kHz.
 pub const VAD_SAMPLE_RATE_HZ: u32 = 16_000;
-/// The raw-PCM channel count for voice detection (mono, at
-/// [`VAD_SAMPLE_RATE_HZ`]), used when the sound names neither rate nor
-/// channels.
+/// The channel count of raw PCM that names none: mono (voice detection
+/// also reads raw PCM that names no rate at [`VAD_SAMPLE_RATE_HZ`]).
 pub const DEFAULT_CHANNELS: u16 = 1;
 
 /// The voice spans of one clip.
@@ -123,7 +122,8 @@ pub struct Identification {
     pub segments: Vec<Segment>,
 }
 
-/// A validated normalization: the sound and where its PCM is written when it is a WAV container.
+/// A validated normalization: the sound and where its PCM is written when
+/// it is a WAV container.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Normalization {
     /// The sound.
@@ -145,15 +145,16 @@ pub struct Frame {
     pub format: Format,
 }
 
-/// A validated append (over the whole open speech at once): the frames, in order, and the utterance file.
+/// A validated append (over the whole open speech at once): the frames, in
+/// order, and the utterance file.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Appending {
     /// The frames.
     pub frames: Vec<Frame>,
     /// The utterance's file.
     pub output: Media,
-    /// Whether the utterance is written as a WAV container (speech that
-    /// arrived as WAV stays WAV for the decoder).
+    /// Whether the utterance is written as a WAV container (the `wav`
+    /// parameter), else as raw PCM.
     pub wav: bool,
 }
 
@@ -399,8 +400,9 @@ pub(crate) fn diarization(given: &Given<'_>) -> Result<Diarization, &'static str
     })
 }
 
-/// `identify`: `model` and `segments` (voice segments `[{audio, media_type, sample_rate_hz, channels,
-/// start_seconds, end_seconds}]`, ascending by start).
+/// `identify`: `model` and `segments` (voice segments `[{audio,
+/// media_type, sample_rate_hz, channels, start_seconds, end_seconds}]`,
+/// ascending by start).
 pub(crate) fn identification(given: &Given<'_>) -> Result<Identification, &'static str> {
     const INVALID: &str = "speech segments must be voice segments of audio/pcm in ascending order";
     given.only(
