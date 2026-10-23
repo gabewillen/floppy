@@ -100,7 +100,7 @@
 //! and `fired_at` and its `output` selects at least one event whose data
 //! holds the tick's own values for any of those fields.
 //!
-//! # `<behavior:verify_apply location="L" done="D" turn="T" input="I" targets="G" error="E"? choices="C"?/>`
+//! # `<behavior:verify_apply location="L" done="D" turn="T" input="I" targets="G" error="E"? choices="C"? handled="H"?/>`
 //!
 //! The live-turn check of a turn behavior (decision D131: one run, then its
 //! selections' data checked against the live values): the
@@ -126,6 +126,11 @@
 //! turn, or whose data its choice's schema does not admit, is a message too
 //! (decision D206), since the candidates runner's send of it is checked
 //! against the receiving transition and fails with `error.execution`.
+//! `handled` (optional, default `true`) evaluates to whether the run must
+//! handle the turn: `false` for a turn that taught the behavior, whose
+//! message is the lesson rather than an instance of what it answers
+//! (decision D207), where an unhandled run writes nothing and a handled
+//! one is checked as above.
 //!
 //! # Failures
 //!
@@ -1426,6 +1431,9 @@ const NOT_STRINGS: &str = "behavior:verify_apply targets is not an array of stri
 /// `<behavior:verify_apply>`'s choices that are not objects.
 const NOT_CHOICES: &str = "behavior:verify_apply choices is not an array of objects or null";
 
+/// `<behavior:verify_apply>`'s handled that is not a boolean.
+const NOT_A_BOOLEAN: &str = "behavior:verify_apply handled is not a boolean";
+
 /// `<behavior:verify_apply>`'s error that is not a name.
 const NOT_AN_ERROR: &str = "behavior:verify_apply error is not a string or null";
 
@@ -1435,13 +1443,22 @@ fn verify_apply_element<H: BehaviorHost>(
     content: &[Content],
     host: &mut H,
 ) -> Result<Executed, Failure<H::Error>> {
-    let [location, done, turn, input, targets, error, choices] = attribute_values(
+    let [
+        location,
+        done,
+        turn,
+        input,
+        targets,
+        error,
+        choices,
+        handled,
+    ] = attribute_values(
         attributes,
         [
-            "location", "done", "turn", "input", "targets", "error", "choices",
+            "location", "done", "turn", "input", "targets", "error", "choices", "handled",
         ],
         [
-            "behavior:verify_apply takes only the location, done, turn, input, targets, error and choices attributes",
+            "behavior:verify_apply takes only the location, done, turn, input, targets, error, choices and handled attributes",
             "behavior:verify_apply repeats an attribute",
             "behavior:verify_apply has an empty attribute",
         ],
@@ -1510,6 +1527,13 @@ fn verify_apply_element<H: BehaviorHost>(
             _ => return Err(Failure::Execution(NOT_CHOICES)),
         },
     };
+    let required = match handled {
+        None => true,
+        Some(handled) => match evaluate(host, handled, NOT_A_BOOLEAN, NOT_A_BOOLEAN)? {
+            Json::Bool(required) => required,
+            _ => return Err(Failure::Execution(NOT_A_BOOLEAN)),
+        },
+    };
     let done = (!done.is_null()).then_some(done);
     let messages = verify_apply(
         done.as_ref(),
@@ -1517,6 +1541,7 @@ fn verify_apply_element<H: BehaviorHost>(
         &input,
         &targets,
         &choices,
+        required,
         error.as_deref(),
     )
     .into_iter()
@@ -1541,6 +1566,7 @@ pub fn verify_apply(
     input: &Map<String, Json>,
     targets: &[String],
     choices: &[Json],
+    handled_required: bool,
     error: Option<&str>,
 ) -> Vec<String> {
     if let Some(error) = error {
@@ -1562,6 +1588,9 @@ pub fn verify_apply(
             js_stringify(done_turn),
             js_stringify(turn)
         )];
+    }
+    if !*handled && !handled_required {
+        return Vec::new();
     }
     if !*handled || selected.is_empty() {
         return vec![NO_SELECTION.into()];

@@ -22,7 +22,8 @@
         "turn": {"type": "integer", "minimum": 1},
         "input": {"type": "object"},
         "targets": {"type": "array", "items": {"type": "string", "minLength": 1}, "maxItems": 32},
-        "choices": {"type": "array", "items": {"type": "object", "properties": {"event": {"type": "string", "minLength": 1}, "schema": {}, "target": {"type": "string", "minLength": 1}}, "required": ["event", "schema"]}, "description": "The live turn's choices: each selection must be an event its target takes on that turn, with data its schema admits, as the dispatch is checked (decision D206)."}
+        "choices": {"type": "array", "items": {"type": "object", "properties": {"event": {"type": "string", "minLength": 1}, "schema": {}, "target": {"type": "string", "minLength": 1}}, "required": ["event", "schema"]}, "description": "The live turn's choices: each selection must be an event its target takes on that turn, with data its schema admits, as the dispatch is checked (decision D206)."},
+        "handled": {"type": "boolean", "description": "Whether the run must handle the live turn (default true); false for a turn that taught the behavior, whose message is the lesson (decision D207)."}
       },
       "required": ["turn", "input", "targets"],
       "additionalProperties": false

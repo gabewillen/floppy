@@ -273,7 +273,7 @@
       <param name="create" expr="isCreate()"/>
       <param name="turn" expr="lesson.turn"/>
       <param name="cognition_input" expr="lesson.cognition_input"/>
-      <param name="cognition_output" expr="lesson.cognition_output"/>
+      <param name="cognition_output" expr="lessonOutput()"/>
       <param name="prior_episodes" expr="prior_episodes"/>
       <param name="instruction" expr="lessonInstruction()"/>
       <param name="turn_choices" expr="lessonChoices()"/>

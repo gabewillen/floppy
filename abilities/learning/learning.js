@@ -112,9 +112,14 @@ function progressTarget() {
 }
 
 // The lesson as the revision's instruction (decision D149).
-// The teaching turn's choices (decision D206).
+// The teaching turn's output and choices without the lesson itself: a
+// behavior never teaches the bot (decisions D206 and D207).
+function lessonOutput() {
+  return lesson.cognition_output.filter(function (s) { return Object(s).event !== 'bot.ability.learning.input'; });
+}
+
 function lessonChoices() {
-  return Array.isArray(lesson.choices) ? lesson.choices : [];
+  return (Array.isArray(lesson.choices) ? lesson.choices : []).filter(function (c) { return Object(c).event !== 'bot.ability.learning.input'; });
 }
 
 function lessonInstruction() {

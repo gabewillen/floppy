@@ -690,7 +690,7 @@
         <elseif cond="isApplyTest()"/>
           <behavior:verify_apply location="apply" done="child_data" turn="testTurn()"
               input="testInput()" targets="testTargets()" error="applyError()"
-              choices="testChoices()"/>
+              choices="testChoices()" handled="testHandled()"/>
         </if>
         <assign location="sim_results" expr="nextSimResults()"/>
         <assign location="sim_index" expr="increment(sim_index)"/>

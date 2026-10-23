@@ -939,5 +939,46 @@
    "cognition"
   ],
   "turn": 3
+ },
+ {
+  "done": {
+   "handled": false,
+   "selected": [],
+   "turn": 3
+  },
+  "error": null,
+  "handled": false,
+  "input": {
+   "text": "when I say ping say pong"
+  },
+  "messages": [],
+  "name": "an_unhandled_run_on_a_teaching_turn",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "handled": true,
+   "selected": [
+    {
+     "data": {},
+     "event": "bot.ability.communication.respond"
+    }
+   ],
+   "turn": 3
+  },
+  "error": null,
+  "handled": false,
+  "input": {},
+  "messages": [
+   "selected[0] (bot.ability.communication.respond) names no target: name the session that receives its event, one of [\"communication\"]."
+  ],
+  "name": "a_handled_run_on_a_teaching_turn_is_still_checked",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
  }
 ]

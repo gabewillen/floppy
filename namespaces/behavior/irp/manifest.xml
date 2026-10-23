@@ -75,7 +75,7 @@
     </test>
   </assert>
   <assert id="behavior-6" specnum="6" specid="#behavior-6">
-    <![CDATA[<behavior:verify_apply> writes E0008 messages for a turn behavior's run on the live turn (for the run, the donedata contract, nothing selected, the targets, and selection data that disagrees with input; decision D131): none when its donedata is {turn, handled, selected} with the live turn, handled true, and at least one selection, each with an event, a target among targets, and data agreeing with input's scalar members; else why (an error, or no donedata, first). With choices (the turn's choices, [{event, target, schema}]; decision D206), each selection must also be an event its target takes on that turn, with data the choice's schema admits, as the candidates runner's dispatch is checked against the receiving transition. An input that is not an object, targets that are not strings, or choices that are not objects raise error.execution and assign nothing.]]>
+    <![CDATA[<behavior:verify_apply> writes E0008 messages for a turn behavior's run on the live turn (for the run, the donedata contract, nothing selected, the targets, and selection data that disagrees with input; decision D131): none when its donedata is {turn, handled, selected} with the live turn, handled true, and at least one selection, each with an event, a target among targets, and data agreeing with input's scalar members; else why (an error, or no donedata, first). With choices (the turn's choices, [{event, target, schema}]; decision D206), each selection must also be an event its target takes on that turn, with data the choice's schema admits, as the candidates runner's dispatch is checked against the receiving transition. With handled false (a turn that taught the behavior, decision D207), an unhandled run writes nothing, and a handled one is checked as above. An input that is not an object, targets that are not strings, choices that are not objects, or handled that is not a boolean raise error.execution and assign nothing.]]>
     <test id="250" conformance="mandatory" manual="false">
       <start uri="250/test250.txml"/>
     </test>
@@ -90,6 +90,9 @@
     </test>
     <test id="255" conformance="mandatory" manual="false">
       <start uri="255/test255.txml"/>
+    </test>
+    <test id="256" conformance="mandatory" manual="false">
+      <start uri="256/test256.txml"/>
     </test>
   </assert>
 </assertions>

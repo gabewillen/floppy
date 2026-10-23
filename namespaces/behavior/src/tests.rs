@@ -542,11 +542,13 @@ fn a_failed_assignment_or_host_failure_is_reported() {
 /// The attributes of a `<behavior:verify_apply>` over the expressions
 /// `done`, `turn`, `input`, `targets` and `error`.
 fn apply_attributes() -> Vec<Attribute> {
-    ["done", "turn", "input", "targets", "error", "choices"]
-        .into_iter()
-        .map(|name| attr(name, name))
-        .chain([attr("location", "apply")])
-        .collect()
+    [
+        "done", "turn", "input", "targets", "error", "choices", "handled",
+    ]
+    .into_iter()
+    .map(|name| attr(name, name))
+    .chain([attr("location", "apply")])
+    .collect()
 }
 
 /// Every message `<behavior:verify_apply>` writes for a turn behavior's run
@@ -562,13 +564,22 @@ fn verify_apply_writes_its_e0008_messages() {
             ("targets", case["targets"].clone()),
             ("error", case["error"].clone()),
             ("choices", case["choices"].clone()),
+            (
+                "handled",
+                case.get("handled").cloned().unwrap_or(json!(true)),
+            ),
         ];
         let assigned = run("verify_apply", &apply_attributes(), &values).expect("the case runs");
         assert_eq!(assigned["apply"], case["messages"], "{}", case["name"]);
     }
     let without_error: Vec<Attribute> = apply_attributes()
         .into_iter()
-        .filter(|attribute| !matches!(attribute.local_name.as_str(), "error" | "choices"))
+        .filter(|attribute| {
+            !matches!(
+                attribute.local_name.as_str(),
+                "error" | "choices" | "handled"
+            )
+        })
         .collect();
     let assigned = run(
         "verify_apply",
@@ -642,6 +653,11 @@ fn malformed_verify_apply_raises_error_execution_and_assigns_nothing() {
             json!(["communication"]),
             "behavior:verify_apply choices is not an array of objects or null",
         ),
+        (
+            "handled",
+            json!("no"),
+            "behavior:verify_apply handled is not a boolean",
+        ),
     ] {
         assert_eq!(
             run("verify_apply", &apply_attributes(), &with(name, value)),
@@ -656,7 +672,7 @@ fn malformed_verify_apply_raises_error_execution_and_assigns_nothing() {
 }
 
 /// The values every malformed `<behavior:verify_apply>` below is given.
-fn good_apply_values() -> [(&'static str, Json); 6] {
+fn good_apply_values() -> [(&'static str, Json); 7] {
     [
         ("done", Json::Null),
         ("turn", json!(1)),
@@ -664,6 +680,7 @@ fn good_apply_values() -> [(&'static str, Json); 6] {
         ("targets", json!(["communication"])),
         ("error", Json::Null),
         ("choices", Json::Null),
+        ("handled", json!(true)),
     ]
 }
 
@@ -688,7 +705,7 @@ fn a_malformed_verify_apply_element_raises_error_execution_and_assigns_nothing()
     assert_eq!(
         run("verify_apply", &attributes, &good),
         Err(
-            "behavior:verify_apply takes only the location, done, turn, input, targets, error and choices attributes"
+            "behavior:verify_apply takes only the location, done, turn, input, targets, error, choices and handled attributes"
         )
     );
     let mut attributes = apply_attributes();

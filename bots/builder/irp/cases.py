@@ -84,7 +84,7 @@ CHIME = "[{event: 'bot.speaking.say', data: {parts: [{words: 'Hourly chime.'}]}}
 
 # A turn behavior that declares the params turn and input and decides at
 # once, selecting `data` for the session communication.
-def greeter(data):
+def greeter(data, handled="true"):
     return f"""<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="greeter" initial="deciding">
   <datamodel>
     <data id="turn" expr="0"/>
@@ -95,7 +95,7 @@ def greeter(data):
   </state>
   <final id="decided">
     <donedata>
-      <content expr="({{turn: turn, handled: true, selected: [{{event: 'bot.ability.communication.respond', target: 'communication', data: {data}}}]}})"/>
+      <content expr="({{turn: turn, handled: {handled}, selected: [{{event: 'bot.ability.communication.respond', target: 'communication', data: {data}}}]}})"/>
     </donedata>
   </final>
 </scxml>"""
@@ -104,6 +104,8 @@ def greeter(data):
 DECIDES = [{"name": "decides", "events": [], "settle_ms": 500, "expect_events": [], "expect_done": True}]
 # The live turn (decision D131): a knock at the door on turn 2.
 LIVE = {"turn_after_bound_ms": 1000, "apply": {"turn": 2, "input": {"label": "knock", "focus": "door"}, "targets": ["communication"]}}
+# A live turn that taught the behavior (decision D207): the run may leave it unhandled.
+LIVE_TAUGHT = {"turn_after_bound_ms": 1000, "apply": dict(LIVE["apply"], handled=False)}
 # The live turn with its choices: communication takes respond only with parts.
 PARTS_ONLY = {"type": "object", "properties": {"parts": {"type": "array"}}, "required": ["parts"], "additionalProperties": False}
 LIVE_CHOICES = {"turn_after_bound_ms": 1000, "apply": dict(LIVE["apply"], choices=[
@@ -140,7 +142,7 @@ S.statement(6, "Each check has its own diagnostics: a validator error (`kind` `v
 S.statement(7, "A generation that fails (`generate.failed`) is a `generate` diagnostic `<stage>-failed`; one that runs `generate_ceiling_ms` in all, or, once its reply streams, makes no progress for `generate_timeout_ms` (the first `generate.progress` arms it, each later one re-arms it), is cancelled, a `timeout` diagnostic `<stage>-timeout` (decision D101).")
 S.statement(8, "With the request's lifetime bounds (`min_every_ms`, `turn_after_bound_ms`), a draft that sends `bot.behavior.tick` (a persistent routine) whose schedule is shorter than `min_every_ms` is a `lifetime` diagnostic `E0009`; a routine within the bounds also gets a forced first tick, whose output must select at least one event (else an `apply` diagnostic `E0008`).")
 
-S.statement(9, "With the request's `apply` `{turn, input, targets, choices?}`, a draft that sends no `bot.behavior.tick` also runs once with the params `turn` and `input` (the simulation result `live turn`) and must end within min(`turn_after_bound_ms`, 2000) ms in a top-level final state whose donedata is `{turn, handled: true, selected}` with the live turn and selections naming targets among `targets` with data agreeing with `input` and, with `choices`, each an event its target takes with data its schema admits, else an `apply` diagnostic `E0008` (`<behavior:verify_apply>`, decisions D131 and D206).")
+S.statement(9, "With the request's `apply` `{turn, input, targets, choices?, handled?}`, a draft that sends no `bot.behavior.tick` also runs once with the params `turn` and `input` (the simulation result `live turn`) and must end within min(`turn_after_bound_ms`, 2000) ms in a top-level final state whose donedata is `{turn, handled: true, selected}` (or, with `handled` false, a turn that taught the behavior, `handled` false) with the live turn and selections naming targets among `targets` with data agreeing with `input` and, with `choices`, each an event its target takes with data its schema admits, else an `apply` diagnostic `E0008` (`<behavior:verify_apply>`, decisions D131, D206 and D207).")
 
 S.case(100, 1, "a request refused by its schema raises error.execution at the sender; the builder keeps waiting and answers a whitespace spec invalid-request.",
        [send(REQUEST, js({"spec": "x", "colour": "blue"})), expect("error.execution"),
@@ -256,3 +258,7 @@ S.case(182, 9, "with a live turn and its choices, a turn behavior whose selectio
         failed("attempts-exhausted", "_event.data.diagnostics.length === 1 && _event.data.diagnostics[0].kind === 'apply' && _event.data.diagnostics[0].code === 'E0008'"
                                      " && _event.data.diagnostics[0].message.indexOf('refuses') > 0")],
        backend=[PLAN, draft(greeter("{text: 'Who is there?', label: input === null ? 'none' : input.label}"), tests=DECIDES, schemas=NO_SCHEMAS)], clock="wall")
+S.case(183, 9, "with a live turn that taught the behavior, a turn behavior that leaves it unhandled is built.",
+       [send(REQUEST, request(**LIVE_TAUGHT)),
+        expect(DONE, "_event.data.report.simulation[1].name === 'live turn' && _event.data.report.simulation[1].passed === true")],
+       backend=[PLAN, draft(greeter("{text: 'Who is there?', label: input === null ? 'none' : input.label}", handled="false"), tests=DECIDES, schemas=NO_SCHEMAS)], clock="wall")

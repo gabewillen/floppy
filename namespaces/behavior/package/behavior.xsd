@@ -30,7 +30,7 @@
                    turn behavior's run on its live turn (the live-turn
                    check, decision D131).
                    done, turn, input, targets (required), error,
-                   choices (optional): expressions.
+                   choices, handled (optional): expressions.
                    None takes another attribute or content.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -75,6 +75,7 @@
       <xs:attribute name="targets" type="xs:string" use="required"/>
       <xs:attribute name="error" type="xs:string"/>
       <xs:attribute name="choices" type="xs:string"/>
+      <xs:attribute name="handled" type="xs:string"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>

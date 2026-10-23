@@ -80,7 +80,7 @@ function builderRequest() {
 // check, decision D131): this turn, its behavior_input as autonomy builds it, and the
 // sessions its output names (a learned behavior names its targets, D104).
 function liveTurn() {
-  return ({turn: turn, input: behavior_input, targets: outputTargets(), choices: turn_choices});
+  return ({turn: turn, input: behavior_input, targets: outputTargets(), choices: turn_choices, handled: instruction === null});
 }
 
 // The distinct targets of this turn's cognition_output, at most 32.
@@ -97,7 +97,8 @@ function builderConstraints() {
 // turn's output names, and this turn's input (behavior_input, as autonomy
 // builds it, in model-facing XML: decision D201).
 function turnContract() {
-  return turn_contract.replace(/TRIGGERS|TARGETS|INPUT/g, function (m) { return m === 'INPUT' ? turn_input : namesText(m === 'TARGETS' ? outputTargets() : triggers); });
+  var contract = turn_contract.replace(/TRIGGERS|TARGETS|INPUT/g, function (m) { return m === 'INPUT' ? turn_input : namesText(m === 'TARGETS' ? outputTargets() : triggers); });
+  return instruction === null ? contract : contract + ' ' + lesson_contract;
 }
 
 // Names as a parenthesized, comma-separated list.
