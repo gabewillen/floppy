@@ -164,7 +164,7 @@
   turn it was taught on. Its bot.ability.learning.output {lesson,
   learned, behavior, participants} is handed to the body as
   bot.ability.cognition.input {stimulus: {event:
-  "bot.ability.learning.output", data: {lesson, learned, behavior},
+  "bot.ability.learning.output", data: {lesson, turn, learned, behavior},
   source: "learning"}, participants}, a turn the bot tells its teacher
   in. Bounded: a turn that perceives a lesson's result sends no lesson
   of its own.

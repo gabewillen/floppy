@@ -1338,7 +1338,7 @@ fn a_lesson_is_learned_and_its_result_perceived() {
     });
     assert_eq!(
         texts(&records, "learning.failed"),
-        strings(&["Learning select returned an empty selection."])
+        strings(&["lesson of turn 1: Learning select returned an empty selection."])
     );
     let requests = reasoning_requests(&mock);
     assert_eq!(requests.len(), 2, "{requests:?}");

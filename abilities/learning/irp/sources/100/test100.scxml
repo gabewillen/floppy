@@ -15,7 +15,7 @@
     <onentry>
       <send event="bot.ability.learning.lesson" target="#_learning"><content expr='{"turn": 1, "content": "When you hear a knock, say hello.", "media_type": null, "cognition_input": {"stimulus": {"event": "environment.sound", "data": {"label": "knock"}}, "focus": "door", "focus_candidates": ["door"]}, "cognition_output": [{"event": "bot.ability.communication.respond", "data": {"parts": [{"words": "Hello!"}]}, "reason": "a knock", "target": "communication"}, {"event": "bot.ability.learning.input", "data": {"content": "When you hear a knock, say hello."}, "reason": "I was taught", "target": "cognition"}], "participants": [{"id": "gabe", "kind": "person"}]}'/></send>
     </onentry>
-    <transition event="bot.ability.learning.output" cond="_event.data.learned === true &amp;&amp; _event.data.behavior.name === 'GreetOnKnock' &amp;&amp; _event.data.behavior.description === 'Say hello when a knock sound arrives.' &amp;&amp; _event.data.participants[0].id === 'gabe'" target="step1"/>
+    <transition event="bot.ability.learning.output" cond="_event.data.learned === true &amp;&amp; _event.data.turn === 1 &amp;&amp; _event.data.behavior.name === 'GreetOnKnock' &amp;&amp; _event.data.behavior.description === 'Say hello when a knock sound arrives.' &amp;&amp; _event.data.participants[0].id === 'gabe'" target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

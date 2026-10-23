@@ -34,7 +34,7 @@
   the cognition's bounds param may set both.
 
   Output: the lesson's result goes to the cognition,
-  bot.ability.learning.output {lesson, learned, behavior, participants}
+  bot.ability.learning.output {lesson, turn, learned, behavior, participants}
   (the teaching turn's participants), which the cognition hands to the
   body as a stimulus to perceive in a turn of its own, so the bot tells
   its teacher in its own words. A lesson that failed anywhere is
@@ -44,8 +44,10 @@
 
   Logs: learning.recalled (the episodes and behaviors read), learning.selected
   (the selected event, or none), learning.learned (the behavior's name and
-  source), learning.failed (why a lesson failed); the revision logs
-  reflection.revision and reflection.inventory as for a reflection.
+  source), learning.failed (why a lesson failed), each but
+  learning.selected after "lesson of turn <turn>: " (decision D204); the
+  revision logs reflection.revision and reflection.inventory as for a
+  reflection.
 
   Contracts: the events it takes reference abilities/schemas/ by
   event:schema (never inline).
@@ -310,7 +312,7 @@
       <assign location="deferred" expr="deferred.concat([_event.data])"/>
     </transition>
     <onentry>
-      <log label="learning.failed" expr="failure"/>
+      <log label="learning.failed" expr="failedLog()"/>
       <send event="bot.ability.learning.output" target="#_parent">
         <content expr="learningOutput(false)"/>
       </send>

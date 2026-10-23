@@ -33,7 +33,7 @@ function recalledEpisodes(_event) {
 }
 
 function recalledLog() {
-  return 'lesson of turn ' + lesson.turn + ': ' + prior_episodes.length + ' episodes, ' + behaviors.length + ' behaviors';
+  return lessonOf() + prior_episodes.length + ' episodes, ' + behaviors.length + ' behaviors';
 }
 
 function recallFailedMessage(detail) {
@@ -132,12 +132,21 @@ function revisionFailedMessage(detail) {
 
 // reporting and failing
 
+// The lesson's log lines name its turn, so a reader ties each to its lesson.
 function learnedLog() {
-  return behavior.name + ' ' + behavior.source;
+  return lessonOf() + behavior.name + ' ' + behavior.source;
+}
+
+function failedLog() {
+  return lessonOf() + failure;
+}
+
+function lessonOf() {
+  return 'lesson of turn ' + lesson.turn + ': ';
 }
 
 // The lesson's result: whether it took and the behavior it became, never
 // why it failed, with the teaching turn's participants.
 function learningOutput(learned) {
-  return ({lesson: lesson.content, learned: learned, behavior: learned ? {name: behavior.name, description: behavior.description === undefined ? null : behavior.description} : null, participants: lesson.participants});
+  return ({lesson: lesson.content, turn: lesson.turn, learned: learned, behavior: learned ? {name: behavior.name, description: behavior.description === undefined ? null : behavior.description} : null, participants: lesson.participants});
 }
