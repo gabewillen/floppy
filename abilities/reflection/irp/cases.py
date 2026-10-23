@@ -156,17 +156,17 @@ S.case(142, 5, "a change of a behavior the inventory does not hold is not offere
        [send(INPUT, turn(1)), failed_prefix("Selection rejected: ")],
        params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(change("Nobody"))], clock="wall")
 
-S.case(150, 6, "a build that never validates abandons the change with the rendered diagnostics, and its draft row stays (a break of it answers).",
+S.case(150, 6, "a build that never validates in its 8 attempts abandons the change with the rendered diagnostics, and its draft row stays (a break of it answers).",
        [send(INPUT, turn(1)),
         failed_prefix("Reflection change abandoned: attempts exhausted:\nbehavior validation failed:\n  error[SCXML005] validate: "),
         send(INPUT, turn(2)), expect(OUTPUT)],
-       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE), PLAN, draft(REJECTED), draft(REJECTED), select(brk("GreetOnKnock"))],
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE), PLAN] + [draft(REJECTED)] * 8 + [select(brk("GreetOnKnock"))],
        clock="wall")
-S.case(151, 6, "a build whose every draft generation fails fails the turn with no draft, and the create's stub stays (a break of it answers).",
+S.case(151, 6, "a build whose 8 draft generations all fail fails the turn with no draft, and the create's stub stays (a break of it answers).",
        [send(INPUT, turn(1)),
         failed_prefix("Reflection revision failed: attempts-exhausted: the author generation failed (status)"),
         send(INPUT, turn(2)), expect(OUTPUT)],
-       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE), PLAN, chat(None, status=500), chat(None, status=500), select(brk("GreetOnKnock"))],
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE), PLAN] + [chat(None, status=500)] * 8 + [select(brk("GreetOnKnock"))],
        clock="wall")
 
 S.case(160, 7, "a revision that outlasts revising_ceiling_ms fails the turn.",

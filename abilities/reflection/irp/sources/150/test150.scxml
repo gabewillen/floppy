@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- reflection-6: a build that never validates abandons the change with the rendered diagnostics, and its draft row stays (a break of it answers). -->
+<!-- reflection-6: a build that never validates in its 8 attempts abandons the change with the rendered diagnostics, and its draft row stays (a break of it answers). -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="reflection" type="scxml" src="../../../reflection.scx">
