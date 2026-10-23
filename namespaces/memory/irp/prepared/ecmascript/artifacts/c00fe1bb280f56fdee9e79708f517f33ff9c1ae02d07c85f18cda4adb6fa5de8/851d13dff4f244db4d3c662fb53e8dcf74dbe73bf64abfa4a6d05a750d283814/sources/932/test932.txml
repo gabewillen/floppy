@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- memory-4: words that are not a string raise error.execution and assign nothing. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory">
+<datamodel>
+  <data id="t" expr="'untouched'"/>
+  <data id="w" expr="['not', 'words']"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <memory:cut_at_word location="t" words="w"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="t === 'untouched'" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

@@ -54,7 +54,7 @@ const BEHAVIOR: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version
   </state>
   <final id="answered">
     <donedata>
-      <content expr="({turn: turn, handled: true, selected: [{event: 'bot.ability.communication.respond', data: {text: 'Hello!'}, reason: 'a knock'}]})"/>
+      <content expr="({turn: turn, handled: true, selected: [{event: 'bot.ability.communication.respond', data: {parts: [{words: 'Hello!'}]}, reason: 'a knock'}]})"/>
     </donedata>
   </final>
 </scxml>"#;
@@ -391,7 +391,7 @@ fn input(turn: u64) -> Json {
             "focus_candidates": ["door"],
         },
         "cognition_output": [
-            {"event": "bot.ability.communication.respond", "data": {"text": "Hello!"}, "reason": "a knock", "target": "communication"}
+            {"event": "bot.ability.communication.respond", "data": {"parts": [{"words": "Hello!"}]}, "reason": "a knock", "target": "communication"}
         ],
     })
 }

@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- conversation-2: an inbound message drops audio content and other members, and takes its relationship's reference. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation">
+<datamodel>
+  <data id="l" expr="null"/>
+  <data id="msg" expr="({source_ids: ['alice'], target_ids: [], content: 'AAAA', content_type: 'Audio/PCM', extra: 1})"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:message_for_turn location="l" direction="inbound" event="'bot.ability.conversation.input'" message="msg"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="l.direction === 'inbound' &amp;&amp; l.content === null &amp;&amp; l.extra === undefined &amp;&amp; l.provenance.event === 'bot.ability.conversation.input' &amp;&amp; l.provenance.session_ref === 'relationship-{&quot;identity_groups&quot;:[[],[&quot;alice&quot;]]}'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

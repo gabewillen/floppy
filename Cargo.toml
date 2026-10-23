@@ -19,6 +19,7 @@ members = [
     "services/files",
     "services/speech",
     "services/pgsql",
+    "services/vision",
     "tests/spikes/pglite",
 ]
 # scxml.rs is a squashed subtree with its own workspace, lockfile, and proof
@@ -42,6 +43,10 @@ publish = false
 [workspace.dependencies]
 # The same pins as scxml.rs's workspace (scxml.rs/Cargo.toml); Cargo.lock was
 # seeded from scxml.rs/Cargo.lock so shared dependencies resolve identically.
+# The JSON Schema validator scxml-event-schema compiles with (the same pin):
+# the generate service reads where a call's arguments first fail its tool's
+# parameters, which `CompiledSchema::admits` does not report.
+boon = { version = "=0.6.1", default-features = false }
 opentelemetry = { version = "0.33.0", default-features = false, features = ["trace"] }
 serde = { version = "1.0.228", default-features = false, features = ["std", "derive"] }
 serde_json = { version = "1.0.145", default-features = false, features = ["std"] }
@@ -56,6 +61,12 @@ wit-bindgen = { version = "0.51.0", default-features = false, features = ["macro
 # `bundled` compiles the amalgamation into the component; `hooks` for the
 # authorizer that keeps a document's statements inside their transaction.
 rusqlite = { version = "0.37.0", default-features = false, features = ["bundled", "hooks"] }
+# The vision service's PNG and WebP decoders (floppy only; scxml.rs
+# decodes no images), pure Rust for wasm32-wasip2. Every `png` release
+# requires `miniz_oxide` 0.8, so the lock holds it beside the 0.9 scxml.rs
+# pins (decision D185).
+png = { version = "0.18.0", default-features = false }
+image-webp = { version = "0.2.4", default-features = false }
 
 scxml-compiler-core = { path = "scxml.rs/crates/scxml-compiler-core" }
 scxml-event-schema = { path = "scxml.rs/crates/scxml-event-schema" }

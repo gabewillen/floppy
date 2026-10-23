@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- seeing-13: with describe on, the view's description is the description child's. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="seeing" type="scxml" src="../../../seeing.scx">
+    <param name="describe" expr="true"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'seeing' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === 'bot.ability.seeing.look' &amp;&amp; _event.data.choices[0].target === undefined &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[0].schema['$schema'] === undefined &amp;&amp; _event.data.choices[0].schema.examples === undefined &amp;&amp; _event.data.choices[0].schema.additionalProperties === false" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="environment.visual" target="#_seeing"><content expr='{"image": "media/a.png", "media_type": "image/png", "source": "camera-1"}'/></send>
+    </onentry>
+    <transition event="bot.ability.cognition.input" cond='JSON.stringify(_event.data) === "{\"participants\":[],\"stimulus\":{\"data\":{\"cause\":\"change\",\"participants\":[],\"views\":[{\"age_ms\":0,\"change\":null,\"description\":\"A white square.\",\"image\":\"media/a.png\",\"kind\":null,\"media_type\":\"image/png\",\"objects\":null,\"participants\":[]}]},\"event\":\"bot.ability.seeing.sight\",\"source\":\"camera-1\"}}"' target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

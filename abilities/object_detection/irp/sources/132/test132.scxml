@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- object_detection-4: numbers are JSON numbers: a boolean or a numeric string is refused, as confidence or in a box. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="object_detection" type="scxml" src="../../../object_detection.scx">
+    <param name="image" expr="'media/scene.png'"/>
+    <param name="media_type" expr="'image/png'"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.vision.detection.output" cond='JSON.stringify(_event.data) === "{\"objects\":[{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":1,\"label\":\"a\"},{\"box\":{\"height\":0.5,\"width\":0.5,\"x\":0,\"y\":0},\"confidence\":0.5,\"label\":\"f\"}]}"' target="step1"/>
+  </state>
+  <state id="step1">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

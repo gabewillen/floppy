@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.seeing.look",
+  "description": "Look at what is in view now. What you see arrives as your next observation (bot.ability.seeing.sight); if nothing is in view you see nothing.",
+  "additionalProperties": false,
+  "properties": {},
+  "type": "object",
+  "examples": [
+    {}
+  ]
+}

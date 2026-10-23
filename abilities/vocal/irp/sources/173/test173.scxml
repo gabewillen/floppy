@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- vocal-8: parts without a pause are one request, a sound and other cues applying nothing. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="vocal" type="scxml" src="../../../vocal.scx">
+    <param name="model" expr="'tts-1'"/>
+    <param name="voice" expr="'alloy'"/>
+    <param name="output" expr="'media/reply.pcm'"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'vocal' &amp;&amp; Array.isArray(_event.data.choices) &amp;&amp; _event.data.choices.length === 0 &amp;&amp; Object.keys(_event.data).length === 2" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal"><content expr='{"parts": [{"expression": {"sound": "laugh"}}, {"expression": {"emotion": "happy"}, "words": "Ha,"}, {"words": " yes."}]}'/></send>
+    </onentry>
+    <transition event="bot.ability.vocal.speech.encoding.output" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply.pcm\",\"channels\":1,\"duration\":0.1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000}"' target="step2"/>
+  </state>
+  <state id="step2">
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'vocal' &amp;&amp; Array.isArray(_event.data.choices) &amp;&amp; _event.data.choices.length === 0 &amp;&amp; Object.keys(_event.data).length === 2" target="step3"/>
+  </state>
+  <state id="step3">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

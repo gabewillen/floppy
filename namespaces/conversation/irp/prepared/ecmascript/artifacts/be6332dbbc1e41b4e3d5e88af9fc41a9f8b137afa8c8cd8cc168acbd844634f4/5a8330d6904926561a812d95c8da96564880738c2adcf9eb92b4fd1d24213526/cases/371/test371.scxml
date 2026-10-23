@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- conversation-8: a source that is not an identity raises error.execution and assigns nothing. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="r" expr="({session_ref: 'relationship-a', context_ref: 'a', source_ids: ['alice'], target_ids: ['bot'], participants: []})"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:participant_for_source location="r" source="({id: 1})"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="r.participants.length === 0" target="pass"/>
+  <transition event="*" target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

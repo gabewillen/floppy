@@ -225,7 +225,7 @@ fn encode(extra: &str) -> String {
     format!(
         r#"<param name="operation" expr="'encode'"/>
       <param name="model" expr="'tts-1'"/>
-      <param name="text" expr="'Hello there.'"/>
+      <param name="parts" expr="[{{words: 'Hello there.'}}]"/>
       {extra}"#
     )
 }
@@ -473,6 +473,45 @@ fn an_unconfigured_backend_answers_failed_and_reads_and_sends_nothing() {
     assert!(!media.join("said.mp3").exists(), "nothing is written");
 }
 
+/// A run that holds a base URL and no key asks a keyless speech server:
+/// the request carries no key header at all, as the original's keyless
+/// client asks one (decision D127).
+#[test]
+fn without_a_held_key_the_request_carries_no_key_header() {
+    let mock = Mock::start();
+    let audio = wav(16_000, 1);
+    let (_, mut args) = granted(
+        "keyless",
+        &format!("{}/v1", mock.origin),
+        &[("heard.wav", &audio)],
+    );
+    let keyless = env_file(
+        "keyless-base",
+        &format!("FLOPPY_SPEECH_BASE_URL={}/v1\n", mock.origin),
+    );
+    args[1] = keyless.display().to_string();
+    let finished = open(&args, DECODE);
+    assert_eq!(
+        events(&finished),
+        labelled(&[
+            (
+                "event",
+                r#"bot.ability.hearing.speech.decoding.output {"text":"Hello from the fake backend."}"#
+            ),
+            ("final", "done"),
+        ]),
+        "{}",
+        finished.stderr
+    );
+    let received = mock.received();
+    assert_eq!(received.len(), 1, "exactly one request");
+    assert_eq!(
+        (&received[0].authorization, &received[0].xi_api_key),
+        (&None, &None),
+        "a keyless request has no key header"
+    );
+}
+
 #[test]
 fn a_malformed_parameter_raises_error_execution() {
     let mock = Mock::start();
@@ -572,7 +611,7 @@ fn live_speech_round_trip_through_an_env_file() {
         &document(&format!(
             r#"<param name="operation" expr="'encode'"/>{provider}
       <param name="model" expr="'{}'"/>
-      <param name="text" expr="'The quick brown fox jumps over the lazy dog.'"/>
+      <param name="parts" expr="[{{words: 'The quick brown fox jumps over the lazy dog.'}}]"/>
       <param name="voice" expr="'{}'"/>
       <param name="output" expr="'media/said.wav'"/>
       <param name="media_type" expr="'audio/wav'"/>"#,

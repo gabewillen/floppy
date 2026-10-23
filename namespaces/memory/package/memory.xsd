@@ -5,13 +5,21 @@
   component governs what the element does. Bind it with the prefix
   `memory` by convention.
 
-  memory:to_json   location (required): receives the JSON text of a
-                   conversation memory row (the original's Memory.to_json).
-                   message (required): an expression.
-  memory:contents  location (required): receives the JSON objects of one
-                   statement's result (the original's OutputData.contents).
-                   result (required): an expression.
-                   Neither takes another attribute or content.
+  memory:to_json         location (required): receives the JSON text of a
+                         conversation memory row (the original's Memory.to_json).
+                         message (required): an expression.
+  memory:contents        location (required): receives the JSON objects of one
+                         statement's result (the original's OutputData.contents).
+                         result (required): an expression.
+  memory:cut_at_word     location (required): receives {text, cut}, the words
+                         within 2048 UTF-8 bytes cut at a whole word (the
+                         original's stm._cut_at_word).
+                         words (required): an expression.
+  memory:stm_projection  location (required): receives the bounded scalar
+                         projection of a stimulus's data (the original's
+                         stm._payload_projection).
+                         data (required): an expression.
+                         None takes another attribute or content.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="https://github.com/stateforward/floppy/namespaces/memory"
@@ -26,6 +34,18 @@
     <xs:complexType>
       <xs:attribute name="location" type="xs:string" use="required"/>
       <xs:attribute name="result" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="cut_at_word">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="words" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="stm_projection">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="data" type="xs:string" use="required"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>

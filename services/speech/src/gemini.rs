@@ -5,12 +5,13 @@
 //! (`https://generativelanguage.googleapis.com/v1beta`).
 //!
 //! * encode: the canonical JSON body `{"generation_config":
-//!   {"speech_config": [{"voice": V}]}, "input": T, "model": M,
-//!   "response_format": {"type": "audio"}, "store": false}`; the answer's
-//!   audio is the first `steps[].content[]` part of `type` `audio`, base64
-//!   linear PCM (16-bit mono at [`crate::PCM_SAMPLE_RATE_HZ`], the
-//!   original's `_DEFAULT_SAMPLE_RATE_HZ`), written raw for `audio/pcm` or
-//!   in a WAV container for `audio/wav` ([`encoding_request`], [`audio`]).
+//!   {"speech_config": [{"voice": V}]}, "input": W, "model": M,
+//!   "response_format": {"type": "audio"}, "store": false}`, `W` one
+//!   stretch's words (one request per stretch); the answer's audio is the
+//!   first `steps[].content[]` part of `type` `audio`, base64 linear PCM
+//!   (16-bit mono at [`crate::PCM_SAMPLE_RATE_HZ`], the default sample
+//!   rate), written raw for `audio/pcm` or in a WAV
+//!   container for `audio/wav` ([`encoding_request`], [`audio`]).
 //! * decode: the body `{"input": [{"text": P, "type": "text"}, {"data": A,
 //!   "mime_type": M, "type": "audio"}], "model": M, "store": false}`, `P`
 //!   the original's prompt ([`DECODING_PROMPT`]) and `A` the audio in
@@ -21,7 +22,7 @@
 use scxml_event_schema::canonical_json;
 use serde_json::{Value as Json, json};
 
-use crate::{Decoding, Encoding, FailureCode, PCM_SAMPLE_RATE_HZ, Part, Request, voice};
+use crate::{Decoding, Encoding, FailureCode, PCM_SAMPLE_RATE_HZ, Part, Request, keyed, voice};
 
 /// The path appended to the base URL.
 pub const INTERACTIONS_PATH: &str = "/interactions";
@@ -30,32 +31,38 @@ pub const INTERACTIONS_PATH: &str = "/interactions";
 pub const DECODING_PROMPT: &str =
     "Generate a transcript of the speech. Return only the spoken words as plain text.";
 
-fn request(base_url: u32, api_key: u32, body: &Json) -> Request {
+fn request(base_url: u32, api_key: Option<u32>, body: &Json) -> Request {
     Request {
         url: vec![
             Part::Reference(base_url),
             Part::Literal(INTERACTIONS_PATH.into()),
         ],
-        headers: vec![
-            ("x-goog-api-key".into(), vec![Part::Reference(api_key)]),
-            (
+        headers: keyed(
+            "x-goog-api-key",
+            api_key,
+            [(
                 "content-type".into(),
                 vec![Part::Literal("application/json".into())],
-            ),
-        ],
+            )],
+        ),
         body: canonical_json(body).into_bytes(),
     }
 }
 
-/// The speech request of an encoding.
+/// The speech request of one stretch's `words`.
 #[must_use]
-pub fn encoding_request(base_url: u32, api_key: u32, encoding: &Encoding) -> Request {
+pub fn encoding_request(
+    base_url: u32,
+    api_key: Option<u32>,
+    encoding: &Encoding,
+    words: &str,
+) -> Request {
     request(
         base_url,
         api_key,
         &json!({
             "generation_config": {"speech_config": [{"voice": encoding.voice}]},
-            "input": encoding.text,
+            "input": words,
             "model": encoding.model,
             "response_format": {"type": "audio"},
             "store": false,
@@ -65,7 +72,12 @@ pub fn encoding_request(base_url: u32, api_key: u32, encoding: &Encoding) -> Req
 
 /// The transcription request of a decoding's audio.
 #[must_use]
-pub fn decoding_request(base_url: u32, api_key: u32, decoding: &Decoding, audio: &[u8]) -> Request {
+pub fn decoding_request(
+    base_url: u32,
+    api_key: Option<u32>,
+    decoding: &Decoding,
+    audio: &[u8],
+) -> Request {
     request(
         base_url,
         api_key,

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- communication-3: the outbound record of a response is history only: after a text turn and its response, the next text turn sees both. -->
+<!-- communication-3: the outbound record of a response joins the exchange only: nothing is forwarded, and the next text turn opens a new exchange. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="communication" type="scxml" src="../../../communication.scx">
@@ -12,7 +12,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'communication' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === 'bot.ability.communication.respond' &amp;&amp; _event.data.choices[0].target === undefined &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[0].schema['$schema'] === undefined &amp;&amp; _event.data.choices[0].schema.required.indexOf('text') &gt;= 0" target="step1"/>
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'communication' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === 'bot.ability.communication.respond' &amp;&amp; _event.data.choices[0].target === undefined &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[0].schema['$schema'] === undefined &amp;&amp; _event.data.choices[0].schema.required.indexOf('parts') &gt;= 0" target="step1"/>
   </state>
   <state id="step1">
     <onentry>
@@ -22,7 +22,7 @@
   </state>
   <state id="step2">
     <onentry>
-      <send event="bot.ability.communication.respond" target="#_communication"><content expr='{"text": "reply 1"}'/></send>
+      <send event="bot.ability.communication.respond" target="#_communication"><content expr='{"parts": [{"words": "reply 1"}]}'/></send>
     </onentry>
     <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 0.1 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step3"/>
   </state>
@@ -33,13 +33,13 @@
     <transition event="bot.ability.speaking.output" cond="_event.data.text === &quot;reply 1&quot; &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step5"/>
   </state>
   <state id="step5">
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'communication' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === 'bot.ability.communication.respond' &amp;&amp; _event.data.choices[0].target === undefined &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[0].schema['$schema'] === undefined &amp;&amp; _event.data.choices[0].schema.required.indexOf('text') &gt;= 0" target="step6"/>
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'communication' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === 'bot.ability.communication.respond' &amp;&amp; _event.data.choices[0].target === undefined &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[0].schema['$schema'] === undefined &amp;&amp; _event.data.choices[0].schema.required.indexOf('parts') &gt;= 0" target="step6"/>
   </state>
   <state id="step6">
     <onentry>
       <send event="bot.ability.communication.input" target="#_communication"><content expr='{"source_ids": ["gabe"], "target_ids": ["floppy"], "content": "two", "content_type": "text/plain"}'/></send>
     </onentry>
-    <transition event="bot.ability.cognition.input" cond="_event.data.stimulus.data.messages.length === 3 &amp;&amp; _event.data.stimulus.data.messages[1].direction === 'outbound' &amp;&amp; _event.data.stimulus.data.messages[1].content === 'reply 1' &amp;&amp; _event.data.stimulus.data.messages[2].direction === 'inbound'" target="step7"/>
+    <transition event="bot.ability.cognition.input" cond="_event.data.stimulus.data.messages.length === 1 &amp;&amp; _event.data.stimulus.data.messages[0].direction === 'inbound' &amp;&amp; _event.data.stimulus.data.messages[0].content === 'two'" target="step7"/>
   </state>
   <state id="step7">
     <transition target="pass"/>

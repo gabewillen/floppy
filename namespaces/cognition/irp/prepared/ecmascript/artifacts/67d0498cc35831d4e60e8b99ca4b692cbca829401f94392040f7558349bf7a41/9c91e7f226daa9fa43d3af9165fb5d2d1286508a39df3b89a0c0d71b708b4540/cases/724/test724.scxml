@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- cognition-4: with a fitted budget, fitlocation receives fit when the content fits whole, and cut when recalled memory was left out to fit. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition" xmlns:conf="http://www.w3.org/2005/scxml-conformance" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="p" expr="null"/>
+  <data id="whole" expr="null"/>
+  <data id="fit" expr="'unset'"/>
+  <data id="cut" expr="'unset'"/>
+  <data id="s" expr="({event: &#34;bot.input&#34;, data: &#34;hi&#34;, source: &#34;gabe&#34;})"/>
+  <data id="r" expr="[{at: &#34;2026-07-07T12:00:01Z&#34;, direction: &#34;heard&#34;, text: &#34;older&#34;}, {at: &#34;2026-07-07T12:00:02Z&#34;, direction: &#34;heard&#34;, text: &#34;newer&#34;}]"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <cognition:model_facing_content location="whole" fitlocation="fit" stimulus="s" recent="r" budget="1000"/>
+    <cognition:model_facing_content location="p" fitlocation="cut" stimulus="s" recent="r" budget="whole.length - 1"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="fit === 'fit' &amp;&amp; cut === 'cut' &amp;&amp; whole.indexOf('older') &gt; 0 &amp;&amp; p.indexOf('older') === -1 &amp;&amp; p.indexOf('&lt;recent omitted=&#34;1&#34;&gt;') &gt; 0" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

@@ -13,7 +13,7 @@
     <onentry>
       <send event="bot.ability.communication.input" target="#_communication"><content expr='{"source_ids": ["gabe"], "target_ids": ["floppy"], "content": "early", "content_type": "text/plain"}'/></send>
     </onentry>
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'communication' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === 'bot.ability.communication.respond' &amp;&amp; _event.data.choices[0].target === undefined &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[0].schema['$schema'] === undefined &amp;&amp; _event.data.choices[0].schema.required.indexOf('text') &gt;= 0" target="step1"/>
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'communication' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === 'bot.ability.communication.respond' &amp;&amp; _event.data.choices[0].target === undefined &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[0].schema['$schema'] === undefined &amp;&amp; _event.data.choices[0].schema.required.indexOf('parts') &gt;= 0" target="step1"/>
   </state>
   <state id="step1">
     <transition event="bot.ability.cognition.input" cond="_event.data.stimulus.data.messages[0].content === 'early'" target="step2"/>

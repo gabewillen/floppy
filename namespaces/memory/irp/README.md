@@ -4,8 +4,8 @@ The implementation report plan of the `memory` namespace, in the format of the
 [W3C SCXML IRP](../../../scxml.rs/tests/conformance/w3c-irp/README.md) and of
 scxml.rs's own namespace suites
 ([scxml.rs/docs/conformance.md](../../../scxml.rs/docs/conformance.md#namespace-suites)):
-3 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
-("Statements"), tested by 9 mandatory documents. It runs through exactly
+5 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
+("Statements"), tested by 17 mandatory documents. It runs through exactly
 the pipeline the W3C IRP runs through (the canonical compiler, the shipped
 Wasm components under the Wasmtime session host, the same oracles and report
 envelope), with the namespace's own extension package and component bound,
@@ -35,12 +35,11 @@ SAXON='java -jar /opt/saxon/saxon-he-12.8.jar' sh scripts/namespace-irp.sh prepa
 sh scripts/namespace-irp.sh baselines memory
 ```
 
-The current baseline (manifest SHA-256 `55aeabfe653d01b05dfeba6f2b26c0f1219a65597c91aa02ea2a1f9add8d5d3c`,
+The current baseline (manifest SHA-256 `fde067bb51cbb9a6f1dc3a41dbc3c12c86b82485d35b496c90e609270b7378e3`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
-measured on macOS arm64 when the namespace was added; regenerate it on
-Linux x86_64, the host `tests/tests/namespace_irp.rs` compares fuel on)
-measures:
+measured on Linux x86_64, the host `tests/tests/namespace_irp.rs` compares
+fuel on) measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 9 / 9 | 0 | `cd4a9d34397855e73d2831a7aed18ee827a059d46c600f850469f56ced4a2af3` | `563b806e0b3b0c1033cee5c009db778fc02cc0595a31a090967230c2ccc86c69` |
+| ECMAScript | 17 / 17 | 0 | `54a7587bdee0d7026bf470b21edff34a98c8c3afd4d30c3a96f16fabc8bfdfc6` | `105fa91182b0571ee2dfc53cdfbc7e4c6a0835ed9eecb63aa6e90262a2cad509` |

@@ -13,7 +13,6 @@
    {
     "context_ref": "<context_ref>",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-<context_ref>",
     "source_ids": [
      "alice"
@@ -34,8 +33,7 @@
     "target_ids": [
      "bot"
     ],
-    "participants": [],
-    "sequences": []
+    "participants": []
    },
    {
     "session_ref": "relationship-b",
@@ -44,8 +42,7 @@
      "bob"
     ],
     "target_ids": [],
-    "participants": [],
-    "sequences": []
+    "participants": []
    }
   ],
   "input": {
@@ -59,7 +56,6 @@
    {
     "context_ref": "a",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-a",
     "source_ids": [
      "alice"
@@ -71,7 +67,6 @@
    {
     "context_ref": "b",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-b",
     "source_ids": [
      "bob"
@@ -92,8 +87,7 @@
     "target_ids": [
      "bot"
     ],
-    "participants": [],
-    "sequences": []
+    "participants": []
    }
   ],
   "input": {
@@ -107,7 +101,6 @@
    {
     "context_ref": "a",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-a",
     "source_ids": [
      "alice"
@@ -119,7 +112,6 @@
    {
     "context_ref": "<context_ref>",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-<context_ref>",
     "source_ids": [
      "carol"
@@ -140,8 +132,7 @@
     "target_ids": [
      "bob"
     ],
-    "participants": [],
-    "sequences": []
+    "participants": []
    },
    {
     "session_ref": "relationship-b",
@@ -152,8 +143,7 @@
     "target_ids": [
      "bot"
     ],
-    "participants": [],
-    "sequences": []
+    "participants": []
    }
   ],
   "input": {
@@ -169,7 +159,6 @@
    {
     "context_ref": "a",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-a",
     "source_ids": [
      "alice"
@@ -181,7 +170,6 @@
    {
     "context_ref": "b",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-b",
     "source_ids": [
      "alice"
@@ -204,8 +192,7 @@
     "target_ids": [
      "bot"
     ],
-    "participants": [],
-    "sequences": []
+    "participants": []
    }
   ],
   "input": {
@@ -221,7 +208,6 @@
    {
     "context_ref": "a",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-a",
     "source_ids": [
      "alice"
@@ -244,8 +230,7 @@
     "target_ids": [],
     "participants": [
      "bot"
-    ],
-    "sequences": []
+    ]
    }
   ],
   "input": {
@@ -263,7 +248,6 @@
     "participants": [
      "bot"
     ],
-    "sequences": [],
     "session_ref": "relationship-a",
     "source_ids": [
      "alice"
@@ -284,8 +268,7 @@
     "target_ids": [],
     "participants": [
      "bot"
-    ],
-    "sequences": []
+    ]
    },
    {
     "session_ref": "relationship-y",
@@ -296,8 +279,7 @@
     "target_ids": [
      "bot"
     ],
-    "participants": [],
-    "sequences": []
+    "participants": []
    }
   ],
   "input": {
@@ -315,7 +297,6 @@
     "participants": [
      "bot"
     ],
-    "sequences": [],
     "session_ref": "relationship-z",
     "source_ids": [
      "alice"
@@ -325,7 +306,6 @@
    {
     "context_ref": "y",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-y",
     "source_ids": [
      "carol"
@@ -348,8 +328,7 @@
     "target_ids": [
      "bot"
     ],
-    "participants": [],
-    "sequences": []
+    "participants": []
    },
    {
     "session_ref": "relationship-y",
@@ -360,8 +339,7 @@
     "target_ids": [
      "alice"
     ],
-    "participants": [],
-    "sequences": []
+    "participants": []
    }
   ],
   "input": {
@@ -377,7 +355,6 @@
    {
     "context_ref": "z",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-z",
     "source_ids": [
      "alice"
@@ -389,7 +366,6 @@
    {
     "context_ref": "y",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-y",
     "source_ids": [
      "bot"
@@ -416,8 +392,7 @@
     "target_ids": [
      "bot"
     ],
-    "participants": [],
-    "sequences": []
+    "participants": []
    }
   ],
   "input": {
@@ -437,7 +412,6 @@
    {
     "context_ref": "a",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-a",
     "source_ids": [
      [
@@ -468,8 +442,7 @@
     "target_ids": [
      "bot"
     ],
-    "participants": [],
-    "sequences": []
+    "participants": []
    }
   ],
   "input": {
@@ -489,7 +462,6 @@
    {
     "context_ref": "a",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-a",
     "source_ids": [
      [
@@ -505,7 +477,6 @@
    {
     "context_ref": "<context_ref>",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-<context_ref>",
     "source_ids": [
      [
@@ -541,8 +512,7 @@
     "target_ids": [
      "bot"
     ],
-    "participants": [],
-    "sequences": []
+    "participants": []
    }
   ],
   "input": {
@@ -567,7 +537,6 @@
    {
     "context_ref": "a",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-a",
     "source_ids": [
      [
@@ -608,8 +577,7 @@
     "target_ids": [
      "bot"
     ],
-    "participants": [],
-    "sequences": []
+    "participants": []
    }
   ],
   "input": {
@@ -634,7 +602,6 @@
    {
     "context_ref": "a",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-a",
     "source_ids": [
      [
@@ -655,7 +622,6 @@
    {
     "context_ref": "<context_ref>",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-<context_ref>",
     "source_ids": [
      [
@@ -688,8 +654,7 @@
     "target_ids": [
      "bot"
     ],
-    "participants": [],
-    "sequences": []
+    "participants": []
    }
   ],
   "input": {
@@ -705,7 +670,6 @@
    {
     "context_ref": "a",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-a",
     "source_ids": [
      "alice",
@@ -718,7 +682,6 @@
    {
     "context_ref": "<context_ref>",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-<context_ref>",
     "source_ids": [
      "alice"
@@ -746,8 +709,7 @@
     "target_ids": [
      "bot"
     ],
-    "participants": [],
-    "sequences": []
+    "participants": []
    },
    {
     "session_ref": "relationship-b",
@@ -763,8 +725,7 @@
     "target_ids": [
      "bot"
     ],
-    "participants": [],
-    "sequences": []
+    "participants": []
    }
   ],
   "input": {
@@ -785,7 +746,6 @@
    {
     "context_ref": "a",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-a",
     "source_ids": [
      "alice",
@@ -802,7 +762,6 @@
    {
     "context_ref": "b",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-b",
     "source_ids": [
      "alice",
@@ -834,8 +793,7 @@
       0,
       0
      ]
-    ],
-    "sequences": []
+    ]
    }
   ],
   "input": {
@@ -861,7 +819,6 @@
       0
      ]
     ],
-    "sequences": [],
     "session_ref": "relationship-a",
     "source_ids": [
      "alice"
@@ -885,8 +842,7 @@
     "target_ids": [
      "bot"
     ],
-    "participants": [],
-    "sequences": []
+    "participants": []
    }
   ],
   "input": {
@@ -906,7 +862,6 @@
    {
     "context_ref": "a",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-a",
     "source_ids": [
      [
@@ -921,7 +876,6 @@
    {
     "context_ref": "<context_ref>",
     "participants": [],
-    "sequences": [],
     "session_ref": "relationship-<context_ref>",
     "source_ids": [
      [

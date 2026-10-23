@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.memory.stm.recent.output",
+  "additionalProperties": false,
+  "description": "Short-term memory read result: entries newest effective clock first.",
+  "examples": [
+    {
+      "entries": [
+        {
+          "created_at": "2026-07-07T12:00:00.123Z",
+          "payload": {
+            "kind": "knock"
+          },
+          "stimulus_name": "environment.sound",
+          "stm_id": "6b6f1d7a2c5440eab91c9f8e33a74a10"
+        }
+      ]
+    }
+  ],
+  "properties": {
+    "entries": {
+      "description": "Entries inside the recency window, newest effective clock first; empty when none.",
+      "items": {
+        "additionalProperties": false,
+        "description": "Recent stimulus the bot's short-term memory observed. payload mirrors what the admitted environment stimulus looked like as bounded scalar fields; selections are never part of it. stm_id is the handle access reinforcement stamps.",
+        "examples": [
+          {
+            "created_at": "2026-07-07T12:00:00.123Z",
+            "event_id": "turn-1",
+            "last_accessed_at": null,
+            "payload": {
+              "kind": "knock",
+              "source": "device-a"
+            },
+            "source": "device-a",
+            "stimulus_name": "environment.sound",
+            "stm_id": "6b6f1d7a2c5440eab91c9f8e33a74a10"
+          }
+        ],
+        "properties": {
+          "stm_id": {
+            "description": "Register entry handle; access reinforcement stamps this id.",
+            "examples": [
+              "6b6f1d7a2c5440eab91c9f8e33a74a10"
+            ],
+            "minLength": 1,
+            "title": "Stm Id",
+            "type": "string"
+          },
+          "stimulus_name": {
+            "description": "Name of the admitted stimulus event.",
+            "examples": [
+              "environment.sound"
+            ],
+            "minLength": 1,
+            "title": "Stimulus Name",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "description": "Bounded scalar projection of the stimulus data as it was admitted.",
+            "examples": [
+              {
+                "kind": "knock"
+              }
+            ],
+            "title": "Payload",
+            "type": "object"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Envelope id of the stimulus event.",
+            "title": "Event Id"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Envelope source address of the stimulus event.",
+            "title": "Source"
+          },
+          "target": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Envelope target address of the stimulus event.",
+            "title": "Target"
+          },
+          "created_at": {
+            "description": "Admission time as UTC ISO text with timezone semantics.",
+            "examples": [
+              "2026-07-07T12:00:00.123Z"
+            ],
+            "minLength": 1,
+            "title": "Created At",
+            "type": "string"
+          },
+          "last_accessed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Access time stamped when grounding used this entry, as UTC ISO text. Effective recency is max(created_at, last_accessed_at).",
+            "title": "Last Accessed At"
+          }
+        },
+        "required": [
+          "stm_id",
+          "stimulus_name",
+          "payload",
+          "created_at"
+        ],
+        "title": "ObservedEvent",
+        "type": "object"
+      },
+      "title": "Entries",
+      "type": "array"
+    }
+  },
+  "required": [
+    "entries"
+  ],
+  "type": "object"
+}

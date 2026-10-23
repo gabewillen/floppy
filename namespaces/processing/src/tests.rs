@@ -131,21 +131,22 @@ fn assigned_json(host: &FakeHost, location: &str) -> Json {
 fn verbose_offers() -> Json {
     json!([{
         "event": "bot.ability.communication.respond",
-        "description": "Say text.",
+        "description": "Say a reply.",
         "target": "communication",
         "schema": {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "title": "bot.ability.communication.respond",
-            "description": "Say text.",
-            "examples": [{"text": "hi"}],
+            "description": "Say a reply.",
+            "examples": [{"parts": [{"words": "hi"}]}],
             "type": "object",
             "properties": {
-                "text": {"type": "string", "title": "Text", "description": "What to say.", "examples": ["hi"]},
+                "parts": {"type": "array", "title": "Parts", "description": "What to say.",
+                          "items": {"type": "object", "properties": {"words": {"type": "string", "title": "Words", "examples": ["hi"]}}}},
                 "title": {"type": "string", "default": {"title": "kept"}},
             },
             "$defs": {"examples": {"enum": [{"title": "kept"}], "title": "dropped"}},
             "anyOf": [{"title": "dropped", "required": ["title"]}],
-            "required": ["text"],
+            "required": ["parts"],
             "additionalProperties": false,
         },
     }])
@@ -163,18 +164,19 @@ fn model_facing_schema_drops_schema_title_and_examples_and_keeps_property_names(
         assigned_json(&host, "offers"),
         json!([{
             "event": "bot.ability.communication.respond",
-            "description": "Say text.",
+            "description": "Say a reply.",
             "target": "communication",
             "schema": {
-                "description": "Say text.",
+                "description": "Say a reply.",
                 "type": "object",
                 "properties": {
-                    "text": {"type": "string", "description": "What to say."},
+                    "parts": {"type": "array", "description": "What to say.",
+                              "items": {"type": "object", "properties": {"words": {"type": "string"}}}},
                     "title": {"type": "string", "default": {"title": "kept"}},
                 },
                 "$defs": {"examples": {"enum": [{"title": "kept"}]}},
                 "anyOf": [{"required": ["title"]}],
-                "required": ["text"],
+                "required": ["parts"],
                 "additionalProperties": false,
             },
         }])
@@ -208,8 +210,8 @@ fn model_facing_schema_over_the_bound_drops_descriptions_before_it_drops_the_cho
     let bare: Json = serde_json::from_str(&bare).unwrap();
     assert_eq!(bare[0]["target"], json!("communication"));
     assert_eq!(
-        bare[0]["schema"]["properties"]["text"],
-        json!({"type": "string"})
+        bare[0]["schema"]["properties"]["parts"],
+        json!({"type": "array", "items": {"type": "object", "properties": {"words": {"type": "string"}}}})
     );
     // A property named description is a name, not a keyword: it stays.
     let named = json!([{"event": "e", "schema": {"properties": {"description": {"type": "string", "description": "x"}}}}]);
@@ -431,15 +433,15 @@ fn assigned_any(host: &FakeHost, location: &str) -> Json {
         other => panic!("expected JSON, got {other:?}"),
     }
 }
-fn clear_choice() -> Json {
-    json!({"event": "bot.clear_focus", "schema": {"type": "object"}})
+fn deactivate_choice() -> Json {
+    json!({"event": "bot.deactivate", "schema": {"type": "object"}})
 }
 fn respond_offer() -> Json {
     json!({
         "event": "bot.ability.communication.respond",
-        "description": "Say text.",
-        "schema": {"title": "respond", "type": "object", "description": "Say text.",
-                   "properties": {"text": {"type": "string", "examples": ["hi"]}}},
+        "description": "Say a reply.",
+        "schema": {"title": "respond", "type": "object", "description": "Say a reply.",
+                   "properties": {"parts": {"type": "array", "examples": [[{"words": "hi"}]]}}},
     })
 }
 
@@ -460,7 +462,7 @@ fn collect_attributes(bound: &str) -> Vec<Attribute> {
 
 fn collecting() -> FakeHost {
     with_values(&[
-        ("own", json!([clear_choice()])),
+        ("own", json!([deactivate_choice()])),
         (
             "offers",
             json!({
@@ -484,10 +486,10 @@ fn collect_offered_events_tags_each_choice_with_its_offering_session_in_name_ord
         Ok(Executed::Handled)
     );
     let choices = json!([
-        {"event": "bot.clear_focus", "schema": {"type": "object"}, "target": "session.floppy"},
+        {"event": "bot.deactivate", "schema": {"type": "object"}, "target": "session.floppy"},
         {"event": "bot.ability.cognition.ignore", "schema": {"type": "object"}, "target": "session.floppy.cognition"},
-        {"event": "bot.ability.communication.respond", "description": "Say text.", "target": "session.floppy.communication",
-         "schema": {"type": "object", "description": "Say text.", "properties": {"text": {"type": "string"}}}},
+        {"event": "bot.ability.communication.respond", "description": "Say a reply.", "target": "session.floppy.communication",
+         "schema": {"type": "object", "description": "Say a reply.", "properties": {"parts": {"type": "array"}}}},
         {"event": "bot.ability.cognition.ignore", "schema": {"type": "object"}, "target": "session.floppy.communication"},
     ]);
     assert_eq!(assigned_any(&host, "choices"), choices);
@@ -613,9 +615,9 @@ fn send_builds_the_originals_dispatch_tool_schema_of_the_choices() {
     let mut host = with_values(&[(
         "choices",
         json!([
-            {"event": "bot.clear_focus", "schema": {"$schema": "x", "title": "Clear", "description": "Clear the focus.", "examples": [{"why": "done"}], "type": "object", "properties": {"why": {"type": "string"}}}},
-            {"event": "bot.ability.communication.respond", "description": "Say text.", "target": "communication",
-             "schema": {"type": "object", "additionalProperties": true, "properties": {"text": {"type": "string"}}, "required": ["text"]}},
+            {"event": "bot.deactivate", "schema": {"$schema": "x", "title": "Deactivate", "description": "Deactivate the bot.", "examples": [{"why": "done"}], "type": "object", "properties": {"why": {"type": "string"}}}},
+            {"event": "bot.ability.communication.respond", "description": "Say a reply.", "target": "communication",
+             "schema": {"type": "object", "additionalProperties": true, "properties": {"parts": {"type": "array"}}, "required": ["parts"]}},
             {"event": "bot.ability.cognition.ignore", "target": "cognition", "schema": "not an object"},
             {"event": "bot.ability.cognition.ignore", "target": "communication", "description": "later", "schema": {}},
             {"event": "bot.ability.cognition.ignore", "target": "cognition", "schema": {}},
@@ -636,7 +638,7 @@ fn send_builds_the_originals_dispatch_tool_schema_of_the_choices() {
     };
     let reason =
         json!({"type": "string", "description": "Optional short reason this event was selected."});
-    let clear_example = json!({"event": "bot.clear_focus", "data": {"why": "done"}});
+    let deactivate_example = json!({"event": "bot.deactivate", "data": {"why": "done"}});
     let expected = json!({
         "description": "Dispatch all events necessary for the input. Call once. Multi-select by listing every offered event this turn requires in the events array (for example a device action and speech together when both are needed). Each item must match one offered event branch; payload fields and requirements are defined on that event's data schema. An empty events list leaves the turn unhandled for the host cascade (e.g. deliberative reasoning); use an explicit ignore/pass event when the stage should handle the turn with no environment actions.",
         "type": "object",
@@ -646,22 +648,22 @@ fn send_builds_the_originals_dispatch_tool_schema_of_the_choices() {
             "items": {"anyOf": [
                 {
                     "type": "object",
-                    "description": "Clear the focus.",
+                    "description": "Deactivate the bot.",
                     "properties": {
-                        "event": {"type": "string", "enum": ["bot.clear_focus"]},
-                        "data": {"title": "Clear", "description": "Clear the focus.", "examples": [{"why": "done"}], "type": "object", "properties": {"why": {"type": "string"}}, "additionalProperties": false},
+                        "event": {"type": "string", "enum": ["bot.deactivate"]},
+                        "data": {"title": "Deactivate", "description": "Deactivate the bot.", "examples": [{"why": "done"}], "type": "object", "properties": {"why": {"type": "string"}}, "additionalProperties": false},
                         "reason": reason,
                     },
                     "required": ["event"],
                     "additionalProperties": false,
-                    "examples": [clear_example],
+                    "examples": [deactivate_example],
                 },
                 {
                     "type": "object",
                     "description": "bot.ability.communication.respond",
                     "properties": {
                         "event": {"type": "string", "enum": ["bot.ability.communication.respond"]},
-                        "data": {"type": "object", "additionalProperties": true, "properties": {"text": {"type": "string"}}, "required": ["text"]},
+                        "data": {"type": "object", "additionalProperties": true, "properties": {"parts": {"type": "array"}}, "required": ["parts"]},
                         "reason": reason,
                         "target": {"type": "string", "enum": ["communication"], "description": "Actor that receives this event. Fixed for this turn because only one actor enables it in the live topology."},
                     },
@@ -692,7 +694,7 @@ fn send_builds_the_originals_dispatch_tool_schema_of_the_choices() {
                     "additionalProperties": false,
                 },
             ]},
-            "examples": [[], clear_example],
+            "examples": [[], deactivate_example],
         }},
         "required": ["events"],
         "additionalProperties": false,
@@ -787,7 +789,7 @@ fn malformed_sends_raise_error_execution_and_assign_nothing() {
 
 #[test]
 fn collect_offered_events_without_offers_tags_only_the_documents_own() {
-    let mut host = with_values(&[("own", json!([clear_choice()]))]);
+    let mut host = with_values(&[("own", json!([deactivate_choice()]))]);
     execute(
         "collect_offered_events",
         &[location("choices"), attr("choices", "own")],
@@ -797,7 +799,7 @@ fn collect_offered_events_without_offers_tags_only_the_documents_own() {
     .expect("collected");
     assert_eq!(
         assigned_any(&host, "choices"),
-        json!([{"event": "bot.clear_focus", "schema": {"type": "object"}, "target": "session.floppy"}])
+        json!([{"event": "bot.deactivate", "schema": {"type": "object"}, "target": "session.floppy"}])
     );
     // Only the choices are assigned without overlocation and sizelocation.
     assert_eq!(host.assigned.len(), 1);
@@ -852,7 +854,7 @@ fn collect_offered_events_offers_the_focused_devices_events_under_its_id_by_its_
     assert_eq!(
         targets,
         [
-            "bot.clear_focus@session.floppy",
+            "bot.deactivate@session.floppy",
             "bot.ability.cognition.ignore@session.floppy.cognition",
             "bot.ability.communication.respond@session.floppy.communication",
             "bot.ability.cognition.ignore@session.floppy.communication",
@@ -938,7 +940,7 @@ fn malformed_device_offers_raise_error_execution_and_assign_nothing() {
 
 #[test]
 fn send_with_max_bounds_the_events_array() {
-    let mut host = with_values(&[("choices", json!([clear_choice()]))]);
+    let mut host = with_values(&[("choices", json!([deactivate_choice()]))]);
     execute(
         "send",
         &[
@@ -953,7 +955,7 @@ fn send_with_max_bounds_the_events_array() {
     let events = &assigned_any(&host, "schema")["properties"]["events"];
     assert_eq!(events["maxItems"], json!(1));
     // Without max the array is unbounded, as the original's tool is.
-    let mut host = with_values(&[("choices", json!([clear_choice()]))]);
+    let mut host = with_values(&[("choices", json!([deactivate_choice()]))]);
     execute(
         "send",
         &[location("schema"), attr("choices", "choices")],

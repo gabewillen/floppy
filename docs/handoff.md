@@ -7,10 +7,42 @@ history lives in [decisions.md](decisions.md) (numbered decisions),
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
-Last updated: 2026-10-21.
+Last updated: 2026-10-22.
 
 ## Current state (2026-10-09) — resume here
 
+- **Seeing (2026-10-22, D185 to D189):** `abilities/seeing/seeing.scx`
+  is the original's eye: it holds the newest `environment.visual` of each
+  `source` (a new [floppy field]; the schema moved to `abilities/schemas/`),
+  measures change through the new `vision` service (`byte_identity`,
+  `frame_diff`), looks when the model selects `bot.ability.seeing.look`, and
+  hands each sight to the body as `bot.ability.cognition.input`; object
+  detection and description are its per-view stage children over generate.
+  The body invokes it always, and its `seeing_enabled` switch (off by
+  default) decides whether it is expected, fed and offered; every bot run
+  now grants the vision service a media directory. Faces wait on decision 6.
+  `frame_diff` decodes as the original's OpenCV 5.0.0 build does (its own
+  JPEG DC decoder, libpng's gray and gamma, `image-webp`, Exif
+  orientation), checked against OpenCV fixtures in
+  `services/vision/src/testdata/`; Cargo.lock carries `miniz_oxide` 0.8.9
+  for `png` beside scxml.rs's 0.9 (D185). A document IRP case may now
+  require its run's logs (`logs=` in cases.py, `logs.json`).
+- **Body and room parity (2026-10-22, D155 to D160):** `bot.clear_focus`
+  is gone (focus stays until the bot focuses another device; the reflex
+  floor keeps it). A busy body holds what arrives (`floppy.held`), and the
+  next turn takes at most 8 percepts, 64 KiB and 32 participants: one
+  percept as itself, more as one `bot.perceived {percepts}`; what is still
+  held when the bot leaves active is released (`floppy.released`), never
+  replayed. `bot.input` carries `participants`, and every schema inlines
+  the original's one `Participant` (`contracts.rs` checks they are equal;
+  scxml.rs refuses a cross-file `$ref`). The room supervises each bot in
+  its own `supervising.<bot>` region with the original's restart budget
+  and backoff, and a device may sit on an object (`on`, rendered on its
+  `<device>`). The body starts a firmware after its abilities
+  (`firmware_src`, default `bots/floppy/firmware/firmware.scx`, which offers
+  nothing); an owner's firmware is offered, read each turn and rendered as
+  `<firmware ref id state>`. A test that lays the body out must copy
+  `firmware/` beside it, as `body.rs` does.
 - **One schema file per event (2026-10-21, D125):** scxml.rs
   `5bc75e72` resolves an `event:schema` reference against its
   document's base URI like any relative URI, `..` included, so the twin
@@ -266,7 +298,11 @@ Last updated: 2026-10-21.
   or this branch. Reflection now stores a failed turn's episode (behavior
   null), so a turn whose reflection fails is not lost to the next turn's
   recall. `live_conversation` now asserts a behavior learned by turn 2 and
-  "green" in turn 4's answer (model-dependent).
+  "green" in turn 4's answer (model-dependent). **Amended by D176
+  (2026-10-22):** the conversation hands reasoning only the current
+  exchange, so turn 4 recalls "green" from
+  reflection's episode of turn 1 (`prior_episodes`), not from the
+  messages; `live_conversation` has not been rerun since.
 - **Speaking bound and self-hearing (2026-10-12, D98):** speaking's
   `encoding_timeout_ms` is 30 s (the communication passes 30 s and bounds
   a response by 36 s), since Gemini's unstreamed synthesis of a sentence
@@ -351,18 +387,22 @@ Last updated: 2026-10-21.
 ## Intuition contract and reasoning prompt (2026-10-10)
 
 - **Intuition** uses the decision service's kind `predicate` (`select`
-  until D120; the original's TypeSafe `Processor.process`): `decision.selected {selections: [{event,
-  data, confidence}]}`, every groundable event with its own probability.
-  Intuition observes their least confidence (0-100) with
+  until D120; the reference decision processor, D150): `decision.selected
+  {selections: [{event, data, confidence, target?}]}`, only the chosen event
+  with its probability. Intuition observes that confidence (0-100) with
   `<intuition:observe>` first, then `<intuition:escalate>` compares it with
   the updated threshold (the original's `_tune_confidence`, D114). `low_confidence` and `deliberative_input` send
-  the environment actions before the turn escalates (D113; the
-  2026-10-11 dedupe is gone). The service's pass
-  criterion is the original's `__unhandled__`, its state document the original's
-  `{"turn": {"envelope": {"name"}, "data"}}` (built by the service from
-  the `stimulus` param since D120), and data grounds from the
-  non-null stimulus value then the enum (no `const`). `choice` (`choose`
-  until D120) lost its `threshold` (and `below-threshold`).
+  only the environment actions before the turn escalates (never the ignore
+  or the handoff), and every donedata carries `acted`, what was sent. The
+  service's pass criteria are one per tier of `hand_ons` (`__intuition__`,
+  `__reasoning__`; `["reasoning"]` by default), a pass returning `hand_to`;
+  its state is `{turn: T}`, T the stimulus's `<cognition:model_facing_content>`,
+  and data grounds from the `stimulus` param's non-null value then the enum
+  (no `const`). With `max_context_tokens` the request is fitted to the
+  model's context, and intuition learns and returns `bytes_per_token` from
+  the service's done data. `choice` (`choose` until D120, the builder's
+  triage) keeps its pass criterion `__unhandled__`; it lost its `threshold`
+  (and `below-threshold`).
 - **Reasoning** sends the original's `model_facing_xml(ProcessorInput)` under
   the original's budgets (`<cognition:model_facing_content>`, D114; it was
   `promptProjection()` in reasoning.js, checked byte-for-byte against the
@@ -529,8 +569,9 @@ Last updated: 2026-10-21.
 - Live tests: `FLOPPY_LIVE_ENV_FILE` (colon-separated env files) and
   `FLOPPY_LIVE_MODEL`.
 - Model endpoint (decision D31): the `generate` service has no default
-  backend; every run needs `FLOPPY_BASE_URL` and `FLOPPY_API_KEY`, and
-  without either the builder ends at once in `failed` (`unconfigured`).
+  backend; every run needs `FLOPPY_BASE_URL`, and without it the builder
+  ends at once in `failed` (`unconfigured`); `FLOPPY_API_KEY` is needed
+  only by a keyed backend (a run without it sends no key header, D127).
   floppy's gitignored `.env` sets them to the user's two DGX Sparks:
   - **direct vLLM:** `FLOPPY_BASE_URL=http://192.168.2.89:8000/v1`, model
     `Qwen/Qwen3.8-Flash-Next` (the builder's default), `FLOPPY_API_KEY` (a
@@ -853,6 +894,12 @@ The remaining the original port runs as one ultracode run with these grants:
 
 ## Backlog (agreed, not started)
 
+- scxml.rs: check a service's WASI grant only when an invocation of it
+  starts (or let a run declare a grant optional). `scx run` resolves every
+  service the bound document tree names before the session starts, even one
+  in a state never entered, so the floppy bot's every run grants the vision
+  service its media directory though seeing is off by default (D185, PR #8).
+  With the check moved, the default run would need no vision grant.
 - Browser parity slice 2 (services, resolution, WASI shims, element trace).
 - `scx compile --target native`: one self-contained executable per platform;
   top-level `<data>` ids are the arguments, `<donedata>` JSON on stdout,

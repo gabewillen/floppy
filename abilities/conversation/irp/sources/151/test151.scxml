@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- conversation-6: an append with a committed id, source and target is answered without being committed again; another source is committed. -->
+<!-- conversation-6: an append with an id, source and target already in the exchange is answered without being committed again; another source is committed. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="conversation" type="scxml" src="../../../conversation.scx"/>
@@ -12,19 +12,19 @@
   </state>
   <state id="step1">
     <onentry>
-      <send event="bot.ability.conversation.append" target="#_conversation"><content expr='{"message": {"sequence": 0, "direction": "outbound", "source_ids": ["bot"], "target_ids": ["alice"], "content": "once", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "r-1", "source": "q"}}}'/></send>
+      <send event="bot.ability.conversation.append" target="#_conversation"><content expr='{"message": {"direction": "outbound", "source_ids": ["bot"], "target_ids": ["alice"], "content": "once", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "r-1", "source": "q"}}}'/></send>
     </onentry>
-    <transition event="bot.ability.conversation.output" cond="_event.data.messages.length === 1 &amp;&amp; _event.data.messages[0].sequence === 0 &amp;&amp; _event.data.parent === null" target="step2"/>
+    <transition event="bot.ability.conversation.output" cond="_event.data.messages.length === 1 &amp;&amp; _event.data.messages[0].content === 'once' &amp;&amp; _event.data.parent === null" target="step2"/>
   </state>
   <state id="step2">
     <onentry>
-      <send event="bot.ability.conversation.append" target="#_conversation"><content expr='{"message": {"sequence": 0, "direction": "outbound", "source_ids": ["bot"], "target_ids": ["alice"], "content": "once again", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "r-1", "source": "q"}}}'/></send>
+      <send event="bot.ability.conversation.append" target="#_conversation"><content expr='{"message": {"direction": "outbound", "source_ids": ["bot"], "target_ids": ["alice"], "content": "once again", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "r-1", "source": "q"}}}'/></send>
     </onentry>
     <transition event="bot.ability.conversation.output" cond="_event.data.messages.length === 1" target="step3"/>
   </state>
   <state id="step3">
     <onentry>
-      <send event="bot.ability.conversation.append" target="#_conversation"><content expr='{"message": {"sequence": 0, "direction": "outbound", "source_ids": ["bot"], "target_ids": ["alice"], "content": "other", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "r-1"}}}'/></send>
+      <send event="bot.ability.conversation.append" target="#_conversation"><content expr='{"message": {"direction": "outbound", "source_ids": ["bot"], "target_ids": ["alice"], "content": "other", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "r-1"}}}'/></send>
     </onentry>
     <transition event="bot.ability.conversation.output" cond="_event.data.messages.length === 2 &amp;&amp; _event.data.messages[1].content === 'other' &amp;&amp; _event.data.messages[1].provenance.source === null" target="step4"/>
   </state>

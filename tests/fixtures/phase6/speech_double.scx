@@ -9,12 +9,12 @@
   mode (rewritten by a test) picks the answer:
     'encode'  bot.ability.vocal.speech.encoding.output {audio: output,
               media_type, sample_rate_hz: 24000, channels: 1, duration:
-              the text's length / 10 seconds}
+              the words' length / 10 seconds}
     'unmeasured'  the same with duration, sample_rate_hz and channels null
     'fail'    bot.ability.failed {message: "unconfigured"}
     'silent'  no answer, ever (a request that hangs)
   then it ends (final), as the service does, except 'silent'. It logs
-  speech.encode with the text it was given.
+  speech.encode with the words of the parts it was given, joined.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        version="1.0" datamodel="ecmascript" name="speech_double" initial="answering">
@@ -22,6 +22,7 @@
     <data id="mode" expr="'encode'"/>
     <data id="operation" expr="null"/>
     <data id="model" expr="null"/>
+    <data id="parts" expr="null"/>
     <data id="text" expr="null"/>
     <data id="voice" expr="null"/>
     <data id="output" expr="null"/>
@@ -30,6 +31,7 @@
 
   <state id="answering">
     <onentry>
+      <assign location="text" expr="parts.map(function (part) { return part.words || ''; }).join('')"/>
       <log label="speech.encode" expr="operation + ' ' + text + ' -> ' + output"/>
       <if cond="mode === 'encode'">
         <send event="bot.ability.vocal.speech.encoding.output" target="#_parent">

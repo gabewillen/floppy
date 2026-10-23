@@ -8,7 +8,7 @@
 </datamodel>
 <state id="s0">
   <onentry>
-    <conversation:message_for_turn location="l" keylocation="k" direction="inbound" event="'e'" message="msg" sequence="0"/>
+    <conversation:message_for_turn location="l" keylocation="k" direction="inbound" event="'e'" message="msg"/>
     <raise event="executed"/>
   </onentry>
   <transition event="error.execution" cond="l === 'untouched' &amp;&amp; k === 'untouched'" conf:targetpass=""/>

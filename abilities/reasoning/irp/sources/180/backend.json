@@ -1,0 +1,22 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "{\"events\": [{\"event\": \"bot.ability.communication.respond\", \"data\": {\"parts\": [{\"words\": \"Hi! I am floppy.\"}]}, \"reason\": \"greet\", \"target\": \"session\"}, {\"event\": \"bot.ability.reasoning.input\", \"data\": {}, \"reason\": \"this needs thought\", \"target\": \"session.reasoning\"}]}"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.memory.stm.reinforce",
+  "additionalProperties": false,
+  "description": "Short-term memory reinforcement: the stm_ids of entries grounding just relied on. Stamping them moves their effective clock forward so used signals outlive arrival churn.",
+  "examples": [
+    {
+      "stm_ids": [
+        "6b6f1d7a2c5440eab91c9f8e33a74a10"
+      ]
+    }
+  ],
+  "properties": {
+    "stm_ids": {
+      "description": "Register entry handles (ObservedEvent.stm_id) to stamp with the access time.",
+      "examples": [
+        [
+          "6b6f1d7a2c5440eab91c9f8e33a74a10"
+        ]
+      ],
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "title": "Stm Ids",
+      "type": "array"
+    }
+  },
+  "required": [
+    "stm_ids"
+  ],
+  "type": "object"
+}

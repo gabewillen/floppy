@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- floppy-7: an input during a turn waits and becomes turn 2 when the turn ends. -->
+<!-- floppy-7: an input during a turn is held and becomes turn 2 when the turn ends. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="floppy" type="scxml" src="../../../floppy.scx">
     <param name="environment" expr="_sessionid"/>
+    <param name="database" expr="null"/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>

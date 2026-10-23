@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- conversation-1: a message_for_turn with the removed keylocation, or the removed commit element, raises error.execution and assigns nothing. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation">
+<datamodel>
+  <data id="l" expr="'untouched'"/>
+  <data id="k" expr="'untouched'"/>
+  <data id="msg" expr="({source_ids: ['alice'], target_ids: [], content: 'AAAA', content_type: 'Audio/PCM', extra: 1})"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:message_for_turn location="l" keylocation="k" direction="inbound" event="'e'" message="msg"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="l === 'untouched' &amp;&amp; k === 'untouched'" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

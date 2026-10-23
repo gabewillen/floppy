@@ -3,7 +3,7 @@
      numbered statement of namespaces/memory/README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/namespaces/memory/irp/sources">
   <assert id="memory-1" specnum="1" specid="#memory-1">
-    <![CDATA[Each element (to_json, contents) takes exactly its declared attributes, the required ones present and none empty, and no content, and the namespace has no other element: a malformed element raises error.execution and assigns nothing (its schema, package/memory.xsd, rejects it before any run under scx validate).]]>
+    <![CDATA[Each element (to_json, contents, cut_at_word, stm_projection) takes exactly its declared attributes, the required ones present and none empty, and no content, and the namespace has no other element: a malformed element raises error.execution and assigns nothing (its schema, package/memory.xsd, rejects it before any run under scx validate).]]>
     <test id="900" conformance="mandatory" manual="false">
       <start uri="900/test900.txml"/>
     </test>
@@ -12,6 +12,12 @@
     </test>
     <test id="902" conformance="mandatory" manual="false">
       <start uri="902/test902.txml"/>
+    </test>
+    <test id="903" conformance="mandatory" manual="false">
+      <start uri="903/test903.txml"/>
+    </test>
+    <test id="904" conformance="mandatory" manual="false">
+      <start uri="904/test904.txml"/>
     </test>
   </assert>
   <assert id="memory-2" specnum="2" specid="#memory-2">
@@ -36,6 +42,30 @@
     </test>
     <test id="922" conformance="mandatory" manual="false">
       <start uri="922/test922.txml"/>
+    </test>
+  </assert>
+  <assert id="memory-4" specnum="4" specid="#memory-4">
+    <![CDATA[<memory:cut_at_word> writes {text, cut} as the original's _cut_at_word returns them: words of at most 2048 UTF-8 bytes unchanged and cut false; longer words cut, cut true, to their whole characters within the bound, less the partial word the bound falls inside when an earlier word break exists, trailing white space (Unicode White_Space) removed; words that are not a string raise error.execution and assign nothing.]]>
+    <test id="930" conformance="mandatory" manual="false">
+      <start uri="930/test930.txml"/>
+    </test>
+    <test id="931" conformance="mandatory" manual="false">
+      <start uri="931/test931.txml"/>
+    </test>
+    <test id="932" conformance="mandatory" manual="false">
+      <start uri="932/test932.txml"/>
+    </test>
+  </assert>
+  <assert id="memory-5" specnum="5" specid="#memory-5">
+    <![CDATA[<memory:stm_projection> writes the original's _payload_projection of a value: an object's fields in their order, keeping each with a non-empty key and a boolean, number, or string of at most 40 characters, at most 16 fields, every other field dropped, never truncated; a bare boolean, number or bounded string as {value}; anything else {}.]]>
+    <test id="940" conformance="mandatory" manual="false">
+      <start uri="940/test940.txml"/>
+    </test>
+    <test id="941" conformance="mandatory" manual="false">
+      <start uri="941/test941.txml"/>
+    </test>
+    <test id="942" conformance="mandatory" manual="false">
+      <start uri="942/test942.txml"/>
     </test>
   </assert>
 </assertions>

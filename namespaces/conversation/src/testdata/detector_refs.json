@@ -21,8 +21,7 @@
       4
      ],
      "alice"
-    ],
-    "sequences": []
+    ]
    },
    {
     "session_ref": "relationship-a",
@@ -37,8 +36,7 @@
       1,
       0
      ]
-    ],
-    "sequences": []
+    ]
    }
   ],
   "refs": [
@@ -84,8 +82,7 @@
     "participants": [
      "b",
      "a"
-    ],
-    "sequences": []
+    ]
    },
    {
     "session_ref": "relationship-{\"identity_groups\":[[],[\"a\"]]}",
@@ -96,8 +93,7 @@
     "target_ids": [],
     "participants": [
      "a"
-    ],
-    "sequences": []
+    ]
    }
   ],
   "refs": [

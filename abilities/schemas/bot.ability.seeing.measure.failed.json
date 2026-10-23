@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.seeing.measure.failed",
+  "description": "A view could not be measured; nothing is handed on and nothing else measures it.",
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "description": "Failure kind: measure_failed when the change measure answered with a failure, timeout when it did not answer within the measure timeout (the original counts that outcome but raises no event for it) [floppy value].",
+      "enum": [
+        "measure_failed",
+        "timeout"
+      ],
+      "examples": [
+        "measure_failed",
+        "timeout"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "message": {
+      "description": "Operator-facing reason; never a metric or span value.",
+      "examples": [
+        "the vision service could not measure the view (error.execution)"
+      ],
+      "minLength": 1,
+      "title": "Message",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "message"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "kind": "measure_failed",
+      "message": "the vision service could not measure the view (error.execution)"
+    }
+  ]
+}

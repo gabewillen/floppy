@@ -6,28 +6,19 @@
     "kind": "namespace-irp",
     "source": "namespaces/memory/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "cd4a9d34397855e73d2831a7aed18ee827a059d46c600f850469f56ced4a2af3",
-    "source_digest": "85a1e25dbb720fabb7570ab0ff1b21d841379ba1422d47b98c50a92a6830ad74",
-    "manifest_digest": "55aeabfe653d01b05dfeba6f2b26c0f1219a65597c91aa02ea2a1f9add8d5d3c",
+    "corpus_digest": "54a7587bdee0d7026bf470b21edff34a98c8c3afd4d30c3a96f16fabc8bfdfc6",
+    "source_digest": "da2586612bea631d7ace0b365eeac61d874a79d2c8ca5632e251ca8c9d738a59",
+    "manifest_digest": "fde067bb51cbb9a6f1dc3a41dbc3c12c86b82485d35b496c90e609270b7378e3",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
     "transformer": {
-      "name": "saxon-process-sandboxed",
+      "name": "saxon-process",
       "version": "SaxonJ-HE 12.8 from Saxonica",
       "command_argv": [
-        "java",
-        "-jar",
-        "saxon-he-12.8.jar",
-        "-a:off",
-        "-p:off",
-        "-dtd:off",
-        "-expand:off",
-        "-ext:off",
-        "-xi:off",
-        "-xsiloc:off"
+        "saxon"
       ],
-      "executable_digest": "c13657d80564f40f10b8ab91b29fdc74080e7d8bb36d6cd06589292755d3476f"
+      "executable_digest": "5a0e355851c39835c20fd16a4663e049f352e2df4f1c33e2eac013315f55027d"
     },
     "datamodel": "ecmascript",
     "provenance": "baseuri=https://github.com/stateforward/floppy/tree/main/namespaces/memory/irp/sources"
@@ -41,17 +32,17 @@
   "engine": {
     "name": "scxml-machine",
     "version": "0.2.0",
-    "source_digest": "b3fde869dbf1c6e0b9494fb7013aef41e3436225ac598902afafdf761c9e2dd5"
+    "source_digest": "dff3fc8cedae948050fb2cd1bc417c9ac835b35059f1477dc30d8b4f2e746452"
   },
   "data_model": {
     "name": "scxml-data-model-ecmascript",
     "version": "0.2.0",
-    "source_digest": "e84a0f3d2c9335c246e1e63d11927c9778ca51ce1891cbf024b93660b8d2d969"
+    "source_digest": "b8ca1a4238a8036c4c007d5cc58819b7a813402ddce88076597f178b9fb0f311"
   },
   "runner": {
     "name": "scxml-conformance/wasm",
     "version": "0.2.0",
-    "source_digest": "d7eac1d8e8b8a47312cef5eb06ab22dd43d9c5bd7130a5b9da6cddfcccb8eee3"
+    "source_digest": "3b6be0410f9c49955d4696f74088899323c31109bb66e16a60f8912bb46dcb17"
   },
   "manual_oracle": {
     "name": "scxml-conformance-manual-oracle",
@@ -62,9 +53,9 @@
     {
       "namespace_uri": "https://github.com/stateforward/floppy/namespaces/memory",
       "package_version": "0.1.0",
-      "manifest_sha256": "16003d27a22d27786303d3f8db09f367cc45cf953a356eae22f69255250b4d4f",
-      "schema_sha256": "0322f8a342e8222203d5e568c766949c9388f57bba0c2a2607e5d4b77173d508",
-      "component_sha256": "b2051ba9d3012824121c785910504b858abcb724347fa0b79fa92de4dcaa10b8"
+      "manifest_sha256": "33d2210472159cb46f24898f2b5c813e041df60ca6e15c95870bb2b0cd52e3fe",
+      "schema_sha256": "c32ef093c63e7b40e374a860d5aeb443845d010745861b223e8829dc3e4f5ee9",
+      "component_sha256": "a25f7670ebf1362fc6978b7603755189cea645e4bbe52242e4bb920cf9711980"
     }
   ],
   "ir_version": 5,
@@ -77,11 +68,11 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "b323581e9a79b374a9b761030255b50a383eb78629bcfe8094926447eb730716",
+  "identity_digest": "abddf71e46a369f631d769b48885cd2fdddd400edb21357722fa701fdcb3532a",
   "summary": {
-    "total_selected": 9,
-    "applicable_selected": 9,
-    "passed": 9,
+    "total_selected": 17,
+    "applicable_selected": 17,
+    "passed": 17,
     "failed": 0,
     "unsupported": 0,
     "invalid": 0,
@@ -91,8 +82,8 @@
     "not_passing": 0,
     "passed_under_erratum": 0,
     "mandatory": {
-      "applicable_selected": 9,
-      "passed": 9,
+      "applicable_selected": 17,
+      "passed": 17,
       "failed": 0,
       "unsupported": 0,
       "invalid": 0,
@@ -116,8 +107,8 @@
     },
     "by_spec": {
       "#memory-1": {
-        "applicable_selected": 3,
-        "passed": 3,
+        "applicable_selected": 5,
+        "passed": 5,
         "failed": 0,
         "unsupported": 0,
         "invalid": 0,
@@ -150,12 +141,36 @@
         "not_applicable": 0,
         "not_passing": 0,
         "passed_under_erratum": 0
+      },
+      "#memory-4": {
+        "applicable_selected": 3,
+        "passed": 3,
+        "failed": 0,
+        "unsupported": 0,
+        "invalid": 0,
+        "harness_error": 0,
+        "skipped": 0,
+        "not_applicable": 0,
+        "not_passing": 0,
+        "passed_under_erratum": 0
+      },
+      "#memory-5": {
+        "applicable_selected": 3,
+        "passed": 3,
+        "failed": 0,
+        "unsupported": 0,
+        "invalid": 0,
+        "harness_error": 0,
+        "skipped": 0,
+        "not_applicable": 0,
+        "not_passing": 0,
+        "passed_under_erratum": 0
       }
     },
     "by_datamodel": {
       "ecmascript": {
-        "applicable_selected": 9,
-        "passed": 9,
+        "applicable_selected": 17,
+        "passed": 17,
         "failed": 0,
         "unsupported": 0,
         "invalid": 0,
@@ -220,6 +235,56 @@
     },
     {
       "id": "902",
+      "assertion_id": "memory-1",
+      "spec_num": "1",
+      "spec_id": "#memory-1",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "903",
+      "assertion_id": "memory-1",
+      "spec_num": "1",
+      "spec_id": "#memory-1",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "904",
       "assertion_id": "memory-1",
       "spec_num": "1",
       "spec_id": "#memory-1",
@@ -373,6 +438,156 @@
       "assertion_id": "memory-3",
       "spec_num": "3",
       "spec_id": "#memory-3",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "930",
+      "assertion_id": "memory-4",
+      "spec_num": "4",
+      "spec_id": "#memory-4",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "931",
+      "assertion_id": "memory-4",
+      "spec_num": "4",
+      "spec_id": "#memory-4",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "932",
+      "assertion_id": "memory-4",
+      "spec_num": "4",
+      "spec_id": "#memory-4",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "940",
+      "assertion_id": "memory-5",
+      "spec_num": "5",
+      "spec_id": "#memory-5",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "941",
+      "assertion_id": "memory-5",
+      "spec_num": "5",
+      "spec_id": "#memory-5",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "942",
+      "assertion_id": "memory-5",
+      "spec_num": "5",
+      "spec_id": "#memory-5",
       "datamodel": "ecmascript",
       "conformance": "mandatory",
       "manual": false,

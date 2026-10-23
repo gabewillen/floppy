@@ -1,0 +1,6 @@
+{"label":"harness.ready","session":"session","text":"sensitivity","type":"log"}
+{"label":"harness.scored","session":"session","text":"media/quiet producing false at 54","type":"log"}
+{"label":"harness.scored","session":"session","text":"media/still-quiet producing false at 54","type":"log"}
+{"label":"harness.scored","session":"session","text":"media/cut-in producing true at 54","type":"log"}
+{"label":"harness.scored","session":"session","text":"media/own producing true at 0","type":"log"}
+{"label":"harness.scored","session":"session","text":"media/closed producing false at 54","type":"log"}

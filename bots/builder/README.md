@@ -32,7 +32,7 @@ final states and its parent receives that state's done data as
 | --- | --- | --- |
 | `builder.request` | an event to the builder (standard input when run directly) | `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?}`: the specification, the name the draft's documents are written under (default the plan's; each run of characters other than letters, digits, `_` and `-` becomes `_`; reflection sends the behavior's), extra constraints (strings), an optional failure cap (1 to 8, no default: without it only the no-progress rule ends the loop), the generate service's model (default `Qwen/Qwen3.8-Flash-Next`, a reasoning model), the time each streamed generation may go without progress, and each generation may take in all, before `builder.timeout` cancels it (1 ms to 1 h each, defaults 30000 and 1200000), and the reference `check()`'s lifetime bounds (1 ms to 1 day each, no default: without them neither the lifetime check nor the forced tick runs; reflection sends 60000 and 1000, the original's `ROUTINE_MIN_EVERY` and `TURN_SILENCE_BOUND`) |
 | final state `done` | its `<donedata>` ([`schemas/done.json`](schemas/done.json)) | `{scxml, schemas, script, path, tests, report}`: the built document's three parts (its SCXML, its input event schemas as one object with `$defs` keyed by event, and its ECMAScript, `""` for none), the path of the `.scx` they were written as (`../../behaviors/<name>.scx`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
-| final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics, history, scxml?, path?}`: `invalid-request`, `unconfigured` (the run holds no `FLOPPY_BASE_URL` or no `FLOPPY_API_KEY`; the first generation ends the build at once), `no-progress` (a diagnostic an earlier failure of the build already had, consecutive or not; decision D124), `attempts-exhausted` (the request's cap), or `abandoned`, with the last diagnostics (`{kind, code, message}`), the failure history (every failure's attempt and diagnostics, as in `done`'s report), and `scxml`, the last draft a check (`validate`, the lifetime check, `simulate`) rejected, with `path`, where it was written, both absent when no draft was rejected (the original's revision drafts the rejected source) |
+| final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics, history, scxml?, path?}`: `invalid-request`, `unconfigured` (the run holds no `FLOPPY_BASE_URL`; the first generation ends the build at once), `no-progress` (a diagnostic an earlier failure of the build already had, consecutive or not; decision D124), `attempts-exhausted` (the request's cap), or `abandoned`, with the last diagnostics (`{kind, code, message}`), the failure history (every failure's attempt and diagnostics, as in `done`'s report), and `scxml`, the last draft a check (`validate`, the lifetime check, `simulate`) rejected, with `path`, where it was written, both absent when no draft was rejected (the original's revision drafts the rejected source) |
 
 The builder answers exactly once, by finishing. Run directly, `scx run`
 prints the done data in its `done` record and exits 0; invoked, the parent
@@ -96,8 +96,8 @@ intake -> design -> author -> writing -> validate -> simulate -> done
   structured-output schema; its `<finalize>` takes the plan from
   `generate.result` (or the code from `generate.failed`), and
   `done.invoke` moves on to `author`, or to `retry_gate` without a plan,
-  except that `unconfigured` (no `FLOPPY_BASE_URL` or no `FLOPPY_API_KEY`
-  held) goes straight to `failed`, since no retry can supply a backend. A
+  except that `unconfigured` (no `FLOPPY_BASE_URL` held) goes straight to
+  `failed`, since no retry can supply a backend. A
   redesign sends the plan it replaces (`previous_plan`) with the
   diagnostics; a redesign whose generation failed keeps that plan for the
   next one.
@@ -292,10 +292,12 @@ else its `--env-file`, else, for a bare `--env NAME`, the shell). The
 `generate` service has no default backend (its package declares no
 `http-origins`): `FLOPPY_BASE_URL` (any `OpenAI`-compatible Chat Completions
 base URL, for example the maintainer's direct vLLM on the DGX Sparks,
-`http://192.168.2.89:8000/v1`) and `FLOPPY_API_KEY` are both required, and
-without either the generate service sends nothing and answers
-`generate.failed` (`unconfigured`), so the builder ends at once in `failed`
-with the reason `unconfigured` and a diagnostic naming both variables. The
+`http://192.168.2.89:8000/v1`) is required, and without it the generate
+service sends nothing and answers `generate.failed` (`unconfigured`), so the
+builder ends at once in `failed` with the reason `unconfigured` and a
+diagnostic naming it. `FLOPPY_API_KEY` is needed only by a keyed backend: a
+run that holds no key reaches a keyless backend with no key header (decision
+D127). The
 `decision` service without a `baseurl` value uses its package's first
 declared `http-origins` entry, `https://api.typesafe.ai`. `--env-file`
 repeats, so the keys may come from two files (`--env-file .env --env-file

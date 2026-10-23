@@ -66,7 +66,7 @@ fn number(value: f64) -> Data {
     Data::Number(scxml_types::FiniteNumber::new(value).expect("a finite number"))
 }
 
-/// A host holding `message`, `provenance`, the event name and sequence 3.
+/// A host holding `message`, `provenance` and the event name.
 fn host(message: &Json, provenance: &Json) -> FakeHost {
     FakeHost {
         values: BTreeMap::from([
@@ -76,7 +76,6 @@ fn host(message: &Json, provenance: &Json) -> FakeHost {
                 "event".to_owned(),
                 Data::String("bot.ability.conversation.input".into()),
             ),
-            ("sequence".to_owned(), number(3.0)),
             ("undefined".to_owned(), Data::Undefined),
         ]),
         ..FakeHost::default()
@@ -89,7 +88,6 @@ fn attributes(direction: &str) -> Vec<Attribute> {
         attr("direction", direction),
         attr("event", "event"),
         attr("message", "message"),
-        attr("sequence", "sequence"),
         attr("provenance", "provenance"),
     ]
 }
@@ -161,12 +159,12 @@ fn an_inbound_message_carries_its_relationship_reference() {
     assert_eq!(
         message,
         json!({
-            "sequence": 3,
             "direction": "inbound",
             "source_ids": ["zed", "alice", [0.5, 1]],
             "target_ids": ["bot", "a\"b"],
             "content": "hello",
             "content_type": "text/plain",
+            "participants": [],
             "provenance": {
                 "event": "bot.ability.conversation.input",
                 "id": null,
@@ -214,7 +212,6 @@ fn an_outbound_message_takes_its_provenance_references() {
     let message = commit_of(
         "outbound",
         &json!({
-            "sequence": 0,
             "direction": "outbound",
             "source_ids": ["bot"],
             "target_ids": ["zed", "alice"],
@@ -227,12 +224,12 @@ fn an_outbound_message_takes_its_provenance_references() {
     assert_eq!(
         message,
         json!({
-            "sequence": 3,
             "direction": "outbound",
             "source_ids": ["bot"],
             "target_ids": ["zed", "alice"],
             "content": "hi",
             "content_type": "text/plain",
+            "participants": [],
             "provenance": {
                 "event": "bot.ability.conversation.input",
                 "id": "r-1",
@@ -276,6 +273,55 @@ fn missing_references_and_content_are_null_and_a_non_string_id_is_null() {
     );
     assert_eq!(inbound["provenance"]["session_ref"], json!("given"));
     assert_eq!(inbound["provenance"]["turn_ref"], json!("t"));
+}
+
+#[test]
+fn a_messages_participants_are_kept_and_malformed_ones_are_execution_errors() {
+    let participants = json!([{"ref": "alice", "role": "source"}, {"ref": "bot", "role": "target", "own": true},
+               {"ref": "voice:1", "role": "source", "resembles": [{"ref": "voice:7b1e04", "similarity": 0.42}]}]);
+    let message = commit_of(
+        "outbound",
+        &json!({"source_ids": [], "target_ids": [], "content_type": "text/plain", "participants": participants}),
+        &Json::Null,
+    );
+    assert_eq!(message["participants"], participants);
+    let message = commit_of(
+        "outbound",
+        &json!({"source_ids": [], "target_ids": [], "content_type": "text/plain", "participants": null}),
+        &Json::Null,
+    );
+    assert_eq!(message["participants"], json!([]));
+    let many: Vec<Json> = (0..33)
+        .map(|n| json!({"ref": format!("p{n}"), "role": "source"}))
+        .collect();
+    for participants in [
+        json!("alice"),
+        json!([{"ref": "alice", "role": "speaker"}]),
+        json!([{"ref": "", "role": "source"}]),
+        json!([{"ref": "x".repeat(201), "role": "source"}]),
+        json!([{"ref": "alice", "role": "source", "own": "yes"}]),
+        json!([{"ref": "alice", "role": "source", "name": "Alice"}]),
+        json!([{"ref": "alice", "role": "source", "resembles": [{"ref": "bob", "similarity": 2}]}]),
+        json!([{"ref": "alice", "role": "source", "resembles": [{"ref": "", "similarity": 0}]}]),
+        json!([{"ref": "alice", "role": "source", "resembles": [{"ref": "a", "similarity": 0}, {"ref": "b", "similarity": 0}, {"ref": "c", "similarity": 0}, {"ref": "d", "similarity": 0}]}]),
+        Json::Array(many),
+    ] {
+        let mut host = host(
+            &json!({"source_ids": [], "target_ids": [], "content_type": "text/plain", "participants": participants}),
+            &Json::Null,
+        );
+        assert_eq!(
+            execution(execute(
+                "message_for_turn",
+                &attributes("outbound"),
+                &[],
+                &mut host
+            )),
+            "conversation message participants are not at most 32 {ref, role, own?, resembles?}",
+            "{participants}"
+        );
+        assert!(host.assigned.is_empty());
+    }
 }
 
 /// `relationship_context_ref` against the original's own (`_stable_context_ref`
@@ -357,7 +403,6 @@ fn malformed_elements_and_values_are_execution_errors() {
                 attr("direction", "inbound"),
                 attr("event", "event"),
                 attr("message", "message"),
-                attr("sequence", "sequence"),
             ],
             good.clone(),
             "conversation:message_for_turn requires a location",
@@ -383,7 +428,7 @@ fn malformed_elements_and_values_are_execution_errors() {
                 a
             },
             good.clone(),
-            "conversation:message_for_turn takes only the location, direction, event, message, sequence and provenance attributes",
+            "conversation:message_for_turn takes only the location, direction, event, message and provenance attributes",
         ),
         (
             {
@@ -454,21 +499,6 @@ fn values_of_the_wrong_kind_are_execution_errors() {
             "conversation:message_for_turn event is not a non-empty string",
         ),
         (
-            "sequence",
-            number(-1.0),
-            "conversation:message_for_turn sequence is not a non-negative integer",
-        ),
-        (
-            "sequence",
-            number(1.5),
-            "conversation:message_for_turn sequence is not a non-negative integer",
-        ),
-        (
-            "sequence",
-            Data::String("1".into()),
-            "conversation:message_for_turn sequence is not a non-negative integer",
-        ),
-        (
             "provenance",
             Data::String("p".into()),
             "conversation:message_for_turn provenance is not an object",
@@ -500,10 +530,6 @@ fn values_of_the_wrong_kind_are_execution_errors() {
         (
             "message",
             "conversation:message_for_turn message did not evaluate",
-        ),
-        (
-            "sequence",
-            "conversation:message_for_turn sequence did not evaluate",
         ),
         (
             "provenance",
@@ -777,7 +803,6 @@ fn complete_turn_commits_what_the_javascript_it_replaces_made() {
             Direction::Inbound,
             "bot.ability.conversation.input",
             case["product"].as_object().expect("a product"),
-            serde_json::Number::from(4),
             case["provenance"].as_object().expect("a provenance"),
         )
         .expect("the product commits");
@@ -789,7 +814,6 @@ fn complete_turn_commits_what_the_javascript_it_replaces_made() {
                 attr("input", "input"),
                 attr("turns", "turns"),
                 attr("session_ref", "session"),
-                attr("sequence", "sequence"),
             ],
             &[
                 (
@@ -799,7 +823,6 @@ fn complete_turn_commits_what_the_javascript_it_replaces_made() {
                 ("input", data(&case["input"])),
                 ("turns", data(&case["turns"])),
                 ("session", data(&case["session_ref"])),
-                ("sequence", number(4.0)),
             ],
         );
         assert_eq!(
@@ -808,6 +831,36 @@ fn complete_turn_commits_what_the_javascript_it_replaces_made() {
             "{case}"
         );
     }
+}
+
+#[test]
+fn complete_turn_writes_the_participants_it_is_given() {
+    let participants = json!([{"ref": "alice", "role": "source"}]);
+    let attributes = [
+        attr("location", "message"),
+        attr("event", "event"),
+        attr("input", "input"),
+        attr("turns", "turns"),
+        attr("session_ref", "session"),
+        attr("participants", "participants"),
+    ];
+    let values = [
+        (
+            "event",
+            Data::String("bot.ability.conversation.input".into()),
+        ),
+        (
+            "input",
+            data(&json!({"source_ids": ["alice"], "target_ids": [], "content_type": "text/plain"})),
+        ),
+        ("turns", data(&json!([{"turn_ref": "t1", "text": "hi"}]))),
+        ("session", Data::String("s".into())),
+        ("participants", data(&participants)),
+    ];
+    let assigned = run("complete_turn", &attributes, &values);
+    assert_eq!(assigned[0].1["participants"], participants);
+    let assigned = run("complete_turn", &attributes[..5], &values[..4]);
+    assert_eq!(assigned[0].1["participants"], json!([]));
 }
 
 /// The open turn `textPartsWith()`, `audioWith()`, `sampleRateWith()`,
@@ -894,7 +947,8 @@ fn ecmascript_trim_is_not_rusts() {
 
 #[test]
 fn malformed_new_elements_raise_error_execution_and_assign_nothing() {
-    let relationship = json!({"session_ref": "r", "source_ids": [], "target_ids": [], "participants": [], "sequences": []});
+    let relationship =
+        json!({"session_ref": "r", "source_ids": [], "target_ids": [], "participants": []});
     for (name, attributes, values, detail) in [
         (
             "relationship_for_input",
@@ -998,7 +1052,6 @@ fn malformed_other_elements_raise_error_execution_and_assign_nothing() {
                 attr("input", "i"),
                 attr("turns", "t"),
                 attr("session_ref", "r"),
-                attr("sequence", "n"),
             ],
             vec![
                 ("e", Data::String("x".into())),
@@ -1010,7 +1063,6 @@ fn malformed_other_elements_raise_error_execution_and_assign_nothing() {
                 ),
                 ("t", data(&json!([]))),
                 ("r", Data::String("r".into())),
-                ("n", number(0.0)),
             ],
             "conversation:complete_turn turns is not an array of turns",
         ),

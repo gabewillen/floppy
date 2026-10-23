@@ -15,13 +15,89 @@ function delay(ms) {
 
 // idle
 
-// The original speaking: data.text.strip().
-function spokenText(raw) {
-  return String(raw).trim();
+// The text of record of a reply: its parts' words joined verbatim
+// (decision D178).
+function said(parts) {
+  return parts.map(function (part) { return typeof part.words === 'string' ? part.words : ''; }).join('');
 }
 
-function isBlankText() {
-  return text.length === 0;
+// An input for an utterance already said (decision D175): only one whose
+// sender named its id can be one.
+function isFinishedUtterance(_event) {
+  return !!_event.sendid && finished_utterances.indexOf(_event.sendid) >= 0;
+}
+
+// The utterance's id: its input's sendid, or null when none was named.
+function utteranceId(_event) {
+  return _event.sendid ? _event.sendid : null;
+}
+
+// speaking
+
+// An input for a finished utterance, or another copy of the one in hand
+// or of one held.
+function isLateUtterance(_event) {
+  return isFinishedUtterance(_event) || isCurrentUtterance(_event) || isHeldUtterance(_event);
+}
+
+// Another copy of the utterance in hand.
+function isCurrentUtterance(_event) {
+  return !!_event.sendid && _event.sendid === utterance_id;
+}
+
+// Another copy of a held utterance: the first copy is kept, as
+// <event:defer/> cannot replace an event it holds (decision D175).
+function isHeldUtterance(_event) {
+  return !!_event.sendid && held_ids.indexOf(_event.sendid) >= 0;
+}
+
+// The held ids with this input's, when its sender named one.
+function heldIds(_event) {
+  return _event.sendid ? held_ids.concat([_event.sendid]) : held_ids;
+}
+
+function canHold() {
+  return held < held_utterances_bound;
+}
+
+function heldOverMessage() {
+  return 'holding ' + held + ' utterances, the most it holds';
+}
+
+// The finished ids with the one in hand, the oldest dropped past the
+// bound (decision D175).
+function finishedUtterances() {
+  var ids = utterance_id === null ? finished_utterances : finished_utterances.concat([utterance_id]);
+  return ids.slice(Math.max(0, ids.length - finished_utterances_bound));
+}
+
+// A reply that says something (decision D178): every part has words (not blank), a sound or a pause, every
+// expression directs a cue (sound_at only with a sound), and the words,
+// joined exactly as written, are not blank.
+function isUnspokenInput(_event) {
+  return !isSpokenReply(_event.data.parts);
+}
+
+function isSpokenReply(parts) {
+  return parts.every(isSpokenPart) && /\S/.test(said(parts));
+}
+
+function isSpokenPart(part) {
+  var expression = isSet(part.expression) ? part.expression : null;
+  if (isSet(part.words) && !/\S/.test(part.words)) {
+    return false;
+  }
+  if (expression === null) {
+    return typeof part.words === 'string';
+  }
+  var cues = ['instructions', 'emotion', 'style', 'intensity', 'pace', 'pitch', 'volume', 'pause', 'sound'];
+  return (cues.some(function (cue) { return isSet(expression[cue]); }) || expression.emphasis === true)
+    && (expression.sound_at === undefined || isSet(expression.sound))
+    && (typeof part.words === 'string' || isSet(expression.pause) || isSet(expression.sound));
+}
+
+function isSet(value) {
+  return value !== undefined && value !== null;
 }
 
 // encoding
@@ -81,6 +157,13 @@ function playoutFailure(_event) {
 }
 
 // recording
+
+// What was said, as the outbound message the conversation commits: no
+// participants until speaking has a voice of its own, when it stamps its
+// voice's ref, own (decision D176).
+function outboundMessage() {
+  return ({source_ids: [], target_ids: [], content: text, content_type: 'text/plain', participants: []});
+}
 
 function recordingTimedOutLog() {
   return 'recording ' + operation + ' after ' + recording_timeout_ms + ' ms';

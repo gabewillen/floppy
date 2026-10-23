@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.persona.output",
+  "additionalProperties": false,
+  "description": "The bot's traits, given by its owner, and the description it wrote of itself, or none when it has not written one.",
+  "properties": {
+    "traits": {
+      "description": "The traits the bot's owner gave it, in the owner's order.",
+      "items": {
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 24,
+      "minItems": 1,
+      "title": "Traits",
+      "type": "array"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "description": "A description the bot wrote of itself (JSON in memory, query_tags=self_persona). A bot starts with none; this row exists only because the bot revised its description.",
+          "properties": {
+            "text": {
+              "description": "The whole description, in the bot's own words, exactly as it wrote it.",
+              "maxLength": 2000,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "Text",
+              "type": "string"
+            },
+            "reason": {
+              "description": "Why the bot revised its description, in its own words.",
+              "maxLength": 500,
+              "minLength": 1,
+              "pattern": "\\S",
+              "title": "Reason",
+              "type": "string"
+            },
+            "traits": {
+              "description": "The owner-given traits the bot had when it wrote this description.",
+              "items": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 24,
+              "minItems": 1,
+              "title": "Traits",
+              "type": "array"
+            },
+            "kind": {
+              "const": "fact",
+              "default": "fact",
+              "description": "Always `fact`: a description is a fact about the bot, never an instruction.",
+              "examples": [
+                "fact"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text",
+            "reason",
+            "traits"
+          ],
+          "title": "Description",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The bot's most recent self-written description, or None when it has written none."
+    }
+  },
+  "required": [
+    "traits"
+  ],
+  "type": "object"
+}

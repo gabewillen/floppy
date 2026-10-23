@@ -24,17 +24,20 @@
   classifier is required, so voice detection always runs;
   sound_classification (KindSoundClassifier), speech_decoding,
   voice_diarization and voice_identification say which optional stages are
-  configured, product_threshold_db is the original's 3 dB, and stage_timeout_ms
-  is the original's 30 s stage operation timeout. floppy's bot configures voice
+  configured, product_threshold_db is 3 dB, stage_timeout_ms is 30 s, the
+  stage operation timeout, and recognize_timeout_ms 2 s (decision D177).
+  floppy's bot configures voice
   detection, sound classification and speech decoding (the phase 6 plan:
   speech is decoded in listening). Voice identification with speech
   decoding is refused, as the original's constructor refuses it (embedding
-  correlation would be lost): initializing ends in the final state
-  degraded, and the listening degrades.
+  correlation would be lost), as are a negative product_threshold_db and a
+  recognize_timeout_ms that is not positive: initializing ends in the final
+  state degraded, and the listening degrades.
 
   Input: bot.ability.listening.sensitivity.output {sound, parent,
-  perceived_level_db} (the original's sensitivity OutputData) from the
-  listening. Scored sounds that arrive while Working are held by
+  perceived_level_db, producing} (sensitivity's output) from the
+  listening; producing is not read yet (echo handling waits for the
+  hearing stream, D177). Scored sounds that arrive while Working are held by
   <event:defer/> (scxml.rs namespaces/event) and taken, in order, by Idle
   and HearingSpeech (the original defers them): interpretation is serial, and
   the score was taken on arrival.
@@ -78,7 +81,11 @@
   * IdentifyingVoiceDirect invokes abilities/voice_identification/voice_identification.scx on
     the opening voice span (clipped to floppy-voice-<n>.pcm); its one
     embedding becomes the window's source identity. IdentifyingVoice
-    embeds each diarized segment. Exactly one embedding per segment.
+    embeds each diarized segment. Exactly one embedding per segment. Both
+    wait for their voices at most stage_timeout_ms + recognize_timeout_ms
+    (decision D177): past that deadline, or with no opening embedding,
+    identification completes as usual with nobody identified: the window
+    opens with no source identity, or each segment is handed off with no embedding.
   * DecodingSpeech invokes abilities/speech_decoding/speech_decoding.scx (the speech
     service) on the utterance: decoding rewrites the observation into
     words.
@@ -129,6 +136,9 @@
     <!-- Configuration (the original's constructor). -->
     <data id="product_threshold_db" expr="3.0"/>
     <data id="stage_timeout_ms" expr="30000"/>
+    <!-- How much longer than a stage an utterance waits for its voices
+         (2 s; decision D177). -->
+    <data id="recognize_timeout_ms" expr="2000"/>
     <data id="sound_classifier" expr="true"/>
     <data id="speech_decoder" expr="true"/>
     <data id="diarizer" expr="false"/>
@@ -165,8 +175,14 @@
   </datamodel>
   <script src="interpretation.js"/>
 
-  <!-- The original's constructor refuses identification with decoding. -->
+  <!-- The configuration's refusals, checked in order (decision D177). -->
   <state id="initializing">
+    <transition cond="hasNegativeThreshold()" target="degraded">
+      <log label="interpretation.degraded" expr="'product_threshold_db must not be negative'"/>
+    </transition>
+    <transition cond="hasNoRecognizeTimeout()" target="degraded">
+      <log label="interpretation.degraded" expr="'recognize_timeout must be positive'"/>
+    </transition>
     <transition cond="refusesIdentificationWithDecoding()" target="degraded">
       <log label="interpretation.degraded" expr="'voice identification cannot be combined with speech decoding'"/>
     </transition>
@@ -471,9 +487,7 @@
       <state id="IdentifyingVoiceDirect">
         <onentry>
           <assign location="stage" expr="'voice_identification'"/>
-          <send id="direct-identification-timer" event="bot.ability.listening.stage.failed" delayexpr="stageDelay()">
-            <content expr="stageTimeout()"/>
-          </send>
+          <send id="direct-identification-timer" event="IdentifyingVoiceDirect.after" delayexpr="identifyDelay()"/>
           <assign location="mismatch" expr="'voice identification requires audio/pcm with sample rate and channels.'"/>
           <if cond="cannotIdentifyOpening()">
             <send event="bot.ability.listening.stage.failed" target="#_internal">
@@ -492,11 +506,19 @@
           <param name="end_seconds" expr="openingEnd()"/>
           <param name="output" expr="voiceOutput()"/>
         </invoke>
+        <!-- No embedding for the opening span, or none in time: the window
+             opens with this frame and nobody identified (decision
+             D177). -->
         <transition event="done.invoke.direct_voice_identification"
-                    cond="hasNoEmbedding(_event)">
-          <send event="bot.ability.listening.stage.failed" target="#_internal">
-            <content expr="stageFailure('Voice identification produced no opening embedding.')"/>
-          </send>
+                    cond="hasNoEmbedding(_event)" target="HearingSpeech">
+          <log label="interpretation.unidentified" expr="'no embedding for the opening voice'"/>
+          <assign location="open_sensed" expr="detection.sensed"/>
+          <assign location="open_frames" expr="openingFrames()"/>
+        </transition>
+        <transition event="IdentifyingVoiceDirect.after" cond="isIdentifyTimer(_event)" target="HearingSpeech">
+          <log label="interpretation.unidentified" expr="identifyTimedOut(1)"/>
+          <assign location="open_sensed" expr="detection.sensed"/>
+          <assign location="open_frames" expr="openingFrames()"/>
         </transition>
         <!-- The first segment's identity is committed, then the window
              opens with this frame. -->
@@ -517,9 +539,7 @@
       <state id="IdentifyingVoice">
         <onentry>
           <assign location="stage" expr="'voice_identification'"/>
-          <send id="voice-identification-timer" event="bot.ability.listening.stage.failed" delayexpr="stageDelay()">
-            <content expr="stageTimeout()"/>
-          </send>
+          <send id="voice-identification-timer" event="IdentifyingVoice.after" delayexpr="identifyDelay()"/>
         </onentry>
         <onexit>
           <cancel sendid="voice-identification-timer"/>
@@ -537,6 +557,13 @@
         <transition event="done.invoke.voice_identification" cond="hasEmbeddings(_event)" target="HandingOff">
           <assign location="completion.kind" expr="'identification'"/>
           <assign location="completion.embeddings" expr="_event.data.embeddings"/>
+        </transition>
+        <!-- Nobody identified in time: identification completes as usual,
+             with no voice for any segment (decision D177). -->
+        <transition event="IdentifyingVoice.after" cond="isIdentifyTimer(_event)" target="HandingOff">
+          <log label="interpretation.unidentified" expr="identifyTimedOut(completion.segments.length)"/>
+          <assign location="completion.kind" expr="'identification'"/>
+          <assign location="completion.embeddings" expr="unidentifiedEmbeddings()"/>
         </transition>
         <transition event="done.invoke.voice_identification" cond="isNotChildFailure(_event)">
           <send event="bot.ability.listening.stage.failed" target="#_internal">

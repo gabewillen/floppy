@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- speaking-5: an empty text is refused by the input's schema at the send; the next text is the first utterance. -->
+<!-- speaking-5: empty words are refused by the input's schema at the send; the next utterance is the first. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="speaking" type="scxml" src="../../../speaking.scx">
@@ -14,13 +14,13 @@
   </state>
   <state id="step1">
     <onentry>
-      <send event="bot.ability.speaking.input" target="#_speaking"><content expr='{"text": ""}'/></send>
+      <send event="bot.ability.speaking.input" target="#_speaking"><content expr='{"parts": [{"words": ""}]}'/></send>
     </onentry>
     <transition event="error.execution" target="step2"/>
   </state>
   <state id="step2">
     <onentry>
-      <send event="bot.ability.speaking.input" target="#_speaking"><content expr='{"text": "hi"}'/></send>
+      <send event="bot.ability.speaking.input" target="#_speaking"><content expr='{"parts": [{"words": "hi"}]}'/></send>
     </onentry>
     <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 0.1 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step3"/>
   </state>
@@ -28,7 +28,7 @@
     <transition event="environment.sound" cond="_event.data.audio === 'media/speaking-1.pcm' &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.source === 'speaking'" target="step4"/>
   </state>
   <state id="step4">
-    <transition event="bot.ability.conversation.append" cond="_event.data.message.direction === 'outbound' &amp;&amp; _event.data.message.content === &quot;hi&quot; &amp;&amp; _event.data.message.content_type === 'text/plain' &amp;&amp; _event.data.message.sequence === 0 &amp;&amp; _event.data.message.source_ids.length === 0 &amp;&amp; _event.data.message.target_ids.length === 0 &amp;&amp; _event.data.message.provenance.id === 'speaking-1' &amp;&amp; _event.data.message.provenance.event === 'bot.ability.conversation.append'" target="step5"/>
+    <transition event="bot.ability.conversation.append" cond="_event.data.message.direction === 'outbound' &amp;&amp; _event.data.message.content === &quot;hi&quot; &amp;&amp; _event.data.message.content_type === 'text/plain' &amp;&amp; !('sequence' in _event.data.message) &amp;&amp; Array.isArray(_event.data.message.participants) &amp;&amp; _event.data.message.participants.length === 0 &amp;&amp; _event.data.message.source_ids.length === 0 &amp;&amp; _event.data.message.target_ids.length === 0 &amp;&amp; _event.data.message.provenance.id === 'speaking-1' &amp;&amp; _event.data.message.provenance.event === 'bot.ability.conversation.append'" target="step5"/>
   </state>
   <state id="step5">
     <transition event="bot.ability.speaking.output" cond="_event.data.text === &quot;hi&quot; &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step6"/>
