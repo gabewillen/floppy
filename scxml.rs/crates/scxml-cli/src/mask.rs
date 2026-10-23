@@ -79,10 +79,12 @@ fn scrub_with<'a>(values: &[String], text: &'a str) -> Cow<'a, str> {
 /// its strings (keys included) and nothing else changed: a string holding a
 /// value is decoded, masked, and encoded again, so the mask never splits an
 /// escape.
+#[cfg(feature = "wasmtime")]
 pub(crate) fn scrub_json(line: &str) -> Cow<'_, str> {
     scrub_json_with(VALUES.get().map_or(&[], Vec::as_slice), line)
 }
 
+#[cfg(feature = "wasmtime")]
 fn scrub_json_with<'a>(values: &[String], line: &'a str) -> Cow<'a, str> {
     if values.is_empty() {
         return Cow::Borrowed(line);
@@ -160,10 +162,9 @@ mod tests {
             "a value that is a declared origin is public"
         );
         assert!(matches!(scrub("nothing"), Cow::Borrowed(_)));
-        assert!(matches!(scrub_json(r#"{"a":"nothing"}"#), Cow::Borrowed(_)));
-        assert!(matches!(scrub_json(r#"{"a":true}"#), Cow::Borrowed(_)));
     }
 
+    #[cfg(feature = "wasmtime")]
     #[test]
     fn json_values_are_masked_only_inside_strings() {
         let values = forms(
@@ -172,6 +173,8 @@ mod tests {
             &[],
         );
         let scrub_json = |line| scrub_json_with(&values, line);
+        assert!(matches!(scrub_json(r#"{"a":"nothing"}"#), Cow::Borrowed(_)));
+        assert!(matches!(scrub_json(r#"{"a":true}"#), Cow::Borrowed(_)));
         assert_eq!(
             scrub_json(r#"{"type":"error","fatal":true,"count":1234.0,"text":"is true"}"#),
             r#"{"type":"error","fatal":true,"count":1234.0,"text":"is [masked]"}"#,
