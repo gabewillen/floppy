@@ -1,10 +1,9 @@
 # sql
 
-The `sql` invoked service: one SQLite transaction of the original's `Statement`s
+The `sql` invoked service: one SQLite transaction of parameterized statements
 per `<invoke>`, as a Wasm component
 (`https://github.com/stateforward/floppy/services/sql`, component
-`floppy_service_sql`). It is the SQLite engine under the original's Memory
-ability, which floppy runs as
+`floppy_service_sql`). It is the SQLite engine under the memory ability,
 [`abilities/memory/memory.scx`](../../abilities/memory/memory.scx), and it
 knows no schema of its own. Its crate documentation ([src/lib.rs](src/lib.rs))
 is the full contract: parameters, events, open transactions, failure codes,

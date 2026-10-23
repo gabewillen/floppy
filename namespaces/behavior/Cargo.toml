@@ -1,6 +1,6 @@
 [package]
 name = "floppy-behavior"
-description = "The `behavior` namespace: `<behavior:instances_from_behavior_results>`, `<behavior:replace_behavior_clauses>`, `<behavior:lifetime_errors>` and `<behavior:verify_tick>`, the original's behavior package (its storage rows and clauses, a lifetime's schedule bounds and the forced tick's check), as a Wasm extension component"
+description = "The `behavior` namespace: `<behavior:instances_from_behavior_results>`, `<behavior:replace_behavior_clauses>`, `<behavior:lifetime_errors>`, `<behavior:verify_tick>` and `<behavior:verify_apply>`, the behavior package (its storage rows and clauses, a lifetime's schedule bounds, and the forced tick's and the live turn's checks), as a Wasm extension component"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

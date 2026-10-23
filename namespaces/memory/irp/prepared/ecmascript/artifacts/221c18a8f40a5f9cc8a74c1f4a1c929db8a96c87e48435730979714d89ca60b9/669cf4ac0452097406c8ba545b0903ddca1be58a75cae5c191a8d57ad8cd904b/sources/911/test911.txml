@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- memory-2: repeated identities are written once, and every number is written as its JSON number. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory">
+<datamodel>
+  <data id="p" expr="null"/>
+  <data id="m" expr="({source_ids: ['a', 'a'], target_ids: [], content: [1e21, 0.00001, 3], content_type: 'text/x'})"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <memory:to_json location="p" message="m"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="p === '{&quot;content&quot;:{&quot;__stateforward_memory_content__&quot;:&quot;list&quot;,&quot;value&quot;:[1e+21,0.00001,3]},&quot;content_type&quot;:&quot;text/x&quot;,&quot;source_ids&quot;:[&quot;a&quot;],&quot;target_ids&quot;:[]}'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

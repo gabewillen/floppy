@@ -1,5 +1,4 @@
-//! The Gemini API's speech (the original's `gemini` provider's
-//! `SpeechEncoder` and `SpeechDecoder`): both directions are one
+//! The Gemini API's speech encoding and decoding: both directions are one
 //! Interactions API call, `POST {base}/interactions` with
 //! `x-goog-api-key: <apikey>`, where `{base}` is the API's version root
 //! (`https://generativelanguage.googleapis.com/v1beta`).
@@ -14,7 +13,7 @@
 //!   container for `audio/wav` ([`encoding_request`], [`audio`]).
 //! * decode: the body `{"input": [{"text": P, "type": "text"}, {"data": A,
 //!   "mime_type": M, "type": "audio"}], "model": M, "store": false}`, `P`
-//!   the original's prompt ([`DECODING_PROMPT`]) and `A` the audio in
+//!   the decoding prompt ([`DECODING_PROMPT`]) and `A` the audio in
 //!   base64; the answer's text is its `output_text`, else the text parts of
 //!   its `model_output` steps, joined by newlines (empty when they hold none) ([`decoding_request`],
 //!   [`transcript`]).
@@ -27,7 +26,7 @@ use crate::{Decoding, Encoding, FailureCode, PCM_SAMPLE_RATE_HZ, Part, Request, 
 /// The path appended to the base URL.
 pub const INTERACTIONS_PATH: &str = "/interactions";
 
-/// What a decoding asks the model (the original's `_DEFAULT_PROMPT`).
+/// What a decoding asks the model.
 pub const DECODING_PROMPT: &str =
     "Generate a transcript of the speech. Return only the spoken words as plain text.";
 
@@ -110,8 +109,8 @@ fn parts(answer: &Json) -> impl Iterator<Item = &Json> {
 /// [`FailureCode::Malformed`] when the answer is not JSON, holds no audio
 /// part, its data is not base64 or is empty, or it names a rate other than
 /// [`PCM_SAMPLE_RATE_HZ`] or more than one channel (raw PCM has no header
-/// to carry either, so the original refuses a rate it was not configured
-/// for).
+/// to carry either, so a rate the encoding was not configured for is
+/// refused).
 pub fn audio(body: &[u8]) -> Result<Vec<u8>, FailureCode> {
     let answer: Json = serde_json::from_slice(body).map_err(|_| FailureCode::Malformed)?;
     let part = parts(&answer)
@@ -138,7 +137,7 @@ pub fn audio(body: &[u8]) -> Result<Vec<u8>, FailureCode> {
 /// [`FailureCode::Malformed`] when the answer is not JSON or holds no
 /// `output_text` and no `model_output` step; a model output with no text
 /// is speech the model heard none of (empty, as an `OpenAI` transcription
-/// of silence is), where the original raises.
+/// of silence is).
 pub fn transcript(body: &[u8]) -> Result<String, FailureCode> {
     let answer: Json = serde_json::from_slice(body).map_err(|_| FailureCode::Malformed)?;
     if let Some(text) = answer.get("output_text").and_then(Json::as_str)

@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/object_detection/irp/sources">
   <assert id="object_detection-1" specnum="1" specid="#object_detection-1">
-    <![CDATA[Its input is its `<param>`s: it sends itself `bot.ability.vision.detection.input` `{image, media_type}` (the original's InputData, the image by reference), which its schema checks, so an `image` that is missing or empty sends nothing to the model and answers `bot.ability.failed` `{message: "ObjectDetection could not run (error.execution)"}`; nothing reaches the parent before its one answer.]]>
+    <![CDATA[Its input is its `<param>`s: it sends itself `bot.ability.vision.detection.input` `{image, media_type}` (the image by reference), which its schema checks, so an `image` that is missing or empty sends nothing to the model and answers `bot.ability.failed` `{message: "ObjectDetection could not run (error.execution)"}`; nothing reaches the parent before its one answer.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -15,7 +15,7 @@
     </test>
   </assert>
   <assert id="object_detection-2" specnum="2" specid="#object_detection-2">
-    <![CDATA[It asks the generate service once, with one user message (the original's DETECT_INSTRUCTIONS as a text part and the image's reference as an image part, the image read from the granted media directory), and answers its parent `bot.ability.vision.detection.output` `{objects}`, each object `{label, confidence, box: {x, y, width, height}}` as the reply gave it; a reply of `[]` is `{objects: []}`; then it ends (`done.invoke.<id>` follows the answer).]]>
+    <![CDATA[It asks the generate service once, with one user message (its instructions as a text part and the image's reference as an image part, the image read from the granted media directory), and answers its parent `bot.ability.vision.detection.output` `{objects}`, each object `{label, confidence, box: {x, y, width, height}}` as the reply gave it; a reply of `[]` is `{objects: []}`; then it ends (`done.invoke.<id>` follows the answer).]]>
     <test id="110" conformance="mandatory" manual="false">
       <start uri="110/test110.scxml"/>
     </test>
@@ -42,7 +42,7 @@
     </test>
   </assert>
   <assert id="object_detection-4" specnum="4" specid="#object_detection-4">
-    <![CDATA[Each reply item is validated on its own as the original's DetectedObject, its numbers JSON numbers (a boolean or a numeric string is refused): `label` a string of 1..100 characters, `confidence` 0..1 or `null` (required), `box` the original's geometry.Box (`x`, `y` in 0..1, `width`, `height` in (0, 1], `x + width` and `y + height` at most 1 + 1e-6), and no other keys; an item that is not one is skipped, never failing the detection.]]>
+    <![CDATA[Each reply item is validated on its own as a detected object, its numbers JSON numbers (a boolean or a numeric string is refused): `label` a string of 1..100 characters, `confidence` 0..1 or `null` (required), `box` a box (`x`, `y` in 0..1, `width`, `height` in (0, 1], `x + width` and `y + height` at most 1 + 1e-6), and no other keys; an item that is not one is skipped, never failing the detection.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>
@@ -99,7 +99,7 @@
     </test>
   </assert>
   <assert id="object_detection-8" specnum="8" specid="#object_detection-8">
-    <![CDATA[An output its schema refuses (more than 32 objects, when the invoker allows more) answers `bot.ability.failed` `{message: "Object detection produced output that does not match its output schema."}`, the original's invalid-output failure.]]>
+    <![CDATA[An output its schema refuses (more than 32 objects, when the invoker allows more) answers `bot.ability.failed` `{message: "Object detection produced output that does not match its output schema."}`.]]>
     <test id="170" conformance="mandatory" manual="false">
       <start uri="170/test170.scxml"/>
     </test>

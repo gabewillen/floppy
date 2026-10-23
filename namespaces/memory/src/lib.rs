@@ -3,15 +3,11 @@
 //! `<memory:stm_projection>` as a
 //! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
-//! The original's memory module (`abilities/memory`): the JSON text a
-//! conversation memory row holds (`Memory.to_json`, with `_encode_content`
-//! and `value.identities_json`), the contents of one statement's
-//! result of a memory select (`OutputData.contents`), each content cell
-//! parsed as its caller does, and the two pure helpers of the short-term
-//! register (`stm.py`): a turn's words bounded and cut at a whole word
-//! (`_cut_at_word`, what `TurnRecordData.of` does), and a stimulus's
-//! bounded scalar projection (`_payload_projection`, what `event_record`
-//! records). The memory ability applies the statements through the sql
+//! The JSON text a conversation memory row holds, the contents of one
+//! statement's result of a memory select, each content cell parsed, and
+//! the two pure helpers of the short-term register: a turn's words bounded
+//! and cut at a whole word, and a stimulus's bounded scalar projection.
+//! The memory ability applies the statements through the sql
 //! service; these elements only build and read what it stores, so they
 //! are synchronous executable content. Documents bind [`NAMESPACE_URI`]
 //! (conventionally with the prefix `memory`):
@@ -28,7 +24,7 @@
 //!
 //! # `<memory:to_json location="L" message="M"/>`
 //!
-//! The original's `Memory.to_json` of a conversation input. `message`
+//! The memory JSON of a conversation input. `message`
 //! (required) evaluates to an object with `source_ids` and `target_ids`
 //! (arrays of identities: a string, or an array of numbers),
 //! `content_type` (a string) and `content` (any value; absent is `null`).
@@ -36,32 +32,31 @@
 //! `{"content":C,"content_type":T,"source_ids":S,"target_ids":G}`, with
 //! the keys sorted and compact separators:
 //!
-//! * `content`: arrays and objects tagged collision-safe (the original's
-//!   `_encode_content`): an array is `{"__stateforward_memory_content__":
-//!   "list","value":[...]}`, an object `{"__stateforward_memory_content__":
-//!   "mapping","value":[[key,value],...]}` with its entries ordered by
-//!   their keys' ASCII JSON text; a number that is not a safe integer
-//!   (within 2^53 - 1) is written as Python's `repr` writes a float, a
-//!   safe integer as an integer.
-//! * `source_ids`, `target_ids`: the original's `identities_json`: the
-//!   identities in the original's order without repeats, each name as a
-//!   JSON string and each embedding as a list of Python floats.
+//! * `content`: arrays and objects tagged collision-safe: an array is
+//!   `{"__stateforward_memory_content__":"list","value":[...]}`, an object
+//!   `{"__stateforward_memory_content__":"mapping","value":[[key,value],...]}`
+//!   with its entries ordered by their keys in code point order; numbers
+//!   are JSON numbers as the data model hands them.
+//! * `source_ids`, `target_ids`: the identities in identity order
+//!   ([`sort_key`]) without repeats, each name a JSON string and each
+//!   embedding its array of numbers.
 //! * Strings are written as ECMAScript's `JSON.stringify` writes them
 //!   (characters outside ASCII kept as they are).
 //!
+//! Nothing compares the stored text as bytes; a reader parses it.
+//!
 //! # `<memory:contents location="L" result="R"/>`
 //!
-//! The original's `OutputData.contents` of one statement's result.
+//! The contents of one statement's result.
 //! `result` (required) evaluates to one result of a
 //! `bot.ability.memory.output`, an object whose `rows` is an array of rows
 //! with `values`. `location` (required) receives, in row order, the first
 //! value of each row that is a string holding a JSON object, parsed; any
-//! other row is skipped, as the original's readers skip a content that
-//! does not validate.
+//! other row is skipped.
 //!
 //! # `<memory:cut_at_word location="L" words="W"/>`
 //!
-//! The original's `_cut_at_word`. `words` (required) evaluates to a string.
+//! A turn's words within a bound. `words` (required) evaluates to a string.
 //! `location` (required) receives `{"text": T, "cut": B}`: words of at most
 //! [`MAX_TURN_TEXT_BYTES`] UTF-8 bytes are `T` unchanged and `B` false;
 //! longer words are cut, `B` true: `T` is their longest prefix of whole
@@ -72,7 +67,7 @@
 //!
 //! # `<memory:stm_projection location="L" data="D"/>`
 //!
-//! The original's `_payload_projection`. `data` (required) evaluates to
+//! A stimulus's bounded scalar projection. `data` (required) evaluates to
 //! any value. `location` (required) receives an object: for an object,
 //! its fields in their order, keeping each whose key is not empty and
 //! whose value is a boolean, a number, or a string of at most
@@ -124,20 +119,18 @@ pub const NAMESPACE_NAME: &str = "memory";
 /// it too.
 pub const NAMESPACE_URI: &str = "https://github.com/stateforward/floppy/namespaces/memory";
 
-/// The tag of a collision-safe encoded array or object (the original's
-/// `_encode_content`).
+/// The tag of a collision-safe encoded array or object.
 pub const CONTENT_TAG: &str = "__stateforward_memory_content__";
 
-/// Most UTF-8 bytes of one turn's text (the original's
-/// `MAX_TURN_TEXT_BYTES`); a longer turn is cut at a whole word.
+/// Most UTF-8 bytes of one turn's text; a longer turn is cut at a whole
+/// word.
 pub const MAX_TURN_TEXT_BYTES: usize = 2048;
 
-/// Longest string, in characters, a stimulus projection keeps (the
-/// original's `MAX_PROJECTION_TEXT_LENGTH`); a longer one is dropped.
+/// Longest string, in characters, a stimulus projection keeps; a longer
+/// one is dropped.
 pub const MAX_PROJECTION_TEXT_LENGTH: usize = 40;
 
-/// Most fields one stimulus projection keeps (the original's
-/// `_MAX_PROJECTION_FIELDS`).
+/// Most fields one stimulus projection keeps.
 pub const MAX_PROJECTION_FIELDS: usize = 16;
 
 /// The largest integer ECMAScript calls safe (`Number.MAX_SAFE_INTEGER`).
@@ -337,8 +330,8 @@ fn to_json_element<H: MemoryHost>(
     Ok(Executed::Handled)
 }
 
-/// The original's `Memory.to_json` of a conversation input (see the crate
-/// documentation, `<memory:to_json>`).
+/// The memory JSON of a conversation input (see the crate documentation,
+/// `<memory:to_json>`).
 ///
 /// # Errors
 ///
@@ -360,17 +353,16 @@ pub fn to_json(message: &Map<String, Json>) -> Result<String, &'static str> {
         Some(Json::String(content_type)) => js_string(content_type),
         _ => return Err("memory:to_json message content_type is not a string"),
     };
-    let content = python_json(&encode_content(
-        message.get("content").unwrap_or(&Json::Null),
-    ));
+    let content = encode_content(message.get("content").unwrap_or(&Json::Null));
     Ok(format!(
         "{{\"content\":{content},\"content_type\":{content_type},\"source_ids\":{source_ids},\"target_ids\":{target_ids}}}"
     ))
 }
 
-/// The original's `_encode_content`: arrays and objects tagged
-/// collision-safe, an object's entries ordered by their keys' ASCII JSON
-/// text.
+/// A content with its arrays and objects tagged collision-safe, an
+/// object's entries ordered by their keys in code point order. Every
+/// object it builds holds the tag and then `value`, so its JSON text has
+/// sorted keys.
 fn encode_content(value: &Json) -> Json {
     let tagged = |kind: &str, value: Json| {
         let mut object = Map::new();
@@ -384,17 +376,14 @@ fn encode_content(value: &Json) -> Json {
             Json::Array(items.iter().map(encode_content).collect()),
         ),
         Json::Object(members) => {
-            let mut entries: Vec<(String, &String, &Json)> = members
-                .iter()
-                .map(|(key, value)| (ascii_json(key), key, value))
-                .collect();
-            entries.sort_by(|left, right| left.0.cmp(&right.0));
+            let mut entries: Vec<(&String, &Json)> = members.iter().collect();
+            entries.sort_by(|left, right| left.0.cmp(right.0));
             tagged(
                 "mapping",
                 Json::Array(
                     entries
                         .into_iter()
-                        .map(|(_, key, value)| {
+                        .map(|(key, value)| {
                             Json::Array(vec![Json::String(key.clone()), encode_content(value)])
                         })
                         .collect(),
@@ -405,67 +394,14 @@ fn encode_content(value: &Json) -> Json {
     }
 }
 
-/// `json.dumps(value, sort_keys=True, separators=(",", ":"))` over an
-/// encoded content: object keys in code point order, a number that is not
-/// a safe integer as Python's `repr` of a float, strings as ECMAScript
-/// writes them.
-fn python_json(value: &Json) -> String {
-    match value {
-        Json::Array(items) => {
-            let items: Vec<String> = items.iter().map(python_json).collect();
-            format!("[{}]", items.join(","))
-        }
-        Json::Object(members) => {
-            let mut keys: Vec<&String> = members.keys().collect();
-            keys.sort();
-            let members: Vec<String> = keys
-                .into_iter()
-                .map(|key| {
-                    format!(
-                        "{}:{}",
-                        js_string(key),
-                        python_json(members.get(key).unwrap_or(&Json::Null))
-                    )
-                })
-                .collect();
-            format!("{{{}}}", members.join(","))
-        }
-        Json::Number(number) => {
-            let value = number.as_f64().unwrap_or(f64::NAN);
-            if value.fract() == 0.0 && value.abs() <= MAX_SAFE_INTEGER {
-                #[allow(
-                    clippy::cast_possible_truncation,
-                    reason = "a safe integer converts exactly"
-                )]
-                let integer = value as i64;
-                integer.to_string()
-            } else {
-                python_float(value)
-            }
-        }
-        Json::String(text) => js_string(text),
-        Json::Bool(value) => value.to_string(),
-        Json::Null => "null".into(),
-    }
-}
-
-/// The original's `value.identities_json`: the identities in identity
-/// order without repeats, each name as a JSON string and each embedding as
-/// a list of Python floats.
+/// The identities in identity order without repeats ([`sort_key`]), as
+/// one JSON text.
 #[must_use]
 pub fn identities_json(ids: &[Json]) -> String {
     let mut keyed: Vec<(String, &Json)> = ids.iter().map(|id| (sort_key(id), id)).collect();
     keyed.sort_by(|left, right| left.0.cmp(&right.0));
     keyed.dedup_by(|right, left| left.0 == right.0);
-    let texts: Vec<String> = keyed
-        .into_iter()
-        .map(|(_, id)| match id {
-            Json::String(name) => js_string(name),
-            Json::Array(components) => python_vector(components),
-            other => other.to_string(),
-        })
-        .collect();
-    format!("[{}]", texts.join(","))
+    Json::Array(keyed.into_iter().map(|(_, id)| id.clone()).collect()).to_string()
 }
 
 /// An identity: a string, or an array of numbers (an embedding).
@@ -477,62 +413,16 @@ fn is_identity(value: &Json) -> bool {
     }
 }
 
-/// The original's `identity_sort_key` as one text, compared in code point
-/// order: `0` and a name's text, or `1` and an embedding's compact Python
-/// JSON.
-fn sort_key(id: &Json) -> String {
+/// An identity's sort key, compared in code point order: `0` and a name's
+/// text, or `1` and an embedding's JSON text (so every name sorts before
+/// every embedding).
+#[must_use]
+pub fn sort_key(id: &Json) -> String {
     match id {
         Json::String(name) => format!("0{name}"),
-        Json::Array(components) => format!("1{}", python_vector(components)),
+        other @ Json::Array(_) => format!("1{other}"),
         other => format!("2{other}"),
     }
-}
-
-/// An embedding as Python's compact `json.dumps` writes a list of floats.
-fn python_vector(components: &[Json]) -> String {
-    let texts: Vec<String> = components
-        .iter()
-        .map(|component| python_float(component.as_f64().unwrap_or(f64::NAN)))
-        .collect();
-    format!("[{}]", texts.join(","))
-}
-
-/// Python's `repr` of a finite float (`float_repr_style` `short`): the
-/// shortest round-trip digits, positional with at least one fraction digit
-/// when the decimal exponent is from -4 to 15, else `d[.ddd]e±XX`.
-#[must_use]
-pub fn python_float(value: f64) -> String {
-    if !value.is_finite() {
-        return "NaN".into();
-    }
-    let sign = if value.is_sign_negative() { "-" } else { "" };
-    if value == 0.0 {
-        return format!("{sign}0.0");
-    }
-    // Rust's `{:e}` writes the shortest round-trip digits: `d[.ddd]e<exp>`.
-    let scientific = format!("{:e}", value.abs());
-    let Some((mantissa, exponent)) = scientific.split_once('e') else {
-        return scientific;
-    };
-    let Ok(exponent) = exponent.parse::<i64>() else {
-        return scientific;
-    };
-    if !(-4..16).contains(&exponent) {
-        let exponent_sign = if exponent < 0 { "-" } else { "+" };
-        return format!("{sign}{mantissa}e{exponent_sign}{:02}", exponent.abs());
-    }
-    let digits: String = mantissa.chars().filter(char::is_ascii_digit).collect();
-    let whole_digits = usize::try_from(exponent + 1).unwrap_or(0);
-    let body = if exponent < 0 {
-        let zeros = usize::try_from(-exponent - 1).unwrap_or(0);
-        format!("0.{}{digits}", "0".repeat(zeros))
-    } else if digits.len() <= whole_digits {
-        format!("{digits}{}.0", "0".repeat(whole_digits - digits.len()))
-    } else {
-        let (whole, fraction) = digits.split_at(whole_digits);
-        format!("{whole}.{fraction}")
-    };
-    format!("{sign}{body}")
 }
 
 /// A string as ECMAScript's `JSON.stringify` writes it: quote, backslash
@@ -558,23 +448,6 @@ pub fn js_string(text: &str) -> String {
         }
     }
     out.push('"');
-    out
-}
-
-/// A string as `asciiJson` wrote it: [`js_string`] with every UTF-16 code
-/// unit from U+007F up as lower-case `\uxxxx`.
-fn ascii_json(text: &str) -> String {
-    let mut out = String::with_capacity(text.len() + 2);
-    for character in js_string(text).chars() {
-        if u32::from(character) < 0x7f {
-            out.push(character);
-        } else {
-            let mut units = [0_u16; 2];
-            for unit in character.encode_utf16(&mut units) {
-                push_unit(&mut out, *unit);
-            }
-        }
-    }
     out
 }
 
@@ -621,7 +494,7 @@ fn contents_element<H: MemoryHost>(
     Ok(Executed::Handled)
 }
 
-/// The original's `OutputData.contents` of one statement's result: the
+/// The contents of one statement's result: the
 /// first value of each row that is a string holding a JSON object, parsed,
 /// in row order; other rows are skipped.
 ///
@@ -684,7 +557,7 @@ fn cut_at_word_element<H: MemoryHost>(
     Ok(Executed::Handled)
 }
 
-/// The original's `_cut_at_word`: `words` within [`MAX_TURN_TEXT_BYTES`],
+/// `words` within [`MAX_TURN_TEXT_BYTES`],
 /// cut at the last whole word, and whether it was cut (see the crate
 /// documentation, `<memory:cut_at_word>`).
 #[must_use]
@@ -692,8 +565,8 @@ pub fn cut_at_word(words: &str) -> (String, bool) {
     if words.len() <= MAX_TURN_TEXT_BYTES {
         return (words.to_owned(), false);
     }
-    // `encoded[:MAX].decode(errors="ignore")`: the whole characters within
-    // the bound.
+    // The whole characters within the bound: a character the bound splits
+    // is dropped.
     let end = (0..=MAX_TURN_TEXT_BYTES)
         .rev()
         .find(|index| words.is_char_boundary(*index))
@@ -710,9 +583,8 @@ pub fn cut_at_word(words: &str) -> (String, bool) {
     (head.trim_end_matches(char::is_whitespace).to_owned(), true)
 }
 
-/// `text.rsplit(maxsplit=1)[0]` when that split has two parts: `text`
-/// without its trailing white space, its last word, and the white space
-/// before that word; `None` when it holds at most one word.
+/// `text` without its trailing white space, its last word, and the white
+/// space before that word; `None` when it holds at most one word.
 fn before_last_word(text: &str) -> Option<&str> {
     let trimmed = text.trim_end_matches(char::is_whitespace);
     let (index, _) = trimmed
@@ -758,7 +630,7 @@ fn stm_projection_element<H: MemoryHost>(
 }
 
 /// An object's fields in their order, a repeated key keeping its first
-/// place and its last value, as Python's `json.loads` builds a dict.
+/// place and its last value.
 struct OrderedFields(Vec<(String, Json)>);
 
 impl<'de> serde::Deserialize<'de> for OrderedFields {
@@ -789,7 +661,7 @@ impl<'de> serde::Deserialize<'de> for OrderedFields {
     }
 }
 
-/// The original's `_scalar_projection_value`: a boolean, a number, or a
+/// A projected scalar: a boolean, a number, or a
 /// string of at most [`MAX_PROJECTION_TEXT_LENGTH`] characters; anything
 /// else is dropped.
 fn scalar_projection_value(value: &Json) -> Option<Json> {
@@ -802,7 +674,7 @@ fn scalar_projection_value(value: &Json) -> Option<Json> {
     }
 }
 
-/// The original's `_payload_projection` of one value (see the crate
+/// The stimulus projection of one value (see the crate
 /// documentation, `<memory:stm_projection>`).
 ///
 /// # Errors

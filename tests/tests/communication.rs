@@ -393,8 +393,7 @@ fn exchange_carrying_turns(body: &Path) -> Run {
     );
     assert_eq!(texts(&all, "communication.exchange"), strings(&["2", "2"]));
     // The conversation's handoff stamps the turn's names as participants
-    // (the original's turn_participants, f6c4e08), and the body copies them
-    // into the turn.
+    // (decision D119), and the body copies them into the turn.
     let stamped = r#"[{"ref":"gabe","role":"source"},{"ref":"floppy","role":"target"}]"#;
     assert_eq!(
         texts(&all, "double.participants"),
@@ -425,8 +424,8 @@ fn exchange_carrying_turns(body: &Path) -> Run {
 }
 
 /// A product that is not text is no turn: the communication forwards the
-/// conversation's output itself, whose latest message is inbound (the original
-/// `_has_conversation_product`), and the body logs it.
+/// conversation's output itself, whose latest message is inbound, and
+/// the body logs it.
 #[test]
 fn a_product_that_is_not_text_reaches_the_body_as_the_conversation_output() {
     let body = layout(&Speaking::Real, &[]);
@@ -955,8 +954,8 @@ fn the_conversation_commits_each_message_into_its_exchange() {
     let second = &outputs[1]["messages"][0];
     let third = &outputs[2]["messages"][0];
     assert_eq!(second["content"], Json::Null);
-    // Each source's turn (the original's identity order: names, then
-    // embeddings) is exchanged with its turn detector, and the turns'
+    // Each source's turn (in identity order: names, then embeddings) is
+    // exchanged with its turn detector, and the turns'
     // texts are committed joined, each distinct text once (D79).
     assert_eq!(first["content"], json!("hello"));
     assert_eq!(first["provenance"]["turn_ref"], json!("input-1:turn:alice"));
@@ -988,10 +987,11 @@ fn the_conversation_commits_each_message_into_its_exchange() {
     );
 }
 
-/// The remembered input is the original's `Memory.to_json` (the expected texts
-/// are its own), as `<memory:to_json>` writes it.
+/// The remembered input is one JSON text as `<memory:to_json>` writes it
+/// (the memory namespace's statement memory-2): sorted keys, lists and
+/// mappings tagged, identities sorted.
 #[test]
-fn the_remembered_input_is_the_original_memory_json() {
+fn the_remembered_input_is_one_memory_json_text() {
     let dir = unique_scratch("conversation-payload");
     let harness = dir.join("payload.scx");
     std::fs::copy(
@@ -1012,8 +1012,8 @@ fn the_remembered_input_is_the_original_memory_json() {
     assert_eq!(
         texts(&all, "payload"),
         strings(&[
-            r#"{"content":{"__stateforward_memory_content__":"mapping","value":[["é","x"],["a",{"__stateforward_memory_content__":"list","value":[true,null,1.5]}],["b",1]]},"content_type":"application/json","source_ids":["alice","zed",[0.5,1.0]],"target_ids":["bot","é"]}"#,
-            "{\"content\":{\"__stateforward_memory_content__\":\"list\",\"value\":[\"\u{1f600}\",1e-07,1.2345678901234567e+19,{\"__stateforward_memory_content__\":\"mapping\",\"value\":[[\"\u{7f}\",{\"__stateforward_memory_content__\":\"list\",\"value\":[]}],[\"z\",{\"__stateforward_memory_content__\":\"mapping\",\"value\":[]}]]}]},\"content_type\":\"text/x\",\"source_ids\":[\"q\\\"\\n\",[1e-05,2.0],[3.0,4.0]],\"target_ids\":[]}",
+            r#"{"content":{"__stateforward_memory_content__":"mapping","value":[["a",{"__stateforward_memory_content__":"list","value":[true,null,1.5]}],["b",1],["é","x"]]},"content_type":"application/json","source_ids":["alice","zed",[0.5,1]],"target_ids":["bot","é"]}"#,
+            "{\"content\":{\"__stateforward_memory_content__\":\"list\",\"value\":[\"\u{1f600}\",1e-7,12345678901234567000,{\"__stateforward_memory_content__\":\"mapping\",\"value\":[[\"z\",{\"__stateforward_memory_content__\":\"mapping\",\"value\":[]}],[\"\u{7f}\",{\"__stateforward_memory_content__\":\"list\",\"value\":[]}]]}]},\"content_type\":\"text/x\",\"source_ids\":[\"q\\\"\\n\",[0.00001,2],[3,4]],\"target_ids\":[]}",
         ])
     );
 }
@@ -1030,8 +1030,8 @@ fn a_turn_its_detector_cannot_close_fails_the_input_and_commits_nothing() {
     .expect("the harness is copyable");
     let input = "bot.ability.conversation.input";
     let mut run = Run::start(&[harness.display().to_string()], &[]);
-    // Sent in one macrostep, so the second and third wait for the first (the original
-    // defers them). White space only: the detector closes the turn with
+    // Sent in one macrostep, so the second and third wait for the first.
+    // White space only: the detector closes the turn with
     // nothing to show. Empty text: the start's text stimulus is refused
     // before the detector. Then text, stripped by the detector before it
     // is committed once, not once per source.
@@ -1354,7 +1354,7 @@ fn a_response_is_spoken_through_the_speech_service() {
     assert_eq!(written.len(), 4800);
     let requests = requests.lock().expect("the request log").clone();
     assert_eq!(requests.len(), 1, "{requests:?}");
-    // speaking's defaults, the original's gemini speech encoder, model and voice.
+    // speaking's defaults: the gemini speech encoder, its model and voice.
     assert_eq!(requests[0]["model"], "gemini-3.1-flash-tts-preview");
     assert_eq!(requests[0]["input"], "reply 1");
     assert_eq!(

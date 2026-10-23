@@ -105,7 +105,7 @@ fn env_names(text: &str) -> BTreeSet<String> {
 }
 
 /// The documents whose `model` is the speech service's (an audio or voice
-/// model, the original's speech decoder, speech encoder and voice classifiers'
+/// model: the speech decoder's, speech encoder's or voice classifier's
 /// own), not the generation model: each `model` `<data>` is `null` (the
 /// service's request names none of floppy's) or a model docs/defaults.md's
 /// "Speech and voice models" names.
@@ -257,8 +257,8 @@ const ACTIVATION_BOUNDS: [(&str, &str); 4] = [
 ];
 
 /// The members of the bot's `bounds` param with no `<data>` default: a
-/// cognition tier's own step bound (decision D140, the reference's
-/// `_tier_timeouts`, read as `bounds[tier() + '_timeout_ms']`) and
+/// cognition tier's own step bound (decision D140, read
+/// as `bounds[tier() + '_timeout_ms']`) and
 /// reasoning's context fit (decision D143); absent, a tier takes the stage
 /// bounds above and reasoning fits nothing. Each is one the body documents
 /// and the cognition's script reads.

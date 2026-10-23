@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- cognition-4: a stimulus over the bytes the instructions and the schema leave of the prompt's fails with the original's message, recalled items or not. -->
+<!-- cognition-4: a stimulus over the bytes the instructions and the schema leave of the prompt's fails with the encoded byte budget's message, recalled items or not. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition">
 <datamodel>
   <data id="p" expr="'unset'"/>

@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   XML Schema of floppy's `processing` extension namespace
-  (namespaces/processing), the original's processing module. It governs
+  (namespaces/processing): what a stage needs between the offered events
+  and their dispatch. It governs
   structure only; the extension component governs what the element does.
   Bind it with the prefix `processing` by convention.
 
@@ -27,7 +28,7 @@
                    bound (optional): a decimal integer, default 32768.
                    overlocation, sizelocation (optional): receive whether
                    the choices are over the bound, and their size in bytes.
-  processing:send  location (required): receives the original's dispatch
+  processing:send  location (required): receives the dispatch
                    tool schema ({events: [anyOf one branch per offered
                    event]}, each branch {event, data, reason?, target?},
                    the tool's description its root description) of the

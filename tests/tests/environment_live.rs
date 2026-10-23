@@ -139,7 +139,7 @@ fn live_two_participants() {
     );
     // a's turn on the request and its speech; then the silence that ends
     // the utterance (the open-speech window closes on a sound without
-    // voice, the original's VAD End), as
+    // voice), as
     // a_bots_speech_reaches_the_other_participant sends it; then b's turn
     // on what it heard (b's floppy.output), at most 15 minutes in all.
     let heard = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

@@ -3,16 +3,37 @@
 Read this first when picking the work up in a new session or account. It
 records where things stand, how to work, and what is open. The detailed
 history lives in [decisions.md](decisions.md) (numbered decisions),
-[port-plan.md](port-plan.md) (the original mapping and phases), and
+[port-plan.md](port-plan.md) (the concept map, phases and conventions), and
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
-Last updated: 2026-10-22.
+Last updated: 2026-10-23.
 
 ## Current state (2026-10-09) — resume here
 
+- **The docs describe floppy on its own terms (2026-10-23, #19):** the
+  plans that tracked floppy against another system are retired. What they
+  left open is under [Open work](#open-work),
+  [Design decisions for the maintainer](#design-decisions-for-the-maintainer)
+  and [Choices to review](#choices-to-review).
+- **Learned behaviors are repaired and run on their live turn
+  (2026-10-22, D130 and D131):** reflection repairs a
+  select call the generate service refuses (D126's `rejection`) at most
+  twice with repair feedback carrying the rejection, failing at once on the same
+  rejection and then with `Selection rejected: <message>` (D130). The
+  builder runs a turn behavior once on the live turn it is learned from
+  (`builder.request`'s `apply`, which reflection always sends) and
+  checks the run with `<behavior:verify_apply>` (D131); a routine keeps
+  its forced tick; the author call (a whole document) is bounded by
+  `document_max_completion_tokens` (16384). D132 (a fixed turn template
+  whose script the model writes) is withdrawn: the maintainer wants no
+  templates in the builder, and the bar is whether the model builds whole
+  documents itself (to be tried on sparks). The build-time half
+  of "nothing tests learned behaviors on real input" is done by D131;
+  the runtime half, a learned behavior tested on a later real turn, is
+  under Learning in [Open work](#open-work) (#14).
 - **Seeing (2026-10-22, D185 to D189):** `abilities/seeing/seeing.scx`
-  is the original's eye: it holds the newest `environment.visual` of each
+  is the bot's eye: it holds the newest `environment.visual` of each
   `source` (a new [floppy field]; the schema moved to `abilities/schemas/`),
   measures change through the new `vision` service (`byte_identity`,
   `frame_diff`), looks when the model selects `bot.ability.seeing.look`, and
@@ -21,23 +42,24 @@ Last updated: 2026-10-22.
   The body invokes it always, and its `seeing_enabled` switch (off by
   default) decides whether it is expected, fed and offered; every bot run
   now grants the vision service a media directory. Faces wait on decision 6.
-  `frame_diff` decodes as the original's OpenCV 5.0.0 build does (its own
+  `frame_diff` decodes as OpenCV 5.0.0 does (its own
   JPEG DC decoder, libpng's gray and gamma, `image-webp`, Exif
   orientation), checked against OpenCV fixtures in
   `services/vision/src/testdata/`; Cargo.lock carries `miniz_oxide` 0.8.9
   for `png` beside scxml.rs's 0.9 (D185). A document IRP case may now
   require its run's logs (`logs=` in cases.py, `logs.json`).
-- **Body and room parity (2026-10-22, D155 to D160):** `bot.clear_focus`
+- **Body and room (2026-10-22, D155 to D160):** `bot.clear_focus`
   is gone (focus stays until the bot focuses another device; the reflex
   floor keeps it). A busy body holds what arrives (`floppy.held`), and the
   next turn takes at most 8 percepts, 64 KiB and 32 participants: one
   percept as itself, more as one `bot.perceived {percepts}`; what is still
   held when the bot leaves active is released (`floppy.released`), never
   replayed. `bot.input` carries `participants`, and every schema inlines
-  the original's one `Participant` (`contracts.rs` checks they are equal;
+  the same `Participant` definition (`contracts.rs` checks they are equal;
   scxml.rs refuses a cross-file `$ref`). The room supervises each bot in
-  its own `supervising.<bot>` region with the original's restart budget
-  and backoff, and a device may sit on an object (`on`, rendered on its
+  its own `supervising.<bot>` region with a restart budget
+  (`max_restarts`) and a doubling backoff (`backoff_initial_ms` to
+  `backoff_max_ms`), and a device may sit on an object (`on`, rendered on its
   `<device>`). The body starts a firmware after its abilities
   (`firmware_src`, default `bots/floppy/firmware/firmware.scx`, which offers
   nothing); an owner's firmware is offered, read each turn and rendered as
@@ -67,7 +89,7 @@ Last updated: 2026-10-22.
   `error.communication` failure look new. `max_attempts` stays. This
   catches the live run 2's `E0009`, repeated four times among other
   diagnostics. Live (2026-10-21, docs/live-proof.md), on the maintainer's
-  lab (mosfet's stack: `gemma-4-26b-a4b` on the vLLM at
+  lab (`gemma-4-26b-a4b` on the vLLM at
   `192.168.2.2:8100`, the systemone decision server at
   `192.168.2.2:8102`): `live_cascade` passes; `live_conversation` failed
   both runs with no run ended early and no behavior learned, every
@@ -142,42 +164,37 @@ Last updated: 2026-10-22.
   `c8bb69a8` (a `srcexpr` child's schema files and scripts load against
   its own base URI, fetched each time it is invoked) came with it. Open: D121's "To
   review" list under "Open decisions" below.
-- **Parity gap 13's small part (2026-10-18,
-  [parity-gaps](plans/parity-gaps.md)):** `<conversation:ingest_content>`
-  no longer takes an image stimulus as `image/*` content, as the original's
-  `0d0f5e2` deletes that branch; until the turn attachments are ported (the
-  rest of gap 13), an image adds nothing to a turn, and a turn of images
-  alone fails as empty. The conversation namespace IRP was re-prepared and
+- **An image is no turn content (2026-10-18):**
+  `<conversation:ingest_content>` no longer takes an image stimulus as
+  `image/*` content; until a turn carries attachments
+  ([open work](#open-work)), an image adds nothing to a turn, and a turn
+  of images alone fails as empty. The conversation namespace IRP was re-prepared and
   its baseline re-measured on macOS arm64.
 - **Q8: the decision service's kinds are OpenAI Decisions API's question
-  types, with J16 and J17 (2026-10-18, D120,
-  [plan](plans/original-domains.md#to-review-q8)):** `choice` (the default;
+  types (2026-10-18, D120,
+  [to review](#choices-to-review)):** `choice` (the default;
   was `choose`, and `classify` when given `labels`), `predicate` (was
   `select`, its behavior unchanged: each event's confidence is still its
   share of the one `selection` question) and `score` (was `rank`); the
   events keep their names and TypeSafe's `/v1/systemone` stays the backend.
   The service now never offers `bot.ability.reasoning.input` and builds the
-  original's `{"turn": {"envelope", "data"}}` state from a `stimulus` param,
-  so intuition passes its `choices` and `stimulus` as they are. Open: the
-  plan's "To review (Q8)" list.
-- **Parity gaps 3, 5 and 4 ported; gap 6 stopped (2026-10-18, D117 to
-  D119, [parity-gaps](plans/parity-gaps.md)):** recalled context trims to
-  the prompt budget instead of failing the turn (D117; open: on wasm the
-  data model's 64 KiB value bound refuses a prompt before it is big enough
-  to trim, so the maintainer lowers the budget or the bound is raised
-  upstream); a `bot.deactivate` while activating answers
+  `{"turn": {"envelope", "data"}}` state from a `stimulus` param, so
+  intuition passes its `choices` and `stimulus` as they are (amended by
+  D150). Open: the [choices to review](#choices-to-review).
+- **Recall trimmed, lifecycle answers, stamped participants (2026-10-18,
+  D117 to D119):** recalled context trims to the prompt budget instead of
+  failing the turn (D117; open: on wasm the data model's 64 KiB value
+  bound refuses a prompt before it is big enough to trim,
+  [open work](#open-work)); a `bot.deactivate` while activating answers
   `bot.deactivated`, and an unacknowledged cancel announces `bot.degraded
   {stage: "processing_cancel"}` (D118); stimuli and cognition inputs carry
   producer-stamped `participants`, the conversation stamping with
-  `<conversation:turn_participants>` (D119). Gap 6
-  (`bot.ability.speaking.stop`) waits on decision 6 and gap 11: the
-  original's stop is built on `c88b6cd`'s streamed utterance and its
-  `OutputData` (`voice_id`, `spoken`, `unspoken`).
-  **Amended by D179 (2026-10-22):** the stop, progress and
-  `spoken`/`unspoken`/`outcome` are ported on unstreamed audio, `voice_id`
-  null until decision 6.
+  `<conversation:turn_participants>` (D119).
+  `bot.ability.speaking.stop` came later (D179, 2026-10-22): the stop,
+  progress and `spoken`/`unspoken`/`outcome` on unstreamed audio,
+  `voice_id` null until decision 6.
 - **The behavior and autonomy namespaces, and no bot namespace (2026-10-18,
-  D116, [plan](plans/original-domains.md) step 4, the last):**
+  D116, the namespace plan's step 4, the last):**
   `namespaces/behavior` (`<behavior:instances_from_behavior_results>`,
   `<behavior:replace_behavior_clauses>`, `<behavior:lifetime_errors>`,
   `<behavior:verify_tick>`) and `namespaces/autonomy`
@@ -185,42 +202,42 @@ Last updated: 2026-10-22.
   the builder's and autonomy's behavior JavaScript; a create's draft is
   stored as an accepted change is, by `replace_behavior_clauses`.
   `<bot:stimulus>` is plain `<assign>`s and `namespaces/bot` is gone, so
-  `decision` keeps only `choice` and `pin`. Open: J7 (`next_after` stays
-  JavaScript: `<scx:validate>` binds no extension package, so a routine
-  draft cannot use a namespace element; an scxml.rs change), the plan's
-  "To review (step 4)" list and its [Map status](plans/original-domains.md#map-status);
+  `decision` keeps only `choice` and `pin`. Open: `next_after` stays
+  JavaScript (`<scx:validate>` binds no extension package, so a routine
+  draft cannot use a namespace element; an scxml.rs change), the
+  [choices to review](#choices-to-review) and the [open work](#open-work);
   the behavior and autonomy namespace IRP baselines were measured on macOS
   arm64. On macOS, `scripts/namespace-irp.sh prepare` fails at
   `cache-create` (its `mktemp -d` is under the `/var` symlink); prepare
   with `scx conformance prepare` and a `--cache` in the scratchpad.
 - **The identity, conversation and memory namespaces (2026-10-18, D115,
-  [plan](plans/original-domains.md) step 3):** `namespaces/identity`
+  the namespace plan's step 3):** `namespaces/identity`
   (`<identity:hears_name>`, was `<bot:recognize>`;
   `<identity:sorted_identities>`), `namespaces/memory` (`<memory:to_json>`,
   `<memory:contents>`) and the `conversation` namespace's ten elements
-  (`<conversation:message_for_turn>`, was `<conversation:commit>`, and
-  the original's `_relationship_for_input`, `_participant_for_source`,
-  `_fail_turn`, `detector_refs`, `_new_track_ref`, `_content_for_detector`,
-  `_complete_turn` and the turn detector's `_ingest_content` and `_on_end`)
+  (`<conversation:message_for_turn>`, was `<conversation:commit>`,
+  `relationship_for_input`, `participant_for_source`, `fail_turn`,
+  `detector_refs`, `new_track_ref`, `content_for_detector`,
+  `complete_turn` and the turn detector's `ingest_content` and `on_end`)
   replace the conversation's, the turn detector's and reasoning's row
   JavaScript, writing what it wrote. `isCommittedAppend` stays JavaScript
   (it searches the history). Next in Q10's order: `behavior`. Open: the
-  plan's "To review (step 3)" list; the bot, conversation, identity and
+  [choices to review](#choices-to-review); the bot, conversation, identity and
   memory namespace IRP baselines were measured on macOS arm64.
 - **The intuition and cognition namespaces (2026-10-18, D114,
-  [plan](plans/original-domains.md) step 2):** `namespaces/intuition`
-  (`<intuition:observe>`, `<intuition:escalate>`, the original's
-  `ConfidenceTuner`, its state the `confidence_tuner` datum) replaces
+  the namespace plan's step 2):** `namespaces/intuition`
+  (`<intuition:observe>`, `<intuition:escalate>`, a confidence tuner
+  whose state is the `confidence_tuner` datum) replaces
   `<decision:tuner>`; `namespaces/cognition`
   (`<cognition:attention_bias_for_turn>`,
   `<cognition:model_facing_content failurelocation?>`) replaces
   `<bot:attention>` and reasoning's prompt JavaScript, rendering the same
   bytes. `<decision:pin>` stays (Q11); `autonomy` is a later step. Next in
-  Q10's order: `identity`, `conversation` and `memory`. Open: the plan's
-  "To review (step 2)" list; the four namespace IRP baselines touched were
+  Q10's order: `identity`, `conversation` and `memory`. Open: the
+  [choices to review](#choices-to-review); the four namespace IRP baselines touched were
   measured on macOS arm64.
 - **The processing namespace and every stage's sends (2026-10-18, D113,
-  [plan](plans/original-domains.md) step 1):** `namespaces/processing`
+  the namespace plan's step 1):** `namespaces/processing`
   (`<processing:model_facing_schema>`, `<processing:collect_offered_events>`,
   `<processing:send max?>`, `<processing:selection_confidence>`) replaces
   `<decision:compact>`, `<decision:assemble>`, `<decision:selection>` and
@@ -230,37 +247,35 @@ Last updated: 2026-10-22.
   offerer's session id, and each stage sends its own selections with
   `<foreach>` + `<send targetexpr="'#_scxml_' + s.target">`; the decision
   service names each selection's only offerer. Next in Q10's order:
-  `intuition` and `cognition`. Open: the plan's "To review (step 1)" list;
+  `intuition` and `cognition`. Open: the
+  [choices to review](#choices-to-review);
   the decision, bot and processing namespace IRP baselines were measured
   on macOS arm64.
 - **Tools, not structured output (2026-10-16, D112, amended
-  2026-10-17 and 2026-10-18):** the generate service asks for schema-shaped output as the
-  original does on Chat Completions: one function tool (the `schemaname`,
+  2026-10-17 and 2026-10-18):** the generate service asks Chat
+  Completions for schema-shaped output as one function tool (the `schemaname`,
   the schema's root `description` as the function's, the rest of the
   schema as its `parameters`, no `strict`), `"tool_choice": "required"`,
   and `reasoning_effort` `none`. `generate.result` is always
   `{content, tool_calls: [{id, name, args}]}`, each call of the function
   checked against the schema before any is returned (`schema-mismatch`),
   after its top-level fields the schema's root `properties` do not
-  declare are dropped (the original reads only `args.events`; nested
-  objects stay strict); `strict` is gone. Reasoning and reflection send
+  declare are dropped (nested objects stay strict); `strict` is gone. Reasoning and reflection send
   the `dispatch` calls' events with nested `<foreach>` (D113), the builder
-  takes its call by name, and `<processing:send>` builds the original's
-  dispatch tool exactly. The maintainer's mapping of floppy's domains onto
-  the original's modules is [plans/original-domains.md](plans/original-domains.md);
-  its step 1 is done (above).
+  takes its call by name, and `<processing:send>` builds the dispatch
+  tool.
 
 - **The environment (2026-10-16, D102 to D111,
   [plan](plans/environment.mdscript.md)):** the bot runs as a participant of
   `environments/room/room.scx`, the root session, and activates on joining
   (no `bot.activate`; `inactive` is its final). The room routes host input,
-  broadcasts sound and visuals with the original's placement and loudness,
+  broadcasts sound and visuals by placement and free-field loudness,
   and logs the bot's events; the communication puts speaking's sound into
   the room after the efference copy (D103, amended). Devices are documents
   the room invokes, held through `holdings` and `owned_devices`, read with
   the new `namespaces/device` (`<device:snapshot>`) and acted on at their
   address; the cognition input's `environment` field is rendered by
-  reasoning as the original's environment block. Every environment run
+  reasoning as its `<environment>` block. Every environment run
   passes `--fuel 9223372036854775807` until average usage is measured
   (D111). scxml.rs is at `5bc75e72` (D125's `..` in `event:schema`), on top of `cf8f293a` (D123's eventless-cond fix), on top of `f920cb47` (D122), on top of `c8bb69a8` (D121) and `b59f8111` (D104, D109, D110). Speech and voice
   backends exist now, each through an env file in the session scratchpad
@@ -309,20 +324,21 @@ Last updated: 2026-10-22.
 - **Speaking bound and self-hearing (2026-10-12, D98):** speaking's
   `encoding_timeout_ms` is 30 s (the communication passes 30 s and bounds
   a response by 36 s), since Gemini's unstreamed synthesis of a sentence
-  outlasted the original's 5 s; `environment.sound` carries an optional
+  outlasted 5 s; `environment.sound` carries an optional
   `source` [floppy field], which speaking stamps with its mouth, so the
   listening's sensitivity scores the bot's own sound against the efference
   copy and the interpretation withholds its product. Voice detection still
   runs on it and fails without `FLOPPY_VOICE_BASE_URL`, as designed.
 - **Selections the body can't place (audit item 4, 2026-10-10; superseded by D113, 2026-10-18):** a turn
   whose selections cannot all be placed fails with `bot.processing.failed`
-  and the original's `SelectionRejectionError` message, never
+  and a selection rejection message, never
   `bot.processing.completed`; `floppy.route.dropped` is gone. `<bot:verdict>`
-  (ignore selections removed, the reference `attention_selection_error`) and
-  `<decision:route rejectionlocation choices>` (the reference `_resolve_target`)
-  run where the original dispatches: in autonomy before a learned behavior's use
+  (ignore selections removed, a focus selection's device checked against
+  the turn's focus candidates) and
+  `<decision:route rejectionlocation choices>` (each selection placed on its
+  target) run where a stage dispatches: in autonomy before a learned behavior's use
   is counted (a rejected one is counted failed and fails the turn),
-  intuition ("Selection rejected: ...", without the original's one retry),
+  intuition ("Selection rejected: ...", with no retry),
   reasoning (before returning its selections), and in the body's `routing` before it logs
   the outcome (which catches the trusted seed's selection).
   `<decision:assemble>` lost `routeslocation`.
@@ -335,7 +351,7 @@ Last updated: 2026-10-22.
   URI, granted `inherit-network`), with the same `sql.result`/`sql.failed`
   contract, `rowcount` guards and open transactions. Migrations are
   Alembic's: `<migration:plan>` (`namespaces/migration`) and
-  `abilities/migration/migration.scx`, with the original's revisions per engine
+  `abilities/migration/migration.scx`, with the memory schema's revisions per engine
   in `abilities/memory/{sqlite,postgresql}/` and the version in
   `alembic_version`. Every ability's SQL is portable to both. Postgres
   support is tested on Postgres 16 (`FLOPPY_POSTGRES_BIN=<bin dir>` runs the
@@ -390,11 +406,11 @@ Last updated: 2026-10-22.
 ## Intuition contract and reasoning prompt (2026-10-10)
 
 - **Intuition** uses the decision service's kind `predicate` (`select`
-  until D120; the reference decision processor, D150): `decision.selected
+  until D120; D150): `decision.selected
   {selections: [{event, data, confidence, target?}]}`, only the chosen event
   with its probability. Intuition observes that confidence (0-100) with
   `<intuition:observe>` first, then `<intuition:escalate>` compares it with
-  the updated threshold (the original's `_tune_confidence`, D114). `low_confidence` and `deliberative_input` send
+  the updated threshold (D114). `low_confidence` and `deliberative_input` send
   only the environment actions before the turn escalates (never the ignore
   or the handoff), and every donedata carries `acted`, what was sent. The
   service's pass criteria are one per tier of `hand_ons` (`__intuition__`,
@@ -406,13 +422,11 @@ Last updated: 2026-10-22.
   the service's done data. `choice` (`choose` until D120, the builder's
   triage) keeps its pass criterion `__unhandled__`; it lost its `threshold`
   (and `below-threshold`).
-- **Reasoning** sends the original's `model_facing_xml(ProcessorInput)` under
-  the original's budgets (`<cognition:model_facing_content>`, D114; it was
-  `promptProjection()` in reasoning.js, checked byte-for-byte against the
-  original's renderer on sample inputs, and the element renders what that
-  JavaScript rendered). The reasoning
-  and intuition system prompts still describe floppy's old inputs (gap 9,
-  the maintainer's).
+- **Reasoning** sends its input as budgeted XML
+  (`<cognition:model_facing_content>`, D114; it was `promptProjection()`
+  in reasoning.js, and the element renders what that JavaScript
+  rendered). The reasoning
+  and intuition system prompts still describe floppy's old inputs.
 - **Tests in worktrees:** a `target/` copied from another checkout keeps
   `floppy-tests` binaries whose `CARGO_MANIFEST_DIR` is the other
   checkout, so `support::workspace()` builds and runs there. Run
@@ -424,7 +438,7 @@ Last updated: 2026-10-22.
 - **Branch:** `claude/project-thread-r7141w` (from `claude/project-thread-brkerr`),
   pushed to `gabewillen/floppy`; the phase 4 branch merges its commits.
 - **Done:** `services/sql` (one SQLite transaction per `<invoke>`, any
-  schema) and `abilities/memory/memory.scx` (the original's Memory: migrates the original's
+  schema) and `abilities/memory/memory.scx` (the Memory ability: migrates the memory
   schema and applies statements through the sql service), decisions D44 to
   D47. Reasoning, identity and conversation recall and remember through the
   memory ability, and the body passes its database `/memory/floppy.sqlite`
@@ -449,17 +463,17 @@ Last updated: 2026-10-22.
   as a chain of runners passing `bot.behavior.tick` up. Decisions D60 to
   D64, D73 to D75, D80 (the plan's D48, D49 and D55, renumbered past clashes).
   Plan: [plans/phase5-behaviors.mdscript.md](plans/phase5-behaviors.mdscript.md).
-- **Routines and revision, the original's behavior (2026-10-10):** a routine's
+- **Routines and revision (2026-10-10):** a routine's
   `at` schedule computes its next occurrence in its own data model with
-  `next_after` (reflection.js, the reference `At.next_after` over the zone's POSIX
+  `next_after` (reflection.js, over the zone's POSIX
   TZ rule: the ECMAScript data model has no `Intl` or time zone database);
   the builder, given `min_every_ms`/`turn_after_bound_ms`, rejects drafts
-  outside the reference `check()`'s lifetime bounds (E0009) and forces a
+  outside the lifetime bounds (E0009) and forces a
   routine's first tick (E0008); the tick schema refuses an empty `output`;
   reflection drafts the builder's last rejected source and drafts nothing
   when the change call itself failed.
 - **Seams on (2026-10-10, D80):** the cognition always runs reflection and
-  routines (no gates, as the original composes them); with no database each logs
+  routines (no gates); with no database each logs
   `absent`. Every bot turn with memory now ends with reflection's select
   call and the turn's episode, which reflection alone stores (D97: reasoning
   retains none, so each turn records one episode, a failed reflection's
@@ -467,12 +481,12 @@ Last updated: 2026-10-22.
 
 ## Conversation memory (2026-10-10)
 
-- **Done** on branch `wt-conversation`: the conversation keeps the original's
+- **Done** on branch `wt-conversation`: the conversation keeps
   relationships (matched in either direction, targetless input in the
-  ambient one) and keys its memory by the original's `relationship_context_ref`
+  ambient one) and keys its memory by the relationship's `relationship_context_ref`
   (`{"identity_groups":[...]}`, written by `<conversation:commit
   keylocation>`), recalls before the turns and remembers after them (each
-  its own 5 s operation), and remembers the original's `Memory.to_json`. It
+  its own 5 s operation), and remembers each input as its memory row's JSON. It
   answers `bot.ability.conversation.snapshot.request` and a repeated
   append; the communication forwards a non-text product whose latest
   message is inbound. Memories kept by earlier floppy runs, under the old
@@ -480,26 +494,26 @@ Last updated: 2026-10-22.
 
 ## Turn detectors (2026-10-10)
 
-- **Done** on branch `claude/project-thread-fubdvs`: the original's TurnDetector
-  as `abilities/turn_detector/turn_detector.scx` (its seven events'
+- **Done** on branch `claude/project-thread-fubdvs`: the turn detector
+  `abilities/turn_detector/turn_detector.scx` (its seven events'
   schemas in `abilities/schemas/`), and the conversation's
   `turn_exchange`, which runs one turn per source of each input through it
   before memory and commits the turns' product. Decisions D76 to D79;
   conventions: [port-plan.md](port-plan.md#turn-detector-conventions).
-- **Decided (D79):** The original commits a multi-source text input once per
-  source (`hello hello hello`); the maintainer chose to say it once, so
-  floppy joins each distinct turn text once. The detector has no decoder
+- **Decided (D79):** the maintainer chose to say a multi-source text
+  input once, so floppy joins each distinct turn text once (`hello`, not
+  `hello hello hello`). The detector has no decoder
   (D77).
 
 ## Phase 6 (2026-10-10): speech and vision
 
 - **Done on `main`** (`d569318`): `services/speech` (decode, encode, and the
   voice operations `detect`, `diarize`, `identify` with the media steps
-  `normalize`, `append`, `clip`); the original's hearing leaves, sensitivity,
+  `normalize`, `append`, `clip`); the hearing leaves, sensitivity,
   interpretation (open-speech window included) and listening, which the
   body invokes as its input ability; the SpeechHeard seed in autonomy;
   vocal and speaking in audio mode; image parts in the generate service;
-  vision and reading (invoked by nothing yet, as in the original). Decisions
+  vision and reading (invoked by nothing yet). Decisions
   D52, D57 to D59, D66, D67; D38 is superseded.
   Plan: [plans/phase6-speech-vision.mdscript.md](plans/phase6-speech-vision.mdscript.md);
   conventions: [port-plan.md](port-plan.md#phase-6-conventions).
@@ -509,10 +523,10 @@ Last updated: 2026-10-22.
   speech decoding) and `FLOPPY_VOICE_BASE_URL`/`FLOPPY_VOICE_API_KEY`
   (LocalAI: every sound goes through voice detection). Without them a
   response fails and every sound is `bot.ability.listening.failed`.
-- **Not ported:** devices (phone, LiveKit, audio hardware; out of scope)
-  and the Conversation's matching of embedding sources to earlier
-  participants' voice centroids. The turn detectors are ported (see
-  below).
+- **Not built:** devices (phone, LiveKit, audio hardware; out of scope)
+  and the conversation's matching of embedding sources to earlier
+  participants' voice centroids. The turn detectors are built (see
+  above).
   ElevenLabs encoding exists in the service (`provider` `elevenlabs`), but
   no document selects it.
 - **Live:** `speech_service`'s `live_speech_round_trip_through_an_env_file`
@@ -532,7 +546,6 @@ Last updated: 2026-10-22.
 | floppy (this repo, formerly nemobot) | `~/VSCode/stateforward/floppy`, remote `github.com/gabewillen/floppy` (private) | `main` | bots, floppy's namespaces and services, docs; no runtime of its own (D14) |
 | scxml.rs | `~/VSCode/stateforward/scxml.rs` | `main` | engine, `scx` CLI, hosts, validator, resolver |
 | scxml.rs work branch | `~/VSCode/stateforward/scxml.rs-services` (git worktree) | `feat/invoke-services` | all scxml.rs changes are made here first |
-| Reference implementation (source of the port) | not in this repository | — | Python runtime being ported; reference only |
 
 `scxml.rs/` inside floppy is a **squashed git subtree** of scxml.rs.
 
@@ -646,14 +659,14 @@ inlines the browser `validate` options type so no unapproved
 
 - Phase 4 event contracts (floppy `cb4e47e0`): one JSON Schema file per
   event, body events in `bots/floppy/schemas/`, ability events in
-  `abilities/schemas/`, the original's domain names in
+  `abilities/schemas/`, the domain event names in
   `abilities/schemas/floppy-event-names.json`; documents reference them by
   `event:schema="schemas/<event>.json"`, never inline. A schema reference
   cannot contain `..`, so ability documents live flat as
   `abilities/<ability>.scx`. `tests/tests/contracts.rs` checks the schema
   set and every `.scx` under `abilities/` and `bots/floppy/`.
 
-- Phase 4 body and thin cognition: `bots/floppy/floppy.scx` (the original's Bot
+- Phase 4 body and thin cognition: `bots/floppy/floppy.scx` (the bot's
   lifecycle and turns as the root session: `inactive`, `live{activating,
   active{unfocused, focused, processing, cancelling_processing,
   returning}}`, `deactivating`, final sink `degraded`) invokes
@@ -673,7 +686,7 @@ inlines the browser `validate` options type so no unapproved
   invokes per turn `abilities/autonomy/autonomy.scx` (always unhandled without
   memory), `abilities/intuition/intuition.scx` (`<decision:choice>` of ignore or
   the reasoning handoff, decided by the decision service on TypeSafe, with
-  the original's ConfidenceTuner passed by `<param>` and returned in
+  the confidence tuner passed by `<param>` and returned in
   `<donedata>`), and `abilities/reasoning/reasoning.scx` (memory steps around one
   strict structured `generate` call whose schema is built from
   `<decision:choice>`: respond and ignore until the body assembles
@@ -711,9 +724,8 @@ inlines the browser `validate` options type so no unapproved
   `bot.ability.conversation.append`, and defers input and responses while
   one is in flight; a waiting one passes the same checks when replayed
   (a blank waiting response fails and is not said). External `bot.ability.communication.input` goes
-  through the body to the conversation (as the original's
-  `bot.ability.conversation.routed_input`), whose text product (its whole
-  history, as in the original) comes back as a `bot.ability.cognition.input`
+  through the body to the conversation, whose text product (its whole
+  history) comes back as a `bot.ability.cognition.input`
   handoff the body grants a turn.
   Tests: `tests/tests/communication.rs` (8), the fake-backend end-to-end
   `a_reasoned_response_is_said_through_the_communication` in
@@ -735,8 +747,8 @@ inlines the browser `validate` options type so no unapproved
   change, and say so in the commit.
 
 - `<decision:compact location bound overlocation>` (floppy `8f2b2616`,
-  `008cd04a`): the shared offer compaction (the original
-  `model_facing_event_json_schema` and the 32 KiB bound) in
+  `008cd04a`): the shared offer compaction (the model-facing schema
+  and the 32 KiB bound) in
   `namespaces/decision`. The cognition and communication offers use it;
   their `compactSchema`/`compactOffers` copies are gone, traces unchanged.
   Still scripted: the body's `compactSchema`/`compactChoices` (its
@@ -756,9 +768,8 @@ inlines the browser `validate` options type so no unapproved
   `attentionBias`, `envelope` (later slices).
 
 - `<decision:selection location choices>`, `<decision:tuner location
-  thresholdlocation observe>`: reasoning's strict dispatch schema (the original
-  `_selection_item_branch`/`dispatch_tool`) and intuition's
-  `ConfidenceTuner` (the original defaults as Rust constants; the threshold is
+  thresholdlocation observe>`: reasoning's strict dispatch schema and
+  intuition's confidence tuner (its defaults as Rust constants; the threshold is
   written as a probability) are namespace elements; the stage results are
   plain `<assign>`s. Reasoning's `onChoices` cond is gone: the generate
   service's strict-schema check already fails an off-choices reply as
@@ -769,7 +780,7 @@ inlines the browser `validate` options type so no unapproved
   namespace (`https://github.com/stateforward/floppy/namespaces/bot`,
   component `floppy_bot`, imports `types`, `telemetry`,
   `data-model-host`): `<bot:attention location focuslocation stimulus
-  devices focus sources>` (the reference `attention_bias_for_turn`) and
+  devices focus sources>` (the turn's attention bias) and
   `<bot:stimulus location event data source target? id?>` (the cognition
   input's stimulus envelope, canonical JSON). The body's `attentionBias`
   and `envelope` functions and its processing-entry and deferral scripts
@@ -783,13 +794,11 @@ inlines the browser `validate` options type so no unapproved
   (`https://github.com/stateforward/floppy/namespaces/conversation`,
   component `floppy_conversation`, imports `types`, `telemetry`,
   `data-model-host`): `<conversation:commit location keylocation?
-  direction event message sequence provenance?>` (the original
-  `_message_for_turn`, `_model_safe_content`, `_stable_identity_basis`,
-  `_stable_context_ref`, `MessageProvenance`) builds one committed message
+  direction event message sequence provenance?>` builds one committed message
   and its relationship key; it never holds the history (the extension
   boundary's values are bounded at 64 KiB on wasm), so the conversation
   appends with `history.concat([message])` and
-  `relationships[participants]` (since 2026-10-10 the key is the original's
+  `relationships[participants]` (since 2026-10-10 the key is the
   relationship context reference). The communication builds its outbound record
   with it (the append's provenance now carries explicit `null` source,
   target, session_ref and turn_ref; the committed history is unchanged).
@@ -801,9 +810,9 @@ inlines the browser `validate` options type so no unapproved
 Next: phase 4 (bot core and abilities), per
 `~/.agents/projects/floppy/plans/20261008-phase4-bot-core.mdscript.md`.
 
-## Port run decisions (user, 2026-10-08)
+## Build run decisions (user, 2026-10-08)
 
-The remaining the original port runs as one ultracode run with these grants:
+The remaining phases run as one ultracode run with these grants:
 
 - **Commits:** commit locally; when the full proof is green, fast-forward
   scxml.rs `main` and subtree-pull into floppy. Never push, publish, or
@@ -825,7 +834,7 @@ The remaining the original port runs as one ultracode run with these grants:
 - **Builder:** save the vLLM traffic-light run as
   `bots/builder/examples/traffic_light_vllm/`; drafts reference schema
   files instead of inline JSON.
-- **Browser slice 2:** after the port.
+- **Browser slice 2:** after phase 7.
 - **Almost everything is `.scx`:** bots, abilities, behaviors, routines, and
   policy are SCXML documents in `.scx` files; Rust/Wasm components only for
   invoked services doing work SCXML cannot express (async I/O).
@@ -842,12 +851,9 @@ The remaining the original port runs as one ultracode run with these grants:
 - **Live model while the Sparks are saturated:** CPA gateway via the
   gitignored `.env.cpa`, model `gabe-codex-1/gpt-6-luna` (fallback
   `gabe-xai/grok-4.6`).
-- **Behaviors and routines (phase 5) use the builder:** The original has the model
-  author behaviors and routines as Starlark HSM programs and compiles them at
-  runtime (`behavior/compiler.py`). floppy mirrors that with
-  `bots/builder`: a behavior or routine is an SCXML document the builder
-  authors, validates, and hands back, and the bot then invokes it. No
-  Starlark port.
+- **Behaviors and routines (phase 5) use the builder:** a behavior or
+  routine is an SCXML document `bots/builder` authors, validates, and
+  hands back, and the bot then invokes it.
 - **Delegated decisions (2026-10-09):** the user delegated all remaining
   decisions overnight. Agents choose by SCXML 1.0 and existing patterns and
   record each choice (and any new scxml.rs name) under "Decisions Made Under
@@ -876,8 +882,8 @@ The remaining the original port runs as one ultracode run with these grants:
    - scxml.rs fetches a `srcexpr` document (and its schema files and
      scripts) each time its `<invoke>` runs, never from the run's memo,
      so a repaired draft written under the same name loads as written.
-   - A row's `source` column holds the path (no migration of the
-     original's schema); routines tell a revision by `updated_at` (second
+   - A row's `source` column holds the path (no schema
+     migration); routines tell a revision by `updated_at` (second
      resolution), since a revised program keeps its path.
    - The builder writes every draft before validating it, so a change
      being built overwrites the stored program's files at once, and a
@@ -895,6 +901,259 @@ The remaining the original port runs as one ultracode run with these grants:
      D122: the draft whose simulation looped no longer ends the run; it
      fails its test and is repaired.)
 
+## Open work
+
+What is still to build, each item with its issue where one exists.
+
+- **The recall budget on wasm (D117).** `<cognition:model_facing_content>`
+  trims `prior_episodes` and `standing_directives` to the prompt budget,
+  newest first, but on wasm the data model's 64 KiB value bound refuses a
+  prompt before it is big enough to trim, so the trimming is proven only
+  natively (`namespaces/cognition/src/tests.rs`). Lower the budget, or
+  raise the bound in scxml.rs.
+- **Learning** (#14, #16): drafts staged before they are installed, an
+  end-to-end test of a learned behavior on a later real turn, examples
+  and byte budgets for reflection's select and builder prompts, and a
+  builder that works with small models (#14); reflection selecting
+  `bot.ability.persona.revise`, the Revision document and the Learning
+  ability (#16). A change does not yet keep the behavior's own triggers
+  as evidence: `evidenceStimulusNames()` in
+  `abilities/reflection/reflection.js` reads the turn's stimulus and the
+  prior episodes, not `existing_behavior.triggers` (#14, L6).
+- **Communication's rings** (#29, D175): the response and utterance
+  senders name their send ids, so the rings keyed on `_event.sendid`
+  catch a repeat.
+- **Interpretation reads `producing`** (#30, D177).
+- **Streaming speech** (S5 step B; step A, #18, is D179): streaming
+  encoding and per-chunk playout, drafts spoken while the reply is
+  generated with an `abandoned` outcome, and streaming decoding with an
+  end of turn. Today vocal encodes each stretch whole (D178) and speaking
+  paces its playout (D179). It waits on the maintainer: the chunk event's
+  name, whether to chunk a backend that answers one chunk per stretch,
+  how a draft is correlated with its final respond (an SCXML `<send>`
+  takes no id from an expression), who produces drafts, and the draft
+  timeout.
+- **Voicing**: voice catalogs, voice design and the bot's own voice;
+  `bot.ability.speaking.output`'s `voice_id` is null until then (D179).
+- **Graph memory and embeddings** ([plan](plans/graph-memory.md)):
+  episodes as nodes with vectors, associative recall,
+  `bot.ability.memory.recall`, an embedding ability for text and images
+  over a remote embedder, and consolidation while the cognition rests.
+  It waits on decisions 3, 7 and, for persons, 6.
+- **Hearing identity**: participant refs through an identification
+  registry, overlap while speaking, tone, and enrolling the bot's own
+  voice. Today the hearing gives voice embeddings and each embedding
+  source is its own participant (D79). It waits on decision 6.
+- **Multimodal turns**: `<conversation:ingest_content>` takes no
+  `image/*` content, so an image adds nothing to a turn and a turn of
+  images alone fails as empty (`Turn closed with neither text, audio, nor
+  modality-neutral content.`). Open: images attached to a completed turn
+  (a bound on their count, a failure past it, the conversation's
+  attachments and how long it keeps them), a typed image value, image
+  placeholders and content parts in a turn's content, and a typed
+  `environment.visual` image.
+- **Faces** (D188): face detection and face identity in seeing wait on
+  decision 6; an embedding change measure and a cascade of measures wait
+  on embeddings.
+- **Effort ceilings**: each stage narrowing the turn's frame to its own
+  effort ceiling (decision 8).
+- **Sandbox, devices and transport** (decision 5): a sandbox ability over
+  a Docker or Podman host; computer, HID keyboard and pointer, audio
+  microphone and speaker, and phone devices, with owner-command routing;
+  transform codecs, transport peers, yamux over WebSocket and a LiveKit
+  room. The tests use the lamp fixture.
+- **Example bots**: a building example (decision 4), and minimal,
+  listen-and-speak, phone and SMS chat bots, each after its abilities.
+- **Telemetry metrics**: no metrics are emitted. A voice embedding is
+  never written to the records (`<biometric:VoiceEmbedding>`,
+  `environment.rs` `a_voice_embedding_is_never_written_to_the_records`).
+- **Logic still in JavaScript that a namespace or a schema could hold:**
+  - A routine's `at` schedule: `next_after` is JavaScript text in
+    `reflection.js` that each routine carries as data. A
+    `<behavior:next_after>` element waits on scxml.rs: `<scx:validate>`
+    binds no extension package, so a draft that uses one fails with
+    `XSD001` (D116).
+  - Reflection's evidence and grounded triggers (`evidenceStimulusNames`,
+    `evidenceTriggerNames`, `groundedTriggers`, `acceptedTriggers`) as a
+    `<reflection:grounded_triggers>` element.
+  - Interpretation's `speechProduct` as a `<send>` with `<param>`s, its
+    `voice_embedding` behind an `<if>`.
+  - Interpretation's segment checks (`isSegmentSourceMismatch`,
+    `isSegmentRateMismatch`, `isSegmentFormatMismatch`,
+    `segmentSourceMismatch`, `segmentConversionFailure`), which compare
+    one field with another, in a `listening` namespace (its name open);
+    sensitivity's `receivedLevel`, `observedGain` and `perceivedLevel`
+    may join it.
+  - The body's `environmentField()` (`bots/floppy/floppy.js`) as an
+    `<environment:model_snapshot>` element.
+  - `<migration:plan>` writing the version guard and the ordered
+    statements (`versionGuard`, `appliedStatements` in `migration.js`;
+    `canRetry` stays).
+  - `builder.request`'s optional bounds (`isOptionalBound`,
+    `requestBound`, `requestConstraints`, `requestMaxAttempts`,
+    `requestModel`, `requestGenerateTimeoutMs`,
+    `requestGenerateCeilingMs`, `isOptionalGenerateBound` in
+    `builder.js`) in `bots/builder/schemas/builder.request.json` (D42).
+- **Session-id targets and the local model.** The dispatch tool's
+  `target` enum lists session ids (D113). Live on 2026-10-18,
+  `Qwen/Qwen3.8-Flash-Next` put `bot.focus_device`'s `device` beside
+  `event` instead of in `data`; with readable keys, or no `target` on
+  that branch, it filled the selection correctly (docs/live-proof.md).
+  Offering readable keys and sending to their sessions is open.
+
+## Design decisions for the maintainer
+
+Numbered as decisions.md and the open work cite them.
+
+| # | Question |
+| --- | --- |
+| 2 | **Postgres:** keep `services/pgsql` and D69 to D72, or keep only SQLite (the user chose SQLite for now, 2026-10-10)? |
+| 3 | **Migrations:** accept D165 (a schema change is a new revision: `0003_stm_turns`, the graph tables `0004`), or rewrite `0001` in place, which breaks every existing database? |
+| 4 | **The name "builder":** a user-facing example bot that builds things would clash with `bots/builder`, the behavior author; one of them needs another name. |
+| 5 | **Devices and transport:** they are out of scope; the sandbox, the devices, the building example and the transport need them. |
+| 6 | **Participant identity:** keep D79 (each embedding source is its own participant), or identify participants through a registry with `voice:` and `face:` refs? Faces (D188), `voice_id` (D179) and hearing identity wait on it. |
+| 7 | **Rest and consolidation:** give the cognition a rest state in which memory consolidates? |
+| 8 | **Effort ceilings:** have each stage narrow the turn's frame to its own effort ceiling? |
+| 9 | **A container image** for `scx run`? floppy has no runtime of its own (D14). |
+
+## Choices to review
+
+Choices the namespace steps (D113 to D116) and the decision kinds (D120)
+made where the plan left a question open, each for the maintainer to
+review. Q9 (a document with no functions drops its `.js`, amending D65)
+was taken on the recommendation and is not exercised: every document
+still has functions. Two names are open: `<processing:model_facing_schema>`
+(or `<processing:schema>`) and `<conversation:message_for_turn>`;
+`<decision:pin>` keeps its name until the maintainer names it (Q11).
+
+**D113, the processing namespace and every stage's sends:**
+
+1. The ignore is tagged with the cognition's session id, so every stage
+   sends it to the cognition, whose transitions log it.
+2. The body sends itself (`#_internal`) each selection whose `target` is
+   not a string (`hasNoTarget` in `floppy.js`): the trusted seed's
+   selection names none.
+3. `<processing:collect_offered_events>` takes the focused device's
+   events from `devices` and `focus`, tagged with its snapshot's `id` and
+   sorted by its reference among the children's invoke ids.
+4. Reflection's trailing self-send is `bot.ability.reflection.selected`;
+   the candidates runner raises
+   `bot.ability.autonomy.candidate.dispatch.succeeded` after its sends,
+   and an `error.*` before it fails the candidate (`Autonomy behavior
+   dispatch failed: <error>`).
+5. Intuition sends a selection no single session offers nowhere: the
+   decision service names a target only for a single offerer (D150).
+6. `<processing:selection_confidence>` reads a number in (0, 1] as a
+   probability; the data model cannot tell 1 from 1.0, so 1 is certainty
+   (100).
+7. Autonomy and the candidates runner take no `choices`; the turn
+   behavior contract asks a behavior to name each selection's `target`.
+8. The body's `bot.focus_device` guard holds whenever the turn has focus
+   candidates.
+9. The turn's output is the handling stage's selections; intuition sends
+   its environment actions itself, and they are not in the output.
+10. `<log expr="choices"/>` logs whole choices; tests read their names
+    with `support::choice_names`.
+11. A turn may focus the lamp twice (intuition's environment action, then
+    reasoning's selection), and the body sets the focus each time;
+    `live_choices` expects the lamp focused at least once.
+
+**D114, the intuition and cognition namespaces:**
+
+1. A budget's message goes to `failurelocation` (reasoning's
+   `prompt_failure`) and `null` to `location`; without
+   `failurelocation` it is `error.execution`.
+2. The element's inputs are `stimulus`, `prior_episodes`,
+   `standing_directives`, `environment`, `instructions` and `schema` (the
+   parameters `<processing:send>` built).
+3. Object members render in sorted order, the data model's canonical
+   JSON.
+4. Each input is bounded by the 64 KiB value bound; one over it fails
+   reasoning as `the reasoning could not run (error.execution)`.
+5. A null confidence never escalates.
+6. Intuition logs `turn N: <events> (confidence C, escalate B)`.
+7. The tuner datum, `<param>` and donedata field are `confidence_tuner`;
+   the log label `cognition.tuner` is kept.
+8. A tuner state that is not one reads as the initial state.
+9. The environment block is part of `<cognition:model_facing_content>`;
+   the body's `environmentField()` stays in `floppy.js` (open work).
+10. Malformed input (a `self` or a device's `attributes` that is a
+    string) renders nothing.
+
+**D115, the identity, conversation and memory namespaces:**
+
+1. `<conversation:message_for_turn>` has no `keylocation`;
+   `<conversation:relationship_for_input>` works out the relationship's
+   context reference.
+2. `identities_json` is part of `<memory:to_json>`, its only caller.
+3. `<memory:contents location result>` takes one statement's result,
+   parses each content as a JSON object and skips the rest.
+4. `<conversation:participant_for_source>` adds a participant on first
+   sight and `<conversation:fail_turn>` drops the one whose detector
+   failed; a failed remember restores the participants from the
+   `participants` datum, and an inbound commit appends its sequence with
+   `<assign>`.
+5. `isCommittedAppend` stays in `conversation.js`: it searches the
+   history, which never crosses the extension boundary.
+6. The turn detector's elements are `<conversation:ingest_content>` and
+   `<conversation:on_end>`, over one `turn_content` datum.
+7. `<conversation:new_track_ref>` runs in `turn_exchange`'s entry and
+   writes the unit vector as `JSON.stringify` does.
+8. The similarity threshold and margin are Rust constants
+   (`SIMILARITY_THRESHOLD` 0.85, `SIMILARITY_MARGIN` 0.05).
+9. An identity may be an embedding (an array of numbers).
+10. The relationships cross the extension boundary (64 KiB per value on
+    wasm), so a long conversation with many embedding participants can
+    fail an input as `error.execution`.
+11. `<conversation:complete_turn>` takes the relationship's
+    `session_ref` and commits the product itself.
+12. `<memory:to_json>` writes `null` for an input without content, and
+    `<memory:contents>` skips a row with a lone surrogate escape or a
+    number out of range.
+
+**D116, the behavior and autonomy namespaces:**
+
+1. The stimulus envelope is assigned member by member and sent with
+   `<param name="stimulus">`; a `bot.input`'s source is `null`.
+2. `<behavior:instances_from_behavior_results>` takes two statements'
+   results (`behaviors`, `triggers`); the first instance is a `prepared`
+   datum (`preparedBehavior()`).
+3. `<behavior:replace_behavior_clauses>` owns its SQL as Rust constants;
+   a create's draft is stored by it too (delete, delete, insert `DRAFT`,
+   then its triggers).
+4. A document is persistent when it has a `<send
+   event="bot.behavior.tick">`, read as XML (`lifetimelocation`).
+5. `<behavior:lifetime_errors>` takes `min_every` and `turn_after_bound`
+   in milliseconds and `scheduleslocation`; a draft that does not parse
+   has no diagnostics, and the validator's report decides it.
+6. `<behavior:verify_tick>` checks the forced tick; comparing a test's
+   outputs with its expectations stays in `builder.js`, gated by
+   `isTickTest()`.
+7. `<autonomy:behavior_input_payload>` always sets `focus` and
+   `focus_candidates` (`null` and `[]` included); array data is
+   `{event: data}`.
+8. Element outputs are canonical JSON, so behaviors in reflection's
+   select prompt and the turn contract's `INPUT` render with sorted keys.
+
+**D120, the decision service's kinds:**
+
+1. `predicate` is one kind, not one predicate per choice, so each
+   event's confidence is still its share of one `selection` question and
+   intuition can abstain as `declined`.
+2. `choice` takes `choices` (the chosen event) or `labels`
+   (`decision.classified`), exactly one, each with its own default
+   instructions.
+3. The service's events keep their names.
+4. The batch's question names follow the kinds for `score` and for
+   `choice` over labels.
+5. The service skips the handoff by name, `bot.ability.reasoning.input`,
+   for `choice` over events and for `predicate`; `isDeliberativeHandoff`
+   stays in `intuition.js` for `hasDeliberativeInput`.
+6. `stimulus` reads only `event` and `data`; its other members are
+   ignored.
+7. `services/decision` has no README: its contract is the crate
+   documentation in `src/lib.rs`.
+
 ## Backlog (agreed, not started)
 
 - scxml.rs: check a service's WASI grant only when an invocation of it
@@ -911,8 +1170,7 @@ The remaining the original port runs as one ultracode run with these grants:
   stdout default, file/WebSocket/OTLP packages. Low priority.
 - PGlite compiled into a component (D71: needs `scx`'s wasmtime with the
   `gc` and `gc-null` features, a proposed scxml.rs change not made).
-- Website (after the port): the original's animated robot (`web/src/face`),
-  web components + hsm.ts, marketplace of packages, a Mindstorms-style
+- Website (after phase 7): an animated robot face, web components + hsm.ts, marketplace of packages, a Mindstorms-style
   workshop whose pieces are inferred from element XSDs, live highlighting
   of running bots.
 - Live listening: voice detection (every sound) runs on a local LocalAI

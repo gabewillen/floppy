@@ -207,10 +207,9 @@ fn a_bot_activates_on_joining_its_environment() {
     drop(run.close(WAIT));
 }
 
-/// A voice embedding is biometric and never reaches the run's records
-/// (the original's capture writes a `VoiceEmbedding` as
-/// `<biometric:VoiceEmbedding>`): the room logs a conversation output
-/// whose source is an embedding with the marker in its place.
+/// A voice embedding is biometric and never reaches the run's records:
+/// the room logs a conversation output whose source is an embedding with
+/// the marker `<biometric:VoiceEmbedding>` in its place.
 #[test]
 fn a_voice_embedding_is_never_written_to_the_records() {
     let dir = layout(&[]);
@@ -371,8 +370,8 @@ fn a_bot_sent_bot_deactivate_in_its_backoff_is_not_restarted() {
     all_activated(&run, &["floppy"]);
     run.event("bot.input", &input("deaf", "x"));
     let mut records = run.until(WAIT, label_is("done.invoke"));
-    // The host stops it while it waits: the original's backoff goes to
-    // stopped, so the 2 s restart never comes.
+    // The host stops it while it waits: the backoff goes to stopped, so
+    // the 2 s restart never comes.
     run.event("bot.deactivate", &json!({}));
     std::thread::sleep(Duration::from_millis(4000));
     let finished = run.close(WAIT);
@@ -812,8 +811,8 @@ fn a_focused_devices_choices_are_read_from_its_snapshot_and_a_selection_reaches_
         .map(|text| support::choice_names(text))
         .collect();
     assert_eq!(choices.len(), 3, "{choices:?}");
-    // Unfocused, the lamp's input turns the bot to the lamp (the
-    // original's reflex floor), so its events are that very turn's
+    // Unfocused, the lamp's input turns the bot to the lamp
+    // (decision D155), so its events are that very turn's
     // choices. Focused on the lamp while it is off: lamp.on and not
     // lamp.off; then on: lamp.off and not lamp.on.
     for off in &choices[..2] {

@@ -1,7 +1,7 @@
-//! floppy's Routines ability (`abilities/routines/routines.scx`, the original
-//! `abilities/cognition/routines.py`), run through `scx run` on the logical
-//! clock under `tests/fixtures/phase5/routines_harness.scx`, which stands in
-//! for the cognition.
+//! floppy's Routines ability (`abilities/routines/routines.scx`), run
+//! through `scx run` on the logical clock under
+//! `tests/fixtures/phase5/routines_harness.scx`, which stands in for the
+//! cognition.
 //!
 //! The harness stores behavior inventory rows through the Memory ability in
 //! a directory the run grants, invokes the routines with the database path
@@ -143,7 +143,7 @@ fn routines_run_the_active_persistent_rows_and_reconcile_their_changes() {
 }
 
 /// An inventory the Memory ability cannot open keeps the running set
-/// (empty here) and logs the original's reconcile failure.
+/// (empty here) and logs `bot.ability.routines.reconcile.failed`.
 #[test]
 fn a_failed_inventory_load_keeps_the_running_set() {
     let harness = layout("'/memory/floppy.sqlite'");
@@ -193,9 +193,8 @@ fn a_failed_inventory_load_keeps_the_running_set() {
     finished.close(WAIT);
 }
 
-/// The text of reflection's `next_after` (the reference `At.next_after`) on one
-/// line, as the persistent routine contract gives it for a routine's
-/// `<data id="next_after">`.
+/// The text of reflection's `next_after` on one line, as the persistent
+/// routine contract gives it for a routine's `<data id="next_after">`.
 fn next_after() -> String {
     let script = std::fs::read_to_string(workspace().join("abilities/reflection/reflection.js"))
         .expect("reflection.js is readable");
@@ -218,12 +217,12 @@ fn attribute(text: &str) -> String {
         .replace('"', "&quot;")
 }
 
-/// The reference `At.next_after` computes occurrences with stdlib `zoneinfo`; the
-/// data model has no time zone database, so `next_after` reads the zone's
-/// POSIX TZ rule. On `tests/fixtures/phase5/at_cases.json` (zoneinfo's
-/// answers, from Python 3, for a spring-forward gap, a fall-back overlap,
-/// the 1 s firing tolerance, southern and negative-DST zones, and random
-/// zones, times and weekdays) it finds the same instant and wall time.
+/// The data model has no time zone database, so `next_after` reads the
+/// zone's POSIX TZ rule (decision D83). On
+/// `tests/fixtures/phase5/at_cases.json` (the tz database's answers for a
+/// spring-forward gap, a fall-back overlap, the 1 s firing tolerance,
+/// southern and negative-DST zones, and random zones, times and weekdays)
+/// it finds the same instant and wall time.
 #[test]
 fn next_after_finds_the_occurrences_zoneinfo_finds() {
     let helper = next_after();
@@ -256,12 +255,12 @@ fn next_after_finds_the_occurrences_zoneinfo_finds() {
     assert_eq!(texts(&finished, "mismatches"), strings(&["[]"]));
 }
 
-/// A routine on an `at` schedule (the reference `hsm.at`), written as the
-/// persistent routine contract says: its data model computes the next
-/// weekday 08:00 in `America/New_York` with `next_after` and ticks there with
+/// A routine on an `at` schedule, written as the persistent routine
+/// contract says: its data model computes the next weekday 08:00 in
+/// `America/New_York` with `next_after` and ticks there with
 /// `scheduled_at` that occurrence. A routine whose tick selects nothing has
-/// its send refused by the tick's schema (the original's runtime fails that
-/// tick), so nothing reaches the runner's parent.
+/// its send refused by the tick's schema, so nothing reaches the runner's
+/// parent.
 #[test]
 fn an_at_routine_ticks_at_its_occurrence_and_an_empty_tick_is_refused() {
     let dir = unique_scratch("routines-at");

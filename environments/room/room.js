@@ -5,12 +5,10 @@
 // Shared: event records and send targets.
 
 // An event's data as JSON for its record. A voice embedding is biometric
-// and never written (the original's capture writes a Biometric as
-// <biometric:ClassName>, its VoiceEmbedding included), at any depth: an
-// identity in source_ids or target_ids that is an array of numbers, and
-// an embedding's JSON inside a reference (a *_ref the conversation
-// builds from its participants' identities), are written as
-// <biometric:VoiceEmbedding>.
+// and never written, at any depth: an identity in source_ids or
+// target_ids that is an array of numbers, and an embedding's JSON inside a
+// reference (a *_ref the conversation builds from its participants'
+// identities), are written as <biometric:VoiceEmbedding>.
 function eventDataJson(_event) {
   var marker = '<biometric:VoiceEmbedding>';
   return JSON.stringify(_event.data, function (key, value) {
@@ -44,7 +42,7 @@ function joined(id) {
   return participants.indexOf(id) >= 0 ? participants.slice() : participants.concat([id]);
 }
 
-// Supervision (decision D158, the original's runtime Supervisor).
+// Supervision (decision D158).
 
 // The leave of _event's participant, for its supervisor: restart when it
 // failed (failed: an error.communication), left degraded (its donedata
@@ -118,7 +116,7 @@ function activationFailedOf(_event) {
 }
 
 // Host input: the participants a communication input's target_ids names,
-// or every bot when it names none (the original: ambient input).
+// or every bot when it names none (ambient input).
 
 function addressees(targetIds) {
   if (targetIds.length === 0) {
@@ -175,7 +173,7 @@ function inputData(_event) {
   return Object.assign({}, _event.data, {target_device: _event.invokeid});
 }
 
-// Sound: the original's reception (decision D103). The level of _event's
+// Sound: reception (decision D103). The level of _event's
 // sound where the participant id is, by the free-field law from the
 // sender's placement (1 m reference, 1 cm clamp); the sound's own
 // received_level_db when there is nothing to measure (no amplitude, no

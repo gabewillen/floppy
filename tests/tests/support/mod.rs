@@ -741,9 +741,9 @@ const ROOM_BOT: &str = r#"    <!-- The bot floppy, supervised. -->
           <param name="owned_devices" expr="ownedDevices('floppy')"/>
           <param name="placed_on" expr="placedOn('floppy')"/>
         </invoke>
-        <!-- Stable after stable_after_ms from its first bot.activated (the
-             original arms it once, in running, which it enters on
-             activation); a reboot's activation does not re-arm it. -->
+        <!-- Stable after stable_after_ms from its first bot.activated (armed
+             once, in serving, which it enters on activation); a reboot's
+             activation does not re-arm it. -->
         <state id="starting.floppy">
           <transition event="room.activated" cond="isFor(_event, 'floppy')" target="serving.floppy"/>
         </state>
@@ -777,8 +777,7 @@ const ROOM_BOT: &str = r#"    <!-- The bot floppy, supervised. -->
         <onexit>
           <cancel sendid="restart.floppy"/>
         </onexit>
-        <!-- A stop while it waits: it is not restarted (the original's
-             backoff goes to stopped). -->
+        <!-- A stop while it waits: it is not restarted. -->
         <transition event="bot.deactivate" event:schema="../../bots/floppy/schemas/bot.deactivate.json" target="left.floppy"/>
         <transition event="room.restart" cond="isFor(_event, 'floppy')" target="running.floppy">
           <log label="room.restarted" expr="restartedJson('floppy')"/>

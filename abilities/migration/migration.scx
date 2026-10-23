@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Migration ability (Alembic's command.upgrade and
-  command.downgrade, which the original runs on its memory database): brings a
-  database to a target revision, agnostic of the database engine. It knows
+  floppy's Migration ability (upgrade and downgrade, versioned in
+  Alembic's alembic_version table): brings a database to a target revision, agnostic of the database engine. It knows
   revisions and never SQL: the revisions' statements are plain SQL for the
   engine the database is, and the sql or pgsql service runs them. An
   ability with a schema (the memory ability) invokes it before its own
@@ -25,12 +24,12 @@
   version_num (null: base, as for a database without it). A database that
   holds any table the history creates (the CREATE TABLE statements of the
   revisions' upgrades) but no alembic_version was not created by these
-  migrations: it matches no revision and is refused untouched with the
-  original's message ("Unversioned memory database already holds
-  ['bot_memory', ...]; not migrating it.", store.py migrate). planning
+  migrations: it matches no revision and is refused untouched
+  ("Unversioned memory database already holds ['bot_memory', ...]; not
+  migrating it."). planning
   orders the steps with <migration:plan> (a linear history walked by
   revision and down_revision). applying runs, in one transaction,
-  Alembic's alembic_version creation (when missing, as Alembic does),
+  Alembic's alembic_version creation (when missing),
   the version row's guard and then every step's statements: the guard moves
   the row from the version read to the target and must touch exactly one
   row (the sql service's rowcount), so a migration that got there first
@@ -40,7 +39,7 @@
 
   Output (to the parent): bot.ability.migration.output {from, to} (the
   revisions before and after, null for base), or bot.ability.failed
-  {message} (the original's FailureData) when nothing was committed. Then the
+  {message} when nothing was committed. Then the
   session ends.
 
   Bindings: the migration namespace package and the sql and pgsql service

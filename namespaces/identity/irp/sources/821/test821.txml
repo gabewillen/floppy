@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- identity-3: embeddings sort by their Python JSON text, so 1e-05 sorts after 0.5. -->
+<!-- identity-3: embeddings sort by their JSON text in code point order, so [0.00001] sorts before [0.5] and [10]. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:identity="https://github.com/stateforward/floppy/namespaces/identity">
 <datamodel>
   <data id="ids" expr="[[0.5], [0.00001], [10]]"/>
@@ -10,7 +10,7 @@
     <identity:sorted_identities location="s" ids="ids"/>
   </onentry>
   <transition event="error.execution" conf:targetfail=""/>
-  <transition cond="JSON.stringify(s) === '[[0.5],[10],[0.00001]]'" conf:targetpass=""/>
+  <transition cond="JSON.stringify(s) === '[[0.00001],[0.5],[10]]'" conf:targetpass=""/>
   <transition conf:targetfail=""/>
 </state>
 <conf:pass/>

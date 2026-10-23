@@ -17,7 +17,7 @@ def failed(cond, kind=None):
     return expect(FAILED, f"typeof _event.data.message === 'string' && {cond}{kinded}")
 
 
-S.statement(1, "Before the statements, it brings the database to the head of floppy's revisions (0001, 0002, then 0003, the original's 0002_stm_turns, decision D165; in the engine's dialect) through the migration ability, so the statements see Alembic's `alembic_version` at `0003` and the tables, `bot_behavior` with its `lifetime` column and `bot_stm_turn`.")
+S.statement(1, "Before the statements, it brings the database to the head of floppy's revisions (0001, 0002, then 0003, decision D165; in the engine's dialect) through the migration ability, so the statements see Alembic's `alembic_version` at `0003` and the tables, `bot_behavior` with its `lifetime` column and `bot_stm_turn`.")
 S.statement(2, "It runs the `statements` <param> (`[{sql, parameters?}]`) in order in one transaction and answers its parent `bot.ability.memory.output` `{results}`: one result per statement, in order, each `{rowcount, rows}` with every row `{columns, values}`; a statement's `parameters` bind its placeholders.")
 S.statement(3, "A statement that fails (the engine refuses it, or its `rowcount` is not the one it expects) answers `bot.ability.failed` `{message, kind}`, the engine's message and kind `store_failed`, and no `bot.ability.memory.output`.")
 S.statement(4, "A database the migration cannot bring to head answers `bot.ability.failed` `{message, kind}` with the migration's message and kind `unavailable`, and the statements never run.")

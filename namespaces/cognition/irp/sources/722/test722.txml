@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- cognition-3: the environment renders as the original's block, the turn's situation before the stimulus: the bot itself and each held device with its attributes. -->
+<!-- cognition-3: the environment renders as the environment block, the turn's situation before the stimulus: the bot itself and each held device with its attributes. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition">
 <datamodel>
   <data id="p" expr="null"/>

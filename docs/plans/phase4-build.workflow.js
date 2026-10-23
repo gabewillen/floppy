@@ -34,7 +34,7 @@ const REVIEW = {
 }
 
 const LANES = [
-  'correctness and SCXML: W3C SCXML 1.0 semantics, event names byte for byte vs the original, done/cancel/invoke lifecycle, fidelity to the original behaviour this slice ports; rerun the slice proof commands yourself',
+  'correctness and SCXML: W3C SCXML 1.0 semantics, domain event names byte for byte as the plan names them, done/cancel/invoke lifecycle, the behavior this slice specifies; rerun the slice proof commands yourself',
   'completeness and rules: the slice\'s done-when criteria all actually met, User Answers honored (bots/floppy, no default URL, schema files, .scx-first with justified Rust), hard cutover (no leftovers/aliases), atomic commits, docs/tests updated, no secrets printed or committed',
   'security and engineering: env/secret handling, http-origins and capability grants, OTEL usage in any Rust touched (cardinality of new attributes), test quality (no weakened asserts, deterministic tests isolated, no shared temp files), clippy/fmt',
 ]

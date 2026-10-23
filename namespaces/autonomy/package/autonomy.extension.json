@@ -4,7 +4,7 @@
   "package-version": "0.1.0",
   "extension-artifact": "floppy_autonomy.virtualized.wasm",
   "schema-artifact": "autonomy.xsd",
-  "schema-sha256": "9bd4e58346623938a0516bd083f34f2c760d7c624681bbbba331b6d66afaac73",
+  "schema-sha256": "b716d84f5363804225f7b06ee7f846ec02b2c1db7a2ae47a9d4bf7ba7a8340fc",
   "wit-world": "stateforward:scxml/executable-content-extension",
   "wit-version": "0.2.0"
 }

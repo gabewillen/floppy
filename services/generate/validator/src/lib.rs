@@ -623,7 +623,7 @@ fn returned(given: Given) -> Vec<(&'static str, Json, Vec<Json>)> {
         }),
     ]);
     let mut events = vec![(FAILED_EVENT, failed, failures)];
-    // The reply is the original's text-generator output: without a schema
+    // The reply is the generate result: without a schema
     // its content and no call, with one at least one call; its request's
     // bytes, and its usage when the backend counted tokens.
     let usage = serde_json::json!({

@@ -6,28 +6,19 @@
     "kind": "namespace-irp",
     "source": "namespaces/device/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "0c2d1dc9686e3bf53b0eb99aa6cbf536f9b59f4628d6ce30314cc297a14b95b4",
+    "corpus_digest": "092a1966bbc0259735c10561eb6b2f922841cc87b9d902e9fe9d62239c337cc6",
     "source_digest": "38a8b9467478649b30cdac6595f5af2d4b8d677b6ee0066bc79c096123850937",
     "manifest_digest": "c5d24f3183cad8408ca67336714bae3dbb5057bb667c9e5a5b224ab68a23213c",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
     "transformer": {
-      "name": "saxon-process-sandboxed",
+      "name": "saxon-process",
       "version": "SaxonJ-HE 12.8 from Saxonica",
       "command_argv": [
-        "java",
-        "-jar",
-        "saxon-he-12.8.jar",
-        "-a:off",
-        "-p:off",
-        "-dtd:off",
-        "-expand:off",
-        "-ext:off",
-        "-xi:off",
-        "-xsiloc:off"
+        "saxon"
       ],
-      "executable_digest": "c13657d80564f40f10b8ab91b29fdc74080e7d8bb36d6cd06589292755d3476f"
+      "executable_digest": "012b6e274f9fa87155e1527848af8d41f19c6e89d7266a3b50716d5891eb739b"
     },
     "datamodel": "ecmascript",
     "provenance": "baseuri=https://github.com/stateforward/floppy/tree/main/namespaces/device/irp/sources"
@@ -41,17 +32,17 @@
   "engine": {
     "name": "scxml-machine",
     "version": "0.2.0",
-    "source_digest": "b3fde869dbf1c6e0b9494fb7013aef41e3436225ac598902afafdf761c9e2dd5"
+    "source_digest": "dff3fc8cedae948050fb2cd1bc417c9ac835b35059f1477dc30d8b4f2e746452"
   },
   "data_model": {
     "name": "scxml-data-model-ecmascript",
     "version": "0.2.0",
-    "source_digest": "e84a0f3d2c9335c246e1e63d11927c9778ca51ce1891cbf024b93660b8d2d969"
+    "source_digest": "b8ca1a4238a8036c4c007d5cc58819b7a813402ddce88076597f178b9fb0f311"
   },
   "runner": {
     "name": "scxml-conformance/wasm",
     "version": "0.2.0",
-    "source_digest": "d7eac1d8e8b8a47312cef5eb06ab22dd43d9c5bd7130a5b9da6cddfcccb8eee3"
+    "source_digest": "3b6be0410f9c49955d4696f74088899323c31109bb66e16a60f8912bb46dcb17"
   },
   "manual_oracle": {
     "name": "scxml-conformance-manual-oracle",
@@ -64,7 +55,7 @@
       "package_version": "0.1.0",
       "manifest_sha256": "be5b43f1bad3ed7085315bb3c96dea8b1e5737147d2830cf16102f9291b12a57",
       "schema_sha256": "af8ed7066fe2378612b2eefd290c62391bdecf51aa784e7050c5f9bcfc34da67",
-      "component_sha256": "87fa5765f6ad619a23f87b455a2b2da70eab4e9bf377dc7603dd6fa8d55f6f6d"
+      "component_sha256": "fa16e4b28e6f2af37c14c0f23cc289693846b52576fad0ee3fef20a2a2be57e9"
     }
   ],
   "ir_version": 5,
@@ -77,7 +68,7 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "734f78695c0a2fe02fb069e3b7d17a785be892eb988e91c275fe4cb38e360b9a",
+  "identity_digest": "240efdc443e35f3bcb58119cb98329a858a1b3f76821f18b919e6aef219ef18b",
   "summary": {
     "total_selected": 5,
     "applicable_selected": 5,

@@ -10,20 +10,20 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.failed" cond="_event.data.message === 'unavailable: StmMemory is degraded.'" target="step1"/>
+    <transition event="bot.ability.failed" cond="_event.data.message === 'unavailable: short-term memory is degraded.'" target="step1"/>
   </state>
   <state id="step1">
     <onentry>
       <send event="bot.ability.memory.stm.record" target="#_stm"><content expr='{"stimulus_name": "environment.sound", "payload": {}}'/></send>
       <send event="bot.ability.memory.stm.recent" target="#_stm"><content expr="{}"/></send>
     </onentry>
-    <transition event="bot.ability.failed" cond="_event.data.message === 'unavailable: StmMemory is degraded.'" target="step2"/>
+    <transition event="bot.ability.failed" cond="_event.data.message === 'unavailable: short-term memory is degraded.'" target="step2"/>
   </state>
   <state id="step2">
     <onentry>
       <send event="bot.ability.memory.stm.recent_turns" target="#_stm"><content expr="{}"/></send>
     </onentry>
-    <transition event="bot.ability.failed" cond="_event.data.message === 'unavailable: StmMemory is degraded.'" target="step3"/>
+    <transition event="bot.ability.failed" cond="_event.data.message === 'unavailable: short-term memory is degraded.'" target="step3"/>
   </state>
   <state id="step3">
     <transition target="pass"/>

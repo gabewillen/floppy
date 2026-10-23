@@ -39,7 +39,7 @@
     </test>
   </assert>
   <assert id="processing-4" specnum="4" specid="#processing-4">
-    <![CDATA[<processing:send> writes the original's dispatch tool as one schema: its description as the root description and its parameters {events: [anyOf one branch per offered event]} with the original's descriptions and examples, and max as the events' maxItems; each branch {event, data, reason?, target?} has event a one-value enum, data the choice's schema without $schema (an empty object for none, wrapped as value for a non-object), required only when the schema requires a field, the schema's description else the event name, and target, required, a sorted enum of the offering targets when one has a target; nothing is normalized for strict decoding.]]>
+    <![CDATA[<processing:send> writes the dispatch tool as one schema: its description as the root description and its parameters {events: [anyOf one branch per offered event]} with the tool's fixed descriptions and examples, and max as the events' maxItems; each branch {event, data, reason?, target?} has event a one-value enum, data the choice's schema without $schema (an empty object for none, wrapped as value for a non-object), required only when the schema requires a field, the schema's description else the event name, and target, required, a sorted enum of the offering targets when one has a target; nothing is normalized for strict decoding.]]>
     <test id="530" conformance="mandatory" manual="false">
       <start uri="530/test530.txml"/>
     </test>
@@ -51,7 +51,7 @@
     </test>
   </assert>
   <assert id="processing-5" specnum="5" specid="#processing-5">
-    <![CDATA[<processing:selection_confidence> writes the least of the selections' confidences, each normalized as the original does (a number in (0, 1] scaled to 0-100, rounded half to even, clamped to 0-100), leaving out a selection whose confidence is not a number, and null when none is left.]]>
+    <![CDATA[<processing:selection_confidence> writes the least of the selections' confidences, each normalized (a number in (0, 1] scaled to 0-100, rounded half to even, clamped to 0-100), leaving out a selection whose confidence is not a number, and null when none is left.]]>
     <test id="540" conformance="mandatory" manual="false">
       <start uri="540/test540.txml"/>
     </test>

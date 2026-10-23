@@ -1,17 +1,17 @@
 //! The `behavior` extension namespace:
 //! `<behavior:instances_from_behavior_results>`,
-//! `<behavior:replace_behavior_clauses>`, `<behavior:lifetime_errors>` and
-//! `<behavior:verify_tick>` as a
+//! `<behavior:replace_behavior_clauses>`, `<behavior:lifetime_errors>`,
+//! `<behavior:verify_tick>` and `<behavior:verify_apply>` as a
 //! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
-//! The original's behavior package (`behavior/storage.py`,
-//! `behavior/instance.py`, `behavior/verify.py`): the inventory rows a
-//! memory select returns read as behavior instances, the statements that
-//! replace one behavior's row and triggers, the schedule bounds a
-//! behavior's lifetime implies, and the check of a persistent routine's
-//! forced tick. The memory ability applies the statements through the sql
-//! service and the builder simulates the routine; these elements only
-//! build and read values, so they are synchronous executable content.
+//! What the reflection and the builder need of learned behaviors: the
+//! inventory rows a memory select returns read as behavior instances, the
+//! statements that replace one behavior's row and triggers, the schedule bounds a
+//! behavior's lifetime implies, the check of a persistent routine's
+//! forced tick, and the check of a turn behavior's run on its live turn.
+//! The memory ability applies the statements through the sql service and
+//! the builder simulates the routine; these elements only build and read
+//! values, so they are synchronous executable content.
 //! Documents bind [`NAMESPACE_URI`] (conventionally with the prefix
 //! `behavior`):
 //!
@@ -23,6 +23,8 @@
 //!     min_every="min_every_ms" turn_after_bound="turn_after_bound_ms"
 //!     lifetimelocation="lifetime" scheduleslocation="schedules"/>
 //! <behavior:verify_tick location="apply" ticks="ticks"/>
+//! <behavior:verify_apply location="apply" done="child_data" turn="testTurn()"
+//!     input="testInput()" targets="testTargets()" error="applyError()"/>
 //! ```
 //!
 //! Every attribute but the locations is an expression of the document's
@@ -30,9 +32,8 @@
 //!
 //! # `<behavior:instances_from_behavior_results location="L" behaviors="B" triggers="T"/>`
 //!
-//! The original's `storage.instances_from_behavior_results`. `behaviors`
-//! and `triggers` (required) each evaluate to one statement's result of a
-//! `bot.ability.memory.output` (an object whose `rows` is an array of rows
+//! `behaviors` and `triggers` (required) each evaluate to one statement's
+//! result of a `bot.ability.memory.output` (an object whose `rows` is an array of rows
 //! with `columns` and `values`): the behavior rows, then the trigger rows
 //! (`behavior_name`, `trigger`). `location` (required) receives one
 //! instance per behavior row, in row order: every column of the row as a
@@ -44,11 +45,10 @@
 //!
 //! # `<behavior:replace_behavior_clauses location="L" instance="I"/>`
 //!
-//! The original's `storage.replace_behavior_clauses`: the statements that
-//! delete a behavior's triggers and row and insert its replacement row and
+//! The statements that delete a behavior's triggers and row and insert its replacement row and
 //! each of its distinct triggers, in that order, as
 //! `bot.ability.memory.input` statements `{sql, parameters}`. `instance`
-//! (required) evaluates to an object named as the original's `Instance`:
+//! (required) evaluates to a behavior instance:
 //! `name` (a non-empty string), `source` (a string), and optionally
 //! `description` (a string; otherwise empty), `examples` (any value,
 //! written as `JSON.stringify` writes it; absent is `[]`), `lifetime` (a
@@ -61,15 +61,15 @@
 //!
 //! # `<behavior:lifetime_errors location="L" scxml="S" min_every="M"? turn_after_bound="A"? lifetimelocation="F"? scheduleslocation="C"?/>`
 //!
-//! The original's `instance._lifetime_errors` over an SCXML document, read
-//! with an XML parser. `scxml` (required) evaluates to the document's text.
+//! The lifetime check of an SCXML document, read with an XML parser.
+//! `scxml` (required) evaluates to the document's text.
 //! A transition that contains a `<send event="bot.behavior.tick">` ticks:
 //! each delayed `<send>` (one with a `delay` or a `delayexpr`) of an event
-//! a ticking transition takes is a schedule (the original's `every` and
-//! `at`), any other an `after`. The document is `persistent` when it sends
+//! a ticking transition takes is a schedule (an `every` or an `at`), any
+//! other an `after`. The document is `persistent` when it sends
 //! `bot.behavior.tick` anywhere, else `turn` (the persistent routine
 //! contract). `min_every` and `turn_after_bound` (optional) evaluate to the
-//! original check's bounds in milliseconds, or `null`; with neither given
+//! check's bounds in milliseconds, or `null`; with neither given
 //! nothing is checked. `location` (required) receives at most 20
 //! diagnostics `{kind: "lifetime", code: "E0009", message}`: a schedule
 //! whose literal delay is shorter than `min_every`, a turn behavior's
@@ -82,13 +82,35 @@
 //!
 //! # `<behavior:verify_tick location="L" ticks="T"/>`
 //!
-//! The original's `verify._verify_tick` with `_selection_binding_errors`
-//! on a persistent routine's forced tick. `ticks` (required) evaluates to
+//! The check of a persistent routine's forced tick and of its selections'
+//! data. `ticks` (required) evaluates to
 //! the `bot.behavior.tick` data the routine sent, in order. `location`
-//! (required) receives the original's `E0008` messages, none when the
+//! (required) receives the `E0008` messages, none when the
 //! first tick carries `name`, `trigger` (`every` or `at`), `scheduled_at`
 //! and `fired_at` and its `output` selects at least one event whose data
 //! holds the tick's own values for any of those fields.
+//!
+//! # `<behavior:verify_apply location="L" done="D" turn="T" input="I" targets="G" error="E"?/>`
+//!
+//! The live-turn check of a turn behavior (decision D131: one run, then its
+//! selections' data checked against the live values): the
+//! behavior ran once, invoked with the params `turn` and `input` of the
+//! turn it is learned from. `done` (required) evaluates to the run's
+//! donedata, `null` when it reached no top-level final state; `turn`
+//! (required) to that turn's number; `input` (required) to that turn's
+//! behavior input, an object; `targets` (required) to the sessions that
+//! turn's output names, an array of strings; and `error` (optional) to the
+//! name of the error event the run ended on, or `null`. `location`
+//! (required) receives `E0008` messages, at most 20 (for the run, the
+//! donedata contract, nothing selected, the targets, and selection data that
+//! disagrees with `input`): none when the
+//! donedata is `{turn, handled, selected}` with the live turn,
+//! `handled` true and at least one selection, each with an event, a target
+//! among `targets` (floppy's check, decision D104: the candidates runner
+//! sends each selection to its target, so an empty `targets` refuses every
+//! selection) and data whose members agree with the string, number and
+//! boolean members of `input` of the same names (compared as JSON
+//! values); else why, an error or no donedata first.
 //!
 //! # Failures
 //!
@@ -146,23 +168,23 @@ const SCXML_NAMESPACE: &str = "http://www.w3.org/2005/07/scxml";
 /// The event a persistent routine sends on every tick.
 const TICK_EVENT: &str = "bot.behavior.tick";
 
-/// The original `delete_behavior_clauses`' first clause: a behavior's
+/// The first delete clause: a behavior's
 /// triggers (first, for engines without `ON DELETE CASCADE`).
 pub const DELETE_TRIGGERS: &str = "DELETE FROM bot_behavior_trigger WHERE behavior_name = ?";
 
-/// The original `delete_behavior_clauses`' second clause: a behavior's row.
+/// The second delete clause: a behavior's row.
 pub const DELETE_BEHAVIOR: &str = "DELETE FROM bot_behavior WHERE name = ?";
 
-/// The original `insert_behavior_clauses`' row: name, source, description,
+/// The insert clause of a behavior's row: name, source, description,
 /// examples JSON, lifetime, status, usage and failure counters; the status
 /// reason empty and the status stamped now.
 pub const INSERT_BEHAVIOR: &str = "INSERT INTO bot_behavior (name, source, description, examples_json, lifetime, status, status_reason, status_updated_at, used_count, last_used_at, failed_count, last_failed_at) VALUES (?, ?, ?, ?, ?, ?, '', replace(substr(CAST(CURRENT_TIMESTAMP AS TEXT), 1, 19), ' ', 'T') || 'Z', ?, ?, ?, ?)";
 
-/// The original `insert_behavior_clauses`' trigger row.
+/// The insert clause of one of a behavior's triggers.
 pub const INSERT_TRIGGER: &str =
     "INSERT INTO bot_behavior_trigger (behavior_name, \"trigger\") VALUES (?, ?)";
 
-/// The original's diagnostic help for E0009.
+/// The diagnostic help for E0009.
 const LIFETIME_HELP: &str = " Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names.";
 
 /// The most diagnostics the lifetime check writes.
@@ -248,6 +270,7 @@ pub fn execute<H: BehaviorHost>(
         "replace_behavior_clauses" => replace_element(attributes, content, host),
         "lifetime_errors" => lifetime_element(attributes, content, host),
         "verify_tick" => verify_tick_element(attributes, content, host),
+        "verify_apply" => verify_apply_element(attributes, content, host),
         _ => Ok(Executed::NotHandled),
     }
 }
@@ -433,7 +456,7 @@ fn result_rows<'a>(
         .collect()
 }
 
-/// The original's `instances_from_behavior_results` (see the crate
+/// The behavior instances of a memory select (see the crate
 /// documentation, `<behavior:instances_from_behavior_results>`).
 ///
 /// # Errors
@@ -585,7 +608,7 @@ fn statement(sql: &str, parameters: Vec<Json>) -> Json {
     Json::Object(statement)
 }
 
-/// The original's `replace_behavior_clauses` (see the crate documentation,
+/// The statements that replace a behavior (see the crate documentation,
 /// `<behavior:replace_behavior_clauses>`).
 ///
 /// # Errors
@@ -1047,7 +1070,7 @@ fn lifetime_error(message: String) -> Json {
     Json::Object(error)
 }
 
-/// The original's `_lifetime_errors` over `text` (see the crate
+/// The lifetime check over `text` (see the crate
 /// documentation, `<behavior:lifetime_errors>`).
 #[must_use]
 pub fn lifetime_errors(
@@ -1163,7 +1186,7 @@ fn verify_tick_element<H: BehaviorHost>(
 /// The tick fields a selection's data must not contradict.
 const LIVE_FIELDS: [&str; 4] = ["name", "trigger", "scheduled_at", "fired_at"];
 
-/// The original's `_verify_tick` and `_selection_binding_errors` on the
+/// The forced tick's check, and its selections' data, on the
 /// first of `ticks` (see the crate documentation, `<behavior:verify_tick>`).
 #[must_use]
 pub fn verify_tick(ticks: &[Json]) -> Vec<String> {
@@ -1197,23 +1220,38 @@ pub fn verify_tick(ticks: &[Json]) -> Vec<String> {
         }
     };
     if selections.is_empty() {
-        return vec![
-            "behavior output must select at least one event for the observed pattern.".into(),
-        ];
+        return vec![NO_SELECTION.into()];
     }
+    let live: Map<String, Json> = LIVE_FIELDS
+        .iter()
+        .filter_map(|field| {
+            tick.get(*field)
+                .map(|value| ((*field).to_owned(), value.clone()))
+        })
+        .collect();
+    selection_binding_errors(selections, &live, "the tick")
+}
+
+/// The binding check after the shape checks (decisions D84 and D131): one
+/// message for each selection data member whose live value differs, in
+/// order; `source` names where the behavior reads the live values.
+fn selection_binding_errors(
+    selections: &[Json],
+    live: &Map<String, Json>,
+    source: &str,
+) -> Vec<String> {
     let mut errors = Vec::new();
     for selection in selections {
         let Some(Json::Object(data)) = selection.get("data") else {
             continue;
         };
         for (key, value) in data {
-            if !LIVE_FIELDS.contains(&key.as_str()) {
+            let Some(live) = live.get(key) else {
                 continue;
-            }
-            let live = tick.get(key).unwrap_or(&Json::Null);
+            };
             if value != live {
                 errors.push(format!(
-                    "selection data[{}]={} does not match live event value {}; read identifiers from the tick at runtime.",
+                    "selection data[{}]={} does not match live event value {}; read identifiers from {source} at runtime.",
                     js_string(key),
                     js_stringify(value),
                     js_stringify(live)
@@ -1222,6 +1260,191 @@ pub fn verify_tick(ticks: &[Json]) -> Vec<String> {
         }
     }
     errors
+}
+
+/// The most messages `<behavior:verify_apply>` writes.
+const MAX_APPLY_ERRORS: usize = 20;
+
+/// The message for an output that selects nothing (decision D131).
+const NO_SELECTION: &str =
+    "behavior output must select at least one event for the observed pattern.";
+
+/// A turn behavior that did not finish on the live turn.
+const NO_FINAL: &str = "turn behavior reached no top-level final state on the live turn's input within the turn's bound: it receives no events, so it decides with eventless transitions and ends at once.";
+
+/// A turn behavior whose donedata is not the candidates runner's contract.
+const NOT_THE_CONTRACT: &str = "turn behavior donedata must be the object {turn, handled, selected}: handled a boolean and selected a list of selections.";
+
+/// `<behavior:verify_apply>`'s targets that are not strings.
+const NOT_STRINGS: &str = "behavior:verify_apply targets is not an array of strings";
+
+/// `<behavior:verify_apply>`'s error that is not a name.
+const NOT_AN_ERROR: &str = "behavior:verify_apply error is not a string or null";
+
+/// Executes `<behavior:verify_apply>`.
+fn verify_apply_element<H: BehaviorHost>(
+    attributes: &[Attribute],
+    content: &[Content],
+    host: &mut H,
+) -> Result<Executed, Failure<H::Error>> {
+    let [location, done, turn, input, targets, error] = attribute_values(
+        attributes,
+        ["location", "done", "turn", "input", "targets", "error"],
+        [
+            "behavior:verify_apply takes only the location, done, turn, input, targets and error attributes",
+            "behavior:verify_apply repeats an attribute",
+            "behavior:verify_apply has an empty attribute",
+        ],
+    )?;
+    let location = location.ok_or(Failure::Execution(
+        "behavior:verify_apply requires a location",
+    ))?;
+    let done = done.ok_or(Failure::Execution("behavior:verify_apply requires done"))?;
+    let turn = turn.ok_or(Failure::Execution("behavior:verify_apply requires a turn"))?;
+    let input = input.ok_or(Failure::Execution(
+        "behavior:verify_apply requires an input",
+    ))?;
+    let targets = targets.ok_or(Failure::Execution("behavior:verify_apply requires targets"))?;
+    no_content(content, "behavior:verify_apply holds no content")?;
+    let done = evaluate(
+        host,
+        done,
+        "behavior:verify_apply done did not evaluate",
+        "behavior:verify_apply done did not evaluate",
+    )?;
+    let turn = evaluate(
+        host,
+        turn,
+        "behavior:verify_apply turn is not a number",
+        "behavior:verify_apply turn is not a number",
+    )?;
+    if !turn.is_number() {
+        return Err(Failure::Execution(
+            "behavior:verify_apply turn is not a number",
+        ));
+    }
+    let Json::Object(input) = evaluate(
+        host,
+        input,
+        "behavior:verify_apply input is not an object",
+        "behavior:verify_apply input is not an object",
+    )?
+    else {
+        return Err(Failure::Execution(
+            "behavior:verify_apply input is not an object",
+        ));
+    };
+    let Json::Array(targets) = evaluate(host, targets, NOT_STRINGS, NOT_STRINGS)? else {
+        return Err(Failure::Execution(NOT_STRINGS));
+    };
+    let targets = targets
+        .into_iter()
+        .map(|target| match target {
+            Json::String(target) => Ok(target),
+            _ => Err(Failure::Execution(NOT_STRINGS)),
+        })
+        .collect::<Result<Vec<String>, _>>()?;
+    let error = match error {
+        None => None,
+        Some(error) => match evaluate(host, error, NOT_AN_ERROR, NOT_AN_ERROR)? {
+            Json::Null => None,
+            Json::String(error) => Some(error),
+            _ => return Err(Failure::Execution(NOT_AN_ERROR)),
+        },
+    };
+    let done = (!done.is_null()).then_some(done);
+    let messages = verify_apply(done.as_ref(), &turn, &input, &targets, error.as_deref())
+        .into_iter()
+        .map(Json::String)
+        .collect();
+    assign_to(
+        host,
+        location,
+        &Json::Array(messages),
+        "behavior:verify_apply could not assign the messages",
+    )?;
+    Ok(Executed::Handled)
+}
+
+/// The live-turn check of a turn behavior (decision D131) with the donedata
+/// contract (the candidates runner's) and target check (decision D104); see
+/// the crate documentation, `<behavior:verify_apply>`.
+#[must_use]
+pub fn verify_apply(
+    done: Option<&Json>,
+    turn: &Json,
+    input: &Map<String, Json>,
+    targets: &[String],
+    error: Option<&str>,
+) -> Vec<String> {
+    if let Some(error) = error {
+        return vec![format!(
+            "turn behavior failed on the live turn's input ({error}) before it reached a top-level final state."
+        )];
+    }
+    let Some(done) = done else {
+        return vec![NO_FINAL.into()];
+    };
+    let (Some(done_turn), Some(Json::Bool(handled)), Some(Json::Array(selected))) =
+        (done.get("turn"), done.get("handled"), done.get("selected"))
+    else {
+        return vec![NOT_THE_CONTRACT.into()];
+    };
+    if done_turn != turn {
+        return vec![format!(
+            "turn behavior donedata turn {} is not the live turn {}: return the turn param as it is.",
+            js_stringify(done_turn),
+            js_stringify(turn)
+        )];
+    }
+    if !*handled || selected.is_empty() {
+        return vec![NO_SELECTION.into()];
+    }
+    let offered = js_stringify(&Json::Array(
+        targets.iter().cloned().map(Json::String).collect(),
+    ));
+    let mut errors = Vec::new();
+    for (index, selection) in selected.iter().enumerate() {
+        let Some(event) = selection
+            .get("event")
+            .and_then(Json::as_str)
+            .filter(|event| !event.is_empty())
+        else {
+            errors.push(format!(
+                "selected[{index}] has no event: each selection is an object {{event, target, data?, reason?}}."
+            ));
+            continue;
+        };
+        match selection.get("target") {
+            Some(Json::String(target)) if !target.is_empty() => {
+                if !targets.contains(target) {
+                    errors.push(format!(
+                        "selected[{index}] ({event}) names the target {}, which is not one of this turn's targets {offered}: name the session exactly as this turn's cognition_output names it.",
+                        js_string(target)
+                    ));
+                }
+            }
+            _ => errors.push(format!(
+                "selected[{index}] ({event}) names no target: name the session that receives its event, one of {offered}."
+            )),
+        }
+    }
+    errors.extend(selection_binding_errors(
+        selected,
+        &live_binding_values(input),
+        "input",
+    ));
+    errors.truncate(MAX_APPLY_ERRORS);
+    errors
+}
+
+/// The live values of a data object (decision D131): its string,
+/// number and boolean members (not `null`, arrays or objects).
+fn live_binding_values(data: &Map<String, Json>) -> Map<String, Json> {
+    data.iter()
+        .filter(|(_, value)| matches!(value, Json::String(_) | Json::Number(_) | Json::Bool(_)))
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect()
 }
 
 #[cfg(target_arch = "wasm32")]

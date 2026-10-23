@@ -18,8 +18,8 @@ function silenceDelay() {
   return silence_ms + 'ms';
 }
 
-// The candidate answered the turn with at least one selection (the original
-// _coerce_behavior_output: an empty one is unhandled).
+// The candidate answered the turn with at least one selection (an empty one
+// is unhandled).
 function isBehaviorHandled(event) {
   return event.data.turn === turn && event.data.handled === true && Array.isArray(event.data.selected) && event.data.selected.length > 0;
 }
@@ -34,7 +34,7 @@ function candidateFailedLog(event) {
 
 // dispatching and recorded_failure
 
-// A dispatch that failed: the original's dispatch failure, with the error.
+// A dispatch that failed, with the error.
 function dispatchFailure(_event) {
   return 'Autonomy behavior dispatch failed: ' + _event.name;
 }
@@ -53,12 +53,12 @@ function memoryTimeoutDelay() {
   return memory_timeout_ms + 'ms';
 }
 
-// the reference _prepare_used_persistence.
+// The handled candidate's use.
 function usedPersistenceStatements() {
   return [{sql: used_sql, parameters: [candidateName()]}];
 }
 
-// the reference _prepare_failed_persistence.
+// The candidate's failure.
 function failedPersistenceStatements() {
   return [{sql: failed_sql, parameters: [candidateName()]}];
 }
@@ -104,8 +104,8 @@ function passedOutput() {
   return Object.assign({}, rest_output, {tried: [candidateName()].concat(rest_output.tried)});
 }
 
-// The data a selection is sent with, as the original's dispatch_selected_events
-// takes it: its data object, else {} (no data, null, or a non-object).
+// The data a selection is sent with: its data object, else {} (no data,
+// null, or a non-object).
 function selectionData(s) {
   return s.data !== null && typeof s.data === 'object' && !Array.isArray(s.data) ? s.data : ({});
 }

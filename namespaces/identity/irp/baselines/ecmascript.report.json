@@ -6,28 +6,19 @@
     "kind": "namespace-irp",
     "source": "namespaces/identity/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "188544fcfbdd30b0446ccdd0b364ba6625b00ab582e4bfc86e70853dbf1720d3",
-    "source_digest": "50cb0e983496e41686b21024ee4a3709680e77424bddbb5144784150deaa5e04",
-    "manifest_digest": "6fe85eebe8aca79e036035dcc9984d14095e55618e617cabb7a50152ff7a3735",
+    "corpus_digest": "22e08df3415b418b449ed795be7b521b50d8a06d91a7d40793617e40023d7bef",
+    "source_digest": "29e850dce6680fa083cd9699873d7aa332c0baee87777cf712dde137f1adfba9",
+    "manifest_digest": "94be61e4b17a35e3c9d24f0c9314306eeb87012ea9afc7ef69506d7beba3e78c",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
     "transformer": {
-      "name": "saxon-process-sandboxed",
+      "name": "saxon-process",
       "version": "SaxonJ-HE 12.8 from Saxonica",
       "command_argv": [
-        "java",
-        "-jar",
-        "saxon-he-12.8.jar",
-        "-a:off",
-        "-p:off",
-        "-dtd:off",
-        "-expand:off",
-        "-ext:off",
-        "-xi:off",
-        "-xsiloc:off"
+        "saxon"
       ],
-      "executable_digest": "c13657d80564f40f10b8ab91b29fdc74080e7d8bb36d6cd06589292755d3476f"
+      "executable_digest": "012b6e274f9fa87155e1527848af8d41f19c6e89d7266a3b50716d5891eb739b"
     },
     "datamodel": "ecmascript",
     "provenance": "baseuri=https://github.com/stateforward/floppy/tree/main/namespaces/identity/irp/sources"
@@ -41,17 +32,17 @@
   "engine": {
     "name": "scxml-machine",
     "version": "0.2.0",
-    "source_digest": "b3fde869dbf1c6e0b9494fb7013aef41e3436225ac598902afafdf761c9e2dd5"
+    "source_digest": "dff3fc8cedae948050fb2cd1bc417c9ac835b35059f1477dc30d8b4f2e746452"
   },
   "data_model": {
     "name": "scxml-data-model-ecmascript",
     "version": "0.2.0",
-    "source_digest": "e84a0f3d2c9335c246e1e63d11927c9778ca51ce1891cbf024b93660b8d2d969"
+    "source_digest": "b8ca1a4238a8036c4c007d5cc58819b7a813402ddce88076597f178b9fb0f311"
   },
   "runner": {
     "name": "scxml-conformance/wasm",
     "version": "0.2.0",
-    "source_digest": "d7eac1d8e8b8a47312cef5eb06ab22dd43d9c5bd7130a5b9da6cddfcccb8eee3"
+    "source_digest": "3b6be0410f9c49955d4696f74088899323c31109bb66e16a60f8912bb46dcb17"
   },
   "manual_oracle": {
     "name": "scxml-conformance-manual-oracle",
@@ -62,9 +53,9 @@
     {
       "namespace_uri": "https://github.com/stateforward/floppy/namespaces/identity",
       "package_version": "0.1.0",
-      "manifest_sha256": "e7d377b4256e0823c55cce1fc3ad0e6c4b53099667ac2c5d12f1093d46afe9fb",
-      "schema_sha256": "9fee82cf9fcf6f1ba666685c441812e5848c711cb7fd96d05fd8994a0d3b3fa3",
-      "component_sha256": "89b46c6e2d021b8b2a5a8da729a9c1717c9bb93846b991f54079f0e34a56bf14"
+      "manifest_sha256": "a60684bd26951bd379a6daeaa0f7cf6199a09678c497e1286cca3d17dedf3c27",
+      "schema_sha256": "f82f2bce4916d13edb52c92314ea8fcf014d6008ffe936e95600d632256666a2",
+      "component_sha256": "a2800862fe30f5a2b4692c162236fde8aea8a667b2f011af21514c9ef679f6e1"
     }
   ],
   "ir_version": 5,
@@ -77,7 +68,7 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "b401c4d9262cd6cf17a8587e44f2f9c8826196a4c71a1499f28016f738201646",
+  "identity_digest": "c3c411610aad5975a53cc624268022fd1d0ed9a8911140b51e23738545ffcab1",
   "summary": {
     "total_selected": 10,
     "applicable_selected": 10,

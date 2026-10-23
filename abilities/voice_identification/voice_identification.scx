@@ -1,37 +1,35 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's VoiceIdentification (the reference abilities/hearing/voice/
-  identification.py): one voice embedding per voice segment, through the
-  speech service's identify operation (the original's voice classifier: pyannote
-  speaker embeddings, WeSpeaker ResNet34; here LocalAI's
-  POST {base}/voice/embed, which serves the same WeSpeaker model). The
-  interpretation (abilities/interpretation/interpretation.scx) invokes it from
+  floppy's VoiceIdentification: one voice embedding per voice segment,
+  through the speech service's identify operation (LocalAI's
+  POST {base}/voice/embed, which serves the WeSpeaker ResNet34 speaker
+  embedding model). The interpretation
+  (abilities/interpretation/interpretation.scx) invokes it from
   IdentifyingVoice (the diarized segments) and IdentifyingVoiceDirect (the
-  opening voice span of a sound, the original's direct identification); the
+  opening voice span of a sound, direct identification); the
   interpretation's stage timer bounds it, and leaving the state cancels it
   and its service call (SCXML 6.4).
 
     identifying { clipping -> applying } -> applied (final)
 
-  Input: either the <param> segments (the original's InputData: voice segments,
-  each a reference to its clipped PCM with its format and span), or, for
+  Input: either the <param> segments (voice segments, each a
+  reference to its clipped PCM with its format and span), or, for
   direct identification, audio, sample_rate_hz and channels (the sound's
   PCM), start_seconds and end_seconds (its first voice span) and output
   (where the clip is written); and model (LocalAI's
   voice-detect-wespeaker-resnet34 by default).
 
   clipping (direct identification only): the speech service's clip step
-  (the original's _voice_segment_from_detection: the span clamped to the sound
-  and clipped by whole frames); its done data is the one segment.
+  (the span clamped to the sound and clipped by whole frames); its done
+  data is the one segment.
 
   applying: the speech service's identify operation, answered
-  bot.ability.hearing.voice.identification.output {embeddings} (the original's
-  OutputData, in segment order).
+  bot.ability.hearing.voice.identification.output {embeddings} (in segment order).
 
   Output: <donedata>, received by the interpretation as
   done.invoke.voice_identification: {segments, embeddings}, or {message}
-  (the original's FailureData) when a step answers bot.ability.failed, answers
-  something else, or cannot run.
+  when a step answers bot.ability.failed, answers something else, or
+  cannot run.
 
   Bindings: the speech service package; env scopes FLOPPY_VOICE_BASE_URL
   and FLOPPY_VOICE_API_KEY to the identify <invoke> (no default backend,

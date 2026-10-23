@@ -12,7 +12,18 @@
     "generate_timeout_ms": {"type": "integer", "minimum": 1, "maximum": 3600000},
     "generate_ceiling_ms": {"type": "integer", "minimum": 1, "maximum": 3600000},
     "min_every_ms": {"type": "integer", "minimum": 1, "maximum": 86400000},
-    "turn_after_bound_ms": {"type": "integer", "minimum": 1, "maximum": 86400000}
+    "turn_after_bound_ms": {"type": "integer", "minimum": 1, "maximum": 86400000},
+    "apply": {
+      "type": "object",
+      "description": "The live turn a turn behavior is run on before it is built (the input of the live-turn check, decision D131): the turn, the behavior input as autonomy builds it, and the sessions that turn's output names [floppy field].",
+      "properties": {
+        "turn": {"type": "integer", "minimum": 1},
+        "input": {"type": "object"},
+        "targets": {"type": "array", "items": {"type": "string", "minLength": 1}, "maxItems": 32}
+      },
+      "required": ["turn", "input", "targets"],
+      "additionalProperties": false
+    }
   },
   "required": ["spec"],
   "additionalProperties": false

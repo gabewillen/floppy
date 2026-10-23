@@ -43,12 +43,22 @@ function firstDiagnosticSummary() {
 
 // Whether the builder.request data satisfies schemas/builder.request.json.
 function satisfiesBuilderRequest(_event) {
-  return _event.data !== null && typeof _event.data === 'object' && !Array.isArray(_event.data) && Object.keys(_event.data).every(function (k) { return ['spec', 'name', 'constraints', 'max_attempts', 'model', 'generate_timeout_ms', 'generate_ceiling_ms', 'min_every_ms', 'turn_after_bound_ms'].indexOf(k) >= 0; }) && isOptionalBound(_event.data.min_every_ms) && isOptionalBound(_event.data.turn_after_bound_ms) && typeof _event.data.spec === 'string' && _event.data.spec.trim().length > 0 && (_event.data.name === undefined || (typeof _event.data.name === 'string' && _event.data.name.length > 0)) && (_event.data.constraints === undefined || (Array.isArray(_event.data.constraints) && _event.data.constraints.length <= 32 && _event.data.constraints.every(function (c) { return typeof c === 'string'; }))) && (_event.data.max_attempts === undefined || (Number.isInteger(_event.data.max_attempts) && _event.data.max_attempts >= 1 && _event.data.max_attempts <= 8)) && (_event.data.model === undefined || (typeof _event.data.model === 'string' && _event.data.model.length > 0)) && isOptionalGenerateBound(_event.data.generate_timeout_ms) && isOptionalGenerateBound(_event.data.generate_ceiling_ms);
+  return _event.data !== null && typeof _event.data === 'object' && !Array.isArray(_event.data) && Object.keys(_event.data).every(function (k) { return ['spec', 'name', 'constraints', 'max_attempts', 'model', 'generate_timeout_ms', 'generate_ceiling_ms', 'min_every_ms', 'turn_after_bound_ms', 'apply'].indexOf(k) >= 0; }) && isOptionalBound(_event.data.min_every_ms) && isOptionalBound(_event.data.turn_after_bound_ms) && isOptionalApply(_event.data.apply) && typeof _event.data.spec === 'string' && _event.data.spec.trim().length > 0 && (_event.data.name === undefined || (typeof _event.data.name === 'string' && _event.data.name.length > 0)) && (_event.data.constraints === undefined || (Array.isArray(_event.data.constraints) && _event.data.constraints.length <= 32 && _event.data.constraints.every(function (c) { return typeof c === 'string'; }))) && (_event.data.max_attempts === undefined || (Number.isInteger(_event.data.max_attempts) && _event.data.max_attempts >= 1 && _event.data.max_attempts <= 8)) && (_event.data.model === undefined || (typeof _event.data.model === 'string' && _event.data.model.length > 0)) && isOptionalGenerateBound(_event.data.generate_timeout_ms) && isOptionalGenerateBound(_event.data.generate_ceiling_ms);
 }
 
 // An absent lifetime bound, or one of 1 ms to 1 day.
 function isOptionalBound(value) {
   return value === undefined || (Number.isInteger(value) && value >= 1 && value <= 86400000);
+}
+
+// An absent live turn, or {turn, input, targets} as schemas/builder.request.json has it.
+function isOptionalApply(value) {
+  return value === undefined || (value !== null && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every(function (k) { return ['turn', 'input', 'targets'].indexOf(k) >= 0; }) && Number.isInteger(value.turn) && value.turn >= 1 && value.input !== null && typeof value.input === 'object' && !Array.isArray(value.input) && Array.isArray(value.targets) && value.targets.length <= 32 && value.targets.every(function (t) { return typeof t === 'string' && t.length > 0; }));
+}
+
+// The request's live turn, else null (a turn behavior runs only its own tests).
+function requestApply(_event) {
+  return _event.data.apply === undefined ? null : _event.data.apply;
 }
 
 // A lifetime bound of the request, else null (not checked).
@@ -343,8 +353,8 @@ function validatorFailedDiagnostics() {
   return [{kind: 'draft', code: 'validator-failed', message: 'the validator could not check the draft (an oversized or unreadable document)'}];
 }
 
-// validate: the original check()'s lifetime bounds (instance._lifetime_errors,
-// E0009, <behavior:lifetime_errors>), checked only when the request names them.
+// validate: the lifetime bounds (E0009, <behavior:lifetime_errors>), checked
+// only when the request names them.
 
 function isLifetimeChecked() {
   return min_every_ms !== null || turn_after_bound_ms !== null;
@@ -356,11 +366,36 @@ function hasLifetimeErrors() {
 
 // simulate
 
-// The reference verify_apply: a persistent routine is checked by one tick,
-// forced by delivering its first schedule's event at once (the original's timer
-// clock fires its first schedule wait at once), within the original's 2 s.
+// The behavior checks: a persistent routine is checked by one forced tick
+// (D84); a turn behavior, given the request's live turn, by one run on that turn (D131).
 function simTests() {
-  return isLifetimeChecked() && lifetime === 'persistent' && schedules.length > 0 ? draft.tests.concat([{name: 'first tick', events: [{name: schedules[0], data: '', delay_ms: 0}], settle_ms: 2000, expect_events: ['bot.behavior.tick'], expect_done: false, tick: true}]) : draft.tests;
+  return isRoutineTicked() ? draft.tests.concat([firstTickTest()]) : isLiveTurnChecked() ? draft.tests.concat([liveTurnTest()]) : draft.tests;
+}
+
+function isRoutineTicked() {
+  return isLifetimeChecked() && lifetime === 'persistent' && schedules.length > 0;
+}
+
+// The routine's tick, forced by delivering its first schedule's event at once (the
+// timer clock fires its first schedule wait at once, decision D84), within 2 s.
+function firstTickTest() {
+  return {name: 'first tick', events: [{name: schedules[0], data: '', delay_ms: 0}], settle_ms: 2000, expect_events: ['bot.behavior.tick'], expect_done: false, tick: true};
+}
+
+// lifetime is written by validate's <behavior:lifetime_errors>, with or without bounds.
+function isLiveTurnChecked() {
+  return live_turn !== null && lifetime === 'turn';
+}
+
+// The run on the live turn (sim_apply): expect_events [] admits any outputs, and
+// <behavior:verify_apply> judges its donedata.
+function liveTurnTest() {
+  return {name: 'live turn', events: [], settle_ms: liveTurnBoundMs(), expect_events: [], expect_done: true, apply: true, live: true, turn: live_turn.turn, input: live_turn.input, targets: live_turn.targets, handled: true};
+}
+
+// The 2 s verify timeout (decision D131), within the turn's silence bound when the request names it.
+function liveTurnBoundMs() {
+  return Math.min(turn_after_bound_ms === null ? 2000 : turn_after_bound_ms, 2000);
 }
 
 function simulateLog() {
@@ -413,6 +448,37 @@ function isOwnOrCandidateEvent(_event) {
   return !_event.invokeid || _event.invokeid === candidate_id;
 }
 
+// sim_apply
+
+// Whether the current test is a run on a turn (sim_apply), with no events sent.
+function isApplyTest() {
+  return currentTest().apply === true;
+}
+
+// The params of an apply run, as the candidates runner gives them.
+function testTurn() {
+  return currentTest().turn;
+}
+
+function testInput() {
+  return currentTest().input;
+}
+
+function testTargets() {
+  return currentTest().targets;
+}
+
+// done.invoke's donedata, which scxml.rs does not check; none is {}, which
+// <behavior:verify_apply> refuses (null in child_data: the draft never finished).
+function appliedData(_event) {
+  return _event.data === undefined || _event.data === null ? ({}) : _event.data;
+}
+
+// The run's error without the candidate's generated invoke id (D124: stable fingerprints).
+function applyError() {
+  return sim_error === null ? null : withoutInvokeId(sim_error, candidate_id);
+}
+
 // sim_check
 
 // sim_results with the current test's result: expect_events in order
@@ -422,7 +488,7 @@ function nextSimResults() {
 }
 
 // Whether the current test is a routine's forced tick, whose ticks
-// <behavior:verify_tick> checks (the original verify._verify_tick, E0008).
+// <behavior:verify_tick> checks (E0008).
 function isTickTest() {
   return currentTest().tick === true;
 }
@@ -441,8 +507,12 @@ function simulateDiagnostics() {
 // (error.communication.<invokeid>): the id is new on every run, so with it
 // the same test failing with the same error would never be the same failure.
 function simError(r) {
-  var suffix = '.' + r.invokeid;
-  return typeof r.invokeid === 'string' && r.error.slice(-suffix.length) === suffix ? r.error.slice(0, -suffix.length) : r.error;
+  return withoutInvokeId(r.error, r.invokeid);
+}
+
+function withoutInvokeId(name, invokeid) {
+  var suffix = '.' + invokeid;
+  return typeof invokeid === 'string' && name.slice(-suffix.length) === suffix ? name.slice(0, -suffix.length) : name;
 }
 
 // What a test's done mismatch means for a machine the simulation invokes
@@ -480,7 +550,8 @@ function diagnosticsFingerprint() {
 }
 
 // The last draft a check rejected (validate, lifetime, simulate, apply),
-// else rejected unchanged: the original drafts the rejected source.
+// else rejected unchanged: the reflection stores the rejected source as a
+// draft.
 // One that could not be written is not.
 function rejectedDraft() {
   return diagnostics.length > 0 && ['draft', 'validate', 'lifetime', 'simulate', 'apply'].indexOf(diagnostics[0].kind) >= 0 && diagnostics[0].code !== 'write-failed' && typeof scxml_text === 'string' ? scxml_text : rejected;

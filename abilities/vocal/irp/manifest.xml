@@ -18,7 +18,7 @@
     </test>
   </assert>
   <assert id="vocal-3" specnum="3" specid="#vocal-3">
-    <![CDATA[The `provider` `<param>` names the original's provider instead: `elevenlabs` is `POST {base}/text-to-speech/{voice}?output_format=…`, `gemini` is `POST {base}/interactions` (its answer's base64 audio part), each answered as above.]]>
+    <![CDATA[The `provider` `<param>` names another provider instead: `elevenlabs` is `POST {base}/text-to-speech/{voice}?output_format=…`, `gemini` is `POST {base}/interactions` (its answer's base64 audio part), each answered as above.]]>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>

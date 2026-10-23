@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- behavior-6: a run on the live turn whose donedata selects on its input, to one of its targets, has no messages. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior">
+<datamodel>
+  <data id="a" expr="null"/>
+  <data id="done" expr="({turn: 3, handled: true, selected: [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'hi', label: 'knock'}}]})"/>
+  <data id="input" expr="({label: 'knock', focus_candidates: ['door']})"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <behavior:verify_apply location="a" done="done" turn="3" input="input" targets="['communication']" error="null"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="Array.isArray(a) &amp;&amp; a.length === 0" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

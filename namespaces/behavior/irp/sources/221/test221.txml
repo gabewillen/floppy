@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- behavior-3: a draft's absent fields are the original Instance's defaults. -->
+<!-- behavior-3: a draft's absent fields are an instance's defaults. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior">
 <datamodel>
   <data id="s" expr="null"/>

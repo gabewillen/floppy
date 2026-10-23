@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's SpeechDecoding (the reference abilities/hearing/speech/decoding.py):
-  speech to words through the speech service (services/speech, operation
-  decode with provider "gemini": the Gemini API's POST {base}/interactions,
-  decision D94), the original's SpeechDecoder providers. The interpretation
+  floppy's SpeechDecoding: speech to words through the speech service
+  (services/speech, operation decode with provider "gemini": the Gemini
+  API's POST {base}/interactions, decision D94). The interpretation
   (abilities/interpretation/interpretation.scx) invokes it once per utterance from
   DecodingSpeech; the interpretation's stage timer bounds it, and leaving
   DecodingSpeech cancels it and the service call (SCXML 6.4).
@@ -12,14 +11,13 @@
 
   Input: the <param>s audio (a reference to the utterance's audio in the
   directory the run grants the speech service), media_type, provider and
-  model (the original's gemini SpeechDecoder and its default model,
-  gemini-3.5-flash, by default; provider null is the OpenAI-compatible
-  POST {base}/audio/transcriptions, whisper-1 for example).
+  model (gemini and gemini-3.5-flash by default; provider null is the
+  OpenAI-compatible POST {base}/audio/transcriptions, whisper-1 for example).
 
   Output: <donedata>, received by the interpretation as
-  done.invoke.speech_decoding: {text} (the original's decoded speech, as words)
+  done.invoke.speech_decoding: {text} (the decoded speech, as words)
   when the service answers bot.ability.hearing.speech.decoding.output
-  {text}, or {message} (the original's FailureData) when it answers
+  {text}, or {message} (the failure) when it answers
   bot.ability.failed {message}, answers something else, or cannot run.
 
   Bindings: the speech service package, resolved from its repository URI;

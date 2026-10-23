@@ -18,7 +18,7 @@
     </test>
   </assert>
   <assert id="reasoning-3" specnum="3" specid="#reasoning-3">
-    <![CDATA[With choices it makes one generate call offering the original's dispatch tool, which allows only the offered events (with their targets); the events of its dispatch calls, in order, are returned as the model gave them with `handled: true`, each `{event, data, reason, target}`, `bot.ability.cognition.ignore` selections included; an empty selection is handled with nothing selected.]]>
+    <![CDATA[With choices it makes one generate call offering the dispatch tool, which allows only the offered events (with their targets); the events of its dispatch calls, in order, are returned as the model gave them with `handled: true`, each `{event, data, reason, target}`, `bot.ability.cognition.ignore` selections included; an empty selection is handled with nothing selected.]]>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>
@@ -51,13 +51,13 @@
     </test>
   </assert>
   <assert id="reasoning-5" specnum="5" specid="#reasoning-5">
-    <![CDATA[A prompt over the original's projection budgets (262144 encoded bytes, 4096 nodes, 4096 collection items, 65536 characters per scalar) fails the turn without a model call, its reason the original's message (for example `prompt projection collection item budget exceeded`).]]>
+    <![CDATA[A prompt over the projection budgets (262144 encoded bytes, 4096 nodes, 4096 collection items, 65536 characters per scalar) fails the turn without a model call, its reason the budget's message (for example `prompt projection collection item budget exceeded`).]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>
   </assert>
   <assert id="reasoning-6" specnum="6" specid="#reasoning-6">
-    <![CDATA[Each selection is sent, in order, to the session its target names (`#_scxml_` + target) before the turn ends, its data `{}` when it has none (the original's `dispatch_selected_events`); a send that fails fails the turn with reason `the reasoning could not run (<error>)`.]]>
+    <![CDATA[Each selection is sent, in order, to the session its target names (`#_scxml_` + target) before the turn ends, its data `{}` when it has none (decision D113); a send that fails fails the turn with reason `the reasoning could not run (<error>)`.]]>
     <test id="150" conformance="mandatory" manual="false">
       <start uri="150/test150.scxml"/>
     </test>

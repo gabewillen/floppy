@@ -81,7 +81,7 @@
     </test>
   </assert>
   <assert id="stm-10" specnum="10" specid="#stm-10">
-    <![CDATA[A database it cannot open leaves it degraded, without an offer: it sends `bot.ability.failed` `{message: "unavailable: StmMemory is degraded."}`, answers every request the same way, and drops every notification.]]>
+    <![CDATA[A database it cannot open leaves it degraded, without an offer: it sends `bot.ability.failed` `{message: "unavailable: short-term memory is degraded."}`, answers every request the same way, and drops every notification.]]>
     <test id="190" conformance="mandatory" manual="false">
       <start uri="190/test190.scxml"/>
     </test>

@@ -1,0 +1,780 @@
+[
+ {
+  "done": {
+   "handled": true,
+   "selected": [
+    {
+     "data": {
+      "label": "knock",
+      "text": "Who is there?"
+     },
+     "event": "bot.ability.communication.respond",
+     "target": "communication"
+    },
+    {
+     "data": {
+      "count": 2,
+      "loud": true,
+      "none": "y",
+      "other": "x"
+     },
+     "event": "bot.ability.communication.respond",
+     "target": "communication"
+    }
+   ],
+   "turn": 3
+  },
+  "error": null,
+  "input": {
+   "count": 2,
+   "focus": "door",
+   "focus_candidates": [
+    "door"
+   ],
+   "label": "knock",
+   "loud": true,
+   "none": null
+  },
+  "messages": [],
+  "name": "a_run_that_selects_on_the_live_turn",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": null,
+  "error": "error.execution",
+  "input": {
+   "count": 2,
+   "focus": "door",
+   "focus_candidates": [
+    "door"
+   ],
+   "label": "knock",
+   "loud": true,
+   "none": null
+  },
+  "messages": [
+   "turn behavior failed on the live turn's input (error.execution) before it reached a top-level final state."
+  ],
+  "name": "a_run_that_failed",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "handled": true,
+   "selected": [
+    {
+     "data": {
+      "label": "knock",
+      "text": "Who is there?"
+     },
+     "event": "bot.ability.communication.respond",
+     "target": "communication"
+    }
+   ],
+   "turn": 3
+  },
+  "error": "error.communication",
+  "input": {
+   "count": 2,
+   "focus": "door",
+   "focus_candidates": [
+    "door"
+   ],
+   "label": "knock",
+   "loud": true,
+   "none": null
+  },
+  "messages": [
+   "turn behavior failed on the live turn's input (error.communication) before it reached a top-level final state."
+  ],
+  "name": "an_error_comes_before_the_donedata",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": null,
+  "error": null,
+  "input": {
+   "count": 2,
+   "focus": "door",
+   "focus_candidates": [
+    "door"
+   ],
+   "label": "knock",
+   "loud": true,
+   "none": null
+  },
+  "messages": [
+   "turn behavior reached no top-level final state on the live turn's input within the turn's bound: it receives no events, so it decides with eventless transitions and ends at once."
+  ],
+  "name": "no_donedata",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {},
+  "error": null,
+  "input": {
+   "count": 2,
+   "focus": "door",
+   "focus_candidates": [
+    "door"
+   ],
+   "label": "knock",
+   "loud": true,
+   "none": null
+  },
+  "messages": [
+   "turn behavior donedata must be the object {turn, handled, selected}: handled a boolean and selected a list of selections."
+  ],
+  "name": "an_empty_donedata",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "selected": [],
+   "turn": 3
+  },
+  "error": null,
+  "input": {
+   "count": 2,
+   "focus": "door",
+   "focus_candidates": [
+    "door"
+   ],
+   "label": "knock",
+   "loud": true,
+   "none": null
+  },
+  "messages": [
+   "turn behavior donedata must be the object {turn, handled, selected}: handled a boolean and selected a list of selections."
+  ],
+  "name": "a_donedata_without_handled",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": [
+   3,
+   true,
+   []
+  ],
+  "error": null,
+  "input": {
+   "count": 2,
+   "focus": "door",
+   "focus_candidates": [
+    "door"
+   ],
+   "label": "knock",
+   "loud": true,
+   "none": null
+  },
+  "messages": [
+   "turn behavior donedata must be the object {turn, handled, selected}: handled a boolean and selected a list of selections."
+  ],
+  "name": "a_donedata_that_is_not_an_object",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "handled": true,
+   "selected": {
+    "data": {
+     "label": "knock",
+     "text": "Who is there?"
+    },
+    "event": "bot.ability.communication.respond",
+    "target": "communication"
+   },
+   "turn": 3
+  },
+  "error": null,
+  "input": {
+   "count": 2,
+   "focus": "door",
+   "focus_candidates": [
+    "door"
+   ],
+   "label": "knock",
+   "loud": true,
+   "none": null
+  },
+  "messages": [
+   "turn behavior donedata must be the object {turn, handled, selected}: handled a boolean and selected a list of selections."
+  ],
+  "name": "a_selected_that_is_not_a_list",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "handled": true,
+   "selected": [
+    {
+     "data": {
+      "label": "knock",
+      "text": "Who is there?"
+     },
+     "event": "bot.ability.communication.respond",
+     "target": "communication"
+    }
+   ],
+   "turn": 0
+  },
+  "error": null,
+  "input": {
+   "count": 2,
+   "focus": "door",
+   "focus_candidates": [
+    "door"
+   ],
+   "label": "knock",
+   "loud": true,
+   "none": null
+  },
+  "messages": [
+   "turn behavior donedata turn 0 is not the live turn 3: return the turn param as it is."
+  ],
+  "name": "another_turn",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "handled": true,
+   "selected": [
+    {
+     "data": {
+      "label": "knock",
+      "text": "Who is there?"
+     },
+     "event": "bot.ability.communication.respond",
+     "target": "communication"
+    }
+   ],
+   "turn": "3"
+  },
+  "error": null,
+  "input": {
+   "count": 2,
+   "focus": "door",
+   "focus_candidates": [
+    "door"
+   ],
+   "label": "knock",
+   "loud": true,
+   "none": null
+  },
+  "messages": [
+   "turn behavior donedata turn \"3\" is not the live turn 3: return the turn param as it is."
+  ],
+  "name": "a_turn_of_another_type",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "handled": false,
+   "selected": [],
+   "turn": 3
+  },
+  "error": null,
+  "input": {
+   "count": 2,
+   "focus": "door",
+   "focus_candidates": [
+    "door"
+   ],
+   "label": "knock",
+   "loud": true,
+   "none": null
+  },
+  "messages": [
+   "behavior output must select at least one event for the observed pattern."
+  ],
+  "name": "unhandled",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "handled": false,
+   "selected": [
+    {
+     "data": {
+      "label": "knock",
+      "text": "Who is there?"
+     },
+     "event": "bot.ability.communication.respond",
+     "target": "communication"
+    }
+   ],
+   "turn": 3
+  },
+  "error": null,
+  "input": {
+   "count": 2,
+   "focus": "door",
+   "focus_candidates": [
+    "door"
+   ],
+   "label": "knock",
+   "loud": true,
+   "none": null
+  },
+  "messages": [
+   "behavior output must select at least one event for the observed pattern."
+  ],
+  "name": "unhandled_with_selections",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "handled": true,
+   "selected": [],
+   "turn": 3
+  },
+  "error": null,
+  "input": {
+   "count": 2,
+   "focus": "door",
+   "focus_candidates": [
+    "door"
+   ],
+   "label": "knock",
+   "loud": true,
+   "none": null
+  },
+  "messages": [
+   "behavior output must select at least one event for the observed pattern."
+  ],
+  "name": "handled_with_nothing_selected",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "handled": true,
+   "selected": [
+    {
+     "target": "communication"
+    }
+   ],
+   "turn": 3
+  },
+  "error": null,
+  "input": {
+   "count": 2,
+   "focus": "door",
+   "focus_candidates": [
+    "door"
+   ],
+   "label": "knock",
+   "loud": true,
+   "none": null
+  },
+  "messages": [
+   "selected[0] has no event: each selection is an object {event, target, data?, reason?}."
+  ],
+  "name": "a_selection_without_an_event",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "handled": true,
+   "selected": [
+    {
+     "data": {
+      "label": "knock",
+      "text": "Who is there?"
+     },
+     "event": "bot.ability.communication.respond",
+     "target": "communication"
+    },
+    "respond"
+   ],
+   "turn": 3
+  },
+  "error": null,
+  "input": {
+   "count": 2,
+   "focus": "door",
+   "focus_candidates": [
+    "door"
+   ],
+   "label": "knock",
+   "loud": true,
+   "none": null
+  },
+  "messages": [
+   "selected[1] has no event: each selection is an object {event, target, data?, reason?}."
+  ],
+  "name": "a_selection_that_is_not_an_object",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "handled": true,
+   "selected": [
+    {
+     "data": {
+      "text": "Who is there?"
+     },
+     "event": "bot.ability.communication.respond"
+    }
+   ],
+   "turn": 3
+  },
+  "error": null,
+  "input": {
+   "count": 2,
+   "focus": "door",
+   "focus_candidates": [
+    "door"
+   ],
+   "label": "knock",
+   "loud": true,
+   "none": null
+  },
+  "messages": [
+   "selected[0] (bot.ability.communication.respond) names no target: name the session that receives its event, one of [\"communication\"]."
+  ],
+  "name": "a_selection_without_a_target",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "handled": true,
+   "selected": [
+    {
+     "data": {
+      "label": "knock",
+      "text": "Who is there?"
+     },
+     "event": "bot.ability.communication.respond",
+     "target": "speaking"
+    }
+   ],
+   "turn": 3
+  },
+  "error": null,
+  "input": {
+   "count": 2,
+   "focus": "door",
+   "focus_candidates": [
+    "door"
+   ],
+   "label": "knock",
+   "loud": true,
+   "none": null
+  },
+  "messages": [
+   "selected[0] (bot.ability.communication.respond) names the target \"speaking\", which is not one of this turn's targets [\"communication\"]: name the session exactly as this turn's cognition_output names it."
+  ],
+  "name": "a_selection_to_a_foreign_target",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "handled": true,
+   "selected": [
+    {
+     "data": {
+      "label": "knock",
+      "text": "Who is there?"
+     },
+     "event": "bot.ability.communication.respond",
+     "target": "communication"
+    }
+   ],
+   "turn": 3
+  },
+  "error": null,
+  "input": {
+   "count": 2,
+   "focus": "door",
+   "focus_candidates": [
+    "door"
+   ],
+   "label": "knock",
+   "loud": true,
+   "none": null
+  },
+  "messages": [
+   "selected[0] (bot.ability.communication.respond) names the target \"communication\", which is not one of this turn's targets []: name the session exactly as this turn's cognition_output names it."
+  ],
+  "name": "no_targets_refuse_every_selection",
+  "targets": [],
+  "turn": 3
+ },
+ {
+  "done": {
+   "handled": true,
+   "selected": [
+    {
+     "data": {
+      "label": "doorbell"
+     },
+     "event": "bot.ability.communication.respond",
+     "target": "communication"
+    }
+   ],
+   "turn": 3
+  },
+  "error": null,
+  "input": {
+   "count": 2,
+   "focus": "door",
+   "focus_candidates": [
+    "door"
+   ],
+   "label": "knock",
+   "loud": true,
+   "none": null
+  },
+  "messages": [
+   "selection data[\"label\"]=\"doorbell\" does not match live event value \"knock\"; read identifiers from input at runtime."
+  ],
+  "name": "a_hardcoded_input_value",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "handled": true,
+   "selected": [
+    {
+     "data": {
+      "count": 2.5,
+      "loud": 1
+     },
+     "event": "bot.ability.communication.respond",
+     "target": "communication"
+    }
+   ],
+   "turn": 3
+  },
+  "error": null,
+  "input": {
+   "count": 2,
+   "focus": "door",
+   "focus_candidates": [
+    "door"
+   ],
+   "label": "knock",
+   "loud": true,
+   "none": null
+  },
+  "messages": [
+   "selection data[\"count\"]=2.5 does not match live event value 2; read identifiers from input at runtime.",
+   "selection data[\"loud\"]=1 does not match live event value true; read identifiers from input at runtime."
+  ],
+  "name": "a_boolean_is_not_a_number",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "handled": true,
+   "selected": [
+    {
+     "data": {
+      "focus": "window"
+     },
+     "event": "bot.ability.communication.respond",
+     "target": "speaking"
+    }
+   ],
+   "turn": 3
+  },
+  "error": null,
+  "input": {
+   "count": 2,
+   "focus": "door",
+   "focus_candidates": [
+    "door"
+   ],
+   "label": "knock",
+   "loud": true,
+   "none": null
+  },
+  "messages": [
+   "selected[0] (bot.ability.communication.respond) names the target \"speaking\", which is not one of this turn's targets [\"communication\"]: name the session exactly as this turn's cognition_output names it.",
+   "selection data[\"focus\"]=\"window\" does not match live event value \"door\"; read identifiers from input at runtime."
+  ],
+  "name": "a_foreign_target_and_a_binding_mismatch",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "handled": true,
+   "selected": [
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    },
+    {
+     "target": "communication"
+    }
+   ],
+   "turn": 3
+  },
+  "error": null,
+  "input": {
+   "count": 2,
+   "focus": "door",
+   "focus_candidates": [
+    "door"
+   ],
+   "label": "knock",
+   "loud": true,
+   "none": null
+  },
+  "messages": [
+   "selected[0] has no event: each selection is an object {event, target, data?, reason?}.",
+   "selected[1] has no event: each selection is an object {event, target, data?, reason?}.",
+   "selected[2] has no event: each selection is an object {event, target, data?, reason?}.",
+   "selected[3] has no event: each selection is an object {event, target, data?, reason?}.",
+   "selected[4] has no event: each selection is an object {event, target, data?, reason?}.",
+   "selected[5] has no event: each selection is an object {event, target, data?, reason?}.",
+   "selected[6] has no event: each selection is an object {event, target, data?, reason?}.",
+   "selected[7] has no event: each selection is an object {event, target, data?, reason?}.",
+   "selected[8] has no event: each selection is an object {event, target, data?, reason?}.",
+   "selected[9] has no event: each selection is an object {event, target, data?, reason?}.",
+   "selected[10] has no event: each selection is an object {event, target, data?, reason?}.",
+   "selected[11] has no event: each selection is an object {event, target, data?, reason?}.",
+   "selected[12] has no event: each selection is an object {event, target, data?, reason?}.",
+   "selected[13] has no event: each selection is an object {event, target, data?, reason?}.",
+   "selected[14] has no event: each selection is an object {event, target, data?, reason?}.",
+   "selected[15] has no event: each selection is an object {event, target, data?, reason?}.",
+   "selected[16] has no event: each selection is an object {event, target, data?, reason?}.",
+   "selected[17] has no event: each selection is an object {event, target, data?, reason?}.",
+   "selected[18] has no event: each selection is an object {event, target, data?, reason?}.",
+   "selected[19] has no event: each selection is an object {event, target, data?, reason?}."
+  ],
+  "name": "at_most_twenty_messages",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ }
+]

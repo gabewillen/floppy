@@ -173,8 +173,8 @@ fn the_payload_is_what_the_javascript_it_replaces_built() {
     }
 }
 
-/// The original's `behavior_input_payload` wraps any data that is not a
-/// mapping, an array included (ECMAScript's `Object.assign` spread an
+/// The behavior input wraps any data that is not an
+/// object, an array included (ECMAScript's `Object.assign` spread an
 /// array's indices), and a focus that evaluates to `undefined` is left out.
 #[test]
 fn array_data_is_wrapped_and_an_undefined_focus_is_left_out() {

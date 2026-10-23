@@ -75,7 +75,7 @@
     </test>
   </assert>
   <assert id="speaking-7" specnum="7" specid="#speaking-7">
-    <![CDATA[Encoding is bounded by `encoding_timeout_ms` (30 s by default, decision D98; the original's 5 s is shorter than Gemini's unstreamed synthesis of a sentence): its timer answers `bot.ability.failed` `{message: "Speech encoding timed out."}` and returns to `idle`.]]>
+    <![CDATA[Encoding is bounded by `encoding_timeout_ms` (30 s by default, decision D98): its timer answers `bot.ability.failed` `{message: "Speech encoding timed out."}` and returns to `idle`.]]>
     <test id="160" conformance="mandatory" manual="false">
       <start uri="160/test160.scxml"/>
     </test>

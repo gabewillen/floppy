@@ -4,8 +4,8 @@
 //! (`<invoke type="https://github.com/stateforward/floppy/services/sql">`)
 //! against a database file in a directory the run grants with
 //! `--dir URI=HOST::GUEST`. Each invocation is one SQLite transaction of
-//! The original's `Statement`s; the service answers `sql.result` (the original's
-//! `OutputData`) or `sql.failed` (the original's `FailureData`), then completes.
+//! statements; the service answers `sql.result` or `sql.failed`, then
+//! completes.
 //! The file outlives the invocation and the run. The `postgres_` test runs
 //! an open transaction on the pgsql service against a fresh Postgres server
 //! ([`support::Pglite`], ignored unless `FLOPPY_PGLITE_SERVER` or
@@ -115,7 +115,7 @@ fn the_database_outlives_the_run() {
     assert!(support::finished(&first.records), "{}", first.stderr);
     // The second run inserts the same memory id: the primary key refuses
     // it, so the whole transaction rolls back and the service answers
-    // The original's failure.
+    // `sql.failed`.
     let second = open(&grant, REMEMBER_AND_RECALL);
     assert_eq!(
         logs(&second.records),

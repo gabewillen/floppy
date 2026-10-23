@@ -1,15 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Seeing ability (the reference abilities/seeing/seeing.py): the
-  eye. It holds the newest view of each source, asks the vision service
-  how much a view changed since the last view of that source it handed
-  on, and hands on a view that changed past a threshold; asked to look, it
-  hands on every fresh view. The body (bots/floppy/floppy.scx) invokes it
-  as its child "seeing" beside its other abilities, and its seeing_enabled
-  switch decides whether it perceives (decision D189): on, it is an
-  expected ability, every environment.visual goes to it after the input
-  abilities and its look offer is taken; off, it is sent no stimulus and
-  its offers are not taken.
+  floppy's Seeing ability: the eye. It holds the newest view of each
+  source, asks the vision service how much a view changed since the last
+  view of that source it handed on, and hands on a view that changed past a
+  threshold; asked to look, it hands on every fresh view. The body
+  (bots/floppy/floppy.scx) invokes it as its child "seeing" beside its
+  other abilities, and its seeing_enabled switch decides whether it
+  perceives (decision D189): on, it is an expected ability, every
+  environment.visual goes to it after the input abilities and its look
+  offer is taken; off, it is sent no stimulus and its offers are not taken.
 
     initializing -refused-> degraded (final)
                  -else-> perceiving
@@ -25,33 +24,30 @@
                    viewed -> viewing ... -> handing_on } -sight-> settling
                  settling -settle_after_ms-> next }
 
-  Initializing (decision D185) is the original's constructor refusals,
-  checked on the invoker's <param>s before the eye perceives: a
-  change_threshold outside (0, 1], a duration that is not positive
-  (measure_every_ms, measure_timeout_ms, settle_after_ms, max_view_age_ms,
-  stage_timeout_ms), a measure_every_ms longer than settle_after_ms, and,
-  floppy's own check (the original's measure is an object), a measure
-  that is neither byte_identity nor frame_diff. The first refusal, in that
-  order, ends Seeing in the final state degraded, logged as
-  seeing.degraded with its closed reason, so its invoker gets
-  done.invoke.seeing. Otherwise initializing goes on to the original's
-  perceiving. The original's initializing also attaches its stage children,
-  and its detaching and degraded follow a failed detach: that is the
-  attachment protocol, which invoke lifecycle replaces (decision D6):
-  Seeing has no persistent child to wait for.
+  Initializing (decision D185) checks the invoker's <param>s before the eye
+  perceives and refuses a change_threshold outside (0, 1], a duration that
+  is not positive (measure_every_ms, measure_timeout_ms, settle_after_ms,
+  max_view_age_ms, stage_timeout_ms), a measure_every_ms longer than
+  settle_after_ms, and a measure that is neither byte_identity nor
+  frame_diff. The first refusal, in that order, ends Seeing in the final
+  state degraded, logged as seeing.degraded with its closed reason, so its
+  invoker gets done.invoke.seeing. Otherwise initializing goes on to
+  perceiving. There is no attach or detach step: each stage invokes its
+  child for one view, and invoke lifecycle starts and cancels it (decision
+  D6), so Seeing has no persistent child to wait for.
 
-  Holding (the original _hold): environment.visual {image, media_type,
-  kind, source, participants} is taken from wherever perception is,
-  without interrupting it. Views older than max_view_age_ms (60 s) expire
-  first; a stimulus without a source is then dropped (a view is keyed by
-  its transducer); else it replaces its source's view (latest wins, moved
-  to the newest place: views is in receipt order) unmeasured, keeping the
-  source's measured_at; past four views (the original's MAX_VIEWS) the least
-  recently received is evicted. An expired or evicted source's seen
-  signature is forgotten with it. Each outcome is logged (seeing.view:
-  expired, dropped, held, evicted). Times are Date.now(), the session's
-  clock, read once per hold and once per choice (next's chosen_at, which
-  its choice, the look's request and the measured pick share).
+  Holding: environment.visual {image, media_type, kind, source,
+  participants} is taken from wherever perception is, without interrupting
+  it. Views older than max_view_age_ms (60 s) expire first; a stimulus
+  without a source is then dropped (a view is keyed by its transducer);
+  else it replaces its source's view (latest wins, moved to the newest
+  place: views is in receipt order) unmeasured, keeping the source's
+  measured_at; past four views (MAX_VIEWS) the least recently received is
+  evicted. An expired or evicted source's seen signature is forgotten with
+  it. Each outcome is logged (seeing.view: expired, dropped, held,
+  evicted). Times are Date.now(), the session's clock, read once per hold
+  and once per choice (next's chosen_at, which its choice, the look's
+  request and the measured pick share).
 
   Looking: bot.ability.seeing.look {} is taken from wherever perception
   is and only remembered (look_pending); looks waiting for the same
@@ -59,20 +55,19 @@
   everywhere else it waits for the state to end, so every sight is
   followed by a full settle_after_ms (5 s).
 
-  next (the original's choice): a pending look goes first, ahead of any
-  measurement, so motion cannot starve it: its request is every fresh
-  view, newest first (ties in receipt order), each with change null and
-  its age_ms, from source "seeing" (Seeing itself, the original's
-  hsm.id). Else an unmeasured fresh view is measured; else the eye
-  watches.
+  next chooses what comes next: a pending look goes first, ahead of any
+  measurement, so motion cannot starve it: its request is every fresh view,
+  newest first (ties in receipt order), each with change null and its
+  age_ms, from source "seeing" (Seeing itself). Else an unmeasured fresh
+  view is measured; else the eye watches.
 
-  Measuring (the vision service, decision D185): measuring picks the
-  least recently measured source among the unmeasured fresh views (never
-  measured first, ties to the oldest arrival: a round robin), marks it
-  measured now, and invokes the vision service ("vision") with measure
-  (byte_identity, the default, or frame_diff), the view's image and the
-  signature last handed on for its source (null for a first view). Its
-  done data, the original's Measurement {change, signature}, becomes
+  Measuring (the vision service, decision D185): measuring picks the least
+  recently measured source among the unmeasured fresh views (never measured
+  first, ties to the oldest arrival: a round robin), marks it measured now,
+  and invokes the vision service ("vision") with measure (byte_identity,
+  the default, or frame_diff), the view's image and the signature last
+  handed on for its source (null for a first view). Its done data, a
+  measurement {change, signature}, becomes
   bot.ability.seeing.measure.completed {source, visual, received_at,
   measurement} sent to itself: a change that is null (a first view) or at
   least change_threshold (0.1) is handed on (seeing.measure first or
@@ -80,52 +75,51 @@
   held, as the change request of that one view; a smaller change is not
   (below_threshold), and the signature handed on before stays, so drift
   keeps accumulating against it. A service that cannot measure (its start
-  is rejected: error.execution), done data that is no Measurement, and
-  the measure_timeout_ms timer (2 s) become
-  bot.ability.seeing.measure.failed {kind: measure_failed or timeout,
-  message} sent to itself (seeing.measure failed or timeout): nothing is
-  handed on, no other measure is asked, and a look still sees the view.
-  Each measurement is followed by pacing, measure_every_ms (500 ms), so
-  at most one measurement runs per measure_every_ms whatever the frame
-  rate; frames in between only replace the held view.
+  is rejected: error.execution), done data that is no measurement, and the
+  measure_timeout_ms timer (2 s) become bot.ability.seeing.measure.failed
+  {kind: measure_failed or timeout, message} sent to itself (seeing.measure
+  failed or timeout): nothing is handed on, no other measure is asked, and
+  a look still sees the view. Each measurement is followed by pacing,
+  measure_every_ms (500 ms), so at most one measurement runs per
+  measure_every_ms whatever the frame rate; frames in between only replace
+  the held view.
 
   Interpreting (decision D187): the request's views are interpreted one
-  after another, each by its objects stage and then its description
-  stage, as the original's _interpret_view orders them (its face stage is
-  out, decision D188). A stage whose switch is off (detect, describe; both
-  false by default: the original composes no stage) is passed at once; a
-  stage that is on invokes its child for the view (detecting:
-  abilities/object_detection/object_detection.scx as "object_detection";
-  describing: abilities/description/description.scx as "description"; each
-  given the view's image and media_type and the model), bounded by
-  stage_timeout_ms (30 s). Its output fills the view's objects or
-  description; its bot.ability.failed, an error, or the timer leaves the
+  after another, each by its objects stage and then its description stage
+  (there is no face stage, decision D188). A stage whose switch is off
+  (detect, describe; both false by default, so by default no stage runs) is
+  passed at once; a stage that is on invokes its child for the view
+  (detecting: abilities/object_detection/object_detection.scx as
+  "object_detection"; describing: abilities/description/description.scx as
+  "description"; each given the view's image and media_type and the model),
+  bounded by stage_timeout_ms (30 s). Its output fills the view's objects
+  or description; its bot.ability.failed, an error, or the timer leaves the
   field null. Each stage logs seeing.stage "<stage> ok", "<stage> failed"
   or "<stage> timeout". Leaving the stage's state cancels its child and its
-  model call (SCXML 6.4), which replaces the original's stuck-stage recovery
-  (decision D186). What a cancelled child queued before its cancel is
-  still delivered (W3C case 236), and both children answer
-  bot.ability.failed, so a stage's end drains: detected and viewed each
-  send themselves an event (no delay, correlated by its sendid) and wait
-  for it, so whatever the child queued before is dropped there, never
-  taken as the next stage's answer. A child's done.invoke is not taken.
+  model call (SCXML 6.4), so no stage is left running (decision D186). What
+  a cancelled child queued before its cancel is still delivered (W3C case
+  236), and both children answer bot.ability.failed, so a stage's end
+  drains: detected and viewed each send themselves an event (no delay,
+  correlated by its sendid) and wait for it, so whatever the child queued
+  before is dropped there, never taken as the next stage's answer. A
+  child's done.invoke is not taken.
 
   Handing on: when every view is interpreted the eye sends itself
-  bot.ability.seeing.sight {cause, views, participants} (the original's
-  SightData; participants the views' stamped participants, first
-  occurrence first, at most 32), and the transition taking it sends the
-  body bot.ability.cognition.input {stimulus: {event:
-  "bot.ability.seeing.sight", data, source}, participants} (source the
-  view's source for a change, "seeing" for a look), logs seeing.sight
-  (its cause) and settles: settling waits settle_after_ms, so at most one
-  sight per settle_after_ms, plus deliberate looks.
+  bot.ability.seeing.sight {cause, views, participants} (participants the
+  views' stamped participants, first occurrence first, at most 32), and the
+  transition taking it sends the body bot.ability.cognition.input
+  {stimulus: {event: "bot.ability.seeing.sight", data, source},
+  participants} (source the view's source for a change, "seeing" for a
+  look), logs seeing.sight (its cause) and settles: settling waits
+  settle_after_ms, so at most one sight per settle_after_ms, plus
+  deliberate looks.
 
   Offers: the entry into perceiving sends bot.ability.offers {ability:
   "seeing", choices} to the body: <decision:choice
-  events="bot.ability.seeing.look"> (the original's one model-callable
-  event), made model-facing by <processing:model_facing_schema> ($schema,
-  title and examples dropped; over 32 KiB descriptions dropped too; still
-  over, the offer is empty and logged).
+  events="bot.ability.seeing.look"> (its one model-callable event), made
+  model-facing by <processing:model_facing_schema> ($schema, title and
+  examples dropped; over 32 KiB descriptions dropped too; still over, the
+  offer is empty and logged).
 
   Logs (closed values only; never a source, a reference, a label, a
   description or a signature): seeing.degraded, seeing.view,
@@ -135,8 +129,8 @@
   event:schema (never inline), its own measure.completed, measure.failed
   and sight included, so a send whose data a schema rejects raises
   error.execution here. The vision service's done data is not checked by
-  scxml.rs, so its cond checks its shape; the salience cond keeps the
-  original's threshold guard; the timers' conds correlate by sendid
+  scxml.rs, so its cond checks its shape; the salience cond compares the
+  change with change_threshold; the timers' conds correlate by sendid
   (decision D81). Each state's invoke is literal: a measure cancelled by
   its timer leaves measuring for pacing, where anything it queued before
   its cancel is dropped, and a stage child's leftovers are dropped in
@@ -153,7 +147,7 @@
        xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
        version="1.0" datamodel="ecmascript" name="Seeing" initial="initializing">
   <datamodel>
-    <!-- The invoker's <param>s (the original's constructor defaults). -->
+    <!-- The invoker's <param>s, at their defaults. -->
     <data id="change_threshold" expr="0.1"/>
     <data id="measure" expr="'byte_identity'"/>
     <data id="measure_every_ms" expr="500"/>
@@ -190,7 +184,7 @@
   </datamodel>
   <script src="seeing.js"/>
 
-  <!-- The original's constructor refusals, in its order. -->
+  <!-- The parameter refusals, in order: the first ends in degraded. -->
   <state id="initializing">
     <transition cond="refusesChangeThreshold()" target="degraded">
       <log label="seeing.degraded" expr="'change_threshold must be in (0, 1]'"/>
@@ -250,7 +244,7 @@
       </transition>
     </state>
 
-    <!-- The original's next choice: a pending look goes first. -->
+    <!-- The next choice: a pending look goes first. -->
     <state id="next">
       <onentry>
         <assign location="chosen_at" expr="clockNow()"/>

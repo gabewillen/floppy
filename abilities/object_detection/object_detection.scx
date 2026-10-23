@@ -1,66 +1,58 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's ObjectDetection (the original's object detection) with the
-  original's GenerativeDetector: what things are in one image and where,
-  asked of an image-capable model once per image. Seeing
+  floppy's ObjectDetection: what things are in one image and where, asked
+  of an image-capable model once per image. Seeing
   (abilities/seeing/seeing.scx) invokes it once per view from the state
   that bounds its objects stage; leaving that state cancels it and its
-  model call (SCXML 6.4), which replaces the original's stuck-stage recovery
-  (detach and re-attach).
+  model call (SCXML 6.4).
 
     detection { idle -bot.ability.vision.detection.input-> applying
       -generate.result-> replied } -> applied (final)
 
   Input: the <param>s image (a reference to the image, as
   environment.visual carries it) and media_type (the view's, or null),
-  model (the vision model, as reading's), instructions (the original's
-  DETECT_INSTRUCTIONS, verbatim), max_objects (the original's MAX_OBJECTS,
-  32) and max_reply_bytes (the original's 65536).
+  model (the vision model, as reading's), instructions (by default the
+  instructions <data> below), max_objects (32) and max_reply_bytes
+  (65536).
 
   idle sends its input to itself as bot.ability.vision.detection.input
-  {image, media_type} (the original's InputData, the image by reference);
-  the transition taking it carries its event:schema, so a missing or
-  malformed image is error.execution here and a failure.
+  {image, media_type} (the image by reference); the transition taking it
+  carries its event:schema, so a missing or malformed image is
+  error.execution here and a failure.
 
   applying invokes the generate service with one user message whose
   content is the instructions as a text part ({kind: "text", content})
   and the image's reference as an image part ({kind: "image", content}),
-  the original's TextPart and ImagePart, as reading builds them. Its text
-  reply goes to replied.
+  as reading builds them. Its text reply goes to replied.
 
-  replied is the original's GenerativeDetector on the reply: a
-  reply over max_reply_bytes (UTF-8) fails; the reply is trimmed, and a
-  reply fenced as markdown (starting with three backticks) is read inside
-  the fence (the text after its first line, a closing fence removed,
-  trimmed again); anything but a JSON array fails ("the reply is not a
-  JSON array of objects"). Each item is validated on its own as the
-  original's DetectedObject (label a string of 1..100 characters;
-  confidence a JSON number in 0..1, or null, a boolean or a numeric string
-  being refused (D186); box the original's geometry.Box {x, y in 0..1, width, height in
+  replied is the detector on the reply: a reply over max_reply_bytes
+  (UTF-8) fails; the reply is trimmed, and a reply fenced as markdown
+  (starting with three backticks) is read inside the fence (the text after
+  its first line, a closing fence removed, trimmed again); anything but a
+  JSON array fails ("the reply is not a JSON array of objects"). Each item
+  is validated on its own as a detected object (label a string of 1..100
+  characters; confidence a JSON number in 0..1, or null, a boolean or a
+  numeric string being refused (D186); box {x, y in 0..1, width, height in
   (0, 1], x + width and y + height at most 1 + 1e-6}; no other keys, none
   missing); an invalid item is skipped and the count logged
-  (object_detection.invalid, the original's bot.vision.detection.invalid
-  counter). The first max_objects valid items, in reply order, are kept
-  and sorted stably by descending confidence, unrated last (the original's
-  OutputData). It sends them to itself as bot.ability.vision.detection.output
+  (object_detection.invalid). The first max_objects valid items, in reply
+  order, are kept and sorted stably by descending confidence, unrated
+  last. It sends them to itself as bot.ability.vision.detection.output
   {objects}, and the transition taking it answers the parent with it.
 
-  Failures: the parent gets bot.ability.failed {message} (the original's
-  FailureData, its message the original's error text where it has one):
-  a reply the detector refuses (the messages above), generate.failed
-  ("Object detection generator failed: <code>."), a result without text,
-  an output its schema refuses (the original's invalid-output failure,
-  "Object detection produced output that does not match its output
-  schema.", such as more than 32 objects), or a step that cannot run
-  ("ObjectDetection could not run (<error event>)": a malformed input, or
-  an image the generate service cannot read, which rejects its start).
-  Either answer ends the detection in applied.
+  Failures: the parent gets bot.ability.failed {message}: a reply the
+  detector refuses (the messages above), generate.failed ("Object
+  detection generator failed: <code>."), a result without text, an output
+  its schema refuses ("Object detection produced output that does not
+  match its output schema.", such as more than 32 objects), or a step that
+  cannot run ("ObjectDetection could not run (<error event>)": a malformed
+  input, or an image the generate service cannot read, which rejects its
+  start). Either answer ends the detection in applied.
 
   Media by reference: the generate service reads the image from the media
   directory the run grants it as /media and sends it as a data: URL; this
-  document never holds image bytes. The original's check that the model
-  can take the image is the service's (an image it cannot send rejects
-  its start).
+  document never holds image bytes. Whether the model can take the image
+  is the service's check (an image it cannot send rejects its start).
 
   Logs: object_detection.invalid (the count of skipped items) and
   object_detection.failed (the failure message); never a label, a box or
@@ -94,7 +86,7 @@
   </datamodel>
   <script src="object_detection.js"/>
 
-  <!-- Any failure answers the parent with the original's FailureData. -->
+  <!-- Any failure answers the parent with bot.ability.failed {message}. -->
   <state id="detection" initial="idle">
     <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="applied">
       <log label="object_detection.failed" expr="_event.data.message"/>
@@ -143,7 +135,7 @@
       </transition>
     </state>
 
-    <!-- The original's GenerativeDetector on the reply. -->
+    <!-- The detector on the reply: its valid objects, or a failure. -->
     <state id="replied">
       <onentry>
         <assign location="detected" expr="detectedReply()"/>
@@ -166,7 +158,7 @@
           <content expr="_event.data"/>
         </send>
       </transition>
-      <!-- An output its schema refuses (the original's invalid output). -->
+      <!-- An output its schema refuses. -->
       <transition event="error.*" target="applied">
         <log label="object_detection.failed" expr="mismatchedMessage()"/>
         <send event="bot.ability.failed" target="#_parent">

@@ -56,7 +56,7 @@ S.statement(6, "A turn that puts the register over `turn_capacity` sheds the old
 S.statement(7, "A turn's words longer than 2048 UTF-8 bytes are cut at a whole word and its `cut` is true; words that cut to nothing (only white space before the bound) are not written.")
 S.statement(8, "The turns' window is `turn_window_ms`, or `within` (milliseconds) when that is shorter; its floor moves in whole steps of half the window, so a turn is read for at least the window and at most one and a half windows.")
 S.statement(9, "Requests and notifications are applied one at a time, in arrival order: what arrives while it is opening or applying waits, so a read sees every write sent before it.")
-S.statement(10, "A database it cannot open leaves it degraded, without an offer: it sends `bot.ability.failed` `{message: \"unavailable: StmMemory is degraded.\"}`, answers every request the same way, and drops every notification.")
+S.statement(10, "A database it cannot open leaves it degraded, without an offer: it sends `bot.ability.failed` `{message: \"unavailable: short-term memory is degraded.\"}`, answers every request the same way, and drops every notification.")
 
 S.case(100, 1, "with a database it is ready with no choices.", [READY], params=[DB], clock="wall")
 S.case(101, 1, "without a database it is ready, drops records and turns, and answers reads empty.",
@@ -155,8 +155,8 @@ S.case(180, 9, "what is sent while it is opening waits, and a read sees every wr
        params=[DB], clock="wall")
 
 S.case(190, 10, "a database it cannot open degrades it: it says so, refuses requests, and drops notifications.",
-       [expect(FAILED, "_event.data.message === 'unavailable: StmMemory is degraded.'"),
+       [expect(FAILED, "_event.data.message === 'unavailable: short-term memory is degraded.'"),
         record("environment.sound"), recent(),
-        expect(FAILED, "_event.data.message === 'unavailable: StmMemory is degraded.'"),
-        recent_turns(), expect(FAILED, "_event.data.message === 'unavailable: StmMemory is degraded.'")],
+        expect(FAILED, "_event.data.message === 'unavailable: short-term memory is degraded.'"),
+        recent_turns(), expect(FAILED, "_event.data.message === 'unavailable: short-term memory is degraded.'")],
        params=[("database", "'/nowhere/floppy.sqlite'")], clock="wall")

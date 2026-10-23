@@ -4,17 +4,18 @@
 `decision` by convention): the synchronous half of a decision as a Wasm
 executable-content extension component (`floppy_decision`): reading the
 choices (a TypeSafe `Choice` question's) and grounding one property of them.
-The original's `ConfidenceTuner` is the [`intuition`](../intuition)
-namespace. What the original's processing module does
-with the choices is the [`processing`](../processing) namespace. Asking a backend to choose is slow I/O and belongs to the
+The confidence tuner is the [`intuition`](../intuition)
+namespace. What becomes of the choices (their model-facing schemas, the
+turn's offered events, the dispatch tool, the selection confidence) is the
+[`processing`](../processing) namespace. Asking a backend to choose is slow I/O and belongs to the
 `decision` invoked service ([`services/decision`](../../services/decision)).
 It reads its expressions and the session snapshot and assigns its results
 through the data model; it never sends, and it does no I/O.
 
-| Element | The original | Writes |
+| Element | Reads | Writes |
 | --- | --- | --- |
 | `<decision:choice location events?>` | the offered events of the active state | the choices `[{event, schema, description?}]` (`location`) |
-| `<decision:pin location event property values>` | `bot.focus_device` grounded in the focus candidates | the choices with the property's `enum` pinned (`location`) |
+| `<decision:pin location event property values>` | the values to ground a property in (for example `bot.focus_device`'s `device` in the focus candidates) | the choices with the property's `enum` pinned (`location`) |
 
 The exact semantics and failures are in [`src/lib.rs`](src/lib.rs); the
 structure is in [`package/decision.xsd`](package/decision.xsd), whose digest

@@ -49,14 +49,14 @@ CUP = item("cup", 0.87, box(0.4, 0.5, 0.1, 0.15))
 PERSON = item("person", 0.5, box(0, 0, 0.5, 1))
 LAMP = item("lamp", None, box(0.75, 0.25, 0.25, 0.5))
 
-S.statement(1, "Its input is its `<param>`s: it sends itself `bot.ability.vision.detection.input` `{image, media_type}` (the original's InputData, the image by reference), which its schema checks, so an `image` that is missing or empty sends nothing to the model and answers `bot.ability.failed` `{message: \"ObjectDetection could not run (error.execution)\"}`; nothing reaches the parent before its one answer.")
-S.statement(2, "It asks the generate service once, with one user message (the original's DETECT_INSTRUCTIONS as a text part and the image's reference as an image part, the image read from the granted media directory), and answers its parent `bot.ability.vision.detection.output` `{objects}`, each object `{label, confidence, box: {x, y, width, height}}` as the reply gave it; a reply of `[]` is `{objects: []}`; then it ends (`done.invoke.<id>` follows the answer).")
+S.statement(1, "Its input is its `<param>`s: it sends itself `bot.ability.vision.detection.input` `{image, media_type}` (the image by reference), which its schema checks, so an `image` that is missing or empty sends nothing to the model and answers `bot.ability.failed` `{message: \"ObjectDetection could not run (error.execution)\"}`; nothing reaches the parent before its one answer.")
+S.statement(2, "It asks the generate service once, with one user message (its instructions as a text part and the image's reference as an image part, the image read from the granted media directory), and answers its parent `bot.ability.vision.detection.output` `{objects}`, each object `{label, confidence, box: {x, y, width, height}}` as the reply gave it; a reply of `[]` is `{objects: []}`; then it ends (`done.invoke.<id>` follows the answer).")
 S.statement(3, "The reply is trimmed, and a reply fenced as markdown (starting with three backticks) is read inside the fence: the text after its first line, a closing fence removed, trimmed again.")
-S.statement(4, "Each reply item is validated on its own as the original's DetectedObject, its numbers JSON numbers (a boolean or a numeric string is refused): `label` a string of 1..100 characters, `confidence` 0..1 or `null` (required), `box` the original's geometry.Box (`x`, `y` in 0..1, `width`, `height` in (0, 1], `x + width` and `y + height` at most 1 + 1e-6), and no other keys; an item that is not one is skipped, never failing the detection.")
+S.statement(4, "Each reply item is validated on its own as a detected object, its numbers JSON numbers (a boolean or a numeric string is refused): `label` a string of 1..100 characters, `confidence` 0..1 or `null` (required), `box` a box (`x`, `y` in 0..1, `width`, `height` in (0, 1], `x + width` and `y + height` at most 1 + 1e-6), and no other keys; an item that is not one is skipped, never failing the detection.")
 S.statement(5, "The first `max_objects` (32 by default, a `<param>`) valid items, in reply order, are kept, then ordered by descending confidence, unrated last, equally rated objects keeping the reply's order.")
 S.statement(6, "A reply over `max_reply_bytes` (65536 by default, a `<param>`; UTF-8 bytes) answers `bot.ability.failed` `{message: \"the reply of <n> bytes exceeds max_reply_bytes (<max>)\"}`, and a reply that is not a JSON array answers `{message: \"the reply is not a JSON array of objects\"}` (never the reply itself).")
 S.statement(7, "A model call that fails answers `bot.ability.failed` `{message: \"Object detection generator failed: <code>.\"}`, the generate service's failure code in the message, and an image reference the generate service cannot read rejects its start: `{message: \"ObjectDetection could not run (error.execution)\"}`.")
-S.statement(8, "An output its schema refuses (more than 32 objects, when the invoker allows more) answers `bot.ability.failed` `{message: \"Object detection produced output that does not match its output schema.\"}`, the original's invalid-output failure.")
+S.statement(8, "An output its schema refuses (more than 32 objects, when the invoker allows more) answers `bot.ability.failed` `{message: \"Object detection produced output that does not match its output schema.\"}`.")
 
 # 1: the input.
 S.case(100, 1, "with no image nothing is asked of the model: the input's schema refuses it.",
@@ -94,7 +94,7 @@ S.case(123, 3, "a fence with nothing after its first line is no array.",
        params=SCENE, backend=replying("```" + reply([CUP]) + "```"))
 
 # 4: each item on its own.
-S.case(130, 4, "items that are not a DetectedObject are skipped, the valid ones kept.",
+S.case(130, 4, "items that are not a detected object are skipped, the valid ones kept.",
        [expect(OUTPUT, objects([CUP, LAMP]))],
        params=SCENE, backend=replying(reply([
            "cup", 3, None, [CUP],
