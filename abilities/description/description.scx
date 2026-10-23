@@ -22,22 +22,23 @@
   applying invokes the generate service with one user message whose
   content is the instructions as a text part ({kind: "text", content})
   and the image's reference as an image part ({kind: "image", content}),
-  as reading builds them. Its text
-  reply goes to replied.
+  as reading builds them. Its text reply goes to replied.
 
-  replied is the describer's output guard: the reply is trimmed; an empty one fails ("the generator
-  answered with an empty description"); it is sent to itself as
+  replied is the describer's output guard: the reply is trimmed; an empty
+  one fails ("the generator answered with an empty description"); it is
+  sent to itself as
   bot.ability.vision.description.output {description}, whose schema admits
   at most 4000 characters, and the transition taking it answers the parent
   with it.
 
-  Failures: the parent gets bot.ability.failed {message}: an empty reply, generate.failed ("Description generator failed: <code>."),
-  a result without text, a description over 4000 characters (an output its
-  schema refuses, "Description produced output that does not match its
-  output schema."), or a step that cannot run ("Description could not
-  run (<error event>)": a malformed input, or an image the generate service
-  cannot read, which rejects its start). Either answer ends the
-  description in applied.
+  Failures: the parent gets bot.ability.failed {message}: an empty reply,
+  generate.failed ("Description generator failed: <code>."), a result
+  without text, a description over 4000 characters (an output its schema
+  refuses, "Description produced output that does not match its output
+  schema."), or a step that cannot run ("Description could not run (<error
+  event>)": a malformed input, or an image the generate service cannot
+  read, which rejects its start). Either answer ends the description in
+  applied.
 
   Media by reference: the generate service reads the image from the media
   directory the run grants it as /media and sends it as a data: URL; this
