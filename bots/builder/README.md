@@ -180,9 +180,13 @@ intake -> design -> author -> writing -> validate -> simulate -> done
   left on the queue (for example the `sim.drive` of a run whose invocation
   failed to start) is dropped. With the lifetime bounds, a persistent
   routine also runs one more test, `first tick` (the forced tick, which
-  stands in for waiting on the schedule's clock): its first schedule's event
-  is sent to a fresh child at once, and within 2 s (the verify timeout) the
-  child must send `bot.behavior.tick` whose data carries
+  stands in for waiting on the schedule's clock): a fresh child runs the
+  draft's forced tick copy, `<name>.tick.scx` beside it (each schedule's
+  `delay` or `delayexpr` replaced by a `delay` of 1500 ms, from
+  `<behavior:lifetime_errors ticklocation>`), and is sent nothing, so its
+  own schedule send must arm and fire (decision D153: a schedule that
+  never arms in the room fails here, not only live), and within 2 s (the
+  verify timeout) the child must send `bot.behavior.tick` whose data carries
   `name`, `trigger` (`every` or `at`), `scheduled_at` and `fired_at`, and
   whose `output` is a non-empty list of selections (objects with an
   `event`) whose data reads the tick's own values; otherwise the
