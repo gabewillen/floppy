@@ -1,0 +1,86 @@
+{
+  "category": "reflex",
+  "intent": "The user teaches a keyword reflex: whenever they mention bananas, reply just 'yellow alert'. The keyword is inside longer sentences, so the behavior must match real input, not one fixed string.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "say": "If I ever mention bananas, reply with just the words 'yellow alert'."
+        },
+        {
+          "say": "I had a banana for breakfast."
+        },
+        {
+          "say": "Can you recommend a good book?"
+        }
+      ]
+    },
+    {
+      "steps": [
+        {
+          "say": "Bananas are my favorite fruit."
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "learned",
+      "by": [
+        0,
+        0
+      ],
+      "lifetime": "turn",
+      "weight": 3
+    },
+    {
+      "check": "reflex",
+      "at": [
+        0,
+        1
+      ],
+      "weight": 2
+    },
+    {
+      "check": "says",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "yellow alert",
+      "weight": 1
+    },
+    {
+      "check": "not_says",
+      "at": [
+        0,
+        2
+      ],
+      "pattern": "yellow alert",
+      "weight": 1
+    },
+    {
+      "check": "reflex",
+      "at": [
+        1,
+        0
+      ],
+      "weight": 2
+    },
+    {
+      "check": "says",
+      "at": [
+        1,
+        0
+      ],
+      "pattern": "yellow alert",
+      "weight": 1
+    }
+  ],
+  "criteria": {
+    "learning": "The keyword rule becomes a learned behavior on the teaching turn.",
+    "firing": "Sentences mentioning bananas get 'yellow alert' from the behavior, also after the restart.",
+    "precision": "The unrelated request gets a normal answer."
+  }
+}
