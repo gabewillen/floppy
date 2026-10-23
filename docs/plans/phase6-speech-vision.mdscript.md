@@ -65,7 +65,7 @@ The slices below run in parallel. Each depends only on what is already on `main`
 
 * goal: the speech heard seed: autonomy runs the trusted seeds before the learned behaviors, and an admissible `bot.ability.listening.speech.output` (non-empty `source_ids`) becomes `bot.ability.communication.input`
 * files: `abilities/behaviors/speech_heard/speech_heard.scx`, `abilities/autonomy/autonomy.scx` (seeds first, then the inventory), tests
-* the seed's selection is `{event: bot.ability.communication.input, data}`, its data the turn
+* the seed's selection is `{event: bot.ability.communication.input, data}`, its data the speech's `source_ids`, an empty `target_ids` and its content
 
 ### Add Vocal And Speaking Audio
 
@@ -88,5 +88,5 @@ The slices below run in parallel. Each depends only on what is already on `main`
 * D58 (planned as D51; renumbered, since D51 records the two SQL engines): image reading is the generate service with an image part, not a new service: the Sparks' vision model speaks Chat Completions
 * D52 (superseded by D66): stages with no OpenAI-compatible API (voice activity, diarization, voice identification) are seams in phase 6
 * D59: speaking speaks audio, superseding D38: `idle` → `encoding` → `playing` → `recording` with the encoder defaults (`gemini-3.1-flash-tts-preview`, `Kore`), every terminal failure answered as `bot.ability.failed`
-* D66: voice detection, diarization and voice identification are ported in full as operations of the speech service (`detect`, `diarize`, `identify`) on LocalAI's voice APIs (`/vad`, `/audio/diarization`, `/voice/embed`, its Silero VAD, pyannote and WeSpeaker models), selected by the run through `FLOPPY_VOICE_BASE_URL`; the interpretation's steps on audio (normalizing to PCM, joining the open speech, clipping a voice span) are the service's media steps on files, and the interpretation is the full machine, open-speech window included
+* D66: voice detection, diarization and voice identification are full operations of the speech service (`detect`, `diarize`, `identify`) on LocalAI's voice APIs (`/vad`, `/audio/diarization`, `/voice/embed`, its Silero VAD, pyannote and WeSpeaker models), selected by the run through `FLOPPY_VOICE_BASE_URL`; the interpretation's steps on audio (normalizing to PCM, joining the open speech, clipping a voice span) are the service's media steps on files, and the interpretation is the full machine, open-speech window included
 * D67: floppy's interpretation is configured with voice detection, sound classification and speech decoding (the phase 6 plan decodes speech in listening), not voice identification; every stage is a `<data>` switch (`sound_classifier`, `speech_decoder`, `diarizer`, `voice_classifier`)
