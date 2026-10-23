@@ -1,37 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Intuition stage (the reference abilities/cognition/decision, its
-  decision layer, with the decision processor; the reference's
-  abilities/cognition/intuition is the later tier that answers in words, the
-  hand_ons tier intuition): the fast System 1 pick, made by the decision service
-  (never by a free-text model) over the turn's choices, with the original's
-  self-tuning confidence gate. The cognition (abilities/cognition/cognition.scx)
-  invokes it once per turn after autonomy left the turn unhandled.
+  floppy's Intuition stage, the cognition's decision layer (the later tier
+  that answers in words is the hand_ons tier intuition, decisions D140 and
+  D144): the fast System 1 pick, made by the decision service (never by a
+  free-text model) over the turn's choices, with a self-tuning confidence
+  gate. The cognition (abilities/cognition/cognition.scx) invokes it once
+  per turn after autonomy left the turn unhandled.
 
     deciding (an invoked decision service) -> done
 
-  Processor (the reference providers/decision Processor.process, the decision
-  service's kind predicate): the turn's choices, the <param> choices (the
+  Processor (the decision service's kind predicate): the turn's choices,
+  the <param> choices (the
   body's assembled snapshot choices: its own enabled event:schema
   transitions and each ability's latest offers, tagged with the offering
-  ability as target; the reference collect_offered_events), go to the
+  ability as target), go to the
   decision service, which never offers the deliberate handoff
   bot.ability.reasoning.input. Its state is {turn: T}, T the model-facing
-  text of the stimulus alone (<cognition:model_facing_content>, the
-  reference D-R-50: what reasoning reads, never the raw envelope); the
+  text of the stimulus alone (<cognition:model_facing_content>, decision
+  D150: what reasoning reads, never the raw envelope); the
   stimulus goes too, but only to ground each event's required data from its
   data's value, else the schema's enum; an event it cannot fill is not
   offered, so a reply that needs free text goes on to a later tier (user
   answer, 2026-10-08). The service adds one pass criterion per tier of
   hand_ons (the <param>; reasoning alone until the cognition composes a
-  chat tier, R-23). When a pass wins (declined) or nothing could be filled
+  chat tier, decision D150). When a pass wins (declined) or nothing could be filled
   (no-candidates) the product is empty: the turn escalates with the
-  original's reason empty_product, a pass naming its tier as hand_to, and
+  reason empty_product, a pass naming its tier as hand_to, and
   the tuner observes nothing. Otherwise the service returns only the chosen
   event, with its data and its probability as its confidence
-  (decision.selected, the reference D-R-28).
+  (decision.selected, decision D150).
 
-  Context fit (the reference ContextFit, D-R-36 and D-R-45): with a
+  Context fit (decision D150): with a
   max_context_tokens <param>, the service cuts the decision's instructions
   to fit floor(max_context_tokens * bytes_per_token) bytes of request; its
   done data reports the request's bytes and the tokens the backend counted,
@@ -39,41 +38,36 @@
   bytes_per_token (a <param>, 3 to start), which goes back in <donedata> for
   the cognition to keep across turns.
 
-  Confidence (the original's ConfidenceTuner, 0-100 scale): the tuner state
+  Confidence (0-100 scale): the tuner state
   {mean, var, n}, the confidence_tuner datum, comes in as a <param> and
   goes back in <donedata>, so it lives in the cognition across turns. The
   turn's confidence is its selection's probability normalized to a whole
-  0-100 number (<processing:selection_confidence>, the original's
-  selection_confidence and normalize_confidence). <intuition:observe>
+  0-100 number (<processing:selection_confidence>). <intuition:observe>
   observes it first (a null confidence is not observed), then
   <intuition:escalate> writes whether it is below the updated threshold
-  (the original's defaults: the floor 35 during the warmup of 8
+  (the defaults: the floor 35 during the warmup of 8
   observations, then max(floor / 2, mean - k_sigma * std); EMA alpha 0.08,
-  variance floor 100), and the turn escalates when it is (the original's
-  _tune_confidence, observe then should_escalate).
+  variance floor 100), and the turn escalates when it is (observe, then
+  escalate).
 
-  Classification (the original _classify_activity, its confidence_gate off, the
-  default): a confident product is handled, its selection {event, data,
+  Classification: a confident product is handled, its selection {event, data,
   target} (escalation reason none). A low-confidence product
   (low_confidence), or one holding bot.ability.reasoning.input
   (deliberative_input), is unhandled and escalates. The decision timer is
   deciding.after (decision_timeout_ms, a <param> the cognition sets from
-  its bounds; the original's intuition has none).
+  its bounds).
 
-  Dispatch (the original _dispatch_selections_activity,
-  cognition.types.dispatch_selected_events): the stage sends, before it
+  Dispatch (decision D113): the stage sends, before it
   answers, what it acted on to its target, the session that offers it (the
-  decision service names a selection's only offerer, the original's
-  _single_enabler): a handled product's selection, the ignore included
+  decision service names a selection's only offerer): a handled product's selection, the ignore included
   (it goes to the cognition, which only logs it), and of an escalating
   product only the environment actions, never the ignore or the deliberate
-  handoff (the reference without_ignore_selections), which the original
-  dispatches before the next tier runs. What it sent is acted in every
+  handoff, sent before the next tier runs. What it sent is acted in every
   <donedata> ([] when nothing), so the cognition knows it as a fact of the
-  turn (the reference ActedData). The decision service has checked the
+  turn. The decision service has checked the
   selection's data against its event's schema (the pinned focus device
-  among them), so nothing is refused at the send; the original's re-ask
-  with a rejection as feedback (routing_rejection) has nothing to retry.
+  among them), so nothing is refused at the send, and there is no re-ask
+  with a rejection as feedback.
 
   Output: <donedata>, received by the cognition as done.invoke.intuition:
 
@@ -116,7 +110,7 @@
     <data id="environment" expr="null"/>
     <data id="confidence_tuner" expr="({mean: 70, var: 100, n: 0})"/>
     <data id="decision_timeout_ms" expr="20000"/>
-    <!-- The later tiers a pass may hand the turn to (R-23). -->
+    <!-- The later tiers a pass may hand the turn to (decision D150). -->
     <data id="hand_ons" expr="['reasoning']"/>
     <!-- The decision model's context fit (null sends every request
          whole) and the bytes a token learned so far. -->

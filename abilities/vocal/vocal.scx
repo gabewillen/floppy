@@ -5,7 +5,7 @@
   (services/speech, operation encode). Speaking
   (abilities/speaking/speaking.scx) invokes it as its child "vocal" from
   its encoding state, so leaving encoding (an answer, a failure or
-  the original's 5 s bound) cancels it and the service request with it (SCXML
+  its encoding_timeout_ms bound) cancels it and the service request with it (SCXML
   6.4).
 
     idle -bot.ability.vocal.speech.encoding.input-> applying -> idle
@@ -20,8 +20,8 @@
   it, which the invoker names) and media_type, and answers the parent with
   the service's bot.ability.vocal.speech.encoding.output {audio,
   media_type, sample_rate_hz, channels} (the audio as a reference, never
-  bytes; a measured duration, when the service gives one, rides along), or bot.ability.failed {message} (the original's
-  FailureData) when the service fails, ends without an answer, or cannot
+  bytes; a measured duration, when the service gives one, rides along), or
+  bot.ability.failed {message} when the service fails, ends without an answer, or cannot
   run. An input that arrives while applying is logged and dropped: its
   invoker sends one per invocation.
 

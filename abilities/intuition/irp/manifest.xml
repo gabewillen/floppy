@@ -18,7 +18,7 @@
     </test>
   </assert>
   <assert id="intuition-2" specnum="2" specid="#intuition-2">
-    <![CDATA[The turn's confidence is its selection's probability as a whole number on the 0-100 scale. The `confidence_tuner` <param> `{mean, var, n}` observes it (the original's `ConfidenceTuner.observe`) and comes back updated in every donedata; the turn is low-confidence when the confidence is below the updated threshold (`should_escalate`) (the floor 35 during the warmup of 8 observations, then `max(17.5, mean - std)`).]]>
+    <![CDATA[The turn's confidence is its selection's probability as a whole number on the 0-100 scale. The `confidence_tuner` <param> `{mean, var, n}` observes it (`<intuition:observe>`) and comes back updated in every donedata; the turn is low-confidence when the confidence is below the updated threshold (`<intuition:escalate>`: the floor 35 during the warmup of 8 observations, then `max(17.5, mean - std)`).]]>
     <test id="110" conformance="mandatory" manual="false">
       <start uri="110/test110.scxml"/>
     </test>
@@ -54,7 +54,7 @@
     </test>
   </assert>
   <assert id="intuition-5" specnum="5" specid="#intuition-5">
-    <![CDATA[Each selection is sent to its target, the one session the choices tag its event with (the decision service's single offerer, the original's `_single_enabler`): the ignore goes to the session that offers it, and an event several sessions offer names no target, so it reaches none and is not acted.]]>
+    <![CDATA[Each selection is sent to its target, the one session the choices tag its event with (the decision service's single offerer): the ignore goes to the session that offers it, and an event several sessions offer names no target, so it reaches none and is not acted.]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>
@@ -81,7 +81,7 @@
     </test>
   </assert>
   <assert id="intuition-7" specnum="7" specid="#intuition-7">
-    <![CDATA[The stage answers once the decision service has ended. Its done data's `request_bytes` over the backend's counted `usage.input_tokens` teaches `bytes_per_token` (the <param>, 3 to start), which keeps the fewest bytes a token any answer showed and comes back in every donedata (the reference `ContextFit.observe`); with a `max_context_tokens` <param> the request is fitted to it and still sent.]]>
+    <![CDATA[The stage answers once the decision service has ended. Its done data's `request_bytes` over the backend's counted `usage.input_tokens` teaches `bytes_per_token` (the <param>, 3 to start), which keeps the fewest bytes a token any answer showed and comes back in every donedata; with a `max_context_tokens` <param> the request is fitted to it and still sent.]]>
     <test id="160" conformance="mandatory" manual="false">
       <start uri="160/test160.scxml"/>
     </test>

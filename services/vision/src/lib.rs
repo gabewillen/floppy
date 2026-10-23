@@ -1,11 +1,11 @@
 //! The `vision` invoked service: measures how much a view changed since the
 //! last one handed on, as a `stateforward:scxml/invoked-service` Wasm
-//! component. It is the original's change measures
-//! (`mosfet.abilities.vision.change`): `ByteIdentity`, and the `opencv`
-//! provider's `FrameDiff`, which floppy computes in the component instead of
-//! through `OpenCV`. The seeing ability (`abilities/seeing/seeing.scx`)
-//! invokes it once per measured view, with the signature of the last view it
-//! handed on, and keeps the signature it answers when it hands this one on.
+//! component. It has two change measures: `byte_identity`, a digest of the
+//! file, and `frame_diff`, a blurred grayscale grid of the image, which it
+//! computes in the component as `OpenCV` computes it. The seeing ability
+//! (`abilities/seeing/seeing.scx`) invokes it once per measured view, with
+//! the signature of the last view it handed on, and keeps the signature it
+//! answers when it hands this one on.
 //!
 //! Reading and decoding an image is I/O and work that may take a while, so
 //! this is a service, never executable content: the invoking state bounds it
@@ -39,9 +39,8 @@
 //!
 //! # Parameters (`<param>`)
 //!
-//! * `measure` (required): [`Measure::ByteIdentity`] (`byte_identity`, the
-//!   original's `ByteIdentity`) or [`Measure::FrameDiff`] (`frame_diff`, the
-//!   original's `opencv.FrameDiff` at its default size, [`FRAME_SIZE`]).
+//! * `measure` (required): [`Measure::ByteIdentity`] (`byte_identity`) or
+//!   [`Measure::FrameDiff`] (`frame_diff`, a grid [`FRAME_SIZE`] a side).
 //! * `image` (required): a reference to the image (see "Media").
 //! * `previous` (optional): the signature of the last view handed on, an
 //!   object exactly as this service answered it; `null` or absent for a
@@ -54,7 +53,7 @@
 //! # Result
 //!
 //! `invoke` reads the image, measures it, and resolves its future at once
-//! with the done data, the original's `Measurement` as canonical JSON (the
+//! with the done data, its [`Measurement`] as canonical JSON (the
 //! invoking session receives it as `done.invoke.<id>`), and returns no
 //! event:
 //!
@@ -69,16 +68,15 @@
 //!   previous values, clamped to 0..1.
 //!
 //! A failure rejects the start, as the files service's does (the `<invoke>`
-//! raises `error.execution`; the original's `change.Error`): an invalid
-//! parameter, a `previous` that is not a signature of the requested measure
-//! and size, an unreadable or empty file, a file over [`MAX_IMAGE_BYTES`],
-//! and, for `frame_diff`, an image the original's `OpenCV` decode would not
-//! read (see "The frame difference") or one over [`MAX_PIXELS`]
-//! ([`VisionError`]).
+//! raises `error.execution`): an invalid parameter, a `previous` that is
+//! not a signature of the requested measure and size, an unreadable or
+//! empty file, a file over [`MAX_IMAGE_BYTES`], and, for `frame_diff`, an
+//! image `OpenCV`'s reduced decode would not read (see "The frame
+//! difference") or one over [`MAX_PIXELS`] ([`VisionError`]).
 //!
 //! # The frame difference
 //!
-//! [`frame_signature`] is the original's `OpenCV` pipeline,
+//! [`frame_signature`] is the `OpenCV` pipeline
 //! `cv2.GaussianBlur(cv2.resize(cv2.imdecode(image,
 //! cv2.IMREAD_REDUCED_GRAYSCALE_8), (32, 32), interpolation=cv2.INTER_AREA),
 //! (3, 3), 0)`, computed in the component. The reduced decode reads the
@@ -115,10 +113,9 @@
 //!
 //! # Bounds
 //!
-//! The file's bytes ([`MAX_IMAGE_BYTES`], the original's
-//! `media.MAX_IMAGE_BYTES`), the decoded pixels ([`MAX_PIXELS`]), and a
-//! reference ([`MAX_REFERENCE_BYTES`]) are bounded on wasm builds only
-//! ([`scxml_types::wasm_bound`]). The done data is at most
+//! The file's bytes ([`MAX_IMAGE_BYTES`], 4 MiB), the decoded pixels
+//! ([`MAX_PIXELS`]), and a reference ([`MAX_REFERENCE_BYTES`]) are bounded
+//! on wasm builds only ([`scxml_types::wasm_bound`]). The done data is at most
 //! [`FRAME_SIZE`]² numbers, under the session's event bound.
 //!
 //! # Telemetry
@@ -154,8 +151,7 @@ pub const SERVICE_NAME: &str = "vision";
 /// repository's latest release (decision D19); the manifest names it too.
 pub const SERVICE_URI: &str = "https://github.com/stateforward/floppy/services/vision";
 
-/// Upper bound on an image file's bytes (wasm builds only): the original's
-/// `media.MAX_IMAGE_BYTES`.
+/// Upper bound on an image file's bytes (wasm builds only): 4 MiB.
 pub const MAX_IMAGE_BYTES: usize = wasm_bound(4 * 1024 * 1024);
 
 /// Upper bound on a decoded image's pixels (wasm builds only): 16
@@ -166,8 +162,7 @@ pub const MAX_PIXELS: usize = wasm_bound(4096 * 4096);
 /// service's.
 pub const MAX_REFERENCE_BYTES: usize = wasm_bound(1024);
 
-/// The side of the frame difference grid: the original's `FrameDiff`
-/// default size.
+/// The side of the frame difference grid.
 pub const FRAME_SIZE: usize = 32;
 
 /// The values of a frame difference signature.
@@ -178,8 +173,7 @@ pub const FRAME_VALUES: usize = FRAME_SIZE * FRAME_SIZE;
 pub enum VisionError {
     /// A parameter is unknown, repeated, missing, or malformed.
     InvalidParameter,
-    /// `previous` is not a signature of the requested measure and size (the
-    /// original's `change.Error`).
+    /// `previous` is not a signature of the requested measure and size.
     MismatchedPrevious,
     /// The image file could not be read, or is empty.
     Unreadable,
@@ -309,7 +303,7 @@ impl Signature {
     }
 }
 
-/// One measured view, the original's `Measurement`.
+/// One measured view: its change and its signature.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Measurement {
     /// How much the view changed, 0 (same) to 1 (entirely different);
@@ -546,16 +540,16 @@ pub fn frame_signature(image: &[u8]) -> Result<Vec<f64>, VisionError> {
     .ok_or(VisionError::Undecodable)?;
     let reduced = exif::oriented(reduced, orientation);
     let small = area_resized(&reduced).ok_or(VisionError::Undecodable)?;
-    // OpenCV scales its 8-bit result as `float32` (`astype(numpy.float32) /
-    // 255.0`); the original's numbers are those `float32` values.
+    // The 8-bit result scaled to 0..1 as `float32`, then widened: the
+    // values are those `float32` values.
     Ok(blurred(&small)
         .iter()
         .map(|&value| f64::from(f32::from(value) / 255.0))
         .collect())
 }
 
-/// The factor the original's decode reduces each side by
-/// (`IMREAD_REDUCED_GRAYSCALE_8`).
+/// The factor the reduced decode reduces each side by, as `OpenCV`'s
+/// `IMREAD_REDUCED_GRAYSCALE_8` does.
 pub const REDUCTION: usize = 8;
 
 /// Whether `width` × `height` is a decodable, bounded image.

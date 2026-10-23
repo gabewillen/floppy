@@ -324,10 +324,10 @@ fn a_messages_participants_are_kept_and_malformed_ones_are_execution_errors() {
     }
 }
 
-/// `relationship_context_ref` against the original's own (`_stable_context_ref`
-/// of each input, computed by the reference implementation).
+/// `relationship_context_ref` writes each input's stored key byte for byte:
+/// these texts are the `context_ref`s memories are kept under.
 #[test]
-fn the_relationship_context_reference_is_the_original() {
+fn the_relationship_context_reference_is_the_stored_key_byte_for_byte() {
     for (source_ids, target_ids, expected) in [
         (
             json!(["zed", "alice", [0.5, 1]]),
@@ -373,7 +373,7 @@ fn the_relationship_context_reference_is_the_original() {
 }
 
 #[test]
-fn numbers_print_as_python_prints_a_float() {
+fn a_context_reference_writes_a_number_with_a_fraction_or_an_exponent() {
     for (value, text) in [
         (0.0, "0.0"),
         (-0.0, "-0.0"),
@@ -390,7 +390,7 @@ fn numbers_print_as_python_prints_a_float() {
         (f64::MAX, "1.7976931348623157e+308"),
         (5e-324, "5e-324"),
     ] {
-        assert_eq!(python_float(value), text, "{value:e}");
+        assert_eq!(key_number(value), text, "{value:e}");
     }
 }
 

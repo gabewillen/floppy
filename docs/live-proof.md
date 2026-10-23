@@ -7,13 +7,13 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
-## 2026-10-21, D124's no-progress on the lab's mosfet stack, model `gemma-4-26b-a4b`
+## 2026-10-21, D124's no-progress on the maintainer's lab stack, model `gemma-4-26b-a4b`
 
-The first runs on the maintainer's lab, the original's (mosfet's) stack:
+The first runs on the maintainer's lab stack:
 the model is `gemma-4-26b-a4b` on the lab's vLLM (`192.168.2.2:8100`,
 `/v1`; vLLM 0.32.0rc1, `max_model_len` 262144) and the decision service is
 the lab's systemone server (`192.168.2.2:8102`, `POST /v1/systemone`,
-model `pplx-decider-flash-v1.2`, run by mosfet with a 2048-token context).
+model `pplx-decider-flash-v1.2`, run by the lab's stack with a 2048-token context).
 The lab's servers take no key. The runs used floppy commit `6b6dec1215`
 (D124), `FLOPPY_LIVE_MODEL=gemma-4-26b-a4b`, `FLOPPY_LIVE_ENV_FILE` naming
 `env.speech` and `env.lab` (`FLOPPY_BASE_URL`, `FLOPPY_API_KEY`,
@@ -144,8 +144,8 @@ floppy-tests --locked --test <file> -- --ignored --nocapture
 | Run | Result | Note |
 | --- | --- | --- |
 | `floppy_live` `live_cascade` | pass (25 s) | autonomy unhandled, intuition abstained (`declined`, `empty_product`), reasoning handled. Tensorfold tonight: pass |
-| `floppy_live` `live_choices` | fail (26 s) | reasoning's `dispatch` call is now valid (`bot.focus_device` with `data: {device: "lamp"}`, `target: "session.floppy"`), where on tensorfold it put `device` beside `event` and failed `schema-mismatch`; the turn completed (`bot.processing.completed`, turn 1). Intuition (TypeSafe, through `predicate`) chose `bot.focus_device` and `bot.ability.cognition.ignore` with confidence 14 and escalated, sending both as its environment actions, and reasoning then sent the focus again, so `floppy.focus` is logged twice (`lamp`, `lamp`) and the test's one-focus check fails. That is D113's removal of D87's dedupe (J12: the original dispatches the environment actions before reasoning and has no dedupe), which the test still expects; neither was changed |
-| `floppy_live` `live_choices` (rerun) | pass (21 s) | after its expectation became the original's (the lamp focused at least once, every focus on the lamp; [To review (step 1)](plans/original-domains.md#to-review-step-1), item 13), test change only. Intuition chose `bot.focus_device` and the ignore (confidence 13) and escalated, sending the focus (`floppy.focus` `lamp`, once); reasoning chose the ignore, so the double focus did not occur in this run |
+| `floppy_live` `live_choices` | fail (26 s) | reasoning's `dispatch` call is now valid (`bot.focus_device` with `data: {device: "lamp"}`, `target: "session.floppy"`), where on tensorfold it put `device` beside `event` and failed `schema-mismatch`; the turn completed (`bot.processing.completed`, turn 1). Intuition (TypeSafe, through `predicate`) chose `bot.focus_device` and `bot.ability.cognition.ignore` with confidence 14 and escalated, sending both as its environment actions, and reasoning then sent the focus again, so `floppy.focus` is logged twice (`lamp`, `lamp`) and the test's one-focus check fails. That is D113's removal of D87's dedupe (J12: an escalating intuition sends its environment actions before reasoning runs, with no dedupe), which the test still expects; neither was changed |
+| `floppy_live` `live_choices` (rerun) | pass (21 s) | after its expectation changed to the lamp focused at least once, every focus on the lamp ([Choices to review](handoff.md#choices-to-review), D113 item 11), test change only. Intuition chose `bot.focus_device` and the ignore (confidence 13) and escalated, sending the focus (`floppy.focus` `lamp`, once); reasoning chose the ignore, so the double focus did not occur in this run |
 | `floppy_live` `live_chat` | pass (29 s) | reasoning answered "Hi Gabe! Nice to meet you. I'm floppy." and speaking said it through Gemini. Tensorfold tonight: pass, after its outage |
 | `floppy_live` `live_identity` | pass (30 s) | turn 1 addressed as Floppy and answered by reasoning; on turn 2 intuition chose the ignore and `bot.ability.identity.adopt` (confidence 6) and escalated, the identity adopted "Floppy" and the bot said "I'm Floppy! Nice to meet you, Gabe." Tensorfold tonight (D115): pass |
 | `floppy_live` `live_conversation` | fail (631 s) | `4 completed, 0 failed`, but no behavior was learned by turn 2: reflection created `RememberUserPreference` on turn 1 and changed it on turns 2 and 4, and every draft failed `scx:validate` with the same `XML001` after its fix (an unclosed attribute value; on turn 4 a regular expression written as an attribute), so each revision was abandoned and it stayed DRAFT. Reasoning chose the ignore on turns 1 to 3 (no "pong" on turn 3) and answered turn 4 "Your favorite color is green!", recalling turn 1. Tensorfold tonight: the same outcome (no behavior learned; drafts failed their simulation), so constrained decoding did not change the drafts' quality |
@@ -235,8 +235,8 @@ model as the entries below (`FLOPPY_LIVE_ENV_FILE` naming `.env`,
 
 ## 2026-10-18, `live_choices` through the relay, and a selection without data sent with `{}`, model `Qwen/Qwen3.8-Flash-Next`
 
-A selection with no data is now sent with `{}`, as the original's
-`dispatch_selected_events` sends it. The runs used floppy commit
+A selection with no data is now sent with `{}`, as D113's
+`selectionData` gives it. The runs used floppy commit
 `f8a759d09c`, the same env files, backends and model as the entry below,
 with one more env file setting `FLOPPY_BASE_URL` to a local relay in front
 of the vLLM that saved each request and reply body (no headers), and
@@ -248,12 +248,11 @@ of the vLLM that saved each request and reply body (no headers), and
 | `floppy_live` `live_choices` | fail (19 s) | as before: intuition sent its focus and ignore (confidence 14) and escalated, and reasoning failed `schema-mismatch`. The relay shows the refused part: the model's `dispatch` call put `bot.focus_device`'s `device` beside `event` (`{"device": "lamp", "event": "bot.focus_device", "reason": ..., "target": "session.floppy"}`), with no `data`, which the branch requires; its `target`s were right, and its respond branch was valid |
 | `floppy_live` `live_cascade` | pass (19 s) | |
 
-The schema matches the original's `dispatch_tool`: `target` is present
+The schema is D112's dispatch tool: `target` is present
 when the event has an offerer and is then a required one-value enum with
-the original's description, and `data` is required when its schema
-requires a field. What differs from the original are the `target` values
-(session ids, a deliberate difference Q3 accepted; the original's are
-actor keys), and before D113 the body's own events offered no `target` at
+D112's description, and `data` is required when its schema
+requires a field. Its `target` values are session ids (a deliberate
+choice Q3 accepted over actor keys), and before D113 the body's own events offered no `target` at
 all. Sending the captured request again to the vLLM directly, twice for
 each variant, with only the `target`s changed:
 
@@ -261,11 +260,11 @@ each variant, with only the `target`s changed:
 | --- | --- |
 | as sent (session ids, `bot.focus_device` targeted at `session.floppy`) | `device` beside `event`, no `data` (refused) |
 | `bot.focus_device` with no `target` (as before D113) | `data: {device: "lamp"}` (valid) |
-| the original's actor keys (`bot`, `cognition`, `communication`, `identity`) | `data: {device: "lamp"}`, `target: "bot"` (valid) |
+| actor keys (`bot`, `cognition`, `communication`, `identity`) | `data: {device: "lamp"}`, `target: "bot"` (valid) |
 
-So this model fills the original's schema correctly with the original's
-actor keys and gets it wrong with session ids in the same places. The
-fault is the model's against a schema of the original's shape, but it is
+So this model fills the schema correctly with actor keys and gets it
+wrong with session ids in the same places. The fault is the model's
+against a schema of D112's shape, but it is
 triggered by Q3's session-id targets: the fix (offering actor keys and
 sending to their sessions) reopens Q3 and is left to the maintainer.
 
@@ -287,8 +286,8 @@ the same env files, backends and model as the entry below, no relay, and
 
 `generate` now drops each top-level field of a call's arguments that the
 tool's root `properties` do not declare (a stray `reason` beside
-`events`) before the strict check, as the original's dispatch parser
-reads only `args.events`; nested objects are still checked strictly. The
+`events`) before the strict check, since a dispatch call's selections
+are only its `args.events`; nested objects are still checked strictly. The
 runs used floppy commit `10e4424412`, the same env files, backends and
 model as the 2026-10-17 entries below, no relay, and `cargo test -p
 floppy-tests --locked --test floppy_live -- --ignored --nocapture
@@ -306,7 +305,7 @@ floppy-tests --locked --test floppy_live -- --ignored --nocapture
 (0.1 s of 16 kHz silence written into the shared media directory) once
 the room logs `a`'s `bot.ability.speaking.output`, as the deterministic
 `a_bots_speech_reaches_the_other_participant` does, so the open-speech
-window closes on a sound without voice (the original's VAD End). The run
+window closes on a sound without voice (the end of speech). The run
 used floppy commit `d68fbda862`, the same env files, backends and model as
 the entry below, and `cargo test -p floppy-tests --locked --test
 environment_live -- --ignored --nocapture --test-threads=1` (27 s).
@@ -315,11 +314,11 @@ environment_live -- --ignored --nocapture --test-threads=1` (27 s).
 | --- | --- | --- |
 | `environment_live` `live_two_participants` | pass (26 s) | `a` answered "The window is open." through reasoning and said it through Gemini; the room delivered the speech and then the silence to both bots; LocalAI answered every `/v1/vad` call `200`; `b` heard it as `bot.ability.listening.speech.output` and took its turn, which intuition handled with `bot.ability.cognition.ignore` (TypeSafe, confidence 65); `a` took no turn on its own speech |
 
-## 2026-10-17, `generate.result` `{content, tool_calls}` and the original's dispatch tool (D112, amended) on the local vLLM, model `Qwen/Qwen3.8-Flash-Next`
+## 2026-10-17, `generate.result` `{content, tool_calls}` and D112's dispatch tool (amended) on the local vLLM, model `Qwen/Qwen3.8-Flash-Next`
 
 `generate` now returns every tool call and checks each one against the
 `parameters` it was sent with (`schema-mismatch`, all or nothing), and
-`<decision:selection>` builds the original's dispatch tool (`reason`
+`<decision:selection>` builds D112's dispatch tool (`reason`
 optional, `data` required only when its schema requires a field). The
 runs used floppy commit `1fc03645f9`, env files
 `FLOPPY_LIVE_ENV_FILE=$PWD/.env:<scratch>/env.speech:<scratch>/env.voice`
@@ -344,7 +343,7 @@ and reply body (no headers).
 | `floppy_live` `live_chat` | pass | speaking went through Gemini |
 | `floppy_live` `live_identity` | fail | turn 1's reasoning failed `schema-mismatch` for the same root `reason` (its branch, "I'm Floppy ...", was valid), so the addressed bot never answered. The rerun failed the same way |
 | `floppy_live` `live_conversation` | fail | `4 completed, 0 failed`: reflection's select failed `schema-mismatch` on turns 1 and 2, a behavior (`GabePingPong`) was learned ACTIVE only on turn 3, and turn 4 still recalled "green" through reasoning. In the relay rerun, select's calls on turns 1 and 2 put `bot.behavior.create`'s fields beside `event` with no `data` (which the branch requires) and put an unoffered `lifetime` in `data`; turns 3 and 4 selected a create and a change whose drafts failed the builder's simulation (`test-failed`), so nothing was learned |
-| `environment_live` `live_two_participants` | fail | `a` took its turn and said "The window is open." through Gemini, and the room delivered the sound to both bots. LocalAI answered one `/v1/vad` call from each bot (`200`) and got nothing more in the 15 minutes. The open-speech window closes only on a later sound without voice (the original's VAD End), and the test sends none after `a`'s speech (the deterministic `a_bots_speech_reaches_the_other_participant` sends `media/silence.wav`), so `b` never decoded the speech or took a turn. This is a gap in the test, not the model's doing, and it was not changed |
+| `environment_live` `live_two_participants` | fail | `a` took its turn and said "The window is open." through Gemini, and the room delivered the sound to both bots. LocalAI answered one `/v1/vad` call from each bot (`200`) and got nothing more in the 15 minutes. The open-speech window closes only on a later sound without voice (the end of speech), and the test sends none after `a`'s speech (the deterministic `a_bots_speech_reaches_the_other_participant` sends `media/silence.wav`), so `b` never decoded the speech or took a turn. This is a gap in the test, not the model's doing, and it was not changed |
 
 Every `schema-mismatch` above is the model's output disagreeing with the
 schema it was sent: this server does not constrain decoding to the
@@ -662,7 +661,7 @@ a bare `--env CPA_API_KEY`; floppy's `.env` was not given as an env file
 (its own `CPA_API_KEY` would have won), and no value was written to disk.
 `TYPESAFE_API_KEY` came from `.env.local`. The base URL came
 from a scratch env file holding only `CPA_BASE_URL`, naming a local
-streaming tap (`http://127.0.0.1:<port>/v1`, a Python script outside the
+streaming tap (`http://127.0.0.1:<port>/v1`, a script outside the
 repository) that forwarded each request byte for byte to
 `192.168.2.89:8000` and its streamed answer chunk by chunk, and recorded,
 per request, when the first and last `reasoning` and `content` deltas
@@ -997,7 +996,7 @@ their tagless URIs to release tag `v0.1.0` at that commit; `scx`'s release
 cache untouched), and `scx` built from the subtree with those session
 components embedded (`SCXML_WASM_ARTIFACTS_DIR="$PWD/target/components/scxml"
 CARGO_TARGET_DIR=target/scx-live cargo build --release --locked -p
-scxml-cli`). The the original env file sets no `TYPESAFE_BASE_URL`; the decision
+scxml-cli`). The maintainer's external env file sets no `TYPESAFE_BASE_URL`; the decision
 service used its package's declared origin `https://api.typesafe.ai`
 (decision D18), so the builder's triage went to the decision service, not
 the fallback. Drafts were checked with `<scx:validate profile="draft">`
@@ -1038,7 +1037,7 @@ cargo install --locked --path scxml.rs/crates/scxml-cli`), and
 services into `scx`'s default package cache. The builder's `env` attributes
 scoped `OPENAI_*` to the generate service's `<invoke>`s and `TYPESAFE_*` to
 the decision service's; the consent listing showed exactly that (names
-only). The the original env file sets no `TYPESAFE_BASE_URL`, so in the builder
+only). The maintainer's external env file sets no `TYPESAFE_BASE_URL`, so in the builder
 run the decision service's `baseurl` slot was absent and the builder used
 its fallback triage. The builder command, from a clean shell
 (`env -i HOME="$HOME" PATH="$HOME/.cargo/bin:/usr/bin:/bin"`), in the
@@ -1049,12 +1048,12 @@ echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestria
   scx run --env-file .env.local bots/builder/builder.scx
 ```
 
-The live tests: `NEMOBOT_LIVE_ENV_FILE=<the original .env> NEMOBOT_LIVE_MODEL=gpt-6-luna
+The live tests: `NEMOBOT_LIVE_ENV_FILE=<the maintainer's external .env> NEMOBOT_LIVE_MODEL=gpt-6-luna
 cargo test -p nemobot-tests --test <test> -- --ignored --nocapture`.
 
 | Run | Model | Result | Runs used | Note |
 | --- | --- | --- | --- | --- |
-| `scx run --env-file <the original .env> bots/builder/builder.scx` | `gpt-6-luna` (generate service); decision unconfigured (no `TYPESAFE_BASE_URL`) | pass | 1 of 1 | exit 0 in 116 s; the `done` record's data: attempt 2 of 4 after 1 failure (`validate` / `SCXML070`), 0 machine fixes, triage `fallback:unavailable`, plan `pedestrian_traffic_light`, all four of its tests passed in simulation; progress `log`s `design`, `author`, `validate`, `retry_gate`, `triage`, `author`, `validate`, `simulate`, `done`; the built document compiled again with `scx compile` (no packages) |
+| `scx run --env-file <the maintainer's external .env> bots/builder/builder.scx` | `gpt-6-luna` (generate service); decision unconfigured (no `TYPESAFE_BASE_URL`) | pass | 1 of 1 | exit 0 in 116 s; the `done` record's data: attempt 2 of 4 after 1 failure (`validate` / `SCXML070`), 0 machine fixes, triage `fallback:unavailable`, plan `pedestrian_traffic_light`, all four of its tests passed in simulation; progress `log`s `design`, `author`, `validate`, `retry_gate`, `triage`, `author`, `validate`, `simulate`, `done`; the built document compiled again with `scx compile` (no packages) |
 | `generate_service live_generate_through_an_env_file` | `gpt-6-luna` | pass | 1 | strict structured output through `generate.result` |
 | `decision_service live_decision_through_an_env_file` | TypeSafe `system_one` (no OpenAI model) | pass (`shipped`) | 1 | the consent check is strict again: the declared origin `https://api.typesafe.ai` is listed though the run's base URL equals it |
 
@@ -1069,7 +1068,7 @@ consent check below (subtree scxml.rs `aa12fa6d`): `services/generate` and
 `outbound-http.fetch`, on wasmtime 49 with the Component Model async ABI,
 through `scxml-cli run`. `OPENAI_*` was granted to the generate service and
 `TYPESAFE_*` to the decision service. Commands:
-`NEMOBOT_LIVE_ENV_FILE=<the original .env> NEMOBOT_LIVE_MODEL=gpt-6-luna cargo test
+`NEMOBOT_LIVE_ENV_FILE=<the maintainer's external .env> NEMOBOT_LIVE_MODEL=gpt-6-luna cargo test
 -p nemobot-tests --test <test> -- --ignored <name>`.
 
 | Test | Model | Result | Runs used | Note |
@@ -1093,7 +1092,7 @@ bots/builder/parent.scxml`, with `OPENAI_BASE_URL` and `TYPESAFE_BASE_URL`
 defaults in the calling environment (the env file's values win). The
 `--env` scopes of `builder.args` granted `OPENAI_*` to the generate service
 and `TYPESAFE_*` to the decision service. Command:
-`NEMOBOT_LIVE_ENV_FILE=<the original .env> NEMOBOT_LIVE_MODEL=gpt-6-luna cargo test
+`NEMOBOT_LIVE_ENV_FILE=<the maintainer's external .env> NEMOBOT_LIVE_MODEL=gpt-6-luna cargo test
 -p nemobot-tests --test builder_bot -- --ignored live_builder_through_an_env_file`.
 
 | Test | Model | Result | Runs used | Note |

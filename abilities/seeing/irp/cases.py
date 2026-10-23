@@ -13,8 +13,8 @@ import json
 S = suite
 # Images: a.png, b.png and c.png are white PNGs of different sizes (other
 # bytes, the same gray); gray240, gray225 and black are 8x8 grays. Every
-# image is at least 8 pixels a side, the least the original's reduced decode
-# reads (OpenCV's PNG decode at an eighth).
+# image is at least 8 pixels a side, the least the vision service's reduced
+# decode reads (OpenCV's PNG decode at an eighth).
 S.media({
     "a.png": png(8, 8),
     "b.png": png(16, 16),
@@ -116,7 +116,7 @@ S.statement(12, "A measurement is bounded by `measure_timeout_ms` (2000): when i
 S.statement(13, "With `detect` on, each view handed on is given to the object detection child (abilities/object_detection, with the view's image and media type and the model), and its `bot.ability.vision.detection.output` fills the view's `objects`; with `describe` on the description child's `bot.ability.vision.description.output` fills its `description`. A view's objects stage runs before its description stage, and a sight's views are interpreted one after another, in order.")
 S.statement(14, "A stage that fails (its child answers `bot.ability.failed`) or does not answer within `stage_timeout_ms` (30000) leaves only its own field null; the sight is still handed on.")
 S.statement(15, "A stimulus its schema refuses is never routed here: an `environment.visual` without an image, or a look with data, raises `error.execution` in the sender.")
-S.statement(16, "Its parameters are checked before it perceives, as the original's constructor checks them: a `change_threshold` outside (0, 1], a `measure_every_ms`, `measure_timeout_ms`, `settle_after_ms`, `max_view_age_ms` or `stage_timeout_ms` that is not positive, a `measure_every_ms` longer than `settle_after_ms`, or a `measure` other than `byte_identity` and `frame_diff` ends it in its final state `degraded`, logging `seeing.degraded` with the first refusal's reason, in that order: it offers nothing, and its invoker gets `done.invoke.seeing`.")
+S.statement(16, "Its parameters are checked before it perceives: a `change_threshold` outside (0, 1], a `measure_every_ms`, `measure_timeout_ms`, `settle_after_ms`, `max_view_age_ms` or `stage_timeout_ms` that is not positive, a `measure_every_ms` longer than `settle_after_ms`, or a `measure` other than `byte_identity` and `frame_diff` ends it in its final state `degraded`, logging `seeing.degraded` with the first refusal's reason, in that order: it offers nothing, and its invoker gets `done.invoke.seeing`.")
 
 S.case(100, 1, "the offer is look alone, compacted.", [READY])
 S.case(101, 1, "it offers once: the first sight is the next thing the parent gets.",

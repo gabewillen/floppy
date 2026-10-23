@@ -35,7 +35,7 @@ fn data(returned: &Returned) -> Json {
     serde_json::from_str(&returned.data).expect("the returned data is JSON")
 }
 
-/// The table the tests use (the original's `bot_memory`, abridged).
+/// The table the tests use (a memory table, abridged).
 const CREATE: &str = "CREATE TABLE IF NOT EXISTS bot_memory (memory_id TEXT PRIMARY KEY, scope TEXT DEFAULT 'memory' NOT NULL, subject_ref TEXT, kind TEXT, content TEXT NOT NULL, content_format TEXT DEFAULT 'text/plain' NOT NULL, metadata_json TEXT DEFAULT '{}' NOT NULL, query_tags TEXT, created_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL)";
 
 /// A database with [`CREATE`]'s table.
@@ -458,7 +458,7 @@ fn a_database_changed_under_an_open_transaction_fails_it_with_changed() {
 
 #[test]
 fn a_connection_is_opened_with_the_busy_timeout() {
-    // The original's engine.py busy_timeout: 5 s.
+    // The lock wait is 5 s.
     let database = database("busy");
     let connection = connect(&database).expect("the database opens");
     let waited: i64 = connection

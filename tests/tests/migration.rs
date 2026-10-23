@@ -1,10 +1,9 @@
-//! The migration ability (`abilities/migration/migration.scx`, Alembic's
-//! `command.upgrade` and `command.downgrade`) run as a harness document's
-//! child through `scx run`, with the original's memory revisions
+//! The migration ability (`abilities/migration/migration.scx`) run as a
+//! harness document's child through `scx run`, with the memory revisions
 //! (`abilities/memory/sqlite/*.json`, `abilities/memory/postgresql/*.json`):
-//! it moves a database between revisions in one transaction, keeps
-//! Alembic's `alembic_version`, and answers its
-//! parent with `bot.ability.migration.output {from, to}` or
+//! it upgrades or downgrades a database between revisions in one
+//! transaction, keeps the current revision in `alembic_version`, and
+//! answers its parent with `bot.ability.migration.output {from, to}` or
 //! `bot.ability.failed`.
 //!
 //! The `postgres_` tests run the same walk on the Postgres engine (the
@@ -205,8 +204,8 @@ fn an_unknown_target_fails_and_commits_nothing() {
 
 #[test]
 fn an_unversioned_database_with_memory_tables_is_refused_untouched() {
-    // The original's store.py migrate: memory tables but no alembic_version
-    // match no revision; the refusal writes nothing (no version table).
+    // Memory tables but no alembic_version match no revision; the refusal
+    // writes nothing (no version table).
     let directory = unique_scratch("migration");
     // At base already, nothing is written; the inspection then makes one
     // of the history's tables and one of its own.

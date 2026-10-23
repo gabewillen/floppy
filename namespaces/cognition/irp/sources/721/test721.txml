@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- cognition-3: prior episodes and standing directives render as the original's models, each list with its count, in a cognition:recalled block before the stimulus. -->
+<!-- cognition-3: prior episodes and standing directives render as cognition:cognitive_episode and cognition:directive elements, each list with its count, in a cognition:recalled block before the stimulus. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition">
 <datamodel>
   <data id="p" expr="null"/>

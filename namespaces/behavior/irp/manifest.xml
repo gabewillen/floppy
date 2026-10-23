@@ -33,7 +33,7 @@
     </test>
   </assert>
   <assert id="behavior-3" specnum="3" specid="#behavior-3">
-    <![CDATA[<behavior:replace_behavior_clauses> writes the statements that delete the behavior's triggers and row and insert its row and each of its distinct triggers, in that order, the row's absent fields the original Instance's defaults (examples [], lifetime turn, status ACTIVE, counters 0); an instance without a name raises error.execution and assigns nothing.]]>
+    <![CDATA[<behavior:replace_behavior_clauses> writes the statements that delete the behavior's triggers and row and insert its row and each of its distinct triggers, in that order, the row's absent fields an instance's defaults (examples [], lifetime turn, status ACTIVE, counters 0); an instance without a name raises error.execution and assigns nothing.]]>
     <test id="220" conformance="mandatory" manual="false">
       <start uri="220/test220.txml"/>
     </test>
@@ -45,7 +45,7 @@
     </test>
   </assert>
   <assert id="behavior-4" specnum="4" specid="#behavior-4">
-    <![CDATA[<behavior:lifetime_errors> writes the original's E0009 diagnostics of an SCXML document read as XML: a schedule (a delayed send of an event a transition sending bot.behavior.tick takes) shorter than min_every, a turn behavior's other delayed send longer than turn_after_bound, and a persistent routine (one that sends bot.behavior.tick) with no schedule, none when neither bound is given; lifetimelocation receives the lifetime and scheduleslocation the schedules' events, each once; a text that does not parse has none and is a turn behavior.]]>
+    <![CDATA[<behavior:lifetime_errors> writes E0009 diagnostics of an SCXML document read as XML: a schedule (a delayed send of an event a transition sending bot.behavior.tick takes) shorter than min_every, a turn behavior's other delayed send longer than turn_after_bound, and a persistent routine (one that sends bot.behavior.tick) with no schedule, none when neither bound is given; lifetimelocation receives the lifetime and scheduleslocation the schedules' events, each once; a text that does not parse has none and is a turn behavior.]]>
     <test id="230" conformance="mandatory" manual="false">
       <start uri="230/test230.txml"/>
     </test>
@@ -60,7 +60,7 @@
     </test>
   </assert>
   <assert id="behavior-5" specnum="5" specid="#behavior-5">
-    <![CDATA[<behavior:verify_tick> writes the original's E0008 messages for a persistent routine's ticks: none when the first carries name, trigger (every or at), scheduled_at and fired_at and its output selects at least one event whose data agrees with those fields, else why; ticks that are not an array raise error.execution and assign nothing.]]>
+    <![CDATA[<behavior:verify_tick> writes E0008 messages for a persistent routine's ticks: none when the first carries name, trigger (every or at), scheduled_at and fired_at and its output selects at least one event whose data agrees with those fields, else why; ticks that are not an array raise error.execution and assign nothing.]]>
     <test id="240" conformance="mandatory" manual="false">
       <start uri="240/test240.txml"/>
     </test>

@@ -1,14 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "generate.result",
-  "description": "The reply of the generate service as the original text generator returns it: its content and every tool call, each with its id, name and JSON-object arguments, and what the request cost: its bytes and, when counted, its tokens.",
+  "description": "The reply of the generate service: its content and every tool call, each with its id, name and JSON-object arguments, and what the request cost: its bytes and, when counted, its tokens.",
   "type": "object",
   "properties": {
     "content": {
       "type": "string"
     },
     "request_bytes": {
-      "description": "The UTF-8 bytes of the request body as the service sent it, without its streaming members (stream, stream_options): the original's request_bytes.",
+      "description": "The UTF-8 bytes of the request body as the service sent it, without its streaming members (stream, stream_options).",
       "type": "integer",
       "minimum": 0
     },
@@ -36,7 +36,7 @@
       }
     },
     "usage": {
-      "description": "The tokens the backend said it counted, when its reply carried usage (a stream's on its last chunk): the original's Usage. A count it left out is absent.",
+      "description": "The tokens the backend said it counted, when its reply carried usage (a stream's on its last chunk). A count it left out is absent.",
       "type": "object",
       "properties": {
         "input_tokens": {

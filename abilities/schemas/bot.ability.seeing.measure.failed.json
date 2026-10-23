@@ -5,7 +5,7 @@
   "additionalProperties": false,
   "properties": {
     "kind": {
-      "description": "Failure kind: measure_failed when the change measure answered with a failure, timeout when it did not answer within the measure timeout (the original counts that outcome but raises no event for it) [floppy value].",
+      "description": "Failure kind: measure_failed when the change measure answered with a failure, timeout when it did not answer within the measure timeout [floppy value].",
       "enum": [
         "measure_failed",
         "timeout"

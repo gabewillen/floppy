@@ -10,12 +10,12 @@ function hasSegments(_event) {
   return Array.isArray(Object(_event.data).segments);
 }
 
-// The original's OutputData.
+// The clipped segments, as the service answered them.
 function diarizedResult(_event) {
   return ({segments: _event.data.segments});
 }
 
-// The original's FailureData.
+// The failure: the service's message, or a fixed one.
 function failedResult(_event) {
   return ({message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'VoiceDiarization failed.'});
 }

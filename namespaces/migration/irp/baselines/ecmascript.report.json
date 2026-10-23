@@ -6,7 +6,7 @@
     "kind": "namespace-irp",
     "source": "namespaces/migration/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "3a42f489016c430115d47d948a1c0e24ff15e792d1db6a344e3290c52611ed92",
+    "corpus_digest": "b321710247c2114b70de1b4934224869270c3da529d629c1b9e90a3583f5e8e9",
     "source_digest": "f87625b73a2c53a0ef78c6ae52cc64e901b5266b8fff34593ce31dab125c4590",
     "manifest_digest": "fb067b83381f4f608a78d97e0dde0d77f0a8c1604781055ddbad7368c718ae77",
     "template_digests": {
@@ -16,11 +16,9 @@
       "name": "saxon-process",
       "version": "SaxonJ-HE 12.8 from Saxonica",
       "command_argv": [
-        "java",
-        "-jar",
-        "saxon-he-12.8.jar"
+        "saxon"
       ],
-      "executable_digest": "1202571b0b642654eb70550cf2216fdb0642c8accae3d9e120112ed921deee4d"
+      "executable_digest": "012b6e274f9fa87155e1527848af8d41f19c6e89d7266a3b50716d5891eb739b"
     },
     "datamodel": "ecmascript",
     "provenance": "baseuri=https://github.com/stateforward/floppy/tree/main/namespaces/migration/irp/sources"
@@ -34,17 +32,17 @@
   "engine": {
     "name": "scxml-machine",
     "version": "0.2.0",
-    "source_digest": "fa539502555be6876cee2620b88b222833593c686d6de68cdd840da71ad0c21f"
+    "source_digest": "dff3fc8cedae948050fb2cd1bc417c9ac835b35059f1477dc30d8b4f2e746452"
   },
   "data_model": {
     "name": "scxml-data-model-ecmascript",
     "version": "0.2.0",
-    "source_digest": "eee3209122213ddb2832d90e121ec744af0fcee7cd78eab22c6ed0efa3d48b51"
+    "source_digest": "b8ca1a4238a8036c4c007d5cc58819b7a813402ddce88076597f178b9fb0f311"
   },
   "runner": {
     "name": "scxml-conformance/wasm",
     "version": "0.2.0",
-    "source_digest": "d7eac1d8e8b8a47312cef5eb06ab22dd43d9c5bd7130a5b9da6cddfcccb8eee3"
+    "source_digest": "3b6be0410f9c49955d4696f74088899323c31109bb66e16a60f8912bb46dcb17"
   },
   "manual_oracle": {
     "name": "scxml-conformance-manual-oracle",
@@ -57,7 +55,7 @@
       "package_version": "0.1.0",
       "manifest_sha256": "320f507d03d35163c551d4021db1a9ed75bfc6397646eb1d7ba967996e97755f",
       "schema_sha256": "5a8532c9d7942a2ee01e9f15636814885411e34f8c88f7ede35adb81c5972a26",
-      "component_sha256": "5a2094cf1db6e9f6d803dfd0c5dcefc63b9fe8ed5ce9254c84fb15aae68d6af6"
+      "component_sha256": "89ff28d7ac9970c15b29a6d30f7a1c023da67b3643ffdf2143eb32388347000f"
     }
   ],
   "ir_version": 5,
@@ -70,7 +68,7 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "37c296b8387267f2a5b43d86f7d6c81611e2b80256770b217797ca447fa1df4d",
+  "identity_digest": "ff7c00c89a171d4a4cefe5f3eac6497c7be673cbb98f5d0e49bad9a2cb789774",
   "summary": {
     "total_selected": 20,
     "applicable_selected": 20,

@@ -20,7 +20,7 @@ function soundChannels(sound) {
   return typeof sound.channels === 'number' ? sound.channels : 1;
 }
 
-// The original _is_audible_product: no level, or at least product_threshold_db.
+// Audible: no level, or at least product_threshold_db.
 function isAudible(scored) {
   return scored.perceived_level_db == null || scored.perceived_level_db >= product_threshold_db;
 }
@@ -67,8 +67,8 @@ function hasText(_event) {
   return typeof Object(_event.data).text === 'string';
 }
 
-// A speech product of a scored sound (the original _dispatch_product_cognition_input):
-// voice_embedding only when one is given.
+// A speech product of a scored sound: voice_embedding only when one is
+// given.
 function speechProduct(content, contentType, scored, voiceDetection, sourceIds, voiceEmbedding) {
   var product = ({content: content, content_type: contentType, voice_detection: voiceDetection});
   product.sample_rate_hz = scored.sound.sample_rate_hz;
@@ -84,7 +84,8 @@ function speechProduct(content, contentType, scored, voiceDetection, sourceIds, 
 
 // initializing
 
-// The original's constructor refuses identification with decoding.
+// The configuration initializing refuses: a negative threshold, a
+// recognize_timeout_ms that is not positive, identification with decoding.
 function hasNegativeThreshold() {
   return product_threshold_db < 0;
 }
@@ -187,7 +188,7 @@ function openingFrames() {
 
 // HearingSpeech, SpeechEnded (the frame just heard)
 
-// Streamed when Listening owns no decoder (the original _emit_speech_product).
+// Streamed when Listening owns no decoder.
 function streamsFrame() {
   return audible && !speech_decoder && !diarizer && hasSampleRate(detection.sensed.sound);
 }
@@ -424,7 +425,7 @@ function silenceProduct() {
   return speechProduct(completion.sensed.sound.audio, 'audio/pcm', completion.sensed, completion.voice_detection, []);
 }
 
-// Participants (the original's f6c4e08: producers stamp, transformers copy)
+// Participants (producers stamp, transformers copy)
 
 // The participants stamped on a scored sound.
 function soundParticipants(scored) {

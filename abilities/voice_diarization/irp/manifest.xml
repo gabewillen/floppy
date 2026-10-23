@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/voice_diarization/irp/sources">
   <assert id="voice_diarization-1" specnum="1" specid="#voice_diarization-1">
-    <![CDATA[It diarizes the utterance through the speech service's `diarize` (`POST {base}/audio/diarization`, model `pyannote-diarization` by default); its `bot.ability.hearing.voice.diarization.output` ends it in `applied` with the done data (`done.invoke.voice_diarization`) exactly `{segments}`: the original's OutputData, one clipped PCM segment per answered span, ascending by start, each `{audio: "<output>-<index>", media_type: "audio/pcm", sample_rate_hz, channels, start_seconds, end_seconds, confidence}` (`confidence` `null` when the answer has none); raw speaker labels never enter.]]>
+    <![CDATA[It diarizes the utterance through the speech service's `diarize` (`POST {base}/audio/diarization`, model `pyannote-diarization` by default); its `bot.ability.hearing.voice.diarization.output` ends it in `applied` with the done data (`done.invoke.voice_diarization`) exactly `{segments}`: one clipped PCM segment per answered span, ascending by start, each `{audio: "<output>-<index>", media_type: "audio/pcm", sample_rate_hz, channels, start_seconds, end_seconds, confidence}` (`confidence` `null` when the answer has none); raw speaker labels never enter.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -21,7 +21,7 @@
     </test>
   </assert>
   <assert id="voice_diarization-3" specnum="3" specid="#voice_diarization-3">
-    <![CDATA[When the service answers `bot.ability.failed` `{message}` (an error status, an answer with no spans, a span outside the utterance, a format it cannot read), the done data is exactly the original's FailureData `{message}`.]]>
+    <![CDATA[When the service answers `bot.ability.failed` `{message}` (an error status, an answer with no spans, a span outside the utterance, a format it cannot read), the done data is exactly `{message}`.]]>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>

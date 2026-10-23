@@ -6,11 +6,11 @@
   "properties": {
     "cognition_input": {
       "additionalProperties": false,
-      "description": "Original input payload given to cognition for this turn: its stimulus, focus and focus candidates. The original passes the live InputData (SkipJsonSchema); floppy passes it as data [floppy field].",
+      "description": "Original input payload given to cognition for this turn: its stimulus, focus and focus candidates [floppy field].",
       "properties": {
         "stimulus": {
           "additionalProperties": false,
-          "description": "The event the body took for this turn, as an envelope: its name, its data, and optionally its id, source and target. The original passes the live stimulus object (SkipJsonSchema); floppy passes it as data [floppy field].",
+          "description": "The event the body took for this turn, as an envelope: its name, its data, and optionally its id, source and target [floppy field].",
           "properties": {
             "event": {
               "minLength": 1,
@@ -153,7 +153,7 @@
               }
             ],
             "default": null,
-            "description": "Optional typed domain payload for the selected event. Trusted native abilities may retain a typed Pydantic payload through internal dispatch; model and learned-behavior JSON projections omit raw media. Do not put selection rationale here — use reason on this envelope.",
+            "description": "Optional typed domain payload for the selected event. Model and learned-behavior JSON projections omit raw media. Do not put selection rationale here — use reason on this envelope.",
             "examples": [
               {
                 "device": "device-a"

@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- identity-3: names come first in code point order, then embeddings by their Python JSON; repeats are kept. -->
+<!-- identity-3: names come first in code point order, then embeddings by their JSON text; repeats are kept. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:identity="https://github.com/stateforward/floppy/namespaces/identity">
 <datamodel>
   <data id="ids" expr="['zed', [0.5, 1], 'alice', [0.25, 3], 'Bob', 'alice']"/>

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- voice_detection-1: the original's start_seconds/end_seconds spans and a score are read too. -->
+<!-- voice_detection-1: spans with start_seconds/end_seconds and a score are read too. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="voice_detection" type="scxml" src="../../../voice_detection.scx">

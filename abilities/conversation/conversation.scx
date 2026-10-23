@@ -1,13 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Conversation ability in text mode (the original
-  abilities/communication/conversation): the current exchange of one
+  floppy's Conversation ability in text mode: the current exchange of one
   conversation. The communication (abilities/communication/communication.scx) invokes it
   as its child "conversation", routes each admitted input to it as
   bot.ability.conversation.routed_input {parent} (parent: the
   communication's input event as an envelope {event, data}), and records
   each spoken response with bot.ability.conversation.append. A direct
-  bot.ability.conversation.input is taken too, as in the original.
+  bot.ability.conversation.input is taken too.
 
     inactive -input-> active { waiting -input-> running -> waiting }
     running { recalling_from -> recalling_memory?
@@ -15,53 +14,51 @@
               -> remembering_from -> remembering_memory? -> committing }
     append, snapshot.request (any state)
 
-  Relationships (the original Conversation._relationship_for_input): each input
+  Relationships: each input
   first finds its relationship, {session_ref, context_ref, source_ids,
   target_ids, participants}, kept in relationships in the order
   they began. Input without targets shares the first relationship without
   targets (the ambient one). Other input takes the best scoring
   relationship, ties by session_ref: an ambient one whose participants
-  include a target scores the original's similarity threshold (0.85); any other
+  include a target scores the similarity threshold (0.85); any other
   scores the lower of its source and target groups' match, in either
   direction (sources to sources and targets to targets, or swapped), the
   higher direction counting. Two groups match one to one, names equal and
   embeddings at least the threshold alike by cosine, refused when another
-  assignment comes within the original's margin (0.05); the score is the
+  assignment comes within the margin (0.05); the score is the
   mean. With no match the input begins a relationship of its own:
-  context_ref is its relationship context reference (the original's
-  _stable_context_ref, {"identity_groups":[...]}, the same in either
-  direction), and session_ref "relationship-" and that. All of this is
+  context_ref is its relationship context reference
+  ({"identity_groups":[...]}, the same in either direction), and session_ref "relationship-" and that. All of this is
   <conversation:relationship_for_input>. A source becomes a participant
   once its detector is ready (<conversation:participant_for_source>) and
   stops being one when its turn fails (<conversation:fail_turn>); a failed
-  remember restores the participants the relationship had before the input
-  (the original's rollback to original_participants), as the original keeps
-  a participant while it has a detector. The original also matches an embedding
-  source to an earlier participant's voice centroid; that inference is not
-  ported, so each embedding is its own participant.
+  remember restores the participants the relationship had before the input,
+  so a participant stays one while it has a detector. An embedding source
+  is never matched to an earlier participant's voice, so each embedding is
+  its own participant.
 
-  Memory (the original Conversation's memory stage, before and after the turns):
+  Memory (before and after the turns):
   with a database (the <param> database, the memory database file) it
   invokes the memory ability (abilities/memory/memory.scx) as "recall",
   before the turns, with the relationship's memories (content where
   query_tags conversation_memory and context_ref is the relationship's
-  context_ref, oldest first, at most 50, the original
-  conversation_memory_recall_input), and as "remember", after them, with
-  the input (kind conversation, the reference conversation_memory_insert_input)
-  as the original's Memory.to_json writes it (<memory:to_json>: {content,
-  content_type, source_ids, target_ids} with sorted keys and compact
-  separators, the identities in the original's order without repeats
-  (embedding components as Python floats), arrays and objects in the content
-  tagged collision-safe, __stateforward_memory_content__ list and mapping). The recalled
-  memories are host-only (the original excludes them from the output) and are
+  context_ref, oldest first, at most 50), and as "remember", after them,
+  with the input (kind conversation) as <memory:to_json> writes it: the
+  JSON text {content, content_type, source_ids, target_ids} with sorted
+  keys and compact separators, numbers as the data model's JSON numbers,
+  the identities in identity order (names sorted, then embeddings by their
+  JSON text) without repeats, and arrays and objects in the content tagged
+  collision-safe (__stateforward_memory_content__ list, and mapping with
+  its entries in code point order of their keys). The recalled
+  memories are host-only (never in the output) and are
   logged by count only, once remembered. Each is bounded by
-  memory_timeout_ms (the original's 5 s); a memory failure or timeout answers
+  memory_timeout_ms (5 s); a memory failure or timeout answers
   bot.ability.conversation.failed {stage: "memory", message} and commits
   nothing. Without a database it logs <log label="memory" expr="'absent'">
   once per input.
 
-  Turns (the original Conversation's turn_detector stage): each input is
-  one turn per source identity, in the original's identity order (names sorted,
+  Turns: each input is one turn per source identity, in identity order
+  (names sorted,
   then embeddings by their JSON; <identity:sorted_identities>), each exchanged with a turn detector
   (abilities/turn_detector/turn_detector.scx) invoked as "turn_detector"
   for that participant: its participant_ref is the participant's track
@@ -72,36 +69,34 @@
   self_participant_ref, source_participant_ref, content} and
   bot.ability.turn_detector.turn.end; turn_ref is
   "input-<n>:turn:<track>", n counting this conversation's inputs. The
-  content is the original's _content_for_detector (<conversation:content_for_detector>): text/plain text as a text
+  content is <conversation:content_for_detector>'s: text/plain text as a text
   stimulus, audio/* content as an audio stimulus with its rate and
   channels, anything else as a content stimulus. Readiness and the turn
-  are each bounded by the original's 5 s (turn_timeout_ms). A detector failure
+  are each bounded by turn_timeout_ms (5 s). A detector failure
   (bot.ability.turn_detector.failed), a timeout, or a turn the detector
   cannot take (an error.* here: a start its schema refuses) answers
   bot.ability.conversation.failed {stage: "turn_detector", message} and
-  commits nothing. The turns' product is what is committed (the original
-  _complete_turn, <conversation:complete_turn>): the turns' texts joined by spaces as text/plain when
+  commits nothing. The turns' product is what is committed
+  (<conversation:complete_turn>): the turns' texts joined by spaces as text/plain when
   any has text, each distinct text once (D79); else no content for audio;
   else the input's content. The committed provenance's turn_ref is the
   first turn's and its session_ref the relationship's; audio/* content is
   dropped (media never enters the model-facing exchange). Input that
   arrives while one is in hand is held by <event:defer/> (scxml.rs
-  namespaces/event) and is taken, in order, on the return to waiting
-  (the original defers it).
+  namespaces/event) and is taken, in order, on the return to waiting.
 
   Appends: outbound messages only, committed into the exchange with
   provenance event bot.ability.conversation.append. An append is already
   committed when its id (non-empty), source and target, which the message's
-  provenance carries for the append event (the original's event id, source and
-  target), match a message's in the current exchange; it is not committed
+  provenance carries for the append event, match a message's in the current exchange; it is not committed
   again, and either way the conversation answers
   bot.ability.conversation.output.
 
   Snapshot: bot.ability.conversation.snapshot.request {request_ref}, in
   any state, answers bot.ability.conversation.snapshot.output
   {request_ref, detector_refs}: [session_ref, source] of every
-  participant, ordered by relationship and then identity (the original
-  detector_refs, <conversation:detector_refs>; floppy invokes a detector per turn, so a participant
+  participant, ordered by relationship and then identity
+  (<conversation:detector_refs>; floppy invokes a detector per turn, so a participant
   stands for its detector).
 
   Exchange (decision D176): an inbound commit opens a new exchange, [the
@@ -128,11 +123,10 @@
 
   Readiness: the session's start sends bot.ability.offers
   {ability: "conversation", choices: []} to the parent; it offers nothing
-  (the original's conversation input is not a tool event).
+  (its input is not a tool event).
 
   Commits: <conversation:complete_turn> builds each inbound message and
-  <conversation:message_for_turn> each outbound one (the original
-  message for a turn); the document opens the exchange with an inbound one
+  <conversation:message_for_turn> each outbound one; the document opens the exchange with an inbound one
   and appends an outbound one to it.
 
   Bindings: the bot, conversation, identity and memory namespace packages and
@@ -146,9 +140,9 @@
        xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory"
        version="1.0" datamodel="ecmascript" name="conversation" initial="conversation">
   <datamodel>
-    <!-- The original's 5 s bound on each memory operation. -->
+    <!-- The 5 s bound on each memory operation. -->
     <data id="memory_timeout_ms" expr="5000"/>
-    <!-- Turns: the original's 5 s turn detector bound, the inputs taken so far,
+    <!-- Turns: the 5 s turn detector bound, the inputs taken so far,
          this input's sources in order, the one in hand, its track and the
          stimulus that opens its turn, the completed turns, and the turn
          timer. -->
@@ -168,8 +162,7 @@
     <!-- Relationships, in the order they
          began: {session_ref, context_ref, source_ids, target_ids,
          participants}; the relationship in hand, its
-         participants before this input (the original's
-         original_participants), and the snapshot's detector references. -->
+         participants before this input, and the snapshot's detector references. -->
     <data id="relationships" expr="[]"/>
     <data id="relationship_index" expr="-1"/>
     <data id="participants" expr="[]"/>
@@ -182,20 +175,19 @@
     <data id="turn_participants" expr="[]"/>
     <!-- The message in hand. -->
     <data id="message" expr="null"/>
-    <!-- Memory: the database file (null: no memory) and the original's
-         statements (conversation/memory.py). The SQL runs on both
+    <!-- Memory: the database file (null: no memory) and its statements.
+         The SQL runs on both
          engines (SQLite and Postgres). A memory id is the next row count
          as 32 zero-padded digits (neither engine's randomness is unique
          across invocations in Wasm); JSON rows are told by their
          content_format, the 50 most recent by created_at,
-         then memory_id (the insertion order), read oldest first (the original's
-         recent_select). The
+         then memory_id (the insertion order), read oldest first. The
          count recalled, for the log. -->
     <data id="database" expr="null"/>
     <data id="memory_select" expr="'SELECT content FROM (SELECT content, created_at, memory_id FROM bot_memory WHERE query_tags = ?1 AND context_ref = ?2 ORDER BY created_at DESC, memory_id DESC LIMIT 50) AS recent ORDER BY created_at, memory_id'"/>
     <data id="memory_insert" expr="'INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT substr(\'00000000000000000000000000000000\', 1, 32 - length(n)) || n FROM (SELECT CAST(COUNT(*) + 1 AS TEXT) AS n FROM bot_memory) AS c), ?1, ?2, NULL, ?3, ?4, ?5, ?6, ?7, ?8)'"/>
     <data id="recalled" expr="0"/>
-    <!-- The input as the original's Memory.to_json writes it, to remember. -->
+    <!-- The input as <memory:to_json> writes it, to remember. -->
     <data id="memory_payload" expr="null"/>
   </datamodel>
   <script src="conversation.js"/>
@@ -248,7 +240,7 @@
           <assign location="turn_index" expr="0"/>
           <assign location="turns" expr="[]"/>
         </onentry>
-        <!-- Input that arrives meanwhile waits (the original defers it). -->
+        <!-- Input that arrives meanwhile waits. -->
         <transition event="bot.ability.conversation.routed_input" event:schema="../schemas/bot.ability.conversation.routed_input.json">
           <event:defer/>
           <log label="conversation.deferred" expr="_event.name"/>

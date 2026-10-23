@@ -13,7 +13,7 @@ SPEECH = "bot.ability.listening.speech.output"
 COGNITION = "bot.ability.cognition.input"
 FAILED = "bot.ability.listening.failed"
 READY = expect("bot.ability.offers", "_event.data.ability === 'interpretation' && _event.data.choices.length === 0")
-# Stages under a loaded host can outlast the original's 30 s bound: cases
+# Stages under a loaded host can outlast the default 30 s bound: cases
 # that reach the backend wait longer (statement 11 tests the bound itself).
 PATIENT = [("stage_timeout_ms", "600000")]
 NO_DECODER = PATIENT + [("speech_decoder", "false")]

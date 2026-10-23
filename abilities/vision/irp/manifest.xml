@@ -39,7 +39,7 @@
     </test>
   </assert>
   <assert id="vision-6" specnum="6" specid="#vision-6">
-    <![CDATA[An input whose data does not satisfy its schema (`kind` other than text or image, a missing `content`, or an empty `content`, the original's `min_length=1`) is `error.execution` in its sender and is never classified.]]>
+    <![CDATA[An input whose data does not satisfy its schema (`kind` other than text or image, a missing `content`, or an empty `content`) is `error.execution` in its sender and is never classified.]]>
     <test id="150" conformance="mandatory" manual="false">
       <start uri="150/test150.scxml"/>
     </test>
@@ -54,7 +54,7 @@
     </test>
   </assert>
   <assert id="vision-7" specnum="7" specid="#vision-7">
-    <![CDATA[The confidences are the classifier's `text_confidence`, `image_confidence` and `unreadable_confidence` (each 1.0 by default, the original's defaults), which the invoker may set as `<param>`s.]]>
+    <![CDATA[The confidences are the classifier's `text_confidence`, `image_confidence` and `unreadable_confidence` (each 1.0 by default), which the invoker may set as `<param>`s.]]>
     <test id="160" conformance="mandatory" manual="false">
       <start uri="160/test160.scxml"/>
     </test>

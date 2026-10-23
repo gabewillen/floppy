@@ -8,19 +8,19 @@ function decisionTimeoutDelay() {
   return decision_timeout_ms + 'ms';
 }
 
-// The original's deliberate handoff event (types.DELIBERATIVE_HANDOFF_EVENT_NAME).
+// The deliberate handoff event.
 function isDeliberativeHandoff(name) {
   return name === 'bot.ability.reasoning.input';
 }
 
-// The cognition's ignore (types.IgnoreEvent): cognition only, never an
+// The cognition's ignore: cognition only, never an
 // environment action.
 function isIgnore(name) {
   return name === 'bot.ability.cognition.ignore';
 }
 
-// The decision's state: the stimulus as the model reads it (the reference
-// D-R-50).
+// The decision's state: the stimulus as the model reads it (decision
+// D150).
 function decisionState() {
   return ({turn: stimulus_content});
 }
@@ -52,9 +52,9 @@ function product(_event) {
   });
 }
 
-// What the stage sends (the reference dispatch_selected_events): a handled
-// product's selections, and of an escalating one only its environment
-// actions (without_ignore_selections, and never the handoff); each to its
+// What the stage sends: a handled product's selections, and of an
+// escalating one only its environment actions (never the ignore or the
+// handoff); each to its
 // one target, so a selection without one is not sent.
 function actedSelections(_event) {
   return product(_event).filter(function (item) {
@@ -68,13 +68,13 @@ function stageResult(fields) {
   return Object.assign({turn: turn, acted: acted, confidence_tuner: confidence_tuner, bytes_per_token: bytes_per_token}, fields);
 }
 
-// The turn's selections (the original's escalation reason none).
+// The turn's selections (escalation reason none).
 function selectionResult(_event) {
   return stageResult({handled: true, selected: product(_event), reason: 'none'});
 }
 
-// An escalating product: unhandled, its environment actions sent (the
-// original dispatches its _environment_actions before the next tier runs).
+// An escalating product: unhandled, its environment actions sent before
+// the next tier runs.
 function escalatedResult(reason) {
   return stageResult({handled: false, reason: reason});
 }
@@ -88,7 +88,7 @@ function abstainedLog(_event) {
   return 'turn ' + turn + ': abstained (' + _event.data.reason + ')';
 }
 
-// The original's empty product: no selection, no observation; a pass
+// An empty product: no selection, no observation; a pass
 // names the tier it hands the turn to.
 function abstainedResult(_event) {
   var empty = stageResult({handled: false, reason: 'empty_product'});
@@ -116,8 +116,7 @@ function hasResult() {
   return result !== null;
 }
 
-// The fewest bytes a token any answer showed (the reference
-// ContextFit.observe): the request's bytes over the tokens the backend
+// The fewest bytes a token any answer showed: the request's bytes over the tokens the backend
 // counted, from the service's done data (unchecked); a count that is not
 // positive teaches nothing.
 function learnedBytesPerToken(_event) {
@@ -127,8 +126,7 @@ function learnedBytesPerToken(_event) {
   return typeof bytes === 'number' && typeof tokens === 'number' && bytes > 0 && tokens > 0 ? Math.min(bytes_per_token, bytes / tokens) : bytes_per_token;
 }
 
-// The data a selection is sent with, as the original's dispatch_selected_events
-// takes it: its data object, else {} (no data, null, or a non-object).
+// The data a selection is sent with (decision D113): its data object, else {} (no data, null, or a non-object).
 function selectionData(s) {
   return s.data !== null && typeof s.data === 'object' && !Array.isArray(s.data) ? s.data : ({});
 }

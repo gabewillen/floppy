@@ -4,7 +4,7 @@
 
 // idle
 
-// The reference SpeechHeard._has_admissible_speech: speech with at least one source_id.
+// Speech with at least one source_id is admissible.
 function hasAdmissibleSpeech() {
   return stimulus.data.source_ids.length > 0;
 }

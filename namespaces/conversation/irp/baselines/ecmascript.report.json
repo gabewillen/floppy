@@ -6,19 +6,19 @@
     "kind": "namespace-irp",
     "source": "namespaces/conversation/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "c809e00942995a0232582b63b901c4159d53563ccb6ae9e6e7cbcf968500187d",
+    "corpus_digest": "e8ff927591447857d2437bcc7a3bfd7242484487cb3c2f8f170031c98f40d4ac",
     "source_digest": "fb5ba209f7b75d276ae7ac1f02609417115130cfa6c1589936ef88886b182f21",
-    "manifest_digest": "d76bb9d773be777d54859d3111b6122c036619de9509da8b465eed6fa15306d7",
+    "manifest_digest": "768b57857088adcaeccfb95b8da5c2289729580d645c84212762cf7c714167ff",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
     "transformer": {
       "name": "saxon-process",
-      "version": "SaxonJ-HE 12.8 from Saxonica (SaxonC-HE 12.8 from Saxonica)",
+      "version": "SaxonJ-HE 12.8 from Saxonica",
       "command_argv": [
         "saxon"
       ],
-      "executable_digest": "f9e0b6910725131e0e8fa088d5ad2fca5c262badbedf7e8745dd6f3d0969fbb0"
+      "executable_digest": "012b6e274f9fa87155e1527848af8d41f19c6e89d7266a3b50716d5891eb739b"
     },
     "datamodel": "ecmascript",
     "provenance": "baseuri=https://github.com/stateforward/floppy/tree/main/namespaces/conversation/irp/sources"
@@ -53,9 +53,9 @@
     {
       "namespace_uri": "https://github.com/stateforward/floppy/namespaces/conversation",
       "package_version": "0.1.0",
-      "manifest_sha256": "2b057961554df399c840aebffc4dbb01be177dee9bdb48c7e30fde98315745f0",
-      "schema_sha256": "f405b51085b455c291b94a1d65d18638b3d882b594e9df68e8c83ef52b24bc6a",
-      "component_sha256": "d95a6a1dff1d0f8c569af084044124c1917e053d349417768eb9217092367f5b"
+      "manifest_sha256": "c295203a1afeeae7f9347ebb24aea33b6b5568cfd86f64e7b91f616d2b9a432d",
+      "schema_sha256": "795c1d112eb5504077cc050972f4c0a758db65cd55b16ee1adcff05a46819a39",
+      "component_sha256": "96e5432b52a3c83614b5df4abc85438fab7e95419dbf336c9dc616657471d7e1"
     }
   ],
   "ir_version": 5,
@@ -68,7 +68,7 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "e6a629c20b8f63455bcbde5ed9e2c60385513164ca295b8aad47640ece73761e",
+  "identity_digest": "257fa258ef0672100c6968e0b624f6859d9339ab6822e7a031fab86be61caae6",
   "summary": {
     "total_selected": 30,
     "applicable_selected": 30,

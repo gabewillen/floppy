@@ -30,7 +30,7 @@
     </test>
   </assert>
   <assert id="identity-3" specnum="3" specid="#identity-3">
-    <![CDATA[<identity:sorted_identities> writes the identities in the original's order: names first by their text in code point order, then embeddings by their compact Python JSON, stable and with repeats kept; ids that are not an array of identities raise error.execution and assign nothing.]]>
+    <![CDATA[<identity:sorted_identities> writes the identities in identity order: names first by their text in code point order, then embeddings by their JSON text in code point order, stable and with repeats kept; ids that are not an array of identities raise error.execution and assign nothing.]]>
     <test id="820" conformance="mandatory" manual="false">
       <start uri="820/test820.txml"/>
     </test>

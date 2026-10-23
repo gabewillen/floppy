@@ -1,12 +1,10 @@
 //! The `autonomy` extension namespace: `<autonomy:behavior_input_payload>`
 //! as a `stateforward:scxml/executable-content-extension` Wasm component.
 //!
-//! The original's autonomy module (`abilities/cognition/autonomy.py`): the
-//! input a learned behavior runs with (`behavior_input_payload`), the data
-//! of the turn's stimulus with the turn's focus added. Autonomy and the
-//! reflection (which tells the builder what a behavior will run with)
-//! build it alike. Documents bind [`NAMESPACE_URI`] (conventionally with
-//! the prefix `autonomy`):
+//! The input a learned behavior runs with: the data of the turn's stimulus
+//! with the turn's focus added. Autonomy and the reflection (which tells
+//! the builder what a behavior will run with) build it alike. Documents
+//! bind [`NAMESPACE_URI`] (conventionally with the prefix `autonomy`):
 //!
 //! ```xml
 //! <autonomy:behavior_input_payload location="behavior_input" stimulus="stimulus"
@@ -18,7 +16,7 @@
 //!
 //! # `<autonomy:behavior_input_payload location="L" stimulus="S" focus="F" focus_candidates="C"/>`
 //!
-//! The original's `behavior_input_payload` of a cognition input.
+//! The input a learned behavior runs with, built from a cognition input.
 //! `stimulus` (required) evaluates to the turn's stimulus envelope (an
 //! object; its `data` is the stimulus data), `focus` (required) to the
 //! turn's focus and `focus_candidates` (required) to its focus candidates.
@@ -339,7 +337,7 @@ fn payload_element<H: AutonomyHost>(
     Ok(Executed::Handled)
 }
 
-/// The original's `behavior_input_payload` (see the crate documentation):
+/// The input a learned behavior runs with (see the crate documentation):
 /// the stimulus data's members, or `{event: data}`, with the focus set (a
 /// focus that is `None`, ECMAScript's `undefined`, is left out).
 #[must_use]

@@ -611,7 +611,7 @@ fn malformed_collect_offered_events_raise_error_execution_and_assign_nothing() {
     }
 }
 #[test]
-fn send_builds_the_originals_dispatch_tool_schema_of_the_choices() {
+fn send_builds_the_dispatch_tool_schema_of_the_choices() {
     let mut host = with_values(&[(
         "choices",
         json!([
@@ -703,7 +703,7 @@ fn send_builds_the_originals_dispatch_tool_schema_of_the_choices() {
 }
 
 #[test]
-fn send_without_choices_offers_any_event_as_the_original_does() {
+fn send_without_choices_offers_any_event() {
     let mut host = with_values(&[("choices", json!([]))]);
     execute(
         "send",
@@ -954,7 +954,7 @@ fn send_with_max_bounds_the_events_array() {
     .expect("built");
     let events = &assigned_any(&host, "schema")["properties"]["events"];
     assert_eq!(events["maxItems"], json!(1));
-    // Without max the array is unbounded, as the original's tool is.
+    // Without max the array is unbounded.
     let mut host = with_values(&[("choices", json!([deactivate_choice()]))]);
     execute(
         "send",
@@ -988,7 +988,7 @@ fn send_with_max_bounds_the_events_array() {
 }
 
 #[test]
-fn normalize_confidence_is_the_originals() {
+fn normalize_confidence_scales_a_probability_and_clamps_to_the_scale() {
     // A probability in (0, 1] is scaled, rounded half to even.
     assert_eq!(normalize_confidence(0.875), 88);
     assert_eq!(normalize_confidence(0.125), 12);

@@ -1,28 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's SpeechHeard seed (the reference abilities/communication/behaviors.py,
-  speech_heard_seed): a trusted turn behavior that autonomy
+  floppy's SpeechHeard seed: a trusted turn behavior that autonomy
   (abilities/autonomy/autonomy.scx) runs before the learned ones when the stimulus
-  is bot.ability.listening.speech.output, its one trigger
-  (SPEECH_HEARD_TRIGGERS).
+  is bot.ability.listening.speech.output, its one trigger.
 
     idle -> handled | unhandled
 
   Input: the <param>s turn, input (focus and focus_candidates) and
-  stimulus (the turn's stimulus envelope): the original's seed takes the
-  cognition's InputData unchanged (its input_adapter), not the learned
-  behaviors' behavior_input_payload.
+  stimulus (the turn's stimulus envelope): the seed takes the cognition's
+  input unchanged, not the learned behaviors' input that
+  <autonomy:behavior_input_payload> builds.
 
-  idle (the original _has_admissible_speech): speech with at least one source_id
+  idle: speech with at least one source_id
   is admitted; any other speech, including empty source_ids, is unhandled,
   so the learned inventory and the next cognition stage may continue.
 
   Output: the Turn Behavior Contract's <donedata> {turn, handled,
-  selected}. handled carries one selection, the original's SelectedEvent
-  {event: bot.ability.communication.input, data: TurnData, reason}: the
-  speech's source_ids, an empty target_ids, its content, content_type,
-  sample_rate_hz and channels. The original's TurnData.parent is not in the
-  JSON schema (SkipJsonSchema), so the selection carries none.
+  selected}. handled carries one selection {event:
+  bot.ability.communication.input, data, reason}, its data the speech's
+  source_ids, an empty target_ids, its content, content_type,
+  sample_rate_hz and channels. The event's schema has no parent, so the
+  selection carries none.
 
   Contracts: none of its own; the selection's data is
   schemas/bot.ability.communication.input.json, checked where the body

@@ -11,7 +11,7 @@ function isPostgresDatabase() {
 
 // migrating
 
-// The original's revisions in the database engine's dialect, oldest first.
+// floppy's revisions in the database engine's dialect, oldest first.
 function engineRevisions() {
   return postgres ? [postgresql_0001, postgresql_0002, postgresql_0003] : [sqlite_0001, sqlite_0002, sqlite_0003];
 }
@@ -22,7 +22,7 @@ function operationTimeoutDelay() {
   return operation_timeout_ms + 'ms';
 }
 
-// The original's _time_out message, in seconds.
+// The timeout failure's message, the bound in seconds.
 function timeoutFailure() {
   return 'Memory did not finish within ' + operation_timeout_ms / 1000 + 's.';
 }

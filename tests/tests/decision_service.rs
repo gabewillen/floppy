@@ -415,14 +415,14 @@ fn choice_fires_the_chosen_schema_transition_with_schema_valid_data() {
     );
     assert_eq!(
         body["questions"]["order.ship::sku"]["criteria"],
-        json!({"A-1": "Which value fills 'sku' for order.ship?"}),
+        json!({"A-1": "Which value fills \"sku\" for order.ship?"}),
         "the sku is grounded in the dataexpr evidence"
     );
     assert_eq!(
         body["questions"]["order.ship::carrier"]["criteria"],
         json!({
-            "ups": "Which value fills 'carrier' for order.ship?",
-            "fedex": "Which value fills 'carrier' for order.ship?"
+            "ups": "Which value fills \"carrier\" for order.ship?",
+            "fedex": "Which value fills \"carrier\" for order.ship?"
         }),
         "the carrier is grounded in the schema's enum"
     );
@@ -469,7 +469,7 @@ fn predicate_document(params: &str) -> String {
     )
 }
 
-/// `predicate` (the reference decision processor): only the chosen event
+/// `predicate` (decision D150): only the chosen event
 /// comes back in `decision.selected`, with its data and its probability in
 /// the selection (D-R-28), and nothing is fired; the service's done data
 /// reports the request's bytes and the backend's usage.
