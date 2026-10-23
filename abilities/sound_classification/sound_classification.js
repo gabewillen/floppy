@@ -2,7 +2,7 @@
 // <script src="sound_classification.js">, so every function here is a global of the
 // document's data model, callable from its cond and expr attributes.
 
-// applying: KindSoundClassifier.classify.
+// applying: the sound labelled from its kind.
 
 // The kind trimmed, or blank when there is none.
 function trimmedKind() {
