@@ -118,8 +118,12 @@
     <data id="max_completion_tokens" expr="8192"/>
     <!-- The author call's token bound: a whole document needs more than
          8192 tokens, which truncated whole documents on 2026-10-21
-         (decision D131); design keeps max_completion_tokens. -->
+         (decision D131); design keeps max_completion_tokens. The request
+         may set it, and an author generation that is truncated doubles it
+         for the next author call, up to document_token_ceiling (decision
+         D135: a reasoning model spends its bound on reasoning first). -->
     <data id="document_max_completion_tokens" expr="16384"/>
+    <data id="document_token_ceiling" expr="65536"/>
     <!-- Where the builder reports its progress (a stage entered, a
          generation's reply arriving) as builder.progress: '#_parent' for an
          invoker that bounds the build by inactivity, null for none. -->
@@ -235,6 +239,7 @@
       <assign location="constraints" expr="requestConstraints(_event)"/>
       <assign location="name" expr="requestName(_event)"/>
       <assign location="max_attempts" expr="requestMaxAttempts(_event)"/>
+      <assign location="document_max_completion_tokens" expr="requestDocumentTokens(_event)"/>
       <assign location="model" expr="requestModel(_event)"/>
       <assign location="generate_timeout_ms" expr="requestGenerateTimeoutMs(_event)"/>
       <assign location="generate_ceiling_ms" expr="requestGenerateCeilingMs(_event)"/>
@@ -400,6 +405,7 @@
     </transition>
     <transition event="done.invoke" cond="isFrom(_event, gen_id)" target="retry_gate">
       <assign location="diagnostics" expr="generationFailedDiagnostics('author', 'draft')"/>
+      <assign location="document_max_completion_tokens" expr="grownDocumentTokens()"/>
     </transition>
     <transition event="builder.timeout" cond="isOwnEvent(_event, stage_run)" target="retry_gate">
       <assign location="diagnostics" expr="generationTimeoutDiagnostics('author')"/>

@@ -43,7 +43,7 @@ function firstDiagnosticSummary() {
 
 // Whether the builder.request data satisfies schemas/builder.request.json.
 function satisfiesBuilderRequest(_event) {
-  return _event.data !== null && typeof _event.data === 'object' && !Array.isArray(_event.data) && Object.keys(_event.data).every(function (k) { return ['spec', 'name', 'constraints', 'max_attempts', 'model', 'generate_timeout_ms', 'generate_ceiling_ms', 'min_every_ms', 'turn_after_bound_ms', 'apply'].indexOf(k) >= 0; }) && isOptionalBound(_event.data.min_every_ms) && isOptionalBound(_event.data.turn_after_bound_ms) && isOptionalApply(_event.data.apply) && typeof _event.data.spec === 'string' && _event.data.spec.trim().length > 0 && (_event.data.name === undefined || (typeof _event.data.name === 'string' && _event.data.name.length > 0)) && (_event.data.constraints === undefined || (Array.isArray(_event.data.constraints) && _event.data.constraints.length <= 32 && _event.data.constraints.every(function (c) { return typeof c === 'string'; }))) && (_event.data.max_attempts === undefined || (Number.isInteger(_event.data.max_attempts) && _event.data.max_attempts >= 1 && _event.data.max_attempts <= 8)) && (_event.data.model === undefined || (typeof _event.data.model === 'string' && _event.data.model.length > 0)) && isOptionalGenerateBound(_event.data.generate_timeout_ms) && isOptionalGenerateBound(_event.data.generate_ceiling_ms);
+  return _event.data !== null && typeof _event.data === 'object' && !Array.isArray(_event.data) && Object.keys(_event.data).every(function (k) { return ['spec', 'name', 'constraints', 'max_attempts', 'model', 'generate_timeout_ms', 'generate_ceiling_ms', 'min_every_ms', 'turn_after_bound_ms', 'apply', 'document_max_completion_tokens'].indexOf(k) >= 0; }) && isOptionalBound(_event.data.min_every_ms) && isOptionalBound(_event.data.turn_after_bound_ms) && isOptionalApply(_event.data.apply) && typeof _event.data.spec === 'string' && _event.data.spec.trim().length > 0 && (_event.data.name === undefined || (typeof _event.data.name === 'string' && _event.data.name.length > 0)) && (_event.data.constraints === undefined || (Array.isArray(_event.data.constraints) && _event.data.constraints.length <= 32 && _event.data.constraints.every(function (c) { return typeof c === 'string'; }))) && (_event.data.max_attempts === undefined || (Number.isInteger(_event.data.max_attempts) && _event.data.max_attempts >= 1 && _event.data.max_attempts <= 8)) && (_event.data.model === undefined || (typeof _event.data.model === 'string' && _event.data.model.length > 0)) && isOptionalGenerateBound(_event.data.generate_timeout_ms) && isOptionalGenerateBound(_event.data.generate_ceiling_ms) && (_event.data.document_max_completion_tokens === undefined || (Number.isInteger(_event.data.document_max_completion_tokens) && _event.data.document_max_completion_tokens >= 1024 && _event.data.document_max_completion_tokens <= document_token_ceiling));
 }
 
 // An absent lifetime bound, or one of 1 ms to 1 day.
@@ -76,6 +76,16 @@ function requestConstraints(_event) {
 
 function requestMaxAttempts(_event) {
   return _event.data.max_attempts === undefined ? max_attempts : _event.data.max_attempts;
+}
+
+function requestDocumentTokens(_event) {
+  return _event.data.document_max_completion_tokens === undefined ? document_max_completion_tokens : _event.data.document_max_completion_tokens;
+}
+
+// The next author call's token bound: doubled after a truncated author
+// generation, up to document_token_ceiling (decision D135).
+function grownDocumentTokens() {
+  return gen_failure === 'truncated' ? Math.min(document_max_completion_tokens * 2, document_token_ceiling) : document_max_completion_tokens;
 }
 
 function requestModel(_event) {

@@ -743,6 +743,20 @@ fn completion(content: &str) -> String {
     .to_string()
 }
 
+/// A reply cut off at the request's token bound (`finish_reason` `length`),
+/// which the generate service fails as `truncated`.
+fn truncated_completion() -> String {
+    json!({
+        "object": "chat.completion",
+        "choices": [{
+            "index": 0,
+            "finish_reason": "length",
+            "message": {"role": "assistant", "content": "{\"scxml\": \"<scxml"},
+        }],
+    })
+    .to_string()
+}
+
 /// A `system_one` answer choosing `chosen` in the selection (0.8, the rest
 /// share 0.2) and every other question's first label.
 fn system_one(chosen: &str, body: &[u8]) -> Option<String> {
@@ -808,6 +822,7 @@ fn mock_reply(
     match (path, schema) {
         (
             "/repair/v1/chat/completions"
+            | "/truncated/v1/chat/completions"
             | "/broken/v1/chat/completions"
             | "/service/v1/chat/completions"
             | "/impostor/v1/chat/completions"
@@ -884,6 +899,13 @@ fn mock_reply(
         }
         ("/nested/v1/chat/completions", Some("scxml_draft")) => {
             Some(completion(&nested_final_draft(authors > 1)))
+        }
+        // Two replies a reasoning model cut off at its token bound, then a draft.
+        ("/truncated/v1/chat/completions", Some("scxml_draft")) if authors <= 2 => {
+            Some(truncated_completion())
+        }
+        ("/truncated/v1/chat/completions", Some("scxml_draft")) => {
+            Some(completion(&draft(&traffic_light(&green_separate(), "red"))))
         }
         ("/repair/v1/chat/completions", Some("scxml_draft")) => Some(completion(&match authors {
             1 => invalid_draft(),
@@ -1572,6 +1594,41 @@ fn a_builder_timeout_preempts_a_generation_in_flight_and_cancels_it() {
         designs[1].at <= late,
         "the builder moved on while the first generation was still in flight"
     );
+}
+
+/// An author generation cut off at its token bound doubles the bound for
+/// the next author call, up to 65536 (decision D135): the request's 16384
+/// becomes 32768 and then 65536, and the third draft is built.
+#[test]
+fn a_truncated_author_generation_doubles_the_next_token_bound() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "truncated",
+        "truncated",
+        &["FLOPPY_API_KEY", "FLOPPY_BASE_URL"],
+        &json!({"spec": SPEC, "document_max_completion_tokens": 16384}),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    let history = done["report"]["history"].as_array().expect("the history");
+    assert_eq!(history.len(), 2, "{done}");
+    assert!(
+        history.iter().all(
+            |failure| failure["diagnostics"][0]["code"] == "author-failed"
+                && failure["diagnostics"][0]["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains("(truncated)"))
+        ),
+        "{done}"
+    );
+    let received = mock.received();
+    let bounds: Vec<&Json> = chat_requests(&received, "scxml_draft")
+        .iter()
+        .map(|request| &request.body["max_completion_tokens"])
+        .collect();
+    assert_eq!(bounds, [&json!(16384), &json!(32768), &json!(65536)]);
 }
 
 /// Without the decision key the builder falls back to its cond-based
