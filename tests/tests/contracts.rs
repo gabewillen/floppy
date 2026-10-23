@@ -94,7 +94,7 @@ const BODY_EVENTS: [&str; 12] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 102] = [
+const ABILITY_EVENTS: [&str; 103] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -158,6 +158,9 @@ const ABILITY_EVENTS: [&str; 102] = [
     "bot.behavior.tick",
     "bot.ability.reflection.input",
     "bot.ability.reflection.output",
+    // The revision's applied behavior (the original's Revision output,
+    // decision D148).
+    "bot.ability.reflection.revision.output",
     "bot.ability.routines.reconcile",
     "bot.ability.offers",
     // Phase 3: the memory service's committed transaction (the original's
