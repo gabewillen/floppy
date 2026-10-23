@@ -874,6 +874,17 @@ fn answers_plan(path: &str) -> bool {
     )
 }
 
+/// Whether the request is one a reasoning model cut off at its token
+/// bound: the first two drafts on `/truncated/v1` and the first two plans
+/// on `/truncatedplan/v1`.
+fn truncates(path: &str, schema: Option<&str>, authors: usize, plans: usize) -> bool {
+    match (path, schema) {
+        ("/truncated/v1/chat/completions", Some("scxml_draft")) => authors <= 2,
+        ("/truncatedplan/v1/chat/completions", Some("topology_plan")) => plans <= 2,
+        _ => false,
+    }
+}
+
 /// The mock's answer to one request on `path` requiring the function of
 /// `schema`, after `authors` draft and `plans` plan requests on that path.
 fn mock_reply(
@@ -883,11 +894,10 @@ fn mock_reply(
     plans: usize,
     body: &[u8],
 ) -> Option<String> {
+    if truncates(path, schema, authors, plans) {
+        return Some(truncated_completion());
+    }
     match (path, schema) {
-        // Two plans a reasoning model cut off at its token bound, then a plan.
-        ("/truncatedplan/v1/chat/completions", Some("topology_plan")) if plans <= 2 => {
-            Some(truncated_completion())
-        }
         (_, Some("topology_plan")) if answers_plan(path) => Some(completion(PLAN)),
         ("/flaky/v1/chat/completions", Some("topology_plan")) => {
             (plans != 2).then(|| completion(PLAN))
@@ -898,10 +908,6 @@ fn mock_reply(
         // The first plan is held (see `Mock::start`) and answered late.
         ("/slow/v1/chat/completions", Some("topology_plan")) => {
             Some(completion(if plans == 1 { LATE_PLAN } else { PLAN }))
-        }
-        // Two replies a reasoning model cut off at its token bound, then a draft.
-        ("/truncated/v1/chat/completions", Some("scxml_draft")) if authors <= 2 => {
-            Some(truncated_completion())
         }
         (
             "/slow/v1/chat/completions"

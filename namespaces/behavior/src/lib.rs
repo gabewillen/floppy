@@ -1437,6 +1437,51 @@ const NOT_A_BOOLEAN: &str = "behavior:verify_apply handled is not a boolean";
 /// `<behavior:verify_apply>`'s error that is not a name.
 const NOT_AN_ERROR: &str = "behavior:verify_apply error is not a string or null";
 
+/// `<behavior:verify_apply>`'s error: its message, or none.
+fn apply_error<H: BehaviorHost>(
+    host: &mut H,
+    error: Option<&str>,
+) -> Result<Option<String>, Failure<H::Error>> {
+    let Some(error) = error else {
+        return Ok(None);
+    };
+    match evaluate(host, error, NOT_AN_ERROR, NOT_AN_ERROR)? {
+        Json::Null => Ok(None),
+        Json::String(error) => Ok(Some(error)),
+        _ => Err(Failure::Execution(NOT_AN_ERROR)),
+    }
+}
+
+/// `<behavior:verify_apply>`'s choices: the turn's, or none.
+fn apply_choices<H: BehaviorHost>(
+    host: &mut H,
+    choices: Option<&str>,
+) -> Result<Vec<Json>, Failure<H::Error>> {
+    let Some(choices) = choices else {
+        return Ok(Vec::new());
+    };
+    match evaluate(host, choices, NOT_CHOICES, NOT_CHOICES)? {
+        Json::Null => Ok(Vec::new()),
+        Json::Array(choices) if choices.iter().all(Json::is_object) => Ok(choices),
+        _ => Err(Failure::Execution(NOT_CHOICES)),
+    }
+}
+
+/// `<behavior:verify_apply>`'s handled: whether the run must handle the
+/// turn (default true).
+fn apply_handled<H: BehaviorHost>(
+    host: &mut H,
+    handled: Option<&str>,
+) -> Result<bool, Failure<H::Error>> {
+    let Some(handled) = handled else {
+        return Ok(true);
+    };
+    match evaluate(host, handled, NOT_A_BOOLEAN, NOT_A_BOOLEAN)? {
+        Json::Bool(required) => Ok(required),
+        _ => Err(Failure::Execution(NOT_A_BOOLEAN)),
+    }
+}
+
 /// Executes `<behavior:verify_apply>`.
 fn verify_apply_element<H: BehaviorHost>(
     attributes: &[Attribute],
@@ -1511,29 +1556,9 @@ fn verify_apply_element<H: BehaviorHost>(
             _ => Err(Failure::Execution(NOT_STRINGS)),
         })
         .collect::<Result<Vec<String>, _>>()?;
-    let error = match error {
-        None => None,
-        Some(error) => match evaluate(host, error, NOT_AN_ERROR, NOT_AN_ERROR)? {
-            Json::Null => None,
-            Json::String(error) => Some(error),
-            _ => return Err(Failure::Execution(NOT_AN_ERROR)),
-        },
-    };
-    let choices = match choices {
-        None => Vec::new(),
-        Some(choices) => match evaluate(host, choices, NOT_CHOICES, NOT_CHOICES)? {
-            Json::Null => Vec::new(),
-            Json::Array(choices) if choices.iter().all(Json::is_object) => choices,
-            _ => return Err(Failure::Execution(NOT_CHOICES)),
-        },
-    };
-    let required = match handled {
-        None => true,
-        Some(handled) => match evaluate(host, handled, NOT_A_BOOLEAN, NOT_A_BOOLEAN)? {
-            Json::Bool(required) => required,
-            _ => return Err(Failure::Execution(NOT_A_BOOLEAN)),
-        },
-    };
+    let error = apply_error(host, error)?;
+    let choices = apply_choices(host, choices)?;
+    let required = apply_handled(host, handled)?;
     let done = (!done.is_null()).then_some(done);
     let messages = verify_apply(
         done.as_ref(),
