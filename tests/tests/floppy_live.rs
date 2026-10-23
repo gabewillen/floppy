@@ -54,7 +54,13 @@ fn start_body(body: &Path) -> Run {
 /// [`start_body`] with the bot holding `devices`, which the room does not
 /// run (every read of one fails and it offers nothing).
 fn start_holding(body: &Path, devices: &[&str]) -> Run {
-    let mut args = Vec::new();
+    start_granting(body, devices, &[])
+}
+
+/// [`start_holding`] with the run also granting `grants` (`--dir` and
+/// `--wasi` arguments), as a speech grant for the sounds a test sends.
+fn start_granting(body: &Path, devices: &[&str], grants: &[String]) -> Run {
+    let mut args = grants.to_vec();
     for file in support::live_env_files() {
         args.push("--env-file".to_owned());
         args.push(file.display().to_string());
@@ -532,8 +538,9 @@ fn live_conversation() {
 /// second of silence, which closes the utterance. The listening detects
 /// the voice (`FLOPPY_VOICE_BASE_URL`, `LocalAI`'s `/vad` or
 /// `scripts/vad-server.py`), decodes the words (`FLOPPY_SPEECH_BASE_URL`)
-/// and hands them over as a turn, which the bot answers aloud. The env
-/// files must also hold the speech and voice variables.
+/// and hands them over as a turn, which the bot answers aloud. The bot
+/// runs in the room, which delivers each sound to it. The env files must
+/// also hold the speech and voice variables.
 #[test]
 #[ignore = "makes real decision, model, speech and voice calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_listening() {
@@ -544,26 +551,9 @@ fn live_listening() {
     )
     .expect("the question is copyable");
     std::fs::write(media.join("silence.pcm"), vec![0_u8; 48_000]).expect("writable");
-    let mut args = vec![
-        "--dir".to_owned(),
-        format!(
-            "{}={}::/media",
-            support::service_uri("speech"),
-            media.display()
-        ),
-    ];
-    for file in support::live_env_files() {
-        args.push("--env-file".to_owned());
-        args.push(file.display().to_string());
-    }
-    args.push(
-        workspace()
-            .join("bots/floppy/floppy.scx")
-            .display()
-            .to_string(),
-    );
-    let mut run = Run::start(&args, &[]);
-    run.event("bot.activate", &json!({"model": model()}));
+    // In the room, which activates the bot with the run's fuel (decision
+    // D111) and gives each sound to every participant (D103).
+    let mut run = start_granting(&scratch_bot(), &[], &support::speech_grant(&media));
     run.until(Duration::from_mins(2), |record| {
         record["type"] == "log" && record["label"] == "bot.activated"
     });

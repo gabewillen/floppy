@@ -17,8 +17,8 @@
 
   opening invokes the memory
   ability (abilities/memory/memory.scx, which migrates the database to
-  floppy's head revision, bot_stm_memory since 0001 and bot_stm_turn since
-  0003) with one read of bot_stm_turn, then
+  floppy's head revision, 0001, which holds bot_stm_memory and
+  bot_stm_turn) with one read of bot_stm_turn, then
   sends bot.ability.offers {ability: "stm", choices: []} to the parent
   once: the register offers nothing to the cognition, and that first
   offer is its readiness. A database that cannot be opened (logged as
