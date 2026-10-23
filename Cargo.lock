@@ -507,6 +507,8 @@ dependencies = [
 name = "floppy-tests"
 version = "0.1.0"
 dependencies = [
+ "floppy-cognition",
+ "quick-xml",
  "scx",
  "scxml-event-schema",
  "scxml-reporting",

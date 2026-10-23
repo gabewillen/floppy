@@ -7,6 +7,7 @@
     "spec": {"type": "string", "minLength": 1},
     "name": {"type": "string", "minLength": 1},
     "constraints": {"type": "array", "items": {"type": "string"}, "maxItems": 32},
+    "context": {"type": "object", "description": "Data the specification refers to, which the design and author prompts carry beside it as model-facing XML (decision D201) [floppy field]."},
     "max_attempts": {"type": "integer", "minimum": 1, "maximum": 8},
     "model": {"type": "string", "minLength": 1},
     "generate_timeout_ms": {"type": "integer", "minimum": 1, "maximum": 3600000},

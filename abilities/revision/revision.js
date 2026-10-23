@@ -69,11 +69,11 @@ function changeWriteInputWithIntent() {
   return Object.assign(write, {intent: intent, existing_behavior: existing_behavior});
 }
 
-// The change instructions with the change input, for the builder, which
-// checks the document it builds against the lifetime bounds (min_every,
-// turn_after_bound).
+// The change instructions with the change input as their context, for the
+// builder, which checks the document it builds against the lifetime bounds
+// (min_every, turn_after_bound).
 function builderRequest() {
-  return ({spec: change_instructions + '\n\n' + JSON.stringify(write), name: intent.name, model: model, min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms, apply: liveTurn()});
+  return ({spec: change_instructions, context: write, name: intent.name, model: model, min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms, apply: liveTurn()});
 }
 
 // The live turn the builder runs a turn behavior on (the live-turn
@@ -95,9 +95,14 @@ function builderConstraints() {
 // The turn behavior contract with the grounded triggers it is stored under
 // (autonomy matches them against the stimulus event), the targets this
 // turn's output names, and this turn's input (behavior_input, as autonomy
-// builds it).
+// builds it, in model-facing XML: decision D201).
 function turnContract() {
-  return turn_contract.replace(/TRIGGERS|TARGETS|INPUT/g, function (m) { return JSON.stringify(m === 'INPUT' ? behavior_input : m === 'TARGETS' ? outputTargets() : triggers); });
+  return turn_contract.replace(/TRIGGERS|TARGETS|INPUT/g, function (m) { return m === 'INPUT' ? turn_input : namesText(m === 'TARGETS' ? outputTargets() : triggers); });
+}
+
+// Names as a parenthesized, comma-separated list.
+function namesText(names) {
+  return '(' + names.join(', ') + ')';
 }
 
 // The next occurrence of an at schedule {time: 'HH:MM', days, tz, rule}:

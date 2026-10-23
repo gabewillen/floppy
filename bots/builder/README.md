@@ -30,7 +30,7 @@ final states and its parent receives that state's done data as
 
 | What | How | Data ([`schemas/`](schemas)) |
 | --- | --- | --- |
-| `builder.request` | an event to the builder (standard input when run directly) | `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?, document_max_completion_tokens?}`: the specification, the name the draft's documents are written under (default the plan's; each run of characters other than letters, digits, `_` and `-` becomes `_`; reflection sends the behavior's), extra constraints (strings), the failure cap (1 to 8, default 8, decision D133), the generate service's model (default `Qwen/Qwen3.8-Flash-Next`, a reasoning model), the time each streamed generation may go without progress, and each generation may take in all, before `builder.timeout` cancels it (1 ms to 1 h each, defaults 30000 and 1200000), and the lifetime bounds (1 ms to 1 day each, no default: without them neither the lifetime check nor the forced tick runs; reflection sends 60000 and 1000, `ROUTINE_MIN_EVERY` and `TURN_SILENCE_BOUND`, decision D84), and the live turn a turn behavior is run on before it is built (`{turn, input, targets}`: the turn, the behavior input as autonomy builds it, and the sessions that turn's output names, at most 32; no default: without it a turn behavior runs only its own tests; reflection sends its turn's, decision D131), and the author call's first token bound (1024 to 65536, default 16384; a truncated author generation doubles it for the next author call, up to 65536, decision D135) |
+| `builder.request` | an event to the builder (standard input when run directly) | `{spec, name?, constraints?, context?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?, document_max_completion_tokens?}`: the specification, the name the draft's documents are written under (default the plan's; each run of characters other than letters, digits, `_` and `-` becomes `_`; reflection sends the behavior's), extra constraints (strings), the data the specification refers to (an object, which the design and author prompts carry beside it; reflection sends the change input, decision D201), the failure cap (1 to 8, default 8, decision D133), the generate service's model (default `Qwen/Qwen3.8-Flash-Next`, a reasoning model), the time each streamed generation may go without progress, and each generation may take in all, before `builder.timeout` cancels it (1 ms to 1 h each, defaults 30000 and 1200000), and the lifetime bounds (1 ms to 1 day each, no default: without them neither the lifetime check nor the forced tick runs; reflection sends 60000 and 1000, `ROUTINE_MIN_EVERY` and `TURN_SILENCE_BOUND`, decision D84), and the live turn a turn behavior is run on before it is built (`{turn, input, targets}`: the turn, the behavior input as autonomy builds it, and the sessions that turn's output names, at most 32; no default: without it a turn behavior runs only its own tests; reflection sends its turn's, decision D131), and the author call's first token bound (1024 to 65536, default 16384; a truncated author generation doubles it for the next author call, up to 65536, decision D135) |
 | final state `done` | its `<donedata>` ([`schemas/done.json`](schemas/done.json)) | `{scxml, schemas, script, path, tests, report}`: the built document's three parts (its SCXML, its input event schemas as one object with `$defs` keyed by event, and its ECMAScript, `""` for none), the path of the `.scx` they were written as (`../../behaviors/<name>.scx`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
 | final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics, history, scxml?, path?}`: `invalid-request`, `unconfigured` (the run holds no `FLOPPY_BASE_URL`; the first generation ends the build at once), `attempts-exhausted` (the failure cap, decision D133), or `abandoned`, with the last diagnostics (`{kind, code, message}`), the failure history (every failure's attempt and diagnostics, as in `done`'s report), and `scxml`, the last draft a check (`validate`, the lifetime check, `simulate`) rejected, with `path`, where it was written, both absent when no draft was rejected (the reflection stores the rejected source as a draft) |
 
@@ -89,6 +89,12 @@ intake -> design -> author -> writing -> validate -> simulate -> done
                        +--------- triage <- retry_gate -> failed
                                   fallback
 ```
+
+Each generation's prompt is its request as model-facing XML
+(`<cognition:model_facing_data>`, decision D201): a `<request task>`
+whose fields are the spec, the context, the constraints and what the stage
+carries, a document or script as the text it is written in, never JSON
+text.
 
 * `design`: invokes the generate service
   (`https://github.com/stateforward/floppy/services/generate`, a
@@ -286,7 +292,7 @@ reaches it during its simulation like the builder does.
 
 Everything a run needs is in the document:
 
-* Its `decision` namespace and its `<invoke type>`s (`generate`,
+* Its `cognition` and `decision` namespaces and its `<invoke type>`s (`generate`,
   `decision`, `files`) are tagless repository URIs
   (`https://github.com/stateforward/floppy/namespaces/<name>`,
   `.../services/<name>`), which name floppy's latest release: `scx`

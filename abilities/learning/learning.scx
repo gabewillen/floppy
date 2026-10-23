@@ -50,12 +50,13 @@
   Contracts: the events it takes reference abilities/schemas/ by
   event:schema (never inline).
 
-  Bindings: the decision, processing and behavior namespace packages and
-  the generate service package, and the revision's; env scopes
+  Bindings: the cognition, decision, processing and behavior namespace
+  packages and the generate service package, and the revision's; env scopes
   FLOPPY_API_KEY, FLOPPY_BASE_URL and FLOPPY_STREAM to the select call.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior"
+       xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
@@ -79,9 +80,10 @@
     <data id="prior_episodes" expr="[]"/>
     <data id="behaviors" expr="[]"/>
     <data id="statements" expr="[]"/>
-    <!-- The select call. -->
+    <!-- The select call, its input as model-facing XML (decision D201). -->
     <data id="choices" expr="[]"/>
     <data id="schema" expr="null"/>
+    <data id="select_input" expr="null"/>
     <data id="gen_id" expr="null"/>
     <data id="answered" expr="false"/>
     <data id="gen_failure" expr="null"/>
@@ -172,6 +174,7 @@
            not offered (decision D100). -->
       <decision:pin location="choices" event="bot.behavior.change" property="name" values="behaviorNames()"/>
       <processing:send location="schema" choices="choices" max="1"/>
+      <cognition:model_facing_data location="select_input" root="lesson" data="selectInput()"/>
       <assign location="answered" expr="false"/>
       <assign location="gen_failure" expr="null"/>
       <!-- The inactivity bound starts with the streamed reply's first
@@ -187,7 +190,7 @@
             env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL" env:stream="FLOPPY_STREAM">
       <param name="model" expr="model"/>
       <param name="system" expr="learn_instructions"/>
-      <param name="prompt" expr="selectPrompt()"/>
+      <param name="prompt" expr="select_input"/>
       <param name="schema" expr="schema"/>
       <param name="schemaname" expr="'dispatch'"/>
     </invoke>

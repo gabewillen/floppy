@@ -127,13 +127,15 @@
   Contracts: the events it takes reference abilities/schemas/ by
   event:schema (never inline).
 
-  Bindings: the decision, processing and behavior namespace packages and
-  the generate service package, and the revision's (the autonomy
-  namespace and files service packages); env scopes FLOPPY_API_KEY and FLOPPY_BASE_URL to the select
-  call (the builder scopes its own).
+  Bindings: the cognition, decision, processing and behavior namespace
+  packages and the generate service package, and the revision's (the
+  autonomy namespace and files service packages); env scopes
+  FLOPPY_API_KEY and FLOPPY_BASE_URL to the select call (the builder
+  scopes its own).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior"
+       xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
@@ -166,6 +168,8 @@
     <!-- The select call. -->
     <data id="choices" expr="[]"/>
     <data id="schema" expr="null"/>
+    <!-- The select input as model-facing XML (decision D201). -->
+    <data id="select_input" expr="null"/>
     <data id="gen_id" expr="null"/>
     <data id="selected" expr="null"/>
     <data id="gen_failure" expr="null"/>
@@ -319,6 +323,7 @@
       <else/>
         <processing:send location="schema" choices="choices" max="1"/>
       </if>
+      <cognition:model_facing_data location="select_input" root="reflection_input" data="selectInput()"/>
       <assign location="selected" expr="null"/>
       <assign location="gen_failure" expr="null"/>
       <assign location="gen_rejection" expr="null"/>

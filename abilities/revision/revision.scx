@@ -73,6 +73,7 @@
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:autonomy="https://github.com/stateforward/floppy/namespaces/autonomy"
        xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior"
+       xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="revision" initial="preparing">
   <datamodel>
@@ -105,6 +106,9 @@
          (<autonomy:behavior_input_payload>), for the turn behavior
          contract. -->
     <data id="behavior_input" expr="null"/>
+    <!-- This turn's behavior input as model-facing XML, for the turn
+         behavior contract (decision D201). -->
+    <data id="turn_input" expr="null"/>
     <!-- The written document's lifetime (by <behavior:lifetime_errors>, which also writes its unbounded
          diagnostics: the builder already checked the bounds). -->
     <data id="lifetime" expr="'turn'"/>
@@ -231,6 +235,7 @@
       <assign location="write" expr="changeWriteInputWithIntent()"/>
       <autonomy:behavior_input_payload location="behavior_input" stimulus="cognition_input.stimulus"
           focus="cognition_input.focus" focus_candidates="cognition_input.focus_candidates"/>
+      <cognition:model_facing_data location="turn_input" root="input" data="behavior_input"/>
       <assign location="request" expr="builderRequest()"/>
       <assign location="request.constraints" expr="builderConstraints()"/>
       <send event="builder.request" target="#_builder">

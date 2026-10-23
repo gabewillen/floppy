@@ -36,6 +36,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde_json::{Map, Value as Json, json};
+use support::model_facing::{read, rendered};
 use support::{Run, logs, unique_scratch, workspace};
 
 /// Bounded wait for any one expected record (scx startup and a builder run
@@ -618,13 +619,17 @@ fn an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it_on(databas
             .message("system")
             .starts_with("Select at most one offered behavior inventory event"),
     );
-    let prompt = |index: usize| -> Json {
-        serde_json::from_str(&selects[index].message("user")).expect("the select prompt is JSON")
-    };
-    assert_eq!(prompt(0)["prior_episodes"], json!([]));
-    assert_eq!(prompt(0)["behaviors"], json!([]));
-    assert_eq!(prompt(0)["cognition_input"], input(1)["cognition_input"]);
-    assert_eq!(prompt(1)["prior_episodes"], json!([episode]));
+    let prompt = |index: usize| -> Json { read(&selects[index].message("user")) };
+    assert_eq!(prompt(0)["prior_episodes"], Json::Null);
+    assert_eq!(prompt(0)["behaviors"], Json::Null);
+    assert_eq!(
+        prompt(0)["cognition_input"],
+        rendered("cognition_input", &input(1)["cognition_input"])
+    );
+    assert_eq!(
+        prompt(1)["prior_episodes"],
+        rendered("prior_episodes", &json!([episode]))
+    );
     // With an empty inventory only a create is offered: nothing could be
     // changed or broken (decision D100).
     assert_eq!(
@@ -693,8 +698,7 @@ fn a_break_marks_the_behavior_broken_and_keeps_it_on(database: &str) {
         break_selection("GreetOnKnock")[0]["data"]
     );
     // The select step saw the inventory with its usage.
-    let prompt: Json = serde_json::from_str(&mock.requests("dispatch")[0].message("user"))
-        .expect("the select prompt is JSON");
+    let prompt = read(&mock.requests("dispatch")[0].message("user"));
     assert_eq!(prompt["behaviors"][0]["name"], "GreetOnKnock");
     // A change or a break names a behavior the inventory holds (decision
     // D100).
@@ -806,7 +810,7 @@ fn a_refused_selection_is_asked_again_with_its_diagnostic_and_learns() {
     assert_eq!(selects.len(), 2);
     assert_eq!(selects[1].message("system"), selects[0].message("system"));
     let first = selects[0].message("user");
-    serde_json::from_str::<Json>(&first).expect("the first select prompt is JSON");
+    assert!(first.ends_with("</reflection_input>"), "{first}");
     let repair = selects[1].message("user");
     assert!(
         repair.starts_with(&format!(
@@ -906,8 +910,9 @@ fn each_turn_starts_its_select_unrepaired() {
     assert_eq!(texts(&second, "harness.output"), ["answered"], "{second:?}");
     let selects = mock.requests("dispatch");
     assert_eq!(selects.len(), 4);
-    serde_json::from_str::<Json>(&selects[2].message("user"))
-        .expect("the second turn's first select prompt is plain JSON");
+    // The second turn's first select prompt is its input alone.
+    let unrepaired = selects[2].message("user");
+    assert!(unrepaired.ends_with("</reflection_input>"), "{unrepaired}");
     let rejected = texts(&second, "reflection.rejected");
     assert_eq!(rejected.len(), 1, "{rejected:?}");
     assert!(
@@ -978,19 +983,17 @@ fn a_create_is_built_and_stored_active_with_grounded_triggers_on(database: &str)
     // turn behavior contract.
     let drafts = mock.requests("scxml_draft");
     assert_eq!(drafts.len(), 1);
-    let spec: Json =
-        serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
-    let spec = spec["spec"].as_str().expect("the spec").to_owned();
+    let prompt = read(&drafts[0].message("user"));
+    let spec = prompt["spec"].as_str().expect("the spec");
     assert!(
         spec.starts_with("Author or revise the SCXML program"),
         "{spec}"
     );
-    assert!(spec.contains(r#""status":"DRAFT""#), "{spec}");
-    assert!(spec.contains(r#""name":"GreetOnKnock""#), "{spec}");
+    let context = &prompt["context"];
+    assert_eq!(context["existing_behavior"]["status"], "DRAFT", "{prompt}");
+    assert_eq!(context["intent"]["name"], "GreetOnKnock", "{prompt}");
     // The persistent routine contract carries the at schedule's
     // next_after for the routine's data model.
-    let prompt: Json =
-        serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
     assert!(
         prompt["constraints"][1]
             .as_str()
@@ -1021,20 +1024,20 @@ fn the_builder_is_told_the_triggers_and_the_input_the_behavior_runs_with() {
     );
     let drafts = mock.requests("scxml_draft");
     assert_eq!(drafts.len(), 1);
-    let prompt: Json =
-        serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
+    let prompt = read(&drafts[0].message("user"));
     let contract = prompt["constraints"][0]
         .as_str()
         .expect("the turn behavior contract")
         .to_owned();
     assert!(contract.starts_with("Write a turn behavior"), "{contract}");
     assert!(
-        contract.contains(r#"its triggers ["environment.sound"]"#),
+        contract.contains("its triggers (environment.sound)"),
         "{contract}"
     );
     assert!(
         contract.contains(
-            r#"for this turn input is {"focus":"door","focus_candidates":["door"],"label":"knock"}"#
+            "for this turn input is <input focus=\"door\" label=\"knock\">\n  \
+             <focus_candidates count=\"1\">\n    <item>door</item>\n  </focus_candidates>\n</input>"
         ),
         "{contract}"
     );
@@ -1089,13 +1092,12 @@ fn a_create_passes_only_when_its_draft_selects_on_the_live_input() {
     );
     let drafts = mock.requests("scxml_draft");
     assert_eq!(drafts.len(), 1);
-    let prompt: Json =
-        serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
+    let prompt = read(&drafts[0].message("user"));
     let contract = prompt["constraints"][0]
         .as_str()
         .expect("the turn behavior contract");
     assert!(
-        contract.contains(r#"whose targets are among ["communication"]"#),
+        contract.contains("whose targets are among (communication)"),
         "{contract}"
     );
     assert!(
@@ -1305,12 +1307,8 @@ fn a_change_reads_the_stored_documents_back_for_the_builder() {
     );
     let drafts = mock.requests("scxml_draft");
     assert_eq!(drafts.len(), 1, "{records:?}");
-    let prompt: Json =
-        serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
-    let spec = prompt["spec"].as_str().expect("the spec");
-    let write: Json = serde_json::from_str(spec.rsplit("\n\n").next().expect("the input"))
-        .expect("the change write input is JSON");
-    let existing = &write["existing_behavior"];
+    let prompt = read(&drafts[0].message("user"));
+    let existing = &prompt["context"]["existing_behavior"];
     assert_eq!(existing["source"], GREET_PATH, "{existing}");
     assert_eq!(existing["scxml"], old.as_str(), "{existing}");
     assert_eq!(
@@ -1420,11 +1418,13 @@ fn failed_and_cancelled_turns_are_remembered_without_a_select() {
     assert_eq!(texts(&completed, "reflection.selected"), ["none"]);
     let selects = mock.requests("dispatch");
     assert_eq!(selects.len(), 1);
-    let prompt: Json =
-        serde_json::from_str(&selects[0].message("user")).expect("the select prompt is JSON");
+    let prompt = read(&selects[0].message("user"));
     assert_eq!(
         prompt["prior_episodes"],
-        json!([failed_episode, cancelled_episode])
+        rendered(
+            "prior_episodes",
+            &json!([failed_episode, cancelled_episode])
+        )
     );
     assert_eq!(
         json_log(&completed, "episodes")[2]["content"],
@@ -1462,9 +1462,8 @@ fn a_selected_persona_revision_is_sent_up() {
         selects[0].body["tools"][0]["function"]["parameters"]["properties"]["events"]["maxItems"],
         2
     );
-    let prompt: Json =
-        serde_json::from_str(&selects[0].message("user")).expect("the select prompt is JSON");
-    assert_eq!(prompt["self"], persona_self()["self"]);
+    let prompt = read(&selects[0].message("user"));
+    assert_eq!(prompt["self"], rendered("self", &persona_self()["self"]));
 }
 
 /// A revision selected after a create is still sent up, and the create is

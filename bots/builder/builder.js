@@ -43,7 +43,7 @@ function firstDiagnosticSummary() {
 
 // Whether the builder.request data satisfies schemas/builder.request.json.
 function satisfiesBuilderRequest(_event) {
-  return _event.data !== null && typeof _event.data === 'object' && !Array.isArray(_event.data) && Object.keys(_event.data).every(function (k) { return ['spec', 'name', 'constraints', 'max_attempts', 'model', 'generate_timeout_ms', 'generate_ceiling_ms', 'min_every_ms', 'turn_after_bound_ms', 'apply', 'document_max_completion_tokens'].indexOf(k) >= 0; }) && isOptionalBound(_event.data.min_every_ms) && isOptionalBound(_event.data.turn_after_bound_ms) && isOptionalApply(_event.data.apply) && typeof _event.data.spec === 'string' && _event.data.spec.trim().length > 0 && (_event.data.name === undefined || (typeof _event.data.name === 'string' && _event.data.name.length > 0)) && (_event.data.constraints === undefined || (Array.isArray(_event.data.constraints) && _event.data.constraints.length <= 32 && _event.data.constraints.every(function (c) { return typeof c === 'string'; }))) && (_event.data.max_attempts === undefined || (Number.isInteger(_event.data.max_attempts) && _event.data.max_attempts >= 1 && _event.data.max_attempts <= 8)) && (_event.data.model === undefined || (typeof _event.data.model === 'string' && _event.data.model.length > 0)) && isOptionalGenerateBound(_event.data.generate_timeout_ms) && isOptionalGenerateBound(_event.data.generate_ceiling_ms) && (_event.data.document_max_completion_tokens === undefined || (Number.isInteger(_event.data.document_max_completion_tokens) && _event.data.document_max_completion_tokens >= 1024 && _event.data.document_max_completion_tokens <= document_token_ceiling));
+  return _event.data !== null && typeof _event.data === 'object' && !Array.isArray(_event.data) && Object.keys(_event.data).every(function (k) { return ['spec', 'name', 'constraints', 'context', 'max_attempts', 'model', 'generate_timeout_ms', 'generate_ceiling_ms', 'min_every_ms', 'turn_after_bound_ms', 'apply', 'document_max_completion_tokens'].indexOf(k) >= 0; }) && isOptionalBound(_event.data.min_every_ms) && isOptionalBound(_event.data.turn_after_bound_ms) && isOptionalApply(_event.data.apply) && typeof _event.data.spec === 'string' && _event.data.spec.trim().length > 0 && (_event.data.context === undefined || (_event.data.context !== null && typeof _event.data.context === 'object' && !Array.isArray(_event.data.context))) && (_event.data.name === undefined || (typeof _event.data.name === 'string' && _event.data.name.length > 0)) && (_event.data.constraints === undefined || (Array.isArray(_event.data.constraints) && _event.data.constraints.length <= 32 && _event.data.constraints.every(function (c) { return typeof c === 'string'; }))) && (_event.data.max_attempts === undefined || (Number.isInteger(_event.data.max_attempts) && _event.data.max_attempts >= 1 && _event.data.max_attempts <= 8)) && (_event.data.model === undefined || (typeof _event.data.model === 'string' && _event.data.model.length > 0)) && isOptionalGenerateBound(_event.data.generate_timeout_ms) && isOptionalGenerateBound(_event.data.generate_ceiling_ms) && (_event.data.document_max_completion_tokens === undefined || (Number.isInteger(_event.data.document_max_completion_tokens) && _event.data.document_max_completion_tokens >= 1024 && _event.data.document_max_completion_tokens <= document_token_ceiling));
 }
 
 // An absent lifetime bound, or one of 1 ms to 1 day.
@@ -68,6 +68,10 @@ function requestBound(value) {
 
 function requestName(_event) {
   return _event.data.name === undefined ? null : _event.data.name;
+}
+
+function requestContext(_event) {
+  return _event.data.context === undefined ? null : _event.data.context;
 }
 
 function requestConstraints(_event) {
@@ -157,8 +161,9 @@ function designLog() {
   return (previous_plan === null ? 'planning' : 'replanning') + ' the topology; failures ' + failures;
 }
 
-function designPrompt() {
-  return JSON.stringify({task: 'design', spec: spec, constraints: constraints, previous_plan: previous_plan, diagnostics: diagnostics});
+// The design request (model-facing XML in the prompt, decision D201).
+function designRequest() {
+  return ({task: 'design', spec: spec, context: context, constraints: constraints, previous_plan: previous_plan, diagnostics: diagnostics});
 }
 
 // The arguments of a generate.result's first call of the function
@@ -190,9 +195,11 @@ function authorSystem() {
   return author_system + '\n\nThe SCXML 1.0 XML Schema (W3C), whose modules follow, each after its file name: the document is valid against it, and every element, attribute and child it holds is one the schema declares for that place (attributes of another namespace, such as event:schema, are allowed where the schema allows ##other).\n\n' + scxml_xsd;
 }
 
-function authorPrompt() {
+// The draft or repair request (model-facing XML in the prompt, decision
+// D201).
+function authorRequest() {
   var repair = mode === 'repair';
-  return JSON.stringify({task: mode, name: fileName(), spec: spec, constraints: constraints, plan: plan, previous_scxml: repair ? scxml_text : null, previous_schemas: repair ? previous_schemas : null, previous_script: repair ? previous_script : null, previous_tests: repair ? previous_tests : null, diagnostics: diagnostics, repeated: repeated.map(function (d) { return d.message; })});
+  return ({task: mode, name: fileName(), spec: spec, context: context, constraints: constraints, plan: plan, previous_scxml: repair ? scxml_text : null, previous_schemas: repair ? previous_schemas : null, previous_script: repair ? previous_script : null, previous_tests: repair ? previous_tests : null, diagnostics: diagnostics, repeated: repeated.map(function (d) { return d.message; })});
 }
 
 function draftGenerated(_event) {

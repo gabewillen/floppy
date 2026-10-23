@@ -92,18 +92,19 @@ function selectCeilingDelay() {
   return select_ceiling_ms + 'ms';
 }
 
-// The select input, with the repair feedback (selection_feedback, decision
-// D130) last when this attempt repairs a rejection.
+// The select input (as model-facing XML, decision D201), with the repair
+// feedback (selection_feedback, decision D130) last when this attempt
+// repairs a rejection.
 function selectPrompt() {
-  return selectInputJson() + selectFeedback();
+  return select_input + selectFeedback();
 }
 
-function selectInputJson() {
+function selectInput() {
   var input = {cognition_input: cognition_input, cognition_output: cognition_output, prior_episodes: prior_episodes, behaviors: behaviors};
   if (hasPersona()) {
     input.self = self;
   }
-  return JSON.stringify(input);
+  return input;
 }
 
 // A persona to revise: the bot was told its owner's traits (decision D145).

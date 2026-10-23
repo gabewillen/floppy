@@ -10,6 +10,10 @@ authors.workspace = true
 publish.workspace = true
 
 [dev-dependencies]
+# Model-facing XML prompts (decision D201) are read back with the renderer
+# that writes them.
+floppy-cognition = { path = "../namespaces/cognition" }
+quick-xml.workspace = true
 # The generate package validator's fixes are applied with the `scx`
 # namespace's fix pass to the canonical report `scx validate` writes.
 scx.workspace = true

@@ -48,9 +48,9 @@ function behaviorNames() {
 }
 
 // The lesson, the turn it was taught on, the prior episodes and the
-// inventory.
-function selectPrompt() {
-  return JSON.stringify({lesson: lesson.content, cognition_input: lesson.cognition_input, cognition_output: lesson.cognition_output, prior_episodes: prior_episodes, behaviors: behaviors});
+// inventory (the select input, as model-facing XML: decision D201).
+function selectInput() {
+  return {content: lesson.content, cognition_input: lesson.cognition_input, cognition_output: lesson.cognition_output, prior_episodes: prior_episodes, behaviors: behaviors};
 }
 
 function selectTimeoutDelay() {

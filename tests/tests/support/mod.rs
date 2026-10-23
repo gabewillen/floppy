@@ -25,6 +25,7 @@
 )]
 
 pub mod hearing;
+pub mod model_facing;
 pub mod trace;
 
 use std::cell::RefCell;

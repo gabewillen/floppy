@@ -41,6 +41,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use serde_json::{Map, Value as Json, json};
+use support::model_facing::{read, rendered};
 use support::{Run, output, scratch, workspace, write};
 
 /// The fake keys (not secrets): the mock checks they arrive as bearers.
@@ -1004,8 +1005,8 @@ impl Received {
             .and_then(Json::as_str)
     }
 
-    /// The user message of a Chat Completions request, parsed (the builder
-    /// sends JSON text).
+    /// The user message of a Chat Completions request, read back (the
+    /// builder sends its request as model-facing XML, decision D201).
     fn user_input(&self) -> Json {
         let text = self
             .body
@@ -1019,7 +1020,7 @@ impl Received {
             .and_then(|message| message.get("content"))
             .and_then(Json::as_str)
             .expect("a user message");
-        serde_json::from_str(text).expect("the builder's user message is JSON")
+        read(text)
     }
 }
 
@@ -1742,8 +1743,8 @@ fn the_same_diagnostic_again_is_repeated_and_the_build_runs_to_its_cap() {
             .is_some_and(|system| system.ends_with(&xsd))),
         "every author call is given the schema"
     );
-    assert_eq!(drafts[0].user_input()["repeated"], json!([]));
-    assert_eq!(drafts[1].user_input()["repeated"], json!([]));
+    assert_eq!(drafts[0].user_input()["repeated"], Json::Null);
+    assert_eq!(drafts[1].user_input()["repeated"], Json::Null);
     let repeated = drafts[2].user_input()["repeated"].clone();
     assert!(
         repeated
@@ -2345,7 +2346,7 @@ fn the_same_validate_diagnostic_on_another_line_is_repeated() {
     let received = mock.received();
     let drafts = chat_requests(&received, "scxml_draft");
     assert_eq!(drafts.len(), 3, "no fourth draft");
-    assert_eq!(drafts[1].user_input()["repeated"], json!([]));
+    assert_eq!(drafts[1].user_input()["repeated"], Json::Null);
     assert_eq!(
         drafts[2].user_input()["repeated"].as_array().map(Vec::len),
         Some(1),
@@ -2391,7 +2392,7 @@ fn a_failure_after_another_is_repeated() {
     let received = mock.received();
     let drafts = chat_requests(&received, "scxml_draft");
     assert_eq!(drafts.len(), 4);
-    assert_eq!(drafts[2].user_input()["repeated"], json!([]));
+    assert_eq!(drafts[2].user_input()["repeated"], Json::Null);
     assert!(
         drafts[3].user_input()["repeated"]
             .as_array()
@@ -2542,7 +2543,10 @@ fn a_redesign_sends_the_previous_plan() {
     let designs = chat_requests(&received, "topology_plan");
     assert_eq!(designs.len(), 2, "one design, then the redesign");
     assert_eq!(designs[0].user_input()["previous_plan"], Json::Null);
-    let expected: Json = serde_json::from_str(PLAN).expect("the plan is JSON");
+    let expected = rendered(
+        "previous_plan",
+        &serde_json::from_str(PLAN).expect("the plan is JSON"),
+    );
     let second = designs[1].user_input();
     assert_eq!(
         second["previous_plan"], expected,
@@ -2570,7 +2574,10 @@ fn a_failed_redesign_keeps_the_previous_plan() {
     let received = mock.received();
     let designs = chat_requests(&received, "topology_plan");
     assert_eq!(designs.len(), 3, "a design, a failed redesign, a redesign");
-    let expected: Json = serde_json::from_str(PLAN).expect("the plan is JSON");
+    let expected = rendered(
+        "previous_plan",
+        &serde_json::from_str(PLAN).expect("the plan is JSON"),
+    );
     assert_eq!(designs[1].user_input()["previous_plan"], expected);
     assert_eq!(
         designs[2].user_input()["previous_plan"],
