@@ -148,7 +148,8 @@ function durationMs() {
   return typeof encoded.duration === 'number' && encoded.duration > 0 ? Math.round(encoded.duration * 1000) : 0;
 }
 
-// The original sends no efference copy without a duration.
+// The encoded speech has a measured duration: without one no efference
+// copy is sent and no pieces are commanded.
 function hasDuration() {
   return duration_ms > 0;
 }

@@ -41,4 +41,4 @@ measured on Linux x86_64) measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 20 / 20 | 0 | `3a42f489016c430115d47d948a1c0e24ff15e792d1db6a344e3290c52611ed92` | `402ec90fddaf72087d8bb3fa6b11c319c738c07ca5b74efec35fabc570111dcf` |
+| ECMAScript | 20 / 20 | 0 | `b321710247c2114b70de1b4934224869270c3da529d629c1b9e90a3583f5e8e9` | `87037b654189663394c9029a520f976f0f456570bbd864bca9918dbcf57b8614` |

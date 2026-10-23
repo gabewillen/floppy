@@ -1,29 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Reading ability (the reference abilities/reading): it focuses on one
-  readable text or image input and answers its invoker with normalized
-  readable text. Nothing in the bot invokes it yet: the original maps no
-  environment.visual to reading, so neither does floppy.
+  floppy's Reading ability: it focuses on one readable text or image input
+  and answers its invoker with normalized readable text. Nothing in the
+  bot invokes it yet: floppy maps no environment.visual to reading.
 
     Reading { Unfocused -bot.ability.reading.input-> Focused {
       Classifying { Applying -> Classified },
       DecodingText | DecodingImage | PreparingUnreadableOutput,
       EncodingOutput } -> Unfocused }
 
-  Reading is the document's own composite (the original's machine root): it
-  invokes abilities/vision/vision.scx as its long-lived child "vision" (the original's
-  visual classifier, invoked for reading's lifetime; invoke lifecycle
-  replaces the original's attachment group). Its other stages are the original's
-  providers inline: the text decoder and the output encoder pass their
-  input through (the original's mlx_vlm TextDecoder and ReadingOutputEncoder),
-  and the image decoder is the generate service with an image part.
+  Reading is the document's own composite: it invokes
+  abilities/vision/vision.scx as its long-lived child "vision" (the visual
+  classifier, invoked for reading's lifetime). Its other stages are
+  inline: the text decoder and the output encoder pass their input
+  through, and the image decoder is the generate service with an image part.
 
   Applying sends the input to the vision child as
   bot.ability.vision.classification.input and turns its
   bot.ability.vision.classification.output into
   bot.ability.reading.classification.completed {input, classification}
-  (the original's private completion), which goes to Classified. Classified is
-  the original's choice: text classified as text goes to DecodingText, an image
+  (a private completion), which goes to Classified. Classified is the
+  choice: text classified as text goes to DecodingText, an image
   classified as image to DecodingImage, unreadable to
   PreparingUnreadableOutput, and any other pairing answers
   bot.ability.reading.failed {stage: "classification"} at once.
@@ -32,14 +29,13 @@
   "text", confidence}; PreparingUnreadableOutput sends
   bot.ability.reading.unreadable.output.ready {text: "", source_kind:
   "unreadable", confidence}; DecodingImage invokes the generate service
-  with one user message whose content is the original's ImageDecoder prompt
+  with one user message whose content is the image decoder's prompt
   ("Read all visible text in this image. Return only the text.") as a
   text part ({kind: "text", content}) and the input's reference as an
-  image part ({kind: "image", content}), the original's reading parts, at
-  the original's image decoder settings (temperature 0, at most 512
-  tokens, decision D128), and sends
-  bot.ability.reading.image.decoded {text (the reply, trimmed as the original
-  does), source_kind: "image", confidence}. The confidence is the
+  image part ({kind: "image", content}), at the image decoder settings
+  (temperature 0, at most 512 tokens, decision D128), and sends
+  bot.ability.reading.image.decoded {text (the reply, with the white space
+  around it trimmed), source_kind: "image", confidence}. The confidence is the
   classification's. EncodingOutput sends
   bot.ability.reading.output.encoded with the candidate unchanged, and the
   transition taking it answers the parent with bot.ability.reading.output
@@ -51,11 +47,11 @@
   returns to Unfocused: the vision child's bot.ability.failed, an error
   while classifying, generate.failed (its code in the message), a reply
   without text, or an error while decoding the image. Applying and
-  DecodingImage are each bounded by the original's 30 s stage timeout
+  DecodingImage are each bounded by the 30 s stage timeout
   (stage_timeout_ms); leaving DecodingImage cancels the model call (SCXML
   6.4).
 
-  Deferral (the original defers the input while Focused): an input arriving
+  Deferral: an input arriving
   while Focused is held by <event:defer/> (scxml.rs namespaces/event) and
   comes back, in order, once Focused is exited, so Unfocused takes it as
   on arrival.
@@ -69,10 +65,8 @@
   (error.execution, a failed image_decoding). This document never holds
   image bytes.
 
-  Input: the original's input carries a typed media.Image and no kind since
-  fa45d93; that commit is superseded here by D36 (media is a URI
-  reference), so the input keeps the kind that tells a reference from text.
-  Its content is non-empty (the original's min_length=1, reading.py:50): an
+  Input: media is a URI reference (decision D36), so the input carries the
+  kind that tells a reference from text. Its content is non-empty: an
   empty one is refused by its schema and never reaches the reading.
 
   Logs: reading.focused (the input's kind), reading.output (the
@@ -170,7 +164,7 @@
           </transition>
         </state>
 
-        <!-- The original's choice: the route the classification selects. -->
+        <!-- The choice: the route the classification selects. -->
         <state id="Classified">
           <transition cond="classifiedAsText()" target="DecodingText"/>
           <transition cond="classifiedAsImage()" target="DecodingImage"/>

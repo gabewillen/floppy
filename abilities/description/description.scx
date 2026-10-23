@@ -1,55 +1,49 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Description (the original's image description) with the
-  original's GenerativeDescriber: what one image shows, in a few plain
-  sentences, asked of an image-capable model once per image. Seeing
+  floppy's Description: what one image shows, in a few plain sentences,
+  asked of an image-capable model once per image. Seeing
   (abilities/seeing/seeing.scx) invokes it once per view from the state
   that bounds its description stage; leaving that state cancels it and its
-  model call (SCXML 6.4), which replaces the original's stuck-stage recovery
-  (detach and re-attach).
+  model call (SCXML 6.4).
 
     description { idle -bot.ability.vision.description.input-> applying
       -generate.result-> replied } -> applied (final)
 
   Input: the <param>s image (a reference to the image, as
   environment.visual carries it) and media_type (the view's, or null),
-  model (the vision model, as reading's) and instructions (the original's
-  DESCRIBE_INSTRUCTIONS, verbatim).
+  model (the vision model, as reading's) and instructions (by default the
+  instructions <data> below).
 
   idle sends its input to itself as bot.ability.vision.description.input
-  {image, media_type} (the original's media.Image, by reference); the
-  transition taking it carries its event:schema, so a missing or malformed
-  image is error.execution here and a failure.
+  {image, media_type} (the image by reference); the transition taking it
+  carries its event:schema, so a missing or malformed image is
+  error.execution here and a failure.
 
   applying invokes the generate service with one user message whose
   content is the instructions as a text part ({kind: "text", content})
   and the image's reference as an image part ({kind: "image", content}),
-  the original's TextPart and ImagePart, as reading builds them. Its text
-  reply goes to replied.
+  as reading builds them. Its text reply goes to replied.
 
-  replied is the original's GenerativeDescriber and the Description's
-  output guard: the reply is trimmed; an empty one fails ("the generator
-  answered with an empty description"); it is sent to itself as
-  bot.ability.vision.description.output {description} (the original's bare
-  string, wrapped), whose schema admits at most the original's
-  MAX_DESCRIPTION_CHARS (4000) characters, and the transition taking it
-  answers the parent with it.
+  replied is the describer's output guard: the reply is trimmed; an empty
+  one fails ("the generator answered with an empty description"); it is
+  sent to itself as
+  bot.ability.vision.description.output {description}, whose schema admits
+  at most 4000 characters, and the transition taking it answers the parent
+  with it.
 
-  Failures: the parent gets bot.ability.failed {message} (the original's
-  FailureData, its message the original's error text where it has one): an
-  empty reply, generate.failed ("Description generator failed: <code>."),
-  a result without text, a description over 4000 characters (the original's
-  invalid-output failure, "Description produced output that does not match
-  its output schema."), or a step that cannot run ("Description could not
-  run (<error event>)": a malformed input, or an image the generate service
-  cannot read, which rejects its start). Either answer ends the
-  description in applied.
+  Failures: the parent gets bot.ability.failed {message}: an empty reply,
+  generate.failed ("Description generator failed: <code>."), a result
+  without text, a description over 4000 characters (an output its schema
+  refuses, "Description produced output that does not match its output
+  schema."), or a step that cannot run ("Description could not run (<error
+  event>)": a malformed input, or an image the generate service cannot
+  read, which rejects its start). Either answer ends the description in
+  applied.
 
   Media by reference: the generate service reads the image from the media
   directory the run grants it as /media and sends it as a data: URL; this
-  document never holds image bytes. The original's check that the model
-  can take the image is the service's (an image it cannot send rejects
-  its start).
+  document never holds image bytes. Whether the model can take the image
+  is the service's check (an image it cannot send rejects its start).
 
   Logs: description.failed (the failure message); never the description.
 
@@ -78,7 +72,7 @@
   </datamodel>
   <script src="description.js"/>
 
-  <!-- Any failure answers the parent with the original's FailureData. -->
+  <!-- Any failure answers the parent with bot.ability.failed {message}. -->
   <state id="description" initial="idle">
     <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="applied">
       <log label="description.failed" expr="_event.data.message"/>
@@ -127,7 +121,7 @@
       </transition>
     </state>
 
-    <!-- The original's GenerativeDescriber and output guard. -->
+    <!-- The output guard: an empty reply fails, else its schema checks it. -->
     <state id="replied">
       <onentry>
         <if cond="isEmptyDescription()">
@@ -146,7 +140,7 @@
           <content expr="_event.data"/>
         </send>
       </transition>
-      <!-- An output its schema refuses (the original's invalid output). -->
+      <!-- An output its schema refuses. -->
       <transition event="error.*" target="applied">
         <log label="description.failed" expr="mismatchedMessage()"/>
         <send event="bot.ability.failed" target="#_parent">

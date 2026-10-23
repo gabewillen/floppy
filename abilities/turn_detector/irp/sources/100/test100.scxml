@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- turn_detector-1: with no params it announces the original's defaults. -->
+<!-- turn_detector-1: with no params it announces its defaults. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="turn_detector" type="scxml" src="../../../turn_detector.scx"/>

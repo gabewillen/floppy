@@ -35,7 +35,7 @@ function turnLog() {
   return 'turn ' + turn;
 }
 
-// A hop timer of the stage in hand, for the turn in hand (the original _is_child_hop_timeout).
+// A hop timer of the stage in hand, for the turn in hand.
 function isChildHopTimeout(_event) {
   return (_event.sendid === hop_timer || _event.sendid === ceiling_timer) && _event.data.turn === turn;
 }
@@ -48,14 +48,14 @@ function hopTimeoutLog(_event) {
 
 // running_autonomy, running_decision, running_intuition, running_reasoning
 
-// The reference's tier of the stage in hand: reflex (autonomy and the
-// decision layer), intuition or reasoning.
+// The tier of the stage in hand: reflex (autonomy and the decision
+// layer), intuition or reasoning.
 function tier() {
   return stage === 'reasoning' || stage === 'intuition' ? stage : 'reflex';
 }
 
-// The tier's own step bound (bounds.<tier>_timeout_ms, the reference
-// _tier_timeouts), else null.
+// The tier's own step bound (bounds.<tier>_timeout_ms, decision D140),
+// else null.
 function tierMs() {
   var ms = bounds[tier() + '_timeout_ms'];
   return ms === undefined ? null : ms;
@@ -81,8 +81,8 @@ function ceilingDelay() {
   return ceilingMs() + 'ms';
 }
 
-// The handed-back stimulus of a step that timed out (the reference
-// StepTimedOutData): the bound that fired, in seconds.
+// The handed-back stimulus of a step that timed out: the bound that
+// fired, in seconds.
 function timedOutStep(_event) {
   var seconds = (_event.sendid === ceiling_timer ? ceilingMs() : inactivityMs()) / 1000;
   var message = "Cognition's " + tier() + ' step took longer than ' + seconds + ' seconds, so the turn failed.';
@@ -90,22 +90,20 @@ function timedOutStep(_event) {
   return ({event: 'bot.ability.cognition.step.timed_out', data: data, source: 'cognition'});
 }
 
-// The handed-back stimulus of a step that failed with message (the
-// reference StepFailedData).
+// The handed-back stimulus of a step that failed with message.
 function failedStep(message) {
   var text = "Cognition's " + tier() + ' step failed, so the turn failed: ' + message;
   var data = {message: text, stage: tier(), turn: turn, stimulus: stimulus.event};
   return ({event: 'bot.ability.cognition.step.failed', data: data, source: 'cognition'});
 }
 
-// Whether the turn perceives a handed-back failure of one of stages (the
-// reference _perceives_failure).
+// Whether the turn perceives a handed-back failure of one of stages.
 function perceivesFailureOf(stages) {
   return perceivesFailure() && stages.indexOf(Object(stimulus.data).stage) >= 0;
 }
 
 // Whether the turn perceives a handed-back failure at all: then it hands
-// none back (the reference _hand_back_failure's bound).
+// none back.
 function perceivesFailure() {
   return ['bot.ability.cognition.step.failed', 'bot.ability.cognition.step.timed_out'].indexOf(stimulus.event) >= 0;
 }
@@ -114,12 +112,12 @@ function perceivesFailure() {
 
 // The decision layer takes the turn unless it perceives a handed-back
 // failure of reflex or intuition, which only a later stage can perceive
-// (the reference _takes_decision).
+// (decision D140).
 function takesDecision() {
   return !perceivesFailureOf(['reflex', 'intuition']);
 }
 
-// The stage's input param, and bot.ability.failed's input (the original _build_processing_input).
+// The stage's input param, and bot.ability.failed's input.
 function processingInput() {
   return ({focus: focus, focus_candidates: focus_candidates});
 }
@@ -136,8 +134,7 @@ function handledOutput(_event) {
 // What earlier stages acted, then what this stage dispatched before it
 // passed the turn on (its donedata's acted, when it has one).
 // A stage's donedata acted is the selections it dispatched (an array), or
-// the reference ActedData {percepts, acts} (autonomy's, for the percepts its
-// behaviors handled).
+// {percepts, acts} (autonomy's, for the percepts its behaviors handled).
 function actsOf(_event) {
   var given = _event.data.acted;
   return Array.isArray(given) ? given : Array.isArray(Object(given).acts) ? given.acts : [];
@@ -153,7 +150,8 @@ function perceptsAfter(_event) {
   return Array.isArray(given) && given.length > 0 ? given : acted_percepts;
 }
 
-// What reasoning is told was already done: the reference ActedData.
+// What reasoning is told was already done: the acts, or {percepts, acts}
+// when a stage named the percepts they were for.
 function actedFact() {
   return acted_percepts === null ? acted : ({percepts: acted_percepts, acts: acted});
 }
@@ -178,8 +176,8 @@ function stageLog(outcome, _event) {
   return outcome + ' (' + _event.data.reason + ')';
 }
 
-// The failure of a stage that failed: its reason, else the original's
-// 'Cognition ability failed.' (_fail_child).
+// The failure of a stage that failed: its reason, else
+// 'Cognition ability failed.'.
 function stageFailure(_event) {
   return (typeof _event.data.reason === 'string' && _event.data.reason.length > 0 ? _event.data.reason : 'Cognition ability failed.');
 }
@@ -203,14 +201,13 @@ function tunerLog() {
 }
 
 // The cognition.cascaded log of a decision layer or an intuition that
-// failed (the reference _cascade_decision_failure and
-// _cascade_intuition_failure).
+// failed (decision D140).
 function cascadedLog(reason) {
   return ({stage: tier(), reason: reason});
 }
 
-// The later tiers the decision layer's pass may hand the turn to (the
-// reference's hand_ons): the chat tier when composed, then reasoning.
+// The later tiers the decision layer's pass may hand the turn to: the
+// chat tier when composed, then reasoning.
 function handOns() {
   return intuition_model === null ? ['reasoning'] : ['intuition', 'reasoning'];
 }
@@ -231,7 +228,7 @@ function handTo(_event) {
 
 // The intuition tier takes the turn: it is composed, the decision layer's
 // pass did not choose reasoning, and the turn perceives no handed-back
-// failure of intuition (the reference _takes_intuition).
+// failure of intuition.
 function takesIntuition() {
   return intuition_model !== null && hand_to !== 'reasoning' && !perceivesFailureOf(['intuition']);
 }
@@ -239,7 +236,7 @@ function takesIntuition() {
 // running_intuition
 
 // The turn's choices and the deliberative handoff, offered by this ability
-// (the reference's call surface, offered to intuition only).
+// (its call surface, offered to intuition only).
 function intuitionChoices() {
   return choices.concat(handoff.map(function (choice) {
     return Object.assign({}, choice, {target: _sessionid});
@@ -277,8 +274,8 @@ function bytesPerTokenAfter(_event) {
 
 // alive
 
-// What the bot knows of itself, as its prompts' self block renders it (the
-// reference SelfData): its name only once the identity told it (null: told
+// What the bot knows of itself, as its prompts' self block renders it:
+// its name only once the identity told it (null: told
 // it has none yet), then its owner's traits and its own description.
 function selfFact() {
   return name_told ? self : ({traits: self.traits, description: self.description});

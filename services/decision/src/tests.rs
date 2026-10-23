@@ -186,8 +186,8 @@ fn choice_asks_the_selection_and_the_grounded_members_in_one_batch() {
         selection,
         ["order.ship", "order.cancel", "order.hold", ABSTAIN_LABEL]
     );
-    // The reference `_event_wording`: the description's first line, else the
-    // event name; the pass criterion's wording is the original's.
+    // An event's wording: the description's first line, else the event
+    // name; the pass criterion has its own wording.
     let descriptions: Vec<&Json> = batch.questions[0]
         .criteria
         .iter()
@@ -204,7 +204,7 @@ fn choice_asks_the_selection_and_the_grounded_members_in_one_batch() {
     );
     assert_eq!(
         batch.questions[2].instructions,
-        "Which value fills 'carrier' for order.ship? Fill one payload field for the selected event: the criteria are the exact values the evidence offers. Pick the value the turn supports."
+        "Which value fills \"carrier\" for order.ship? Fill one payload field for the selected event: the criteria are the exact values the evidence offers. Pick the value the turn supports."
     );
     assert_eq!(batch.state, json!({"qty": 2, "sku": "A-1"}));
     let request = prepared.request(&TypeSafe, Some(1), Part::Reference(2));
@@ -227,8 +227,8 @@ fn choice_asks_the_selection_and_the_grounded_members_in_one_batch() {
     assert_eq!(
         body["questions"]["order.ship::carrier"]["criteria"],
         json!({
-            "fedex": "Which value fills 'carrier' for order.ship?",
-            "ups": "Which value fills 'carrier' for order.ship?"
+            "fedex": "Which value fills \"carrier\" for order.ship?",
+            "ups": "Which value fills \"carrier\" for order.ship?"
         })
     );
 }
@@ -316,7 +316,7 @@ fn predicate() -> Prepared {
 #[test]
 fn predicate_returns_only_the_chosen_event_with_its_probability() {
     let prepared = predicate();
-    // The same batch as choice, with the original's selection instructions
+    // The same batch as choice, with the predicate's selection instructions
     // and a pass to reasoning in place of the choice's pass criterion.
     assert_eq!(prepared.batch().questions.len(), 4);
     assert!(
@@ -348,7 +348,7 @@ fn predicate_returns_only_the_chosen_event_with_its_probability() {
             "order.cancel::reason": {"customer": 0.4, "stock": 0.6},
         })),
     );
-    // The reference D-R-28: the other options' probabilities are not
+    // Decision D150: the other options' probabilities are not
     // selections.
     assert_eq!(returned.name, SELECTED_EVENT);
     assert_eq!(
@@ -474,8 +474,8 @@ fn a_predicate_passes_to_each_tier_its_hand_ons_name() {
 
 #[test]
 fn a_selection_carries_its_only_offerer_as_target() {
-    // order.ship has one offerer, order.cancel two: the original's
-    // _single_enabler.
+    // order.ship has one offerer, order.cancel two: only a single
+    // offerer is a selection's target (decision D113).
     let tagged = Data::JsonArray(canonical_json(&json!([
         {"event": "order.ship", "schema": ship_schema(), "target": "session.floppy.orders"},
         {"event": "order.cancel", "schema": cancel_schema(), "target": "session.floppy.orders"},
@@ -581,8 +581,9 @@ fn members_ground_from_non_null_evidence_then_enum_never_const() {
 
 #[test]
 fn a_stimulus_grounds_the_data_and_the_state_is_the_model_facing_turn() {
-    // The reference grounds from the live stimulus data and shows the model
-    // its model-facing text (D-R-50): the state is the document's, as given.
+    // The data is grounded from the live stimulus data and the model is
+    // shown its model-facing text (decision D150): the state is the
+    // document's, as given.
     let turn = Data::JsonObject(r#"{"turn":"<bot.input>ship it</bot.input>"}"#.into());
     let asked = prepared(&[
         ("kind", Data::String("predicate".into())),
@@ -655,7 +656,7 @@ fn a_stimulus_grounds_the_data_and_the_state_is_the_model_facing_turn() {
 
 #[test]
 fn the_deliberative_handoff_is_never_offered() {
-    // The original's TypeSafe processor skips the deliberative handoff.
+    // The deliberative handoff event is never offered.
     let choices = Data::JsonArray(canonical_json(&json!([
         {"event": DELIBERATIVE_HANDOFF_EVENT, "schema": {"type": "object"}},
         {"event": "order.hold", "schema": {"type": "object"}},
@@ -1188,10 +1189,10 @@ fn done_data_reports_the_request_bytes_and_the_answers_usage() {
 }
 
 #[test]
-fn instructions_split_into_lines_as_the_reference_splits_them() {
+fn instructions_split_into_lines_at_line_feeds() {
     assert_eq!(
         split_lines("a\r\nb\rc\nd\u{2028}e\n"),
-        ["a", "b", "c", "d", "e"]
+        ["a", "b\rc", "d\u{2028}e"]
     );
     assert_eq!(split_lines("a\n\nb"), ["a", "", "b"]);
     assert!(split_lines("").is_empty());

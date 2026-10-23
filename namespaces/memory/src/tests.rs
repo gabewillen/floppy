@@ -142,30 +142,39 @@ fn other_local_names_are_not_handled() {
     assert!(host.assigned.is_empty());
 }
 
-/// The memory JSON `memoryPayload()` in `abilities/conversation/conversation.js`
-/// wrote, before this element replaced it (`testdata/to_json.json`, written by
-/// that JavaScript), is written byte for byte.
+/// The memory JSON: sorted keys, compact separators, the content tagged
+/// with its object entries in code point order, numbers as JSON numbers,
+/// and the identities in identity order without repeats.
 #[test]
-fn to_json_writes_what_the_javascript_it_replaces_wrote() {
-    let cases: Json =
-        serde_json::from_str(include_str!("testdata/to_json.json")).expect("the cases are JSON");
-    for case in cases.as_array().expect("an array of cases") {
-        assert_eq!(
-            written(&case["message"]).as_deref(),
-            Ok(case["json"].as_str().expect("a text")),
-            "{case}"
-        );
+fn to_json_writes_sorted_keys_tagged_content_and_sorted_identities() {
+    for (message, text) in [
+        (
+            json!({"source_ids": ["zed", "alice", [0.5, 1]], "target_ids": ["bot", "\u{e9}"], "content": {"b": 1, "a": [true, null, 1.5], "\u{e9}": "x"}, "content_type": "application/json"}),
+            r#"{"content":{"__stateforward_memory_content__":"mapping","value":[["a",{"__stateforward_memory_content__":"list","value":[true,null,1.5]}],["b",1],["é","x"]]},"content_type":"application/json","source_ids":["alice","zed",[0.5,1]],"target_ids":["bot","é"]}"#,
+        ),
+        (
+            json!({"source_ids": [[1e-5, 2], [3, 4], "q\"\n"], "target_ids": [], "content": ["\u{1f600}", 1e-7, 12_345_678_901_234_567_000_u64, {"\u{7f}": [], "z": {}}], "content_type": "text/x"}),
+            "{\"content\":{\"__stateforward_memory_content__\":\"list\",\"value\":[\"\u{1f600}\",1e-7,12345678901234567000,{\"__stateforward_memory_content__\":\"mapping\",\"value\":[[\"z\",{\"__stateforward_memory_content__\":\"mapping\",\"value\":[]}],[\"\u{7f}\",{\"__stateforward_memory_content__\":\"list\",\"value\":[]}]]}]},\"content_type\":\"text/x\",\"source_ids\":[\"q\\\"\\n\",[0.00001,2],[3,4]],\"target_ids\":[]}",
+        ),
+        (
+            json!({"source_ids": ["alice", "alice", [1, 2], [1, 2]], "target_ids": ["bot"], "content": "hi", "content_type": "text/plain"}),
+            r#"{"content":"hi","content_type":"text/plain","source_ids":["alice",[1,2]],"target_ids":["bot"]}"#,
+        ),
+        (
+            json!({"source_ids": ["a"], "target_ids": [], "content": {"\u{1f600}": 1, "ab": 2, "a\u{e9}": 3, "a\"": 4, "a\\": 5, "A": [{"y": 1, "x": 2}]}, "content_type": "application/json"}),
+            r#"{"content":{"__stateforward_memory_content__":"mapping","value":[["A",{"__stateforward_memory_content__":"list","value":[{"__stateforward_memory_content__":"mapping","value":[["x",2],["y",1]]}]}],["a\"",4],["a\\",5],["ab",2],["aé",3],["😀",1]]},"content_type":"application/json","source_ids":["a"],"target_ids":[]}"#,
+        ),
+        (
+            json!({"source_ids": ["a"], "target_ids": [], "content": [1, -0.5, 3, 1e21, 2e-7, 100, 9_007_199_254_740_992_u64, 0.1, -1e-5], "content_type": "application/json"}),
+            r#"{"content":{"__stateforward_memory_content__":"list","value":[1,-0.5,3,1e+21,2e-7,100,9007199254740992,0.1,-0.00001]},"content_type":"application/json","source_ids":["a"],"target_ids":[]}"#,
+        ),
+        (
+            json!({"source_ids": [" x\u{1}"], "target_ids": ["\t"], "content": " \u{1}\u{1f600}", "content_type": "text/plain"}),
+            "{\"content\":\" \\u0001\u{1f600}\",\"content_type\":\"text/plain\",\"source_ids\":[\" x\\u0001\"],\"target_ids\":[\"\\t\"]}",
+        ),
+    ] {
+        assert_eq!(written(&message).as_deref(), Ok(text), "{message}");
     }
-}
-
-/// The original's own texts (tests/tests/communication.rs,
-/// `the_remembered_input_is_the_original_memory_json`).
-#[test]
-fn to_json_writes_the_original_memory_json() {
-    assert_eq!(
-        written(&json!({"source_ids": ["zed", "alice", [0.5, 1]], "target_ids": ["bot", "\u{e9}"], "content": {"b": 1, "a": [true, null, 1.5], "\u{e9}": "x"}, "content_type": "application/json"})).as_deref(),
-        Ok(r#"{"content":{"__stateforward_memory_content__":"mapping","value":[["é","x"],["a",{"__stateforward_memory_content__":"list","value":[true,null,1.5]}],["b",1]]},"content_type":"application/json","source_ids":["alice","zed",[0.5,1.0]],"target_ids":["bot","é"]}"#)
-    );
 }
 
 #[test]
@@ -348,10 +357,10 @@ fn projected(data: &Data) -> Result<Json, &'static str> {
     }
 }
 
-/// The original's own `_cut_at_word` (`testdata/cut_at_word.json`, written by
-/// running it on each case's words): the same text and the same `cut`.
+/// Each case of `testdata/cut_at_word.json` is cut to its text, with its
+/// `cut`, within the bound.
 #[test]
-fn cut_at_word_cuts_as_the_original_cuts() {
+fn cut_at_word_cuts_each_fixture_case_to_its_text_within_the_bound() {
     let cases: Json = serde_json::from_str(include_str!("testdata/cut_at_word.json"))
         .expect("the cases are JSON");
     for case in cases.as_array().expect("an array of cases") {
@@ -418,11 +427,10 @@ fn malformed_cut_at_word_raises_error_execution_and_assigns_nothing() {
     assert!(host.assigned.is_empty());
 }
 
-/// The original's own `_payload_projection` (`testdata/stm_projection.json`,
-/// written by running it on each case's data, kept as JSON text so an
-/// object's fields keep their order).
+/// Each case of `testdata/stm_projection.json` (its data kept as JSON text
+/// so an object's fields keep their order) is projected to its projection.
 #[test]
-fn stm_projection_projects_as_the_original_projects() {
+fn stm_projection_projects_each_fixture_case_to_its_projection() {
     let cases: Json = serde_json::from_str(include_str!("testdata/stm_projection.json"))
         .expect("the cases are JSON");
     for case in cases.as_array().expect("an array of cases") {

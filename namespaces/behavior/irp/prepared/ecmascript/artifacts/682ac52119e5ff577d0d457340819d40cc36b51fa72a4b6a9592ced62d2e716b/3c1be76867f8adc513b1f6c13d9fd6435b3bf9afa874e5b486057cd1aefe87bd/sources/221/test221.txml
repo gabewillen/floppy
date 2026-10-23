@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- behavior-3: a draft's absent fields are an instance's defaults. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior">
+<datamodel>
+  <data id="s" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <behavior:replace_behavior_clauses location="s" instance="({name: 'D', source: '', status: 'DRAFT'})"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="s.length === 3 &amp;&amp; JSON.stringify(s[2].parameters) === '[&quot;D&quot;,&quot;&quot;,&quot;&quot;,&quot;[]&quot;,&quot;turn&quot;,&quot;DRAFT&quot;,&quot;0&quot;,&quot;&quot;,&quot;0&quot;,&quot;&quot;]'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

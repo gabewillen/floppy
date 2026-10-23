@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/speech_decoding/irp/sources">
   <assert id="speech_decoding-1" specnum="1" specid="#speech_decoding-1">
-    <![CDATA[By default it decodes through the original's gemini SpeechDecoder: the speech service's `decode` with provider `gemini` and model `gemini-3.5-flash`, `POST {base}/interactions`. The service's `bot.ability.hearing.speech.decoding.output` `{text}` ends it in `applied`, its done data (`done.invoke.speech_decoding`) exactly `{text}`: the answer's `output_text`, or its `model_output` steps' text, trimmed.]]>
+    <![CDATA[By default it decodes through Gemini: the speech service's `decode` with provider `gemini` and model `gemini-3.5-flash`, `POST {base}/interactions`. The service's `bot.ability.hearing.speech.decoding.output` `{text}` ends it in `applied`, its done data (`done.invoke.speech_decoding`) exactly `{text}`: the answer's `output_text`, or its `model_output` steps' text, trimmed.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -30,7 +30,7 @@
     </test>
   </assert>
   <assert id="speech_decoding-4" specnum="4" specid="#speech_decoding-4">
-    <![CDATA[When the service answers `bot.ability.failed` `{message}` (an unreadable or empty audio file, an error status, a malformed answer), the done data is the original's FailureData, exactly `{message}` with the service's message.]]>
+    <![CDATA[When the service answers `bot.ability.failed` `{message}` (an unreadable or empty audio file, an error status, a malformed answer), the done data is exactly `{message}` with the service's message.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>

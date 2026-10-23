@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # A local voice detection backend for live runs: LocalAI's POST {base}/vad
-# (services/speech/src/voice.rs, `detect`), answered on Silero VAD v5, the
-# model the original runs, so listening runs live without LocalAI.
+# (services/speech/src/voice.rs, `detect`), answered on Silero VAD v5,
+# listening's default voice detection model (`silero-vad`), so listening
+# runs live without LocalAI.
 #
 # Usage: python3 scripts/vad-server.py PORT SILERO_VAD_ONNX
 #   then FLOPPY_VOICE_BASE_URL=http://127.0.0.1:PORT/v1 in the env file.

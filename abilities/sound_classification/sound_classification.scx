@@ -1,20 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's SoundClassification (the reference abilities/hearing/sound/
-  classification.py) with the original's KindSoundClassifier: non-speech sound
-  labelled from the sound's kind, with no model. The interpretation
+  floppy's SoundClassification: non-speech sound labelled from the sound's
+  kind, with no model. The interpretation
   (abilities/interpretation/interpretation.scx) invokes it once per sound from
   ClassifyingSound.
 
     applying -> applied (final)
 
-  Input: the <param>s audio, media_type and kind (the original's input is the
-  whole SoundData so the classifier can read its kind).
+  Input: the <param>s audio, media_type and kind.
 
-  applying labels the sound (KindSoundClassifier.classify): a kind that is
+  applying labels the sound: a kind that is
   null or blank is unlabeled, {labels: []}; any other kind, trimmed, is the
-  one label with confidence 1.0, {labels: [kind], confidence: 1.0}
-  (the original's OutputData). The result is the <donedata>, received by the
+  one label with confidence 1.0, {labels: [kind], confidence: 1.0}.
+  The result is the <donedata>, received by the
   interpretation as done.invoke.sound_classification.
 
   Bindings: none (no service, no I/O).
@@ -26,7 +24,7 @@
     <data id="audio" expr="null"/>
     <data id="media_type" expr="null"/>
     <data id="kind" expr="null"/>
-    <!-- KindSoundClassifier's confidence, and the result. -->
+    <!-- The label's confidence, and the result. -->
     <data id="confidence" expr="1.0"/>
     <data id="label" expr="''"/>
     <data id="output" expr="null"/>

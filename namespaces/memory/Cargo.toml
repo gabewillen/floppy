@@ -1,6 +1,6 @@
 [package]
 name = "floppy-memory"
-description = "The `memory` namespace: `<memory:to_json>`, `<memory:contents>`, `<memory:cut_at_word>` and `<memory:stm_projection>`, the original's memory module (a memory row's JSON as the original writes it, the contents of a memory select, and the short-term register's bounded turn text and stimulus projection), as a Wasm extension component"
+description = "The `memory` namespace: `<memory:to_json>`, `<memory:contents>`, `<memory:cut_at_word>` and `<memory:stm_projection>` (a conversation memory row's JSON, the contents of a memory select, and the short-term register's bounded turn text and stimulus projection), as a Wasm extension component"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -15,7 +15,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 # The rows and the memory JSON as JSON (no schema code, so no randomness);
 # serde reads a stimulus's fields in their order (the projection keeps the
-# first 16, as the original walks a dict).
+# first 16 in that order).
 scxml-types.workspace = true
 serde.workspace = true
 serde_json.workspace = true

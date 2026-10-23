@@ -3,9 +3,9 @@
 //! repository URI) and invokes it
 //! (`<invoke type="https://github.com/stateforward/floppy/services/vision">`)
 //! against the media directory the run grants with
-//! `--dir URI=HOST::/media`. It measures a view as the original's change
-//! measures do (`byte_identity`, `frame_diff`) and answers the original's
-//! `Measurement` as the done data, `{change, signature}`: no change for a
+//! `--dir URI=HOST::/media`. It measures a view with a change measure
+//! (`byte_identity`, `frame_diff`) and answers the measurement as the done
+//! data, `{change, signature}`: no change for a
 //! first view, then the change against the `previous` signature the
 //! document hands back. A reference that would leave the directory, a
 //! missing or undecodable image, and a `previous` of another measure are

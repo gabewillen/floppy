@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Persona ability (the reference abilities/persona): the traits the
-  bot's owner gave it and the description of itself it writes and keeps.
+  floppy's Persona ability: the traits the bot's owner gave it and the description of itself it writes and keeps.
   The body (bots/floppy/floppy.scx) invokes it as its child "persona".
 
     recalling { asking <-> waiting } -bot.ability.persona.recalled-> knowing
@@ -10,25 +9,24 @@
       -bot.ability.failed (from memory)-> knowing
     knowing -error.execution-> failed (final)
 
-  Inputs: traits, the invoker's <param name="traits"> (the original's
-  Traits, persona/trait.py: one to 24 traits, each a word or short phrase
+  Inputs: traits, the invoker's <param name="traits"> (one to 24 traits, each a word or short phrase
   of at most 200 characters once the white space around it is stripped,
   in the owner's order). Traits come from composition and nowhere else: the
   bot never writes them, memory never stores them as their own row, and no
   revision changes them. database, the <param> (the memory database file;
   null: no memory). bring_up_timeout_ms, recall_attempt_timeout_ms and
-  recall_retry_delay_ms, <param>s with the original's defaults (below).
+  recall_retry_delay_ms, <param>s with the defaults below.
   bot.ability.persona.revise {text, reason}, which the bot selects.
 
-  recalling (the original Persona._recall): with a database it invokes the
+  recalling: with a database it invokes the
   memory ability (abilities/memory/memory.scx) to select the descriptions
   the bot wrote (query_tags self_persona, subject_ref self, the 50 most
-  recent, oldest first, the original description.py and memory/fact.py)
-  and sends bot.ability.persona.recalled {description} to #_internal with
-  the most recent one that decodes as the original's Description (a row
+  recent, oldest first) and sends bot.ability.persona.recalled
+  {description} to #_internal with the most recent one that decodes as a
+  description ({text, reason, traits, kind}; a row
   that does not is skipped, so one damaged row never costs the bot the
   description written before it), else with none. A memory that does not
-  answer yet is not an empty one (the original's asking and waiting): an
+  answer yet is not an empty one: an
   attempt that fails (logged as persona.recall.failed, "Persona could not
   recall a description from memory: ...") or does not answer within
   recall_attempt_timeout_ms (1 s) is asked again after
@@ -37,23 +35,21 @@
   activation_timeout_ms) runs out
   first, it sends bot.ability.failed {message: "Persona could not recall
   a description: memory did not answer within the bring-up budget."} to
-  the parent and wakes with none, as the original's _give_up_recalling
-  does. Without a database it logs <log label="memory" expr="'absent'">
+  the parent and wakes with none. Without a database it logs <log label="memory" expr="'absent'">
   and wakes with none: a bot with no memory wakes with no description
   every time.
 
   Outputs: bot.ability.persona.output {traits, description} to the parent
-  (the original's OutputEvent, told to its owner): once on waking (on
+  (told to its owner): once on waking (on
   entering knowing from recalling), with the description it remembered or
   none (null), and once after every revision it wrote down. The send
   carries the event's own event:schema, so traits that are not 1 to 24
   traits of at most 200 characters are refused where the event is created
   (error.execution in this session): the persona then ends in failed,
-  whose donedata is {message}, as the original refuses to compose a
-  persona from such traits, and its invoker gets done.invoke.persona.
+  whose donedata is {message}, so no persona is composed from such
+  traits, and its invoker gets done.invoke.persona.
 
-  Offers: bot.ability.persona.revise {text, reason} (the original's
-  ReviseEvent; text at most 2000 characters, reason at most 500, neither
+  Offers: bot.ability.persona.revise {text, reason} (text at most 2000 characters, reason at most 500, neither
   blank) is offered on every entry into knowing, through
   <decision:choice events="bot.ability.persona.revise">, made
   model-facing by <processing:model_facing_schema> ($schema, title and
@@ -61,12 +57,10 @@
   from knowing's onentry, after the output; the first offers are the
   ability's readiness. A bot that never revises is working correctly:
   keeping the description it has is a decision this ability makes
-  available and never makes. In the original only reflection, composed
-  with the same persona, may select a revision.
+  available and never makes.
 
-  revising (the original Persona._revise) writes the description down
-  before it becomes the bot's: the original's Description {text, reason,
-  traits, kind: "fact"}, the owner's traits it was written under
+  revising writes the description down before it becomes the bot's: the
+  description {text, reason, traits, kind: "fact"}, the owner's traits it was written under
   included. With a database it inserts it as a self-fact (scope long_term,
   kind fact, sensitivity standard, retention retain, content_format
   application/json, query_tags self_persona, subject_ref self; the recall
@@ -74,17 +68,17 @@
   keep their order) and sends bot.ability.persona.revised {description} to
   #_internal; a write that fails answers the parent with
   bot.ability.failed {message: "Persona could not remember its revision:
-  ..."} (the original's _fail_revision) and goes back to knowing, and the
+  ..."} and goes back to knowing, and the
   bot keeps the description it had (fail-closed); the bot may select a
-  revision again. The original's private bot.ability.persona.revise.failed
-  and bot.ability.persona.recall.failed are not sent: the memory's own
+  revision again. No private bot.ability.persona.revise.failed or
+  bot.ability.persona.recall.failed is sent: the memory's own
   bot.ability.failed is taken where it arrives (and a private event named
   under bot.ability.persona.revise would be matched, and its data judged,
   by the revise transitions' schema). Without a database
   it logs <log label="memory" expr="'absent'"> and sends revised.
   Revision is append-only: the current description is the most recent row.
 
-  Deferral (the original's defer): a revise that arrives while recalling or
+  Deferral: a revise that arrives while recalling or
   revising is held by <event:defer/> (scxml.rs namespaces/event) and comes
   back, in order, once the configuration changes, so knowing takes it by
   the same transition as on arrival.
@@ -124,21 +118,19 @@
     <!-- The offers. -->
     <data id="offered" expr="[]"/>
     <data id="offers_over" expr="false"/>
-    <!-- Memory: the database file (null: no memory) and the original's
-         statements (persona/description.py over memory/fact.py's self-fact
-         helpers). The SQL runs on both engines (SQLite and Postgres). A
+    <!-- Memory: the database file (null: no memory) and its self-fact
+         statements. The SQL runs on both engines (SQLite and Postgres). A
          memory id is the next row count as 32 zero-padded digits (neither
          engine's randomness is unique across invocations in Wasm); JSON
          rows are told by their content_format, the 50 most recent by
          created_at, then memory_id (the insertion order), read oldest
-         first (the original's recent_select). -->
+         first. -->
     <data id="database" expr="null"/>
     <data id="description_select" expr="'SELECT content FROM (SELECT content, created_at, memory_id FROM bot_memory WHERE query_tags = ?1 AND subject_ref = ?2 AND content_format = \'application/json\' ORDER BY created_at DESC, memory_id DESC LIMIT 50) AS recent ORDER BY created_at, memory_id'"/>
     <data id="description_insert" expr="'INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT substr(\'00000000000000000000000000000000\', 1, 32 - length(n)) || n FROM (SELECT CAST(COUNT(*) + 1 AS TEXT) AS n FROM bot_memory) AS c), ?1, NULL, ?2, ?3, ?4, ?5, ?6, ?7, ?8)'"/>
     <data id="description_parameters" expr="[]"/>
-    <!-- Recall's time bounds (the original persona.py): one attempt, the
-         pause before the next, and the bring-up budget (the original's
-         attachment timeout, 30 s; the body passes half its
+    <!-- Recall's time bounds: one attempt, the pause before the next, and
+         the bring-up budget (30 s; the body passes half its
          activation_timeout_ms, so the budget runs out first),
          which an invoker may set as <param>s. -->
     <data id="recall_attempt_timeout_ms" expr="1000"/>
@@ -165,8 +157,7 @@
         </send>
       </onentry>
     </state>
-    <!-- A memory that does not answer yet is not an empty one (the
-         original's asking and waiting): an attempt that fails or takes
+    <!-- A memory that does not answer yet is not an empty one: an attempt that fails or takes
          longer than recall_attempt_timeout_ms is asked again after
          recall_retry_delay_ms, until the bring-up budget runs out. -->
     <state id="recalling_memory" initial="asking">
@@ -256,8 +247,8 @@
     <transition event="bot.ability.persona.revise" event:schema="../schemas/bot.ability.persona.revise.json" target="revising">
       <assign location="revision" expr="_event.data"/>
     </transition>
-    <!-- What it knows could not be told: end, as the original refuses to
-         compose a persona from traits out of bounds. -->
+    <!-- What it knows could not be told: end, composing no persona from
+         traits out of bounds. -->
     <transition event="error.execution" target="failed">
       <log label="persona.failed" expr="failedMessage(_event)"/>
     </transition>
@@ -293,7 +284,7 @@
           <param name="description" expr="revisedDescription()"/>
         </send>
       </transition>
-      <!-- Not taken (the original's _fail_revision): the bot keeps the
+      <!-- Not taken: the bot keeps the
            description it had and may select a revision again. -->
       <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="knowing">
         <log label="persona.revise.failed" expr="reviseFailedMessage(_event)"/>

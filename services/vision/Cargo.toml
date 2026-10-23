@@ -1,6 +1,6 @@
 [package]
 name = "floppy-service-vision"
-description = "The `vision` invoked service: measures how much a view changed since the last one handed on (the original's change measures), reading the image from a directory the run grants, as a Wasm component whose `invoke` export is an `async func`"
+description = "The `vision` invoked service: measures how much a view changed since the last one handed on (a file digest or a frame difference), reading the image from a directory the run grants, as a Wasm component whose `invoke` export is an `async func`"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

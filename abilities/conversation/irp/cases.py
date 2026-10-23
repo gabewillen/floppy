@@ -11,7 +11,7 @@ SNAPSHOT = "bot.ability.conversation.snapshot.request"
 SNAPSHOT_OUT = "bot.ability.conversation.snapshot.output"
 READY = expect("bot.ability.offers", "_event.data.ability === 'conversation' && _event.data.choices.length === 0")
 DB = "'/memory/floppy.sqlite'"
-# Memory under a loaded host can outlast the original's 5 s bound: cases
+# Memory under a loaded host can outlast the default 5 s bound: cases
 # that reach the sql service wait longer (the bound itself loses every race to an in-process child: no case can make it fire).
 MEMORY = [("database", DB), ("memory_timeout_ms", "600000")]
 

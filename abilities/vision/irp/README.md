@@ -17,5 +17,5 @@ through `scx run` with the real invoked services (a case's
 - <a id="vision-3"></a>**vision-3**. An input `{kind: "image", content}` (its reference) is classified as image: `{kind: "image", confidence: 1.0}`; classifying reads nothing, so the reference need not name a file.
 - <a id="vision-4"></a>**vision-4**. Anything else is unreadable: text that is only white space is answered `{kind: "unreadable", confidence: 1.0}`.
 - <a id="vision-5"></a>**vision-5**. After answering it is back in `Unclassified`: every input is answered once, in order.
-- <a id="vision-6"></a>**vision-6**. An input whose data does not satisfy its schema (`kind` other than text or image, a missing `content`, or an empty `content`, the original's `min_length=1`) is `error.execution` in its sender and is never classified.
-- <a id="vision-7"></a>**vision-7**. The confidences are the classifier's `text_confidence`, `image_confidence` and `unreadable_confidence` (each 1.0 by default, the original's defaults), which the invoker may set as `<param>`s.
+- <a id="vision-6"></a>**vision-6**. An input whose data does not satisfy its schema (`kind` other than text or image, a missing `content`, or an empty `content`) is `error.execution` in its sender and is never classified.
+- <a id="vision-7"></a>**vision-7**. The confidences are the classifier's `text_confidence`, `image_confidence` and `unreadable_confidence` (each 1.0 by default), which the invoker may set as `<param>`s.

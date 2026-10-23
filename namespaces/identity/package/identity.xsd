@@ -1,17 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   XML Schema of floppy's `identity` extension namespace
-  (namespaces/identity), the original's identity module. It governs
+  (namespaces/identity): whether a text names the bot, and the order of
+  participant identities. It governs
   structure only; the extension component governs what the element does.
   Bind it with the prefix `identity` by convention.
 
   identity:hears_name
                    location (required): receives whether the text names the
-                   bot (the original's recognition.hears_name).
+                   bot: its name's tokens as a whole run among the text's.
                    name, text (required): expressions.
   identity:sorted_identities
-                   location (required): receives the identities in the
-                   original's order (value.sorted_identities).
+                   location (required): receives the identities in
+                   identity order: names by their text, then embeddings
+                   by their JSON text, repeats kept.
                    ids (required): an expression.
                    Neither takes another attribute or content.
 -->

@@ -18,7 +18,7 @@
     </test>
   </assert>
   <assert id="intuition-2" specnum="2" specid="#intuition-2">
-    <![CDATA[<intuition:observe> keeps the original's ConfidenceTuner state {mean, var, n}: anything else is read as the initial state {mean: 70, var: 100, n: 0}; a number confidence, clamped to 0-100, is observed (the first sets the mean, later ones move the mean and variance by the EMA with alpha 0.08, the variance never under 100), and a null confidence is not.]]>
+    <![CDATA[<intuition:observe> keeps the tuner state {mean, var, n}: anything else is read as the initial state {mean: 70, var: 100, n: 0}; a number confidence, clamped to 0-100, is observed (the first sets the mean, later ones move the mean and variance by the EMA with alpha 0.08, the variance never under 100), and a null confidence is not.]]>
     <test id="610" conformance="mandatory" manual="false">
       <start uri="610/test610.txml"/>
     </test>

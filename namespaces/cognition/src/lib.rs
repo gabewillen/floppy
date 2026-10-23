@@ -2,15 +2,10 @@
 //! and `<cognition:model_facing_content>` as a
 //! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
-//! The original's cognition module owns the turn's attention policy
-//! (`abilities/cognition/types.py` `attention_bias_for_turn`, with the
-//! body's `_interrupt_reference` and `_target_device_reference`) and the
-//! projection of a turn for a model (`processing.py`
-//! `InputData.model_facing_content` over `abilities/cognition/event.py`
-//! `model_facing_content`, fitted as a provider fits it to its
-//! `ContextFit`). Both are synchronous and quick, so they are executable content
-//! here, under the original's names. Documents bind [`NAMESPACE_URI`]
-//! (conventionally with the prefix `cognition`):
+//! The turn's attention policy, and the projection of a turn for a model,
+//! fitted to the model's context when a budget is given. Both are
+//! synchronous and quick, so they are executable content here. Documents
+//! bind [`NAMESPACE_URI`] (conventionally with the prefix `cognition`):
 //!
 //! ```xml
 //! <cognition:attention_bias_for_turn location="focus_candidates" focuslocation="focus"
@@ -28,24 +23,21 @@
 //!
 //! # `<cognition:attention_bias_for_turn location="L" focuslocation="F" stimulus="X" devices="D" focus="G"/>`
 //!
-//! The turn's attention bias from device identity only (the original's
-//! `attention_bias_for_turn`). `focus` is the currently focused device (any
-//! value; `null` when none), `devices` the configured devices (an array),
-//! and `stimulus` the turn's stimulus envelope (an object, `{event, data,
-//! source, target?, id?}`).
+//! The turn's attention bias from device identity only. `focus` is the
+//! currently focused device (any value; `null` when none), `devices` the
+//! configured devices (an array), and `stimulus` the turn's stimulus envelope
+//! (an object, `{event, data, source, target?, id?}`).
 //!
 //! * The focus: `focus` when it is not `null` and is one of `devices`, else
 //!   `null`. It is the first focus candidate when it is not `null`.
 //! * The stimulus's device: for a `bot.input` stimulus, its data's
-//!   `target_device` when the data is an object that has one (the
-//!   original's `_target_device_reference`, which its `_interrupt_reference`
-//!   prefers: the environment stamps a device's input with it, decision
-//!   D105), else `null`. It is appended to the candidates when it is not
-//!   `null`, is one of `devices`, and is not a candidate already.
+//!   `target_device` when the data is an object that has one (the environment
+//!   stamps a device's input with it, decision D105), else `null`. It is
+//!   appended to the candidates when it is not `null`, is one of `devices`, and
+//!   is not a candidate already.
 //! * A `bot.perceived` batch (the body's percepts taken together) is biased
-//!   percept by percept, as the original's is: each percept's `stimulus`,
-//!   in arrival order, appends its device as above. No percept outranks
-//!   another.
+//!   percept by percept: each percept's `stimulus`, in arrival order, appends
+//!   its device as above. No percept outranks another.
 //!
 //! `focuslocation` (optional) receives the focus, then `location`
 //! (required) receives the candidates, a JSON array. Values compare as JSON
@@ -53,91 +45,80 @@
 //!
 //! # `<cognition:model_facing_content location="L" stimulus="S" …/>`
 //!
-//! The original's `InputData.model_facing_content` over floppy's JSON:
 //! `location` (required) receives the user content a model reads for a
-//! turn, its blocks joined by newlines, most stable first (R-20 C5), each
-//! left out when absent:
+//! turn, its blocks joined by newlines, most stable first (decision D141),
+//! each left out when absent:
 //!
-//! 1. the stable part of what the bot has in mind (the original's
-//!    `RecalledData` with only its `__model_facing_stable_fields__`):
-//!    `<cognition:recalled>` holding `recent` (optional, an array of
-//!    short-term memory's turns, oldest first), uncounted (its
-//!    `__model_facing_uncounted_fields__`), each turn one `<memory:turn>`
-//!    line (`stm.Turn.__model_facing_element__`: `at` as `%H:%M:%SZ`,
-//!    `direction`, `who` the speakers' `ref`s when it has any, `cut="true"`
-//!    when its words were cut, holding its `text`);
+//! 1. the stable part of what the bot has in mind: `<cognition:recalled>`
+//!    holding `recent` (optional, an array of short-term memory's turns, oldest
+//!    first), uncounted, each turn one `<memory:turn>` line (`at` as
+//!    `%H:%M:%SZ`, `direction`, `who` the speakers' `ref`s when it has any,
+//!    `cut="true"` when its words were cut, holding its `text`);
 //! 2. the turn's situation: the environment block (decision D106) of
-//!    `environment` (optional; an object, anything else renders nothing),
-//!    the original's `Environment.model_snapshot` layout (`<environment
-//!    id>` holding `<self state>` with the bot's own attributes as children
-//!    and `<owned_devices>` with one `<device ref id state on?>` per held
-//!    device, its attributes as children (`on`, the object it sits on, only
-//!    when it is a string), after `<firmware ref id state>` when `self` has
-//!    a `firmware` object (the bot's firmware, shown as a device is)), then
-//!    what earlier stages already
-//!    did on the turn (`acted`, optional: the selections they dispatched,
-//!    an array, or the original's `ActedData` `{percepts, acts}`) as the
-//!    original's `memory_content` of its `ActedData`: `<cognition:acted>`
-//!    with the `percepts` (`[0]` for an array: floppy's turn has one) and
-//!    the `acts` as `cognition:event`s, or `<cognition:acted
+//!    `environment` (optional; an object, anything else renders nothing):
+//!    `<environment id>` holding `<self state>` with the bot's own attributes
+//!    as children and `<owned_devices>` with one `<device ref id state on?>`
+//!    per held device, its attributes as children (`on`, the object it sits on,
+//!    only when it is a string), after `<firmware ref id state>` when `self`
+//!    has a `firmware` object (the bot's firmware, shown as a device is), then
+//!    what earlier stages already did on the turn (`acted`, optional: the
+//!    selections they dispatched, an array, or `{percepts, acts}`) as
+//!    `<cognition:acted>` with the `percepts` (`[0]` for an array: floppy's
+//!    turn has one) and the `acts` as `cognition:event`s, or `<cognition:acted
 //!    omitted="size" />` over its 16384 bytes;
 //! 3. the rest of what the bot has in mind: `<cognition:recalled>` holding
-//!    `prior_episodes` (an array of the original's `CognitiveEpisode`s:
-//!    `focus`, `focus_candidates`, `stimulus_name`, a failed or cancelled
-//!    turn's `outcome` and `failure` (decision D139), `output` as
+//!    `prior_episodes` (an array of cognitive episodes: `focus`,
+//!    `focus_candidates`, `stimulus_name`, a failed or cancelled turn's
+//!    `outcome` and `failure` (decision D139), `output` as
 //!    `cognition:event`s and `behavior` as a `behavior:create`,
 //!    `behavior:change` or `behavior:break`) and `standing_directives` (an
-//!    array of the original's `Directive`s: `text`, `kind`, `instruction`
-//!    by default), each optional and with its `count`: floppy's recalled
-//!    memory until associative memory exists (decision D97);
-//! 4. the stimulus (`stimulus`, optional: left out, no stimulus block, as
-//!    the reference's decision instructions have none) as the root
-//!    element of its own block, tagged as the original's `_payload_tag` tags a payload that is
-//!    not a model (`dict`, `list`, `str`, `int`, `float`, `bool`, or
-//!    `none_type` for no data or a `null` stimulus), a string as its text and
-//!    anything else as its `content` field, stamped `stimulus:event`, then
-//!    `stimulus:id`, `stimulus:source` and `stimulus:target` when each is a
-//!    non-empty string; a `bot.ability.conversation.output`'s messages
-//!    leave out `provenance`, `source_ids` and `target_ids` (the original's
-//!    `conversation.Message.__model_facing_excluded_fields__`);
+//!    array of directives: `text`, `kind`, `instruction` by default), each
+//!    optional and with its `count`: floppy's recalled memory until
+//!    associative memory exists (decision D97);
+//! 4. the stimulus (`stimulus`, optional: without it there is no stimulus
+//!    block, as in a situation render) as the root element of its own block,
+//!    tagged by the kind of its data (`dict` for an object, `list` for an
+//!    array, `str` for a string, `int` for a number written as an integer,
+//!    `float` for any other number, `bool`, or `none_type` for no data or a
+//!    `null` stimulus), a string as its text and anything else as its `content`
+//!    field, stamped `stimulus:event`, then `stimulus:id`, `stimulus:source`
+//!    and `stimulus:target` when each is a non-empty string; a
+//!    `bot.ability.conversation.output`'s messages leave out `provenance`,
+//!    `source_ids` and `target_ids`, which a model never sees;
 //! 5. the repair `feedback` (optional, a string; `null` is none).
 //!
-//! `systemlocation` (optional) receives the system channel: the
-//! `instructions` (optional, a string; `null` is none), trimmed, then a
-//! blank line and the self block of `self` (optional; the cognition's
-//! `self` datum `{name?, traits?, description?}`), the original's
-//! `SelfData.__model_repr__`: `<persona>` holding `<name taken_by="you">`
-//! for a `name` string or `<no_name_yet/>` for `null` (nothing without
-//! one), then, with traits, `<traits given_by="owner">` of `<trait>`s and
-//! `<description written_by="you">` (empty without one), every value
-//! escaped; `null` when both are empty.
+//! `systemlocation` (optional) receives the system channel: the `instructions`
+//! (optional, a string; `null` is none), trimmed, then a blank line and the
+//! self block of `self` (optional; the cognition's `self` datum `{name?,
+//! traits?, description?}`): `<persona>` holding `<name taken_by="you">` for a
+//! `name` string or `<no_name_yet/>` for `null` (nothing without one), then,
+//! with traits, `<traits given_by="owner">` of `<trait>`s and `<description
+//! written_by="you">` (empty without one), every value escaped; `null` when
+//! both are empty.
 //!
-//! A field renders as the original's `_fill_field` renders a value that is
-//! not a model: `null` is skipped, a scalar is an attribute (a number as
-//! its JSON text), an object is an element of `<entry key>`
-//! elements each holding its `value`, and an array an element with its
-//! `count` of `<item>` elements, a scalar item as its text and an object or
-//! array item filled as `item` (decision D99); an empty array or object
-//! renders nothing unless it is an entry's value or an item. A snapshot
-//! attribute renders as a child element named after its key (each character
-//! other than a letter, a digit, `_`, `.` or `-` replaced by `_`, and `_`
-//! put first when the tag is empty or starts with a digit, `.` or `-`): a
-//! string as its text, a boolean or number as its JSON text, an object as
-//! nested elements, an array as a list. Object members render in the data
-//! model's canonical order (sorted keys). Each block is
-//! `ElementTree.indent(space="  ")` then `ElementTree.tostring`: attributes
-//! in order, an empty element as `<name />`.
+//! A field renders so: `null` is skipped, a scalar is an attribute (a number as
+//! its JSON text), an object is an element of `<entry key>` elements each
+//! holding its `value`, and an array an element with its `count` of `<item>`
+//! elements, a scalar item as its text and an object or array item filled as
+//! `item` (decision D99); an empty array or object renders nothing unless it is
+//! an entry's value or an item. A snapshot attribute renders as a child element
+//! named after its key (each character other than a letter, a digit, `_`, `.`
+//! or `-` replaced by `_`, and `_` put first when the tag is empty or starts
+//! with a digit, `.` or `-`): a string as its text, a boolean or number as its
+//! JSON text, an object as nested elements, an array as a list. Object members
+//! render in the data model's canonical order (sorted keys). Each block puts
+//! every child element on its own line, indented two spaces per level:
+//! attributes in order, an empty element as `<name />`.
 //!
-//! The original's budgets hold: 262144 encoded bytes, 4096 nodes, 4096
-//! collection items and 65536 characters per scalar for each block, and
-//! 65536 characters for the system channel, the situation and the
-//! feedback. The system channel and the tool's schema (`schema`, optional,
-//! its compact JSON) are reserved first; the situation and the feedback are
-//! never trimmed, and the stimulus renders into the bytes they leave of the
-//! prompt's 262144.
+//! The budgets hold: 262144 encoded bytes, 4096 nodes, 4096 collection items
+//! and 65536 characters per scalar for each block, and 65536 characters for the
+//! system channel, the situation and the feedback. The system channel and the
+//! tool's schema (`schema`, optional, its compact JSON) are reserved first; the
+//! situation and the feedback are never trimmed, and the stimulus renders into
+//! the bytes they leave of the prompt's 262144.
 //!
-//! What the bot has in mind never makes the projection fail (the original's
-//! `b1654d6`): its stable part, then its rest, each render into the bytes
+//! What the bot has in mind never makes the projection fail (decision
+//! D117): its stable part, then its rest, each render into the bytes
 //! everything else leaves, their items newest (last) first; an item that
 //! would exceed any budget is left out, the kept items keep their order, a
 //! counted field's `count` is how many were kept, and `omitted="<n>"`
@@ -145,30 +126,27 @@
 //! left out. Sizes are measured as rendered and indented, so the text always
 //! fits.
 //!
-//! `budget` (optional, a number of bytes; `null` is none) is the fitted size
-//! of the whole request (the original's `ContextFit.budget_bytes` less the
-//! reserved completion); with it the projection is fitted as a provider
-//! fits it: the content renders whole, and when it is over the budget less
-//! the system channel and the schema it renders again with what the bot has
-//! in mind trimmed to that, and `fitlocation` (optional) receives `fit`,
-//! `cut` (the trimmed content fits) or `overflow` (it is still over: the
-//! stimulus, situation and feedback are never cut, and the request goes as
-//! it is). Without a budget `fitlocation` receives `null`.
+//! `budget` (optional, a number of bytes; `null` is none) is the fitted size of
+//! the whole request (the model's context less the reserved completion); with
+//! it the projection is fitted: the content renders whole, and when it is over
+//! the budget less the system channel and the schema it renders again with what
+//! the bot has in mind trimmed to that, and `fitlocation` (optional) receives
+//! `fit`, `cut` (the trimmed content fits) or `overflow` (it is still over: the
+//! stimulus, situation and feedback are never cut, and the request goes as it
+//! is). Without a budget `fitlocation` receives `null`.
 //!
 //! Over a budget otherwise (the stimulus alone overflows, or the system
 //! channel, the situation or the feedback is over the scalar budget),
-//! `failurelocation` (optional) receives the original's `ValueError`
-//! message (for example `prompt projection collection item budget
-//! exceeded`) and `location`, `systemlocation` and `fitlocation` receive
-//! `null`; without `failurelocation` it is `error.execution`. Within them,
-//! `failurelocation` receives `null`. The locations are assigned in the
-//! order `failurelocation`, `systemlocation`, `fitlocation`, `location`.
+//! `failurelocation` (optional) receives the exceeded budget's message (for
+//! example `prompt projection collection item budget exceeded`) and `location`,
+//! `systemlocation` and `fitlocation` receive `null`; without `failurelocation`
+//! it is `error.execution`. Within them, `failurelocation` receives `null`. The
+//! locations are assigned in the order `failurelocation`, `systemlocation`,
+//! `fitlocation`, `location`.
 //!
-//! The original also counts the left-out items in its
-//! `bot.processing.prompt.recalled.omitted` metric and each fit in
-//! `bot.processing.context.fit.count`; this component's telemetry is the
-//! closed per-entry-point observation below, so the count is only the
-//! `omitted` attribute and the fit is `fitlocation`.
+//! No metric counts the left-out items or the fits: this component's
+//! telemetry is the closed per-entry-point observation below, so the count
+//! is only the `omitted` attribute and the fit is `fitlocation`.
 //!
 //! # Failures
 //!
@@ -181,8 +159,8 @@
 //!
 //! # Bounds
 //!
-//! The projection is bounded by the original's budgets above; the data
-//! model bounds the values it hands this component.
+//! The projection is bounded by the budgets above; the data model bounds the
+//! values it hands this component.
 //!
 //! # Telemetry
 //!
@@ -214,23 +192,19 @@ pub const NAMESPACE_NAME: &str = "cognition";
 /// it too.
 pub const NAMESPACE_URI: &str = "https://github.com/stateforward/floppy/namespaces/cognition";
 
-/// The projection's encoded byte budget, and the prompt's (the original's
-/// `_MAX_PROMPT_PROJECTION_BYTES`, `_MAX_MODEL_PROMPT_BYTES`).
+/// The projection's encoded byte budget, and the prompt's.
 pub const MAX_PROJECTION_BYTES: usize = 262_144;
 
-/// The projection's node budget (the original's
-/// `_MAX_PROMPT_PROJECTION_NODES`).
+/// The projection's node budget.
 pub const MAX_PROJECTION_NODES: usize = 4_096;
 
-/// The projection's collection item budget (the original's
-/// `_MAX_PROMPT_PROJECTION_ITEMS`).
+/// The projection's collection item budget.
 pub const MAX_PROJECTION_ITEMS: usize = 4_096;
 
-/// The characters one scalar may have (the original's
-/// `_MAX_PROMPT_PROJECTION_SCALAR_CHARACTERS`).
+/// The characters one scalar may have.
 pub const MAX_SCALAR_CHARACTERS: usize = 65_536;
 
-/// The original's message for each exceeded budget.
+/// The message for each exceeded budget.
 const NODE_BUDGET: &str = "prompt projection node budget exceeded";
 const BYTE_BUDGET: &str = "prompt projection encoded byte budget exceeded";
 const ITEM_BUDGET: &str = "prompt projection collection item budget exceeded";
@@ -496,8 +470,7 @@ fn attention_bias_for_turn<H: CognitionHost>(
     Ok(Executed::Handled)
 }
 
-/// The original's `attention_bias_for_turn`: the turn's focus and focus
-/// candidates (see the crate documentation).
+/// The turn's focus and focus candidates (see the crate documentation).
 #[must_use]
 pub fn attention_bias(
     stimulus: &Map<String, Json>,
@@ -840,29 +813,29 @@ fn read_budget<H: CognitionHost>(
 #[derive(Clone, Copy, Debug)]
 pub enum Stimulus<'a> {
     /// No stimulus block (the `stimulus` attribute left out): the content
-    /// is the rest alone, as the reference's decision instructions are.
+    /// is the rest alone, as in a situation render.
     Absent,
-    /// The reference's `None` input: a `<none_type />` root.
+    /// A `null` stimulus: a `<none_type />` root.
     Null,
     /// A stimulus envelope `{event, data?, id?, source?, target?}`.
     Envelope(&'a Map<String, Json>),
 }
 
-/// What `<cognition:model_facing_content>` projects: the original's
-/// processing `InputData`, its `situation` (the environment block, then the
-/// `acted` fact) and `recalled` (`RecalledData`) as floppy's JSON.
+/// What `<cognition:model_facing_content>` projects, as floppy's JSON: the
+/// stimulus, the situation (the environment block, then the `acted` fact),
+/// what the bot has in mind (recent turns, episodes, directives) and the
+/// feedback.
 #[derive(Clone, Copy, Debug)]
 pub struct TurnInput<'a> {
     /// The stimulus: its root element, or none.
     pub stimulus: Stimulus<'a>,
-    /// The recent turns short-term memory holds, oldest first (the
-    /// original's `RecalledData.recent`, `stm.Turn`s).
+    /// The recent turns short-term memory holds, oldest first.
     pub recent: &'a [Json],
     /// The bot's environment, `null` for none.
     pub environment: &'a Json,
     /// What earlier stages already did on the turn: the selections they
-    /// dispatched (an array), or the original's `ActedData` (`{percepts,
-    /// acts}`); `null` or an empty array for nothing.
+    /// dispatched (an array), or `{percepts, acts}`; `null` or an empty
+    /// array for nothing.
     pub acted: &'a Json,
     /// The prior cognitive episodes (floppy's recalled memory until
     /// associative memory exists, decision D97).
@@ -873,8 +846,7 @@ pub struct TurnInput<'a> {
     pub feedback: &'a str,
 }
 
-/// How a projection was fitted to a fitted budget (the original's
-/// `ContextFitOutcome`).
+/// How a projection was fitted to a fitted budget.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Fit {
     /// Sent whole.
@@ -886,7 +858,7 @@ pub enum Fit {
 }
 
 impl Fit {
-    /// The original's outcome name.
+    /// The outcome's name, as `fitlocation` receives it.
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -907,9 +879,7 @@ pub struct Projected {
 }
 
 /// The system channel: the static `instructions` then the self block of
-/// `known` (the original's `SelfData.__model_repr__`), joined by a blank
-/// line as `Processing._input_for_processor` stamps them; empty when both
-/// are.
+/// `known`, joined by a blank line; empty when both are.
 #[must_use]
 pub fn system(instructions: &str, known: &Json) -> String {
     let instructions = instructions.trim();
@@ -921,14 +891,12 @@ pub fn system(instructions: &str, known: &Json) -> String {
     }
 }
 
-/// The original's `SelfData.__model_repr__` of the cognition's `self`
-/// datum (`{name?, traits?, description?}`, what identity and persona told
-/// it): `<persona>` holding the name (`identity.NameData`'s `<name
-/// taken_by="you">` for a string, `<no_name_yet/>` for `null`, nothing when
-/// absent) and, with traits (the persona's `OutputData` has at least one),
-/// the owner's `<traits given_by="owner">`, then the self-written
-/// `<description written_by="you">` (empty without one); empty when `known`
-/// is not an object.
+/// The self block of the cognition's `self` datum (`{name?, traits?,
+/// description?}`, what identity and persona told it): `<persona>` holding the
+/// name (`<name taken_by="you">` for a string, `<no_name_yet/>` for `null`,
+/// nothing when absent) and, with traits, the owner's `<traits
+/// given_by="owner">`, then the self-written `<description written_by="you">`
+/// (empty without one); empty when `known` is not an object.
 fn self_block(known: &Json) -> String {
     let Some(known) = known.as_object() else {
         return String::new();
@@ -971,24 +939,23 @@ fn self_block(known: &Json) -> String {
     block
 }
 
-/// `xml.sax.saxutils.escape`: `&`, `<` and `>`.
+/// `text` with `&`, `<` and `>` escaped.
 fn xml_escape(text: &str) -> String {
     text.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
 }
 
-/// The original's `InputData.model_facing_content` fitted as a provider
-/// fits it to a `ContextFit` budget: the user content of `input`, with the
-/// system channel `system` and a tool schema of `tool_bytes` bytes reserved
-/// first (see the crate documentation).
+/// The model-facing content of `input` fitted to `budget`: the user content of
+/// `input`, with the system channel `system` and a tool schema of `tool_bytes`
+/// bytes reserved first (see the crate documentation).
 ///
 /// # Errors
 ///
-/// The original's message for the first budget exceeded: the system
-/// channel, the situation or the feedback over the scalar budget, or the
-/// stimulus over the bytes they and the tool leave (or any other budget).
-/// Recalled memory never fails the projection.
+/// The message of the first budget exceeded: the system channel, the situation
+/// or the feedback over the scalar budget, or the stimulus over the bytes they
+/// and the tool leave (or any other budget). Recalled memory never fails the
+/// projection.
 pub fn project(
     input: &TurnInput<'_>,
     system: &str,
@@ -1025,10 +992,9 @@ pub fn project(
     })
 }
 
-/// The original's `InputData.model_facing_content` with its
-/// `budget_bytes`: the stable recalled part, the situation, the varying
-/// recalled part, the stimulus, the feedback, joined by newlines, each
-/// left out when absent.
+/// The model-facing content within `budget_bytes`: the stable recalled part,
+/// the situation, the varying recalled part, the stimulus, the feedback, joined
+/// by newlines, each left out when absent.
 fn content(
     input: &TurnInput<'_>,
     system: &str,
@@ -1137,8 +1103,7 @@ fn content(
 }
 
 /// The turn's situation: the environment block, then what earlier stages
-/// already did on it (the original's `_build_processing_input`: the world
-/// block and the `acted` fact joined by a newline); empty for neither.
+/// already did on it, joined by a newline; empty for neither.
 fn situation(environment: &Json, acted: &Json) -> Result<String, &'static str> {
     let mut budget = Budget::default();
     let world = environment_element(environment, &mut budget)?.map(|element| element.text(0));
@@ -1150,11 +1115,10 @@ fn situation(environment: &Json, acted: &Json) -> Result<String, &'static str> {
         .join("\n"))
 }
 
-/// What the original keeps of a turn's `ActedData` in its situation
-/// (`memory_content` within `_MAX_ACTED_BYTES`): `<cognition:acted>` with
-/// the `percepts` acted on and the `acts` dispatched, or the bare element
-/// with `omitted="size"` when it does not fit; `None` when nothing was
-/// done.
+/// The `acted` fact of a turn's situation, within `MAX_ACTED_BYTES`:
+/// `<cognition:acted>` with the `percepts` acted on and the `acts` dispatched,
+/// or the bare element with `omitted="size"` when it does not fit; `None` when
+/// nothing was done.
 fn acted_fact(acted: &Json) -> Option<String> {
     let (percepts, acts) = match acted {
         Json::Array(acts) => (vec![Json::from(0)], acts.as_slice()),
@@ -1195,8 +1159,8 @@ fn acted_fact(acted: &Json) -> Option<String> {
     Some(rendered.unwrap_or_else(|_| "<cognition:acted omitted=\"size\" />".to_owned()))
 }
 
-/// The bytes the acted fact may take (the original's `_MAX_ACTED_BYTES`:
-/// a sixteenth of an episode's 262144).
+/// The bytes the acted fact may take: a sixteenth of
+/// [`MAX_PROJECTION_BYTES`].
 const MAX_ACTED_BYTES: usize = 16_384;
 
 /// One budgeted field of a recalled part: its items render after the rest
@@ -1209,9 +1173,9 @@ struct Field<'a> {
     counted: bool,
 }
 
-/// One part of the original's `RecalledData` rendered within `limit`
-/// bytes: `<cognition:recalled>` holding each field with items, the rest at
-/// their defaults rendering nothing; `None` when its frame does not fit.
+/// One part of what the bot has in mind rendered within `limit` bytes:
+/// `<cognition:recalled>` holding each field with items, the rest at their
+/// defaults rendering nothing; `None` when its frame does not fit.
 fn recalled(fields: &[Field<'_>], limit: usize) -> Option<String> {
     let mut budget = Budget::default();
     let mut root = budget.element("cognition:recalled").ok()?;
@@ -1236,11 +1200,11 @@ fn recalled(fields: &[Field<'_>], limit: usize) -> Option<String> {
     (text.len() <= limit).then_some(text)
 }
 
-/// The original's `_render_budgeted`: each deferred field's items, newest
-/// first, into the bytes the rest of `root` leaves of `limit`. An item that
-/// would exceed any budget is left out, and its field's `omitted` counts
-/// them (the attribute is dropped when none is); kept items keep their
-/// order. Sizes are measured as rendered and indented, as the original's.
+/// Renders each deferred field's items, newest first, into the bytes the rest
+/// of `root` leaves of `limit`. An item that would exceed any budget is left
+/// out, and its field's `omitted` counts them (the attribute is dropped when
+/// none is); kept items keep their order. Sizes are measured as rendered and
+/// indented.
 ///
 /// # Errors
 ///
@@ -1268,7 +1232,7 @@ fn render_budgeted(
         };
         // Each item rides on its own indented line; the first one also turns
         // the empty `<field … />` into `<field …>` + indentation +
-        // `</field>` (the original's arithmetic, byte for byte).
+        // `</field>` (exactly the bytes the rendered text adds).
         let line = 1 + INDENT.len() * level;
         let opening = format!("</{}>", field.name).len() + line - 2;
         let mut kept: Vec<(usize, Element)> = Vec::new();
@@ -1312,11 +1276,11 @@ fn render_budgeted(
     Ok(())
 }
 
-/// The indentation of one level (`ElementTree.indent(space="  ")`).
+/// The indentation of one level: two spaces.
 const INDENT: &str = "  ";
 
-/// The original's `_ProjectionBudget`: encoded bytes, nodes and collection
-/// items so far.
+/// The projection's budget so far: encoded bytes, nodes and collection
+/// items.
 #[derive(Clone, Copy, Debug, Default)]
 struct Budget {
     bytes: usize,
@@ -1325,12 +1289,12 @@ struct Budget {
 }
 
 impl Budget {
-    /// The original's `_ProjectionBudget.mark`.
+    /// The budget so far, to rewind to.
     fn mark(&self) -> Self {
         *self
     }
 
-    /// The original's `_ProjectionBudget.rewind`.
+    /// Rewinds to a [`Budget::mark`].
     fn rewind(&mut self, mark: Self) {
         *self = mark;
     }
@@ -1358,7 +1322,7 @@ impl Budget {
         self.markup(&html_escape(text))
     }
 
-    /// The original's `_element`: one element, counted.
+    /// One element, counted as a node and its name's bytes.
     fn element(&mut self, name: &str) -> Result<Element, &'static str> {
         self.nodes = self.nodes.saturating_add(1);
         if self.nodes > MAX_PROJECTION_NODES {
@@ -1373,7 +1337,8 @@ impl Budget {
         })
     }
 
-    /// The original's `_set_attribute`.
+    /// Sets an attribute, its name counted as bytes and its value as a
+    /// scalar.
     fn attribute(
         &mut self,
         element: &mut Element,
@@ -1395,7 +1360,8 @@ impl Budget {
     }
 }
 
-/// Python's `html.escape(value, quote=True)`.
+/// `text` with `&`, `<`, `>`, `"` and `'` escaped (`'` as `&#x27;`), as
+/// the byte budget counts a scalar.
 fn html_escape(text: &str) -> String {
     let mut escaped = String::with_capacity(text.len());
     for character in text.chars() {
@@ -1421,7 +1387,9 @@ struct Element {
 }
 
 impl Element {
-    /// `ElementTree.indent(space="  ")` then `ElementTree.tostring`.
+    /// The element at indentation `level`: each child on its own line,
+    /// indented two spaces per level, attributes in order, an empty element
+    /// as `<name />`.
     fn text(&self, level: usize) -> String {
         let mut out = String::new();
         out.push('<');
@@ -1547,9 +1515,8 @@ fn members(value: Option<&Json>) -> Option<&Map<String, Json>> {
     value.and_then(Json::as_object)
 }
 
-/// The original's `_fill_field` over a JSON value (see the crate
-/// documentation): an empty array or object renders nothing, as it tells
-/// the model nothing its absence does not.
+/// A field over a JSON value (see the crate documentation): an empty array or
+/// object renders nothing, as it tells the model nothing its absence does not.
 fn fill_field(
     element: &mut Element,
     name: &str,
@@ -1563,9 +1530,8 @@ fn fill_field(
     }
 }
 
-/// The original's `_fill_field` with `as_item`: a value placed as an entry
-/// of an enclosing collection, which renders even when it is an empty
-/// array or object, keeping that collection's count true.
+/// A value placed as an entry of an enclosing collection, which renders even
+/// when it is an empty array or object, keeping that collection's count true.
 fn fill_item(
     element: &mut Element,
     name: &str,
@@ -1609,14 +1575,11 @@ fn fill_item(
     }
 }
 
-/// The stimulus as the root element of its own block (the original's
-/// `_project` of a payload that is not a model): tagged as the original's
-/// `_payload_tag` tags the payload's Python type (`dict`, `list`, `str`,
-/// `int`, `float`, `bool`, `none_type`), a string as its text and anything else filled as its
-/// `content` field, stamped `stimulus:event`, then `stimulus:id`,
-/// `:source` and `:target` when set. A conversation output's messages
-/// leave out the fields the original's `conversation.Message` excludes from
-/// a model (`__model_facing_excluded_fields__`).
+/// The stimulus as the root element of its own block: tagged by the kind of its
+/// data (`dict`, `list`, `str`, `int`, `float`, `bool`, `none_type`), a string
+/// as its text and anything else filled as its `content` field, stamped
+/// `stimulus:event`, then `stimulus:id`, `:source` and `:target` when set. A
+/// conversation output's messages leave out `MESSAGE_EXCLUDED_FIELDS`.
 fn stimulus_element(
     envelope: Option<&Map<String, Json>>,
     budget: &mut Budget,
@@ -1668,8 +1631,7 @@ fn stimulus_element(
 /// their correlation.
 const CONVERSATION_OUTPUT: &str = "bot.ability.conversation.output";
 
-/// The fields of a conversation message a model never sees (the original's
-/// `conversation.Message.__model_facing_excluded_fields__`).
+/// The fields of a conversation message a model never sees.
 const MESSAGE_EXCLUDED_FIELDS: [&str; 3] = ["provenance", "source_ids", "target_ids"];
 
 /// A conversation output's data with each of its `messages` without
@@ -1689,10 +1651,9 @@ fn model_facing_messages(data: &Json) -> Json {
 /// Renders one model of a tuple.
 type Render = fn(Option<&Map<String, Json>>, &mut Budget) -> Result<Element, &'static str>;
 
-/// The original's `stm.Turn.__model_facing_element__`: one `<memory:turn>`
-/// line, `at` (UTC, to the second), `direction`, `who` (each speaker's
-/// `ref`) when it has speakers and `cut="true"` when the words were cut,
-/// holding the words.
+/// One short-term memory turn as a `<memory:turn>` line: `at` (UTC, to the
+/// second), `direction`, `who` (each speaker's `ref`) when it has speakers and
+/// `cut="true"` when the words were cut, holding the words.
 fn turn(turn: Option<&Map<String, Json>>, budget: &mut Budget) -> Result<Element, &'static str> {
     let field = |key: &str| turn.and_then(|turn| turn.get(key));
     let mut element = budget.element("memory:turn")?;
@@ -1747,9 +1708,9 @@ fn models(
     Ok(list)
 }
 
-/// The original's `episodes.CognitiveEpisode`: `focus`, `focus_candidates`,
-/// `stimulus_name`, `outcome` and `failure` (a failed or cancelled turn's,
-/// decision D139), `output` (`cognition.types.EventData`), `behavior`.
+/// A cognitive episode: `focus`, `focus_candidates`, `stimulus_name`,
+/// `outcome` and `failure` (a failed or cancelled turn's, decision D139),
+/// `output` (as `cognition:event`s), `behavior`.
 fn episode(
     episode: Option<&Map<String, Json>>,
     budget: &mut Budget,
@@ -1789,7 +1750,7 @@ fn episode(
     Ok(element)
 }
 
-/// The original's `cognition.types.EventData`: target, event, data, reason.
+/// A selection as a `cognition:event`: target, event, data, reason.
 fn selection(
     selection: Option<&Map<String, Json>>,
     budget: &mut Budget,
@@ -1806,7 +1767,8 @@ fn selection(
     Ok(element)
 }
 
-/// The original's `behavior.events` `CreateData`, `ChangeData`, `BreakData`.
+/// A behavior event as a `behavior:create`, `behavior:change` or
+/// `behavior:break`.
 fn behavior_element(
     behavior: &Map<String, Json>,
     budget: &mut Budget,
@@ -1834,8 +1796,7 @@ fn behavior_element(
     Ok(element)
 }
 
-/// The original's `directives.Directive`: text, kind (`instruction` by
-/// default).
+/// A directive: text, kind (`instruction` by default).
 fn directive(
     directive: Option<&Map<String, Json>>,
     budget: &mut Budget,
@@ -1853,8 +1814,8 @@ fn directive(
     Ok(element)
 }
 
-/// The original's environment block (`Environment.model_snapshot` from
-/// the bot's perspective); `None` when the turn has no environment.
+/// The environment block, from the bot's perspective; `None` when the turn has
+/// no environment.
 fn environment_element(value: &Json, budget: &mut Budget) -> Result<Option<Element>, &'static str> {
     let fields = match value {
         Json::Object(fields) => Some(fields),
@@ -1881,8 +1842,8 @@ fn environment_element(value: &Json, budget: &mut Budget) -> Result<Option<Eleme
         })
         .unwrap_or_default();
     snapshot_attributes(&mut own_element, &others, budget)?;
-    // The firmware is shown exactly as a device is (the original's
-    // `_render_firmware`), under the reference `firmware`.
+    // The firmware is shown exactly as a device is, under the tag
+    // `firmware`.
     if let Some(firmware) = members(own_field("firmware")) {
         let firmware = actor_element("firmware", firmware, budget)?;
         own_element.children.push(firmware);
@@ -1900,9 +1861,8 @@ fn environment_element(value: &Json, budget: &mut Budget) -> Result<Option<Eleme
     Ok(Some(element))
 }
 
-/// One actor element, a device or the firmware (the original's
-/// `_render_actor_element`): `<tag ref id state on?>` with its attributes
-/// as children.
+/// One actor element, a device or the firmware: `<tag ref id state on?>` with
+/// its attributes as children.
 fn actor_element(
     tag: &str,
     actor: &Map<String, Json>,
@@ -1912,8 +1872,8 @@ fn actor_element(
     for key in ["ref", "id", "state"] {
         budget.attribute(&mut element, key, ecmascript_string(actor.get(key)))?;
     }
-    // Where the actor is, not what it shows (the original lifts a
-    // snapshot's `on` onto the element).
+    // Where the actor is, not what it shows: a snapshot's `on` is an
+    // attribute of the element.
     if let Some(Json::String(on)) = actor.get("on") {
         budget.attribute(&mut element, "on", on.clone())?;
     }
@@ -1926,8 +1886,8 @@ fn actor_element(
     Ok(element)
 }
 
-/// A snapshot's attributes as child elements, as the original renders
-/// them (see the crate documentation).
+/// A snapshot's attributes as child elements (see the crate
+/// documentation).
 fn snapshot_attributes(
     element: &mut Element,
     values: &Map<String, Json>,
@@ -1963,8 +1923,8 @@ fn snapshot_attributes(
     Ok(())
 }
 
-/// The original's sanitized tag of a key, counted in UTF-16 code units as
-/// the JavaScript it replaces did.
+/// A key as a sanitized tag (see the crate documentation), counted in UTF-16
+/// code units as the JavaScript it replaces did.
 fn snapshot_tag(key: &str) -> String {
     let mut tag = String::with_capacity(key.len());
     for character in key.chars() {

@@ -1,7 +1,6 @@
-//! The reading ability (`abilities/reading/reading.scx`, the original's Reading) and its
-//! visual classification child (`abilities/vision/vision.scx`, the original's
-//! `VisualClassification`), run as a harness document's child through
-//! `scx run` on the logical clock.
+//! The reading ability (`abilities/reading/reading.scx`) and its visual
+//! classification child (`abilities/vision/vision.scx`), run as a harness
+//! document's child through `scx run` on the logical clock.
 //!
 //! Each test lays out a scratch `abilities/` with the harness and copies of
 //! `reading/` and `vision/` (documents and scripts) and the abilities'
@@ -240,7 +239,7 @@ fn an_image_is_read_by_the_vision_model() {
             r#"[{"content":[{"content":"Read all visible text in this image. Return only the text.","kind":"text"},{"content":"media/receipt.png","kind":"image"}],"role":"user"}]"#
         ])
     );
-    // The original's image decoder settings: temperature 0, 512 tokens.
+    // The image decoder's sampling: temperature 0, 512 tokens.
     assert_eq!(texts(&finished, "double.sampling"), strings(&["[0,512]"]));
     assert_eq!(
         texts(&finished, "vision.classification"),

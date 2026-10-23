@@ -1,6 +1,6 @@
 [package]
 name = "floppy-autonomy"
-description = "The `autonomy` namespace: `<autonomy:behavior_input_payload>`, the original's autonomy module (the input a learned behavior runs with), as a Wasm extension component"
+description = "The `autonomy` namespace: `<autonomy:behavior_input_payload>` (the input a learned behavior runs with) as a Wasm extension component"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

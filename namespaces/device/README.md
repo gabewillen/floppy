@@ -7,7 +7,7 @@ session of the run through scxml.rs's `session-snapshot-host.snapshot` with
 a target (decision D109) and assigns the read through the data model; it
 never sends, and it does no I/O.
 
-| Element | The original | Writes |
+| Element | Reads | Writes |
 | --- | --- | --- |
 | `<device:snapshot location target>` | a device's state machine snapshot, read for the bot's environment block and its focused device's choices | `{id, state, attributes, events}`: the session's `_sessionid`, its active atomic states (space-separated), its data model, and the event names its active transitions accept, each once (`*` is not listed) |
 

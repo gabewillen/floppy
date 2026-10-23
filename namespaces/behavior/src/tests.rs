@@ -239,8 +239,8 @@ fn accepting_statements_are_what_the_javascript_it_replaces_built() {
     }
 }
 
-/// The original's `_draft` stub, stored as `store_behavior` stores it: its
-/// defaults fill what a draft does not name.
+/// A bare draft, stored as the reflection stores a behavior: an
+/// instance's defaults fill what a draft does not name.
 #[test]
 fn a_draft_is_replaced_with_the_instance_defaults() {
     let assigned = run(

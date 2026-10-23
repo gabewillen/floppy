@@ -11,7 +11,7 @@ function memoryTimeoutDelay() {
 // percept
 
 // The turn's percepts: a bot.perceived batch's stimuli in arrival order,
-// else the stimulus itself (the reference _Agenda's slots).
+// else the stimulus itself.
 function perceptsOf(stimulus) {
   if (stimulus.event === 'bot.perceived') {
     return stimulus.data.percepts.map(function (percept) { return percept.stimulus; });
@@ -41,7 +41,7 @@ function silenceDelay() {
 }
 
 // seeding: the seed answered the turn with at least
-// one selection (the reference _coerce_behavior_output: an empty one is unhandled).
+// one selection (an empty one is unhandled).
 function isBehaviorHandled(event) {
   return event.data.turn === turn && event.data.handled === true && Array.isArray(event.data.selected) && event.data.selected.length > 0;
 }
@@ -50,7 +50,7 @@ function seedSilentLog() {
   return 'SpeechHeard after ' + silence_ms + ' ms';
 }
 
-// the reference _emit_native_start_failure.
+// Why the seed failed: the error event's name.
 function seedFailedReason(event) {
   return 'Autonomy native seed \'SpeechHeard\' failed: ' + event.name;
 }
@@ -68,7 +68,7 @@ function noMemoryLog() {
 
 // loading
 
-// the reference _behavior_select_input.
+// One statement: the ACTIVE turn behaviors the percept's event triggers.
 function behaviorSelectStatements() {
   return [{sql: select_sql, parameters: [view.event]}];
 }
@@ -153,7 +153,7 @@ function noBehaviorsOutput() {
 }
 
 // Unhandled, with what the behaviors that handled some percepts did
-// (acted, the reference's ActedData) when any did.
+// (acted) when any did.
 function unhandledOutput() {
   var output = {turn: turn, handled: false, candidates: tried, reason: 'unhandled'};
   if (handled.length > 0) {

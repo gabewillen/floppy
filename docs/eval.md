@@ -3,8 +3,8 @@
 The learning eval grades how well the floppy bot learns from what people
 tell it, on real input: its **name** (the identity ability adopts a name,
 answers to it, and recalls it after a restart), its **reflexes** (turn
-behaviors reflection learns and autonomy then runs on matching input, the
-reference's reflex tier) and its **routines** (persistent behaviors that act
+behaviors reflection learns and autonomy then runs on matching input) and
+its **routines** (persistent behaviors that act
 on a schedule with no input). It exists because the live runs so far
 (docs/live-proof.md, 2026-10-20 and 2026-10-21) showed reflection rarely
 learns a behavior, and no test checked a learned behavior against the input
@@ -172,7 +172,7 @@ python3 tests/eval/eval.py builder --judges none --repeats 2 \
 
 The bot's backends are the live tests' (`FLOPPY_LIVE_ENV_FILE`,
 `FLOPPY_LIVE_MODEL`; floppy_live's module comment). On the maintainer's lab
-(mosfet's stack, docs/live-proof.md 2026-10-21: `gemma-4-26b-a4b` on the
+(docs/live-proof.md 2026-10-21: `gemma-4-26b-a4b` on the
 vLLM at `192.168.2.2:8100`, the systemone decision server at
 `192.168.2.2:8102`, reachable from the maintainer's network only), with
 `env.lab` and `env.speech` as there:

@@ -4,7 +4,7 @@
 
 // preparing
 
-// The original revision._draft: the create stub, DRAFT.
+// A create's stub, DRAFT.
 function draftInstance() {
   return ({name: intent.name, source: '', description: intent.description || '', status: 'DRAFT', triggers: intent.triggers || []});
 }
@@ -54,7 +54,7 @@ function revisionLog() {
   return (intent_event === 'bot.behavior.create' ? 'create ' : 'change ') + intent.name;
 }
 
-// The reference ChangeWriteInput: the turn.
+// The change input: the turn.
 function changeWriteInput() {
   return ({cognition_input: cognition_input, cognition_output: cognition_output, prior_episodes: prior_episodes});
 }
@@ -64,9 +64,9 @@ function changeWriteInputWithIntent() {
   return Object.assign(write, {intent: intent, existing_behavior: existing_behavior});
 }
 
-// The original CHANGE_INSTRUCTIONS with the ChangeWriteInput, for the builder,
-// which checks the document it builds against the original check()'s lifetime
-// bounds (min_every, turn_after_bound).
+// The change instructions with the change input, for the builder, which
+// checks the document it builds against the lifetime bounds (min_every,
+// turn_after_bound).
 function builderRequest() {
   return ({spec: change_instructions + '\n\n' + JSON.stringify(write), name: intent.name, model: model, min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms, apply: liveTurn()});
 }
@@ -95,14 +95,14 @@ function turnContract() {
   return turn_contract.replace(/TRIGGERS|TARGETS|INPUT/g, function (m) { return JSON.stringify(m === 'INPUT' ? behavior_input : m === 'TARGETS' ? outputTargets() : triggers); });
 }
 
-// The original schedule.At.next_after for an at schedule {time: 'HH:MM', days,
-// tz, rule}: the first occurrence later than now (ms since the epoch) by
-// more than OCCURRENCE_TOLERANCE (1 s) within 8 days, as {ms, iso} (iso
+// The next occurrence of an at schedule {time: 'HH:MM', days, tz, rule}:
+// the first occurrence later than now (ms since the epoch) by more than
+// 1 s within 8 days, as {ms, iso} (iso
 // the wall time with its offset), or null when days name no weekday. The
 // data model has no time zone database (no Intl), so the zone is its
 // POSIX TZ rule, the rule its zoneinfo file ends with; a wall time in a
 // spring-forward gap resolves past the gap and one in a fall-back overlap
-// is the first of its two instants (zoneinfo fold=0). A routine carries it
+// is the earlier of its two instants. A routine carries it
 // as data (routineContract), so its text has no <, &, or quotes.
 var next_after = (at, now) => {
   const hms = s => {
@@ -155,13 +155,13 @@ function isBuilt(_event) {
   return typeof Object(_event.data).reason !== 'string' && typeof Object(_event.data).scxml === 'string' && _event.data.scxml.length > 0 && typeof _event.data.path === 'string';
 }
 
-// The builder's failed with the last draft it rejected (the original: a failed
-// check, which drafts the rejected source).
+// The builder's failed with the last draft it rejected (a failed check,
+// which drafts the rejected source).
 function hasRejectedDraft(_event) {
   return typeof Object(_event.data).reason === 'string' && typeof _event.data.scxml === 'string' && _event.data.scxml.length > 0 && typeof _event.data.path === 'string';
 }
 
-// The original diagnostic.Report.render of the builder's diagnostics.
+// The builder's diagnostics rendered as a validation report.
 function renderedReport(diagnostics) {
   return 'behavior validation failed:' + (Array.isArray(diagnostics) ? diagnostics : []).map(function (d) { return '\n  error[' + d.code + '] ' + d.kind + ': ' + d.message; }).join('');
 }
@@ -171,7 +171,7 @@ function abandonedMessage(_event) {
   return _event.data.reason === 'attempts-exhausted' ? 'Reflection change abandoned: attempts exhausted:\n' + renderedReport(_event.data.diagnostics) : 'Reflection change abandoned: ' + _event.data.reason + '.';
 }
 
-// The original _fail_child: the change call failed, with no draft.
+// The change call failed, with no draft.
 function builderFailedMessage(_event) {
   var d = Array.isArray(Object(_event.data).diagnostics) ? _event.data.diagnostics[0] : undefined;
   return revisionFailedMessage(String(Object(_event.data).reason) + (d === undefined ? '' : ': ' + d.message));
@@ -179,7 +179,7 @@ function builderFailedMessage(_event) {
 
 // accepting
 
-// The original _evidence_trigger_names: the turn's stimulus, then the prior episodes'.
+// The evidence's trigger names: the turn's stimulus, then the prior episodes'.
 function evidenceStimulusNames() {
   return [cognition_input.stimulus.event].concat(prior_episodes.map(function (e) { return e.stimulus_name; }));
 }
@@ -193,7 +193,9 @@ function intentTriggers() {
   return Array.isArray(intent.triggers) ? intent.triggers : [];
 }
 
-// The original _grounded_triggers.
+// The triggers grounded in the evidence: the intent's that the evidence
+// names, else the evidence's first name when the intent named any, else
+// none.
 function groundedTriggers() {
   return triggers.some(function (t) { return evidence.indexOf(t) >= 0; }) ? triggers.filter(function (t) { return evidence.indexOf(t) >= 0; }) : triggers.length === 0 ? [] : evidence.slice(0, 1);
 }
@@ -203,7 +205,7 @@ function acceptedTriggers() {
   return triggers.length > 0 ? triggers : existing_behavior.triggers;
 }
 
-// The original _AppliedEventData.behavior.
+// The applied inventory event's behavior.
 function appliedBehavior() {
   return ({event: intent.event, name: intent.name, triggers: triggers, description: intent.description || existing_behavior.description || null});
 }
@@ -212,7 +214,7 @@ function appliedBehaviorWithSource() {
   return Object.assign(behavior, {reason: intent.reason || null, source: path});
 }
 
-// The accepted Instance, ACTIVE with the written documents' path as its
+// The accepted instance, ACTIVE with the written documents' path as its
 // source and their lifetime, the
 // grounded triggers and the existing row's examples and usage counters.
 function acceptedInstance() {
@@ -227,7 +229,7 @@ function acceptedLog() {
 
 // abandoning
 
-// The original Revision._persist_draft: the rejected draft's path, DRAFT validation.
+// An abandoned revision's draft: the rejected draft's path, DRAFT validation.
 function draftBehaviorStatements() {
   return [{sql: draft_behavior, parameters: [path, intent.name]}];
 }

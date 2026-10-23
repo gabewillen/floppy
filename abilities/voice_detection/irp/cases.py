@@ -40,7 +40,7 @@ NONE = {"path": VAD, "body": {"segments": []}}
 S.statement(1, "It normalizes the sound, then detects its voice: a WAV container's signed 16-bit PCM is written to `output` and the sound becomes `{audio: output, media_type: \"audio/pcm\", sample_rate_hz, channels}` (the container's own format); the speech service's `detect` (`POST {base}/vad`, model `silero-vad` by default) answers `bot.ability.hearing.voice.detection.output` `{segments}`, and the done data (`done.invoke.voice_detection`) is exactly `{sound, voice_detection: {segments}}`, each segment `{start_seconds, end_seconds, confidence}` (the answer's `confidence`, `probability` or `score`, else `null`) in ascending start order, clamped to the clip.")
 S.statement(2, "Raw, `audio/l16` or unnamed audio with a rate and channels normalizes to `audio/pcm` in place (the same `audio`); any other media type, or a WAV container that cannot be read, leaves the sound unchanged, and the detection still runs on it.")
 S.statement(3, "A clip with no voice (no spans answered, or only spans outside the clip) is not a failure: its `voice_detection` is `{segments: []}`.")
-S.statement(4, "When the detection answers `bot.ability.failed` `{message}` (an error status, a malformed answer, audio that cannot be read), the done data is exactly the original's FailureData `{message}`, with no sound.")
+S.statement(4, "When the detection answers `bot.ability.failed` `{message}` (an error status, a malformed answer, audio that cannot be read), the done data is exactly `{message}`, with no sound.")
 S.statement(5, "When the normalization fails (`bot.ability.failed`, such as an `output` that cannot be written) it ends with that `{message}` and nothing is detected; when a step cannot run (a missing `output`, or a malformed `model`, rejects its start with `error.execution`), the done data is `{message: \"VoiceDetection could not run (<error event>)\"}`.")
 
 # 1: WAV normalized, spans folded.
@@ -50,7 +50,7 @@ S.case(100, 1, "a WAV sound is normalized to PCM and its spans come back sorted,
            {"start_seconds": 0.5, "end_seconds": 1, "confidence": None}]))],
        params=WAV,
        backend=[{"path": VAD, "body": {"segments": [{"start": 0.5, "end": 2.0}, {"start": 0.1, "end": 0.3, "probability": 0.9}]}}])
-S.case(101, 1, "the original's start_seconds/end_seconds spans and a score are read too.",
+S.case(101, 1, "spans with start_seconds/end_seconds and a score are read too.",
        [expect(DONE, detected(sound("media/sound.pcm", "audio/pcm", 8000, 1), [
            {"start_seconds": 0.25, "end_seconds": 0.75, "confidence": 0.5}]))],
        params=WAV,

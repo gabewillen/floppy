@@ -4,8 +4,8 @@
 //!
 //! Executable content is synchronous and quick, so this namespace holds only
 //! the half of a decision that is: reading the choices (the choices of a
-//! `TypeSafe` `Choice` question) and grounding one property of them. What the original's processing module does with
-//! the choices (their model-facing schemas, the turn's offered events, the
+//! `TypeSafe` `Choice` question) and grounding one property of them. What
+//! becomes of the choices (their model-facing schemas, the turn's offered events, the
 //! dispatch tool, the selection confidence) is the `processing` namespace
 //! (`namespaces/processing`). Asking a backend to
 //! choose is slow I/O and belongs to the `decision` invoked service
@@ -74,8 +74,8 @@
 //! # `<decision:pin location="L" event="E" property="P" values="X"/>`
 //!
 //! Pins one property of one event's schema in the choice array at
-//! `location` (the original grounds `bot.focus_device`'s `device` in the turn's
-//! focus candidates): `values`, an expression that evaluates to a JSON
+//! `location` (as the floppy bot (`bots/floppy`) grounds `bot.focus_device`'s `device` in the
+//! turn's focus candidates): `values`, an expression that evaluates to a JSON
 //! array, becomes the `enum` of `schema.properties.<P>` of every entry whose
 //! event is `E`; when the array is empty those entries are removed instead
 //! (nothing could fill them). The result is canonical JSON. Every attribute

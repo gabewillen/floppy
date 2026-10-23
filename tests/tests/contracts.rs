@@ -1,6 +1,5 @@
-//! Phase 4 event contracts: one canonical JSON Schema file per event,
-//! extracted from the original's pydantic models (docs/port-plan.md, "Phase 4
-//! event contracts"). Body events live in `bots/floppy/schemas/`, ability
+//! Phase 4 event contracts: one canonical JSON Schema file per event
+//! (docs/port-plan.md, "Phase 4 event contracts"). Body events live in `bots/floppy/schemas/`, ability
 //! events in `abilities/schemas/`, each in exactly one file: an
 //! `event:schema` file reference resolves against its document's base URI
 //! like any relative URI, so an ability references
@@ -14,10 +13,11 @@
 //! * every schema is JSON Schema 2020-12, compiles, and is titled by its
 //!   file name; its examples satisfy it;
 //! * the set is exactly the phase 4 events, split body / abilities;
-//! * every name is the original's (`abilities/schemas/floppy-event-names.json`,
-//!   the extracted list) or is marked `[floppy name]` in its description;
+//! * every name is on the event name list
+//!   (`abilities/schemas/floppy-event-names.json`) or is marked
+//!   `[floppy name]` in its description;
 //! * the mapping rules hold: correlated events require an integer `turn`,
-//!   the original's runtime-only fields are gone, and media is a reference.
+//!   the runtime-only correlation fields are gone, and media is a reference.
 //!
 //! And over every `.scx` under `abilities/`, `bots/floppy/` and
 //! `environments/` (the body `bots/floppy/floppy.scx`, its abilities, and
@@ -29,8 +29,8 @@
 //! * every `event:schema` is a reference to an existing file, never inline;
 //! * every `#_parent` or `#_<invokeid>` send has a transition taking it in
 //!   the receiving document;
-//! * every `bot.*` or `environment.*` name used is the original's or a marked
-//!   floppy name;
+//! * every `bot.*` or `environment.*` name used is on the event name list
+//!   or a marked floppy name;
 //! * the layout rule (decision D65): the document is `<name>/<name>.scx`,
 //!   its only `<script>` is the root `<script src="<name>.js"/>` naming the
 //!   `<name>.js` beside it, and the document itself has no `function`
@@ -146,8 +146,7 @@ const ABILITY_EVENTS: [&str; 103] = [
     "bot.ability.identity.recalled",
     "bot.ability.identity.ask",
     "bot.ability.identity.named",
-    // The original's Persona: its revise, its output and its private
-    // completions.
+    // The persona: its revise, its output and its private completions.
     "bot.ability.persona.revise",
     "bot.ability.persona.output",
     "bot.ability.persona.recalled",
@@ -158,26 +157,25 @@ const ABILITY_EVENTS: [&str; 103] = [
     "bot.behavior.tick",
     "bot.ability.reflection.input",
     "bot.ability.reflection.output",
-    // The revision's applied behavior (the original's Revision output,
-    // decision D148).
+    // The revision's applied behavior (decision D148).
     "bot.ability.reflection.revision.output",
     "bot.ability.routines.reconcile",
     "bot.ability.offers",
-    // Phase 3: the memory service's committed transaction (the original's
-    // Memory.output_event), described where the abilities take it.
+    // Phase 3: the memory service's committed transaction, described where
+    // the abilities take it.
     "bot.ability.memory.output",
     // The migration ability's reached revision (Alembic's upgrade or
     // downgrade), described where the memory ability takes it.
     "bot.ability.migration.output",
-    // Phase 6: listening (the original's Listening, Sensitivity and
-    // Interpretation) and the efference copy it takes from speaking.
+    // Phase 6: listening (with its sensitivity and interpretation) and the
+    // efference copy it takes from speaking.
     "bot.ability.listening.speech.output",
     "bot.ability.listening.failed",
     "bot.ability.listening.stage.failed",
     "bot.ability.listening.sensitivity.score",
     "bot.ability.listening.sensitivity.output",
     "bot.ability.listening.sensitivity.failed",
-    // Phase 6: the original's VisualClassification and Reading.
+    // Phase 6: visual classification and reading.
     "bot.ability.vision.classification.input",
     "bot.ability.vision.classification.output",
     "bot.ability.vision.classification.apply.completed",
@@ -190,7 +188,7 @@ const ABILITY_EVENTS: [&str; 103] = [
     "bot.ability.reading.image.decoded",
     "bot.ability.reading.unreadable.output.ready",
     "bot.ability.reading.output.encoded",
-    // The original's TurnDetector (the conversation's turn_detector stage).
+    // The turn detector (the conversation's turn_detector stage).
     "bot.ability.turn_detector.turn.start",
     "bot.ability.turn_detector.turn.update",
     "bot.ability.turn_detector.turn.pause",
@@ -198,8 +196,8 @@ const ABILITY_EVENTS: [&str; 103] = [
     "bot.ability.turn_detector.turn.complete",
     "bot.ability.turn_detector.failed",
     "bot.ability.turn_detector.ready",
-    // The original's short-term register (abilities/memory/stm.py): its
-    // notifications, its requests and their replies.
+    // The short-term register (abilities/stm/stm.scx): its notifications,
+    // its requests and their replies.
     "bot.ability.memory.stm.record",
     "bot.ability.memory.stm.reinforce",
     "bot.ability.memory.stm.recent",
@@ -207,7 +205,7 @@ const ABILITY_EVENTS: [&str; 103] = [
     "bot.ability.memory.stm.turn",
     "bot.ability.memory.stm.recent_turns",
     "bot.ability.memory.stm.recent_turns.output",
-    // Seeing (the original's Seeing), the stimulus it takes, and its stage
+    // Seeing, the stimulus it takes, and its stage
     // children's object detection and description (decisions D185 to
     // D189).
     "environment.visual",
@@ -245,8 +243,8 @@ const CORRELATED: [&str; 18] = [
     "bot.ability.reasoning.recalled",
 ];
 
-/// The original's runtime-only correlation and cancel-token fields, which SCXML
-/// invoke cancellation and `turn` replace.
+/// Runtime-only correlation and cancel-token fields, which SCXML invoke
+/// cancellation and `turn` replace, so no schema carries them.
 const RUNTIME_ONLY: [&str; 8] = [
     "operation_id",
     "generation",
@@ -318,7 +316,8 @@ fn all_schemas() -> BTreeMap<String, Json> {
     all
 }
 
-fn reference_names() -> BTreeSet<String> {
+/// The event names `abilities/schemas/floppy-event-names.json` lists.
+fn listed_event_names() -> BTreeSet<String> {
     let names: Vec<String> = serde_json::from_value(read_json(&ability_schemas().join(NAMES_FILE)))
         .expect("the name list is an array of strings");
     names.into_iter().collect()
@@ -398,8 +397,8 @@ fn every_schema_is_2020_12_compiles_and_is_titled_by_its_file_name() {
     }
 }
 
-/// Whether `node` is a schema of the original's `Participant`: an object
-/// schema whose properties are its `ref` and `role`.
+/// Whether `node` is a participant schema: an object schema whose
+/// properties include `ref` and `role`.
 fn is_participant(node: &Json) -> bool {
     node.get("properties")
         .and_then(Json::as_object)
@@ -407,11 +406,11 @@ fn is_participant(node: &Json) -> bool {
 }
 
 #[test]
-fn every_participant_is_the_originals_one_participant() {
+fn every_schema_inlines_the_same_one_participant() {
     // scxml.rs bundles no schema from another file (a `$ref` that is not a
     // fragment is refused, `ReferenceReason::External`), so each schema
-    // that carries participants inlines the original's Participant, and
-    // every one is the same: its ref, role, own and resembles.
+    // that carries participants inlines the Participant schema, and every
+    // one is the same: its ref, role, own and resembles.
     let mut participants: Vec<(String, Json)> = Vec::new();
     for (event, schema) in all_schemas() {
         walk(&schema, &mut |node| {
@@ -539,8 +538,8 @@ fn every_reference_resolves_to_its_events_one_schema_file() {
 }
 
 #[test]
-fn every_event_name_is_the_original_or_a_marked_floppy_name() {
-    let reference = reference_names();
+fn every_event_name_is_a_listed_name_or_a_marked_floppy_name() {
+    let listed = listed_event_names();
     let schemas = all_schemas();
     let floppy = floppy_names(&schemas);
     assert_eq!(
@@ -553,8 +552,8 @@ fn every_event_name_is_the_original_or_a_marked_floppy_name() {
     );
     for event in schemas.keys() {
         assert!(
-            reference.contains(event) != floppy.contains(event),
-            "{event} is the original's, or floppy's and marked, never both"
+            listed.contains(event) != floppy.contains(event),
+            "{event} is on the event name list, or floppy's and marked, never both"
         );
     }
 }
@@ -826,8 +825,8 @@ fn unreceived_sends(document: &Parsed) -> Vec<String> {
 }
 
 /// The `bot.*` and `environment.*` names one document uses (transition
-/// descriptors, `<send>` and `<raise>` events) that are neither the original's
-/// nor a marked floppy name.
+/// descriptors, `<send>` and `<raise>` events) that are neither on the event
+/// name list nor a marked floppy name.
 fn unknown_domain_names(document: &Parsed, known: &BTreeSet<String>) -> Vec<String> {
     document.with(|root| {
         let mut unknown = Vec::new();
@@ -844,7 +843,7 @@ fn unknown_domain_names(document: &Parsed, known: &BTreeSet<String>) -> Vec<Stri
             for token in event.value.split_whitespace() {
                 let name = token.strip_suffix(".*").unwrap_or(token);
                 let domain = name.starts_with("bot.") || name.starts_with("environment.");
-                // A descriptor may name a prefix of the original names (`bot.ability`).
+                // A descriptor may name a prefix of the listed names (`bot.ability`).
                 let known_name = known
                     .iter()
                     .any(|known| known == name || known.starts_with(&format!("{name}.")));
@@ -1046,7 +1045,7 @@ fn contract_events() -> BTreeSet<String> {
 }
 
 fn known_names() -> BTreeSet<String> {
-    let mut known = reference_names();
+    let mut known = listed_event_names();
     known.extend(floppy_names(&all_schemas()));
     known
 }

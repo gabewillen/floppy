@@ -36,7 +36,7 @@
     </test>
   </assert>
   <assert id="voice_detection-4" specnum="4" specid="#voice_detection-4">
-    <![CDATA[When the detection answers `bot.ability.failed` `{message}` (an error status, a malformed answer, audio that cannot be read), the done data is exactly the original's FailureData `{message}`, with no sound.]]>
+    <![CDATA[When the detection answers `bot.ability.failed` `{message}` (an error status, a malformed answer, audio that cannot be read), the done data is exactly `{message}`, with no sound.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>

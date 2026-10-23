@@ -4,7 +4,7 @@
   "package-version": "0.1.0",
   "extension-artifact": "floppy_identity.virtualized.wasm",
   "schema-artifact": "identity.xsd",
-  "schema-sha256": "9fee82cf9fcf6f1ba666685c441812e5848c711cb7fd96d05fd8994a0d3b3fa3",
+  "schema-sha256": "f82f2bce4916d13edb52c92314ea8fcf014d6008ffe936e95600d632256666a2",
   "wit-world": "stateforward:scxml/executable-content-extension",
   "wit-version": "0.2.0"
 }

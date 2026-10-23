@@ -19,13 +19,13 @@ function recalledName() {
   return typeof name === 'string' && name.length > 0 ? {text: name, kind: 'fact'} : null;
 }
 
-// The original identity/name.py: the adopted names, oldest first.
+// The adopted names, oldest first.
 function nameSelectStatements() {
   return [{sql: name_select, parameters: ['self_name', 'self']}];
 }
 
-// One stored row's content as the original's Name (identity/name.py: text,
-// and kind, "fact" when absent; no other key), or null when it does not
+// One stored row's content as a name ({text, kind}, kind "fact" when
+// absent; no other key), or null when it does not
 // decode as one, so a damaged row never costs the bot the name adopted
 // before it. A text over 64 characters, which no adoption writes, is
 // skipped too: bot.ability.identity.named could not tell it.
@@ -70,7 +70,7 @@ function recalledNameLog() {
 
 // listening
 
-// The original Identity._can_recognize: a nameless bot only hears words.
+// A nameless bot only hears words.
 function canRecognize() {
   return name !== null;
 }
@@ -82,12 +82,12 @@ function heardText(data) {
 
 // recognizing
 
-// The speech decoding answered with a transcript (the original's decoded text).
+// The speech decoding answered with a transcript (its decoded text).
 function hasTranscript(_event) {
   return typeof Object(_event.data).text === 'string';
 }
 
-// The original _run_recognition: the recognizer's error, as the stage failure.
+// The recognizer's error, as the stage failure.
 function recognitionFailedMessage(_event) {
   return typeof Object(_event.data).message === 'string' ? _event.data.message : 'Identity recognizer produced output that does not match its output schema.';
 }
@@ -106,7 +106,7 @@ function adoptedName() {
   return ({text: adopting_name, kind: 'fact'});
 }
 
-// The original identity/name.py: the insert's parameters ?1 to ?6.
+// The insert's parameters ?1 to ?6.
 function nameInsertParameters() {
   return ['long_term', 'self', 'fact', 'standard', 'retain', JSON.stringify({text: adopting_name, kind: 'fact'})];
 }

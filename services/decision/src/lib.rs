@@ -37,7 +37,7 @@
 //! * `kind` (optional): `choice` (the default), `predicate`, or `score`.
 //! * `state` (required): the state document the backend decides about, a
 //!   string, a JSON object, or a JSON array (the decision layer's is the
-//!   model-facing text of its stimulus, `{"turn": T}`, the reference D-R-50).
+//!   model-facing text of its stimulus, `{"turn": T}`, decision D150).
 //! * `instructions` (optional, a non-empty string): what to decide; each
 //!   kind has a default.
 //! * `model` (optional, a non-empty string): the backend's model; the
@@ -61,8 +61,7 @@
 //!   `(0, 3]`, [`DEFAULT_BYTES_PER_TOKEN`] without one): see "Context fit".
 //! * `predicate` also: `hand_ons` (optional: a non-empty JSON array of
 //!   distinct tiers, `intuition` or `reasoning`, the later tiers a pass may
-//!   hand the turn to, the reference's `hand_ons`; `["reasoning"]` without
-//!   one).
+//!   hand the turn to; `["reasoning"]` without one, decision D150).
 //! * `choice` over labels: `labels` instead of `choices` (a JSON array of
 //!   strings, a JSON object mapping each label to its description, a
 //!   string, object, array, or `null`, or one string of labels separated by
@@ -83,46 +82,43 @@
 //! `package/decision.service.json`), as the deleted scxml.rs `openai`
 //! namespace defaulted to its provider's URL; the manifest stays the one
 //! place the origin is written. Without a held key, a held base URL is
-//! asked keyless (no authorization header is sent, as the reference sends
-//! its bearer only when given one); with neither, the service sends
-//! nothing and answers `unconfigured`.
+//! asked keyless (no authorization header is sent, decision D127); with
+//! neither, the service sends nothing and answers `unconfigured`.
 //!
 //! # `choice` over events, and `predicate`
 //!
-//! Both are the original's `TypeSafe` processor (`providers.typesafe`
-//! `Processor.process`) asking one batch:
+//! Both ask one batch of a `TypeSafe` backend:
 //!
 //! * **The deliberative handoff.** The event [`DELIBERATIVE_HANDOFF_EVENT`]
-//!   is never offered (the processor skips the deliberative handoff's
-//!   schema), so a decision about it is reasoning's.
+//!   is never offered (it is skipped by its name), so a decision about it
+//!   is reasoning's.
 //! * **Grounded data.** The data of each offered event is a JSON object
 //!   holding its schema's top-level `required` members, each chosen by its
 //!   own question among grounded options, never authored: the evidence's
 //!   non-null member of that name (the evidence is `data`, the stimulus's
 //!   data, else the state when it is an object), then the property's
-//!   non-null `enum` values
-//!   (the reference `_candidate_values`). An event with a required member that has
-//!   no option is not offered.
+//!   non-null `enum` values. An event with a required member that has no
+//!   option is not offered.
 //! * **The batch.** The question `selection` criteria are every offered
 //!   event (described by the first line of its description, else by its
-//!   name: the reference `_event_wording`) plus the pass criteria: a
-//!   predicate's one per tier of `hand_ons` ([`HandOn`]: `__intuition__`
-//!   and `__reasoning__`, each in the reference's wording, R-23 and
-//!   D-R-42), a choice's [`ABSTAIN_LABEL`] ([`ABSTAIN_DESCRIPTION`]); each
+//!   name) plus the pass criteria: a predicate's one per tier of
+//!   `hand_ons` ([`HandOn`]: `__intuition__` and `__reasoning__`, each with
+//!   its own wording, decision D150), a choice's [`ABSTAIN_LABEL`]
+//!   ([`ABSTAIN_DESCRIPTION`]); each
 //!   offered event's required member is its own question `<event>::<member>`
 //!   whose criteria are its options. When nothing is offered, the service
 //!   returns [`ABSTAIN_EVENT`] `{"reason": "no-candidates"}` without a
 //!   request; when a pass criterion wins, [`ABSTAIN_EVENT`]
 //!   `{"reason": "declined", "confidence": P}`, with `"hand_to": tier` for a
-//!   predicate's (the reference's explicit decline naming its tier).
+//!   predicate's (an explicit decline naming its tier).
 //! * **`choice`** returns the winning event itself, with its filled data.
 //! * **`predicate`** returns [`SELECTED_EVENT`]
 //!   `{"selections": [{"event": E, "data": D, "confidence": P, "target": T}]}`:
-//!   only the chosen event (the reference D-R-28: the other options'
+//!   only the chosen event (decision D150: the other options'
 //!   probabilities are not selections), with its filled data, its
 //!   probability in the selection question as its confidence, and `target`
-//!   its only offerer, the one `target` its listings name (the original's
-//!   `_single_enabler`; absent when no listing or several name one); the
+//!   its only offerer, the one `target` its listings name (decision D113;
+//!   absent when no listing or several name one); the
 //!   invoking document sends it to its target.
 //! * **Validation before returning.** The filled data of the returned
 //!   event must satisfy its schema from the choices; otherwise the service
@@ -131,7 +127,7 @@
 //! * **Context fit.** With `max_context_tokens`, a request body over
 //!   `floor(max_context_tokens * bytes_per_token)` bytes has the selection's
 //!   instructions cut to as many leading whole lines as fit, then to the
-//!   kind's default instructions (the reference `_fitted`, D-R-36); the
+//!   kind's default instructions (decision D150); the
 //!   state and every criterion are never cut, and a request still over is
 //!   sent anyway, so the backend's refusal is the decision's failure.
 //!
@@ -151,8 +147,7 @@
 //! (`done.invoke.<id>`'s data): the request body's bytes, its fit (`fit`,
 //! `cut` or `overflow`, only with `max_context_tokens`), and the tokens a
 //! successful answer says the backend counted, from which the invoking
-//! document learns its bytes per token (the reference `ContextFit.observe`,
-//! D-R-45). A failure returns [`FAILED_EVENT`] `{"code": C}` with one closed
+//! document learns its bytes per token (decisions D143, D150). A failure returns [`FAILED_EVENT`] `{"code": C}` with one closed
 //! [`FailureCode`]. The chosen event of `choice` is defined by the invoking
 //! document (its choices' `event:schema` transitions), and the document
 //! describes this service's own events with `event:schema` too
@@ -236,11 +231,9 @@ pub const ABSTAIN_LABEL: &str = "__unhandled__";
 /// The `choice` pass criterion's wording.
 pub const ABSTAIN_DESCRIPTION: &str = "None of these: leave the turn unhandled.";
 
-/// A later tier a `predicate` pass hands the turn to (the reference
-/// `processing.HandOn`, R-23): each has its own reserved pass criterion (the
-/// reference `_PASS_CRITERIA`), which the choices never name, and its own
-/// wording (the reference `_DEFAULT_PASS_WORDING`, D-R-42: never as leaving
-/// the turn unhandled).
+/// A later tier a `predicate` pass hands the turn to (decision D150): each
+/// has its own reserved pass criterion, which the choices never name, and
+/// its own wording (never as leaving the turn unhandled).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum HandOn {
     /// Answer it in words now, with intuition.
@@ -250,7 +243,7 @@ pub enum HandOn {
 }
 
 impl HandOn {
-    /// Every tier, in the reference's order.
+    /// Every tier, earliest first.
     pub const ALL: [Self; 2] = [Self::Intuition, Self::Reasoning];
 
     /// The tier's name (`hand_ons` items and `hand_to`).
@@ -293,25 +286,24 @@ fn reserved_label(label: &str) -> bool {
 }
 
 /// The bytes of request body a token before an answer teaches fewer (the
-/// reference `ContextFit`'s starting estimate, D-R-45).
+/// starting estimate, decisions D143, D150).
 pub const DEFAULT_BYTES_PER_TOKEN: f64 = 3.0;
 
 /// The selection question's name in a `choice` or `predicate` batch.
 pub const SELECTION_QUESTION: &str = "selection";
 
-/// The original's deliberative handoff (`types.DELIBERATIVE_HANDOFF_EVENT_NAME`,
-/// the event whose schema is marked `__deliberative_handoff__`): never
-/// offered by `choice` or `predicate`, as the `TypeSafe` processor skips
-/// it.
+/// The deliberative handoff (the event whose schema is marked
+/// `__deliberative_handoff__`): never offered by `choice` or `predicate`,
+/// which skip it by this name.
 pub const DELIBERATIVE_HANDOFF_EVENT: &str = "bot.ability.reasoning.input";
 
 const SCORE_INSTRUCTIONS: &str =
     "Rank the candidates by how well each fits the state: give the best fit the most probability.";
 const LABEL_INSTRUCTIONS: &str = "Classify the state: choose the label that describes it.";
 const CHOICE_INSTRUCTIONS: &str = "Choose the single event the machine should take in this state: each criterion names an event it can take. Choose the pass criterion when none fits.";
-/// The reference `_SELECTION_INSTRUCTIONS`.
+/// A predicate's default instructions.
 const PREDICATE_INSTRUCTIONS: &str = "Choose the single criterion that answers this turn from the bot's own peripheral transducers: the criterion text names the situation. Choose the pass criterion when none offered fits.";
-/// The reference `_PAYLOAD_KEY_INSTRUCTIONS`.
+/// The instructions of a member question.
 const FILL_INSTRUCTIONS: &str = "Fill one payload field for the selected event: the criteria are the exact values the evidence offers. Pick the value the turn supports.";
 
 /// Upper bound on one question's criteria (wasm builds only).
@@ -462,8 +454,7 @@ pub struct Candidate {
     pub targets: Vec<String>,
 }
 
-/// The first non-blank line of `text`, trimmed (the reference `_event_wording`
-/// takes the first line of a stripped description).
+/// The first non-blank line of `text`, trimmed: an event's wording.
 fn first_line(text: &str) -> Option<String> {
     text.lines()
         .map(str::trim)
@@ -485,8 +476,8 @@ fn valid_event_name(name: &str) -> bool {
 /// `schema`, an optional `description`, and an optional `target` (the
 /// offering session's id, as `<processing:collect_offered_events>` tags it).
 ///
-/// An event is one candidate however many targets offer it (the original
-/// `collect_offered_events` keeps one event per name): it may be listed
+/// An event is one candidate however many targets offer it (one event per
+/// name): it may be listed
 /// again only when every listing has a `target` and the same schema, and
 /// the first listing's description is kept. The targets are never part of
 /// the decision; a selection carries its only one.
@@ -626,8 +617,8 @@ fn ground(
                 values.push(value.clone());
             }
         };
-        // The reference `_candidate_values`: the evidence's value, then the
-        // schema's enum options, never null.
+        // A member's options: the evidence's value, then the schema's enum
+        // options, never null.
         if let Some(value) = evidence
             .and_then(|evidence| evidence.get(member))
             .filter(|value| !value.is_null())
@@ -676,8 +667,8 @@ pub struct DecisionRequest {
     kind: Kind,
 }
 
-/// A model's context window in bytes of request body (the reference
-/// `processing.ContextFit`, D-R-36): the invoking document holds the learned
+/// A model's context window in bytes of request body (decision D150): the
+/// invoking document holds the learned
 /// estimate across requests and passes it in, so the service stays stateless.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ContextFit {
@@ -689,7 +680,7 @@ pub struct ContextFit {
 }
 
 impl ContextFit {
-    /// The request body bytes that fit (the reference `budget_bytes`).
+    /// The request body bytes that fit.
     #[must_use]
     pub fn budget_bytes(&self) -> usize {
         #[allow(
@@ -702,8 +693,7 @@ impl ContextFit {
     }
 }
 
-/// How a request was fitted to a model's context (the reference
-/// `ContextFitOutcome`).
+/// How a request was fitted to a model's context.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ContextFitOutcome {
     /// Sent whole.
@@ -847,7 +837,7 @@ fn find<'a>(given: &[(&str, &'a Data)], name: &str) -> Option<&'a Data> {
         .map(|(_, value)| *value)
 }
 
-/// The evidence of a stimulus, as the reference grounds from it: the data of
+/// The evidence a stimulus grounds: the data of
 /// a stimulus object whose `event` is a string, else the stimulus itself;
 /// evidence only when that is a JSON object.
 fn stimulus_evidence(stimulus: Json) -> Option<Map<String, Json>> {
@@ -926,7 +916,7 @@ fn context_fit(
 /// The event part of a `choice` or `predicate` request: its choices, its
 /// evidence (`data`, else the stimulus's object data, else an object
 /// `state`), and a predicate's tiers (`hand_ons`, reasoning alone when
-/// absent: the reference hands a pass to reasoning when the turn names none).
+/// absent: a pass goes to reasoning when the turn names none, decision D150).
 fn events_kind(given: &[(&str, &Data)], state: &Json, every: bool) -> Result<Kind, &'static str> {
     let choices = choices_from_json(
         &json_of(
@@ -1135,36 +1125,7 @@ enum Decide {
 
 const NO_ANSWER: FailureCode = FailureCode::Malformed;
 
-/// A member name as Python's `repr` writes a string (the original formats
-/// `{key!r}`): single quotes unless it holds a single quote and no double
-/// one.
-fn python_repr(text: &str) -> String {
-    let quote = if text.contains('\'') && !text.contains('"') {
-        '"'
-    } else {
-        '\''
-    };
-    let mut repr = String::with_capacity(text.len() + 2);
-    repr.push(quote);
-    for character in text.chars() {
-        match character {
-            '\\' => repr.push_str("\\\\"),
-            '\n' => repr.push_str("\\n"),
-            '\r' => repr.push_str("\\r"),
-            '\t' => repr.push_str("\\t"),
-            other if other == quote => {
-                repr.push('\\');
-                repr.push(other);
-            }
-            other => repr.push(other),
-        }
-    }
-    repr.push(quote);
-    repr
-}
-
-/// The questions of one `choice` or `predicate` batch (the original's `TypeSafe`
-/// `Processor.process`): the selection (every offered event, then the pass
+/// The questions of one `choice` or `predicate` batch: the selection (every offered event, then the pass
 /// criteria: a predicate's one per tier of `hand_ons`, a choice's
 /// [`ABSTAIN_LABEL`]), then each offered event's member questions
 /// (`<event>::<member>`, each criterion described by the question's
@@ -1217,7 +1178,10 @@ fn event_questions(
             if !names.insert(name.clone()) {
                 return Err("decision member questions would share a name");
             }
-            let wording = format!("Which value fills {} for {event}?", python_repr(member));
+            let wording = format!(
+                "Which value fills {} for {event}?",
+                Json::String(member.clone())
+            );
             questions.push(Question {
                 name,
                 instructions: format!("{wording} {FILL_INSTRUCTIONS}"),
@@ -1348,8 +1312,8 @@ impl Prepared {
     }
 
     /// The one request that asks the batch through `backend`, fitted to the
-    /// model's context when the request has a [`ContextFit`] (the reference
-    /// `_fitted`, D-R-36): over its budget, the selection's instructions keep
+    /// model's context when the request has a [`ContextFit`] (decision
+    /// D150): over its budget, the selection's instructions keep
     /// as many leading whole lines as fit, then the kind's default
     /// instructions; the state and every criterion are never cut, and a
     /// request still over at its smallest is sent anyway (the backend's
@@ -1420,7 +1384,7 @@ impl Prepared {
     /// bytes (`request_bytes`), its fit (`context_fit`, with a
     /// [`ContextFit`]) and the tokens a successful answer says the backend
     /// counted (`usage`), from which the invoking document learns its
-    /// bytes per token (the reference `ContextFit.observe`, D-R-45); `None`
+    /// bytes per token (decisions D143, D150); `None`
     /// before a request was built.
     #[must_use]
     pub fn done_data<B: Backend>(
@@ -1600,9 +1564,9 @@ fn decided_events(
     if !every {
         return Ok(Returned::new(&candidate.event, &data));
     }
-    // Only the chosen option is returned (the reference D-R-28), with its
-    // probability as its confidence and its only offerer as `target` (the
-    // original's `_single_enabler`), none when several offer it.
+    // Only the chosen option is returned (decision D150), with its
+    // probability as its confidence and its only offerer as `target`
+    // (decision D113), none when several offer it.
     let mut selection = serde_json::json!({
         "event": candidate.event,
         "data": data,
@@ -1617,31 +1581,10 @@ fn decided_events(
     ))
 }
 
-/// The lines of `text` as Python's `str.splitlines` splits them (the
-/// reference cuts its instructions by them): at `\n`, `\r`, `\r\n`, `\x0b`,
-/// `\x0c`, `\x1c` to `\x1e`, `\u{85}`, `\u{2028}` and `\u{2029}`, no empty
-/// line after a final break.
+/// The lines of `text` the instructions are cut by: split at `\n` or
+/// `\r\n` ([`str::lines`]), no empty line after a final break.
 fn split_lines(text: &str) -> Vec<String> {
-    let mut lines = Vec::new();
-    let mut line = String::new();
-    let mut characters = text.chars().peekable();
-    while let Some(character) = characters.next() {
-        match character {
-            '\r' => {
-                if characters.peek() == Some(&'\n') {
-                    characters.next();
-                }
-                lines.push(std::mem::take(&mut line));
-            }
-            '\n' | '\x0b' | '\x0c' | '\x1c' | '\x1d' | '\x1e' | '\u{85}' | '\u{2028}'
-            | '\u{2029}' => lines.push(std::mem::take(&mut line)),
-            other => line.push(other),
-        }
-    }
-    if !line.is_empty() {
-        lines.push(line);
-    }
-    lines
+    text.lines().map(str::to_owned).collect()
 }
 
 /// The package's first declared `http-origins` entry: the base URL when no

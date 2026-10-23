@@ -293,7 +293,7 @@ fn detection_sends_sixteen_kilohertz_mono_samples() {
 }
 
 #[test]
-fn a_wav_clip_declares_its_own_format_and_raw_pcm_takes_the_original_defaults() {
+fn a_wav_clip_declares_its_own_format_and_raw_pcm_takes_the_default_format() {
     let detection = detection_of(&[]);
     let wav = wav_container(&pcm(&[1_000; 8_000]), 8_000, 1);
     let (samples, seconds) = detection_samples(&detection, wav).expect("a WAV clip");
@@ -460,7 +460,7 @@ fn normalization(media_type: Option<&str>, format: Format) -> Normalization {
 }
 
 #[test]
-fn normalization_is_the_original_pcm_sound_data() {
+fn normalization_unwraps_a_wav_container_into_raw_pcm_and_keeps_other_sound() {
     let wav = wav_container(&pcm(&[7, 8]), 8_000, 1);
     let mut written = None;
     let done = normalized(
@@ -599,7 +599,7 @@ fn open_speech_appends_every_frame_in_order() {
 }
 
 #[test]
-fn a_clip_is_the_original_voice_segment_from_detection() {
+fn a_clip_is_the_pcm_of_its_span_with_the_end_clamped_to_the_sound() {
     let clipping = Clipping {
         audio: media("media/s"),
         sample_rate_hz: 4,

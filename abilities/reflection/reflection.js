@@ -29,12 +29,12 @@ function hasNoDatabase() {
   return database === null;
 }
 
-// The original episodes.episode_select_input: the turn's focus or none.
+// The episodes' select: the turn's focus or none.
 function episodeSelectStatements() {
   return [{sql: select_episodes, parameters: [cognition_input.focus, cognition_input.focus]}];
 }
 
-// The original storage.select_all_behaviors_clauses appended: every behavior.
+// The inventory's select appended: every behavior.
 function behaviorSelectStatements() {
   return statements.concat([{sql: select_behaviors, parameters: [null, null]}, {sql: select_triggers, parameters: [null, null]}]);
 }
@@ -177,8 +177,8 @@ function isSelectHopTimeout(_event) {
   return _event.sendid === hop_timer || _event.sendid === ceiling_timer;
 }
 
-// The original _fail_cancel_timeout: the select child is cancelled on the hop
-// timeout (synchronously here, as leaving the invoking state cancels it).
+// The hop timeout's failure: the select child is cancelled on the hop
+// timeout (synchronously, as leaving the invoking state cancels it).
 function selectTimedOutMessage() {
   return 'Reflection child cancellation timed out.';
 }
@@ -200,7 +200,7 @@ function canRepairSelect() {
 
 // breaking
 
-// The original _apply_break: the trimmed reason, by name.
+// A break: the trimmed reason, by name.
 function breakBehaviorStatements() {
   return [{sql: break_behavior, parameters: [typeof behavior.reason === 'string' ? behavior.reason.trim() : '', behavior.name]}];
 }
@@ -223,7 +223,7 @@ function breakFailedMessage(detail) {
 
 // storing
 
-// The reference CognitiveEpisode, with the behavior the turn applied (null: none).
+// The turn's cognitive episode, with the behavior the turn applied (null: none).
 function cognitiveEpisode(applied) {
   var input = cognition_input;
   var episode = {focus: input.focus, focus_candidates: input.focus_candidates, stimulus_name: input.stimulus.event, output: cognition_output, behavior: applied};
@@ -239,7 +239,7 @@ function isEpisodeUnstored() {
   return episode === null;
 }
 
-// The original episodes.episode_insert_input.
+// The episode's insert.
 function insertEpisodeStatements() {
   return [{sql: insert_episode, parameters: [cognition_input.focus, JSON.stringify(episode)]}];
 }
@@ -284,8 +284,8 @@ function revisingCeilingDelay() {
   return (bounds.revising_ceiling_ms === undefined ? revising_ceiling_ms : bounds.revising_ceiling_ms) + 'ms';
 }
 
-// The data a selection is sent with, as the original's dispatch_selected_events
-// takes it: its data object, else {} (no data, null, or a non-object).
+// The data a selection is sent with: its data object, else {} (no data,
+// null, or a non-object).
 function selectionData(s) {
   return s.data !== null && typeof s.data === 'object' && !Array.isArray(s.data) ? s.data : ({});
 }

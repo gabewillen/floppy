@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Revision ability (the reference reflection's Revision): it
-  authors and checks one create or change of a stored behavior with the
-  builder bot and stores the result. Reflection
-  (abilities/reflection/reflection.scx) invokes it in its revising state
-  with the <param>s below, one invocation per revision (decision D148).
+  floppy's Revision ability: it authors and checks one create or change of
+  a stored behavior with the builder bot and stores the result.
+  Reflection (abilities/reflection/reflection.scx) invokes it in its
+  revising state with the <param>s below, one invocation per revision
+  (decision D148).
 
     preparing -> reading { reading_scxml -> reading_schemas ->
       reading_script } -> authoring -> accepting | abandoning
@@ -15,47 +15,46 @@
   (the builder's), progress_target (where the builder sends its
   builder.progress and passes on its generate.progress; '#_parent' by
   default), intent (the selected bot.behavior.create or change data),
-  intent_event (which of the two it is), create (true for a create of a name the inventory does not hold), turn,
-  cognition_input, cognition_output and prior_episodes (the turn the
-  revision learns from, the reference ChangeWriteInput).
+  intent_event (which of the two it is), create (true for a create of a
+  name the inventory does not hold), turn, cognition_input,
+  cognition_output and prior_episodes (the turn the revision learns from,
+  the change input).
 
-  preparing (the original Revision._prepare) stores a create's DRAFT stub
-  (empty source, its triggers and description) and loads the row (a
-  change of an unknown name fails). A row's source is the path of its
-  program, three documents beside each other that the builder wrote
-  (<name>.scx, <name>.json and <name>.js; decision D121): reading reads
-  them back through the files service, for a row that has one, as the
-  existing row's scxml, schemas and script. authoring invokes the builder
-  bot (bots/builder/builder.scx) and sends it builder.request with a spec
-  built from the intent, the existing row and the turn
-  (change_instructions, ChangeWriteInput) and the turn behavior or
-  persistent routine contract as constraints; the builder's own
-  validate, simulate and repair loop, up to its 8 attempts (decision
-  D133), is the check-and-retry, and it writes the documents under the
-  intent's name. Its done is accepting: the document's path replaces the
-  row ACTIVE (delete triggers, delete row, insert row, insert triggers,
-  the original inventory.store_behavior), keeping the usage counters,
-  with the original's _grounded_triggers (grounded before the build, so
-  the turn behavior contract names them with this turn's input exactly as
-  autonomy builds it; decision D96) and lifetime persistent when the
+  preparing stores a create's DRAFT stub (empty source, its triggers and
+  description) and loads the row (a change of an unknown name fails). A
+  row's source is the path of its program, three documents beside each
+  other that the builder wrote (<name>.scx, <name>.json and <name>.js;
+  decision D121): reading reads them back through the files service, for
+  a row that has one, as the existing row's scxml, schemas and script.
+  authoring invokes the builder bot (bots/builder/builder.scx) and sends
+  it builder.request with a spec built from the intent, the existing row
+  and the turn (change_instructions and the change input,
+  changeWriteInput()) and the turn behavior or persistent routine
+  contract as constraints; the builder's own validate, simulate and
+  repair loop, up to its 8 attempts (decision D133), is the
+  check-and-retry, and it writes the documents under the intent's name.
+  Its done is accepting: the document's path replaces the row ACTIVE
+  (delete triggers, delete row, insert row, insert triggers), keeping the
+  usage counters, with the grounded triggers (grounded before the build,
+  so the turn behavior contract names them with this turn's input exactly
+  as autonomy builds it; decision D96) and lifetime persistent when the
   document sends bot.behavior.tick, else turn. The request carries the
-  original check()'s lifetime bounds (min_every_ms, turn_after_bound_ms),
-  which the builder checks, and it forces a routine's first tick and runs
-  a turn behavior once on this turn's input, its targets those of
-  cognition_output (the live-turn check, decision D131). Its failed with
-  the last draft it rejected is abandoning (the original _abandon): the
-  row keeps that draft's path as DRAFT with status_reason validation, and
-  the revision fails with "Reflection change abandoned: attempts
-  exhausted:" and the rendered diagnostics. Its failed with no draft (no
-  backend, generation failures) fails the revision with no draft, as the
-  original's failed change call.
+  lifetime bounds (min_every_ms, turn_after_bound_ms), which the builder
+  checks, and it forces a routine's first tick and runs a turn behavior
+  once on this turn's input, its targets those of cognition_output (the
+  live-turn check, decision D131). Its failed with the last draft it
+  rejected is abandoning: the row keeps that draft's path as DRAFT with
+  status_reason validation, and the revision fails with "Reflection
+  change abandoned: attempts exhausted:" and the rendered diagnostics.
+  Its failed with no draft (no backend, generation failures) fails the
+  revision with no draft.
 
   Output, to the invoker: bot.ability.reflection.revision.output
-  {behavior} (the original _AppliedEventData.behavior: the intent's event,
-  name, grounded triggers, description, reason and the documents' path as
-  source), or bot.ability.failed {message}; then the session ends. The
-  invoker bounds it (reflection's revising bounds, decision D101): leaving
-  the invoking state cancels it, the builder with it.
+  {behavior} (the applied behavior: the intent's event, name, grounded
+  triggers, description, reason and the documents' path as source), or
+  bot.ability.failed {message}; then the session ends. The invoker bounds
+  it (reflection's revising bounds, decision D101): leaving the invoking
+  state cancels it, the builder with it.
 
   Memory: each step that reads or writes the inventory is one transaction
   of the memory ability (abilities/memory/memory.scx); the SQL is in the
@@ -86,8 +85,8 @@
     <data id="cognition_input" expr="null"/>
     <data id="cognition_output" expr="[]"/>
     <data id="prior_episodes" expr="[]"/>
-    <!-- The stored row, the builder's request and answer (the reference
-         ChangeWriteInput). -->
+    <!-- The stored row, the builder's request (the change input) and its
+         answer. -->
     <data id="prepared" expr="[]"/>
     <data id="existing_behavior" expr="null"/>
     <data id="write" expr="null"/>
@@ -97,49 +96,48 @@
     <data id="path" expr="null"/>
     <data id="triggers" expr="[]"/>
     <data id="evidence" expr="[]"/>
-    <!-- This turn's behavior input as autonomy builds it (the original
-         behavior_input_payload), for the turn behavior contract. -->
+    <!-- This turn's behavior input as autonomy builds it
+         (<autonomy:behavior_input_payload>), for the turn behavior
+         contract. -->
     <data id="behavior_input" expr="null"/>
-    <!-- The written document's lifetime (the original lifetime, by
-         <behavior:lifetime_errors>, which also writes its unbounded
+    <!-- The written document's lifetime (by <behavior:lifetime_errors>, which also writes its unbounded
          diagnostics: the builder already checked the bounds). -->
     <data id="lifetime" expr="'turn'"/>
     <data id="lifetime_errors" expr="[]"/>
-    <!-- The applied behavior (the original _AppliedEventData.behavior). -->
+    <!-- The applied behavior. -->
     <data id="behavior" expr="null"/>
     <!-- The memory transaction in hand and the failure. -->
     <data id="statements" expr="[]"/>
     <data id="failure" expr="null"/>
-    <!-- The original CHANGE_INSTRUCTIONS, for the builder: the program is an
-         SCXML document. -->
+    <!-- The change instructions, for the builder: the program is an SCXML
+         document. -->
     <data id="change_instructions" expr="'Author or revise the SCXML program of the stored behavior. existing_behavior is the current inventory row (its source is the path of its program, empty for a new create stub, and scxml, schemas, and script are the documents of that program; status may be DRAFT or BROKEN for unfinished or retired behaviors). If existing_behavior.source is empty, write a full new program from this turn, prior_episodes, and intent: invent event contracts, guards, and effects from the observed pattern only. If source is non-empty, rewrite or patch its documents so they better fit this turn and prior_episodes. The output is a cognition event selection object (keys: event, target?, data?, reason?) or a list of such objects, matching the shape of prior episode and this-turn outputs. Derive input fields, guards, and selection field names from the observed pattern. At runtime, fill selection data from the live input; never hardcode identifier values copied from episode examples. A turn behavior (default) answers one matching turn. When the intent or the turn calls for something recurring or time-based (or the user asked for it), write a persistent routine instead, scheduled by every or at delayed sends whose transitions send bot.behavior.tick with its selections: a persistent routine is checked by one forced tick, not the live turn, and needs no triggers.'"/>
     <data id="turn_contract" expr="'Write a turn behavior: its datamodel declares turn and input, which its invoker sets with param elements ; its invoker runs it only for a turn whose stimulus event is one of its triggers TRIGGERS, and no stimulus, event name or trigger reaches it, so it never tests one: input is the stimulus data (its fields, or {event: the data} when the data is not an object) with focus and focus_candidates added, and for this turn input is INPUT; when input holds messages and parent (a conversation\'s output), parent.data is the message this turn answers and messages is the whole conversation so far, earlier turns included, so it decides from parent.data; it sends nothing to its invoker and ends within one second in a top-level final state whose donedata content is the object {turn, handled, selected}: handled true with selected the list of selections, each naming its target, the session that receives its event, exactly as this turn\'s cognition_output names it, or handled false with selected an empty list when the behavior does not apply to this turn (never handled true with an empty list). The builder runs it once itself, as its invoker will, with this turn\'s turn and input, even when this turn\'s stimulus is not one of its triggers, and accepts it only when that run ends within one second with handled true and selections whose targets are among TARGETS and whose data agrees with the fields of input of the same names; its own tests run it with no param, so they drive no input events and expect only what it does with its data items\' own values.'"/>
-    <!-- The original's persistent routine (lifetime persistent, hsm.every and
-         hsm.at, behavior/schedule.py): an at schedule's occurrences are
-         computed in the routine's data model by next_after (revision.js,
-         the original At.next_after), which routineContract() puts where
-         NEXT_AFTER stands. -->
+    <!-- The persistent routine contract (lifetime persistent, every and at
+         schedules): an at schedule's occurrences are computed in the
+         routine's data model by next_after (revision.js), which
+         routineContract() puts where NEXT_AFTER stands. -->
     <data id="routine_contract" expr="'Or, for a recurring need, write a persistent routine: it takes no params and never finishes. Each schedule is a delayed send of an event to the routine itself, with no target attribute (a send with none goes to the routine\'s own queue; any target sends it elsewhere and the schedule never fires), armed with an id (unique in the document, so not a data id) on entry of the state that waits and cancelled on its exit, and a transition on that event back into the state that sends bot.behavior.tick to #_parent with data {name, trigger, scheduled_at, fired_at, output}, output a non-empty list of selections. every (trigger every): a fixed delay of at least 60s; scheduled_at and fired_at are both new Date().toISOString(). at (trigger at): a wall-clock time of day on chosen weekdays in one IANA time zone; declare &lt;data id=&quot;at&quot; expr=&quot;({time: \'HH:MM\', days: [\'mon\', \'tue\'], tz: \'Area/City\', rule: \'POSIX TZ rule\'})&quot;/&gt;, where days are among mon tue wed thu fri sat sun and rule is the POSIX TZ rule of tz (the last line of its zoneinfo file: EST5EDT,M3.2.0,M11.1.0 for America/New_York, CET-1CEST,M3.5.0,M10.5.0/3 for Europe/Berlin, UTC0 for UTC), and &lt;data id=&quot;next_after&quot; expr=&quot;NEXT_AFTER&quot;/&gt; exactly as given, and &lt;data id=&quot;due&quot; expr=&quot;null&quot;/&gt;; on entry assign due the value of next_after(at, Date.now()), its next occurrence {ms, iso}, before the send, whose delayexpr is (due.ms - Date.now()) + \'ms\'; scheduled_at is due.iso and fired_at new Date().toISOString(). A routine may also do its own I/O when a schedule fires: send through any SCXML Event I/O Processor (for example type basichttp to a URL the bot\'s run admits) or invoke a service. Send its tick first, since a send that fails ends the rest of its executable content block; an error.communication that comes back is an event like any other, and the tick is still how it reaches the bot. The builder forces the first schedule\'s tick itself, so the routine\'s tests drive no input events, expect no outputs, and settle within 2000 ms.'"/>
-    <!-- The original check(): ROUTINE_MIN_EVERY and TURN_SILENCE_BOUND, which
-         the builder checks the document it builds against (E0009). -->
+    <!-- The lifetime bounds: a routine's shortest every and a turn
+         behavior's longest delayed send, which the builder checks the
+         document it builds against (E0009). -->
     <data id="min_every_ms" expr="60000"/>
     <data id="turn_after_bound_ms" expr="1000"/>
 
-    <!-- The original storage.select_all_behaviors_clauses for one name: the
-         row, named as the inventory's fields, then its triggers. -->
+    <!-- A behavior's row, named as the inventory's fields, then its
+         triggers, for one name. -->
     <data id="select_behaviors">SELECT name, source, description, examples_json AS examples, lifetime, status, status_reason, status_updated_at, used_count, last_used_at, failed_count, last_failed_at FROM bot_behavior WHERE CAST(? AS TEXT) IS NULL OR name = ? ORDER BY name</data>
     <data id="select_triggers">SELECT behavior_name, "trigger" FROM bot_behavior_trigger WHERE CAST(? AS TEXT) IS NULL OR behavior_name = ? ORDER BY behavior_name, "trigger"</data>
-    <!-- The original inventory.store_behavior (a create's revision._draft
-         stub and an accepted change) is
-         <behavior:replace_behavior_clauses>: delete triggers, delete row,
+    <!-- Storing a behavior (a create's DRAFT stub and an accepted change)
+         is <behavior:replace_behavior_clauses>: delete triggers, delete row,
          insert row, insert each distinct trigger. -->
-    <!-- The original Revision._persist_draft: the rejected source,
-         storage.mark_draft(reason=validation), usage kept. -->
+    <!-- An abandoned revision's draft: the rejected source, DRAFT with
+         status_reason validation, usage kept. -->
     <data id="draft_behavior">UPDATE bot_behavior SET source = ?, status = 'DRAFT', status_reason = 'validation', status_updated_at = replace(substr(CAST(CURRENT_TIMESTAMP AS TEXT), 1, 19), ' ', 'T') || 'Z', updated_at = CURRENT_TIMESTAMP WHERE name = ?</data>
   </datamodel>
   <script src="revision.js"/>
 
-  <!-- The original Revision._prepare: a create's DRAFT stub, then the row. -->
+  <!-- A create's DRAFT stub, then the row. -->
   <state id="preparing">
     <onentry>
       <assign location="statements" expr="[]"/>
@@ -217,7 +215,7 @@
     </invoke>
     <transition event="revision.unknown" target="failed"/>
     <transition event="revision.requested">
-      <!-- The original _grounded_triggers, before the build: the builder is
+      <!-- The grounded triggers, before the build: the builder is
            told the triggers the behavior will be stored under. -->
       <assign location="evidence" expr="evidenceStimulusNames()"/>
       <assign location="evidence" expr="evidenceTriggerNames()"/>
@@ -238,13 +236,13 @@
       <assign location="written" expr="_event.data.scxml"/>
       <assign location="path" expr="_event.data.path"/>
     </transition>
-    <!-- The original _abandon: a failed check drafts the rejected source. -->
+    <!-- Abandoning: a failed check drafts the rejected source. -->
     <transition event="done.invoke.builder" cond="hasRejectedDraft(_event)" target="abandoning">
       <assign location="written" expr="_event.data.scxml"/>
       <assign location="path" expr="_event.data.path"/>
       <assign location="failure" expr="abandonedMessage(_event)"/>
     </transition>
-    <!-- The original _fail_child: a failed change call fails with no draft. -->
+    <!-- A failed change call fails with no draft. -->
     <transition event="done.invoke.builder" target="failed">
       <assign location="failure" expr="builderFailedMessage(_event)"/>
     </transition>
@@ -253,8 +251,8 @@
     </transition>
   </state>
 
-  <!-- The original Revision._accept: the row replaced ACTIVE, usage kept, with
-       the triggers authoring grounded (the original _grounded_triggers). -->
+  <!-- Accepting: the row replaced ACTIVE, usage kept, with the triggers
+       authoring grounded. -->
   <state id="accepting">
     <onentry>
       <behavior:lifetime_errors location="lifetime_errors" scxml="written" lifetimelocation="lifetime"/>
@@ -277,7 +275,7 @@
     </transition>
   </state>
 
-  <!-- The original Revision._abandon (_persist_draft): the row keeps the
+  <!-- Abandoning: the row keeps the
        rejected source as DRAFT (validation), and the turn fails. -->
   <state id="abandoning">
     <onentry>
@@ -293,7 +291,6 @@
     <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failed"/>
     <transition event="error.*" target="failed"/>
   </state>
-
   <!-- The revision's answer. -->
   <state id="revised">
     <onentry>

@@ -20,10 +20,9 @@
 //! script: `revision` a non-empty string, `down_revision` the revision it
 //! follows or `null` for the first, `upgrade` and `downgrade` arrays of
 //! statements, each an object the element passes through untouched; other
-//! members are ignored). The history must be linear, as the original's is: one
-//! first revision, every `down_revision` a known revision, no revision
-//! followed by two (Alembic's "multiple heads"), no cycle, and no revision
-//! named twice.
+//! members are ignored). The history must be linear: one first revision,
+//! every `down_revision` a known revision, no revision followed by two
+//! (Alembic's "multiple heads"), no cycle, and no revision named twice.
 //!
 //! `current` (required) evaluates to the database's current revision, a
 //! string, or `null` (Alembic's `base`: no revision applied).
