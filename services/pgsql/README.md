@@ -1,10 +1,10 @@
 # pgsql
 
-The `pgsql` invoked service: one Postgres transaction of the original's
-`Statement`s per `<invoke>`, as a Wasm component
+The `pgsql` invoked service: one Postgres transaction of parameterized
+statements per `<invoke>`, as a Wasm component
 (`https://github.com/stateforward/floppy/services/pgsql`, component
-`floppy_service_pgsql`). It is the Postgres engine under the original's Memory
-ability (the original's `postgres_memory`), beside the SQLite engine
+`floppy_service_pgsql`). It is the Postgres engine under the memory
+ability, beside the SQLite engine
 [`services/sql`](../sql/README.md), and answers exactly as that service does:
 the same `statements`, `rowcount` guards, open transactions, and
 `sql.result`/`sql.failed` events (decision D51). Its crate documentation

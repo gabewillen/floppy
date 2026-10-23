@@ -1,15 +1,14 @@
 //! The `sql` invoked service: one SQLite transaction of parameterized
 //! statements per `<invoke>`, as a `stateforward:scxml/invoked-service` Wasm
-//! component. It is the engine under the original's Memory ability
-//! (`abilities/memory/store.py` on `providers/sqlite_memory`), which
-//! floppy runs as `abilities/memory/memory.scx`; it knows no schema of its own.
+//! component. It is the engine under the memory ability,
+//! `abilities/memory/memory.scx`; it knows no schema of its own.
 //!
 //! Storage is I/O, so it is a service, never executable content: the
 //! invoking session keeps processing events and timers while a transaction
 //! runs in another session's component, a `<send delay>` in the invoking
 //! state bounds it, and leaving that state cancels it. One invocation is one
 //! transaction of ordered, parameterized statements that all commit or all
-//! roll back, the original's `InputData`; the invoking document owns its SQL.
+//! roll back; the invoking document owns its SQL.
 //! Documents name [`SERVICE_URI`]:
 //!
 //! ```xml
@@ -34,8 +33,7 @@
 //!   optionally `rowcount` (a non-negative integer: the rowcount the
 //!   statement must have, else the whole transaction fails with code
 //!   `rowcount`; a guard such as a version row that must still be the one
-//!   read), and nothing else (the original's `Statement`, `extra="forbid"`, with
-//!   its `StatementResult.rowcount` as the guard).
+//!   read), and nothing else (a statement with any other field is malformed).
 //!
 //! * `transaction` (optional): `open` keeps the transaction open across
 //!   events (see "Open transactions"); `statements` is then optional, and
@@ -48,8 +46,8 @@
 //! # The transaction
 //!
 //! The service opens the file (read-write, created when missing; a lock
-//! another connection holds is waited for up to [`BUSY_TIMEOUT`], 5 s, the
-//! original's `busy_timeout`, before the transaction fails with
+//! another connection holds is waited for up to [`BUSY_TIMEOUT`], 5 s,
+//! before the transaction fails with
 //! `SQLITE_BUSY`) and runs the statements in order inside one
 //! `BEGIN IMMEDIATE` transaction ([`apply`]) and commits. A statement that returns columns yields its
 //! rows; any other yields the rows it changed. A statement that would end
@@ -79,12 +77,12 @@
 //! (`generate.result`, `generate.failed`):
 //!
 //! * [`RESULT_EVENT`] `{"results": [{"rowcount": N, "rows": [{"columns":
-//!   [...], "values": [...]}]}]}`: one result per statement, in order
-//!   (the original's `OutputData`). A cell is its SQLite value as JSON (`NULL` as
+//!   [...], "values": [...]}]}]}`: one result per statement, in order.
+//!   A cell is its SQLite value as JSON (`NULL` as
 //!   `null`, an integer or a real as a number, text as a string, a blob as
 //!   its lowercase hex text).
-//! * [`FAILED_EVENT`] `{"code": C, "message": M}` (the original's `FailureData`
-//!   and a code a document can branch on): `code` is SQLite's primary
+//! * [`FAILED_EVENT`] `{"code": C, "message": M}`: `code`, which a
+//!   document can branch on, is SQLite's primary
 //!   result-code name (`SQLITE_CONSTRAINT`, `SQLITE_BUSY`, ...), `rowcount`
 //!   (a statement's expected rowcount differed), or `bound`; `message` is
 //!   SQLite's message or the rule that was broken. Messages never carry a
@@ -173,11 +171,9 @@ pub const SERVICE_NAME: &str = "sql";
 /// repository's latest release (decision D19); the manifest names it too.
 pub const SERVICE_URI: &str = "https://github.com/stateforward/floppy/services/sql";
 
-/// The event that carries a committed transaction's results (the original's
-/// `OutputData`).
+/// The event that carries a committed transaction's results.
 pub const RESULT_EVENT: &str = "sql.result";
-/// The event that reports a transaction that did not commit (the original's
-/// `FailureData`).
+/// The event that reports a transaction that did not commit.
 pub const FAILED_EVENT: &str = "sql.failed";
 /// The event that runs statements in an open transaction.
 pub const EXECUTE_EVENT: &str = "sql.execute";
@@ -207,8 +203,8 @@ pub const MAX_RESULT_BYTES: usize = wasm_bound(88 * 1024);
 /// Upper bound on a failure message's bytes.
 const MAX_MESSAGE_BYTES: usize = 512;
 /// How long a transaction waits for another connection's lock before it
-/// fails with `SQLITE_BUSY` (the original's engine.py `busy_timeout`), so
-/// concurrent memory invocations queue instead of failing.
+/// fails with `SQLITE_BUSY`, so concurrent memory invocations queue
+/// instead of failing.
 pub const BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// One bind value.
@@ -224,7 +220,7 @@ pub enum Parameter {
     Text(String),
 }
 
-/// One parameterized statement (the original's `Statement`).
+/// One parameterized statement.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Statement {
     /// Exactly one SQL statement with positional placeholders.
@@ -507,7 +503,7 @@ fn parameter_from_json(value: &Json) -> Result<Parameter, &'static str> {
 }
 
 /// Runs `statements` in one `BEGIN IMMEDIATE` transaction on `connection`
-/// and commits, returning the original's `OutputData` as JSON; on any failure
+/// and commits, returning the results event's data as JSON; on any failure
 /// nothing is committed.
 ///
 /// # Errors
