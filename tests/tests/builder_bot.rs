@@ -1562,12 +1562,12 @@ fn assert_repair_requests(received: &[Received]) {
     );
     assert_eq!(
         second["previous_tests"],
-        tests(),
+        rendered("previous_tests", &tests()),
         "the repair sees the failed draft's tests"
     );
     assert_eq!(
         second["previous_schemas"],
-        schemas(&["pedestrian.button"]),
+        rendered("previous_schemas", &schemas(&["pedestrian.button"])),
         "the repair sees the failed draft's schemas"
     );
     assert_eq!(second["previous_script"], "");

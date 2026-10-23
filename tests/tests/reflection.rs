@@ -710,7 +710,7 @@ fn a_break_marks_the_behavior_broken_and_keeps_it_on(database: &str) {
             "bot.behavior.break": ["GreetOnKnock"],
         })
     );
-    assert_eq!(prompt["behaviors"][0]["used_count"], 1);
+    assert_eq!(prompt["behaviors"][0]["used_count"], "1");
     assert_eq!(
         prompt["behaviors"][0]["triggers"],
         json!(["environment.sound"])
