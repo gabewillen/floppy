@@ -126,7 +126,7 @@ fn a_fresh_database_is_migrated_to_the_head_schema() {
         [(
             "output".to_owned(),
             format!(
-                r#"{{"results":[{{"rowcount":1,"rows":[{{"columns":["group_concat(name)"],"values":["{columns}"]}}]}},{{"rowcount":1,"rows":[{{"columns":["name"],"values":["lifetime"]}}]}},{{"rowcount":1,"rows":[{{"columns":["version_num"],"values":["0003"]}}]}}]}}"#
+                r#"{{"results":[{{"rowcount":1,"rows":[{{"columns":["group_concat(name)"],"values":["{columns}"]}}]}},{{"rowcount":1,"rows":[{{"columns":["name"],"values":["lifetime"]}}]}},{{"rowcount":1,"rows":[{{"columns":["version_num"],"values":["0001"]}}]}}]}}"#
             )
         )],
         "{}",
@@ -151,7 +151,7 @@ fn a_fresh_database_is_migrated_to_the_head_schema() {
 
 #[test]
 fn the_head_schema_keeps_the_short_term_turns() {
-    // Decision D165: the short-term turns are revision 0003_stm_turns.
+    // Decision D193: the short-term turns are in the one revision, 0001.
     let directory = unique_scratch("memory");
     let finished = run(
         &directory,
@@ -177,7 +177,7 @@ fn a_database_newer_than_the_ability_is_refused_untouched() {
         &directory,
         &harness(
             Some(
-                "[{sql: 'CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)'}, {sql: 'INSERT INTO alembic_version VALUES (\\'0004\\')'}]",
+                "[{sql: 'CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)'}, {sql: 'INSERT INTO alembic_version VALUES (\\'0002\\')'}]",
             ),
             "[{sql: 'SELECT 1'}]",
         ),
@@ -185,7 +185,7 @@ fn a_database_newer_than_the_ability_is_refused_untouched() {
     assert_eq!(
         logs(&finished.records),
         support::labelled(&[
-            ("failed", "Migration could not plan from 0004 to head"),
+            ("failed", "Migration could not plan from 0002 to head"),
             ("kind", "unavailable"),
         ]),
         "{}",
@@ -327,7 +327,7 @@ fn postgres_a_fresh_database_is_migrated_to_the_head_schema() {
     assert_eq!(
         logs(&finished.records),
         output(&format!(
-            r#"[{{"rowcount":1,"rows":[{{"columns":["columns"],"values":["{columns}"]}}]}},{{"rowcount":1,"rows":[{{"columns":["column_name","data_type"],"values":["lifetime","text"]}}]}},{{"rowcount":1,"rows":[{{"columns":["version_num"],"values":["0003"]}}]}}]"#
+            r#"[{{"rowcount":1,"rows":[{{"columns":["columns"],"values":["{columns}"]}}]}},{{"rowcount":1,"rows":[{{"columns":["column_name","data_type"],"values":["lifetime","text"]}}]}},{{"rowcount":1,"rows":[{{"columns":["version_num"],"values":["0001"]}}]}}]"#
         )),
         "{}",
         finished.stderr
@@ -363,7 +363,7 @@ fn postgres_a_database_newer_than_the_ability_is_refused_untouched() {
             &server.database(),
             "pgsql",
             Some(
-                "[{sql: 'CREATE TABLE alembic_version (version_num VARCHAR(32) PRIMARY KEY)'}, {sql: 'INSERT INTO alembic_version VALUES (\\'0004\\')'}]",
+                "[{sql: 'CREATE TABLE alembic_version (version_num VARCHAR(32) PRIMARY KEY)'}, {sql: 'INSERT INTO alembic_version VALUES (\\'0002\\')'}]",
             ),
             "[{sql: 'SELECT 1'}]",
         ),
@@ -371,7 +371,7 @@ fn postgres_a_database_newer_than_the_ability_is_refused_untouched() {
     assert_eq!(
         logs(&finished.records),
         support::labelled(&[
-            ("failed", "Migration could not plan from 0004 to head"),
+            ("failed", "Migration could not plan from 0002 to head"),
             ("kind", "unavailable"),
         ]),
         "{}",
