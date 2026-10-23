@@ -39,6 +39,8 @@ SUMMARY_LABELS = (
     "reflection.selected",
     "reflection.revision",
     "reflection.inventory",
+    "learning.selected",
+    "learning.learned",
     "autonomy",
     "autonomy.candidate",
     "routines",
@@ -217,7 +219,7 @@ def evidence(job, limit=400):
     lines = []
     for index, records in enumerate(job["sessions"]):
         for label, text in logs(records):
-            if label.startswith("reflection") or label.startswith("builder") or "failed" in label:
+            if label.startswith(("reflection", "learning", "builder")) or "failed" in label:
                 lines.append(f"session {index} {label}: {text[:limit]}")
     return lines
 
