@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   The candidates runner: the learned turn behaviors Autonomy
-  (abilities/autonomy/autonomy.scx) tries one at a time (the original
-  _CandidateRun), as a chain of SCXML children. One runner runs the first
+  (abilities/autonomy/autonomy.scx) tries one at a time, as a chain of
+  SCXML children. One runner runs the first
   candidate of its candidates <param> and, when that one does not answer
   the turn, invokes itself for the rest; Autonomy invokes the first
   runner.
@@ -17,8 +17,8 @@
   candidate answered arrives in a state that does not take it, and one
   pending when the runner ends dies with the runner's session.
 
-  Input: the <param>s turn, input (the reference behavior_input_payload, the
-  candidate's input), candidates (the behaviors left to try, in inventory
+  Input: the <param>s turn, input (the candidate's input, as
+  <autonomy:behavior_input_payload> builds it), candidates (the behaviors left to try, in inventory
   order: [{name, source}], at least one), database, silence_ms and
   memory_timeout_ms.
 
@@ -31,8 +31,7 @@
   raises bot.ability.autonomy.candidate.dispatch.succeeded, which a send
   that failed (error.*, raised before it) preempts: sent, the use is
   persisted and the runner answers; failed, the failure is persisted and
-  the runner answers the failure (the original's
-  bot.ability.autonomy.candidate.dispatch.failed). Not handled, silent within silence_ms, or an error.* for it
+  the runner answers the failure. Not handled, silent within silence_ms, or an error.* for it
   (its failure persisted): the rest run.
 
   Output (donedata): {tried, handled, selected, rejection}: tried names the
@@ -42,8 +41,8 @@
 
   Memory: each transaction invokes the Memory ability
   (abilities/memory/memory.scx); one that fails or outlasts
-  memory_timeout_ms is logged and takes the same effect as one persisted
-  (the reference persistence_failed).
+  memory_timeout_ms is logged (autonomy.behavior_usage.persistence_failed)
+  and takes the same effect as one persisted.
 
   Bindings: none of its own (the Memory ability binds the sql service).
 -->
@@ -95,8 +94,8 @@
     </transition>
   </state>
 
-  <!-- the reference _dispatch_candidate_activity: the handled candidate's
-       selections are sent before its use is persisted. -->
+  <!-- The handled candidate's selections are sent before its use is
+       persisted. -->
   <state id="dispatching">
     <onentry>
       <foreach array="answer" item="s">
@@ -117,7 +116,7 @@
     </transition>
   </state>
 
-  <!-- the reference behavior_usage: the handled candidate's use is persisted. -->
+  <!-- The handled candidate's use is persisted. -->
   <state id="using">
     <onentry>
       <send event="bot.ability.autonomy.behavior_usage.persistence_failed" delayexpr="memoryTimeoutDelay()"/>
@@ -129,7 +128,7 @@
     <!-- The update's results: nothing to keep. -->
     <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json"/>
     <transition event="done.invoke.usage" target="answered"/>
-    <!-- the original: persistence_failed takes the same effect as persisted. -->
+    <!-- A failed persistence takes the same effect as one persisted. -->
     <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="answered">
       <log label="autonomy.behavior_usage.persistence_failed" expr="usageFailedReason(_event.data.message)"/>
     </transition>
@@ -142,8 +141,7 @@
   </state>
 
   <!-- A failed candidate's failure is persisted, then the rest run; a
-       rejected one's, then the runner answers the rejection (the original
-       persisting_dispatch_failed). -->
+       rejected one's, then the runner answers the rejection. -->
   <state id="recording_failure">
     <onentry>
       <send event="bot.ability.autonomy.behavior_usage.persistence_failed" delayexpr="memoryTimeoutDelay()"/>
@@ -154,7 +152,7 @@
     </invoke>
     <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json"/>
     <transition event="done.invoke.failure" target="recorded_failure"/>
-    <!-- the original: persistence_failed takes the same effect as persisted. -->
+    <!-- A failed persistence takes the same effect as one persisted. -->
     <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="recorded_failure">
       <log label="autonomy.behavior_usage.persistence_failed" expr="usageFailedReason(_event.data.message)"/>
     </transition>
