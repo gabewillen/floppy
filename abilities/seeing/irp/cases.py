@@ -92,6 +92,12 @@ def replying(*contents):
     return [{"path": CHAT, "status": 200, "body": completion(content)} for content in contents]
 
 
+def detections(*found):
+    # The object detection child's detections call arguments (the fake
+    # backend sends a scripted reply as the call the request requires).
+    return json.dumps({"objects": list(found)})
+
+
 def box(x, y, width, height):
     return {"x": x, "y": y, "width": width, "height": height}
 
@@ -230,7 +236,7 @@ S.case(210, 12, "the vision service answers within its <invoke>: even a 1 ms bou
 S.case(220, 13, "with detect on, the view's objects are the detection child's.",
        [READY, send(VISUAL, visual("a.png", "camera-1")),
         sight("change", "camera-1", [view("a.png", objects=[CUP])])],
-       params=[("detect", "true")], backend=replying(json.dumps([CUP])), clock="logical")
+       params=[("detect", "true")], backend=replying(detections(CUP)), clock="logical")
 S.case(221, 13, "with describe on, the view's description is the description child's.",
        [READY, send(VISUAL, visual("a.png", "camera-1")),
         sight("change", "camera-1", [view("a.png", description=DESCRIBED)])],
@@ -239,7 +245,7 @@ S.case(222, 13, "with both on, the objects stage is asked first, then the descri
        [READY, send(VISUAL, visual("a.png", "camera-1")),
         sight("change", "camera-1", [view("a.png", objects=[PERSON, CUP], description=DESCRIBED)])],
        params=[("detect", "true"), ("describe", "true")],
-       backend=replying(json.dumps([CUP, PERSON]), DESCRIBED), clock="logical",
+       backend=replying(detections(CUP, PERSON), DESCRIBED), clock="logical",
        logs={"seeing.stage": ["objects ok", "description ok"]})
 S.case(223, 13, "a look's views are interpreted one after another, in order.",
        [READY, send(VISUAL, visual("a.png", "camera-1")), send(VISUAL, visual("b.png", "camera-2")), look(),
@@ -247,7 +253,7 @@ S.case(223, 13, "a look's views are interpreted one after another, in order.",
         sight("look", "seeing", [view("a.png", age=5000, objects=[PERSON]), view("b.png", age=5000, objects=[LAMP])]),
         sight("change", "camera-2", [view("b.png", age=10000, objects=[])])],
        params=[("detect", "true")],
-       backend=replying(json.dumps([CUP]), json.dumps([PERSON]), json.dumps([LAMP]), "[]"), clock="logical")
+       backend=replying(detections(CUP), detections(PERSON), detections(LAMP), detections()), clock="logical")
 
 S.case(230, 14, "a failed objects stage leaves objects null; the description is still filled.",
        [READY, send(VISUAL, visual("a.png", "camera-1")),
@@ -259,13 +265,13 @@ S.case(231, 14, "a failed description leaves description null; the objects are s
        [READY, send(VISUAL, visual("a.png", "camera-1")),
         sight("change", "camera-1", [view("a.png", objects=[CUP])])],
        params=[("detect", "true"), ("describe", "true")],
-       backend=replying(json.dumps([CUP]), "   "), clock="logical",
+       backend=replying(detections(CUP), "   "), clock="logical",
        logs={"seeing.stage": ["objects ok", "description failed"]})
 S.case(232, 14, "an objects stage that does not answer within stage_timeout_ms leaves objects null.",
        [READY, send(VISUAL, visual("a.png", "camera-1")),
         sight("change", "camera-1", [view("a.png")])],
        params=[("detect", "true"), ("stage_timeout_ms", "1")],
-       backend=replying(json.dumps([CUP])), clock="wall", logs={"seeing.stage": ["objects timeout"]})
+       backend=replying(detections(CUP)), clock="wall", logs={"seeing.stage": ["objects timeout"]})
 S.case(233, 14, "a description stage that does not answer within stage_timeout_ms leaves description null.",
        [READY, send(VISUAL, visual("a.png", "camera-1")),
         sight("change", "camera-1", [view("a.png")])],

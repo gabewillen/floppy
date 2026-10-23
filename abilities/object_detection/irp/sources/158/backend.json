@@ -9,10 +9,10 @@
         "choices": [
           {
             "index": 0,
-            "finish_reason": "length",
+            "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "[{\"label\""
+              "content": "{\"objects\": [{\"label\": \"cup\", \"confidence\": 0.5, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1, \"depth\": 1}}]}"
             }
           }
         ]
