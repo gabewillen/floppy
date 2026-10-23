@@ -52,9 +52,18 @@ function selectCeilingDelay() {
   return select_ceiling_ms + 'ms';
 }
 
-// The reference SelectInput.
+// The select input, with the repair feedback (selection_feedback, decision
+// D130) last when this attempt repairs a rejection.
 function selectPrompt() {
+  return selectInputJson() + selectFeedback();
+}
+
+function selectInputJson() {
   return JSON.stringify({cognition_input: cognition_input, cognition_output: cognition_output, prior_episodes: prior_episodes, behaviors: behaviors});
+}
+
+function selectFeedback() {
+  return select_rejection === null ? '' : '\n' + selection_feedback.replace('MESSAGE', function () { return rejectionMessage(select_rejection); });
 }
 
 // The code of a generate.failed, else gen_failure unchanged.
@@ -62,16 +71,40 @@ function generateFailure(_event) {
   return typeof Object(_event.data).code === 'string' ? _event.data.code : gen_failure;
 }
 
-// An event of this hop's call. processing is entered once per reflection,
-// and each entry invokes the service under a fresh gen_id, so a late
-// event of an earlier entry's cancelled call does not match: scxml.rs
-// keeps the events a cancelled invocation queued before its cancel.
+// An event of this hop's call. processing is entered once per select
+// attempt (a repair enters it again), and each entry invokes the service
+// under a fresh gen_id, so a late event of an earlier entry's cancelled
+// call does not match: scxml.rs keeps the events a cancelled invocation
+// queued before its cancel.
 function isGenerate(_event) {
   return _event.invokeid === gen_id;
 }
 
 function hasSelection(_event) {
   return isGenerate(_event) && Array.isArray(selected);
+}
+
+// The rejection of this hop's call (generate.failed, decision D126): present
+// exactly for not-json and schema-mismatch, the calls the model can repair.
+function selectRejection(_event) {
+  return _event.data.rejection === undefined ? null : _event.data.rejection;
+}
+
+function isSelectRejection(_event) {
+  return isGenerate(_event) && gen_rejection !== null;
+}
+
+// The failure message for a rejected selection (decision D130).
+function rejectionMessage(r) {
+  return 'Selection rejected: ' + r.message;
+}
+
+function selectRejectedMessage() {
+  return rejectionMessage(gen_rejection);
+}
+
+function rejectedLog() {
+  return 'attempt ' + select_attempt + ': ' + gen_rejection.key;
 }
 
 function selectFailedMessage(detail) {
@@ -90,6 +123,21 @@ function isSelectHopTimeout(_event) {
 // timeout (synchronously here, as leaving the invoking state cancels it).
 function selectTimedOutMessage() {
   return 'Reflection child cancellation timed out.';
+}
+
+// routing_rejection
+
+// The same-rejection check (decision D130): this hop's rejection is the one
+// it repaired. The whole diagnostic is compared: a
+// D126 key names only where the arguments first fail, so its message is
+// compared too.
+function isSameSelectRejection() {
+  return select_rejection !== null && select_rejection.key === gen_rejection.key && select_rejection.message === gen_rejection.message;
+}
+
+// Another repair is allowed: at most max_selection_repairs (decision D130).
+function canRepairSelect() {
+  return select_attempt < max_selection_repairs;
 }
 
 // breaking
@@ -186,7 +234,19 @@ function changeWriteInputWithIntent() {
 // which checks the document it builds against the original check()'s lifetime
 // bounds (min_every, turn_after_bound).
 function builderRequest() {
-  return ({spec: change_instructions + '\n\n' + JSON.stringify(write), name: intent.name, model: model, min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms});
+  return ({spec: change_instructions + '\n\n' + JSON.stringify(write), name: intent.name, model: model, min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms, apply: liveTurn()});
+}
+
+// The live turn the builder runs a turn behavior on (the live-turn
+// check, decision D131): this turn, its behavior_input as autonomy builds it, and the
+// sessions its output names (a learned behavior names its targets, D104).
+function liveTurn() {
+  return ({turn: turn, input: behavior_input, targets: outputTargets()});
+}
+
+// The distinct targets of this turn's cognition_output, at most 32.
+function outputTargets() {
+  return cognition_output.map(function (s) { return s.target; }).filter(function (t, i, a) { return typeof t === 'string' && t.length > 0 && a.indexOf(t) === i; }).slice(0, 32);
 }
 
 function builderConstraints() {
@@ -194,10 +254,11 @@ function builderConstraints() {
 }
 
 // The turn behavior contract with the grounded triggers it is stored under
-// (autonomy matches them against the stimulus event) and this turn's input
-// (behavior_input, as autonomy builds it).
+// (autonomy matches them against the stimulus event), the targets this
+// turn's output names, and this turn's input (behavior_input, as autonomy
+// builds it).
 function turnContract() {
-  return turn_contract.replace(/TRIGGERS|INPUT/g, function (m) { return JSON.stringify(m === 'INPUT' ? behavior_input : triggers); });
+  return turn_contract.replace(/TRIGGERS|TARGETS|INPUT/g, function (m) { return JSON.stringify(m === 'INPUT' ? behavior_input : m === 'TARGETS' ? outputTargets() : triggers); });
 }
 
 // The original schedule.At.next_after for an at schedule {time: 'HH:MM', days,

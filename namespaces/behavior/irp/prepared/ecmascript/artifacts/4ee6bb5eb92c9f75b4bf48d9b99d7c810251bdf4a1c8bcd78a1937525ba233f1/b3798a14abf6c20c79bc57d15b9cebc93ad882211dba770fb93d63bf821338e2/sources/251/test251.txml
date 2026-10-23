@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- behavior-6: a run that handles nothing writes the nothing-selected message (decision D131). -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior">
+<datamodel>
+  <data id="a" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <behavior:verify_apply location="a" done="({turn: 1, handled: false, selected: []})" turn="1" input="({})" targets="['communication']"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="a.length === 1 &amp;&amp; a[0] === 'behavior output must select at least one event for the observed pattern.'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

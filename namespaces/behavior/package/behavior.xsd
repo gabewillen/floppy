@@ -28,6 +28,12 @@
                    persistent routine's forced tick (the original's
                    verify._verify_tick).
                    ticks (required): an expression.
+  behavior:verify_apply
+                   location (required): receives the E0008 messages of a
+                   turn behavior's run on its live turn (the live-turn
+                   check, decision D131).
+                   done, turn, input, targets (required), error
+                   (optional): expressions.
                    None takes another attribute or content.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -60,6 +66,16 @@
     <xs:complexType>
       <xs:attribute name="location" type="xs:string" use="required"/>
       <xs:attribute name="ticks" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="verify_apply">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="done" type="xs:string" use="required"/>
+      <xs:attribute name="turn" type="xs:string" use="required"/>
+      <xs:attribute name="input" type="xs:string" use="required"/>
+      <xs:attribute name="targets" type="xs:string" use="required"/>
+      <xs:attribute name="error" type="xs:string"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>

@@ -16,6 +16,22 @@ Last updated: 2026-10-23.
   left open is under [Open work](#open-work),
   [Design decisions for the maintainer](#design-decisions-for-the-maintainer)
   and [Choices to review](#choices-to-review).
+- **Learned behaviors are repaired and run on their live turn
+  (2026-10-22, D130 and D131):** reflection repairs a
+  select call the generate service refuses (D126's `rejection`) at most
+  twice with repair feedback carrying the rejection, failing at once on the same
+  rejection and then with `Selection rejected: <message>` (D130). The
+  builder runs a turn behavior once on the live turn it is learned from
+  (`builder.request`'s `apply`, which reflection always sends) and
+  checks the run with `<behavior:verify_apply>` (D131); a routine keeps
+  its forced tick; the author call (a whole document) is bounded by
+  `document_max_completion_tokens` (16384). D132 (a fixed turn template
+  whose script the model writes) is withdrawn: the maintainer wants no
+  templates in the builder, and the bar is whether the model builds whole
+  documents itself (to be tried on sparks). The build-time half
+  of "nothing tests learned behaviors on real input" is done by D131;
+  the runtime half, a learned behavior tested on a later real turn, is
+  under Learning in [Open work](#open-work) (#14).
 - **Seeing (2026-10-22, D185 to D189):** `abilities/seeing/seeing.scx`
   is the bot's eye: it holds the newest `environment.visual` of each
   `source` (a new [floppy field]; the schema moved to `abilities/schemas/`),

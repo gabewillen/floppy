@@ -30,7 +30,7 @@ final states and its parent receives that state's done data as
 
 | What | How | Data ([`schemas/`](schemas)) |
 | --- | --- | --- |
-| `builder.request` | an event to the builder (standard input when run directly) | `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?}`: the specification, the name the draft's documents are written under (default the plan's; each run of characters other than letters, digits, `_` and `-` becomes `_`; reflection sends the behavior's), extra constraints (strings), an optional failure cap (1 to 8, no default: without it only the no-progress rule ends the loop), the generate service's model (default `Qwen/Qwen3.8-Flash-Next`, a reasoning model), the time each streamed generation may go without progress, and each generation may take in all, before `builder.timeout` cancels it (1 ms to 1 h each, defaults 30000 and 1200000), and the reference `check()`'s lifetime bounds (1 ms to 1 day each, no default: without them neither the lifetime check nor the forced tick runs; reflection sends 60000 and 1000, the original's `ROUTINE_MIN_EVERY` and `TURN_SILENCE_BOUND`) |
+| `builder.request` | an event to the builder (standard input when run directly) | `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?}`: the specification, the name the draft's documents are written under (default the plan's; each run of characters other than letters, digits, `_` and `-` becomes `_`; reflection sends the behavior's), extra constraints (strings), an optional failure cap (1 to 8, no default: without it only the no-progress rule ends the loop), the generate service's model (default `Qwen/Qwen3.8-Flash-Next`, a reasoning model), the time each streamed generation may go without progress, and each generation may take in all, before `builder.timeout` cancels it (1 ms to 1 h each, defaults 30000 and 1200000), and the lifetime bounds (1 ms to 1 day each, no default: without them neither the lifetime check nor the forced tick runs; reflection sends 60000 and 1000, `ROUTINE_MIN_EVERY` and `TURN_SILENCE_BOUND`, decision D84), and the live turn a turn behavior is run on before it is built (`{turn, input, targets}`: the turn, the behavior input as autonomy builds it, and the sessions that turn's output names, at most 32; no default: without it a turn behavior runs only its own tests; reflection sends its turn's, decision D131) |
 | final state `done` | its `<donedata>` ([`schemas/done.json`](schemas/done.json)) | `{scxml, schemas, script, path, tests, report}`: the built document's three parts (its SCXML, its input event schemas as one object with `$defs` keyed by event, and its ECMAScript, `""` for none), the path of the `.scx` they were written as (`../../behaviors/<name>.scx`), its test scripts, and the report (attempts, failures, fixes applied, warnings, the plan, the triage decisions, the failure history, the simulation results) |
 | final state `failed` | its `<donedata>` ([`schemas/failed.json`](schemas/failed.json)) | `{reason, diagnostics, history, scxml?, path?}`: `invalid-request`, `unconfigured` (the run holds no `FLOPPY_BASE_URL`; the first generation ends the build at once), `no-progress` (a diagnostic an earlier failure of the build already had, consecutive or not; decision D124), `attempts-exhausted` (the request's cap), or `abandoned`, with the last diagnostics (`{kind, code, message}`), the failure history (every failure's attempt and diagnostics, as in `done`'s report), and `scxml`, the last draft a check (`validate`, the lifetime check, `simulate`) rejected, with `path`, where it was written, both absent when no draft was rejected (the original's revision drafts the rejected source) |
 
@@ -142,7 +142,8 @@ intake -> design -> author -> writing -> validate -> simulate -> done
   help and fixes (decision D123). A simulate diagnostic whose `done`
   differs from the test's says what that means (the machine reached no
   top-level final state, invoked with no param and sent only the test's
-  events, or reached one the test did not expect). With the
+  events, or reached one the test did not expect); only the `live turn`
+  run below is invoked with params. With the
   request's `min_every_ms` and `turn_after_bound_ms`, a clean draft is then
   checked against the reference `check()`'s lifetime bounds (`instance.py`
   `_lifetime_errors`, diagnostics of kind `lifetime`, code `E0009`): a
@@ -179,7 +180,21 @@ intake -> design -> author -> writing -> validate -> simulate -> done
   `event`) whose data reads the tick's own values; otherwise the
   diagnostics are the original's (kind `apply`, code `E0008`). So a routine whose
   schedule is minutes or days away is verified in the builder's own time,
-  inside reflection's 30 s revision bound.
+  within the 2 s verify timeout (decision D131), while revising is bounded only
+  by inactivity (`revising_timeout_ms`) and its ceiling
+  (`revising_ceiling_ms`, decision D101). With the request's `apply`, a
+  turn behavior (any draft that does not send `bot.behavior.tick`) also
+  runs one more test, `live turn` (the live-turn check of a turn
+  behavior, decision D131), in its own state
+  `sim_apply`: a fresh child invoked as the candidates runner invokes it,
+  with the params `turn` and `input` of that live turn, is sent nothing and
+  must reach a top-level final state within min(`turn_after_bound_ms`,
+  2000) ms, armed once it has started; `<behavior:verify_apply>` then checks
+  its donedata: `{turn, handled, selected}` with the live turn, `handled`
+  true and at least one selection, each with an `event`, a `target` among
+  `apply.targets` and data whose members agree with the string, number and
+  boolean members of `input` of the same names; otherwise the diagnostics
+  are kind `apply`, code `E0008`, as for the forced tick.
 * `done`: a final state whose `<donedata>` carries the result.
 * `retry_gate`: every failure (generation, draft, validation, simulation,
   timeout) passes through it. It counts the failure and takes its
@@ -224,7 +239,9 @@ the topology. `design` and `author` each arm `builder.timeout` after
 (the run's `FLOPPY_STREAM` is `true`), after `generate_timeout_ms` without
 progress (default 30 s; the first `generate.progress` arms it, each later
 one re-arms it), the request may set either; each reply is bounded by
-`max_completion_tokens` (8192, reasoning included); and `triage` arms it
+`max_completion_tokens` (8192, reasoning included), but the author reply (a
+whole document) by `document_max_completion_tokens` (16384: the 2026-10-21
+runs truncated whole documents at 8192; decision D131); and `triage` arms it
 after `decision_timeout_ms` (60 s), tagged with the stage run
 (`stage_run`) and cancelled on exit (decision D101). Invoked with the
 `<param>` `progress_target` `'#_parent'` (reflection does), the builder

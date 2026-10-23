@@ -1,0 +1,39 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "{\"name\": \"pinger\", \"summary\": \"Answer a ping with a pong, then finish.\", \"states\": [{\"id\": \"idle\", \"kind\": \"atomic\", \"parent\": \"\", \"purpose\": \"Wait for a ping.\"}, {\"id\": \"done\", \"kind\": \"final\", \"parent\": \"\", \"purpose\": \"Finished.\"}], \"events\": [{\"name\": \"ping\", \"direction\": \"input\", \"description\": \"A ping.\"}, {\"name\": \"pong\", \"direction\": \"output\", \"description\": \"The answer.\"}], \"transitions\": [{\"source\": \"idle\", \"event\": \"ping\", \"target\": \"done\", \"description\": \"Answer and finish.\"}]}"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "{\"scxml\": \"<scxml xmlns=\\\"http://www.w3.org/2005/07/scxml\\\" version=\\\"1.0\\\" datamodel=\\\"ecmascript\\\" name=\\\"greeter\\\" initial=\\\"deciding\\\">\\n  <datamodel>\\n    <data id=\\\"turn\\\" expr=\\\"0\\\"/>\\n    <data id=\\\"input\\\" expr=\\\"null\\\"/>\\n  </datamodel>\\n  <state id=\\\"deciding\\\">\\n    <transition target=\\\"decided\\\"/>\\n  </state>\\n  <final id=\\\"decided\\\">\\n    <donedata>\\n      <content expr=\\\"({turn: turn, handled: true, selected: [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Who is there?', label: input === null ? 'none' : input.label}}]})\\\"/>\\n    </donedata>\\n  </final>\\n</scxml>\", \"schemas\": {\"$defs\": {}}, \"script\": \"\", \"tests\": [{\"name\": \"decides\", \"events\": [], \"settle_ms\": 500, \"expect_events\": [], \"expect_done\": true}]}"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

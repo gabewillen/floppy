@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- behavior-6: a selection to a session the turn did not name, whose data hardcodes an input value, is two messages. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior">
+<datamodel>
+  <data id="a" expr="null"/>
+  <data id="done" expr="({turn: 2, handled: true, selected: [{event: 'e', target: 'speaking', data: {label: 'doorbell'}}]})"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <behavior:verify_apply location="a" done="done" turn="2" input="({label: 'knock'})" targets="['communication']"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="a.length === 2 &amp;&amp; a[0] === 'selected[0] (e) names the target &quot;speaking&quot;, which is not one of this turn\'s targets [&quot;communication&quot;]: name the session exactly as this turn\'s cognition_output names it.' &amp;&amp; a[1] === 'selection data[&quot;label&quot;]=&quot;doorbell&quot; does not match live event value &quot;knock&quot;; read identifiers from input at runtime.'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

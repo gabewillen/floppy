@@ -598,12 +598,135 @@ fn routine_draft(delay: &str, output: &str) -> String {
     .to_string()
 }
 
-const CHIME: &str = "[{event: 'bot.speaking.say', data: {text: 'Hourly chime.'}}]";
+const CHIME: &str = "[{event: 'bot.speaking.say', data: {parts: [{words: 'Hourly chime.'}]}}]";
 
 /// The request with the original `check()`'s lifetime bounds (`ROUTINE_MIN_EVERY`,
 /// `TURN_SILENCE_BOUND`), as reflection sends it.
 fn lifetime_request() -> Json {
     json!({"spec": "chime every hour", "min_every_ms": 60000, "turn_after_bound_ms": 1000})
+}
+
+/// The request with reflection's live turn (`apply`, decision D131): turn 3,
+/// the behavior input autonomy builds for a knock at the door, and the one
+/// session that turn's output names.
+fn live_request() -> Json {
+    json!({
+        "spec": "answer a knock",
+        "name": "Greet",
+        "turn_after_bound_ms": 1000,
+        "apply": {
+            "turn": 3,
+            "input": {"label": "knock", "focus": "door", "focus_candidates": ["door"]},
+            "targets": ["communication"],
+        },
+    })
+}
+
+/// A selection that answers the knock: it reads `label` from the param
+/// `input` (none without it), so it agrees with the live turn only when the
+/// run was given that turn's input.
+const RESPOND: &str = "{event: 'bot.ability.communication.respond', target: 'communication', data: {parts: [{words: 'Who is there?'}], label: input === null ? 'none' : input.label}}";
+
+/// A turn behavior that declares the params `turn` and `input`, holds
+/// `deciding` in its state `deciding`, and ends in `decided` with
+/// `donedata`; its one test drives nothing and expects `expect_done`.
+fn turn_draft(deciding: &str, donedata: &str, expect_done: bool) -> String {
+    json!({
+        "scxml": format!(
+            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="Greet" initial="deciding">
+  <datamodel>
+    <data id="turn" expr="0"/>
+    <data id="input" expr="null"/>
+  </datamodel>
+  <state id="deciding">
+    {deciding}
+  </state>
+  <final id="decided">
+    <donedata><content expr="{donedata}"/></donedata>
+  </final>
+</scxml>"#
+        ),
+        "schemas": {"$defs": {}},
+        "script": "",
+        "tests": [{"name": "decides", "events": [], "settle_ms": 1000, "expect_events": [], "expect_done": expect_done}],
+    })
+    .to_string()
+}
+
+/// A turn behavior that decides at once with `donedata`.
+fn deciding_draft(donedata: &str) -> String {
+    turn_draft(r#"<transition target="decided"/>"#, donedata, true)
+}
+
+/// The draft that selects [`RESPOND`] on the live turn.
+fn live_ok_draft() -> String {
+    deciding_draft(&format!(
+        "({{turn: turn, handled: true, selected: [{RESPOND}]}})"
+    ))
+}
+
+/// The draft whose selection hardcodes the label `doorbell`.
+fn live_binding_draft() -> String {
+    deciding_draft(&format!(
+        "({{turn: turn, handled: true, selected: [{}]}})",
+        RESPOND.replace(
+            "label: input === null ? 'none' : input.label",
+            "label: 'doorbell'"
+        )
+    ))
+}
+
+/// The `authors`th draft of a `/live*/v1` route (see [`Mock`]).
+fn live_route_draft(path: &str, authors: usize) -> String {
+    let route = path
+        .strip_prefix('/')
+        .and_then(|path| path.split('/').next())
+        .unwrap_or_default();
+    match route {
+        "liveok" => live_ok_draft(),
+        "livestuck" => turn_draft(
+            r#"<transition event="never" target="decided"/>"#,
+            "({turn: turn, handled: true, selected: []})",
+            false,
+        ),
+        // Runs away only with the param input (decision D122 ends the
+        // call); invoked with no param it decides at once.
+        "liverunaway" => turn_draft(
+            r#"<onentry><if cond="input !== null"><raise event="spin"/></if></onentry>
+    <transition event="spin" target="deciding"/>
+    <transition cond="input === null" target="decided"/>"#,
+            "({turn: turn, handled: false, selected: []})",
+            true,
+        ),
+        "liveshape" => deciding_draft("({turn: turn, selected: []})"),
+        "liveturn" => deciding_draft(&format!(
+            "({{turn: 0, handled: true, selected: [{RESPOND}]}})"
+        )),
+        "liveunhandled" => deciding_draft("({turn: turn, handled: false, selected: []})"),
+        "livenoevent" => {
+            deciding_draft("({turn: turn, handled: true, selected: [{target: 'communication'}]})")
+        }
+        "livenotarget" => deciding_draft(&format!(
+            "({{turn: turn, handled: true, selected: [{}]}})",
+            RESPOND.replace(" target: 'communication',", "")
+        )),
+        "liveforeign" => deciding_draft(&format!(
+            "({{turn: turn, handled: true, selected: [{}]}})",
+            RESPOND.replace("target: 'communication'", "target: 'speaking'")
+        )),
+        "liverepair" if authors > 1 => live_ok_draft(),
+        _ => live_binding_draft(),
+    }
+}
+
+/// The mock's answer on a `/live*/v1` route: the plan, then the
+/// `authors`th draft.
+fn live_reply(path: &str, schema: Option<&str>, authors: usize) -> Option<String> {
+    match schema {
+        Some("topology_plan") => Some(completion(PLAN)),
+        Some("scxml_draft") => Some(completion(&live_route_draft(path, authors))),
+        _ => None,
+    }
 }
 
 /// A non-streamed Chat Completions answer carrying `content`, as the
@@ -855,7 +978,15 @@ impl Received {
 /// fails every plan (404); `/slow/v1` holds its first plan until its
 /// second plan request arrives (at most [`SLOW_PLAN_HOLD_BOUND`]) and
 /// answers [`LATE_PLAN`], then answers the plan and
-/// valid drafts. Each connection is served on its own thread, so a held
+/// valid drafts. The `/live*/v1` routes answer the plan, then turn
+/// behaviors for a request with a live turn ([`live_route_draft`]):
+/// `/liveok/v1` one that selects on it, `/livestuck/v1` one that never
+/// finishes, `/liverunaway/v1` one that runs away with the param input,
+/// `/liveshape/v1`, `/liveturn/v1`, `/liveunhandled/v1`, `/livenoevent/v1`,
+/// `/livenotarget/v1` and `/liveforeign/v1` one whose donedata breaks the
+/// contract that way, `/livebinding/v1` one that hardcodes an input value,
+/// and `/liverepair/v1` that one first, then the one that selects on it.
+/// Each connection is served on its own thread, so a held
 /// answer delays nothing else. `decision` routes:
 /// `/typesafe` chooses `triage.repair`, `/redesign` `triage.redesign`.
 struct Mock {
@@ -953,8 +1084,12 @@ fn serve(mut stream: std::net::TcpStream, log: &Mutex<Vec<Received>>, arrived: &
         }
         counts
     };
-    let reply = mock_reply(&path, request.schema_name(), authors, plans, &body)
-        .map(|reply| support::answer_as_asked(&request.body, reply));
+    let reply = if path.starts_with("/live") {
+        live_reply(&path, request.schema_name(), authors)
+    } else {
+        mock_reply(&path, request.schema_name(), authors, plans, &body)
+    }
+    .map(|reply| support::answer_as_asked(&request.body, reply));
     let (status, reply) = reply.map_or(("404 Not Found", "{}".to_owned()), |reply| {
         ("200 OK", reply)
     });
@@ -1237,6 +1372,13 @@ fn assert_repair_requests(received: &[Received]) {
     let authors = chat_requests(received, "scxml_draft");
     assert_eq!(designs.len(), 1);
     assert_eq!(authors.len(), 2);
+    // The author call (a whole document) has its own token bound (decision D131).
+    assert_eq!(designs[0].body["max_completion_tokens"], 8192);
+    assert!(
+        authors
+            .iter()
+            .all(|request| request.body["max_completion_tokens"] == 16384)
+    );
     assert_eq!(designs[0].user_input()["spec"], SPEC);
     assert_eq!(designs[0].user_input()["previous_plan"], Json::Null);
     let first = authors[0].user_input();
@@ -1507,6 +1649,202 @@ fn a_routine_tick_with_no_selection_is_rejected_with_its_draft() {
             .as_str()
             .is_some_and(|scxml| scxml.contains("output: []")),
         "{failed}"
+    );
+}
+
+/// The live-turn check of a turn behavior (decision D131): with the
+/// request's live turn, the draft also runs once as the candidates runner
+/// runs it, with the params turn and input, and its donedata selects on that
+/// input, so it is built; the draft's own tests are what it carried.
+#[test]
+fn a_turn_behavior_that_selects_on_the_live_turn_is_built() {
+    let mock = Mock::start();
+    let document = builder_document();
+    let records = run_deciding_in(
+        &document,
+        &mock,
+        "liveok",
+        "liveok",
+        "typesafe",
+        &ALL,
+        &live_request(),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    let report = &done["report"];
+    let simulation = report["simulation"].as_array().expect("simulation results");
+    assert_eq!(
+        simulation.len(),
+        2,
+        "the draft's test and the live turn: {report}"
+    );
+    assert_eq!(simulation[1]["name"], "live turn", "{report}");
+    assert_eq!(simulation[1]["passed"], true, "{report}");
+    assert_eq!(simulation[1]["done"], true, "{report}");
+    assert_eq!(simulation[1]["apply"], json!([]), "{report}");
+    assert_eq!(done["tests"].as_array().map(Vec::len), Some(1), "{done}");
+    assert!(
+        behaviors_of(&document).join("Greet.scx").is_file(),
+        "the built document is written"
+    );
+}
+
+/// Without a live turn a turn behavior runs only its own tests.
+#[test]
+fn without_a_live_turn_a_turn_behavior_runs_only_its_own_tests() {
+    let mock = Mock::start();
+    let mut request = live_request();
+    request
+        .as_object_mut()
+        .expect("the request is an object")
+        .remove("apply");
+    let records = run(&mock, "liveok-none", "liveok", &ALL, &request);
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    assert_eq!(
+        done["report"]["simulation"].as_array().map(Vec::len),
+        Some(1),
+        "{done}"
+    );
+}
+
+/// A routine (it sends `bot.behavior.tick`) is checked by its forced tick,
+/// not the live turn: the check branches on the lifetime (decision D131).
+#[test]
+fn a_routine_is_checked_by_its_first_tick_not_the_live_turn() {
+    let mock = Mock::start();
+    let mut request = lifetime_request();
+    request["apply"] = live_request()["apply"].clone();
+    let records = run(&mock, "lifetime-live", "lifetime", &ALL, &request);
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    let simulation = done["report"]["simulation"]
+        .as_array()
+        .expect("simulation results");
+    assert_eq!(simulation.len(), 2, "{done}");
+    assert_eq!(simulation[1]["name"], "first tick", "{done}");
+}
+
+/// Runs the live request on `route`, whose drafts all fail the live turn the
+/// same way, and asserts the build ends with `no-progress` on its one E0008
+/// `message`.
+fn assert_live_refused(route: &str, message: &str) {
+    let mock = Mock::start();
+    let records = run(&mock, route, route, &ALL, &live_request());
+    assert!(finished(&records), "{records:?}");
+    let (label, failed) = answer(&records);
+    assert_eq!(label, "failed", "{failed}");
+    assert_eq!(failed["reason"], "no-progress", "{failed}");
+    assert_eq!(
+        failed["diagnostics"],
+        json!([{"kind": "apply", "code": "E0008", "message": message}]),
+        "{failed}"
+    );
+    assert!(failed["scxml"].is_string(), "{failed}");
+}
+
+#[test]
+fn a_live_turn_that_never_finishes_is_refused() {
+    assert_live_refused(
+        "livestuck",
+        "turn behavior reached no top-level final state on the live turn's input within the turn's bound: it receives no events, so it decides with eventless transitions and ends at once.",
+    );
+}
+
+/// The run on the live turn runs away (decision D122 ends the call) only
+/// because it is given the param input; its own test, with none, passes.
+#[test]
+fn a_live_turn_that_fails_is_refused() {
+    assert_live_refused(
+        "liverunaway",
+        "turn behavior failed on the live turn's input (error.execution) before it reached a top-level final state.",
+    );
+}
+
+#[test]
+fn a_live_turn_whose_donedata_is_not_the_contract_is_refused() {
+    assert_live_refused(
+        "liveshape",
+        "turn behavior donedata must be the object {turn, handled, selected}: handled a boolean and selected a list of selections.",
+    );
+}
+
+#[test]
+fn a_live_turn_answering_another_turn_is_refused() {
+    assert_live_refused(
+        "liveturn",
+        "turn behavior donedata turn 0 is not the live turn 3: return the turn param as it is.",
+    );
+}
+
+/// A change whose lesson is not to answer the turn cannot pass: the
+/// live-turn check requires the behavior to select on the live turn (decision D131).
+#[test]
+fn a_live_turn_that_selects_nothing_is_refused() {
+    assert_live_refused(
+        "liveunhandled",
+        "behavior output must select at least one event for the observed pattern.",
+    );
+}
+
+#[test]
+fn a_live_selection_without_an_event_is_refused() {
+    assert_live_refused(
+        "livenoevent",
+        "selected[0] has no event: each selection is an object {event, target, data?, reason?}.",
+    );
+}
+
+#[test]
+fn a_live_selection_without_a_target_is_refused() {
+    assert_live_refused(
+        "livenotarget",
+        r#"selected[0] (bot.ability.communication.respond) names no target: name the session that receives its event, one of ["communication"]."#,
+    );
+}
+
+#[test]
+fn a_live_selection_to_a_session_the_turn_did_not_name_is_refused() {
+    assert_live_refused(
+        "liveforeign",
+        r#"selected[0] (bot.ability.communication.respond) names the target "speaking", which is not one of this turn's targets ["communication"]: name the session exactly as this turn's cognition_output names it."#,
+    );
+}
+
+#[test]
+fn a_live_selection_that_hardcodes_an_input_value_is_refused() {
+    assert_live_refused("livebinding", LIVE_BINDING);
+}
+
+/// The message of the `/livebinding/v1` draft's run on the live turn.
+const LIVE_BINDING: &str = r#"selection data["label"]="doorbell" does not match live event value "knock"; read identifiers from input at runtime."#;
+
+/// A live-turn failure is repaired like any other: the repair is told the
+/// E0008 message, and its draft, which reads the label from input, is built.
+#[test]
+fn a_live_turn_failure_is_repaired_from_its_diagnostic() {
+    let mock = Mock::start();
+    let records = run(&mock, "liverepair", "liverepair", &ALL, &live_request());
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    let report = &done["report"];
+    assert_eq!(report["failures"], 1, "{report}");
+    assert_eq!(
+        report["history"][0]["diagnostics"][0],
+        json!({"kind": "apply", "code": "E0008", "message": LIVE_BINDING}),
+        "{report}"
+    );
+    let received = mock.received();
+    let drafts = chat_requests(&received, "scxml_draft");
+    assert_eq!(drafts.len(), 2, "{report}");
+    assert_eq!(
+        drafts[1].user_input()["diagnostics"][0]["message"],
+        LIVE_BINDING,
+        "the repair is told the live turn's message"
     );
 }
 
@@ -2235,6 +2573,50 @@ fn a_request_its_schema_rejects_is_refused_before_the_builder() {
         "{records:?}"
     );
     assert!(!finished(&records), "{records:?}");
+    assert!(mock.received().is_empty(), "nothing is generated");
+}
+
+/// A live turn its schema rejects is refused as the rest of the request
+/// is: each bound of `apply` alone, the rest of the live turn valid (the
+/// pass tests show that the valid live turn is accepted).
+#[test]
+fn a_live_turn_its_schema_rejects_is_refused_before_the_builder() {
+    let mock = Mock::start();
+    let many: Vec<String> = (0..33).map(|n| format!("s{n}")).collect();
+    let bounds = [
+        ("turn-zero", "/apply/turn", json!(0)),
+        ("turn-fraction", "/apply/turn", json!(1.5)),
+        ("input-array", "/apply/input", json!([])),
+        ("input-null", "/apply/input", Json::Null),
+        ("target-number", "/apply/targets", json!([1])),
+        ("target-empty", "/apply/targets", json!([""])),
+        ("targets-many", "/apply/targets", json!(many)),
+        ("extra-member", "/apply/handled", json!(true)),
+        ("apply-null", "/apply", Json::Null),
+    ];
+    for (case, pointer, value) in bounds {
+        let mut request = live_request();
+        let (parent, member) = pointer.rsplit_once('/').expect("a pointer");
+        request
+            .pointer_mut(parent)
+            .and_then(Json::as_object_mut)
+            .expect("the member's object")
+            .insert(member.to_owned(), value);
+        let records = run(
+            &mock,
+            &format!("refused-apply-{case}"),
+            "liveok",
+            &ALL,
+            &request,
+        );
+        assert!(
+            records.iter().any(
+                |record| record["type"] == "error" && record["code"] == "machine-invalid-input"
+            ),
+            "{case}: {records:?}"
+        );
+        assert!(!finished(&records), "{case}: {records:?}");
+    }
     assert!(mock.received().is_empty(), "nothing is generated");
 }
 

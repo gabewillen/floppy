@@ -252,6 +252,7 @@ D33 to D43.
 | A memory row's JSON (its identities included), a result's contents | `<memory:to_json>`, `<memory:contents>` (D115) | `namespaces/memory` elements |
 | Loading and storing behavior rows | `<behavior:instances_from_behavior_results>`, `<behavior:replace_behavior_clauses>` (D116) | `namespaces/behavior` elements |
 | A behavior's lifetime and its bounds, the forced tick's check | `<behavior:lifetime_errors>`, `<behavior:verify_tick>` (D116) | `namespaces/behavior` elements |
+| A turn behavior's live-turn check (one run on the turn it is learned from, its selections' data checked against the live values) | `<behavior:verify_apply>` (D131) | `namespaces/behavior` element |
 | A routine's next `at` occurrence | `next_after` in `abilities/reflection/reflection.js`, carried by a routine as data (a draft cannot use a namespace element: `<scx:validate>` binds no package, D116) | routine ECMAScript |
 | A behavior's input | `<autonomy:behavior_input_payload>` (D116) | `namespaces/autonomy` element |
 | Cognition | `abilities/cognition/cognition.scx` | ability `.scx` child |

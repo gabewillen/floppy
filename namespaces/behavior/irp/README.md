@@ -4,8 +4,8 @@ The implementation report plan of the `behavior` namespace, in the format of the
 [W3C SCXML IRP](../../../scxml.rs/tests/conformance/w3c-irp/README.md) and of
 scxml.rs's own namespace suites
 ([scxml.rs/docs/conformance.md](../../../scxml.rs/docs/conformance.md#namespace-suites)):
-5 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
-("Statements"), tested by 18 mandatory documents. It runs through exactly
+6 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
+("Statements"), tested by 23 mandatory documents. It runs through exactly
 the pipeline the W3C IRP runs through (the canonical compiler, the shipped
 Wasm components under the Wasmtime session host, the same oracles and report
 envelope), with the namespace's own extension package and component bound,
@@ -35,12 +35,12 @@ SAXON='java -jar /opt/saxon/saxon-he-12.8.jar' sh scripts/namespace-irp.sh prepa
 sh scripts/namespace-irp.sh baselines behavior
 ```
 
-The current baseline (manifest SHA-256 `7859ec4537b319a391b64cfcdc21f781057b44813b51eff9e18e63340b4efe7c`,
+The current baseline (manifest SHA-256 `6ec951a679ce5840adc3365644c2c8e794b4406310fb56f8a04820b6ca34d2db`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
-measured on macOS arm64 when the namespace was added; regenerate it on
-Linux x86_64, the host `tests/tests/namespace_irp.rs` compares fuel on)
+measured on Linux x86_64, the host `tests/tests/namespace_irp.rs` compares
+fuel on, when `<behavior:verify_apply>` was added and behavior-6 and the schema comments were reworded)
 measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 18 / 18 | 0 | `dbaa603476cf98afe53054d8d20d2b619d747fb3dcfeb2017c782cbb2b9bb7e0` | `64529499bc330c2fbc1cd9d736d7187ec7be621c965a9a3b54d9ceae2e17bc7b` |
+| ECMAScript | 23 / 23 | 0 | `9c75c71c9755aab55263c63f1da5e2fd2112e5c30f327a8167ba8977beadf41f` | `706ba0083e2bce6674c687a1e53f4b5d4f8315ca0d76523a3d0452d073a5721e` |
