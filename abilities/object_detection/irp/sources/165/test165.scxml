@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- object_detection-3: a fenced reply is read inside its fence. -->
+<!-- object_detection-6: arguments with no objects array are refused. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="object_detection" type="scxml" src="../../../object_detection.scx">
@@ -11,7 +11,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.vision.detection.output" cond='JSON.stringify(_event.data) === "{\"objects\":[{\"box\":{\"height\":0.15,\"width\":0.1,\"x\":0.4,\"y\":0.5},\"confidence\":0.87,\"label\":\"cup\"}]}"' target="step1"/>
+    <transition event="bot.ability.failed" cond='JSON.stringify(_event.data) === "{\"message\":\"Object detection generator failed: schema-mismatch.\"}"' target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

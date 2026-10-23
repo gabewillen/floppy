@@ -15,50 +15,80 @@ function detectionMessages() {
   return [{role: 'user', content: [{kind: 'text', content: instructions}, {kind: 'image', content: image}]}];
 }
 
-// A generate result with its text (D41: the service's events are unchecked).
-function isGenerateTextResult(_event) {
-  return typeof Object(_event.data).content === 'string';
+// The detections tool's JSON Schema (decision D201): the generate service
+// offers it as the one function the model must call and admits only
+// arguments it admits, so every object is checked before this document
+// reads it. A box past the image's edge is the one rule it cannot state.
+function detectionsSchema() {
+  var unit = {type: 'number', minimum: 0, maximum: 1};
+  var extent = {type: 'number', exclusiveMinimum: 0, maximum: 1};
+  return {
+    description: 'Report the distinct objects seen in the image, an empty list when there are none.',
+    type: 'object',
+    additionalProperties: false,
+    required: ['objects'],
+    properties: {
+      objects: {
+        description: 'The objects seen, one item each.',
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['label', 'confidence', 'box'],
+          properties: {
+            label: {description: 'A short name for the object.', type: 'string', minLength: 1, maxLength: 100},
+            confidence: {
+              description: 'How sure you are that the object is there, from 0 to 1; null when you cannot say.',
+              anyOf: [unit, {type: 'null'}]
+            },
+            box: {
+              description: 'Where the object is, normalized to the image: fractions of its width and height measured from its top-left corner, the box inside the image.',
+              type: 'object',
+              additionalProperties: false,
+              required: ['x', 'y', 'width', 'height'],
+              properties: {
+                x: Object.assign({description: 'Left edge, as a fraction of the image width.'}, unit),
+                y: Object.assign({description: 'Top edge, as a fraction of the image height.'}, unit),
+                width: Object.assign({description: 'Box width, as a fraction of the image width.'}, extent),
+                height: Object.assign({description: 'Box height, as a fraction of the image height.'}, extent)
+              }
+            }
+          }
+        }
+      }
+    }
+  };
+}
+
+// A generate result whose every call carries an objects array (D41: the
+// service's events are unchecked; with a schema it returns only calls the
+// schema admits, at least one).
+function isDetectionsResult(_event) {
+  var calls = Object(_event.data).tool_calls;
+  return Array.isArray(calls) && calls.length > 0 && calls.every(function (call) {
+    return Array.isArray(Object(Object(call).args).objects);
+  });
 }
 
 function generatorFailedMessage(_event) {
   return typeof Object(_event.data).code === 'string' ? 'Object detection generator failed: ' + _event.data.code + '.' : 'Object detection generator failed.';
 }
 
-// replied: the detector on the reply.
+// replied: the detector on the calls.
 
-// {objects, skipped} (the valid items, at most max_objects, most confident
-// first, and how many were not a detected object), or {message} when the
-// reply cannot be read at all.
-function detectedReply() {
-  var size = utf8Bytes(reply);
-  if (size > max_reply_bytes) {
-    return {message: 'the reply of ' + size + ' bytes exceeds max_reply_bytes (' + max_reply_bytes + ')'};
-  }
-  var answer = reply.trim();
-  if (answer.startsWith('```')) {
-    // A model may fence its JSON as markdown: read what is inside the fence.
-    var newline = answer.indexOf('\n');
-    var inside = newline < 0 ? '' : answer.slice(newline + 1);
-    answer = (inside.endsWith('```') ? inside.slice(0, -3) : inside).trim();
-  }
-  var items = null;
-  try {
-    items = JSON.parse(answer);
-  } catch (error) {
-    items = null;
-  }
-  if (!Array.isArray(items)) {
-    // The reply is model output: it never becomes the failure message.
-    return {message: 'the reply is not a JSON array of objects'};
-  }
+// {objects, skipped}: the objects of every call, in order, without those
+// whose box passes the image's edge (skipped counts them), the first
+// max_objects of them, most confident first.
+function detectedObjects() {
   var found = [];
   var skipped = 0;
-  for (var item of items) {
-    var object = detectedObject(item);
-    if (object === null) {
-      skipped += 1;
-    } else {
-      found.push(object);
+  for (var call of calls) {
+    for (var object of call.args.objects) {
+      if (isInsideImage(object.box)) {
+        found.push(object);
+      } else {
+        skipped += 1;
+      }
     }
   }
   return {objects: mostConfidentFirst(found.slice(0, max_objects)), skipped: skipped};
@@ -68,80 +98,14 @@ function hasSkippedItems() {
   return detected.skipped > 0;
 }
 
-function hasObjects() {
-  return Array.isArray(detected.objects);
-}
-
 function mismatchedMessage() {
   return 'Object detection produced output that does not match its output schema.';
 }
 
-// The reply's size in UTF-8 bytes.
-function utf8Bytes(text) {
-  var bytes = 0;
-  for (var character of text) {
-    var point = character.codePointAt(0);
-    bytes += point < 0x80 ? 1 : point < 0x800 ? 2 : point < 0x10000 ? 3 : 4;
-  }
-  return bytes;
-}
-
-function isRecord(value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-// Exactly these keys: no other key, none missing.
-function hasExactly(record, keys) {
-  var own = Object.keys(record);
-  return own.length === keys.length && keys.every(function (key) { return own.indexOf(key) >= 0; });
-}
-
-// A JSON number in [low, high] (a boolean or a numeric string is not one).
-function isNumberIn(value, low, high) {
-  return typeof value === 'number' && value >= low && value <= high;
-}
-
-// A box, or null: x and y in 0..1, width and height in (0, 1], inside the
-// image up to 1e-6 slack.
-function detectedBox(value) {
-  if (!isRecord(value) || !hasExactly(value, ['x', 'y', 'width', 'height'])) {
-    return null;
-  }
-  var x = value.x;
-  var y = value.y;
-  var width = value.width;
-  var height = value.height;
-  if (!(isNumberIn(x, 0, 1) && isNumberIn(y, 0, 1) && isNumberIn(width, 0, 1) && isNumberIn(height, 0, 1))) {
-    return null;
-  }
-  if (width === 0 || height === 0 || x + width > 1 + 1e-6 || y + height > 1 + 1e-6) {
-    return null;
-  }
-  return {x: x, y: y, width: width, height: height};
-}
-
-// A detected object, or null: label a string of 1..100
-// characters, confidence 0..1 or null, and a box.
-function detectedObject(item) {
-  if (!isRecord(item) || !hasExactly(item, ['label', 'confidence', 'box'])) {
-    return null;
-  }
-  if (typeof item.label !== 'string') {
-    return null;
-  }
-  var length = Array.from(item.label).length;
-  if (length < 1 || length > 100) {
-    return null;
-  }
-  var confidence = item.confidence;
-  if (confidence !== null && !isNumberIn(confidence, 0, 1)) {
-    return null;
-  }
-  var box = detectedBox(item.box);
-  if (box === null) {
-    return null;
-  }
-  return {label: item.label, confidence: confidence, box: box};
+// x + width and y + height at most 1, up to 1e-6 slack (the schema has
+// already bounded each number).
+function isInsideImage(box) {
+  return box.x + box.width <= 1 + 1e-6 && box.y + box.height <= 1 + 1e-6;
 }
 
 // The output order: descending confidence, unrated last;
