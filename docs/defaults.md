@@ -35,8 +35,10 @@ the `model` `<data>` of `bots/builder/builder.scx` (a `builder.request`'s
 `model` overrides it), `bots/floppy/floppy.scx` (its environment's `model`
 `<param>` overrides it), `abilities/cognition/cognition.scx`,
 `abilities/reasoning/reasoning.scx` and `abilities/reflection/reflection.scx`
-(each takes its invoker's by `<param>`), and `abilities/reading/reading.scx`
-(the image decoder).
+(each takes its invoker's by `<param>`), `abilities/reading/reading.scx`
+(the image decoder), and `abilities/seeing/seeing.scx`, which passes its own
+by `<param>` to `abilities/object_detection/object_detection.scx` and
+`abilities/description/description.scx` (each carries the same `<data>`).
 
 A bot composes the chat intuition tier only when its environment gives an
 `intuition_model` `<param>` (none by default; decision D144): the cognition
@@ -109,7 +111,8 @@ Gemini API, so `FLOPPY_SPEECH_BASE_URL` is its version root,
 | `abilities/seeing/seeing.scx` | `max_view_age_ms` | `60000` | how long a held view stays fresh |
 | `abilities/seeing/seeing.scx` | `stage_timeout_ms` | `30000` | each object detection or description call |
 
-The bot's `bounds` param may also bound a cognition tier's step on its own:
+The bot's `bounds` param may also bound a cognition tier's step on its own
+([floppy fields]):
 `reflex_timeout_ms` bounds the learned behaviors and the decision layer (a
 step bound shorter than the decision layer's own `decision_timeout_ms` fails
 the turn before the decision cascades), `intuition_timeout_ms` the chat tier,
@@ -122,7 +125,7 @@ stimulus.
 
 The bot's `bounds` param may also give reasoning's model context,
 `max_context_tokens` (none by default: nothing is fitted), and the tokens
-reserved for its reply, `completion_reserve_tokens` (0): each prompt is then
+reserved for its reply, `completion_reserve_tokens` (0), [floppy fields]: each prompt is then
 fitted to that context (decision D143).
 
 ## The floppy bot

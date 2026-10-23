@@ -342,7 +342,7 @@ Last updated: 2026-10-22.
   ignored `postgres_*` tests on a fresh cluster each); the user chose SQLite
   for now (2026-10-10), so running them on PGlite through pglite-socket
   (`FLOPPY_PGLITE_SERVER`) is future work. PGlite inside a component waits on `scx` admitting
-  exception handling (D71). Defaults are in README.md's "Defaults" and
+  exception handling (D71). Defaults are in [defaults.md](defaults.md) and
   `.env.example` (`tests/tests/defaults.rs`). Releases are prepared, not
   published: [release.md](release.md); its open decisions (where the
   release lives, a release job, the scxml.rs release it follows) wait for
