@@ -155,7 +155,7 @@ attempt 1 starts one; `done` "built X in N attempt(s)" or `failed`
 and `builder.md` gives, per column and scenario, the builds, the accepted
 ones, the success rate, the attempts per accepted build and whether the
 scenario's behavior was learned anywhere in the job, then per column the
-failed builds by reason and first diagnostic (`no-progress (author-failed
+failed builds by reason and first diagnostic (`attempts-exhausted (author-failed
 schema-mismatch)`, `attempts-exhausted ...`, `unfinished`). A job counts
 as unfinished in `report.md` when any step never ran or never settled. For example, on the CPA
 gateway with the decision server on the lab:
