@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Listening ability: the ear. It hears an environment.sound, scores it against what the body
-  predicted, and hands it on to be interpreted. The body
+  floppy's Listening ability: the ear. It hears an environment.sound,
+  scores it against what the body predicted, and hands it on to be
+  interpreted. The body
   (bots/floppy/floppy.scx) invokes it as its child "listening", one of its
   input abilities.
 
@@ -41,7 +42,8 @@
   bot.ability.listening.failed go on to the body unchanged. Either leaves
   from wherever perception is.
 
-  Efference copy: bot.ability.speaking.efference goes to the sensitivity from wherever perception is: the report
+  Efference copy: bot.ability.speaking.efference goes to the sensitivity
+  from wherever perception is: the report
   modulates perception, it does not interrupt it. The body sends it here
   (its listening_abilities list) just
   before the bot's own speech comes back as environment.sound, so the bot
