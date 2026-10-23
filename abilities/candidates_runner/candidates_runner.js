@@ -24,6 +24,17 @@ function isBehaviorHandled(event) {
   return event.data.turn === turn && event.data.handled === true && Array.isArray(event.data.selected) && event.data.selected.length > 0;
 }
 
+// Why a candidate that finished did not handle the turn: its donedata is
+// not an object, names another turn, is not handled, or selects nothing.
+function candidateAdvanceLog(event) {
+  var d = event.data;
+  var why = d === null || typeof d !== 'object' ? 'no donedata object'
+    : d.turn !== turn ? 'donedata turn ' + JSON.stringify(d.turn) + ' is not the turn ' + turn
+    : d.handled !== true ? 'handled ' + JSON.stringify(d.handled)
+    : 'no selections';
+  return candidateName() + ' (' + why + ')';
+}
+
 function candidateSilentLog() {
   return candidateName() + ' after ' + silence_ms + ' ms';
 }

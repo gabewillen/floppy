@@ -1057,7 +1057,7 @@ fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
     );
     assert_eq!(
         texts(&records, "autonomy.candidate.advance"),
-        strings(&["Bdeclines"])
+        strings(&["Bdeclines (handled false)"])
     );
     assert_eq!(texts(&records, "behavior.double"), strings(&["turn 1"]));
     assert_eq!(
@@ -2805,7 +2805,7 @@ fn the_speech_heard_seed_admits_identified_speech_as_communication_input() {
     );
     assert_eq!(
         texts(&finished.all, "autonomy.candidate.advance"),
-        strings(&["SpeechHeard"])
+        strings(&["SpeechHeard (handled false)"])
     );
     trace::assert_trace(
         "the_speech_heard_seed_admits_identified_speech_as_communication_input",
