@@ -83,7 +83,8 @@
 //!    omitted="size" />` over its 16384 bytes;
 //! 3. the rest of what the bot has in mind: `<cognition:recalled>` holding
 //!    `prior_episodes` (an array of the original's `CognitiveEpisode`s:
-//!    `focus`, `focus_candidates`, `stimulus_name`, `output` as
+//!    `focus`, `focus_candidates`, `stimulus_name`, a failed or cancelled
+//!    turn's `outcome` and `failure` (decision D139), `output` as
 //!    `cognition:event`s and `behavior` as a `behavior:create`,
 //!    `behavior:change` or `behavior:break`) and `standing_directives` (an
 //!    array of the original's `Directive`s: `text`, `kind`, `instruction`
@@ -1747,7 +1748,8 @@ fn models(
 }
 
 /// The original's `episodes.CognitiveEpisode`: `focus`, `focus_candidates`,
-/// `stimulus_name`, `output` (`cognition.types.EventData`), `behavior`.
+/// `stimulus_name`, `outcome` and `failure` (a failed or cancelled turn's,
+/// decision D139), `output` (`cognition.types.EventData`), `behavior`.
 fn episode(
     episode: Option<&Map<String, Json>>,
     budget: &mut Budget,
@@ -1769,6 +1771,10 @@ fn episode(
         field("stimulus_name"),
         budget,
     )?;
+    // A failed or cancelled turn's (decision D139); a completed turn's
+    // episode has neither.
+    fill_field(&mut element, "outcome", field("outcome"), budget)?;
+    fill_field(&mut element, "failure", field("failure"), budget)?;
     let output = field("output")
         .and_then(Json::as_array)
         .map_or(&[][..], Vec::as_slice);

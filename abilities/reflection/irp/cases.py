@@ -27,6 +27,12 @@ def turn(n):
     })
 
 
+def outcome_turn(n, outcome, failure=None):
+    data = json.loads(turn(n))
+    data.update({"cognition_output": [], "outcome": outcome, "failure": failure})
+    return js(data)
+
+
 def completion(content):
     return {"object": "chat.completion",
             "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": content}}]}
@@ -109,6 +115,7 @@ S.statement(6, "A builder that fails with the last draft it rejected (`abandonin
 S.statement(7, "`revising` is bounded by `revising_timeout_ms` without progress while a builder generation streams (the builder, invoked with `progress_target` `'#_parent'`, passes on each `generate.progress` of its streamed generations, which arms it, and sends `builder.progress` as it enters a stage, which disarms it) and by `revising_ceiling_ms` in all (the `<param>` `bounds` overriding either, decision D101): when one passes, the revision is cancelled and the turn fails with `Reflection child cancellation timed out.`.")
 S.statement(8, "A memory transaction that fails (here the recall, on a database the run does not grant) fails the turn with `Reflection memory recall failed: <detail>`; after any failure the turn's episode is stored with no behavior (unless storing it is what failed; decision D97) and the reflection is idle again and takes the next input.")
 S.statement(9, "An input that arrives while a reflection is in hand waits and runs after it, in order: each turn gets its own answer.")
+S.statement(10, "An input whose `outcome` is `failed` or `cancelled` (a turn that failed or was cancelled; `completed` by default) is only remembered: after the recall it goes to `storing`, asking no model, and its episode carries its `outcome` and `failure` (decision D139).")
 
 S.case(100, 1, "without a database each input is answered at once with an output.",
        [send(INPUT, turn(1)), expect(OUTPUT, "_event.data === null || _event.data === undefined"),
@@ -183,3 +190,9 @@ S.case(180, 9, "a second input sent while the first is in hand runs after it: th
        [send(INPUT, turn(1)), send(INPUT, turn(2)),
         failed_prefix("Selection rejected: "), expect(OUTPUT)],
        params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(brk("Nobody")), select(brk("Nobody")), select()], clock="wall")
+
+S.case(190, 10, "a failed turn and a cancelled one each answer the output asking no model; the next completed turn selects.",
+       [send(INPUT, outcome_turn(1, "failed", "Cognition reasoning timed out after 30 seconds.")), expect(OUTPUT),
+        send(INPUT, outcome_turn(2, "cancelled")), expect(OUTPUT),
+        send(INPUT, turn(3)), expect(OUTPUT)],
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select()], clock="wall")

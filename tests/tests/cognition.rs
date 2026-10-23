@@ -623,10 +623,13 @@ fn reflection_settled(record: &Json) -> bool {
         )
 }
 
-/// Waits until reflection has settled every output read so far (a run
-/// closed before it settles would cut it short at a load-dependent point).
+/// Waits until reflection has settled every turn read so far, each output
+/// and each failed or cancelled turn (decision D139; a run closed before it
+/// settles would cut it short at a load-dependent point).
 fn settle_reflection(run: &Run) {
-    let outputs = run.count(label_is("floppy.output"));
+    let outputs = run.count(label_is("floppy.output"))
+        + run.count(label_is("cognition.failed"))
+        + run.count(label_is("cognition.cancelled"));
     while run.count(reflection_settled) < outputs {
         run.until(WAIT, reflection_settled);
     }
@@ -1909,6 +1912,68 @@ fn a_reasoning_failure_fails_the_turn() {
         strings(&["bounded"])
     );
     close(run, &mock, "a_reasoning_failure_fails_the_turn");
+}
+
+/// A failed turn is remembered (decision D139): reflection stores each
+/// failed turn's episode with its outcome and failure, and selects nothing
+/// for it.
+#[test]
+fn failed_turns_are_remembered_with_their_failure() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Fail, &[]);
+    support::use_database(&bot.body, DATABASE);
+    let grant = support::memory_grant();
+    let mut run = start_with(&bot, &grant);
+    say(&mut run, "question");
+    until_turn_ended(&run, 1);
+    until_turn_ended(&run, 2);
+    settle_reflection(&run);
+    drop(run.close(WAIT));
+    assert!(
+        !mock
+            .received("")
+            .iter()
+            .any(|request| is_reflection(&request.body)),
+        "reflection selected for a failed turn"
+    );
+    let output = transact(
+        &grant,
+        DATABASE,
+        &json!([{"sql": "SELECT content FROM bot_memory WHERE query_tags = 'cognitive_episode' ORDER BY created_at, memory_id"}]),
+    );
+    let episodes: Vec<Json> = output["results"][0]["rows"]
+        .as_array()
+        .expect("the rows")
+        .iter()
+        .map(|row| {
+            serde_json::from_str(row["values"][0].as_str().expect("the content")).expect("JSON")
+        })
+        .collect();
+    let remembered: Vec<(Json, Json, Json)> = episodes
+        .iter()
+        .map(|e| {
+            (
+                e["stimulus_name"].clone(),
+                e["outcome"].clone(),
+                e["failure"].clone(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        remembered,
+        [
+            (
+                json!("bot.input"),
+                json!("failed"),
+                json!("the reasoning failed (status)")
+            ),
+            (
+                json!("bot.ability.cognition.step.failed"),
+                json!("failed"),
+                json!("the reasoning failed (status)")
+            ),
+        ]
+    );
 }
 
 #[test]

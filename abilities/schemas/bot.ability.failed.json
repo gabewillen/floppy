@@ -360,6 +360,27 @@
                     ],
                     "title": "Stimulus Name"
                   },
+                  "outcome": {
+                    "description": "How a failed or cancelled turn ended (decision D139); a completed turn's episode has none [floppy field].",
+                    "enum": [
+                      "failed",
+                      "cancelled"
+                    ],
+                    "title": "Outcome",
+                    "type": "string"
+                  },
+                  "failure": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Why a failed turn failed; null for a cancelled one (decision D139) [floppy field].",
+                    "title": "Failure"
+                  },
                   "output": {
                     "description": "Typed cognitive output from that prior turn.",
                     "items": {

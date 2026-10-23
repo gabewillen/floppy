@@ -83,4 +83,10 @@
       <start uri="180/test180.scxml"/>
     </test>
   </assert>
+  <assert id="reflection-10" specnum="10" specid="#reflection-10">
+    <![CDATA[An input whose `outcome` is `failed` or `cancelled` (a turn that failed or was cancelled; `completed` by default) is only remembered: after the recall it goes to `storing`, asking no model, and its episode carries its `outcome` and `failure` (decision D139).]]>
+    <test id="190" conformance="mandatory" manual="false">
+      <start uri="190/test190.scxml"/>
+    </test>
+  </assert>
 </assertions>

@@ -9,6 +9,15 @@ function hasDeferredInput() {
   return deferred.length > 0;
 }
 
+// How the turn ended (decision D139): completed unless the input says.
+function inputOutcome(input) {
+  return typeof input.outcome === 'string' ? input.outcome : 'completed';
+}
+
+function inputFailure(input) {
+  return typeof input.failure === 'string' ? input.failure : null;
+}
+
 // recalling
 
 function hasNoDatabase() {
@@ -36,6 +45,15 @@ function behaviorNames() {
 
 function recalledLog() {
   return 'turn ' + turn + ': ' + prior_episodes.length + ' episodes, ' + behaviors.length + ' behaviors';
+}
+
+// A failed or cancelled turn, which reflection only remembers (decision D139).
+function isUnreflected() {
+  return outcome !== 'completed';
+}
+
+function unreflectedLog() {
+  return 'turn ' + turn + ': ' + outcome;
 }
 
 function recallFailedMessage(detail) {
@@ -407,7 +425,12 @@ function draftLog() {
 // The reference CognitiveEpisode, with the behavior the turn applied (null: none).
 function cognitiveEpisode(applied) {
   var input = cognition_input;
-  return ({focus: input.focus, focus_candidates: input.focus_candidates, stimulus_name: input.stimulus.event, output: cognition_output, behavior: applied});
+  var episode = {focus: input.focus, focus_candidates: input.focus_candidates, stimulus_name: input.stimulus.event, output: cognition_output, behavior: applied};
+  if (isUnreflected()) {
+    episode.outcome = outcome;
+    episode.failure = turn_failure;
+  }
+  return episode;
 }
 
 // Whether a failing turn has not tried to store its episode yet.

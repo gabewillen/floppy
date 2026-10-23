@@ -482,10 +482,25 @@ fn input(turn: u64) -> Json {
 /// Sends one turn and returns its answer's records through the logged
 /// inventory and episodes.
 fn reflect(run: &mut Run, turn: u64) -> Vec<Json> {
-    run.event("bot.ability.reflection.input", &input(turn));
+    reflect_on(run, &input(turn))
+}
+
+/// [`reflect`] with the reflection input `input`.
+fn reflect_on(run: &mut Run, input: &Json) -> Vec<Json> {
+    run.event("bot.ability.reflection.input", input);
     run.until(WAIT, |record| {
         record["type"] == "log" && record["label"] == "episodes"
     })
+}
+
+/// [`input`] with `fields` added: a failed or cancelled turn's outcome
+/// (decision D139).
+fn input_with(turn: u64, fields: &Json) -> Json {
+    let mut input = input(turn);
+    if let (Some(input), Some(fields)) = (input.as_object_mut(), fields.as_object()) {
+        input.extend(fields.clone());
+    }
+    input
 }
 
 fn texts(records: &[Json], label: &str) -> Vec<String> {
@@ -1338,4 +1353,57 @@ fn a_failed_change_call_drafts_nothing_on(database: &str) {
         }])
     );
     assert_eq!(json_log(&records, "episodes"), stored(&unapplied_episode()));
+}
+
+/// A failed turn and a cancelled one are remembered with their outcome and
+/// nothing is selected for them; the next turn's select recalls both
+/// (decision D139).
+#[test]
+fn failed_and_cancelled_turns_are_remembered_without_a_select() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "none", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let failure = "Cognition reasoning timed out after 30 seconds.";
+    let failed = reflect_on(
+        &mut run,
+        &input_with(
+            1,
+            &json!({"cognition_output": [], "outcome": "failed", "failure": failure}),
+        ),
+    );
+    assert_eq!(texts(&failed, "harness.output"), ["answered"], "{failed:?}");
+    assert_eq!(texts(&failed, "reflection"), ["turn 1: failed"]);
+    let mut failed_episode = unapplied_episode();
+    failed_episode["output"] = json!([]);
+    failed_episode["outcome"] = json!("failed");
+    failed_episode["failure"] = json!(failure);
+    assert_eq!(json_log(&failed, "episodes"), stored(&failed_episode));
+    let cancelled = reflect_on(
+        &mut run,
+        &input_with(2, &json!({"cognition_output": [], "outcome": "cancelled"})),
+    );
+    assert_eq!(texts(&cancelled, "reflection"), ["turn 2: cancelled"]);
+    let mut cancelled_episode = failed_episode.clone();
+    cancelled_episode["outcome"] = json!("cancelled");
+    cancelled_episode["failure"] = Json::Null;
+    assert_eq!(
+        json_log(&cancelled, "episodes")[1]["content"],
+        cancelled_episode
+    );
+    assert!(mock.requests("dispatch").is_empty());
+    let completed = reflect(&mut run, 3);
+    drop(run.close(WAIT));
+    assert_eq!(texts(&completed, "reflection.selected"), ["none"]);
+    let selects = mock.requests("dispatch");
+    assert_eq!(selects.len(), 1);
+    let prompt: Json =
+        serde_json::from_str(&selects[0].message("user")).expect("the select prompt is JSON");
+    assert_eq!(
+        prompt["prior_episodes"],
+        json!([failed_episode, cancelled_episode])
+    );
+    assert_eq!(
+        json_log(&completed, "episodes")[2]["content"],
+        unapplied_episode()
+    );
 }
