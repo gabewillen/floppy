@@ -317,7 +317,8 @@ Last updated: 2026-10-23.
   whose selections cannot all be placed fails with `bot.processing.failed`
   and a selection rejection message, never
   `bot.processing.completed`; `floppy.route.dropped` is gone. `<bot:verdict>`
-  (ignore selections removed, the focus checked against the candidates) and
+  (ignore selections removed, a focus selection's device checked against
+  the turn's focus candidates) and
   `<decision:route rejectionlocation choices>` (each selection placed on its
   target) run where a stage dispatches: in autonomy before a learned behavior's use
   is counted (a rejected one is counted failed and fails the turn),
@@ -409,8 +410,7 @@ Last updated: 2026-10-23.
   (`<cognition:model_facing_content>`, D114; it was `promptProjection()`
   in reasoning.js, and the element renders what that JavaScript
   rendered). The reasoning
-  and intuition system prompts still describe floppy's old inputs (the
-  maintainer's gap 9).
+  and intuition system prompts still describe floppy's old inputs.
 - **Tests in worktrees:** a `target/` copied from another checkout keeps
   `floppy-tests` binaries whose `CARGO_MANIFEST_DIR` is the other
   checkout, so `support::workspace()` builds and runs there. Run
