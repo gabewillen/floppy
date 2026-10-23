@@ -225,12 +225,18 @@ def evidence(job, limit=400):
     return lines
 
 
+# The builder's own log labels (bots/builder/builder.scx), each logged in
+# the builder's session.
+BUILDER_LABELS = ("design", "author", "validate", "simulate", "triage", "retry_gate", "done", "failed")
+
+
 def builds(job):
     """Every build the builder ran in the job (reflection or the learning
-    ability invokes it for each create or change), from its own logs:
-    `author` "<mode> draft, attempt N" (attempt 1 starts a build),
-    `retry_gate` "failure N ...", and its final state, `done` "built <name>
-    in N attempt(s)" or `failed` "<reason>: <diagnostic>". Two builders can
+    ability invokes it for each create or change), from its own logs
+    (BUILDER_LABELS): its first line opens a build, `author` "<mode> draft,
+    attempt N" counts its attempts, `retry_gate` "failure N ..." its
+    failures, and its final state is `done` "built <name> in N attempt(s)"
+    or `failed` "<reason>: <diagnostic>". Two builders can
     run at once (reflection's and the learning ability's), so each build is
     followed by its record's `session`. A build the turn cancelled has no
     final state. Each is {accepted, attempts, reason, cause, diagnostics}."""
@@ -244,21 +250,29 @@ def builds(job):
             text = record.get("text") if isinstance(record.get("text"), str) else json.dumps(record.get("text"))
             where = record.get("session") or ""
             build = current.get(where)
+            if label not in BUILDER_LABELS:
+                continue
             if label == "author":
                 match = re.search(r"attempt (\d+)$", text)
                 attempt = int(match.group(1)) if match else 1
-                if build is None or attempt == 1:
-                    if build is not None:
-                        out.append(build)
-                    build = current[where] = {"accepted": False, "attempts": 0, "reason": "unfinished", "cause": "", "diagnostics": []}
+                # Attempt 1 after an earlier author call is a new build
+                # (one its turn cancelled before it ended).
+                if build is not None and attempt == 1 and build["attempts"] >= 1:
+                    out.append(build)
+                    build = None
+            if build is None:
+                # Any of a builder's lines opens a build: a failure before
+                # its first author call (its design) is that build's too.
+                build = current[where] = {"accepted": False, "attempts": 0, "reason": "unfinished", "cause": "", "diagnostics": []}
+            if label == "author":
                 build["attempts"] = max(build["attempts"], attempt)
-            elif build is not None and label == "retry_gate":
+            elif label == "retry_gate":
                 build["diagnostics"].append(text[:200])
-            elif build is not None and label == "done":
+            elif label == "done":
                 match = re.search(r"in (\d+) attempt", text)
                 build.update(accepted=True, reason="done", attempts=int(match.group(1)) if match else build["attempts"])
                 out.append(current.pop(where))
-            elif build is not None and label == "failed":
+            elif label == "failed":
                 # "<reason>: <kind> <code> ...": the reason alone hides
                 # whether the draft failed its schema, validation or tests.
                 words = re.findall(r"[A-Za-z0-9_.-]+", text)
