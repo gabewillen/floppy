@@ -43,11 +43,13 @@
   before the turns, with the relationship's memories (content where
   query_tags conversation_memory and context_ref is the relationship's
   context_ref, oldest first, at most 50), and as "remember", after them,
-  with the input (kind conversation) as <memory:to_json> writes it ({content,
-  content_type, source_ids, target_ids} with sorted keys and compact
-  separators, the identities sorted without repeats (embedding components
-  with at least one fraction digit, 1 as 1.0), arrays and objects in the content
-  tagged collision-safe, __stateforward_memory_content__ list and mapping). The recalled
+  with the input (kind conversation) as <memory:to_json> writes it: the
+  JSON text {content, content_type, source_ids, target_ids} with sorted
+  keys and compact separators, numbers as the data model's JSON numbers,
+  the identities in identity order (names sorted, then embeddings by their
+  JSON text) without repeats, and arrays and objects in the content tagged
+  collision-safe (__stateforward_memory_content__ list, and mapping with
+  its entries in code point order of their keys). The recalled
   memories are host-only (never in the output) and are
   logged by count only, once remembered. Each is bounded by
   memory_timeout_ms (5 s); a memory failure or timeout answers
