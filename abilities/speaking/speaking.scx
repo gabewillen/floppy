@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Speaking ability: it encodes a reply's parts to speech, plays it out as environment.sound, and
-  records the words in the conversation. The communication (abilities/
+  floppy's Speaking ability: it encodes a reply's parts to speech, plays
+  it out as environment.sound, and records the words in the conversation. The communication (abilities/
   communication/communication.scx) invokes it as its child "speaking" and routes each
   selected response to it. Cognition never selects it directly
   (bot.ability.speaking.input is not offered).
@@ -26,8 +26,8 @@
   (the speech service measures it for linear PCM). Synthesis is bounded
   by encoding_timeout_ms, 30 s (decision D98: Gemini's synthesis is not
   streamed and answers only once the whole clip exists, so a sentence can
-  take longer than 5 s; 30 s is the stage operation timeout of the other
-  model-backed stages); leaving encoding cancels vocal and its request.
+  take longer than 5 s; 30 s is the stage_timeout_ms of the
+  interpretation, reading and seeing); leaving encoding cancels vocal and its request.
 
   playing issues the efference copy first, on entry (the copy leaves
   before the sound does): bot.ability.speaking.efference
@@ -55,8 +55,8 @@
   Failures: a vocal failure (its bot.ability.failed), an encoding or
   recording timeout, or a vocal that cannot run answers the parent with
   bot.ability.failed {message} (the terminal failure) and returns to idle.
-  Timers are bot.ability.speaking.apply.failed {message} sends (speaking's own failure event), taken only by the timer
-  in hand (_event.sendid).
+  Timers are bot.ability.speaking.apply.failed {message} sends (speaking's
+  own failure event), taken only by the timer in hand (_event.sendid).
 
   Utterances: an utterance's id is its input's sendid (none when the
   sender named none). Leaving speaking retires it into the last
