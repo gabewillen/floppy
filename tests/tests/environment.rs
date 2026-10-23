@@ -562,7 +562,7 @@ fn the_environment_refuses_host_input_its_schemas_refuse() {
 
 /// Starts the room laid into `dir` with one floppy bot per id in `bots`,
 /// hearing through the fake hearing backend (`support::hearing`): the
-/// speech double's first utterance, `media/speaking-1.pcm`, spells
+/// speech double's first utterance's one chunk, `media/speaking-1.0.pcm`, spells
 /// `words` (24 kHz mono PCM, as the double reports it), and
 /// `media/silence.wav` is silence.
 fn start_hearing(
@@ -577,7 +577,7 @@ fn start_hearing(
         test,
         &backend,
         &[
-            ("speaking-1.pcm", hearing::pcm(&hearing::voiced(words))),
+            ("speaking-1.0.pcm", hearing::pcm(&hearing::voiced(words))),
             ("silence.wav", hearing::silent_wav()),
         ],
     )
@@ -668,7 +668,7 @@ fn a_bot_hears_its_own_speech_through_the_environment_and_withholds_it() {
     assert!(
         logs(&all)
             .iter()
-            .any(|(label, text)| label == "environment.sound" && text.contains("speaking-1.pcm")),
+            .any(|(label, text)| label == "environment.sound" && text.contains("speaking-1.0.pcm")),
         "the environment delivered the bot's own sound: {all:?}"
     );
 }
