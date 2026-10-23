@@ -2,7 +2,7 @@
 <!-- conversation-8: a source that is not an identity raises error.execution and assigns nothing. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation">
 <datamodel>
-  <data id="r" expr="({session_ref: 'relationship-a', context_ref: 'a', source_ids: ['alice'], target_ids: ['bot'], participants: [], sequences: []})"/>
+  <data id="r" expr="({session_ref: 'relationship-a', context_ref: 'a', source_ids: ['alice'], target_ids: ['bot'], participants: []})"/>
 </datamodel>
 <state id="s0">
   <onentry>

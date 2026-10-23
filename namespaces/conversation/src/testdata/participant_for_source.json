@@ -9,8 +9,7 @@
    "target_ids": [
     "bot"
    ],
-   "participants": [],
-   "sequences": []
+   "participants": []
   },
   "source": "alice",
   "added": {
@@ -18,7 +17,6 @@
    "participants": [
     "alice"
    ],
-   "sequences": [],
    "session_ref": "relationship-a",
    "source_ids": [
     "alice"
@@ -30,7 +28,6 @@
   "removed": {
    "context_ref": "a",
    "participants": [],
-   "sequences": [],
    "session_ref": "relationship-a",
    "source_ids": [
     "alice"
@@ -52,8 +49,7 @@
    ],
    "participants": [
     "alice"
-   ],
-   "sequences": []
+   ]
   },
   "source": "alice",
   "added": {
@@ -61,7 +57,6 @@
    "participants": [
     "alice"
    ],
-   "sequences": [],
    "session_ref": "relationship-a",
    "source_ids": [
     "alice"
@@ -73,7 +68,6 @@
   "removed": {
    "context_ref": "a",
    "participants": [],
-   "sequences": [],
    "session_ref": "relationship-a",
    "source_ids": [
     "alice"
@@ -101,8 +95,7 @@
      3,
      4
     ]
-   ],
-   "sequences": []
+   ]
   },
   "source": [
    3,
@@ -116,7 +109,6 @@
      4
     ]
    ],
-   "sequences": [],
    "session_ref": "relationship-a",
    "source_ids": [
     [
@@ -131,7 +123,6 @@
   "removed": {
    "context_ref": "a",
    "participants": [],
-   "sequences": [],
    "session_ref": "relationship-a",
    "source_ids": [
     [
@@ -160,8 +151,7 @@
    ],
    "participants": [
     "bob"
-   ],
-   "sequences": []
+   ]
   },
   "source": [
    3,
@@ -176,7 +166,6 @@
      4
     ]
    ],
-   "sequences": [],
    "session_ref": "relationship-a",
    "source_ids": [
     [
@@ -194,7 +183,6 @@
    "participants": [
     "bob"
    ],
-   "sequences": [],
    "session_ref": "relationship-a",
    "source_ids": [
     [
@@ -223,8 +211,7 @@
     "b",
     "a",
     "b"
-   ],
-   "sequences": []
+   ]
   },
   "source": "b",
   "added": {
@@ -234,7 +221,6 @@
     "a",
     "b"
    ],
-   "sequences": [],
    "session_ref": "relationship-a",
    "source_ids": [
     "a",
@@ -249,7 +235,6 @@
    "participants": [
     "a"
    ],
-   "sequences": [],
    "session_ref": "relationship-a",
    "source_ids": [
     "a",

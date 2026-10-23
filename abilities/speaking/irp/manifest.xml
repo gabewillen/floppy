@@ -12,12 +12,15 @@
     </test>
   </assert>
   <assert id="speaking-2" specnum="2" specid="#speaking-2">
-    <![CDATA[`bot.ability.speaking.input` `{text}` is encoded by the vocal child with the speaking's `provider`, `model`, `voice` and `media_type` (by default the original's gemini encoder, `audio/pcm`), written to `output_prefix` + the utterance's number + `.` + the media subtype (`media/speaking-<n>.pcm`), the text stripped first.]]>
+    <![CDATA[`bot.ability.speaking.input` `{parts}` (1 to 64 parts `{expression?, words?}`, decision D178) is encoded by the vocal child, which gets the parts, with the speaking's `provider`, `model`, `voice` and `media_type` (by default the gemini encoder, `audio/pcm`), written to `output_prefix` + the utterance's number + `.` + the media subtype (`media/speaking-<n>.pcm`); the utterance's text of record is the parts' words joined exactly as written (nothing stripped).]]>
     <test id="110" conformance="mandatory" manual="false">
       <start uri="110/test110.scxml"/>
     </test>
     <test id="111" conformance="mandatory" manual="false">
       <start uri="111/test111.scxml"/>
+    </test>
+    <test id="112" conformance="mandatory" manual="false">
+      <start uri="112/test112.scxml"/>
     </test>
   </assert>
   <assert id="speaking-3" specnum="3" specid="#speaking-3">
@@ -30,7 +33,7 @@
     </test>
   </assert>
   <assert id="speaking-4" specnum="4" specid="#speaking-4">
-    <![CDATA[`recording` sends `bot.ability.conversation.append` `{message}` to its parent, the outbound message `<conversation:message_for_turn>` builds (content the text, content_type `text/plain`, sequence 0, provenance id `speaking-<n>` and event `bot.ability.conversation.append`), then answers `bot.ability.speaking.output` `{text, media_type, sample_rate_hz, channels}` and returns to `idle`.]]>
+    <![CDATA[`recording` sends `bot.ability.conversation.append` `{message}` to its parent, the outbound message `<conversation:message_for_turn>` builds (content the text, content_type `text/plain`, participants `[]` until the speaking has a voice of its own, provenance id `speaking-<n>` and event `bot.ability.conversation.append`), then answers `bot.ability.speaking.output` `{text, media_type, sample_rate_hz, channels}` and returns to `idle`.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>
@@ -39,12 +42,27 @@
     </test>
   </assert>
   <assert id="speaking-5" specnum="5" specid="#speaking-5">
-    <![CDATA[A blank text (after stripping) is refused before any encoding: `bot.ability.failed` `{message: "Speaking requires non-blank text."}`, and back to `idle`; an empty text never arrives: the input's schema refuses it at the send, raising `error.execution` in the sender.]]>
+    <![CDATA[An utterance that says nothing (its words, joined, blank; a part whose words are blank; a part with neither words, a pause nor a sound; an expression that directs no cue) is refused before any encoding: `bot.ability.failed` `{message: "A reply must say something: every part needs words, a sound or a pause, and the words must not be blank."}`, and back to `idle`; one its schema refuses (no parts, empty words) never arrives: the send raises `error.execution` in the sender.]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>
     <test id="141" conformance="mandatory" manual="false">
       <start uri="141/test141.scxml"/>
+    </test>
+    <test id="142" conformance="mandatory" manual="false">
+      <start uri="142/test142.scxml"/>
+    </test>
+    <test id="143" conformance="mandatory" manual="false">
+      <start uri="143/test143.scxml"/>
+    </test>
+    <test id="144" conformance="mandatory" manual="false">
+      <start uri="144/test144.scxml"/>
+    </test>
+    <test id="145" conformance="mandatory" manual="false">
+      <start uri="145/test145.scxml"/>
+    </test>
+    <test id="146" conformance="mandatory" manual="false">
+      <start uri="146/test146.scxml"/>
     </test>
   </assert>
   <assert id="speaking-6" specnum="6" specid="#speaking-6">
@@ -63,9 +81,24 @@
     </test>
   </assert>
   <assert id="speaking-8" specnum="8" specid="#speaking-8">
-    <![CDATA[Input that arrives outside `idle` is held (`<event:defer/>`) and taken, in order, on the return to `idle`.]]>
+    <![CDATA[Input for another utterance that arrives outside `idle` is held (`<event:defer/>`), up to `held_utterances_bound` (16, a `<param>`), and taken, in order, on the return to `idle`; past that bound it is refused with `bot.ability.failed` `{message: "Speaking is holding too many utterances; this one is refused."}` (decision D175).]]>
     <test id="170" conformance="mandatory" manual="false">
       <start uri="170/test170.scxml"/>
+    </test>
+    <test id="171" conformance="mandatory" manual="false">
+      <start uri="171/test171.scxml"/>
+    </test>
+  </assert>
+  <assert id="speaking-9" specnum="9" specid="#speaking-9">
+    <![CDATA[An utterance's id is its input's sendid (none when the sender names none). A finished utterance's id is kept among the last `finished_utterances_bound` (16) finished ids, and an input with a finished id, or another copy of the utterance in hand or of a held one, is dropped (logged `speaking.late`): nothing is said or answered for it, and a re-sent held id takes no second slot toward `held_utterances_bound` (the first copy is kept, decision D175).]]>
+    <test id="180" conformance="mandatory" manual="false">
+      <start uri="180/test180.scxml"/>
+    </test>
+    <test id="181" conformance="mandatory" manual="false">
+      <start uri="181/test181.scxml"/>
+    </test>
+    <test id="182" conformance="mandatory" manual="false">
+      <start uri="182/test182.scxml"/>
     </test>
   </assert>
 </assertions>

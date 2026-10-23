@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- communication-2: a second input's stimulus carries the history before it. -->
+<!-- communication-2: a second input opens a new exchange: its stimulus carries only that input. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="communication" type="scxml" src="../../../communication.scx">
@@ -10,7 +10,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'communication' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === 'bot.ability.communication.respond' &amp;&amp; _event.data.choices[0].target === undefined &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[0].schema['$schema'] === undefined &amp;&amp; _event.data.choices[0].schema.required.indexOf('text') &gt;= 0" target="step1"/>
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'communication' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === 'bot.ability.communication.respond' &amp;&amp; _event.data.choices[0].target === undefined &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[0].schema['$schema'] === undefined &amp;&amp; _event.data.choices[0].schema.required.indexOf('parts') &gt;= 0" target="step1"/>
   </state>
   <state id="step1">
     <onentry>
@@ -22,7 +22,7 @@
     <onentry>
       <send event="bot.ability.communication.input" target="#_communication"><content expr='{"source_ids": ["gabe"], "target_ids": ["floppy"], "content": "two", "content_type": "text/plain"}'/></send>
     </onentry>
-    <transition event="bot.ability.cognition.input" cond="_event.data.stimulus.data.messages.length === 2 &amp;&amp; _event.data.stimulus.data.messages[0].content === 'one' &amp;&amp; _event.data.stimulus.data.messages[1].content === 'two' &amp;&amp; _event.data.stimulus.data.messages[1].sequence === 1" target="step3"/>
+    <transition event="bot.ability.cognition.input" cond="_event.data.stimulus.data.messages.length === 1 &amp;&amp; _event.data.stimulus.data.messages[0].content === 'two'" target="step3"/>
   </state>
   <state id="step3">
     <transition target="pass"/>

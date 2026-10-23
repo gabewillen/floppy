@@ -225,7 +225,7 @@ fn encode(extra: &str) -> String {
     format!(
         r#"<param name="operation" expr="'encode'"/>
       <param name="model" expr="'tts-1'"/>
-      <param name="text" expr="'Hello there.'"/>
+      <param name="parts" expr="[{{words: 'Hello there.'}}]"/>
       {extra}"#
     )
 }
@@ -611,7 +611,7 @@ fn live_speech_round_trip_through_an_env_file() {
         &document(&format!(
             r#"<param name="operation" expr="'encode'"/>{provider}
       <param name="model" expr="'{}'"/>
-      <param name="text" expr="'The quick brown fox jumps over the lazy dog.'"/>
+      <param name="parts" expr="[{{words: 'The quick brown fox jumps over the lazy dog.'}}]"/>
       <param name="voice" expr="'{}'"/>
       <param name="output" expr="'media/said.wav'"/>
       <param name="media_type" expr="'audio/wav'"/>"#,

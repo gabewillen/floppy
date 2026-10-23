@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- conversation-2: a message's participants are kept as given, own and resembles included, and malformed ones raise error.execution and assign nothing. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="l" expr="null"/>
+  <data id="b" expr="null"/>
+  <data id="msg" expr="({source_ids: [], target_ids: [], content: 'hi', content_type: 'text/plain', participants: [{ref: 'voice:a', role: 'source', own: true, resembles: [{ref: 'voice:b', similarity: 0.5}]}, {ref: 'gabe', role: 'target'}]})"/>
+  <data id="bad" expr="({source_ids: [], target_ids: [], content: 'hi', content_type: 'text/plain', participants: [{ref: 'gabe', role: 'speaker'}]})"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:message_for_turn location="l" direction="outbound" event="'bot.ability.conversation.append'" message="msg"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="l.participants.length === 2 &amp;&amp; l.participants[0].ref === 'voice:a' &amp;&amp; l.participants[0].own === true &amp;&amp; l.participants[0].resembles[0].ref === 'voice:b' &amp;&amp; l.participants[1].role === 'target' &amp;&amp; l.participants[1].own === undefined" target="s1"/>
+  <transition target="fail"/>
+</state>
+<state id="s1">
+  <onentry>
+    <conversation:message_for_turn location="b" direction="outbound" event="'bot.ability.conversation.append'" message="bad"/>
+  </onentry>
+  <transition event="error.execution" cond="b === null" target="pass"/>
+  <transition event="*" target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

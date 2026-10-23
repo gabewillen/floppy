@@ -57,22 +57,22 @@ const BEHAVIOR: &str = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version
   </state>
   <final id="answered">
     <donedata>
-      <content expr="({turn: turn, handled: true, selected: [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Hello!'}, reason: 'a knock'}]})"/>
+      <content expr="({turn: turn, handled: true, selected: [{event: 'bot.ability.communication.respond', target: 'communication', data: {parts: [{words: 'Hello!'}]}, reason: 'a knock'}]})"/>
     </donedata>
   </final>
 </scxml>"#;
 
 /// The turn behavior's script a create's builder writes into the turn
 /// template (decision D132): it answers a knock with one response.
-const GREET_SCRIPT: &str = "function applies(input) {\n  return input.label === 'knock';\n}\nfunction selections(input, turn) {\n  return [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Hello!'}, reason: 'a knock'}];\n}\n";
+const GREET_SCRIPT: &str = "function applies(input) {\n  return input.label === 'knock';\n}\nfunction selections(input, turn) {\n  return [{event: 'bot.ability.communication.respond', target: 'communication', data: {parts: [{words: 'Hello!'}]}, reason: 'a knock'}];\n}\n";
 
 /// A script that answers only a knock and reads its label from `input`,
 /// so it agrees with the live turn (decision D131) only when the builder
 /// ran it on that turn's input.
 fn grounded_script() -> String {
     GREET_SCRIPT.replace(
-        "data: {text: 'Hello!'}",
-        "data: {text: 'Hello!', label: input.label}",
+        "data: {parts: [{words: 'Hello!'}]}",
+        "data: {parts: [{words: 'Hello!'}], label: input.label}",
     )
 }
 
@@ -80,8 +80,8 @@ fn grounded_script() -> String {
 /// hardcoded as another (a prior episode's) value.
 fn hardcoded_script() -> String {
     GREET_SCRIPT.replace(
-        "data: {text: 'Hello!'}",
-        "data: {text: 'Hello!', label: 'doorbell'}",
+        "data: {parts: [{words: 'Hello!'}]}",
+        "data: {parts: [{words: 'Hello!'}], label: 'doorbell'}",
     )
 }
 
@@ -118,7 +118,7 @@ fn routine_draft() -> String {
     <onexit><cancel sendid="every"/></onexit>
     <transition event="hourly.every" target="waiting">
       <send event="bot.behavior.tick" target="#_parent">
-        <content expr="({name: 'GreetOnKnock', trigger: 'every', scheduled_at: new Date().toISOString(), fired_at: new Date().toISOString(), output: [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Hello!'}}]})"/>
+        <content expr="({name: 'GreetOnKnock', trigger: 'every', scheduled_at: new Date().toISOString(), fired_at: new Date().toISOString(), output: [{event: 'bot.ability.communication.respond', target: 'communication', data: {parts: [{words: 'Hello!'}]}}]})"/>
       </send>
     </transition>
   </state>
@@ -497,7 +497,7 @@ fn input(turn: u64) -> Json {
             "focus_candidates": ["door"],
         },
         "cognition_output": [
-            {"event": "bot.ability.communication.respond", "data": {"text": "Hello!"}, "reason": "a knock", "target": "communication"}
+            {"event": "bot.ability.communication.respond", "data": {"parts": [{"words": "Hello!"}]}, "reason": "a knock", "target": "communication"}
         ],
     })
 }

@@ -12,8 +12,8 @@
   </state>
   <state id="step1">
     <onentry>
-      <send event="bot.ability.conversation.append" target="#_conversation"><content expr='{"message": {"sequence": 0, "direction": "inbound", "source_ids": ["alice"], "target_ids": [], "content": "x", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "i-1"}}}'/></send>
-      <send event="bot.ability.conversation.append" target="#_conversation"><content expr='{"message": {"sequence": 0, "direction": "outbound", "source_ids": ["bot"], "target_ids": ["alice"], "content": "after", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "r-2"}}}'/></send>
+      <send event="bot.ability.conversation.append" target="#_conversation"><content expr='{"message": {"direction": "inbound", "source_ids": ["alice"], "target_ids": [], "content": "x", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "i-1"}}}'/></send>
+      <send event="bot.ability.conversation.append" target="#_conversation"><content expr='{"message": {"direction": "outbound", "source_ids": ["bot"], "target_ids": ["alice"], "content": "after", "content_type": "text/plain", "provenance": {"event": "x.y", "id": "r-2"}}}'/></send>
     </onentry>
     <transition event="bot.ability.conversation.output" cond="_event.data.messages.length === 1 &amp;&amp; _event.data.messages[0].content === 'after'" target="step2"/>
   </state>

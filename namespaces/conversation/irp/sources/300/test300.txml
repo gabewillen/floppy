@@ -7,7 +7,7 @@
 </datamodel>
 <state id="s0">
   <onentry>
-    <conversation:message_for_turn location="l" direction="sideways" event="'e'" message="msg" sequence="0"/>
+    <conversation:message_for_turn location="l" direction="sideways" event="'e'" message="msg"/>
     <raise event="executed"/>
   </onentry>
   <transition event="error.execution" cond="l === 'untouched'" conf:targetpass=""/>

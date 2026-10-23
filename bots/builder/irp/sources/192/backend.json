@@ -12,7 +12,7 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "{\"lifetime\": \"turn\", \"script\": \"function applies(input) {\\n  return true;\\n}\\nfunction selections(input, turn) {\\n  return [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Who is there?'}}];\\n}\\n\", \"tests\": [{\"name\": \"a bell is not answered\", \"input\": \"{\\\"label\\\": \\\"bell\\\", \\\"focus\\\": \\\"door\\\"}\", \"handled\": false}]}"
+              "content": "{\"lifetime\": \"turn\", \"script\": \"function applies(input) {\\n  return true;\\n}\\nfunction selections(input, turn) {\\n  return [{event: 'bot.ability.communication.respond', target: 'communication', data: {parts: [{words: 'Who is there?'}]}}];\\n}\\n\", \"tests\": [{\"name\": \"a bell is not answered\", \"input\": \"{\\\"label\\\": \\\"bell\\\", \\\"focus\\\": \\\"door\\\"}\", \"handled\": false}]}"
             }
           }
         ]

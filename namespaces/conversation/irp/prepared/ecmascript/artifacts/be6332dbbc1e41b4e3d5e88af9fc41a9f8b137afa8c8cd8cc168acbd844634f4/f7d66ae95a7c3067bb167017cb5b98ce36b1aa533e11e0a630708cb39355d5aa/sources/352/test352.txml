@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!-- conversation-6: the inbound message carries the participants given, and none when they are absent. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation">
+<datamodel>
+  <data id="m" expr="null"/>
+  <data id="n" expr="null"/>
+  <data id="input" expr="({source_ids: ['gabe'], target_ids: ['floppy'], content: 'hi', content_type: 'text/plain'})"/>
+  <data id="turns" expr="[{turn_ref: 't1', text: 'hi'}]"/>
+  <data id="stamped" expr="[{ref: 'gabe', role: 'source'}, {ref: 'floppy', role: 'target'}]"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:complete_turn location="m" event="'bot.ability.conversation.input'" input="input" turns="turns" session_ref="'r'" participants="stamped"/>
+    <conversation:complete_turn location="n" event="'bot.ability.conversation.input'" input="input" turns="turns" session_ref="'r'"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="m.participants.length === 2 &amp;&amp; m.participants[0].ref === 'gabe' &amp;&amp; m.participants[1].role === 'target' &amp;&amp; n.participants.length === 0" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

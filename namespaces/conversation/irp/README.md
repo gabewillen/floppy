@@ -5,7 +5,7 @@ The implementation report plan of the `conversation` namespace, in the format of
 scxml.rs's own namespace suites
 ([scxml.rs/docs/conformance.md](../../../scxml.rs/docs/conformance.md#namespace-suites)):
 9 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
-("Statements"), tested by 28 mandatory documents. It runs through exactly
+("Statements"), tested by 30 mandatory documents. It runs through exactly
 the pipeline the W3C IRP runs through (the canonical compiler, the shipped
 Wasm components under the Wasmtime session host, the same oracles and report
 envelope), with the namespace's own extension package and component bound,
@@ -35,12 +35,12 @@ SAXON='java -jar /opt/saxon/saxon-he-12.8.jar' sh scripts/namespace-irp.sh prepa
 sh scripts/namespace-irp.sh baselines conversation
 ```
 
-The current baseline (manifest SHA-256 `734a98b0feddfb444040ceb1dfdd187d63a1472aae3dbd45a63a241cffd67822`,
+The current baseline (manifest SHA-256 `d76bb9d773be777d54859d3111b6122c036619de9509da8b465eed6fa15306d7`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
-measured on macOS arm64 when the namespace took the original's
-`turn_participants`, 2026-10-18; regenerate it on Linux x86_64, the host
-`tests/tests/namespace_irp.rs` compares fuel on) measures:
+measured on Linux x86_64, the host `tests/tests/namespace_irp.rs` compares
+fuel on, when the namespace took the original's message participants (with
+`resembles`) and dropped `sequence`, 2026-10-22) measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 28 / 28 | 0 | `6095a2f1e46bac71e344d7ffb6b9d244f32a2f749d52f401f457e4d7ba2576fc` | `c390ad70d855a26094708e41c31d0cab4b8da2580d9c6ee5510d1b99c0b94911` |
+| ECMAScript | 30 / 30 | 0 | `c809e00942995a0232582b63b901c4159d53563ccb6ae9e6e7cbcf968500187d` | `5080b7b7d766d507f6a48b515f0b75a7510befb8f311e16b63ba65b76de3a06f` |

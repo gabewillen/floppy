@@ -30,12 +30,15 @@
     </test>
   </assert>
   <assert id="listening-5" specnum="5" specid="#listening-5">
-    <![CDATA[`bot.ability.speaking.efference` goes to the sensitivity from wherever perception is, without interrupting it; the score request's stimulus carries the sound's `source` (none when the sound names none), so while the copy's window is open a sound off the copy's `mouth` (speaking stamps its own sound `source: "speaking"`) is scored against the prediction, fully predicted at 0 dB, and its product is withheld, while a sound from any other source is scored at its received level.]]>
+    <![CDATA[`bot.ability.speaking.efference` goes to the sensitivity from wherever perception is, without interrupting it; the score request's stimulus carries the sound's `source` (none when the sound names none), so while the copy's window is open a sound off the copy's `mouth` (speaking stamps its own sound `source: "speaking"`) is scored against the prediction, fully predicted at 0 dB, and its product is withheld, while a sound from any other source is scored at its received level; a silent copy (`duration` 0) closes the window, so the mouth's sound after it is scored at its received level again.]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>
     <test id="141" conformance="mandatory" manual="false">
       <start uri="141/test141.scxml"/>
+    </test>
+    <test id="142" conformance="mandatory" manual="false">
+      <start uri="142/test142.scxml"/>
     </test>
   </assert>
   <assert id="listening-6" specnum="6" specid="#listening-6">

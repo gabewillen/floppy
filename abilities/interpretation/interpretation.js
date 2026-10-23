@@ -85,6 +85,14 @@ function speechProduct(content, contentType, scored, voiceDetection, sourceIds, 
 // initializing
 
 // The original's constructor refuses identification with decoding.
+function hasNegativeThreshold() {
+  return product_threshold_db < 0;
+}
+
+function hasNoRecognizeTimeout() {
+  return !(recognize_timeout_ms > 0);
+}
+
 function refusesIdentificationWithDecoding() {
   return voice_classifier && speech_decoder;
 }
@@ -295,7 +303,26 @@ function activeSourceIds() {
   return [active_voice_embedding.embedding];
 }
 
+// The identification deadline (decision D177): a stage, then the
+// registry's answer.
+function identifyDelay() {
+  return (stage_timeout_ms + recognize_timeout_ms) + 'ms';
+}
+
+function isIdentifyTimer(_event) {
+  return _event.sendid === 'direct-identification-timer' || _event.sendid === 'voice-identification-timer';
+}
+
+function identifyTimedOut(count) {
+  return count + ' segment(s) unidentified after ' + (stage_timeout_ms + recognize_timeout_ms) + ' ms';
+}
+
 // IdentifyingVoice
+
+// No voice for any segment.
+function unidentifiedEmbeddings() {
+  return completion.segments.map(function () { return null; });
+}
 
 function isEmbeddingCountMismatch(_event) {
   return hasEmbeddings(_event) && _event.data.embeddings.length !== completion.segments.length;

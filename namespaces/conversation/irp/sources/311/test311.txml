@@ -8,7 +8,7 @@
 </datamodel>
 <state id="s0">
   <onentry>
-    <conversation:message_for_turn location="l" direction="outbound" event="'bot.ability.conversation.append'" message="msg" sequence="0" provenance="p"/>
+    <conversation:message_for_turn location="l" direction="outbound" event="'bot.ability.conversation.append'" message="msg" provenance="p"/>
   </onentry>
   <transition event="error.execution" conf:targetfail=""/>
   <transition cond="l.content === 'hi' &amp;&amp; l.provenance.id === 'r-1' &amp;&amp; l.provenance.source === null &amp;&amp; l.provenance.target === 'q' &amp;&amp; l.provenance.session_ref === 's1' &amp;&amp; l.provenance.turn_ref === 't1'" conf:targetpass=""/>

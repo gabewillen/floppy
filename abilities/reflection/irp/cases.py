@@ -22,7 +22,7 @@ def turn(n):
             "focus_candidates": ["door"],
         },
         "cognition_output": [
-            {"event": "bot.ability.communication.respond", "data": {"text": "Hello!"}, "reason": "a knock", "target": "communication"}
+            {"event": "bot.ability.communication.respond", "data": {"parts": [{"words": "Hello!"}]}, "reason": "a knock", "target": "communication"}
         ],
     })
 
@@ -73,7 +73,7 @@ GREET_SCRIPT = """function applies(input) {
   return input.label === 'knock';
 }
 function selections(input, turn) {
-  return [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Hello!'}, reason: 'a knock'}];
+  return [{event: 'bot.ability.communication.respond', target: 'communication', data: {parts: [{words: 'Hello!'}]}, reason: 'a knock'}];
 }
 """
 UNDECLARED_SCRIPT = GREET_SCRIPT[GREET_SCRIPT.index("function selections"):]
@@ -96,7 +96,7 @@ BEHAVIOR = """<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datam
   </state>
   <final id="answered">
     <donedata>
-      <content expr="({turn: turn, handled: true, selected: [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Hello!'}, reason: 'a knock'}]})"/>
+      <content expr="({turn: turn, handled: true, selected: [{event: 'bot.ability.communication.respond', target: 'communication', data: {parts: [{words: 'Hello!'}]}, reason: 'a knock'}]})"/>
     </donedata>
   </final>
 </scxml>"""

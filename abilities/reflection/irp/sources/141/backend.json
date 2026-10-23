@@ -29,7 +29,7 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "{\"lifetime\": \"turn\", \"script\": \"function applies(input) {\\n  return input.label === 'knock';\\n}\\nfunction selections(input, turn) {\\n  return [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Hello!'}, reason: 'a knock'}];\\n}\\n\", \"tests\": []}"
+              "content": "{\"lifetime\": \"turn\", \"script\": \"function applies(input) {\\n  return input.label === 'knock';\\n}\\nfunction selections(input, turn) {\\n  return [{event: 'bot.ability.communication.respond', target: 'communication', data: {parts: [{words: 'Hello!'}]}, reason: 'a knock'}];\\n}\\n\", \"tests\": []}"
             }
           }
         ]
@@ -63,7 +63,7 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "{\"lifetime\": \"turn\", \"script\": \"function applies(input) {\\n  return input.label === 'knock';\\n}\\nfunction selections(input, turn) {\\n  return [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Hello!'}, reason: 'a knock'}];\\n}\\n\", \"tests\": []}"
+              "content": "{\"lifetime\": \"turn\", \"script\": \"function applies(input) {\\n  return input.label === 'knock';\\n}\\nfunction selections(input, turn) {\\n  return [{event: 'bot.ability.communication.respond', target: 'communication', data: {parts: [{words: 'Hello!'}]}, reason: 'a knock'}];\\n}\\n\", \"tests\": []}"
             }
           }
         ]

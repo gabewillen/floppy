@@ -10,8 +10,8 @@
                    location (required): receives the committed message
                    (the original's _message_for_turn).
                    direction (required): the literal inbound or outbound.
-                   event, message, sequence (required), provenance
-                   (optional): expressions.
+                   event, message (required), provenance (optional):
+                   expressions.
   conversation:relationship_for_input
                    location (required): holds and receives the
                    relationships, a new one appended when none matches
@@ -39,8 +39,8 @@
   conversation:complete_turn
                    location (required): receives the turns' committed
                    message (the original's _complete_turn).
-                   event, input, turns, session_ref, sequence (required):
-                   expressions.
+                   event, input, turns, session_ref (required),
+                   participants (optional): expressions.
   conversation:ingest_content
                    location (required): holds and receives the open
                    turn's content (the turn detector's _ingest_content).
@@ -73,7 +73,6 @@
       </xs:attribute>
       <xs:attribute name="event" type="xs:string" use="required"/>
       <xs:attribute name="message" type="xs:string" use="required"/>
-      <xs:attribute name="sequence" type="xs:string" use="required"/>
       <xs:attribute name="provenance" type="xs:string" use="optional"/>
     </xs:complexType>
   </xs:element>
@@ -122,7 +121,7 @@
       <xs:attribute name="input" type="xs:string" use="required"/>
       <xs:attribute name="turns" type="xs:string" use="required"/>
       <xs:attribute name="session_ref" type="xs:string" use="required"/>
-      <xs:attribute name="sequence" type="xs:string" use="required"/>
+      <xs:attribute name="participants" type="xs:string" use="optional"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="ingest_content">

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   floppy's Conversation ability in text mode (the original
-  abilities/communication/conversation): the committed history of one
+  abilities/communication/conversation): the current exchange of one
   conversation. The communication (abilities/communication/communication.scx) invokes it
   as its child "conversation", routes each admitted input to it as
   bot.ability.conversation.routed_input {parent} (parent: the
@@ -11,13 +11,13 @@
 
     inactive -input-> active { waiting -input-> running -> waiting }
     running { recalling_from -> recalling_memory?
-              -> turn_exchange { readiness -> exchange } (per source)
+              -> turn_exchange { readiness -> exchanging } (per source)
               -> remembering_from -> remembering_memory? -> committing }
     append, snapshot.request (any state)
 
   Relationships (the original Conversation._relationship_for_input): each input
   first finds its relationship, {session_ref, context_ref, source_ids,
-  target_ids, participants, sequences}, kept in relationships in the order
+  target_ids, participants}, kept in relationships in the order
   they began. Input without targets shares the first relationship without
   targets (the ambient one). Other input takes the best scoring
   relationship, ties by session_ref: an ambient one whose participants
@@ -84,17 +84,18 @@
   any has text, each distinct text once (D79); else no content for audio;
   else the input's content. The committed provenance's turn_ref is the
   first turn's and its session_ref the relationship's; audio/* content is
-  dropped (media never enters the model-facing history). Input that
+  dropped (media never enters the model-facing exchange). Input that
   arrives while one is in hand is held by <event:defer/> (scxml.rs
   namespaces/event) and is taken, in order, on the return to waiting
   (the original defers it).
 
-  Appends: outbound messages only, committed with the next sequence and
+  Appends: outbound messages only, committed into the exchange with
   provenance event bot.ability.conversation.append. An append is already
   committed when its id (non-empty), source and target, which the message's
   provenance carries for the append event (the original's event id, source and
-  target), match a committed message's; it is not committed again, and
-  either way the conversation answers bot.ability.conversation.output.
+  target), match a message's in the current exchange; it is not committed
+  again, and either way the conversation answers
+  bot.ability.conversation.output.
 
   Snapshot: bot.ability.conversation.snapshot.request {request_ref}, in
   any state, answers bot.ability.conversation.snapshot.output
@@ -103,17 +104,27 @@
   detector_refs, <conversation:detector_refs>; floppy invokes a detector per turn, so a participant
   stands for its detector).
 
+  Exchange (decision D176): an inbound commit opens a new exchange, [the
+  inbound message], and its input becomes the exchange's parent; each
+  outbound commit joins it; the next inbound replaces it. Nothing earlier
+  is carried (what was said before is memory's). Every message carries
+  participants (stamped by its producer and never inferred): an inbound
+  one the participants <conversation:turn_participants> stamps for its
+  turn (its string source_ids and target_ids, then whatever its parent's
+  data carries), an outbound one those its producer stamped on the append
+  (speaking stamps the bot's own voice once it has one, own true). A
+  message's provenance, source_ids and target_ids are correlation, left
+  out of what a model is shown (the cognition renderer drops them).
+  An append is answered with the exchange's own parent, even while
+  another input is in flight.
+
   Output: every commit's product is bot.ability.conversation.output
-  {parent, messages}: parent is the input that caused the latest inbound
-  commit (an envelope {event, data}), and messages is the committed
-  history in causal order. An inbound commit of text (string content,
-  content_type text/*) hands it to the parent as a stimulus,
-  bot.ability.cognition.input {stimulus, participants} (the product's
-  envelope with source "conversation", the original's text contribution
-  handoff; participants as <conversation:turn_participants> stamps them
-  for the turn, the original's f6c4e08: its string source_ids and
-  target_ids, then whatever its parent's data carries); every other
-  commit sends the product itself, history only.
+  {parent, messages}: the exchange, parent the input that opened it (an
+  envelope {event, data}) and messages the exchange in causal order. An
+  inbound commit of text (string content, content_type text/*) hands it to
+  the parent as a stimulus, bot.ability.cognition.input {stimulus,
+  participants} (the product's envelope with source "conversation";
+  participants the turn's); every other commit sends the product itself.
 
   Readiness: the session's start sends bot.ability.offers
   {ability: "conversation", choices: []} to the parent; it offers nothing
@@ -121,8 +132,8 @@
 
   Commits: <conversation:complete_turn> builds each inbound message and
   <conversation:message_for_turn> each outbound one (the original
-  _message_for_turn); the document appends it to history and the inbound
-  ones' sequences to their relationship.
+  message for a turn); the document opens the exchange with an inbound one
+  and appends an outbound one to it.
 
   Bindings: the bot, conversation, identity and memory namespace packages and
   the memory ability's sql service package (a run grants it its directory:
@@ -149,12 +160,14 @@
     <data id="turn_content" expr="null"/>
     <data id="turns" expr="[]"/>
     <data id="timer" expr="null"/>
-    <!-- Input that arrived while one was in hand ({input, parent}), in
-         order. -->
-    <data id="history" expr="[]"/>
-    <!-- Relationships (the original _RelationshipProfile), in the order they
+    <!-- The current exchange (decision D176): the inbound
+         message that opened it, then the outbound ones committed since,
+         and the input that opened it (its parent; null before one). -->
+    <data id="exchange" expr="[]"/>
+    <data id="exchange_parent" expr="null"/>
+    <!-- Relationships, in the order they
          began: {session_ref, context_ref, source_ids, target_ids,
-         participants, sequences}; the relationship in hand, its
+         participants}; the relationship in hand, its
          participants before this input (the original's
          original_participants), and the snapshot's detector references. -->
     <data id="relationships" expr="[]"/>
@@ -295,7 +308,7 @@
             <onexit>
               <cancel sendidexpr="timer"/>
             </onexit>
-            <transition event="bot.ability.turn_detector.ready" event:schema="../schemas/bot.ability.turn_detector.ready.json" target="exchange">
+            <transition event="bot.ability.turn_detector.ready" event:schema="../schemas/bot.ability.turn_detector.ready.json" target="exchanging">
               <conversation:participant_for_source location="relationships[relationship_index]"
                                                    source="turn_sources[turn_index]"/>
               <conversation:content_for_detector location="turn_content" input="input"
@@ -314,9 +327,9 @@
               </send>
             </transition>
           </state>
-          <state id="exchange">
+          <state id="exchanging">
             <onentry>
-              <send idlocation="timer" event="exchange.after" delayexpr="turnDelay()"/>
+              <send idlocation="timer" event="exchanging.after" delayexpr="turnDelay()"/>
             </onentry>
             <onexit>
               <cancel sendidexpr="timer"/>
@@ -327,7 +340,7 @@
               <assign location="turns" expr="turnsWith(_event)"/>
               <assign location="turn_index" expr="turn_index + 1"/>
             </transition>
-            <transition event="exchange.after" cond="isTimer(_event)" target="waiting">
+            <transition event="exchanging.after" cond="isTimer(_event)" target="waiting">
               <conversation:fail_turn location="relationships[relationship_index]"
                                       source="turn_sources[turn_index]"/>
               <send event="bot.ability.conversation.failed" target="#_parent">
@@ -393,22 +406,23 @@
         <state id="committing">
           <!-- The turns' product, committed in place of the input. -->
           <onentry>
+            <conversation:turn_participants location="turn_participants" input="input" parent="parent"/>
             <conversation:complete_turn location="message" event="parent.event" input="input" turns="turns"
-                                        session_ref="relationshipRef()" sequence="history.length"/>
+                                        session_ref="relationshipRef()" participants="turn_participants"/>
           </onentry>
+          <!-- An inbound commit opens a new exchange; the one before it is
+               not carried. -->
           <transition target="waiting">
-            <assign location="history" expr="historyWithMessage()"/>
-            <assign location="relationships[relationship_index].sequences[relationships[relationship_index].sequences.length]"
-                    expr="message.sequence"/>
+            <assign location="exchange" expr="[message]"/>
+            <assign location="exchange_parent" expr="parent"/>
             <log label="conversation" expr="inboundCommitLog()"/>
             <if cond="isTextMessage()">
               <assign location="product" expr="({})"/>
               <assign location="product.event" expr="'bot.ability.conversation.output'"/>
               <assign location="product.data" expr="({})"/>
               <assign location="product.data.parent" expr="parent"/>
-              <assign location="product.data.messages" expr="history"/>
+              <assign location="product.data.messages" expr="exchange"/>
               <assign location="product.source" expr="'conversation'"/>
-              <conversation:turn_participants location="turn_participants" input="input" parent="parent"/>
               <send event="bot.ability.cognition.input" target="#_parent">
                 <param name="stimulus" expr="product"/>
                 <param name="participants" expr="turn_participants"/>
@@ -416,7 +430,7 @@
             <else/>
               <send event="bot.ability.conversation.output" target="#_parent">
                 <param name="parent" expr="parent"/>
-                <param name="messages" expr="history"/>
+                <param name="messages" expr="exchange"/>
               </send>
             </if>
           </transition>
@@ -424,8 +438,8 @@
       </state>
     </state>
 
-    <!-- An outbound record, in either state, committed once; answered
-         either way. -->
+    <!-- An outbound record, in either state, joins the exchange once;
+         answered either way. -->
     <transition event="bot.ability.conversation.append" event:schema="../schemas/bot.ability.conversation.append.json"
                 cond="isOutboundAppend(_event)">
       <if cond="isCommittedAppend(_event)">
@@ -433,13 +447,13 @@
       <else/>
         <conversation:message_for_turn location="message" direction="outbound"
                                        event="_event.name" message="_event.data.message"
-                                       provenance="_event.data.message.provenance" sequence="history.length"/>
-        <assign location="history" expr="historyWithMessage()"/>
+                                       provenance="_event.data.message.provenance"/>
+        <assign location="exchange" expr="exchangeWithMessage()"/>
         <log label="conversation" expr="outboundCommitLog()"/>
       </if>
       <send event="bot.ability.conversation.output" target="#_parent">
-        <param name="parent" expr="parent"/>
-        <param name="messages" expr="history"/>
+        <param name="parent" expr="exchange_parent"/>
+        <param name="messages" expr="exchange"/>
       </send>
     </transition>
     <!-- The participants' detectors, in any state. -->

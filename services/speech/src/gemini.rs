@@ -5,12 +5,13 @@
 //! (`https://generativelanguage.googleapis.com/v1beta`).
 //!
 //! * encode: the canonical JSON body `{"generation_config":
-//!   {"speech_config": [{"voice": V}]}, "input": T, "model": M,
-//!   "response_format": {"type": "audio"}, "store": false}`; the answer's
-//!   audio is the first `steps[].content[]` part of `type` `audio`, base64
-//!   linear PCM (16-bit mono at [`crate::PCM_SAMPLE_RATE_HZ`], the
-//!   original's `_DEFAULT_SAMPLE_RATE_HZ`), written raw for `audio/pcm` or
-//!   in a WAV container for `audio/wav` ([`encoding_request`], [`audio`]).
+//!   {"speech_config": [{"voice": V}]}, "input": W, "model": M,
+//!   "response_format": {"type": "audio"}, "store": false}`, `W` one
+//!   stretch's words (one request per stretch); the answer's audio is the
+//!   first `steps[].content[]` part of `type` `audio`, base64 linear PCM
+//!   (16-bit mono at [`crate::PCM_SAMPLE_RATE_HZ`], the default sample
+//!   rate), written raw for `audio/pcm` or in a WAV
+//!   container for `audio/wav` ([`encoding_request`], [`audio`]).
 //! * decode: the body `{"input": [{"text": P, "type": "text"}, {"data": A,
 //!   "mime_type": M, "type": "audio"}], "model": M, "store": false}`, `P`
 //!   the original's prompt ([`DECODING_PROMPT`]) and `A` the audio in
@@ -48,15 +49,20 @@ fn request(base_url: u32, api_key: Option<u32>, body: &Json) -> Request {
     }
 }
 
-/// The speech request of an encoding.
+/// The speech request of one stretch's `words`.
 #[must_use]
-pub fn encoding_request(base_url: u32, api_key: Option<u32>, encoding: &Encoding) -> Request {
+pub fn encoding_request(
+    base_url: u32,
+    api_key: Option<u32>,
+    encoding: &Encoding,
+    words: &str,
+) -> Request {
     request(
         base_url,
         api_key,
         &json!({
             "generation_config": {"speech_config": [{"voice": encoding.voice}]},
-            "input": encoding.text,
+            "input": words,
             "model": encoding.model,
             "response_format": {"type": "audio"},
             "store": false,

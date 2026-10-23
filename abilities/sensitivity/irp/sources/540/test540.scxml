@@ -21,7 +21,7 @@
     <onentry>
       <send event="bot.ability.listening.sensitivity.score" target="#_sensitivity"><content expr='{"stimulus": {"event": "environment.sound", "data": {"audio": "media/a.wav", "received_level_db": -30, "amplitude_db": -10}, "source": "speaker"}}'/></send>
     </onentry>
-    <transition event="bot.ability.listening.sensitivity.output" cond="_event.data.perceived_level_db === -30" target="step3"/>
+    <transition event="bot.ability.listening.sensitivity.output" cond="_event.data.perceived_level_db === -30 &amp;&amp; _event.data.producing === false" target="step3"/>
   </state>
   <state id="step3">
     <transition target="pass"/>

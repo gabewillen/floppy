@@ -260,7 +260,7 @@ fn live_chat() {
         let text = record["text"].as_str().unwrap_or("");
         record["type"] == "log"
             && match record["label"].as_str() {
-                Some("communication.history" | "bot.processing.failed") => true,
+                Some("communication.exchange" | "bot.processing.failed") => true,
                 Some("bot.processing.completed") => {
                     !text.contains("bot.ability.communication.respond")
                 }

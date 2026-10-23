@@ -35,14 +35,24 @@ def offered(event):
     return schema
 
 
-def turn(n, text="hello", choices=(IGNORE,)):
+# Respond's schema reduced to its parts' words: the whole schema, written into a case's one
+# <content expr>, nests past the ECMAScript data model's expression bound (LIMIT003).
+RESPOND_PARTS = {"type": "object", "properties": {"parts": {
+                     "type": "array", "minItems": 1, "maxItems": 64,
+                     "items": {"type": "object", "properties": {"words": {"type": "string", "minLength": 1}},
+                               "additionalProperties": False}}},
+                 "required": ["parts"], "additionalProperties": False}
+
+
+def turn(n, data=None, choices=(IGNORE,)):
     # Tagged with their offering sessions' ids: the cognition's own ignore,
     # and respond offered by the harness (the run's root, "session").
     targets = {IGNORE: "session.cognition", RESPOND: "session"}
+    schemas = {IGNORE: offered(IGNORE), RESPOND: RESPOND_PARTS}
     return js({"turn": n,
-               "stimulus": {"event": "bot.input", "data": {"text": text}, "source": "conversation"},
+               "stimulus": {"event": "bot.input", "data": data or {"text": "hello"}, "source": "conversation"},
                "focus": None, "focus_candidates": [],
-               "choices": [{"event": e, "schema": offered(e), "target": targets[e]} for e in choices]})
+               "choices": [{"event": e, "schema": schemas[e], "target": targets[e]} for e in choices]})
 
 
 def completion(content):
@@ -66,12 +76,16 @@ DECIDE_IGNORE = decided({IGNORE: 0.8, "__reasoning__": 0.2}, IGNORE)
 DECIDE_ABSTAIN = decided({IGNORE: 0.2, "__reasoning__": 0.8}, "__reasoning__")
 # The pass to the chat tier, offered when the cognition composes one (its hand_ons).
 DECIDE_TO_INTUITION = decided({IGNORE: 0.1, "__intuition__": 0.8, "__reasoning__": 0.1}, "__intuition__")
-# Respond 0.34 (its text grounded in the stimulus), the one selection: 34 is under the warmup floor 35.
+# A stimulus carrying respond's parts, the evidence the decision layer grounds respond in.
+HI = {"parts": [{"words": "hi"}]}
+HI_LABEL = json.dumps(HI["parts"], separators=(",", ":"))
+# Respond 0.34 (its parts grounded in the stimulus), the one selection: 34 is under the warmup floor 35.
 DECIDE_LOW = decided({RESPOND: 0.34, IGNORE: 0.33, "__reasoning__": 0.33}, RESPOND,
-                     {f"{RESPOND}::text": {"type": "choice", "choice": "hi", "confidence": 1.0, "probabilities": {"hi": 1.0}}})
+                     {f"{RESPOND}::parts": {"type": "choice", "choice": HI_LABEL, "confidence": 1.0,
+                                            "probabilities": {HI_LABEL: 1.0}}})
 REASONED_IGNORE = chat([{"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "session.cognition"}])
-REASONED_REPEAT = chat([{"event": RESPOND, "data": {"text": "hi"}, "reason": "answer", "target": "session"}])
-SAID_HI = expect(RESPOND, "_event.data.text === 'hi'")
+REASONED_REPEAT = chat([{"event": RESPOND, "data": HI, "reason": "answer", "target": "session"}])
+SAID_HI = expect(RESPOND, "_event.data.parts.length === 1 && _event.data.parts[0].words === 'hi'")
 OFF_CHOICE = chat([{"event": "bot.focus_device", "data": {"device": "lamp"}, "reason": "look"}])
 
 
@@ -140,15 +154,15 @@ S.case(121, 3, "with a database, the turn goes through autonomy's and reasoning'
        params=[SLOW, DB], backend=[DECIDE_ABSTAIN, REASONED_IGNORE, chat([])], clock="logical", ignore=[OFFERS])
 
 S.case(130, 4, "a low-confidence decision layer's respond is sent first; the output is that respond, then reasoning's ignore.",
-       [READY, send(INPUT, turn(1, text="hi", choices=(IGNORE, RESPOND))), SAID_HI,
+       [READY, send(INPUT, turn(1, HI, choices=(IGNORE, RESPOND))), SAID_HI,
         output(1, f"_event.data.output.length === 2 && _event.data.output[0].event === {js(RESPOND)}"
                   f" && _event.data.output[1].event === {js(IGNORE)} && _event.data.output[1].reason === 'nothing to say'")],
        params=[SLOW], backend=[DECIDE_LOW, REASONED_IGNORE], clock="logical", ignore=[OFFERS])
 S.case(131, 4, "reasoning's repeat of the low-confidence decision layer's respond is sent again, after it.",
-       [READY, send(INPUT, turn(1, text="hi", choices=(IGNORE, RESPOND))), SAID_HI, SAID_HI,
+       [READY, send(INPUT, turn(1, HI, choices=(IGNORE, RESPOND))), SAID_HI, SAID_HI,
         output(1, f"_event.data.output.length === 2 && _event.data.output[0].event === {js(RESPOND)}"
                   f" && _event.data.output[1].event === {js(RESPOND)}"
-                  " && _event.data.output[1].data.text === 'hi' && _event.data.output[1].target === 'session'")],
+                  " && _event.data.output[1].data.parts[0].words === 'hi' && _event.data.output[1].target === 'session'")],
        params=[SLOW], backend=[DECIDE_LOW, REASONED_REPEAT], clock="logical", ignore=[OFFERS])
 
 S.case(140, 5, "a failed decision cascades the turn to reasoning, which answers it.",
@@ -195,7 +209,7 @@ S.case(180, 9, "an input without a stimulus is refused at the sender; the cognit
 
 INTUITION = ("intuition_model", "'chat-model'")
 HANDOFF = "bot.ability.reasoning.input"
-INTUITED_HANDOFF = chat([{"event": RESPOND, "data": {"text": "hi"}, "reason": "hold on", "target": "session"},
+INTUITED_HANDOFF = chat([{"event": RESPOND, "data": HI, "reason": "hold on", "target": "session"},
                          {"event": HANDOFF, "data": {}, "reason": "this needs thought", "target": "session.cognition"}])
 S.case(190, 10, "an intuition tier handles the turn the decision layer left unhandled, without reasoning.",
        [READY, send(INPUT, turn(1)), output(1, REASONED)],

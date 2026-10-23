@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- speaking-2: a reply of several parts is one utterance, its text the parts' words joined as written; its pause reaches the encoder as silence (0.1 s, 0.4 s, 0.1 s). -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="speaking" type="scxml" src="../../../speaking.scx">
+    <param name="encoding_timeout_ms" expr="600000"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'speaking' &amp;&amp; _event.data.choices.length === 0" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.speaking.input" target="#_speaking"><content expr='{"parts": [{"words": "Well,"}, {"expression": {"pause": "short", "emotion": "warm"}, "words": " hello there."}]}'/></send>
+    </onentry>
+    <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 0.6 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step2"/>
+  </state>
+  <state id="step2">
+    <transition event="environment.sound" cond="_event.data.audio === 'media/speaking-1.pcm' &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.source === 'speaking'" target="step3"/>
+  </state>
+  <state id="step3">
+    <transition event="bot.ability.conversation.append" cond="_event.data.message.direction === 'outbound' &amp;&amp; _event.data.message.content === &quot;Well, hello there.&quot; &amp;&amp; _event.data.message.content_type === 'text/plain' &amp;&amp; !('sequence' in _event.data.message) &amp;&amp; Array.isArray(_event.data.message.participants) &amp;&amp; _event.data.message.participants.length === 0 &amp;&amp; _event.data.message.source_ids.length === 0 &amp;&amp; _event.data.message.target_ids.length === 0 &amp;&amp; _event.data.message.provenance.id === 'speaking-1' &amp;&amp; _event.data.message.provenance.event === 'bot.ability.conversation.append'" target="step4"/>
+  </state>
+  <state id="step4">
+    <transition event="bot.ability.speaking.output" cond="_event.data.text === &quot;Well, hello there.&quot; &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step5"/>
+  </state>
+  <state id="step5">
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'speaking' &amp;&amp; _event.data.choices.length === 0" target="step6"/>
+  </state>
+  <state id="step6">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

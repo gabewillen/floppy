@@ -79,7 +79,7 @@ def routine(delay, output):
 </scxml>"""
 
 
-CHIME = "[{event: 'bot.speaking.say', data: {text: 'Hourly chime.'}}]"
+CHIME = "[{event: 'bot.speaking.say', data: {parts: [{words: 'Hourly chime.'}]}}]"
 
 
 # A turn behavior that declares the params turn and input and decides at
@@ -114,7 +114,7 @@ KNOCK_SCRIPT = """function applies(input) {
   return input.label === 'knock';
 }
 function selections(input, turn) {
-  return [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Who is there?'}}];
+  return [{event: 'bot.ability.communication.respond', target: 'communication', data: {parts: [{words: 'Who is there?'}]}}];
 }
 """
 EVERY_SCRIPT = KNOCK_SCRIPT.replace("input.label === 'knock'", "true")

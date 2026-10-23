@@ -598,7 +598,7 @@ fn routine_draft(delay: &str, output: &str) -> String {
     .to_string()
 }
 
-const CHIME: &str = "[{event: 'bot.speaking.say', data: {text: 'Hourly chime.'}}]";
+const CHIME: &str = "[{event: 'bot.speaking.say', data: {parts: [{words: 'Hourly chime.'}]}}]";
 
 /// The request with the original `check()`'s lifetime bounds (`ROUTINE_MIN_EVERY`,
 /// `TURN_SILENCE_BOUND`), as reflection sends it.
@@ -625,7 +625,7 @@ fn live_request() -> Json {
 /// A selection that answers the knock: it reads `label` from the param
 /// `input` (none without it), so it agrees with the live turn only when the
 /// run was given that turn's input.
-const RESPOND: &str = "{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Who is there?', label: input === null ? 'none' : input.label}}";
+const RESPOND: &str = "{event: 'bot.ability.communication.respond', target: 'communication', data: {parts: [{words: 'Who is there?'}], label: input === null ? 'none' : input.label}}";
 
 /// A turn behavior that declares the params `turn` and `input`, holds
 /// `deciding` in its state `deciding`, and ends in `decided` with
@@ -750,7 +750,7 @@ fn script_reply(lifetime: &str, script: &str, tests: &Json) -> String {
 
 /// A turn script that answers a knock (reading its label from input), to
 /// the session communication.
-const KNOCK_SCRIPT: &str = "function applies(input) {\n  return input.label === 'knock';\n}\nfunction selections(input, turn) {\n  return [{event: 'bot.ability.communication.respond', target: 'communication', data: {text: 'Who is there?', label: input.label}}];\n}\n";
+const KNOCK_SCRIPT: &str = "function applies(input) {\n  return input.label === 'knock';\n}\nfunction selections(input, turn) {\n  return [{event: 'bot.ability.communication.respond', target: 'communication', data: {parts: [{words: 'Who is there?'}], label: input.label}}];\n}\n";
 
 /// [`KNOCK_SCRIPT`] whose `applies` returns `applies`.
 fn knock_script_applying(applies: &str) -> String {

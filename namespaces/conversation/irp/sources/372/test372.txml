@@ -6,7 +6,7 @@
 </datamodel>
 <state id="s0">
   <onentry>
-    <conversation:complete_turn location="m" event="'e'" input="({source_ids: [], target_ids: [], content_type: 'text/plain'})" turns="[]" session_ref="'r'" sequence="0"/>
+    <conversation:complete_turn location="m" event="'e'" input="({source_ids: [], target_ids: [], content_type: 'text/plain'})" turns="[]" session_ref="'r'"/>
     <raise event="executed"/>
   </onentry>
   <transition event="error.execution" cond="m === 'untouched'" conf:targetpass=""/>

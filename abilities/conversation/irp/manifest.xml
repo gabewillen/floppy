@@ -9,7 +9,7 @@
     </test>
   </assert>
   <assert id="conversation-2" specnum="2" specid="#conversation-2">
-    <![CDATA[A direct `bot.ability.conversation.input` (its parent the envelope `{event: "bot.ability.conversation.input", data}`) or a `bot.ability.conversation.routed_input` `{parent}` (the communication's envelope, whose data is the input) is committed as an inbound message (sequence the history's length, provenance event the parent's event); an inbound commit of text hands the parent `bot.ability.cognition.input` `{stimulus}` whose stimulus is `{event: "bot.ability.conversation.output", data: {parent, messages}, source: "conversation"}`.]]>
+    <![CDATA[A direct `bot.ability.conversation.input` (its parent the envelope `{event: "bot.ability.conversation.input", data}`) or a `bot.ability.conversation.routed_input` `{parent}` (the communication's envelope, whose data is the input) is committed as an inbound message (provenance event the parent's event; no sequence); an inbound commit of text hands the parent `bot.ability.cognition.input` `{stimulus, participants}` whose stimulus is `{event: "bot.ability.conversation.output", data: {parent, messages}, source: "conversation"}`, messages the exchange the commit opens.]]>
     <test id="110" conformance="mandatory" manual="false">
       <start uri="110/test110.scxml"/>
     </test>
@@ -57,7 +57,7 @@
     </test>
   </assert>
   <assert id="conversation-6" specnum="6" specid="#conversation-6">
-    <![CDATA[`bot.ability.conversation.append` `{message}` with an outbound message is committed with the next sequence and answered `bot.ability.conversation.output` `{parent, messages}`; one whose provenance id (non-empty), source and target match a committed message's is not committed again but is answered all the same; an inbound one is not taken (nothing is committed or answered).]]>
+    <![CDATA[`bot.ability.conversation.append` `{message}` with an outbound message joins the current exchange and is answered `bot.ability.conversation.output` `{parent, messages}`; one whose provenance id (non-empty), source and target match a message's in the current exchange is not committed again but is answered all the same; an inbound one is not taken (nothing is committed or answered).]]>
     <test id="150" conformance="mandatory" manual="false">
       <start uri="150/test150.scxml"/>
     </test>
@@ -99,6 +99,30 @@
     <![CDATA[An input its schema refuses is never routed here: the send raises `error.execution` in the sender, and nothing is committed.]]>
     <test id="190" conformance="mandatory" manual="false">
       <start uri="190/test190.scxml"/>
+    </test>
+  </assert>
+  <assert id="conversation-11" specnum="11" specid="#conversation-11">
+    <![CDATA[Every output is the current exchange (decision D176), never the cumulative history: an inbound commit opens a new exchange, `[the inbound message]`, its input the exchange's `parent`; each outbound commit joins it; the next inbound replaces it, and nothing earlier is carried.]]>
+    <test id="200" conformance="mandatory" manual="false">
+      <start uri="200/test200.scxml"/>
+    </test>
+    <test id="201" conformance="mandatory" manual="false">
+      <start uri="201/test201.scxml"/>
+    </test>
+    <test id="202" conformance="mandatory" manual="false">
+      <start uri="202/test202.scxml"/>
+    </test>
+  </assert>
+  <assert id="conversation-12" specnum="12" specid="#conversation-12">
+    <![CDATA[Every message carries `participants`, stamped by its producer and never inferred: an inbound message the turn's participants as `<conversation:turn_participants>` stamps them (its string source ids as `{ref, role: "source"}`, then its string target ids as `{ref, role: "target"}`; an embedding is no ref), which the cognition handoff carries too; an outbound message those its append carries (`[]` when it carries none).]]>
+    <test id="210" conformance="mandatory" manual="false">
+      <start uri="210/test210.scxml"/>
+    </test>
+    <test id="211" conformance="mandatory" manual="false">
+      <start uri="211/test211.scxml"/>
+    </test>
+    <test id="212" conformance="mandatory" manual="false">
+      <start uri="212/test212.scxml"/>
     </test>
   </assert>
 </assertions>

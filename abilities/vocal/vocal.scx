@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's vocal SpeechEncoding ability (the reference abilities/vocal/speech/
-  encoding.py SpeechEncoding): text to speech through the speech service
+  floppy's vocal speech encoding ability:
+  a reply's parts to speech through the speech service
   (services/speech, operation encode). Speaking
   (abilities/speaking/speaking.scx) invokes it as its child "vocal" from
   its encoding state, so leaving encoding (an answer, a failure or
@@ -10,11 +10,12 @@
 
     idle -bot.ability.vocal.speech.encoding.input-> applying -> idle
 
-  Input: bot.ability.vocal.speech.encoding.input {text} (the original's input is
-  the text's UTF-8 bytes). applying invokes the speech service with the
+  Input: bot.ability.vocal.speech.encoding.input {parts} (the parts
+  whole, decision D178). applying invokes the speech service with the
   <param>s operation "encode", provider (the invoker's, null for the
   OpenAI-compatible API), model and voice (the speech service requires
-  both: the invoker names them), text, output (where the
+  both: the invoker names them), parts (the service says each pause as
+  silence and applies no other cue, decision D178), output (where the
   service writes the audio: a path in the media directory the run grants
   it, which the invoker names) and media_type, and answers the parent with
   the service's bot.ability.vocal.speech.encoding.output {audio,
@@ -47,7 +48,7 @@
     <data id="output" expr="null"/>
     <data id="media_type" expr="'audio/pcm'"/>
     <!-- The utterance in hand and the service's answer. -->
-    <data id="text" expr="null"/>
+    <data id="parts" expr="null"/>
     <data id="encoded" expr="null"/>
     <data id="failure" expr="null"/>
   </datamodel>
@@ -62,7 +63,7 @@
     </onentry>
     <transition event="bot.ability.vocal.speech.encoding.input" event:schema="../schemas/bot.ability.vocal.speech.encoding.input.json"
                 target="applying">
-      <assign location="text" expr="_event.data.text"/>
+      <assign location="parts" expr="_event.data.parts"/>
     </transition>
   </state>
 
@@ -76,7 +77,7 @@
       <param name="operation" expr="'encode'"/>
       <param name="provider" expr="provider"/>
       <param name="model" expr="model"/>
-      <param name="text" expr="text"/>
+      <param name="parts" expr="parts"/>
       <param name="voice" expr="voice"/>
       <param name="output" expr="output"/>
       <param name="media_type" expr="media_type"/>
