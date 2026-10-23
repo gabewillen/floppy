@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   A firmware double for the body tests (tests/tests/body.rs): an owner's
-  firmware (decision D160), a timer. tests/tests/body.rs copies it
+  firmware (decision D160) that runs a timer. tests/tests/body.rs copies it
   beside a copy of the body and names it with the body's firmware_src.
 
   Unless mode is 'silent' (the test rewrites mode's expr), it starts by
