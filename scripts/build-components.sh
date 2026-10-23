@@ -372,8 +372,10 @@ build_component() {
     test -f "$raw" || { echo "missing release component artifact: $raw" >&2; exit 1; }
     virt_input=$raw
     case "$component" in
-        floppy_decision|floppy_service_generate|floppy_service_decision|floppy_service_generate_validator|floppy_service_vision)
-        # <decision:choice> compiles each offered schema, the generate service
+        floppy_behavior|floppy_decision|floppy_service_generate|floppy_service_decision|floppy_service_generate_validator|floppy_service_vision)
+        # <behavior:verify_apply> checks each selection against its turn
+        # choice's schema (decision D206), <decision:choice> compiles each
+        # offered schema, the generate service
         # checks structured output, and the decision service checks the
         # choices' schemas and the filled event data with the same `event`
         # schema code (boon, std's RandomState); the vision service's WebP
