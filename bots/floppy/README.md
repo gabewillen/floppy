@@ -115,8 +115,8 @@ streamed reasoning reply's progress starts it over),
 `child_operation_ceiling_ms` (a stage in all), `revising_timeout_ms`
 (reflection's revision through the builder without progress) and
 `revising_ceiling_ms` (a revision in all); absent, each is the ability's
-default (the root README's "Timeouts and bounds"). The memory ability (`abilities/memory/memory.scx`, the original's
-Memory) keeps the bot's database, `/memory/floppy.sqlite`, through the sql
+default ([docs/defaults.md](../../docs/defaults.md#timeouts-and-bounds)). The memory ability (`abilities/memory/memory.scx`)
+keeps the bot's database, `/memory/floppy.sqlite`, through the sql
 service (`services/sql`, SQLite), in the directory the run grants that
 service: `--dir
 https://github.com/stateforward/floppy/services/sql=HOST::/memory`
@@ -130,7 +130,7 @@ though it is used only when the database is a Postgres connection URI
 (`postgresql://USER@IP:PORT/DBNAME`, for example PGlite served by
 `pglite-server` from `@electric-sql/pglite-socket`); the body's `database`
 `<data>` names the engine, and Postgres support is tested on Postgres 16
-([Memory engines](../../README.md#memory-engines)). The `generate` service
+([memory engines](../../docs/running.md#memory-engines)). The `generate` service
 imports `wasi:filesystem` too (it reads the images a message names), so
 the run grants it a media directory the same way (create `media/` first;
 it is ignored by git).
@@ -145,8 +145,8 @@ backend; `FLOPPY_SPEECH_API_KEY` too unless the backend is keyless) and the spee
 media directory its audio is written to (`--dir
 https://github.com/stateforward/floppy/services/speech=HOST::/media`);
 without them a response fails with `bot.ability.communication.failed`.
-[`.env.example`](../../.env.example) names the variables, and the README's
-[Defaults](../../README.md#defaults) lists the model, the timeouts and the
+[`.env.example`](../../.env.example) names the variables, and
+[docs/defaults.md](../../docs/defaults.md) lists the model, the timeouts and the
 bounds this bot ships with.
 
 Sound (phase 6): `environment.sound` `{audio, media_type, sample_rate_hz,

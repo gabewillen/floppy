@@ -303,8 +303,8 @@ declared `http-origins` entry, `https://api.typesafe.ai`. `--env-file`
 repeats, so the keys may come from two files (`--env-file .env --env-file
 <typesafe env file>`). Without `TYPESAFE_API_KEY` the decision service
 answers `decision.failed` (`unconfigured`) and the builder triages with its
-fallback. [`.env.example`](../../.env.example) names the variables, and the
-README's [Defaults](../../README.md#defaults) lists the model, the timeouts
+fallback. [`.env.example`](../../.env.example) names the variables, and
+[docs/defaults.md](../../docs/defaults.md) lists the model, the timeouts
 and the bounds the builder ships with. Drafts are
 validated without packages, so a built machine uses no extension namespace
 or service.
@@ -313,7 +313,7 @@ or service.
 
 From the repository root, after `sh scripts/build-components.sh` and with
 `scx` installed from the subtree (see the
-[README](../../README.md#quick-start)):
+[docs/running.md](../../docs/running.md#build)):
 
 ```console
 # The locally built packages (the dev cache under target/).

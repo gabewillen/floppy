@@ -59,7 +59,7 @@ pub const GRANTED: [&str; 9] = [
 /// starts, and entering a room starts its bots and all their abilities.
 pub const FUEL: &str = "9223372036854775807";
 
-/// The model floppy ships (README.md, "Defaults"): every document's `model`
+/// The model floppy ships (docs/defaults.md): every document's `model`
 /// `<data>`, checked by `tests/tests/defaults.rs`.
 pub const DEFAULT_MODEL: &str = "Qwen/Qwen3.8-Flash-Next";
 
