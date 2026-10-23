@@ -168,7 +168,7 @@ builders can run at once (`author`
 attempt 1, or a `design` that follows neither `triage` nor `retry_gate`, starts one, and any
 other builder line with no build open opens one; `done` "built X in N attempt(s)" or `failed`
 "<reason>: ..." ends it; a build its turn cancelled stays `unfinished`, and
-one cut before any draft or failure is counted apart as "cut before a draft", since it
+one cut before any draft or failure (or whose log ended there, at the job's end) is counted apart as "cut before a draft", since it
 measures the turn, not the builder; the 8-failure budget also counts a
 failed design, so a build can exhaust it in fewer than 8 attempts),
 and `builder.md` gives, per column and scenario, the builds, the accepted

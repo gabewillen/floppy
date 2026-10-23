@@ -280,7 +280,10 @@ def builds(job):
                 # "failure N of M": the budget counts a failed design as
                 # well as each failed draft.
                 match = re.match(r"failure (\d+)", text)
-                build["failures"] = max(build["failures"], int(match.group(1)) if match else build["failures"] + 1)
+                if match:
+                    build["failures"] = max(build["failures"], int(match.group(1)))
+                else:
+                    build["failures"] += 1
                 build["diagnostics"].append(text[:200])
             elif label == "done":
                 match = re.search(r"in (\d+) attempt", text)

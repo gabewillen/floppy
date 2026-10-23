@@ -273,6 +273,16 @@ def cmd_run(args):
 def cmd_grade(args):
     with open(os.path.join(args.dir, "plan.json"), encoding="utf-8") as handle:
         jobs = json.load(handle)["jobs"]
+    # A builder track's run: its table again, from the models it saved.
+    # Checked before anything is written, so a regrade is whole or none.
+    builder_json = os.path.join(args.dir, "builder.json")
+    models = None
+    if os.path.exists(builder_json):
+        with open(builder_json, encoding="utf-8") as handle:
+            models = json.load(handle).get("models")
+        if models is None:
+            sys.exit(f"{builder_json} names no column models (a run from before they were saved): "
+                     "it cannot be regraded")
     for job in jobs:
         # A run made on another machine: its out directories moved with it.
         job["out"] = os.path.join(args.dir, "jobs", job["id"])
@@ -282,14 +292,7 @@ def cmd_grade(args):
         json.dump({"summary": summary, "jobs": graded}, handle, indent=2)
     with open(os.path.join(args.dir, "report.md"), "w", encoding="utf-8") as handle:
         handle.write(report_markdown(f"Learning eval {os.path.basename(args.dir)}", summary, graded))
-    # A builder track's run: its table again, from the same columns.
-    builder_json = os.path.join(args.dir, "builder.json")
-    if os.path.exists(builder_json):
-        with open(builder_json, encoding="utf-8") as handle:
-            models = json.load(handle).get("models")
-        if models is None:
-            sys.exit(f"{builder_json} names no column models (a run from before they were saved): "
-                     "builder.md cannot be regraded")
+    if models is not None:
         write_builder(args.dir, [{"label": label, "builder": model} for label, model in models.items()], graded)
     print(json.dumps(summary, indent=2))
 
