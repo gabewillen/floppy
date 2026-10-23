@@ -86,6 +86,20 @@ class Scorer(unittest.TestCase):
         self.assertEqual(by["broken"], 1.0)
         self.assertEqual(by["no_ticks"], 1.0)
 
+    def test_a_break_by_the_learning_ability_is_broken(self):
+        scenario = self.scenarios["routine_reminder"]
+        session = [
+            log("reflection.inventory", "WaterReminder ACTIVE persistent [] (accept)"),
+            log("floppy.say", "Time to drink some water!"),
+            log("floppy.say", "Okay, I'll stop."),
+            log("learning.learned", "lesson of turn 6: WaterReminder ACTIVE persistent BROKEN"),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            write_job(directory, [session], [step(0, 0, 0, 1), step(0, 1, 1, 2, "wait"), step(0, 2, 2, 4), step(0, 3, 4, 4, "wait")])
+            _, results = score.score(scenario, score.load_job(directory))
+        by = {r["check"]: r["score"] for r in results}
+        self.assertEqual(by["broken"], 1.0)
+
     def test_a_name_is_adopted_recalled_and_heard(self):
         scenario = self.scenarios["name_adopt"]
         session0 = [log("identity.name", 'adopted "Juniper"'), log("identity.heard", "addressed as Juniper"),

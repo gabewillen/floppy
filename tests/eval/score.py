@@ -15,7 +15,9 @@ bot already writes:
   learned        reflection.inventory `<name> ACTIVE <lifetime> ... (accept)`
                  (reflection learned a behavior, and the builder's draft
                  passed)
-  broken         reflection.inventory `<name> BROKEN (break)`
+  broken         reflection.inventory `<name> BROKEN (break)`, or the
+                 learning ability's learning.learned `lesson of turn N:
+                 <name> ... BROKEN`
   reflex         cognition.stage `autonomy handled`: a learned behavior,
                  not reasoning, handled the real input
   not_reflex     no cognition.stage `autonomy handled`
@@ -146,7 +148,8 @@ def check(job, spec):
         revisions = _texts(records, "reflection.revision")
         return 0.0, f"no {lifetime} behavior accepted (revisions {revisions[:4]})"
     if kind == "broken":
-        broken = [t for t in _texts(records, "reflection.inventory") if " BROKEN" in t]
+        texts = _texts(records, "reflection.inventory") + _texts(records, "learning.learned")
+        broken = [t for t in texts if " BROKEN" in t]
         return float(bool(broken)), (broken[0] if broken else "nothing was broken")
     stages = _texts(records, "cognition.stage")
     says = _texts(records, "floppy.say")

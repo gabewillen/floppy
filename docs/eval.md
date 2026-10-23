@@ -77,7 +77,7 @@ Each check reads a log label the bot already writes, at one step (`at:
 | `recalled_name` | `identity.name` is `recalled "<name>"` in that session (a restarted bot remembered it) |
 | `addressed`, `not_addressed` | `identity.heard` is (is not) `addressed as <name>` |
 | `learned` | `reflection.inventory` accepts a behavior: `<Name> ACTIVE <lifetime> ... (accept)`, `turn` for a reflex, `persistent` for a routine |
-| `broken` | `reflection.inventory` breaks one: `<Name> BROKEN (break)` |
+| `broken` | `reflection.inventory` breaks one: `<Name> BROKEN (break)`, or the learning ability does: `learning.learned` `lesson of turn N: <Name> … BROKEN` |
 | `reflex`, `not_reflex` | `cognition.stage` is (is not) `autonomy handled`: a learned behavior, not reasoning, handled the real input |
 | `says`, `not_says` | a `floppy.say` matches (none matches) the pattern, case-insensitive |
 | `ticks` | at least `min` `floppy.say` matching the pattern during a wait (no input, so each is a routine's turn); partial credit below `min` |
