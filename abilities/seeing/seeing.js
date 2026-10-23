@@ -2,8 +2,8 @@
 // <script src="seeing.js">, so every function here is a global of the
 // document's data model, callable from its cond and expr attributes.
 
-// Shared: the original's MAX_VIEWS and participants bound, send delays, the
-// timer in hand, and a view's freshness.
+// Shared: the views and participants bounds, send delays, the timer in
+// hand, and a view's freshness.
 
 var MAX_VIEWS = 4;
 var MAX_PARTICIPANTS = 32;
@@ -16,7 +16,7 @@ function isTimer(_event) {
   return _event.sendid === timer;
 }
 
-// How long ago a view arrived at now, never negative (the original _age).
+// How long ago a view arrived at now, never negative.
 function ageMs(view, now) {
   return Math.max(0, now - view.received_at);
 }
@@ -25,9 +25,9 @@ function isFresh(view, now) {
   return ageMs(view, now) <= max_view_age_ms;
 }
 
-// initializing: the original's constructor refusals
+// initializing: the parameter refusals
 
-// The bounded durations, in the original's order.
+// The bounded durations, in the order they are checked.
 var DURATIONS = ['measure_every_ms', 'measure_timeout_ms', 'settle_after_ms', 'max_view_age_ms', 'stage_timeout_ms'];
 var MEASURES = ['byte_identity', 'frame_diff'];
 
@@ -63,7 +63,7 @@ function refusesMeasure() {
   return MEASURES.indexOf(measure) === -1;
 }
 
-// perceiving: holding (the original _hold)
+// perceiving: holding
 
 // The views and outcomes once _event's view is held: stale views expire;
 // a view without a source is dropped; else it replaces its source's view
@@ -99,9 +99,8 @@ function hold(_event) {
 }
 
 // The seen signatures without the sources a hold forgot: an expired or
-// evicted source's signature goes with it (the original _forget_source), so
-// its next view is a first view again, even when that view is the one just
-// held.
+// evicted source's signature goes with it, so its next view is a first
+// view again, even when that view is the one just held.
 function seenWithout(forgotten) {
   return seen.filter(function (entry) { return forgotten.indexOf(entry.source) === -1; });
 }
@@ -118,7 +117,7 @@ function hasUnmeasuredView() {
   return views.some(function (view) { return !view.measured && isFresh(view, chosen_at); });
 }
 
-// A view as the eye hands it on (the original's View): the stimulus's
+// A view as the eye hands it on: the stimulus's
 // image, media type, kind and participants, its change and age; no stage
 // has filled objects or description yet.
 function handedView(visual, change, age) {
@@ -129,7 +128,7 @@ function orNull(value) {
   return value === undefined ? null : value;
 }
 
-// The look's request (the original _take_look): every fresh view, newest
+// The look's request: every fresh view, newest
 // first (a stable sort, so views that arrived together stay in receipt
 // order), change null, from Seeing itself.
 function lookRequest() {
@@ -139,7 +138,7 @@ function lookRequest() {
   return {cause: 'look', source: 'seeing', views: fresh.map(function (view) { return handedView(view.visual, null, ageMs(view, now)); })};
 }
 
-// measuring (the original _measure)
+// measuring
 
 // The unmeasured fresh view of the least recently measured source: never
 // measured first, then the oldest measured_at, ties to the oldest arrival.
@@ -189,7 +188,7 @@ function previousSignature() {
   return entry === undefined ? null : entry.signature;
 }
 
-// The vision service's done data is the original's Measurement.
+// The vision service's done data is a measurement {change, signature}.
 function isMeasurement(_event) {
   var data = Object(_event.data);
   return (data.change === null || typeof data.change === 'number') && typeof Object(data.signature).measure === 'string';
@@ -203,7 +202,7 @@ function measureTimedOutMessage() {
   return 'the measurement timed out after ' + measure_timeout_ms + ' ms';
 }
 
-// The original _is_salient: a first view, or a change at the threshold or past it.
+// Salient: a first view, or a change at the threshold or past it.
 function isSalient(_event) {
   var change = _event.data.measurement.change;
   return change === null || change >= change_threshold;
@@ -213,8 +212,8 @@ function salience(_event) {
   return _event.data.measurement.change === null ? 'first' : 'salient';
 }
 
-// The original _take_change: the measured signature becomes what later views
-// of its source are measured against, while the source is still held.
+// The measured signature becomes what later views of its source are
+// measured against, while the source is still held.
 function seenAfter(_event) {
   var source = _event.data.source;
   if (!views.some(function (view) { return view.source === source; })) {
@@ -249,8 +248,8 @@ function nextViewIndex() {
   return view_index + 1;
 }
 
-// The sight's participants (the original _merged_participants without
-// faces): the views' stamped participants, first occurrence first, bounded.
+// The sight's participants: the views' stamped participants, first
+// occurrence first, bounded.
 function sightParticipants() {
   var merged = [];
   request.views.forEach(function (view) {
