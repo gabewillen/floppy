@@ -5,10 +5,10 @@
 // Shared: event records and send targets.
 
 // An event's data as JSON for its record. A voice embedding is biometric
-// and never written, at any depth: an identity in source_ids or target_ids that is an array of numbers, and
-// an embedding's JSON inside a reference (a *_ref the conversation
-// builds from its participants' identities), are written as
-// <biometric:VoiceEmbedding>.
+// and never written, at any depth: an identity in source_ids or
+// target_ids that is an array of numbers, and an embedding's JSON inside a
+// reference (a *_ref the conversation builds from its participants'
+// identities), are written as <biometric:VoiceEmbedding>.
 function eventDataJson(_event) {
   var marker = '<biometric:VoiceEmbedding>';
   return JSON.stringify(_event.data, function (key, value) {

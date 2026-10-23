@@ -1,10 +1,10 @@
 # The room
 
-[`room.scx`](room.scx) is floppy's environment (decision D102): the root session `scx run` runs, whose
-invoked children are its participants. It invokes the floppy bot
-([`bots/floppy/floppy.scx`](../../bots/floppy/floppy.scx)) as `floppy`,
-which activates on joining (D107), and holds no device (no device is
-ported yet; the tests add the lamp fixture, `tests/fixtures/environment/lamp/`).
+[`room.scx`](room.scx) is floppy's environment (decision D102): the root
+session `scx run` runs, whose invoked children are its participants. It
+invokes the floppy bot ([`bots/floppy/floppy.scx`](../../bots/floppy/floppy.scx))
+as `floppy`, which activates on joining (D107), and holds no device (floppy
+ships none yet; the tests add the lamp fixture, `tests/fixtures/environment/lamp/`).
 
 | Data | What |
 | --- | --- |
