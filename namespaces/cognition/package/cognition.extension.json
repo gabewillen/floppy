@@ -4,7 +4,7 @@
   "package-version": "0.1.0",
   "extension-artifact": "floppy_cognition.virtualized.wasm",
   "schema-artifact": "cognition.xsd",
-  "schema-sha256": "9feaf3d566eecf693ec0f88fe9c5e338d584f56e48d0d3f90ad222918bb6e398",
+  "schema-sha256": "8bbe54b7c48afd3d3dbbf43838fc2d5b04b17effbfaf0776d6762693683911de",
   "wit-world": "stateforward:scxml/executable-content-extension",
   "wit-version": "0.2.0"
 }

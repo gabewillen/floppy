@@ -1,23 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  XML Schema of floppy's `memory` extension namespace (namespaces/memory),
-  the original's memory module. It governs structure only; the extension
-  component governs what the element does. Bind it with the prefix
-  `memory` by convention.
+  XML Schema of floppy's `memory` extension namespace (namespaces/memory):
+  the JSON a conversation memory row holds and the short-term register's
+  helpers. It governs structure only; the extension component governs
+  what the element does. Bind it with the prefix `memory` by convention.
 
   memory:to_json         location (required): receives the JSON text of a
-                         conversation memory row (the original's Memory.to_json).
+                         conversation memory row.
                          message (required): an expression.
   memory:contents        location (required): receives the JSON objects of one
-                         statement's result (the original's OutputData.contents).
+                         statement's result, each row's first value parsed.
                          result (required): an expression.
   memory:cut_at_word     location (required): receives {text, cut}, the words
-                         within 2048 UTF-8 bytes cut at a whole word (the
-                         original's stm._cut_at_word).
+                         within 2048 UTF-8 bytes cut at a whole word.
                          words (required): an expression.
   memory:stm_projection  location (required): receives the bounded scalar
-                         projection of a stimulus's data (the original's
-                         stm._payload_projection).
+                         projection of a stimulus's data.
                          data (required): an expression.
                          None takes another attribute or content.
 -->
