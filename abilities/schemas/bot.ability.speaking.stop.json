@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.speaking.stop",
+  "additionalProperties": false,
+  "description": "Stop the utterance in hand: whatever the mouth has not played yet is dropped, and the utterance ends stopped with what was already heard as spoken. It names no utterance, since speaking holds one at a time.",
+  "properties": {},
+  "type": "object",
+  "examples": [
+    {}
+  ]
+}

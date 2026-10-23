@@ -26,6 +26,7 @@
   </state>
   <transition event="bot.ability.conversation.append"/>
   <transition event="bot.ability.speaking.output"/>
+  <transition event="bot.ability.speaking.progress"/>
   <transition event="bot.ability.offers"/>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
 </state>

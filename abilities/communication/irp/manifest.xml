@@ -36,7 +36,7 @@
     </test>
   </assert>
   <assert id="communication-5" specnum="5" specid="#communication-5">
-    <![CDATA[`bot.ability.communication.respond` `{parts}` (1 to 64 parts `{expression?, words?}`, decision D178) that says something, in active, is said through speaking: in order, the body gets speaking's efference copy `bot.ability.speaking.efference` `{mouth: "speaking", duration, media_type, sample_rate_hz, channels}`, the communication puts speaking's `environment.sound` `{audio, media_type, sample_rate_hz, channels, source: "speaking"}` into the environment whose id its `environment` names (`#_scxml_` + that id), and the body gets `bot.ability.speaking.output` `{text, media_type, sample_rate_hz, channels}`, its text the parts' words joined exactly as written; the communication is active again and offers again, and the outbound record joins the conversation's exchange only.]]>
+    <![CDATA[`bot.ability.communication.respond` `{parts}` (1 to 64 parts `{expression?, words?}`, decision D178) that says something, in active, is said through speaking: in order, the body gets speaking's efference copies `bot.ability.speaking.efference` `{mouth: "speaking", duration, media_type, sample_rate_hz, channels}` (the first before the sound, then one per piece played), the communication puts speaking's `environment.sound` `{audio, media_type, sample_rate_hz, channels, source: "speaking"}` into the environment whose id its `environment` names (`#_scxml_` + that id), and the body gets `bot.ability.speaking.output` `{text, spoken, unspoken, outcome, voice_id, media_type, sample_rate_hz, channels}`, its text the parts' words joined exactly as written; the communication is active again and offers again, and the outbound record joins the conversation's exchange only.]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>
@@ -75,7 +75,7 @@
     </test>
   </assert>
   <assert id="communication-8" specnum="8" specid="#communication-8">
-    <![CDATA[A response is bounded by `response_timeout_ms` (36000 by default, a `<param>`: speaking's 30 s encoding bound plus the original's 6 s): when it passes before speaking answers, the body gets `bot.ability.communication.failed` `{message: "Speaking response timed out."}` and the communication is active again; speaking's late answer is not forwarded. `encoding_timeout_ms` (30000 by default, a `<param>`; decision D98) is passed to speaking as its encoding bound.]]>
+    <![CDATA[A response is bounded by `response_timeout_ms` (36000 by default, a `<param>`), which bounds speaking's silence on a response: each `bot.ability.speaking.progress` re-arms it (D179). When it passes before speaking answers, the body gets `bot.ability.communication.failed` `{message: "Speaking response timed out."}` and the communication is active again; speaking's late answer is not forwarded. `encoding_timeout_ms` (30000 by default, a `<param>`; decision D98) is passed to speaking as its encoding bound.]]>
     <test id="170" conformance="mandatory" manual="false">
       <start uri="170/test170.scxml"/>
     </test>
@@ -111,6 +111,18 @@
     <![CDATA[At most `held_responses_bound` (16, a `<param>`) responses are held while one is in hand; past that a respond is refused with `bot.ability.communication.failed` `{message: "Communication is holding too many responses; this one is refused."}` (decision D175), and the held ones are still said, in order.]]>
     <test id="210" conformance="mandatory" manual="false">
       <start uri="210/test210.scxml"/>
+    </test>
+  </assert>
+  <assert id="communication-13" specnum="13" specid="#communication-13">
+    <![CDATA[Every entry into responding sends `bot.ability.offers` `{ability: "communication", choices}`, the events enabled there: respond (held) and the model-callable `bot.ability.communication.stop` `{}` (decision D179). A stop while a response is said sends speaking `bot.ability.speaking.stop` `{}`, which stops it: the body gets the efference copy `{duration: 0}` and `bot.ability.speaking.output` with `outcome` `stopped`, and the communication is active again.]]>
+    <test id="220" conformance="mandatory" manual="false">
+      <start uri="220/test220.scxml"/>
+    </test>
+  </assert>
+  <assert id="communication-14" specnum="14" specid="#communication-14">
+    <![CDATA[Speaking's `bot.ability.speaking.progress` re-arms the response's hop timer (decision D179), and the hop timeout also sends speaking `bot.ability.speaking.stop` `{}`.]]>
+    <test id="221" conformance="mandatory" manual="false">
+      <start uri="221/test221.scxml"/>
     </test>
   </assert>
 </assertions>

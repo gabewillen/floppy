@@ -237,8 +237,11 @@ fn a_named_bot_hears_its_name_in_a_sound() {
     assert_eq!(texts(&records, "floppy.say"), strings(&["I am Floppy"]));
     // The bot hears its own playout too (every input ability hears the
     // environment, as in the original); the speech double writes no audio, so
-    // decoding it fails, and the identity says so.
-    run.until(WAIT, label_is("identity.recognition.failed"));
+    // decoding it fails, and the identity says so. Playout lasts as long as
+    // the audio (D179), so that can come before speaking's answer.
+    if !records.iter().any(label_is("identity.recognition.failed")) {
+        run.until(WAIT, label_is("identity.recognition.failed"));
+    }
     assert_eq!(backend.decoded(), strings(&["hey floppy"]));
     close(run, test);
 }

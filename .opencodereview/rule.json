@@ -78,6 +78,11 @@
     {
       "path": ".env.example",
       "rule": ".opencodereview/rules/docs.md"
+    },
+    {
+      "path": "**",
+      "rule": ".opencodereview/rules/common.md",
+      "merge_system_rule": true
     }
   ]
 }
