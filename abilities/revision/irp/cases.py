@@ -85,9 +85,12 @@ S.statement(5, "A lesson (`instruction`) whose intent carries an `example`, on a
 
 S.case(100, 1, "a create is built and stored, and the applied behavior names the built documents.",
        [expect(OUTPUT, "_event.data.behavior.name === 'GreetOnKnock' && _event.data.behavior.event === 'bot.behavior.create'"
-                       " && _event.data.behavior.source.length > 0 && _event.data.behavior.triggers[0] === 'environment.sound'")],
+                       " && _event.data.behavior.triggers.length === 1 && _event.data.behavior.triggers[0] === 'environment.sound'"
+                       " && _event.data.behavior.description === 'Say hello when a knock sound arrives.'"
+                       " && _event.data.behavior.reason === 'The user asked for it.'"
+                       " && /\\.scx$/.test(_event.data.behavior.source)")],
        params=CREATE, backend=[PLAN, draft(BEHAVIOR)], clock="wall", ignore=PROGRESS,
-       logs={"reflection.revision": ["create GreetOnKnock"]})
+       logs={"reflection.revision": ["create GreetOnKnock"], "reflection.inventory": ["GreetOnKnock ACTIVE turn [\"environment.sound\"] (accept)"]})
 
 S.case(110, 2, "a change of a name the inventory does not hold fails.",
        [failed("Revision selected unknown behavior: Nobody.")],
@@ -102,7 +105,7 @@ S.case(121, 3, "a build whose 8 draft generations all fail fails with no draft."
        params=CREATE, backend=[PLAN] + [chat(None, status=500)] * 8, clock="wall", ignore=PROGRESS)
 
 S.case(130, 4, "a memory transaction on a database the run does not grant fails.",
-       [failed_prefix("Reflection revision failed: ")],
+       [failed("Reflection revision failed: unable to open database file: /nowhere/floppy.sqlite")],
        params=[("database", "'/nowhere/floppy.sqlite'")] + CREATE[1:], ignore=PROGRESS)
 
 
