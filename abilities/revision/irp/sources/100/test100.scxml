@@ -16,7 +16,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.reflection.revision.output" cond="_event.data.behavior.name === 'GreetOnKnock' &amp;&amp; _event.data.behavior.event === 'bot.behavior.create' &amp;&amp; _event.data.behavior.source.length &gt; 0 &amp;&amp; _event.data.behavior.triggers[0] === 'environment.sound'" target="step1"/>
+    <transition event="bot.ability.reflection.revision.output" cond="_event.data.behavior.name === 'GreetOnKnock' &amp;&amp; _event.data.behavior.event === 'bot.behavior.create' &amp;&amp; _event.data.behavior.triggers.length === 1 &amp;&amp; _event.data.behavior.triggers[0] === 'environment.sound' &amp;&amp; _event.data.behavior.description === 'Say hello when a knock sound arrives.' &amp;&amp; _event.data.behavior.reason === 'The user asked for it.' &amp;&amp; /\.scx$/.test(_event.data.behavior.source)" target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

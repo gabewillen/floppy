@@ -1,5 +1,8 @@
 {
   "reflection.revision": [
     "create GreetOnKnock"
+  ],
+  "reflection.inventory": [
+    "GreetOnKnock ACTIVE turn [\"environment.sound\"] (accept)"
   ]
 }
