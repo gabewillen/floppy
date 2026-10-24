@@ -12,7 +12,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'vocal' &amp;&amp; Array.isArray(_event.data.choices) &amp;&amp; _event.data.choices.length === 0 &amp;&amp; Object.keys(_event.data).length === 2" target="step1"/>
+    <transition event="bot.ability.ready" target="step1"/>
   </state>
   <state id="step1">
     <onentry>
@@ -30,9 +30,6 @@
     <transition event="bot.ability.vocal.speech.encoding.output" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply.pcm\",\"channels\":1,\"duration\":0.7,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000}"' target="step5"/>
   </state>
   <state id="step5">
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'vocal' &amp;&amp; Array.isArray(_event.data.choices) &amp;&amp; _event.data.choices.length === 0 &amp;&amp; Object.keys(_event.data).length === 2" target="step6"/>
-  </state>
-  <state id="step6">
     <transition target="pass"/>
   </state>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>

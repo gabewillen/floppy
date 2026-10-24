@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/communication/irp/sources">
   <assert id="communication-1" specnum="1" specid="#communication-1">
-    <![CDATA[It is ready once both its children, the conversation and speaking, are ready (their first `bot.ability.offers`): on every entry into active it sends `bot.ability.offers` `{ability: "communication", choices}`, choices the one model-callable `bot.ability.communication.respond` with its schema compacted (no `$schema`, title or examples), no target.]]>
+    <![CDATA[It is ready once both its children, the conversation and speaking, are ready (each sends `bot.ability.ready`): it sends `bot.ability.ready` to its parent, once and with no data (decision D242). What it offers in active, read from its live session (`<decision:offers>`), is the one model-callable `bot.ability.communication.respond`, of no effort, with its schema, no target.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -36,7 +36,7 @@
     </test>
   </assert>
   <assert id="communication-5" specnum="5" specid="#communication-5">
-    <![CDATA[`bot.ability.communication.respond` `{parts}` (1 to 64 parts `{expression?, words?}`, decision D178) that says something, in active, is said through speaking: in order, the body gets speaking's efference copies `bot.ability.speaking.efference` `{mouth: "speaking", duration, media_type, sample_rate_hz, channels}` (the first before the sound, then one per piece played), the communication puts speaking's `environment.sound` `{audio, media_type, sample_rate_hz, channels, source: "speaking"}` into the environment whose id its `environment` names (`#_scxml_` + that id), and the body gets `bot.ability.speaking.output` `{text, spoken, unspoken, outcome, voice_id, media_type, sample_rate_hz, channels}`, its text the parts' words joined exactly as written; the communication is active again and offers again, and the outbound record joins the conversation's exchange only.]]>
+    <![CDATA[`bot.ability.communication.respond` `{parts}` (1 to 64 parts `{expression?, words?}`, decision D178) that says something, in active, is said through speaking: in order, the body gets speaking's efference copies `bot.ability.speaking.efference` `{mouth: "speaking", duration, media_type, sample_rate_hz, channels}` (the first before the sound, then one per piece played), the communication puts speaking's `environment.sound` `{audio, media_type, sample_rate_hz, channels, source: "speaking"}` into the environment whose id its `environment` names (`#_scxml_` + that id), and the body gets `bot.ability.speaking.output` `{text, spoken, unspoken, outcome, voice_id, media_type, sample_rate_hz, channels}`, its text the parts' words joined exactly as written; the communication is active again and offers respond again, and the outbound record joins the conversation's exchange only.]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>
@@ -114,7 +114,7 @@
     </test>
   </assert>
   <assert id="communication-13" specnum="13" specid="#communication-13">
-    <![CDATA[Every entry into responding sends `bot.ability.offers` `{ability: "communication", choices}`, the events enabled there: respond (held) and the model-callable `bot.ability.communication.stop` `{}` (decision D179). A stop while a response is said sends speaking `bot.ability.speaking.stop` `{}`, which stops it: the body gets the efference copy `{duration: 0}` and `bot.ability.speaking.output` with `outcome` `stopped`, and the communication is active again.]]>
+    <![CDATA[While a response is said (responding) it offers, read from its live session, respond (held) and the model-callable `bot.ability.communication.stop` `{}` (decision D179). A stop while a response is said sends speaking `bot.ability.speaking.stop` `{}`, which stops it: the body gets the efference copy `{duration: 0}` and `bot.ability.speaking.output` with `outcome` `stopped`, and the communication is active again.]]>
     <test id="220" conformance="mandatory" manual="false">
       <start uri="220/test220.scxml"/>
     </test>

@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- communication-5: a reply of several parts is said as one response, its text the parts' words joined exactly as written. -->
-<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision" version="1.0" datamodel="ecmascript" initial="harness">
+<datamodel>
+  <data id="offers" expr="null"/>
+</datamodel>
 <state id="harness" initial="boot">
   <invoke id="communication" type="scxml" src="../../../communication.scx">
     <param name="environment" expr="_sessionid"/>
@@ -12,30 +15,31 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'communication' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === 'bot.ability.communication.respond' &amp;&amp; _event.data.choices[0].target === undefined &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[0].schema['$schema'] === undefined &amp;&amp; _event.data.choices[0].schema.required.indexOf('parts') &gt;= 0" target="step1"/>
+    <transition event="bot.ability.ready" target="step1"/>
   </state>
   <state id="step1">
     <onentry>
       <send event="bot.ability.communication.respond" target="#_communication"><content expr='{"parts": [{"words": " Hi"}, {"expression": {"emotion": "warm", "emphasis": true}, "words": ", I am floppy. "}]}'/></send>
     </onentry>
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'communication' &amp;&amp; _event.data.choices.length === 2 &amp;&amp; _event.data.choices.map(function (c) { return c.event; }).sort().join(' ') === 'bot.ability.communication.respond bot.ability.communication.stop' &amp;&amp; _event.data.choices.every(function (c) { return c.schema.title === undefined; })" target="step2"/>
+    <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 0.1 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step2"/>
   </state>
   <state id="step2">
-    <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 0.1 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step3"/>
+    <transition event="environment.sound" cond="_event.data.audio === &quot;media/speaking-1.0.pcm&quot; &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.source === 'speaking'" target="step3"/>
   </state>
   <state id="step3">
-    <transition event="environment.sound" cond="_event.data.audio === &quot;media/speaking-1.0.pcm&quot; &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.source === 'speaking'" target="step4"/>
+    <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 0 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step4"/>
   </state>
   <state id="step4">
-    <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 0 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step5"/>
+    <transition event="bot.ability.speaking.output" cond="_event.data.text === &quot; Hi, I am floppy. &quot; &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.spoken === &quot; Hi, I am floppy. &quot; &amp;&amp; _event.data.outcome === 'completed'" target="step5"/>
   </state>
   <state id="step5">
-    <transition event="bot.ability.speaking.output" cond="_event.data.text === &quot; Hi, I am floppy. &quot; &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.spoken === &quot; Hi, I am floppy. &quot; &amp;&amp; _event.data.outcome === 'completed'" target="step6"/>
+    <onentry>
+      <decision:offers location="offers" target="'#_communication'"/>
+    </onentry>
+    <transition cond="offers.length === 1 &amp;&amp; offers[0].event === 'bot.ability.communication.respond' &amp;&amp; offers[0].effort === undefined &amp;&amp; offers[0].target === undefined &amp;&amp; offers[0].schema.required.indexOf('parts') &gt;= 0" target="step6"/>
+    <transition target="fail"><log label="unexpected" expr="'offers ' + JSON.stringify(offers)"/></transition>
   </state>
   <state id="step6">
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'communication' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === 'bot.ability.communication.respond' &amp;&amp; _event.data.choices[0].target === undefined &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[0].schema['$schema'] === undefined &amp;&amp; _event.data.choices[0].schema.required.indexOf('parts') &gt;= 0" target="step7"/>
-  </state>
-  <state id="step7">
     <transition target="pass"/>
   </state>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>

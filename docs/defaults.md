@@ -73,8 +73,9 @@ LocalAI voice models behind one origin (decision D240). A `provider` of
 | `bots/builder/builder.scx` | `decision_timeout_ms` | `60000` | one triage decision |
 | `bots/builder/builder.scx` | `max_tests` | `8` | the test scripts one draft may carry |
 | `bots/builder/builder.scx` | `sim_test_cap_ms` | `120000` | each test script's simulation run |
-| `bots/floppy/floppy.scx` | `activation_timeout_ms` | `30000` | activation until every ability offers |
-| `bots/floppy/floppy.scx` | `firmware_timeout_ms` | `30000` | the firmware's start until its first offers, once every ability is ready (decision D160) |
+| `bots/floppy/floppy.scx` | `activation_timeout_ms` | `30000` | activation until every ability is ready (decision D242) |
+| `bots/floppy/floppy.scx` | `firmware_timeout_ms` | `30000` | the firmware's start until its session answers a snapshot, once every ability is ready (decisions D160 and D242) |
+| `bots/floppy/floppy.scx` | `firmware_check_ms` | `10` | between checks that the firmware's session answers a snapshot (decision D242) |
 | `bots/floppy/floppy.scx` | `processing_timeout_ms` | `300000` | one turn |
 | `bots/floppy/floppy.scx` | `reading_turns_timeout_ms` | `1000` | reading the short-term register's recent turns before each turn; the turn starts without them after it |
 | `abilities/cognition/cognition.scx` | `child_operation_timeout_ms` | `30000` | each cascade stage without progress: autonomy's and the decision layer's from their start, reasoning's once its reply streams (the first progress arms it, each later one re-arms it); live streamed replies had at most 6.2 s between chunks (decision D101; the bot's `bounds` param's `child_operation_timeout_ms` overrides it) |

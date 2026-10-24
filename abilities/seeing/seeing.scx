@@ -8,7 +8,7 @@
   other abilities, and its seeing_enabled switch decides whether it
   perceives (decision D189): on, it is an expected ability, every
   environment.visual goes to it after the input abilities and its look
-  offer is taken; off, it is sent no stimulus and its offers are not taken.
+  offer is taken; off, it is sent no stimulus and its offer is not read.
 
     initializing -refused-> degraded (final)
                  -else-> perceiving
@@ -114,12 +114,12 @@
   settle_after_ms, so at most one sight per settle_after_ms, plus
   deliberate looks.
 
-  Offers: the entry into perceiving sends bot.ability.offers {ability:
-  "seeing", choices} to the body: <decision:choice
-  events="bot.ability.seeing.look"> (its one model-callable event), made
-  model-facing by <processing:model_facing_schema> ($schema, title and
-  examples dropped; over 32 KiB descriptions dropped too; still over, the
-  offer is empty and logged).
+  Offers: the move from initializing into perceiving sends
+  bot.ability.ready to the body, once (decision D242). What it offers, the
+  body reads from its live session with <decision:offers>: the event its
+  offerable <data> declares, bot.ability.seeing.look (its one
+  model-callable event, of no effort), which every state of perceiving
+  takes.
 
   Logs (closed values only; never a source, a reference, a label, a
   description or a signature): seeing.degraded, seeing.view,
@@ -136,15 +136,12 @@
   its cancel is dropped, and a stage child's leftovers are dropped in
   detected or viewed.
 
-  Bindings: the decision and processing namespace packages and the vision
-  service package; the stage children bind the generate service. The run
+  Bindings: the vision service package; the stage children bind the generate service. The run
   grants the vision service the media directory it reads the views from
   as /media (scx run's dir option; bots/floppy/README.md gives it).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
-       xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
        version="1.0" datamodel="ecmascript" name="Seeing" initial="initializing">
   <datamodel>
     <!-- The invoker's <param>s, at their defaults. -->
@@ -178,9 +175,9 @@
     <data id="view_index" expr="0"/>
     <!-- The timer in hand. -->
     <data id="timer" expr="null"/>
-    <!-- The offers. -->
-    <data id="offered" expr="[]"/>
-    <data id="offers_over" expr="false"/>
+    <!-- What it offers its parent (decision D242), which reads it from its
+         live session with <decision:offers>: the look, of no effort. -->
+    <data id="offerable" expr="({'bot.ability.seeing.look': {}})"/>
   </datamodel>
   <script src="seeing.js"/>
 
@@ -198,21 +195,13 @@
     <transition cond="refusesMeasure()" target="degraded">
       <log label="seeing.degraded" expr="'measure must be byte_identity or frame_diff'"/>
     </transition>
-    <transition target="perceiving"/>
+    <!-- Ready, once (decision D242). -->
+    <transition target="perceiving">
+      <send event="bot.ability.ready" target="#_parent"/>
+    </transition>
   </state>
 
   <state id="perceiving" initial="watching">
-    <onentry>
-      <decision:choice location="offered" events="bot.ability.seeing.look"/>
-      <processing:model_facing_schema location="offered" bound="32768" overlocation="offers_over"/>
-      <if cond="offers_over">
-        <log label="seeing.offers.dropped" expr="'the offers are over 32768 bytes'"/>
-      </if>
-      <send event="bot.ability.offers" target="#_parent">
-        <param name="ability" expr="'seeing'"/>
-        <param name="choices" expr="offered"/>
-      </send>
-    </onentry>
     <!-- Wherever perception is, the newest frame replaces the held view
          and a look is remembered; neither interrupts what the eye is
          doing. -->

@@ -19,15 +19,13 @@
   ability (abilities/memory/memory.scx, which migrates the database to
   floppy's head revision, 0001, which holds bot_stm_memory and
   bot_stm_turn) with one read of bot_stm_turn, then
-  sends bot.ability.offers {ability: "stm", choices: []} to the parent
-  once: the register offers nothing to the cognition, and that first
-  offer is its readiness. A database that cannot be opened (logged as
+  sends bot.ability.ready to the parent once (decision D242): the
+  register offers nothing to the cognition. A database that cannot be opened (logged as
   stm.open.failed, "short-term memory could not open its database: ...")
-  or does not open within open_timeout_ms leaves it degraded, without an
-  offer, so the body's activation fails at its timeout; on entering
+  or does not open within open_timeout_ms leaves it degraded, never ready, so the body's activation fails at its timeout; on entering
   degraded it sends bot.ability.failed {message: "unavailable: short-term
   memory is degraded."} to the parent.
-  Without a database it logs <log label="memory" expr="'absent'">, offers,
+  Without a database it logs <log label="memory" expr="'absent'">, is ready,
   and holds nothing: notifications are dropped and reads answer empty.
 
   Notifications (no reply; the sender never waits on perception upkeep):
@@ -169,10 +167,7 @@
         <param name="statements" expr="openStatements()"/>
       </invoke>
       <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="serving">
-        <send event="bot.ability.offers" target="#_parent">
-          <param name="ability" expr="'stm'"/>
-          <param name="choices" expr="[]"/>
-        </send>
+        <send event="bot.ability.ready" target="#_parent"/>
       </transition>
       <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="degraded">
         <log label="stm.open.failed" expr="openFailedMessage(_event)"/>
@@ -335,10 +330,7 @@
   <state id="absent">
     <onentry>
       <log label="memory" expr="'absent'"/>
-      <send event="bot.ability.offers" target="#_parent">
-        <param name="ability" expr="'stm'"/>
-        <param name="choices" expr="[]"/>
-      </send>
+      <send event="bot.ability.ready" target="#_parent"/>
     </onentry>
     <transition event="bot.ability.memory.stm.record" event:schema="../schemas/bot.ability.memory.stm.record.json"/>
     <transition event="bot.ability.memory.stm.reinforce" event:schema="../schemas/bot.ability.memory.stm.reinforce.json"/>

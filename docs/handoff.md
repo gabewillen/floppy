@@ -11,9 +11,22 @@ Last updated: 2026-10-24.
 
 ## Current state (2026-10-09) — resume here
 
+- **Offers through snapshots (2026-10-24, D242, #73):** abilities no
+  longer send `bot.ability.offers`. Each sends a bare `bot.ability.ready`
+  once, and each turn the body reads what each ability offers from its
+  live session with `<decision:offers location target undeclared?>`: the
+  enabled `event:schema` transitions without a cond that its
+  `<data id="offerable">` (`{event: {effort?}}`) declares. A cond'd
+  transition is never offered but still shadows later ones, so a guarded
+  offer moves its guard into a transient state or an `<if>`
+  (communication's `admitting_response`). Effort is declared in
+  `offerable`; `<decision:choice>` takes no `effort`. Each ability's
+  offers are bounded alone (32 KiB, `floppy.offers.dropped`), and the
+  firmware is started once its session answers a snapshot
+  (`firmware_check_ms`).
 - **Effort ceilings (2026-10-24, D206, #50):** each tier of a turn is
   offered only the actions within its effort ceiling (D196). An offering
-  document declares an action's effort on `<decision:choice effort>` (an
+  document declares an action's effort in its `offerable` data (D242; an
   expression, 0 when absent, so the ignore and every other offer stay
   light); identity's adopt weighs 1 and persona's revise 2. The cognition
   frames each stage's choices with the new `<cognition:within_ceiling>`

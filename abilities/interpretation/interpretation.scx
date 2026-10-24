@@ -113,8 +113,8 @@
   and returns to Idle; Idle clears the open
   speech.
 
-  Readiness: on start it sends bot.ability.offers {ability:
-  "interpretation", choices: []} to the listening; it offers nothing.
+  Readiness: on start it sends bot.ability.ready to the listening
+  (decision D242); it offers nothing.
 
   Contracts: the events it takes reference abilities/schemas/ by
   event:schema (never inline). The stages' results are done.invoke
@@ -186,10 +186,7 @@
 
   <state id="Interpretation" initial="Idle">
     <onentry>
-      <send event="bot.ability.offers" target="#_parent">
-        <param name="ability" expr="'interpretation'"/>
-        <param name="choices" expr="[]"/>
-      </send>
+      <send event="bot.ability.ready" target="#_parent"/>
     </onentry>
 
     <!-- Scored sounds are taken here, one at a time; the open speech is

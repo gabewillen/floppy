@@ -8,14 +8,18 @@
                    enabled event:schema transitions.
                    events (optional): a white-space separated list of SCXML
                    event descriptors; the choices keep only the events one of
-                   them matches.
-                   effort (optional): an expression of a whole number from
-                   0 to 1000, written as every choice's effort, how heavy an
-                   action it is (decision D206). No other attribute, no
-                   content.
+                   them matches. No other attribute, no content.
                    Choosing among them is the decision service's
                    work (services/decision): executable content stays
                    synchronous and quick.
+  decision:offers  location (required): receives the canonical choices
+                   another session offers its parent, read from its live
+                   session (decision D242). target (required): an
+                   expression of the session's <send> target. undeclared
+                   (optional, none or all): whether only the events the
+                   session declares in its offerable data are offered (none,
+                   the default) or every one (all). No other attribute, no
+                   content.
   decision:pin     location (required): the choice array whose event's
                    schema property it pins. event, property (required):
                    which. values (required): an expression of a JSON array,
@@ -29,7 +33,20 @@
     <xs:complexType>
       <xs:attribute name="location" type="xs:string" use="required"/>
       <xs:attribute name="events" type="xs:string" use="optional"/>
-      <xs:attribute name="effort" type="xs:string" use="optional"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="offers">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="target" type="xs:string" use="required"/>
+      <xs:attribute name="undeclared" use="optional">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:enumeration value="none"/>
+            <xs:enumeration value="all"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:attribute>
     </xs:complexType>
   </xs:element>
   <xs:element name="pin">

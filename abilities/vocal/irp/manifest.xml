@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/vocal/irp/sources">
   <assert id="vocal-1" specnum="1" specid="#vocal-1">
-    <![CDATA[On start, and on every later entry into `idle`, it offers nothing: it sends `bot.ability.offers` `{ability: "vocal", choices: []}` to its parent.]]>
+    <![CDATA[On start, and only then, it sends `bot.ability.ready` to its parent (decision D242), with no data: it offers nothing, and a later entry into `idle` sends nothing more.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>

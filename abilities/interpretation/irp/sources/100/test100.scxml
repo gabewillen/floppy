@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- interpretation-1: the interpretation offers nothing on start. -->
+<!-- interpretation-1: the interpretation is ready on start. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="interpretation" type="scxml" src="../../../interpretation.scx"/>
@@ -8,7 +8,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'interpretation' &amp;&amp; _event.data.choices.length === 0" target="step1"/>
+    <transition event="bot.ability.ready" target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

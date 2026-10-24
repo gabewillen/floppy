@@ -158,7 +158,7 @@
 //! One tier's frame of the turn's choices (decision D206): `choices`
 //! (required) evaluates to the turn's choice entries, each an object with a
 //! string `event` and optionally an `effort` (a whole number, as
-//! `<decision:choice effort>` declares it; 0 without one), and `ceiling`
+//! an ability's `offerable` data declares it, decision D242; 0 without one), and `ceiling`
 //! (optional) to the tier's effort ceiling, a whole number, or `null` (or no
 //! attribute) for the whole frame. `location` (required) receives, in order,
 //! the entries whose effort is at most the ceiling, each without its

@@ -5,27 +5,24 @@
   document its firmware_src param names, invoked by srcexpr as the child
   "firmware", or, when it names none, this one. It stands in for an
   owner's firmware so the body's topology is the same either way: it
-  offers nothing, once, which is its start, and does nothing else. The
-  body never shows it to the cognition.
+  offers nothing and does nothing. The body never shows it to the
+  cognition.
 
-  An owner's firmware is any SCXML document that does the same: its
-  first bot.ability.offers {ability: "firmware", choices} to its parent
-  starts it (its choices are events one of its states takes), a
-  selection of one of its choices is sent to it (its session id,
-  <body>.firmware), and a bot.ability.cognition.input {stimulus} to its
-  parent hands the body an observation, which takes a turn as any
-  ability's product does. The body reads its state and data model each
-  turn with <device:snapshot>, as it reads a device.
+  An owner's firmware is any SCXML document: it is started once its
+  session is running (the body reads it with <device:snapshot>, decision
+  D242), what it offers is every event a transition without a cond takes
+  with an event:schema (the body reads them each turn with
+  <decision:offers undeclared="all">), a selection of one of them is sent
+  to it (its session id, <body>.firmware), and a
+  bot.ability.cognition.input {stimulus} to its parent hands the body an
+  observation, which takes a turn as any ability's product does. The body
+  reads its state and data model each turn with <device:snapshot>, as it
+  reads a device.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        version="1.0" datamodel="ecmascript" name="firmware" initial="running">
   <script src="firmware.js"/>
   <state id="running">
-    <onentry>
-      <send event="bot.ability.offers" target="#_parent">
-        <content expr="noOffers()"/>
-      </send>
-    </onentry>
     <!-- Whatever reaches it, it takes and does nothing with. -->
     <transition event="*"/>
   </state>

@@ -8,7 +8,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'speaking' &amp;&amp; _event.data.choices.length === 0" target="step1"/>
+    <transition event="bot.ability.ready" target="step1"/>
   </state>
   <state id="step1">
     <onentry>
@@ -17,9 +17,6 @@
     <transition event="bot.ability.failed" cond='_event.data.message === "A reply must say something: every part needs words, a sound or a pause, and the words must not be blank."' target="step2"/>
   </state>
   <state id="step2">
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'speaking' &amp;&amp; _event.data.choices.length === 0" target="step3"/>
-  </state>
-  <state id="step3">
     <transition target="pass"/>
   </state>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>

@@ -12,7 +12,7 @@ through `scx run` with the real invoked services (a case's
 
 ## Statements
 
-- <a id="stm-1"></a>**stm-1**. With a database it opens it (migrating it to the head revision through the memory ability) and is ready: it sends `bot.ability.offers` `{ability: "stm", choices: []}` once; without one it is ready the same way, holds nothing (records and turns are dropped) and answers every read empty.
+- <a id="stm-1"></a>**stm-1**. With a database it opens it (migrating it to the head revision through the memory ability) and is ready: it sends `bot.ability.ready` once (decision D242), with no data; without one it is ready the same way, holds nothing (records and turns are dropped) and answers every read empty.
 - <a id="stm-2"></a>**stm-2**. `bot.ability.memory.stm.record` `{stimulus_name, payload, event_id?, source?, target?}` is written with no reply, and `bot.ability.memory.stm.recent` `{stimulus_name?, limit?}` answers `bot.ability.memory.stm.recent.output` `{entries}`: the records inside the recency window, newest first, each `{stm_id, stimulus_name, payload, event_id, source, target, created_at, last_accessed_at}`, optionally only one stimulus's, at most `limit`.
 - <a id="stm-3"></a>**stm-3**. Each record evicts, in its own transaction, every record beyond `capacity` by the effective clock (last access, else admission), so the register holds the newest `capacity`; a read past `recency_window_ms` finds nothing.
 - <a id="stm-4"></a>**stm-4**. `bot.ability.memory.stm.reinforce` `{stm_ids}` stamps those records' `last_accessed_at` (no reply), which moves their effective clock forward for reads and eviction.

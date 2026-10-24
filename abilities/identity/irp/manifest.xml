@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/identity/irp/sources">
   <assert id="identity-1" specnum="1" specid="#identity-1">
-    <![CDATA[Without a database it recalls the name it was started with (the `<param>` `name`, else none) and is ready: on entering knowing it sends `bot.ability.offers` `{ability: "identity", choices}`, choices the one model-callable `bot.ability.identity.adopt` with its schema compacted (no `$schema`, title or examples) and the schema's description, no target.]]>
+    <![CDATA[Without a database it recalls the name it was started with (the `<param>` `name`, else none) and is ready: on entering knowing it sends `bot.ability.ready` to its parent, once and with no data (decision D242). What it offers, read from its live session (`<decision:offers>`), is the one model-callable `bot.ability.identity.adopt` with its effort (`adopt_effort`, 1), its schema and the schema's description, no target.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -57,7 +57,7 @@
     </test>
   </assert>
   <assert id="identity-5" specnum="5" specid="#identity-5">
-    <![CDATA[`bot.ability.identity.adopt` `{name, reason?}` takes the name and re-enters knowing, offering again; without a database nothing is written, with one the name is written to memory before it is taken. From then on it answers to that name. A write that fails answers `bot.ability.failed` `{message: "Identity could not remember the name it took: ..."}` and re-enters knowing with the old name.]]>
+    <![CDATA[`bot.ability.identity.adopt` `{name, reason?}` takes the name and re-enters knowing, offering it still (it is not ready again); without a database nothing is written, with one the name is written to memory before it is taken. From then on it answers to that name. A write that fails answers `bot.ability.failed` `{message: "Identity could not remember the name it took: ..."}` and re-enters knowing with the old name.]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>

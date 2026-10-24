@@ -14,7 +14,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'speaking' &amp;&amp; _event.data.choices.length === 0" target="step1"/>
+    <transition event="bot.ability.ready" target="step1"/>
   </state>
   <state id="step1">
     <onentry>
@@ -32,9 +32,6 @@
     <transition event="bot.ability.speaking.output" cond="_event.data.text === &quot;hi&quot; &amp;&amp; _event.data.media_type === 'audio/mpeg' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.spoken === &quot;hi&quot; &amp;&amp; _event.data.unspoken === &quot;&quot; &amp;&amp; _event.data.outcome === 'completed' &amp;&amp; _event.data.voice_id === null" target="step5"/>
   </state>
   <state id="step5">
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'speaking' &amp;&amp; _event.data.choices.length === 0" target="step6"/>
-  </state>
-  <state id="step6">
     <transition target="pass"/>
   </state>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>

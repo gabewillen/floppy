@@ -181,8 +181,8 @@ fn a_heard_utterance_is_decoded_into_a_speech_product() {
     run.until(WAIT, label_is("harness.speech"));
     let finished = close(run, "a_heard_utterance_is_decoded_into_a_speech_product");
     assert_eq!(
-        json_texts(&finished.all, "harness.ready"),
-        vec![json!({"ability": "listening", "choices": []})]
+        texts(&finished.all, "harness.ready"),
+        vec!["listening".to_owned()]
     );
     let detected = backend.received_at("/vad");
     assert_eq!(detected.len(), 2, "each sound is voice-detected");
@@ -763,8 +763,8 @@ const SENSITIVITY_HARNESS: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="harness" initial="run">
   <state id="run">
     <invoke id="sensitivity" type="scxml" src="sensitivity/sensitivity.scx"/>
-    <transition event="bot.ability.offers" cond="_event.invokeid === 'sensitivity'">
-      <log label="harness.ready" expr="_event.data.ability"/>
+    <transition event="bot.ability.ready" cond="_event.invokeid === 'sensitivity'">
+      <log label="harness.ready" expr="'sensitivity'"/>
     </transition>
     <transition event="bot.ability.listening.sensitivity.output" cond="_event.invokeid === 'sensitivity'">
       <log label="harness.scored" expr="_event.data.sound.audio + ' producing ' + _event.data.producing + ' at ' + _event.data.perceived_level_db"/>

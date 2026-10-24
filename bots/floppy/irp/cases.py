@@ -5,8 +5,7 @@
 # event the body emits (decision D102), which a case expects in order. The
 # body's real abilities answer too, so a case ignores their products the
 # body passes on (bot.ability.*), and an activation it must control waits
-# for an extra expected ability, "ghost", that only the case offers for
-# (GHOST). Every event name the body takes has one meaning whoever sends
+# for an extra expected ability, "ghost", that is never ready (GHOST). Every event name the body takes has one meaning whoever sends
 # it, so a case sends the abilities' replies and the body's own timers
 # itself, in one burst the body takes before its real abilities answer:
 #
@@ -23,17 +22,12 @@
 
 S = suite
 DEACTIVATE = "bot.deactivate"
-OFFERS = "bot.ability.offers"
 INPUT = "bot.input"
 DONE = "done.invoke.floppy"
 ABILITIES = ["cognition", "communication", "identity", "listening", "stm", "persona"]
 GHOST = ("expected", js(ABILITIES + ["ghost"]))
 # The abilities' products the body passes on to its environment.
 NOISE = ("bot.ability",)
-
-
-def offers(*abilities):
-    return [send(OFFERS, js({"ability": a, "choices": []})) for a in (abilities or ABILITIES)]
 
 
 def bot_input(text="hello"):
@@ -77,20 +71,19 @@ def case(test_id, number, comment, steps, params=(), **options):
     S.case(test_id, number, comment, steps, ignore=NOISE, params=[ENVIRONMENT, NO_MEMORY] + list(params), **options)
 
 
-S.statement(1, "Invoked, the body starts in `live`, which invokes the abilities (`cognition`, `communication`, `identity`, `listening`, `stm`, `persona`), and activates on its own (no `bot.activate`): it sends `bot.activated` to its parent, and takes a turn's input, only once every expected ability (the data `expected`) has sent its first `bot.ability.offers`.")
+S.statement(1, "Invoked, the body starts in `live`, which invokes the abilities (`cognition`, `communication`, `identity`, `listening`, `stm`, `persona`), and activates on its own (no `bot.activate`): it sends `bot.activated` to its parent, and takes a turn's input, only once every expected ability (the data `expected`) has sent its `bot.ability.ready` (decision D242).")
 S.statement(2, "While `activating`, an `error.*` event, an ability's `done.invoke`, or the activation timer (`activation_timeout_ms`) fails the activation: the body sends `bot.activating.failed` to its parent and its session ends in the final state `inactive`.")
 S.statement(3, "`bot.deactivate` leaves `live` and ends the session in `inactive`: from `active` or `activating`, after sending `bot.deactivated` to its parent (every accepted request is answered).")
-S.statement(4, "`bot.reboot` `{reason}` re-enters `live`, and the body passes it on to its parent: the abilities are invoked again and the bot waits for their offers again (and sends `bot.activated` again) before it takes input; the turn count goes on.")
+S.statement(4, "`bot.reboot` `{reason}` re-enters `live`, and the body passes it on to its parent: the abilities are invoked again and the bot waits for their readiness again (and sends `bot.activated` again) before it takes input; the turn count goes on.")
 S.statement(5, "In `unfocused` or `focused`, `bot.input` or a `bot.ability.cognition.input` `{stimulus}` handoff starts a `processing` turn, counted from 1; the cognition's `bot.ability.cognition.output` or `bot.ability.failed` for the current turn ends it (back to attention) with `bot.processing.completed` or `bot.processing.failed` to the parent, and one for another turn is dropped.")
 S.statement(6, "`bot.processing.timed_out` for the current turn moves to `cancelling_processing` and is passed on to the parent; the acknowledgement (`bot.ability.cognition.cancelled` or `bot.ability.processing.cancelled` for the turn) ends the turn with `bot.processing.failed`; `bot.processing.cancel.timed_out` for it degrades the bot: it sends `bot.processing.cancel.timed_out`, `bot.processing.failed` and `bot.degraded` `{stage: \"processing_cancel\"}`, and the session ends in the final state `degraded` with `{reason: \"turn <n>: the cognition did not acknowledge its cancel\"}`. A timer for another turn is not taken.")
 S.statement(7, "An input that arrives during a turn is held, and the turn's end (`turn_ended`) starts the next turn at once with what is held: one percept is that turn's stimulus as itself, several are perceived together as `bot.perceived`.")
 S.statement(8, "An ability that ends while the bot is active (`done.invoke.<id>`) degrades it: the session ends in `degraded` with `{reason: \"the ability <id> ended while active\"}`.")
 
-case(100, 1, "activated by every ability's offers, the bot takes a turn: probe(1) degrades it at turn 1.",
+case(100, 1, "activated by every ability's readiness, the bot takes a turn: probe(1) degrades it at turn 1.",
      ACTIVE + probe(1))
-case(101, 1, "with an expected ability that has not offered, the bot takes no input; once it offers, it does.",
-     TAKE_TURN + offers("ghost") + [ACTIVATED] + probe(1),
-     params=[GHOST])
+case(101, 1, "before its abilities are ready the bot takes no input; once they are, it does.",
+     TAKE_TURN + [ACTIVATED] + probe(1))
 
 case(110, 2, "an error while activating fails the activation and ends the session in inactive.",
      [send("error.platform", js({})), expect("bot.activating.failed"), LEFT],
@@ -98,7 +91,7 @@ case(110, 2, "an error while activating fails the activation and ends the sessio
 case(111, 2, "an ability ending while activating fails the activation.",
      [send("done.invoke.listening", js({})), expect("bot.activating.failed"), LEFT],
      params=[GHOST])
-case(112, 2, "an activation that times out (an expected ability never offers) fails it.",
+case(112, 2, "an activation that times out (an expected ability is never ready) fails it.",
      [expect("bot.activating.failed"), LEFT],
      params=[GHOST, ("activation_timeout_ms", "100")])
 
@@ -108,10 +101,9 @@ case(121, 3, "bot.deactivate while activating answers bot.deactivated and ends t
      [send(DEACTIVATE, js({})), expect("bot.deactivated"), LEFT],
      params=[GHOST])
 
-case(130, 4, "bot.reboot re-enters live: no input is taken until the abilities offer again.",
-     offers("ghost") + [ACTIVATED, send("bot.reboot", js({"reason": "cognition_child_teardown_failed"})), expect("bot.reboot")]
-     + TAKE_TURN + offers("ghost") + [ACTIVATED] + probe(1),
-     params=[GHOST])
+case(130, 4, "bot.reboot re-enters live: no input is taken until the abilities are ready again.",
+     ACTIVE + [send("bot.reboot", js({"reason": "cognition_child_teardown_failed"}))] + TAKE_TURN
+     + [expect("bot.reboot"), ACTIVATED] + probe(1))
 case(131, 4, "after a reboot the turn count goes on.",
      ACTIVE + [bot_input(), turn_event("bot.ability.failed", 1, message="done"), for_turn("bot.processing.failed", 1),
                send("bot.reboot", js({"reason": "cognition_child_teardown_failed"})), expect("bot.reboot"), ACTIVATED]

@@ -26,7 +26,6 @@ S.media({
 })
 VISUAL = "environment.visual"
 LOOK = "bot.ability.seeing.look"
-OFFERS = "bot.ability.offers"
 INPUT = "bot.ability.cognition.input"
 SIGHT = "bot.ability.seeing.sight"
 CHAT = "/chat/completions"
@@ -34,15 +33,11 @@ FRAME_DIFF = ("measure", "'frame_diff'")
 P1 = {"ref": "person-1", "role": "source"}
 P2 = {"ref": "person-2", "role": "source"}
 
-# The offer: look alone, its schema compacted ($schema, title and examples
-# dropped), no target.
-READY = expect(OFFERS, "_event.data.ability === 'seeing' && _event.data.choices.length === 1"
-                       " && _event.data.choices[0].event === 'bot.ability.seeing.look'"
-                       " && _event.data.choices[0].target === undefined"
-                       " && _event.data.choices[0].schema.title === undefined"
-                       " && _event.data.choices[0].schema['$schema'] === undefined"
-                       " && _event.data.choices[0].schema.examples === undefined"
-                       " && _event.data.choices[0].schema.additionalProperties === false")
+READY = expect("bot.ability.ready")
+# The offer: look alone, of no effort, with its schema, read from its live
+# session (decision D242).
+OFFERED = offers("offers.length === 1 && offers[0].event === 'bot.ability.seeing.look' && offers[0].effort === undefined"
+                 " && offers[0].target === undefined && offers[0].schema.additionalProperties === false")
 
 
 def canonical(value):
@@ -107,7 +102,7 @@ PERSON = {"label": "person", "confidence": 0.75, "box": box(0, 0, 0.5, 1)}
 LAMP = {"label": "lamp", "confidence": None, "box": box(0.75, 0.25, 0.25, 0.5)}
 DESCRIBED = "A white square."
 
-S.statement(1, "On start it sends its parent `bot.ability.offers` `{ability: \"seeing\", choices}`, choices the one model-callable `bot.ability.seeing.look` with its schema compacted (no `$schema`, title or examples; `{}` with no other property), no target; it offers once.")
+S.statement(1, "On start it sends its parent `bot.ability.ready`, once and with no data (decision D242). What it offers, read from its live session (`<decision:offers>`), is the one model-callable `bot.ability.seeing.look`, of no effort, with its schema (`{}` with no other property), no target.")
 S.statement(2, "An `environment.visual` with a `source` is held as that source's view and, as the source's first view, measured and handed on: the parent gets `bot.ability.cognition.input` `{stimulus: {event: \"bot.ability.seeing.sight\", data: {cause: \"change\", views: [view], participants}, source: <the view's source>}, participants}`, the view `{image, media_type, kind, participants, change: null, age_ms, objects: null, description: null}` copied from the stimulus (`media_type` and `kind` null when it names none) and `participants` the view's stamped participants.")
 S.statement(3, "An `environment.visual` without a `source` is dropped: nothing is held, measured or handed on, and a look then sees nothing (`{cause: \"look\", views: [], participants: []}`, source `\"seeing\"`).")
 S.statement(4, "A later view of a source is measured against the signature of the last view of that source handed on, by `measure` (`byte_identity` by default: 0 for the same bytes, 1 for others; or `frame_diff`, the mean difference of the views' blurred 32x32 grays): a change of at least `change_threshold` (0.1) is handed on with its change; a smaller change is not.")
@@ -122,10 +117,10 @@ S.statement(12, "A measurement is bounded by `measure_timeout_ms` (2000): when i
 S.statement(13, "With `detect` on, each view handed on is given to the object detection child (abilities/object_detection, with the view's image and media type and the model), and its `bot.ability.vision.detection.output` fills the view's `objects`; with `describe` on the description child's `bot.ability.vision.description.output` fills its `description`. A view's objects stage runs before its description stage, and a sight's views are interpreted one after another, in order.")
 S.statement(14, "A stage that fails (its child answers `bot.ability.failed`) or does not answer within `stage_timeout_ms` (30000) leaves only its own field null; the sight is still handed on.")
 S.statement(15, "A stimulus its schema refuses is never routed here: an `environment.visual` without an image, or a look with data, raises `error.execution` in the sender.")
-S.statement(16, "Its parameters are checked before it perceives: a `change_threshold` outside (0, 1], a `measure_every_ms`, `measure_timeout_ms`, `settle_after_ms`, `max_view_age_ms` or `stage_timeout_ms` that is not positive, a `measure_every_ms` longer than `settle_after_ms`, or a `measure` other than `byte_identity` and `frame_diff` ends it in its final state `degraded`, logging `seeing.degraded` with the first refusal's reason, in that order: it offers nothing, and its invoker gets `done.invoke.seeing`.")
+S.statement(16, "Its parameters are checked before it perceives: a `change_threshold` outside (0, 1], a `measure_every_ms`, `measure_timeout_ms`, `settle_after_ms`, `max_view_age_ms` or `stage_timeout_ms` that is not positive, a `measure_every_ms` longer than `settle_after_ms`, or a `measure` other than `byte_identity` and `frame_diff` ends it in its final state `degraded`, logging `seeing.degraded` with the first refusal's reason, in that order: it is never ready, and its invoker gets `done.invoke.seeing`.")
 
-S.case(100, 1, "the offer is look alone, compacted.", [READY])
-S.case(101, 1, "it offers once: the first sight is the next thing the parent gets.",
+S.case(100, 1, "the offer is look alone.", [READY, OFFERED])
+S.case(101, 1, "it is ready once: the first sight is the next thing the parent gets.",
        [READY, send(VISUAL, visual("a.png", "camera-1")), sight("change", "camera-1", [view("a.png")])])
 
 S.case(110, 2, "a first view is handed on with the stimulus's fields and participants.",
@@ -286,7 +281,7 @@ S.case(241, 15, "a look with data is never routed: the sender gets error.executi
 
 
 def refused(test_id, comment, params, reason):
-    """A case whose parameters the eye refuses: it ends at once, offering nothing."""
+    """A case whose parameters the eye refuses: it ends at once, never ready."""
     S.case(test_id, 16, comment, [expect("done.invoke.seeing")], params=params, logs={"seeing.degraded": [reason]})
 
 
@@ -303,6 +298,6 @@ refused(258, "a measure other than byte_identity and frame_diff is refused.", [(
         "measure must be byte_identity or frame_diff")
 refused(259, "only the first refusal is logged: the threshold's, before the measure's.",
         [("change_threshold", "0"), ("measure", "'embedding'")], "change_threshold must be in (0, 1]")
-S.case(260, 16, "a measure_every_ms equal to settle_after_ms is accepted: the eye offers and sees.",
+S.case(260, 16, "a measure_every_ms equal to settle_after_ms is accepted: the eye is ready and sees.",
        [READY, send(VISUAL, visual("a.png", "camera-1")), sight("change", "camera-1", [view("a.png")])],
        params=[("measure_every_ms", "5000")])

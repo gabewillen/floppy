@@ -127,8 +127,8 @@
   synchronous); the body's cancel timer still bounds the acknowledgement.
 
   Ignore: bot.ability.cognition.ignore is this ability's offer: its
-  transitions (in idle and processing, which only log) are what
-  <decision:choice> offers. A selected ignore is the turn's terminal
+  transitions (in idle and processing, which only log) are what its
+  parent reads with <decision:offers>. A selected ignore is the turn's terminal
   product, which only the cognition takes ("cognition only", decision
   D113): the stage that selects it
   sends it here, to its target, and the transition logs it.
@@ -150,13 +150,11 @@
   handed to the body as bot.ability.cognition.input {stimulus} (the tick's
   envelope, source "routines"), which the body grants a turn. With no database it runs no routine.
 
-  Readiness: every entry into idle sends bot.ability.offers {ability,
-  choices} to the parent: the choices <decision:choice events=...> reads,
-  bot.ability.cognition.ignore, made model-facing by
-  <processing:model_facing_schema> ($schema, title and examples dropped;
-  over 32 KiB descriptions dropped too; still over, the offer is empty and
-  logged). The stages are per-turn children
-  that offer nothing, so there are no descendant offers to relay.
+  Readiness: the start sends bot.ability.ready to the parent, once
+  (decision D242). What it offers, the parent reads from its live session
+  with <decision:offers>: the events its offerable <data> declares,
+  bot.ability.cognition.ignore (of no effort), while a transition without
+  a cond takes them. The stages are per-turn children that offer nothing.
 
   Choices: each turn's input carries the body's collected choices (its own
   and every ability's offers, each tagged with the session id of its
@@ -168,7 +166,7 @@
   fails the stage, which this ability answers as bot.ability.failed.
 
   Effort ceilings (decisions D196 and D206): a choice carries the effort its
-  offerer declares (<decision:choice effort>; 0 without one, so an
+  offerer declares (its offerable <data>; 0 without one, so an
   always-offered event such as the ignore is within every ceiling). Each
   stage's substate frames the turn's choices on entry with
   <cognition:within_ceiling> against its tier's ceiling: the decision
@@ -296,12 +294,11 @@
     <data id="reboot_reason" expr="null"/>
     <!-- A routine tick's stimulus envelope, for the handoff. -->
     <data id="tick" expr="null"/>
-    <!-- The offers. -->
-    <data id="offering" expr="false"/>
-    <data id="offered" expr="[]"/>
+    <!-- What it offers its parent (decision D242), which reads it from its
+         live session with <decision:offers>: the ignore, of no effort. -->
+    <data id="offerable" expr="({'bot.ability.cognition.ignore': {}})"/>
     <!-- The deliberative handoff, offered to the intuition tier only. -->
     <data id="handoff" expr="[]"/>
-    <data id="offers_over" expr="false"/>
     <!-- What the bot knows of itself: its name, as the identity tells it
          (bot.ability.identity.named, relayed by the body; null until it
          has taken one), and its owner's traits and its own description,
@@ -317,6 +314,11 @@
   <script src="cognition.js"/>
 
   <parallel id="alive">
+  <!-- Ready once, on start (decision D242): idle is entered again after
+       every turn. -->
+  <onentry>
+    <send event="bot.ability.ready" target="#_parent"/>
+  </onentry>
   <!-- The identity's answer to an ask, and the name after each
        adoption. -->
   <transition event="bot.ability.identity.named" event:schema="../schemas/bot.ability.identity.named.json">
@@ -337,20 +339,8 @@
   <!-- Waits for the body's turn, awake and then at rest. -->
   <state id="idle" initial="awake">
     <onentry>
-      <assign location="offering" expr="true"/>
-      <decision:choice location="offered" events="bot.ability.cognition.ignore"/>
       <decision:choice location="handoff" events="bot.ability.reasoning.input"/>
-      <assign location="offering" expr="false"/>
-      <processing:model_facing_schema location="offered" bound="32768" overlocation="offers_over"/>
       <processing:model_facing_schema location="handoff"/>
-      <if cond="offers_over">
-        <log label="cognition.offers.dropped" expr="'the offers are over 32768 bytes'"/>
-      </if>
-      <log label="cognition.offers" expr="offered"/>
-      <send event="bot.ability.offers" target="#_parent">
-        <param name="ability" expr="'cognition'"/>
-        <param name="choices" expr="offered"/>
-      </send>
       <!-- Not yet told its name: ask the identity, through the body, on
            every return to idle until it answers. -->
       <if cond="!name_told">

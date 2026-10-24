@@ -6,13 +6,13 @@
   selected response to it. Cognition never selects it directly
   (bot.ability.speaking.input is not offered).
 
-    idle -bot.ability.speaking.input-> speaking { voicing { encoding
+    starting -> idle -bot.ability.speaking.input-> speaking { voicing { encoding
       -> playing { sounding <-> starved } } -> recording } -> idle
     encoding, playing -bot.ability.speaking.stop-> recording
 
   voicing invokes the vocal SpeechEncoding (abilities/vocal/vocal.scx, its
   child "vocal", which invokes the speech service) and, once vocal is ready (its
-  first bot.ability.offers), sends it bot.ability.vocal.speech.encoding.input
+  bot.ability.ready), sends it bot.ability.vocal.speech.encoding.input
   {parts}: the input's parts (1 to 64 parts {expression?, words?},
   decision D178), whose words, joined exactly as written, are the
   utterance's text of record. Input that does not
@@ -123,15 +123,15 @@
   error.execution in the sender (scxml.rs session.accepts-event-data).
   vocal's events are checked where vocal creates them.
 
-  Readiness: every entry into idle sends bot.ability.offers {ability:
-  "speaking", choices: []} to the parent; it offers nothing.
+  Readiness: its start (starting, which goes on to idle) sends
+  bot.ability.ready to the parent once (decision D242); it offers nothing.
 
   Bindings: the conversation namespace package; vocal's speech service.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
-       version="1.0" datamodel="ecmascript" name="speaking" initial="idle">
+       version="1.0" datamodel="ecmascript" name="speaking" initial="starting">
   <datamodel>
     <!-- Configuration: defaults and bounds. -->
     <data id="sample_rate_hz" expr="24000"/>
@@ -192,13 +192,16 @@
   </datamodel>
   <script src="speaking.js"/>
 
-  <state id="idle">
+  <!-- Ready once, on start (decision D242): idle is entered again after
+       each utterance. -->
+  <state id="starting">
     <onentry>
-      <send event="bot.ability.offers" target="#_parent">
-        <param name="ability" expr="'speaking'"/>
-        <param name="choices" expr="[]"/>
-      </send>
+      <send event="bot.ability.ready" target="#_parent"/>
     </onentry>
+    <transition target="idle"/>
+  </state>
+
+  <state id="idle">
     <transition event="bot.ability.speaking.input" event:schema="../schemas/bot.ability.speaking.input.json"
                 cond="isFinishedUtterance(_event)">
       <log label="speaking.late" expr="_event.sendid"/>
@@ -288,7 +291,7 @@
 
       <!-- Synthesis: no sound exists yet. -->
       <state id="encoding">
-        <transition event="bot.ability.offers" event:schema="../schemas/bot.ability.offers.json">
+        <transition event="bot.ability.ready" event:schema="../schemas/bot.ability.ready.json">
           <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal">
             <param name="parts" expr="parts"/>
           </send>

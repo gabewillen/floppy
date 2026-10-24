@@ -1,2 +1,2 @@
-{"label":"harness.ready","session":"session","text":"{\"ability\":\"listening\",\"choices\":[]}","type":"log"}
+{"label":"harness.ready","session":"session","text":"listening","type":"log"}
 {"label":"harness.failed","session":"session","text":"{\"message\":\"Speech decoding completed on sound with no sample rate to place it on a timeline.\",\"stage\":\"speech_decoding\"}","type":"log"}

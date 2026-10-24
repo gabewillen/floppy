@@ -49,19 +49,10 @@ function isSeeingOff() {
   return !seeing_enabled;
 }
 
-// Whether the offers _event carries are taken: seeing's only while it is on.
-function isTakenOffer(_event) {
-  return seeing_enabled || _event.data.ability !== 'seeing';
-}
-
-// Whether the ability whose offers _event carries is still waited for.
-function isWaiting(_event) {
-  return waiting.indexOf(_event.data.ability) >= 0;
-}
-
-// waiting without the ability whose offers _event carries.
-function waitingWithout(_event) {
-  return waiting.filter(function (ability) { return ability !== _event.data.ability; });
+// waiting without the ability that sent _event, its readiness (decision
+// D242): a bare bot.ability.ready names its sender by its invoke id only.
+function waitingWithoutSender(_event) {
+  return waiting.filter(function (ability) { return ability !== _event.invokeid; });
 }
 
 // The abilities an environment.visual goes to: seeing after the input
@@ -70,13 +61,11 @@ function visualInput() {
   return seeing_enabled ? input.concat(['seeing']) : input;
 }
 
-// The abilities' offers a turn may select from: every ability's but the
-// persona's, whose revision only reflection may select (the cognition
-// shows the persona every turn and lets reflection alone revise it).
+// The abilities' offers a turn may select from, read this turn from their
+// live sessions (decision D242): every ability's but the persona's, which
+// is never read (only reflection may select its revision).
 function turnOffers() {
-  var turn = Object.assign({}, offers);
-  delete turn.persona;
-  return turn;
+  return read_offers;
 }
 
 // activating
@@ -119,9 +108,10 @@ function firmwareTarget() {
   return '#_scxml_' + _sessionid + '.firmware';
 }
 
-// The firmware has sent its first offers this run.
+// The firmware's session answers its snapshot: it is running (decision
+// D242).
 function isFirmwareStarted() {
-  return offers.firmware !== undefined;
+  return firmware_snapshot !== null;
 }
 
 function firmwareTimeoutDiagnostic() {

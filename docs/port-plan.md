@@ -21,7 +21,7 @@ handoff's [open work](handoff.md#open-work).
 | An environment (membership, holdings, placement, broadcast) | An environment document, `environments/<name>/<name>.scx` (today `environments/room/room.scx`), run as the root session; its invoked children are its participants, joining when the invoke starts and leaving when it ends; it routes host input by its payload (D108), broadcasts every `environment.sound` and `environment.visual` to the participants that perceive it (placement, the free-field law and thresholds, D103), and logs the events its bots send it (decisions D102 to D111) |
 | State machines | SCXML documents (table below) |
 | Abilities (listening, speaking, cognition, memory, ...) | Invoked children, one `.scx` per machine under `abilities/<name>/`: `<invoke id="<name>" type="scxml" src="../../abilities/<name>/<name>.scx">` from the body (a stage or sub-ability from its ability: `src="../<name>/<name>.scx"`), literal `id` and `src`, talking to the parent through `#_parent` and to the child through `#_<invokeid>` (decisions D33, D34) |
-| Attaching and detaching abilities | No attachment events: the `<invoke>` lifecycle is attach (start on state entry) and detach (cancel on state exit, `done.invoke.<id>` on completion); a group's attach is the body's parallel `<invoke>`s joined on each member's first `bot.ability.offers` (decision D6) |
+| Attaching and detaching abilities | No attachment events: the `<invoke>` lifecycle is attach (start on state entry) and detach (cancel on state exit, `done.invoke.<id>` on completion); a group's attach is the body's parallel `<invoke>`s joined on each member's `bot.ability.ready` (decisions D6 and D242) |
 | Devices | SCXML documents an environment invokes (`devices/<name>/<name>.scx`), any real I/O inside them an invoked service; a bot holds them through the environment's `holdings` and `owned_devices`, reads them with `<device:snapshot>` and acts on them at their address (decisions D105, D109, D110); none is built yet (the tests use the lamp fixture) |
 | Backends | Invoked services (`services/`) for every effect: anything asynchronous, I/O-bound, or long-running (decision D13); extension namespaces (`namespaces/`) only for synchronous, quick executable content (table below) |
 | Learned behaviors | Validator-gated SCXML: the builder bot authors the behavior as an SCXML document, `scx:validate` gates it, and a simulation as an invoked child proves it before it is stored; a matched behavior runs as an invoked child |
@@ -128,9 +128,9 @@ Schema rules (the byte-for-byte rule covers event names, not data shapes):
   `bot.ability.cognition.input` requires `stimulus`, the envelope
   `{event, data, id?, source?, target?}` of the event the body took for the
   turn, and may carry
-  `choices`, the turn's choices the body assembled (its own and each
-  ability's `bot.ability.offers`, tagged with the offering ability's
-  `target`), and `environment`, the bot's environment block (D106); the
+  `choices`, the turn's choices the body assembled (its own and what
+  each ability offers, read from its live session that turn, tagged with
+  the offering ability's `target`), and `environment`, the bot's environment block (D106); the
   bot's `model` (an activation `<param>` its environment gives, D107) goes
   to its model-backed abilities.
 - Media is a reference: `environment.sound`'s `audio` and
@@ -142,7 +142,7 @@ Schema rules (the byte-for-byte rule covers event names, not data shapes):
   schema is ref-free.
 - An event with several shapes (`bot.ability.failed`) is their `anyOf`.
 - floppy-only names are marked `[floppy name]` at the start of the
-  description (phase 4: `bot.ability.offers`).
+  description (phase 4: `bot.ability.offers`, removed by D242).
 
 `generate.*` and `decision.*` are not copied beside the abilities: they are
 service results, never offered as choices, so an ability needs no schema on
@@ -164,18 +164,20 @@ D33 to D43.
   `cond` and each `expr` outside `<data>` is at most 160 characters.
   Reusable synchronous logic is a namespace element that writes to a
   `location`; I/O is an invoked service (decision D39).
-- **Readiness and offers.** An ability is ready when its first
-  `bot.ability.offers` [floppy name] reaches the body; the body activates
-  when no expected ability is left in its `waiting` list, and an expected
-  ability that ends while active degrades the bot. Each offer is the
-  ability's `<decision:choice>` filtered to its own events and made
-  model-facing with `<processing:model_facing_schema>` (decisions D35,
-  D113).
+- **Readiness and offers.** An ability is ready when its
+  `bot.ability.ready`, sent once when it starts serving, reaches the body;
+  the body activates when no expected ability is left in its `waiting`
+  list, and an expected ability that ends while active degrades the bot.
+  Nothing pushes offers: each turn the body reads what each ability offers
+  from its live session with `<decision:offers>` (its enabled `event:schema`
+  transitions without a cond that its `offerable` data declares), made
+  model-facing with `<processing:model_facing_schema>` and dropped for the
+  turn when over 32 KiB (decisions D113, D242).
 - **Choices as data.** On each `processing` entry the body collects the
   turn's choices with `<processing:collect_offered_events>` (its own
   `bot.focus_device`, pinned to the turn's focus candidates (there is no
   `bot.clear_focus`: focus stays on a device until the bot focuses
-  another, D155), plus each ability's latest offers and the focused
+  another, D155), plus what each ability offers and the focused
   device's events, each tagged with its offerer's session id as
   `target`), holds them to 32 KiB, and sends them as
   `bot.ability.cognition.input.choices` [floppy field]. Each stage that
@@ -239,7 +241,7 @@ D33 to D43.
 | Unit | floppy artifact | kind |
 | --- | --- | --- |
 | The body | `bots/floppy/floppy.scx` | bot root `.scx` |
-| Attaching the abilities, the processing operation | the body's `<invoke>`s in `live`, its offers bookkeeping and its delayed `<send>`/`<cancel>` | composition inside the body |
+| Attaching the abilities, the processing operation | the body's `<invoke>`s in `live`, its readiness bookkeeping and its delayed `<send>`/`<cancel>` | composition inside the body |
 | The turn's attention bias (the interrupt and the target device) | `<cognition:attention_bias_for_turn>` (D114) | `namespaces/cognition` element |
 | stimulus envelope | assigned member by member with `<assign>` before its `<send>` (was `<bot:stimulus>`, D116) | plain SCXML |
 | Removing the ignore, checking the focus | the ignore sent to the cognition, the focus device's pinned enum and the body's guards (D113) | plain SCXML |

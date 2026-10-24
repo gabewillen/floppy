@@ -5,8 +5,7 @@
   abilities/identity/identity.scx beside a copy of the body whose input
   is ['identity'], so the body's literal <invoke id="identity"> reaches it.
 
-  On start it sends bot.ability.offers {ability: "identity", choices: []}
-  (its readiness), then logs input.sound or input.visual with the event's
+  On start it sends bot.ability.ready (decision D242), then logs input.sound or input.visual with the event's
   data as JSON for each environment.sound or environment.visual it is
   sent, and input.efference for each bot.ability.speaking.efference (as a
   Listening peer, tests/tests/communication.rs). It perceives nothing and
@@ -16,10 +15,7 @@
        version="1.0" datamodel="ecmascript" name="input_double" initial="perceiving">
   <state id="perceiving">
     <onentry>
-      <send event="bot.ability.offers" target="#_parent">
-        <param name="ability" expr="'identity'"/>
-        <param name="choices" expr="[]"/>
-      </send>
+      <send event="bot.ability.ready" target="#_parent"/>
     </onentry>
     <transition event="environment.sound">
       <log label="input.sound" expr="JSON.stringify(_event.data)"/>

@@ -12,7 +12,7 @@ through `scx run` with the real invoked services (a case's
 
 ## Statements
 
-- <a id="sensitivity-1"></a>**sensitivity-1**. On start it offers nothing: it sends `bot.ability.offers` `{ability: "sensitivity", choices: []}` to its parent.
+- <a id="sensitivity-1"></a>**sensitivity-1**. On start it offers nothing: it sends `bot.ability.ready` to its parent (decision D242), with no data.
 - <a id="sensitivity-2"></a>**sensitivity-2**. Every arrival scored (`bot.ability.listening.sensitivity.score` `{stimulus}`) comes back as `bot.ability.listening.sensitivity.output` `{sound, parent, perceived_level_db, producing}`, its sound the stimulus's data, its parent the stimulus, and `producing` whether it arrived while the body was producing (true for every arrival inside the window, whoever made it); quiet, `producing` is false and the level is the sound's `received_level_db`, `null` when nothing was measured.
 - <a id="sensitivity-3"></a>**sensitivity-3**. `bot.ability.speaking.efference` `{mouth, duration}` with sound still to come (`duration` > 0) opens a producing window on that mouth, or re-arms the open one on the new duration; inside it, an arrival from another source is scored by its `received_level_db`.
 - <a id="sensitivity-4"></a>**sensitivity-4**. Inside the window, an arrival from the producing mouth is scored against the prediction: with no levels to compare, 0; with no learned path gain yet, the observed gain (`received_level_db - amplitude_db`) is learned and the level is 0; afterwards the level is `|observed - learned|`, and the learned gain is never retaught.

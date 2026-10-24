@@ -12,7 +12,7 @@ SCORED = "bot.ability.listening.sensitivity.output"
 SPEECH = "bot.ability.listening.speech.output"
 COGNITION = "bot.ability.cognition.input"
 FAILED = "bot.ability.listening.failed"
-READY = expect("bot.ability.offers", "_event.data.ability === 'interpretation' && _event.data.choices.length === 0")
+READY = expect("bot.ability.ready")
 # Stages under a loaded host can outlast the default 30 s bound: cases
 # that reach the backend wait longer (statement 11 tests the bound itself).
 PATIENT = [("stage_timeout_ms", "600000")]
@@ -86,7 +86,7 @@ def stimulus(cond):
     return expect(COGNITION, "_event.data.stimulus.event === 'environment.sound' && _event.data.stimulus.source === 'listening' && " + cond)
 
 
-S.statement(1, "On start it sends `bot.ability.offers` `{ability: \"interpretation\", choices: []}` to its parent: it offers nothing.")
+S.statement(1, "On start it sends `bot.ability.ready` to its parent (decision D242), with no data: it offers nothing.")
 S.statement(2, "The configuration's refusals (decision D177): voice identification (`voice_classifier`) with speech decoding (`speech_decoder`), a negative `product_threshold_db`, and a `recognize_timeout_ms` that is not positive each end the interpretation in its final state `degraded` without offering.")
 S.statement(3, "With the default configuration (voice detection, sound classification, speech decoding), a voiced scored sound opens the open-speech window, each further voiced sound joins it, and the first sound without voice closes it; the utterance is joined into a WAV file, decoded, and answered as `bot.ability.listening.speech.output` `{content: <words>, content_type: \"text/plain\", voice_detection, sample_rate_hz, channels, media_type: \"audio/pcm\", source_ids: [], parent}`, its parent the loudest frame's (the first with a level when none is louder).")
 S.statement(4, "A sound without voice is classified: a labelled one (a non-blank kind) is handed to the parent as `bot.ability.cognition.input` `{stimulus}`, the stimulus `{event: \"environment.sound\", data: <the sound as voice detection normalized it, its PCM written beside it as floppy-sound-<n>.pcm>, source: \"listening\"}`; an unlabelled one is dropped while speech decoding is configured.")
@@ -98,7 +98,7 @@ S.statement(9, "A stage failure (its child's failure, an error, or its timer) an
 S.statement(10, "Scored sounds that arrive while one is being interpreted are held (`<event:defer/>`) and taken in order.")
 S.statement(11, "Each stage but identification (statement 8) is bounded by `stage_timeout_ms` (30 s by default): its timer fails it with `{stage, message: \"Listening <stage> timed out.\"}`.")
 
-S.case(100, 1, "the interpretation offers nothing on start.", [READY])
+S.case(100, 1, "the interpretation is ready on start.", [READY])
 
 S.case(110, 2, "voice identification with speech decoding degrades the interpretation.",
        [expect("done.invoke.interpretation")], params=[("voice_classifier", "true")])
@@ -106,7 +106,7 @@ S.case(111, 2, "a negative product threshold degrades the interpretation.",
        [expect("done.invoke.interpretation")], params=[("product_threshold_db", "-1")])
 S.case(112, 2, "a recognize timeout that is not positive degrades the interpretation.",
        [expect("done.invoke.interpretation")], params=[("recognize_timeout_ms", "0")])
-S.case(113, 2, "a zero product threshold is no refusal: the interpretation offers.",
+S.case(113, 2, "a zero product threshold is no refusal: the interpretation is ready.",
        [READY], params=[("product_threshold_db", "0")])
 
 S.case(120, 3, "a voiced sound and a silent one are one utterance, decoded into words.",

@@ -1,34 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- floppy-4: bot.reboot re-enters live: no input is taken until the abilities offer again. -->
+<!-- floppy-4: bot.reboot re-enters live: no input is taken until the abilities are ready again. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="floppy" type="scxml" src="../../../floppy.scx">
     <param name="environment" expr="_sessionid"/>
     <param name="database" expr="null"/>
-    <param name="expected" expr='["cognition", "communication", "identity", "listening", "stm", "persona", "ghost"]'/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <onentry>
-      <send event="bot.ability.offers" target="#_floppy"><content expr='{"ability": "ghost", "choices": []}'/></send>
-    </onentry>
     <transition event="bot.activated" target="step1"/>
   </state>
   <state id="step1">
     <onentry>
       <send event="bot.reboot" target="#_floppy"><content expr='{"reason": "cognition_child_teardown_failed"}'/></send>
+      <send event="bot.input" target="#_floppy"><content expr='{"observation": {"event": "text", "data": "taken"}}'/></send>
+      <send event="bot.ability.failed" target="#_floppy"><content expr='{"turn": 1, "message": "taken"}'/></send>
     </onentry>
     <transition event="bot.reboot" target="step2"/>
   </state>
   <state id="step2">
-    <onentry>
-      <send event="bot.input" target="#_floppy"><content expr='{"observation": {"event": "text", "data": "taken"}}'/></send>
-      <send event="bot.ability.failed" target="#_floppy"><content expr='{"turn": 1, "message": "taken"}'/></send>
-      <send event="bot.ability.offers" target="#_floppy"><content expr='{"ability": "ghost", "choices": []}'/></send>
-    </onentry>
     <transition event="bot.activated" target="step3"/>
   </state>
   <state id="step3">

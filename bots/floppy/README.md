@@ -35,7 +35,8 @@ Listening, and recorded in the conversation; decision D203), and the
 (phase 6: see Sound below). Each turn the body
 collects the choices (its own `bot.focus_device`, pinned to the turn's
 focus candidates, plus
-each ability's latest `bot.ability.offers` and the focused device's
+what each ability offers, read from its live session that turn
+(`<decision:offers>`, decision D242), and the focused device's
 events, each tagged with the session id of its offerer as `target`, made
 model-facing and held to 32 KiB, `<processing:collect_offered_events>`);
 nothing the bot selects clears the focus: it stays on a device until the
