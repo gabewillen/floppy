@@ -16,7 +16,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.failed" cond='_event.data.message.indexOf("Reflection revision failed: ") === 0' target="step1"/>
+    <transition event="bot.ability.failed" cond='_event.data.message === "Reflection revision failed: unable to open database file: /nowhere/floppy.sqlite"' target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>
