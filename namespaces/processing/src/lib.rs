@@ -94,8 +94,9 @@
 //! `additionalProperties` `false` when it names neither);
 //! `reason` an optional string; `target`, present and required when some
 //! choice of the event has one, an enum of the distinct targets offering
-//! it, sorted. `event` is required, and `data` when its schema requires a
-//! field; no other property is admitted. The branch's `description` is the
+//! it, sorted. `event` and `data` are required (an empty `data` too:
+//! sorted, `data` precedes `event`, decision D231); no other property is
+//! admitted. The branch's `description` is the
 //! data schema's, else the event name, and when the data schema's
 //! `examples` starts with an object the branch has one example, `{event,
 //! data, target}` (`target` only for a single target). Nothing is
@@ -933,8 +934,8 @@ const DISPATCH_EVENTS_DESCRIPTION: &str = "All events necessary for the input th
 
 /// One offered event's branch: `event` a one-value enum, `data` the event's
 /// schema ([`selection_data`]), `reason` optional, `target` an enum of the
-/// `targets` offering it when there are any; `event` required, `data`
-/// required when its schema requires a field, `target` when present; the
+/// `targets` offering it when there are any; `event` and `data` required,
+/// `target` when present; the
 /// schema's description (else the event name) and, when its `examples`
 /// starts with an object, one example.
 fn selection_item_branch(event: Json, schema: &Json, targets: &[String]) -> Json {
@@ -944,14 +945,12 @@ fn selection_item_branch(event: Json, schema: &Json, targets: &[String]) -> Json
         .and_then(Json::as_str)
         .filter(|description| !description.trim().is_empty())
         .map_or_else(|| event.clone(), Json::from);
-    let data_required = data
-        .get("required")
-        .and_then(Json::as_array)
-        .is_some_and(|required| required.iter().any(Json::is_string));
-    let mut required = vec![Json::from("event")];
-    if data_required {
-        required.push("data".into());
-    }
+    // `data` is required in every branch, an empty one included: the
+    // wire schema's members are sorted, so `data` comes before `event`,
+    // and a backend that decodes members in schema order would otherwise
+    // let a call that writes `event` first take only the branches whose
+    // `data` is optional (decision D231).
+    let mut required = vec![Json::from("event"), Json::from("data")];
     let first_example = data
         .get("examples")
         .and_then(Json::as_array)

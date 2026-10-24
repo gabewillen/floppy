@@ -654,7 +654,7 @@ fn send_builds_the_dispatch_tool_schema_of_the_choices() {
                         "data": {"title": "Deactivate", "description": "Deactivate the bot.", "examples": [{"why": "done"}], "type": "object", "properties": {"why": {"type": "string"}}, "additionalProperties": false},
                         "reason": reason,
                     },
-                    "required": ["event"],
+                    "required": ["event", "data"],
                     "additionalProperties": false,
                     "examples": [deactivate_example],
                 },
@@ -679,7 +679,7 @@ fn send_builds_the_dispatch_tool_schema_of_the_choices() {
                         "reason": reason,
                         "target": {"type": "string", "enum": ["cognition", "communication"], "description": "Actor that should receive the event. Required because multiple actors enable this event this turn; choose exactly one offered actor key."},
                     },
-                    "required": ["event", "target"],
+                    "required": ["event", "data", "target"],
                     "additionalProperties": false,
                 },
                 {
