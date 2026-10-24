@@ -1440,15 +1440,17 @@ fn known_voices(voices: &[Json]) -> Vec<(String, Vec<f64>)> {
         .iter()
         .filter_map(|voice| match voice.as_array().map(Vec::as_slice) {
             Some([Json::String(person), Json::String(embedding)]) if !person.is_empty() => {
-                let embedding: Json = serde_json::from_str(embedding).ok()?;
-                match embedding {
-                    Json::Array(components) if !components.is_empty() => components
-                        .iter()
-                        .map(Json::as_f64)
-                        .collect::<Option<Vec<_>>>()
-                        .map(|components| (person.clone(), components)),
-                    _ => None,
+                let Ok(Json::Array(components)) = serde_json::from_str::<Json>(embedding) else {
+                    return None;
+                };
+                if components.is_empty() {
+                    return None;
                 }
+                components
+                    .iter()
+                    .map(Json::as_f64)
+                    .collect::<Option<Vec<_>>>()
+                    .map(|components| (person.clone(), components))
             }
             _ => None,
         })
@@ -1534,16 +1536,15 @@ pub fn people_for(
         for id in ids {
             let id = match embedding(id) {
                 Some(voice) => {
-                    let person = match person_for_voice(&voice, &known) {
-                        Some(person) => person.to_owned(),
-                        None => {
-                            let person = format!(
-                                "{PERSON_REF_PREFIX}{}",
-                                count.saturating_add(people.len() as u64).saturating_add(1)
-                            );
-                            people.push(Json::String(person.clone()));
-                            person
-                        }
+                    let person = if let Some(person) = person_for_voice(&voice, &known) {
+                        person.to_owned()
+                    } else {
+                        let person = format!(
+                            "{PERSON_REF_PREFIX}{}",
+                            count.saturating_add(people.len() as u64).saturating_add(1)
+                        );
+                        people.push(Json::String(person.clone()));
+                        person
                     };
                     known.push((person.clone(), voice));
                     voices.push(Json::Array(vec![

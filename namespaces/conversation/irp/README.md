@@ -43,4 +43,4 @@ decision D204, 2026-10-23) measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 33 / 33 | 0 | `632d5dbdbf5d39d325782f1e52175be04f288a49bf9770269ff07eb50f97f5d0` | `6264c784e5db09237bbf53e083a28c2a510cd0cbc1c1f3d588530749faefae28` |
+| ECMAScript | 33 / 33 | 0 | `632d5dbdbf5d39d325782f1e52175be04f288a49bf9770269ff07eb50f97f5d0` | `9d7bfa18263a2da6b2a591ccefda0e457b027bd7082cbfc7821bd4b92155a486` |

@@ -55,7 +55,7 @@
       "package_version": "0.1.0",
       "manifest_sha256": "71527dd07c3e70aff4596f049881f6219130ebd5922c44a67bb82363efe100df",
       "schema_sha256": "cd13621a1381049d00fa23da2c7beb7da82ddfcb752b28aa118b030f1379c158",
-      "component_sha256": "d74b73ba24f2771d97917e3447c71c512601b10c3143645f113eec3e5d873a83"
+      "component_sha256": "84185225e8c48abcbcd0453a0401d4520a61af1faf0fb2495a7a95588d429e5c"
     }
   ],
   "ir_version": 5,
@@ -68,7 +68,7 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "ac22a15808360fb9d8cc2c9eb1a2bb4c7beb5044362a97640d2f3b03b38cb90b",
+  "identity_digest": "a657b913fbc1e46c3168e58c95e566821e271f29a93642a9ac5c7abe4f949bae",
   "summary": {
     "total_selected": 33,
     "applicable_selected": 33,
