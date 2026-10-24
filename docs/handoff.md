@@ -11,6 +11,15 @@ Last updated: 2026-10-24.
 
 ## Current state (2026-10-09) — resume here
 
+- **The bot learns what it is taught (2026-10-23, D148, D149, D151):**
+  the cognition always offers `bot.ability.learning.input` beside its
+  ignore, so any tier can select a lesson, and after the turn's output
+  its long-lived child `learning` (`abilities/learning/learning.scx`)
+  selects a create or change and invokes the Revision document
+  (`abilities/revision/revision.scx`, reflection's revision moved into
+  its own ability) with the lesson as the builder's instruction.
+  Reflection only remembers a taught turn and a turn the bot's own
+  routine or lesson caused.
 - **Rest and consolidation (2026-10-24, D205, #49):** after
   `rest_after_ms` (5 minutes) without input the cognition rests and
   invokes `abilities/consolidation/consolidation.scx`, which folds the
@@ -939,9 +948,9 @@ What is still to build, each item with its issue where one exists.
   end-to-end test of a learned behavior on a later real turn, examples
   and byte budgets for reflection's select and builder prompts, and a
   builder that works with small models (#14); reflection selecting
-  `bot.ability.persona.revise` (#16). The Revision document (D148) and the
-  Learning ability (D149) are in review. A change does not yet keep the behavior's own triggers
-  as evidence: `evidenceStimulusNames()` in
+  `bot.ability.persona.revise` (#16). The Revision document (D148) and
+  the Learning ability (D149) are in review. A change does not yet keep
+  the behavior's own triggers as evidence: `evidenceStimulusNames()` in
   `abilities/reflection/reflection.js` reads the turn's stimulus and the
   prior episodes, not `existing_behavior.triggers` (#14, L6).
 - **Communication's rings** (#29, D175): the response and utterance

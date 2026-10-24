@@ -42,7 +42,10 @@
   A failed or cancelled turn goes on to storing: reflection selects
   nothing for it and only remembers it (decision D139), and so does a
   turn whose output selected bot.ability.learning.input: the learning
-  learns that lesson (decision D149).
+  learns that lesson (decision D149). A turn the bot's own routine or
+  lesson caused (its stimulus bot.behavior.tick or
+  bot.ability.learning.output) is only remembered too: no one's input
+  caused it (decision D151).
 
   processing (the select call, select_instructions): its
   transitions for the three inventory events are the enabled transitions
@@ -347,7 +350,7 @@
     </transition>
     <!-- The answer of this hop's call (gen_id: a late answer from an
          earlier hop's cancelled call is not this one). -->
-    <transition event="generate.result" cond="isGenerate(_event) &amp;&amp; isOverSelection(_event)">
+    <transition event="generate.result" cond="isOverSelection(_event)">
       <assign location="gen_failure" expr="'schema-mismatch'"/>
       <assign location="gen_rejection" expr="overSelectionRejection()"/>
     </transition>

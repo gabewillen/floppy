@@ -25,7 +25,8 @@ SLOW = ("child_operation_timeout_ms", "300000")
 DB = ("database", "'/memory/floppy.sqlite'")
 
 READY = expect(OFFERS, f"_event.data.ability === 'cognition' && _event.data.choices.length === 2 && _event.data.choices[0].event === {js(IGNORE)}"
-                       f" && _event.data.choices[1].event === {js(LEARN)} && _event.data.choices[0].schema.title === undefined")
+                       f" && _event.data.choices[1].event === {js(LEARN)} && _event.data.choices[0].schema.title === undefined"
+                       " && _event.data.choices[1].schema.title === undefined")
 
 
 def offered(event):
@@ -240,6 +241,8 @@ S.case(220, 13, "a turn that selects a lesson outputs it, and the lesson's resul
         expect(INPUT, f"_event.data.stimulus.event === 'bot.ability.learning.output' && _event.data.stimulus.data.learned === false"
                       " && _event.data.stimulus.data.lesson === 'say hi back' && _event.data.stimulus.data.behavior === null")],
        params=[SLOW], backend=[DECIDE_ABSTAIN, REASONED_LEARN], clock="logical", ignore=[OFFERS])
+S.case(222, 13, "a lesson offer taken in idle is only logged: the next event answered is the cancel's.",
+       [READY, send(LEARN, js({"content": "say hi back"})), send(CANCEL, js({"turn": 3})), expect(CANCELLED, "_event.data.turn === 3")])
 
 S.statement(12, "With no input for `rest_after_ms` (the `<param>`, else the `bounds`' `rest_after_ms`; 5 minutes by default) `idle` rests (decisions D195 and D205): it logs `cognition.rest` `resting` and invokes the consolidation with its database (with none there is nothing to consolidate, logged `cognition.consolidated`), and stays at rest until input, which leaves rest at once (`cognition.rest` `awake`, cancelling a consolidation in progress) and is taken as a normal turn.")
 

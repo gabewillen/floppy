@@ -325,7 +325,8 @@ function perceivesLesson() {
 
 // The lesson with the turn it was taught on (decision D149).
 function turnLesson() {
-  var data = Object(selectedLesson().data);
+  var lesson = selectedLesson();
+  var data = lesson === null ? {} : Object(lesson.data);
   return ({turn: turn, content: data.content, media_type: data.media_type === undefined ? null : data.media_type, cognition_input: cognitionInput(), cognition_output: selected, participants: participants});
 }
 

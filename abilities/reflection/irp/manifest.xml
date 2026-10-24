@@ -45,7 +45,7 @@
     </test>
   </assert>
   <assert id="reflection-5" specnum="5" specid="#reflection-5">
-    <![CDATA[A selected `bot.behavior.create` (`revising`, which invokes the revision ability, decision D148) stores a DRAFT stub for a new name, invokes the builder bot with a `builder.request`, and on the builder's `done` (`accepting`) replaces the row ACTIVE with the built document's path (its three documents the builder wrote, decision D121), then stores the episode and answers `bot.ability.reflection.output`; a `bot.behavior.change` of a stored name reads its documents back (`reading`) and revises it the same way, and a change of a name the inventory does not hold is not offered, so a model that selects one is refused twice and fails the select with `Selection rejected: <message>`.]]>
+    <![CDATA[A selected `bot.behavior.create` is revised by the revision ability, which `revising` invokes (decision D148): the revision stores a DRAFT stub for a new name, invokes the builder bot with a `builder.request`, and on the builder's `done` (`accepting`) replaces the row ACTIVE with the built document's path (its three documents the builder wrote, decision D121), and the reflection then stores the episode and answers `bot.ability.reflection.output`; a `bot.behavior.change` of a stored name reads its documents back (`reading`) and revises it the same way, and a change of a name the inventory does not hold is not offered, so a model that selects one is refused twice and fails the select with `Selection rejected: <message>`.]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>
@@ -66,7 +66,7 @@
     </test>
   </assert>
   <assert id="reflection-7" specnum="7" specid="#reflection-7">
-    <![CDATA[`revising` is bounded by `revising_timeout_ms` without progress while a builder generation streams (the builder, invoked with `progress_target` the reflection's own session, passes on each `generate.progress` of its streamed generations, which arms it, and sends `builder.progress` as it enters a stage, which disarms it) and by `revising_ceiling_ms` in all (the `<param>` `bounds` overriding either, decision D101): when one passes, the revision is cancelled and the turn fails with `Reflection child cancellation timed out.`.]]>
+    <![CDATA[`revising` is bounded by `revising_timeout_ms` without progress while a builder generation streams (the revision passes the builder `progress_target` the reflection's own session, `'#_scxml_' + _sessionid` (decision D148), and the builder passes on each `generate.progress` of its streamed generations, which arms it, and sends `builder.progress` as it enters a stage, which disarms it) and by `revising_ceiling_ms` in all (the `<param>` `bounds` overriding either, decision D101): when one passes, the revision is cancelled and the turn fails with `Reflection child cancellation timed out.`.]]>
     <test id="160" conformance="mandatory" manual="false">
       <start uri="160/test160.scxml"/>
     </test>
@@ -89,6 +89,21 @@
       <start uri="190/test190.scxml"/>
     </test>
   </assert>
+  <assert id="reflection-11" specnum="11" specid="#reflection-11">
+    <![CDATA[With `self` holding the owner's traits, `processing` also offers `bot.ability.persona.revise` (its `events` at most two) and sends a selected revision to the invoker, before an inventory event of the same reply; more than one inventory event or more than one revision is refused as `over-selection` and repaired as any rejection (decision D145).]]>
+    <test id="200" conformance="mandatory" manual="false">
+      <start uri="200/test200.scxml"/>
+    </test>
+    <test id="201" conformance="mandatory" manual="false">
+      <start uri="201/test201.scxml"/>
+    </test>
+    <test id="202" conformance="mandatory" manual="false">
+      <start uri="202/test202.scxml"/>
+    </test>
+    <test id="203" conformance="mandatory" manual="false">
+      <start uri="203/test203.scxml"/>
+    </test>
+  </assert>
   <assert id="reflection-12" specnum="12" specid="#reflection-12">
     <![CDATA[An input whose `cognition_output` holds a `bot.ability.learning.input` (a turn that taught the bot a lesson, which the learning learns itself) is only remembered too: after the recall it goes to `storing`, asking no model (decision D149).]]>
     <test id="191" conformance="mandatory" manual="false">
@@ -100,14 +115,8 @@
     <test id="192" conformance="mandatory" manual="false">
       <start uri="192/test192.scxml"/>
     </test>
-  </assert>
-  <assert id="reflection-11" specnum="11" specid="#reflection-11">
-    <![CDATA[With `self` holding the owner's traits, `processing` also offers `bot.ability.persona.revise` (its `events` at most two) and sends a selected revision to the invoker, before an inventory event of the same reply; more than one inventory event or more than one revision is refused as `over-selection` and repaired as any rejection (decision D145).]]>
-    <test id="200" conformance="mandatory" manual="false">
-      <start uri="200/test200.scxml"/>
-    </test>
-    <test id="201" conformance="mandatory" manual="false">
-      <start uri="201/test201.scxml"/>
+    <test id="193" conformance="mandatory" manual="false">
+      <start uri="193/test193.scxml"/>
     </test>
   </assert>
 </assertions>
