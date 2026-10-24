@@ -50,10 +50,6 @@ function routedParent(_event) {
 
 // active
 
-function hasRespond(_event) {
-  return offering || isSpokenReply(_event.data.parts);
-}
-
 // A reply that says something (decision D178): every part has words (not blank), a sound or a pause, every
 // expression directs a cue (sound_at only with a sound), and the words,
 // joined exactly as written, are not blank.
@@ -88,12 +84,25 @@ function said(parts) {
 // A respond for a response that already finished (decision D175): only a
 // respond whose sender named its id can be one.
 function isClosedResponse(_event) {
-  return !offering && !!_event.sendid && closed_responses.indexOf(_event.sendid) >= 0;
+  return !!_event.sendid && closed_responses.indexOf(_event.sendid) >= 0;
 }
 
 // The response's id: its respond's sendid, or null when none was named.
 function responseId(_event) {
   return _event.sendid ? _event.sendid : null;
+}
+
+// admitting_response (decision D242: active's one respond transition has
+// no cond, so its parent reads it as an offer)
+
+// The respond being admitted is for a response that already finished.
+function isClosedAdmission() {
+  return response_id !== null && closed_responses.indexOf(response_id) >= 0;
+}
+
+// The respond being admitted says something.
+function isSpokenAdmission() {
+  return isSpokenReply(response);
 }
 
 // preparing_response

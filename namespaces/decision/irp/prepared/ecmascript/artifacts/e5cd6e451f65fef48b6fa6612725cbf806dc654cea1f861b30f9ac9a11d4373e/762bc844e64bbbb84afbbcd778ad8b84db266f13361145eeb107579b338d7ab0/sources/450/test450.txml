@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<!-- decision-6: the offers are the declared events the child's unguarded event:schema transitions take, with their declared efforts; a guarded transition is never offered and still takes its event from a later one, and a schemaless or undeclared event is not offered. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision">
+<datamodel>
+  <data id="offers" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <send event="timeout" delay="5s"/>
+  </onentry>
+  <invoke id="child" type="http://www.w3.org/TR/scxml/">
+    <content>
+      <scxml version="1.0" initial="c0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event">
+        <datamodel>
+          <data id="offerable" expr="({'tool.alpha': {effort: 2}, 'tool.beta': {}, 'tool.gamma': {}, 'tool.delta': {}})"/>
+        </datamodel>
+        <state id="c0">
+          <onentry>
+            <send event="childReady" target="#_parent"/>
+          </onentry>
+          <transition event="tool.beta" cond="true" event:schema='{"type": "object"}'/>
+          <transition event="tool.alpha" event:schema='{"type": "object", "description": "Alpha."}'/>
+          <transition event="tool.beta" event:schema='{"type": "object"}'/>
+          <transition event="tool.gamma"/>
+          <transition event="tool.epsilon" event:schema='{"type": "object"}'/>
+        </state>
+      </scxml>
+    </content>
+  </invoke>
+  <transition event="childReady">
+    <decision:offers location="offers" target="'#_child'"/>
+    <raise event="read"/>
+  </transition>
+  <transition event="read" cond="offers.length === 1 &amp;&amp; offers[0].event === 'tool.alpha' &amp;&amp; offers[0].effort === 2 &amp;&amp; offers[0].description === 'Alpha.' &amp;&amp; offers[0].schema.type === 'object'" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

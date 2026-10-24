@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/sensitivity/irp/sources">
   <assert id="sensitivity-1" specnum="1" specid="#sensitivity-1">
-    <![CDATA[On start it offers nothing: it sends `bot.ability.offers` `{ability: "sensitivity", choices: []}` to its parent.]]>
+    <![CDATA[On start it offers nothing: it sends `bot.ability.ready` to its parent (decision D242), with no data.]]>
     <test id="500" conformance="mandatory" manual="false">
       <start uri="500/test500.scxml"/>
     </test>

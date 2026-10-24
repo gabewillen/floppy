@@ -1,2 +1,2 @@
-{"label":"harness.ready","session":"session","text":"{\"ability\":\"listening\",\"choices\":[]}","type":"log"}
+{"label":"harness.ready","session":"session","text":"listening","type":"log"}
 {"label":"harness.failed","session":"session","text":"{\"message\":\"Voice detection failed: the audio cannot be read.\",\"stage\":\"voice_detection\"}","type":"log"}

@@ -8,11 +8,7 @@
                    enabled event:schema transitions.
                    events (optional): a white-space separated list of SCXML
                    event descriptors; the choices keep only the events one of
-                   them matches.
-                   effort (optional): an expression of a whole number from
-                   0 to 1000, written as every choice's effort, how heavy an
-                   action it is (decision D206). No other attribute, no
-                   content.
+                   them matches. No other attribute, no content.
                    Choosing among them is the decision service's
                    work (services/decision): executable content stays
                    synchronous and quick.
@@ -37,7 +33,6 @@
     <xs:complexType>
       <xs:attribute name="location" type="xs:string" use="required"/>
       <xs:attribute name="events" type="xs:string" use="optional"/>
-      <xs:attribute name="effort" type="xs:string" use="optional"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="offers">

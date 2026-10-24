@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- decision-7: the offers are the declared events the child's unguarded event:schema transitions take, with their declared efforts; a guarded transition is never offered and still takes its event from a later one, and a schemaless or undeclared event is not offered. -->
+<!-- decision-6: the offers are the declared events the child's unguarded event:schema transitions take, with their declared efforts; a guarded transition is never offered and still takes its event from a later one, and a schemaless or undeclared event is not offered. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision">
 <datamodel>
   <data id="offers" expr="null"/>

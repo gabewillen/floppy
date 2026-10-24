@@ -94,7 +94,7 @@ const BODY_EVENTS: [&str; 12] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 104] = [
+const ABILITY_EVENTS: [&str; 103] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -160,7 +160,6 @@ const ABILITY_EVENTS: [&str; 104] = [
     "bot.ability.reflection.input",
     "bot.ability.reflection.output",
     "bot.ability.routines.reconcile",
-    "bot.ability.offers",
     "bot.ability.ready",
     // Phase 3: the memory service's committed transaction, described where
     // the abilities take it.
@@ -549,10 +548,9 @@ fn every_event_name_is_a_listed_name_or_a_marked_floppy_name() {
         floppy,
         BTreeSet::from([
             "bot.ability.migration.output".to_owned(),
-            "bot.ability.offers".to_owned(),
             "bot.ability.ready".to_owned()
         ]),
-        "the floppy-only events: phase 4's offers, an ability's readiness and the migration ability's output"
+        "the floppy-only events: an ability's readiness and the migration ability's output"
     );
     for event in schemas.keys() {
         assert!(

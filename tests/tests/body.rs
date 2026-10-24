@@ -18,7 +18,8 @@
 //! `log` record labelled with the event's name; the double logs `double.input` and `double.exit`.
 //!
 //! The double offers `bot.ability.cognition.ignore` and the communication
-//! `bot.ability.communication.respond`; the choice tests check the turn's
+//! `bot.ability.communication.respond`, which the body reads from their
+//! live sessions each turn (decision D242); the choice tests check the turn's
 //! choices, each tagged with its offering session's id (`floppy.choices`,
 //! `double.choices`), and what the body takes of the selections the double
 //! sends it like a stage (`floppy.focus`) or sends itself (the ones that
@@ -32,8 +33,8 @@
 //! stimulus the body fans out to it.
 //!
 //! The firmware tests set `firmware_src` to `'firmware_double.scx'` and put
-//! `tests/fixtures/phase4/firmware_double.scx` beside the body: it offers
-//! `timer.set`, logs `firmware.set`, and reports `timer.started`; every
+//! `tests/fixtures/phase4/firmware_double.scx` (and its `timer.set.json`)
+//! beside the body: it offers `timer.set`, logs `firmware.set`, and reports `timer.started`; every
 //! other test runs the body's own `firmware/firmware.scx`, which offers
 //! nothing.
 //!
@@ -145,6 +146,11 @@ fn layout(cognition: &Cognition, data: &[(&str, &str)]) -> PathBuf {
             );
             std::fs::create_dir_all(abilities.join("cognition")).expect("creatable");
             std::fs::write(ability, double).expect("the double copy is writable");
+            std::fs::copy(
+                workspace().join("tests/fixtures/phase4/cognition_huge.json"),
+                abilities.join("cognition/cognition_huge.json"),
+            )
+            .expect("the double's huge schema is copyable");
         }
         Cognition::Real => {
             // The cognition and its stages.
@@ -206,17 +212,17 @@ fn close(run: Run, test: &str) -> Finished {
 }
 
 #[test]
-fn activation_waits_for_the_cognitions_offers() {
+fn activation_waits_for_the_cognitions_readiness() {
     let body = layout(&Cognition::Double("'ready'"), &[]);
     let mut run = start(&body);
     // The bot activates on joining (nothing sends bot.activate), once
-    // every ability has offered.
+    // every ability is ready.
     let records = activated(&mut run);
     assert!(
         only(&records, &["double.input", "floppy.output"]).is_empty(),
         "an activating bot takes no turn: {records:?}"
     );
-    let finished = close(run, "activation_waits_for_the_cognitions_offers");
+    let finished = close(run, "activation_waits_for_the_cognitions_readiness");
     assert!(
         only(&finished.records, &["bot.activating.failed"]).is_empty(),
         "{:?}",
@@ -242,7 +248,7 @@ fn a_missing_cognition_fails_the_activation() {
 }
 
 #[test]
-fn an_ability_that_never_offers_times_the_activation_out() {
+fn an_ability_that_is_never_ready_times_the_activation_out() {
     let body = layout(
         &Cognition::Double("'silent'"),
         &[("activation_timeout_ms", "3000")],
@@ -264,7 +270,10 @@ fn an_ability_that_never_offers_times_the_activation_out() {
             .any(|(label, _)| label == "double.exit"),
         "{records:?}"
     );
-    close(run, "an_ability_that_never_offers_times_the_activation_out");
+    close(
+        run,
+        "an_ability_that_is_never_ready_times_the_activation_out",
+    );
 }
 
 #[test]
@@ -300,7 +309,7 @@ fn deactivate_while_activating_is_answered_and_cancels_the_abilities() {
         &[("activation_timeout_ms", "60000")],
     );
     let mut run = start(&body);
-    // The silent cognition never offers, so the bot is still activating.
+    // The silent cognition is never ready, so the bot is still activating.
     run.event("bot.deactivate", &json!({}));
     let records = run.until(WAIT, label_is("done.invoke"));
     // Every accepted bot.deactivate is answered (decision D118): never
@@ -677,19 +686,18 @@ fn what_is_held_when_the_bot_leaves_active_is_released() {
     close(run, "what_is_held_when_the_bot_leaves_active_is_released");
 }
 
-/// Puts `tests/fixtures/phase4/firmware_double.scx` beside the laid-out
-/// body, its `mode`'s expression replaced, for the body's `firmware_src`
-/// `'firmware_double.scx'`.
-fn with_firmware(body: &Path, mode: &str) {
-    let double =
-        std::fs::read_to_string(workspace().join("tests/fixtures/phase4/firmware_double.scx"))
-            .expect("the firmware double is readable")
-            .replace(
-                r#"<data id="mode" expr="'ready'"/>"#,
-                &format!(r#"<data id="mode" expr="{mode}"/>"#),
-            );
+/// Puts `tests/fixtures/phase4/firmware_double.scx` and its
+/// `timer.set.json` beside the laid-out body, for the body's
+/// `firmware_src` `'firmware_double.scx'`.
+fn with_firmware(body: &Path) {
     let dir = body.parent().expect("the body has a directory");
-    std::fs::write(dir.join("firmware_double.scx"), double).expect("writable");
+    for name in ["firmware_double.scx", "timer.set.json"] {
+        std::fs::copy(
+            workspace().join("tests/fixtures/phase4").join(name),
+            dir.join(name),
+        )
+        .expect("the firmware double is copyable");
+    }
 }
 
 #[test]
@@ -698,7 +706,7 @@ fn the_firmware_is_offered_shown_and_reports_like_an_ability() {
         &Cognition::Double("'ready'"),
         &[("firmware_src", "'firmware_double.scx'")],
     );
-    with_firmware(&body, "'ready'");
+    with_firmware(&body);
     let mut run = start(&body);
     activated(&mut run);
     run.event(
@@ -778,27 +786,22 @@ fn the_firmware_is_offered_shown_and_reports_like_an_ability() {
 }
 
 #[test]
-fn a_firmware_that_never_offers_fails_the_activation() {
+fn a_firmware_that_cannot_start_fails_the_activation() {
     let body = layout(
         &Cognition::Double("'ready'"),
-        &[
-            ("firmware_src", "'firmware_double.scx'"),
-            ("firmware_timeout_ms", "2000"),
-        ],
+        &[("firmware_src", "'missing_firmware.scx'")],
     );
-    with_firmware(&body, "'silent'");
     let run = start(&body);
     let records = run.until(WAIT, label_is("bot.activating.failed"));
-    assert_eq!(
-        only(&records, &["floppy.diagnostic"]),
-        pairs(&[(
-            "floppy.diagnostic",
-            "the firmware did not start within 2000 ms"
-        )])
+    let diagnostic = only(&records, &["floppy.diagnostic"]);
+    assert_eq!(diagnostic.len(), 1, "{records:?}");
+    assert!(
+        diagnostic[0].1.starts_with("error."),
+        "the firmware's start error fails the activation: {diagnostic:?}"
     );
     assert!(only(&records, &["bot.activated"]).is_empty(), "{records:?}");
     run.until(WAIT, label_is("done.invoke"));
-    close(run, "a_firmware_that_never_offers_fails_the_activation");
+    close(run, "a_firmware_that_cannot_start_fails_the_activation");
 }
 
 #[test]
@@ -1040,17 +1043,7 @@ fn ability_choices() -> [Json; 2] {
 
 /// The double's offer, compacted and tagged with its session's id.
 fn ignore_choice() -> Json {
-    json!({
-        "event": "bot.ability.cognition.ignore",
-        "description": "Deliberately ignore this stimulus.",
-        "schema": {
-            "description": "Deliberately ignore this stimulus.",
-            "type": "object",
-            "properties": {},
-            "additionalProperties": false
-        },
-        "target": "session.floppy.cognition"
-    })
+    offered_choice("session.floppy.cognition", "bot.ability.cognition.ignore")
 }
 
 fn device_input(action: &str, data: &str, device: &str) -> Json {
@@ -1177,24 +1170,35 @@ fn an_ignore_selection_goes_to_the_cognition_and_ends_the_turn() {
 }
 
 #[test]
-fn choices_over_the_budget_fail_the_turn_before_the_cognition() {
+fn an_offer_over_the_budget_is_dropped_from_the_turn() {
     let body = layout(&Cognition::Double("'huge'"), &[]);
     let mut run = start(&body);
     activated(&mut run);
     run.event("bot.input", &input("reply", "x"));
-    let records = run.until(WAIT, label_is("bot.processing.failed"));
-    let failed = last_json(&records, "bot.processing.failed");
-    assert_eq!(failed["turn"], 1, "{failed}");
-    let message = failed["message"].as_str().expect("a message");
+    let records = run.until(WAIT, label_is("bot.processing.completed"));
+    // The double's offer is over 32 KiB even without its descriptions, so
+    // the body drops it whole (decision D242) and the turn goes on with
+    // the others' offers.
+    assert_eq!(
+        only(&records, &["floppy.offers.dropped"]),
+        pairs(&[("floppy.offers.dropped", "cognition")])
+    );
+    let choices = last_json(&records, "floppy.choices");
+    let events: Vec<&str> = choices
+        .as_array()
+        .expect("an array")
+        .iter()
+        .filter_map(|choice| choice["event"].as_str())
+        .collect();
     assert!(
-        message.starts_with("the turn's choices are ") && message.ends_with(" bytes, over 32768"),
-        "{message}"
+        !events.contains(&"bot.ability.cognition.ignore") && !events.contains(&"double.huge"),
+        "{events:?}"
     );
-    assert!(only(&records, &["double.input"]).is_empty(), "{records:?}");
-    close(
-        run,
-        "choices_over_the_budget_fail_the_turn_before_the_cognition",
+    assert!(
+        events.contains(&"bot.ability.communication.respond"),
+        "{events:?}"
     );
+    close(run, "an_offer_over_the_budget_is_dropped_from_the_turn");
 }
 
 #[test]

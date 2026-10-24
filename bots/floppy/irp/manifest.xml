@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/bots/floppy/irp/sources">
   <assert id="floppy-1" specnum="1" specid="#floppy-1">
-    <![CDATA[Invoked, the body starts in `live`, which invokes the abilities (`cognition`, `communication`, `identity`, `listening`, `stm`, `persona`), and activates on its own (no `bot.activate`): it sends `bot.activated` to its parent, and takes a turn's input, only once every expected ability (the data `expected`) has sent its first `bot.ability.offers`.]]>
+    <![CDATA[Invoked, the body starts in `live`, which invokes the abilities (`cognition`, `communication`, `identity`, `listening`, `stm`, `persona`), and activates on its own (no `bot.activate`): it sends `bot.activated` to its parent, and takes a turn's input, only once every expected ability (the data `expected`) has sent its `bot.ability.ready` (decision D242).]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -33,7 +33,7 @@
     </test>
   </assert>
   <assert id="floppy-4" specnum="4" specid="#floppy-4">
-    <![CDATA[`bot.reboot` `{reason}` re-enters `live`, and the body passes it on to its parent: the abilities are invoked again and the bot waits for their offers again (and sends `bot.activated` again) before it takes input; the turn count goes on.]]>
+    <![CDATA[`bot.reboot` `{reason}` re-enters `live`, and the body passes it on to its parent: the abilities are invoked again and the bot waits for their readiness again (and sends `bot.activated` again) before it takes input; the turn count goes on.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>

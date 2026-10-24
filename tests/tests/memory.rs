@@ -585,9 +585,9 @@ fn every_recall_reads_the_most_recent_window_oldest_first() {
 
 /// A harness that invokes the short-term register with `database` (an
 /// ECMAScript expression) and `params` (more `<param>`s, or none), runs
-/// `stages[0]` once it is ready (`bot.ability.offers`) and `stages[n]` on
+/// `stages[0]` once it is ready (`bot.ability.ready`) and `stages[n]` on
 /// `harness.stage<n>` (a delayed `<send>` an earlier stage arms), and logs
-/// each answer: `offers`, `recent` (each entry's stimulus name, payload,
+/// each answer: `ready`, `recent` (each entry's stimulus name, payload,
 /// envelope, id length and whether it was reinforced), `turns` (each
 /// turn's id, direction, speakers, text (its length past 40 characters),
 /// cut, conversation and whether its time is UTC) and `failed`, ending
@@ -596,12 +596,12 @@ fn stm_harness(database: &str, params: &str, stages: &[String], answers: usize) 
     let mut transitions = String::new();
     for (n, stage) in stages.iter().enumerate() {
         let event = if n == 0 {
-            "bot.ability.offers".to_owned()
+            "bot.ability.ready".to_owned()
         } else {
             format!("harness.stage{n}")
         };
         let offers = if n == 0 {
-            r#"<log label="offers" expr="JSON.stringify(_event.data)"/>"#
+            r#"<log label="ready" expr="JSON.stringify(_event.data)"/>"#
         } else {
             ""
         };
@@ -685,7 +685,7 @@ fn run_stm(document: &str, clock: &str) -> Finished {
     run.finish(Duration::from_secs(300))
 }
 
-const STM_READY: (&str, &str) = ("offers", r#"{"ability":"stm","choices":[]}"#);
+const STM_READY: (&str, &str) = ("ready", "undefined");
 const STM_DATABASE: &str = "'/memory/floppy.sqlite'";
 const DEGRADED: &str = "unavailable: short-term memory is degraded.";
 

@@ -26,11 +26,11 @@
 //! `location` (required) receives the canonical choices: a JSON array of
 //! objects with `event` (an event name), `schema` (the transition's resolved
 //! `event:schema`), `description` (the schema's `description`, else its
-//! `title`, first line; omitted when it has neither), and `effort` (only with
-//! the `effort` attribute), canonical JSON with
+//! `title`, first line; omitted when it has neither), canonical JSON with
 //! members sorted by key, in the session snapshot's walk order. `events`
-//! (optional) filters it: see "The filter". `effort` (optional) declares
-//! what the choices cost: see "The effort". Every other attribute
+//! (optional) filters it: see "The filter". What a choice costs (`effort`)
+//! is declared only by a session `<decision:offers>` reads (decision
+//! D242). Every other attribute
 //! (unqualified or namespaced), any child element, and any non-white-space
 //! text is refused.
 //!
@@ -69,17 +69,6 @@
 //!   document uses it to offer a model only the events meant for it (tool
 //!   events) and not, say, its own input or completion events.
 //!
-//! * **The effort** (decision D206). `effort="EXPR"` is an expression of
-//!   the data model that evaluates to a whole number from 0 to
-//!   [`MAX_EFFORT`], and every choice the element writes carries it as
-//!   `effort`: how heavy an action it is to take, which the cognition holds
-//!   against each tier's effort ceiling (`<cognition:within_ceiling>`). A
-//!   choice without `effort` weighs 0, within every ceiling. An `effort`
-//!   that fails to evaluate or is not such a number is `error.execution`.
-//!   The offering document declares it because it is what the action costs
-//!   in this bot, not part of the event's data contract; an expression lets
-//!   an invoker's `<param>` set it.
-//!
 //! # `<decision:offers location="L" target="T" undeclared="none|all"/>`
 //!
 //! What another session of the run offers its parent, read from its live
@@ -87,8 +76,8 @@
 //! value, a string, names the session as a `<send>` target does
 //! (`#_<invokeid>` of a live invoked child, `#_scxml_<sessionid>` of any
 //! running session of the run), and `location` (required) receives the
-//! canonical choices `[{event, schema, description?, effort?}]` as
-//! `<decision:choice>` writes them. The read is
+//! canonical choices `[{event, schema, description?, effort?}]`, as
+//! `<decision:choice>` writes them with each declared effort. The read is
 //! `session-snapshot-host.snapshot` with that target, without the system,
 //! queue and pending-send sections, as `<device:snapshot>` reads a device.
 //!
@@ -338,8 +327,8 @@ pub struct Choice {
     pub schema: Json,
     /// What the event means, when its schema says.
     pub description: Option<String>,
-    /// How heavy an action it is (decision D206), when the offering document
-    /// declares it.
+    /// How heavy an action it is (decision D206), when the offering document's
+    /// `offerable` declares it (decision D242).
     pub effort: Option<u32>,
 }
 
@@ -596,30 +585,6 @@ pub fn effort_of(value: &Json) -> Option<u32> {
         .filter(|effort| *effort <= MAX_EFFORT)
 }
 
-/// The effort `expression` evaluates to (see [`effort_of`]).
-fn read_effort<H: ChoiceHost>(host: &mut H, expression: &str) -> Result<u32, Failure<H::Error>> {
-    const MALFORMED: &str = "decision:choice effort is not a whole number from 0 to 1000";
-    match host
-        .read(expression)
-        .map_err(Failure::Host)?
-        .map_err(|()| Failure::Execution("decision:choice effort did not evaluate"))?
-    {
-        Data::Number(number) => {
-            let number = number.get();
-            if number.fract() != 0.0 || !(0.0..=f64::from(MAX_EFFORT)).contains(&number) {
-                return Err(Failure::Execution(MALFORMED));
-            }
-            #[expect(
-                clippy::cast_possible_truncation,
-                clippy::cast_sign_loss,
-                reason = "a whole number from 0 to MAX_EFFORT, checked above"
-            )]
-            Ok(number as u32)
-        }
-        _ => Err(Failure::Execution(MALFORMED)),
-    }
-}
-
 /// Executes `<decision:choice>`.
 fn choice<H: ChoiceHost>(
     attributes: &[Attribute],
@@ -628,7 +593,6 @@ fn choice<H: ChoiceHost>(
 ) -> Result<Executed, Failure<H::Error>> {
     let mut location = None;
     let mut events = None;
-    let mut effort = None;
     for attribute in attributes {
         let slot = match (
             attribute.namespace_uri.as_deref(),
@@ -636,10 +600,9 @@ fn choice<H: ChoiceHost>(
         ) {
             (None, "location") => &mut location,
             (None, "events") => &mut events,
-            (None, "effort") => &mut effort,
             _ => {
                 return Err(Failure::Execution(
-                    "decision:choice takes only the location, events and effort attributes",
+                    "decision:choice takes only the location and events attributes",
                 ));
             }
         };
@@ -660,15 +623,6 @@ fn choice<H: ChoiceHost>(
     {
         return Err(Failure::Execution("decision:choice holds no content"));
     }
-    let effort = effort
-        .map(|effort| {
-            Some(effort.trim())
-                .filter(|effort| !effort.is_empty())
-                .ok_or(Failure::Execution("decision:choice has an empty effort"))
-        })
-        .transpose()?
-        .map(|effort| read_effort(host, effort))
-        .transpose()?;
     let document = host
         .snapshot(&CHOICES_SNAPSHOT_EXCLUDE)
         .map_err(Failure::Host)?
@@ -680,9 +634,6 @@ fn choice<H: ChoiceHost>(
                 .iter()
                 .any(|descriptor| matches(descriptor, &entry.event))
         });
-    }
-    for entry in &mut choices {
-        entry.effort = effort;
     }
     host.assign(location, &Data::JsonArray(choices_json(&choices)))
         .map_err(Failure::Host)?
@@ -772,7 +723,11 @@ pub fn session_offers<E>(
     undeclared: Undeclared,
 ) -> Result<Vec<Choice>, Failure<E>> {
     let document: Json = serde_json::from_str(document).map_err(|_| malformed())?;
-    let root = document.pointer("/snapshot/root").ok_or_else(malformed)?;
+    // A document without its session object offers nothing, as
+    // `snapshot_choices` reads one.
+    let Some(root) = document.pointer("/snapshot/root") else {
+        return Ok(Vec::new());
+    };
     let declared = offerable(root)?;
     let walked = selection_walk(root, &mut |_| Ok(Guard::Unknown))?;
     Ok(walked
@@ -909,7 +864,8 @@ pub enum Guard {
 /// The choices of a `scxml.session-snapshot/v2` document: see the crate
 /// documentation ("The choices"). `guard` evaluates one transition's `cond`
 /// text: `Ok(Some(b))` for a boolean, `Ok(None)` for a failed or
-/// non-boolean evaluation.
+/// non-boolean evaluation, as [`ChoiceHost::guard`] answers; it is a thin
+/// wrapper over [`selection_walk`], whose [`Guard`] it maps that answer to.
 ///
 /// # Errors
 ///
@@ -1113,6 +1069,9 @@ mod guest {
             match data_model_host::evaluate(location) {
                 Ok(DataValue::JsonArray(text)) => Ok(Ok(Data::JsonArray(text))),
                 Ok(DataValue::JsonObject(text)) => Ok(Ok(Data::JsonObject(text))),
+                // A string is `<decision:offers>`' target; `<decision:pin>`
+                // refuses one where it reads an array, and `<decision:choice>`
+                // reads nothing.
                 Ok(DataValue::Text(text)) => Ok(Ok(Data::String(text))),
                 Ok(DataValue::Number(value)) => Ok(scxml_types::FiniteNumber::new(value)
                     .map(Data::Number)
@@ -1165,11 +1124,15 @@ mod guest {
         ) -> Result<SnapshotRead, ComponentError> {
             match session_snapshot_host::snapshot(&sections(exclude), Some(target)) {
                 Ok(document) => Ok(SnapshotRead::Document(document)),
-                // No running session of the run answers the target: nothing
-                // to read.
+                // `unavailable` with a target: the target is malformed or no
+                // running session of the run answers it (scxml.rs
+                // `session-snapshot.snapshot`). The no-image case it shares
+                // with the self read arises only outside `execute` or for a
+                // target naming the executing session, which no document
+                // reads its own offers with. Nothing to read.
                 Err(error) if error.code == ErrorCode::Unavailable => Ok(SnapshotRead::NotRunning),
                 // The call bound or a document bound: the element cannot
-                // read it (`error.execution`).
+                // read it (`error.execution`), as the self read above.
                 Err(error)
                     if recoverable(error.code) || error.code == ErrorCode::CapacityExhausted =>
                 {

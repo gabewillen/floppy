@@ -17,13 +17,11 @@
 //!
 //! The vision service is granted a scratch media directory holding a PNG
 //! (`tests/fixtures/total-due.png`) as `frame.png`. The lifecycle tests put
-//! `tests/fixtures/phase4/seeing_double.scx` in seeing's place: it offers
-//! unless its `mode` is `'silent'`, and the first `environment.visual` it
+//! `tests/fixtures/phase4/seeing_double.scx` in seeing's place: it is
+//! ready unless its `mode` is `'silent'`, and the first `environment.visual` it
 //! is sent ends it (it logs `double.end`), so the body gets
 //! `done.invoke.seeing` once it is active; with `mode` `'ending'` it ends
-//! right after offering, while the body activates. One test names a
-//! firmware (`firmware_src`) that ends the double before it starts, so
-//! seeing ends while the body waits for the firmware.
+//! right after its readiness, while the body activates.
 //!
 //! Seeing's own suite (`abilities/seeing/irp`, run by `document_irp.rs`)
 //! covers what seeing does with what it is sent; this covers what the body
@@ -122,12 +120,7 @@ fn layout(seeing: &Seeing, data: &[(&str, &str)]) -> PathBuf {
         abilities.join("identity/identity.scx"),
     )
     .expect("the input double is copyable");
-    std::fs::create_dir_all(abilities.join("cognition")).expect("creatable");
-    std::fs::copy(
-        workspace().join("tests/fixtures/phase4/cognition_double.scx"),
-        abilities.join("cognition/cognition.scx"),
-    )
-    .expect("the cognition double is copyable");
+    support::copy_cognition_double(&abilities);
     if let Seeing::Double(mode) = seeing {
         let double =
             std::fs::read_to_string(workspace().join("tests/fixtures/phase4/seeing_double.scx"))
@@ -314,8 +307,8 @@ fn with_seeing_on_a_visual_with_a_source_becomes_a_turn_whose_stimulus_is_a_sigh
 }
 
 #[test]
-fn with_seeing_on_activation_waits_for_its_offers() {
-    // The silent double never offers: the activation times out naming it.
+fn with_seeing_on_activation_waits_for_its_readiness() {
+    // The silent double is never ready: the activation times out naming it.
     let body = layout(
         &Seeing::Double("'silent'"),
         &[("activation_timeout_ms", "3000")],
@@ -358,7 +351,7 @@ fn with_seeing_on_its_ending_degrades_the_bot() {
 
 #[test]
 fn with_seeing_off_its_ending_while_activating_is_ignored() {
-    // The ending double offers and ends at once, while the body still
+    // The ending double is ready and ends at once, while the body still
     // waits for its other abilities: the activation does not fail.
     let body = layout(&Seeing::Double("'ending'"), &[]);
     let mut run = start(&body, &[]);
@@ -375,72 +368,6 @@ fn with_seeing_off_its_ending_while_activating_is_ignored() {
         order,
         vec!["double.end", "bot.activated"],
         "seeing ended while the bot activated"
-    );
-    assert!(
-        texts(&finished.all, "bot.activating.failed").is_empty(),
-        "{:?}",
-        finished.all
-    );
-    assert_eq!(
-        texts(&finished.all, "double.input"),
-        vec![r#"1 ignore "after""#]
-    );
-}
-
-/// A firmware for the firmware-starting test: on start it sends seeing,
-/// its sibling (`<body>.seeing`, decision D110), a visual, which ends the
-/// seeing double, and offers nothing 2 s later, so seeing ends while the
-/// body waits for it in `firmware_starting`.
-const ENDING_FIRMWARE: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
-<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="starting">
-  <state id="starting">
-    <onentry>
-      <send event="environment.visual" targetexpr="'#_scxml_' + _sessionid.slice(0, -'firmware'.length) + 'seeing'">
-        <content expr="({image: 'media/frame.png', media_type: 'image/png', source: 'camera-1'})"/>
-      </send>
-      <send event="started" delay="2s"/>
-    </onentry>
-    <transition event="started" target="running">
-      <send event="bot.ability.offers" target="#_parent">
-        <param name="ability" expr="'firmware'"/>
-        <param name="choices" expr="[]"/>
-      </send>
-    </transition>
-  </state>
-  <state id="running">
-    <transition event="*"/>
-  </state>
-</scxml>
-"##;
-
-#[test]
-fn with_seeing_off_its_ending_while_the_firmware_starts_is_ignored() {
-    // The abilities are ready (the double offers and waits); the firmware
-    // then ends the double and starts only after it ended: the activation
-    // does not fail.
-    let body = layout(
-        &Seeing::Double("'ready'"),
-        &[("firmware_src", "'seeing_firmware.scx'")],
-    );
-    support::write(
-        body.parent().expect("the body's directory"),
-        "seeing_firmware.scx",
-        ENDING_FIRMWARE,
-    );
-    let mut run = start(&body, &[]);
-    run.until(WAIT, label_is("bot.activated"));
-    run.event("bot.input", &input("ignore", "after"));
-    run.until(WAIT, label_is("bot.processing.completed"));
-    let finished = run.close(WAIT);
-    let order: Vec<String> = logs(&finished.all)
-        .into_iter()
-        .filter(|(label, _)| label == "double.end" || label == "bot.activated")
-        .map(|(label, _)| label)
-        .collect();
-    assert_eq!(
-        order,
-        vec!["double.end", "bot.activated"],
-        "seeing ended while the firmware started"
     );
     assert!(
         texts(&finished.all, "bot.activating.failed").is_empty(),
@@ -493,14 +420,14 @@ fn with_seeing_off_its_ending_is_ignored() {
 const VISION_INVOKE: &str =
     r#"<invoke id="vision" type="https://github.com/stateforward/floppy/services/vision">"#;
 
-/// A harness that invokes the seeing beside it and, once it offers, sends
+/// A harness that invokes the seeing beside it and, once it is ready, sends
 /// it a view and a look, then logs the sight it hands on (`harness.sight`)
 /// and ends.
 const TIMEOUT_HARNESS: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
   <state id="harness">
     <invoke id="seeing" type="scxml" src="seeing.scx"/>
-    <transition event="bot.ability.offers">
+    <transition event="bot.ability.ready">
       <send event="environment.visual" target="#_seeing">
         <content expr="({image: 'media/frame.png', media_type: 'image/png', source: 'camera-1'})"/>
       </send>

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- floppy-1: activated by every ability's offers, the bot takes a turn: probe(1) degrades it at turn 1. -->
+<!-- floppy-1: activated by every ability's readiness, the bot takes a turn: probe(1) degrades it at turn 1. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="floppy" type="scxml" src="../../../floppy.scx">

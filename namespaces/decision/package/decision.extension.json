@@ -4,7 +4,7 @@
   "package-version": "0.1.0",
   "extension-artifact": "floppy_decision.virtualized.wasm",
   "schema-artifact": "decision.xsd",
-  "schema-sha256": "20935c7cbf8780ef05d603b09cae0e47cb790dda7b5b8afead031194d82b0960",
+  "schema-sha256": "61b01f27cfc82678cb61bab9a5e80a412f9ffbd3c096deabb9595585ba5206d3",
   "wit-world": "stateforward:scxml/executable-content-extension",
   "wit-version": "0.2.0"
 }

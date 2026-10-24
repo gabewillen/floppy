@@ -51,15 +51,6 @@
     </test>
   </assert>
   <assert id="decision-6" specnum="6" specid="#decision-6">
-    <![CDATA[An effort, an expression of a whole number from 0 to 1000, is written as the effort of every choice <decision:choice> writes; a choice written without one carries none, and an effort that is not such a number raises error.execution and assigns nothing.]]>
-    <test id="440" conformance="mandatory" manual="false">
-      <start uri="440/test440.txml"/>
-    </test>
-    <test id="441" conformance="mandatory" manual="false">
-      <start uri="441/test441.txml"/>
-    </test>
-  </assert>
-  <assert id="decision-7" specnum="7" specid="#decision-7">
     <![CDATA[<decision:offers> writes, for the session its target names, one choice {event, schema, description?, effort?} per event its event:schema transitions without a cond take that its offerable data declares, with the declared effort, in the selection walk's order; a transition with a cond is never offered but still takes its events from later transitions, and undeclared="all" offers every such event.]]>
     <test id="450" conformance="mandatory" manual="false">
       <start uri="450/test450.txml"/>
@@ -68,7 +59,7 @@
       <start uri="451/test451.txml"/>
     </test>
   </assert>
-  <assert id="decision-8" specnum="8" specid="#decision-8">
+  <assert id="decision-7" specnum="7" specid="#decision-7">
     <![CDATA[A <decision:offers> target that no running session of the run answers assigns nothing and raises nothing; an offerable that is not an object of {effort?} entries raises error.execution and assigns nothing.]]>
     <test id="460" conformance="mandatory" manual="false">
       <start uri="460/test460.txml"/>

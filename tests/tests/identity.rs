@@ -11,12 +11,11 @@
 //! A bot is born nameless; a test that needs a name rewrites the identity's
 //! `<data id="name">`, which stands in for the invoker's `<param>`.
 //!
-//! The identity logs `identity.name`, `identity.heard`, `identity.offers`
-//! and `identity.adopt.failed`.
+//! The identity logs `identity.name`, `identity.heard` and
+//! `identity.adopt.failed`.
 //!
 //! The persona (`abilities/persona/persona.scx`), the bot's other sense of
-//! itself, is tested here too: it logs `persona.description` and
-//! `persona.offers`, and the body relays its `bot.ability.persona.output`
+//! itself, is tested here too: it logs `persona.description`, and the body relays its `bot.ability.persona.output`
 //! to the cognition, whose double a persona test rewrites to log it as
 //! `double.persona` (and to select a revision for the persona).
 //!
@@ -85,12 +84,7 @@ fn layout(name: Option<&str>) -> PathBuf {
         support::copy_ability(name, &dir.join("abilities"));
     }
     support::copy_listening(&dir.join("abilities"));
-    std::fs::create_dir_all(dir.join("abilities/cognition")).expect("creatable");
-    std::fs::copy(
-        workspace().join("tests/fixtures/phase4/cognition_double.scx"),
-        dir.join("abilities/cognition/cognition.scx"),
-    )
-    .expect("the double is copyable");
+    support::copy_cognition_double(&dir.join("abilities"));
     support::double_speech(&dir.join("abilities"), "'encode'");
     if let Some(name) = name {
         let path = dir.join("abilities/identity/identity.scx");
@@ -156,7 +150,7 @@ fn close(run: Run, test: &str) -> Vec<Json> {
 
 #[test]
 fn the_identity_is_ready_with_its_adopt_offer() {
-    let (run, records) = started(&layout(None));
+    let (mut run, records) = started(&layout(None));
     // The identity's first offers are part of the activation; the body
     // gives it a database, so it recalls from memory.
     assert!(texts(&records, "memory").is_empty(), "{records:?}");
@@ -164,12 +158,16 @@ fn the_identity_is_ready_with_its_adopt_offer() {
         texts(&records, "identity.name"),
         strings(&["recalled null"])
     );
-    assert_eq!(
-        texts(&records, "identity.offers")
-            .iter()
-            .map(|text| support::choice_names(text))
-            .collect::<Vec<_>>(),
-        strings(&["bot.ability.identity.adopt"])
+    // What it offers, the body reads from its live session each turn
+    // (decision D242): adopt, under the identity's session id.
+    run.event("bot.input", &input("ignore", "hello"));
+    let records = run.until(WAIT, label_is("double.choices"));
+    let choices = texts(&records, "double.choices");
+    assert_eq!(choices.len(), 1, "{records:?}");
+    assert!(
+        support::choice_names(&choices[0])
+            .contains("bot.ability.identity.adopt@session.floppy.identity"),
+        "{choices:?}"
     );
     close(run, "the_identity_is_ready_with_its_adopt_offer");
 }
@@ -293,7 +291,7 @@ fn an_adopted_name_is_answered_to() {
         texts(&records, "identity.name"),
         strings(&[r#"adopted "Floppy""#])
     );
-    // Back in knowing, it offers again, and now answers to the name.
+    // Back in knowing, it still offers adopt, and now answers to the name.
     run.event(
         "bot.ability.communication.input",
         &said("ignore hey floppy"),
@@ -305,12 +303,11 @@ fn an_adopted_name_is_answered_to() {
     );
     assert_eq!(texts(&records, "floppy.say"), strings(&["I am Floppy"]));
     let all = close(run, "an_adopted_name_is_answered_to");
-    assert_eq!(
-        texts(&all, "identity.offers")
+    assert!(
+        texts(&all, "double.choices")
             .iter()
-            .map(|text| support::choice_names(text))
-            .collect::<Vec<_>>(),
-        strings(&["bot.ability.identity.adopt", "bot.ability.identity.adopt"])
+            .all(|text| support::choice_names(text).contains("bot.ability.identity.adopt@")),
+        "{all:?}"
     );
 }
 
@@ -320,7 +317,11 @@ fn an_adopted_name_is_answered_to() {
 fn adopted_then_recalled(body: &Path, grant: &[String]) -> (Run, Vec<Json>) {
     let (mut run, _) = started_with(body, grant);
     run.event("bot.input", &input("adopt", "Floppy"));
-    run.until(WAIT, label_is("identity.offers"));
+    run.until(WAIT, |record| {
+        record["type"] == "log"
+            && record["label"] == "identity.name"
+            && record["text"] == r#"adopted "Floppy""#
+    });
     run.event("bot.input", &input("adopt", "Pip"));
     let records = run.until(WAIT, |record| {
         record["type"] == "log"
@@ -542,13 +543,7 @@ fn the_persona_tells_the_cognition_its_traits_and_no_description() {
         strings(&["recalled null"])
     );
     assert_eq!(persona_told(&records), vec![told(None)]);
-    assert_eq!(
-        texts(&records, "persona.offers")
-            .iter()
-            .map(|text| support::choice_names(text))
-            .collect::<Vec<_>>(),
-        strings(&["bot.ability.persona.revise"])
-    );
+    // Its revise is never read into a turn's choices (decision D242).
     run.event("bot.input", &input("ignore", "hello"));
     let records = run.until(WAIT, label_is("double.choices"));
     let choices = texts(&records, "double.choices");

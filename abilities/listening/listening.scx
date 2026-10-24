@@ -14,7 +14,7 @@
   (abilities/sensitivity/sensitivity.scx, the body's prediction) and
   <invoke id="interpretation">
   (abilities/interpretation/interpretation.scx, the slow half). Each
-  is ready with its first bot.ability.offers; initializing waits for both.
+  is ready when it sends bot.ability.ready; initializing waits for both.
   A child that cannot start, or ends, ends this ability in its final state
   degraded (the body then degrades the bot).
 
@@ -55,8 +55,8 @@
   (the one comparison is made at the end of the pipeline),
   so a voice detection backend the run does not configure fails it there.
 
-  Readiness: the entry into Perceiving sends bot.ability.offers {ability:
-  "listening", choices: []} to the body; it offers nothing (the
+  Readiness: the entry into Perceiving sends bot.ability.ready to the
+  body (decision D242); it offers nothing (the
   listening's input is not a tool event).
 
   Contracts: the events it takes reference abilities/schemas/ by
@@ -85,10 +85,7 @@
     <invoke id="sensitivity" type="scxml" src="../sensitivity/sensitivity.scx"/>
     <invoke id="interpretation" type="scxml" src="../interpretation/interpretation.scx"/>
 
-    <transition event="bot.ability.offers" event:schema="../schemas/bot.ability.offers.json">
-      <assign location="ready[_event.data.ability]" expr="true"/>
-    </transition>
-    <!-- A child's readiness (decision D242), named by its invoke id. -->
+    <!-- A child's readiness, once (decision D242), named by its invoke id. -->
     <transition event="bot.ability.ready" event:schema="../schemas/bot.ability.ready.json">
       <assign location="ready[_event.invokeid]" expr="true"/>
     </transition>
@@ -114,10 +111,7 @@
 
     <state id="Perceiving" initial="Listening">
       <onentry>
-        <send event="bot.ability.offers" target="#_parent">
-          <param name="ability" expr="'listening'"/>
-          <param name="choices" expr="[]"/>
-        </send>
+        <send event="bot.ability.ready" target="#_parent"/>
       </onentry>
       <!-- The body's report of what it is producing reaches the
            prediction from wherever perception happens to be. -->

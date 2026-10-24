@@ -34,7 +34,7 @@
   6.4), and the body has no cleanup states: an SCXML invoke cancel is
   synchronous, so deactivation and reboot have no cleanup to wait on or
   time out, and every reboot restarts the abilities from their documents. An ability is ready when it
-  sends its first bot.ability.offers; the body is active when every
+  sends bot.ability.ready, once a run (decision D242); the body is active when every
   expected ability is ready. A run-tagged activation timer
   (activation_timeout_ms), an error event, or an ability ending while
   activating (seeing only while its switch is on) fails the activation (bot.activating.failed) and ends the
@@ -126,12 +126,12 @@
   Seeing: the seeing_enabled <data> switch (false by default; the
   environment may pass it as a <param>, decision D107) decides whether the
   eye perceives. On, seeing is an expected ability (the body waits for its
-  offers), each environment.visual goes to it after the input abilities,
+  readiness), each environment.visual goes to it after the input abilities,
   its offer (bot.ability.seeing.look) is among the turn's choices, its
   sight comes back as bot.ability.cognition.input {stimulus:
   bot.ability.seeing.sight}, which is held and perceived like any handoff
   (Turns, below), and its ending degrades the bot. Off, seeing still runs
-  but is sent no stimulus, its offers are not taken and its ending is
+  but is sent no stimulus, its offer is not read and its ending is
   ignored (while activating, while the firmware starts and while active),
   so the bot behaves as without it.
 
@@ -181,8 +181,11 @@
   enum of the turn's focus_candidates, and
   <processing:collect_offered_events> tags every choice with the session id
   of the session that offers it (the target a stage sends it to): the
-  body's own with its _sessionid, each ability's latest bot.ability.offers
-  choices (but the persona's) with the ability's session id (<_sessionid>.<invoke id>, decision
+  body's own with its _sessionid, what each ability offers (but the
+  persona), read this turn from its live session with <decision:offers>
+  (decision D242: the events its offerable <data> declares, with their
+  efforts, that a transition without a cond takes; the firmware's every
+  such event), with the ability's session id (<_sessionid>.<invoke id>, decision
   D110), and, while a device is focused, the events its live session
   accepts, read this turn with <device:snapshot> (decision D109), each
   {event, schema: {type: object}} with the device's id (the device's own
@@ -219,8 +222,9 @@
   floppy's own log records, which are not events, are labelled floppy.*:
   floppy.output the turn's selected events (one record per completed turn),
   floppy.choices each turn's choices, floppy.focus each focus change,
-  floppy.held the number held after each arrival during a turn, and
-  floppy.released what was still held when the bot left active.
+  floppy.held the number held after each arrival during a turn,
+  floppy.released what was still held when the bot left active, and
+  floppy.offers.dropped each ability whose offer was over 32 KiB.
 
   Contracts: every event the body takes references its one schema file by
   event:schema: its own events in schemas/, and the abilities' events it
@@ -297,10 +301,12 @@
     <!-- The owner-written firmware: a document's URI, relative to this one, that the
          environment's <invoke> may give as a <param>; null runs
          firmware/firmware.scx, the firmware of a bot that has none, which offers
-         nothing and is not shown to the cognition. Its start is bounded
+         nothing and is not shown to the cognition. Its start (its session
+         answering a snapshot, checked every firmware_check_ms) is bounded
          by firmware_timeout_ms. -->
     <data id="firmware_src" expr="null"/>
     <data id="firmware_timeout_ms" expr="30000"/>
+    <data id="firmware_check_ms" expr="10"/>
     <!-- The firmware read this turn (<device:snapshot>), or null. -->
     <data id="firmware_snapshot" expr="null"/>
     <data id="processing_timeout_ms" expr="300000"/>
@@ -324,10 +330,9 @@
     <!-- The device being read (the <foreach> item). -->
     <data id="device" expr="null"/>
     <!-- Lifecycle: each entry into live is one run; the abilities expected
-         and the offers each has sent this run. -->
+         and those not yet ready this run. -->
     <data id="live_run" expr="0"/>
     <data id="expected" expr="['cognition', 'communication', 'identity', 'listening', 'stm', 'persona']"/>
-    <data id="offers" expr="({})"/>
     <data id="waiting" expr="[]"/>
     <!-- The input abilities each environment.* stimulus fans out to
          (as invoke ids), and the one being sent to. -->
@@ -364,7 +369,7 @@
     <data id="choices_over" expr="false"/>
     <data id="choices_size" expr="0"/>
     <!-- This turn's reads of what each ability offers (<decision:offers>,
-         decision D242): ability to its compacted choices. -->
+         decision D242): ability to its model-facing choices. -->
     <data id="read_offers" expr="({})"/>
     <data id="offers_over" expr="false"/>
     <data id="selections" expr="[]"/>
@@ -376,7 +381,6 @@
   <state id="live" initial="activating">
     <onentry>
       <assign location="live_run" expr="nextLiveRun()"/>
-      <assign location="offers" expr="({})"/>
       <assign location="waiting" expr="expectedAbilities()"/>
       <assign location="devices" expr="heldDevices()"/>
       <assign location="held" expr="[]"/>
@@ -411,15 +415,6 @@
     </invoke>
     <invoke id="seeing" type="scxml" src="../../abilities/seeing/seeing.scx"/>
 
-    <!-- Each ability's latest offers; the first of a run is its readiness. -->
-    <transition event="bot.ability.offers" event:schema="../../abilities/schemas/bot.ability.offers.json">
-      <if cond="isTakenOffer(_event)">
-        <assign location="offers[_event.data.ability]" expr="_event.data.choices"/>
-      </if>
-      <if cond="isWaiting(_event)">
-        <assign location="waiting" expr="waitingWithout(_event)"/>
-      </if>
-    </transition>
     <!-- An ability's readiness, once a run (decision D242): it is no longer
          waited for. -->
     <transition event="bot.ability.ready" event:schema="../../abilities/schemas/bot.ability.ready.json">
@@ -536,18 +531,31 @@
       <invoke id="firmware" type="scxml" srcexpr="firmwareSrc()"/>
 
       <!-- The last activation step: the
-           firmware is started when it sends its first bot.ability.offers;
-           a failure, an ability or the firmware ending, or no offers
-           within firmware_timeout_ms fails the activation. -->
+           firmware is started when its session answers a snapshot
+           (decision D242), checked at once and then every
+           firmware_check_ms; a failure, an ability or the firmware ending,
+           or no answer within firmware_timeout_ms fails the activation. -->
       <state id="firmware_starting">
         <onentry>
+          <assign location="firmware_snapshot" expr="null"/>
           <send id="firmware-timer" event="firmware_starting.after" delayexpr="delay(firmware_timeout_ms)">
+            <param name="run" expr="live_run"/>
+          </send>
+          <send event="firmware_starting.check">
             <param name="run" expr="live_run"/>
           </send>
         </onentry>
         <onexit>
           <cancel sendid="firmware-timer"/>
         </onexit>
+        <transition event="firmware_starting.check" cond="isCurrentRun(_event)">
+          <device:snapshot location="firmware_snapshot" target="firmwareTarget()"/>
+          <if cond="!isFirmwareStarted()">
+            <send event="firmware_starting.check" delayexpr="delay(firmware_check_ms)">
+              <param name="run" expr="live_run"/>
+            </send>
+          </if>
+        </transition>
         <transition cond="isFirmwareStarted()" target="active">
           <send event="bot.activated" target="#_parent">
             <content expr="emptyData()"/>
@@ -753,9 +761,12 @@
           </onentry>
           <!-- What each ability offers, read from its live session
                (decision D242), each in its own block so a read that fails
-               leaves the others (SCXML 4.9). Compacted as the abilities
-               compact their pushed offers; any difference from the pushed
-               offers is logged while both are read. -->
+               leaves the others (SCXML 4.9), and made model-facing
+               ($schema, title and examples dropped; over 32 KiB
+               descriptions dropped too; still over, the ability's offer is
+               empty and logged). The persona's is never read: only
+               reflection, composed with the same persona, may select a
+               revision. -->
           <onentry>
             <assign location="read_offers" expr="({})"/>
           </onentry>
@@ -766,10 +777,6 @@
             <if cond="offers_over">
               <log label="floppy.offers.dropped" expr="'cognition'"/>
             </if>
-            <log label="floppy.offers.cognition" expr="read_offers.cognition"/>
-            <if cond="offersDiffer('cognition')">
-              <log label="floppy.offers.differ" expr="'cognition'"/>
-            </if>
           </onentry>
           <onentry>
             <assign location="read_offers.communication" expr="[]"/>
@@ -778,10 +785,6 @@
             <if cond="offers_over">
               <log label="floppy.offers.dropped" expr="'communication'"/>
             </if>
-            <log label="floppy.offers.communication" expr="read_offers.communication"/>
-            <if cond="offersDiffer('communication')">
-              <log label="floppy.offers.differ" expr="'communication'"/>
-            </if>
           </onentry>
           <onentry>
             <assign location="read_offers.identity" expr="[]"/>
@@ -789,22 +792,6 @@
             <processing:model_facing_schema location="read_offers.identity" bound="32768" overlocation="offers_over"/>
             <if cond="offers_over">
               <log label="floppy.offers.dropped" expr="'identity'"/>
-            </if>
-            <log label="floppy.offers.identity" expr="read_offers.identity"/>
-            <if cond="offersDiffer('identity')">
-              <log label="floppy.offers.differ" expr="'identity'"/>
-            </if>
-          </onentry>
-          <onentry>
-            <assign location="read_offers.persona" expr="[]"/>
-            <decision:offers location="read_offers.persona" target="'#_persona'"/>
-            <processing:model_facing_schema location="read_offers.persona" bound="32768" overlocation="offers_over"/>
-            <if cond="offers_over">
-              <log label="floppy.offers.dropped" expr="'persona'"/>
-            </if>
-            <log label="floppy.offers.persona" expr="read_offers.persona"/>
-            <if cond="offersDiffer('persona')">
-              <log label="floppy.offers.differ" expr="'persona'"/>
             </if>
           </onentry>
           <onentry>
@@ -815,10 +802,6 @@
               <if cond="offers_over">
                 <log label="floppy.offers.dropped" expr="'seeing'"/>
               </if>
-              <log label="floppy.offers.seeing" expr="read_offers.seeing"/>
-              <if cond="offersDiffer('seeing')">
-                <log label="floppy.offers.differ" expr="'seeing'"/>
-              </if>
             </if>
           </onentry>
           <onentry>
@@ -828,10 +811,6 @@
               <processing:model_facing_schema location="read_offers.firmware" bound="32768" overlocation="offers_over"/>
               <if cond="offers_over">
                 <log label="floppy.offers.dropped" expr="'firmware'"/>
-              </if>
-              <log label="floppy.offers.firmware" expr="read_offers.firmware"/>
-              <if cond="offersDiffer('firmware')">
-                <log label="floppy.offers.differ" expr="'firmware'"/>
               </if>
             </if>
           </onentry>

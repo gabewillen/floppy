@@ -57,12 +57,7 @@ fn layout(data: &[(&str, &str)]) -> PathBuf {
     }
     support::copy_listening(&abilities);
     support::double_speech(&abilities, "'encode'");
-    std::fs::create_dir_all(abilities.join("cognition")).expect("creatable");
-    std::fs::copy(
-        workspace().join("tests/fixtures/phase4/cognition_double.scx"),
-        abilities.join("cognition/cognition.scx"),
-    )
-    .expect("the cognition double is copyable");
+    support::copy_cognition_double(&abilities);
     dir
 }
 

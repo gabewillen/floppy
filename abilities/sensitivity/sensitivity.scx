@@ -34,8 +34,8 @@
     amplitude_db) is learned and the level is 0; else the level is
     |observed - learned|. The gain is learned once and never retaught.
 
-  Readiness: on start it sends bot.ability.offers {ability:
-  "sensitivity", choices: []} to the listening; it offers nothing.
+  Readiness: on start it sends bot.ability.ready to the listening
+  (decision D242); it offers nothing.
 
   Contracts: the events it takes reference abilities/schemas/ by
   event:schema (never inline).
@@ -60,10 +60,7 @@
 
   <state id="Sensitivity" initial="quiet">
     <onentry>
-      <send event="bot.ability.offers" target="#_parent">
-        <param name="ability" expr="'sensitivity'"/>
-        <param name="choices" expr="[]"/>
-      </send>
+      <send event="bot.ability.ready" target="#_parent"/>
     </onentry>
 
     <!-- Nothing is being produced: all of the arrival survives. -->

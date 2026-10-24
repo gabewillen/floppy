@@ -12,7 +12,7 @@ through `scx run` with the real invoked services (a case's
 
 ## Statements
 
-- <a id="listening-1"></a>**listening-1**. It waits for both children, the sensitivity and the interpretation (each ready with its first `bot.ability.offers`), then sends `bot.ability.offers` `{ability: "listening", choices: []}` to its parent: it offers nothing.
+- <a id="listening-1"></a>**listening-1**. It waits for both children, the sensitivity and the interpretation (each ready when it sends `bot.ability.ready`), then sends `bot.ability.ready` to its parent (decision D242), with no data: it offers nothing.
 - <a id="listening-2"></a>**listening-2**. Each `environment.sound` is scored by the sensitivity (`bot.ability.listening.sensitivity.score` `{stimulus: {event: "environment.sound", data: <the sound>}}`) and the score goes on to the interpretation; the interpretation's speech product is handed to the parent as `bot.ability.cognition.input` `{stimulus: {event: "bot.ability.listening.speech.output", data: <the product>, source: "listening"}}`, the product's parent the sound's envelope.
 - <a id="listening-3"></a>**listening-3**. A sound is scored at its `received_level_db`: a product the interpretation finds below its threshold is dropped, a louder one handed on.
 - <a id="listening-4"></a>**listening-4**. The interpretation's own `bot.ability.cognition.input` (labelled non-speech) and its `bot.ability.listening.failed` `{stage, message}` go on to the parent unchanged.

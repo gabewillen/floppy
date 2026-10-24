@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- vocal-1: the vocal offers nothing on start. -->
+<!-- vocal-1: the vocal is ready on start. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="vocal" type="scxml" src="../../../vocal.scx">
@@ -12,7 +12,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'vocal' &amp;&amp; Array.isArray(_event.data.choices) &amp;&amp; _event.data.choices.length === 0 &amp;&amp; Object.keys(_event.data).length === 2" target="step1"/>
+    <transition event="bot.ability.ready" target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

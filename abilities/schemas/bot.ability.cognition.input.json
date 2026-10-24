@@ -94,7 +94,7 @@
     },
     "choices": {
       "default": [],
-      "description": "The turn's choices the body assembled: its own (bot.focus_device pinned to the turn's focus candidates) and each ability's latest bot.ability.offers choices tagged with the ability's invoke id as target; the body routes a selection to its target, or to itself when the choice has none [floppy field].",
+      "description": "The turn's choices the body assembled: its own (bot.focus_device pinned to the turn's focus candidates) and the choices each ability offers, read from its live session that turn (decision D242), tagged with the ability's invoke id as target; the body routes a selection to its target, or to itself when the choice has none [floppy field].",
       "items": {
         "additionalProperties": false,
         "properties": {
@@ -117,7 +117,7 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 1000,
-            "description": "How heavy an action the event is, as its offering ability declares it (<decision:choice effort>, decision D206); 0 when absent. A tier is offered only the choices within its effort ceiling [floppy field]."
+            "description": "How heavy an action the event is, as its offering ability declares it (its offerable data, decisions D206 and D242); 0 when absent. A tier is offered only the choices within its effort ceiling [floppy field]."
           }
         },
         "required": [

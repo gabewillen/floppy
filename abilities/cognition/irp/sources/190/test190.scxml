@@ -11,7 +11,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'cognition' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === &quot;bot.ability.cognition.ignore&quot; &amp;&amp; _event.data.choices[0].schema.title === undefined" target="step1"/>
+    <transition event="bot.ability.ready" target="step1"/>
   </state>
   <state id="step1">
     <onentry>
@@ -22,7 +22,6 @@
   <state id="step2">
     <transition target="pass"/>
   </state>
-  <transition event="bot.ability.offers"/>
   <transition event="bot.ability.identity.ask"/>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
 </state>

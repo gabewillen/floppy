@@ -11,11 +11,6 @@
 //!   grandchild names is resolved for the run, and leaving the root's
 //!   invoking state mid-request cancels the whole tree (exit handlers run
 //!   root first) and closes the request's connection.
-//! * (b) `choice_relay`: a child writes its choices with `<decision:choice>` and
-//!   sends it to its parent, which hands it to a third session whose
-//!   `decision` service invoke takes it as its `choices` param. Near the
-//!   64 KiB value bound the relay breaks in three different ways, each
-//!   pinned here.
 //! * (c) `replay`: events deferred into the data model and replayed with
 //!   `<send target="#_internal">` in `<foreach>` run before an external
 //!   event already pending, and lose `_event.invokeid` (the replay carries
@@ -43,15 +38,14 @@
 
 mod support;
 
-use std::fmt::Write as _;
 use std::io::{BufRead as _, BufReader, Read as _, Write as _};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use serde_json::{Map, Value as Json, json};
-use support::{Finished, Run, labelled, logs, scratch, service_uri, workspace};
+use serde_json::{Value as Json, json};
+use support::{Run, labelled, logs, scratch, service_uri, workspace};
 
 /// The fake key (not a secret): the mock checks it arrives as the bearer.
 const FAKE_KEY: &str = "sk-floppy-spike-fake";
@@ -87,42 +81,9 @@ fn completion(content: &str) -> String {
     .to_string()
 }
 
-/// The `system_one` answer choosing `order.ship`: the selection gives it
-/// 0.8, every fill question its first label.
-fn ship(body: &Json) -> Option<String> {
-    let questions = body.get("questions")?.as_object()?;
-    let mut answers = Map::new();
-    for (name, question) in questions {
-        let labels: Vec<&String> = question.get("criteria")?.as_object()?.keys().collect();
-        let mut probabilities = Map::new();
-        let choice = if name == "selection" {
-            let rest = f64::from(u32::try_from(labels.len().saturating_sub(1).max(1)).ok()?);
-            for label in &labels {
-                let share = if label.as_str() == "order.ship" {
-                    0.8
-                } else {
-                    0.2 / rest
-                };
-                probabilities.insert((*label).clone(), share.into());
-            }
-            "order.ship".to_owned()
-        } else {
-            let first = (*labels.first()?).clone();
-            probabilities.insert(first.clone(), 1.0.into());
-            first
-        };
-        answers.insert(
-            name.clone(),
-            json!({"type": "choice", "choice": choice, "confidence": 0.8, "probabilities": probabilities}),
-        );
-    }
-    Some(json!({"model": "jev-latest", "answers": answers, "usage": {"input_tokens": 1, "output_tokens": 1}}).to_string())
-}
-
 /// A deterministic fake backend on 127.0.0.1: `/text/...` streams a Chat
-/// Completions reply, `/hold/...` never answers and records when the
-/// client closes the connection, and `/ship/...` is a `system_one` backend
-/// choosing `order.ship`.
+/// Completions reply, and `/hold/...` never answers and records when the
+/// client closes the connection.
 struct Mock {
     origin: String,
     seen: Arc<Mutex<Vec<Seen>>>,
@@ -200,8 +161,6 @@ fn serve(mut stream: std::net::TcpStream, log: &Mutex<Vec<Seen>>) {
             "application/json",
             completion("Hello from the spike backend!"),
         ))
-    } else if target.starts_with("/ship/") {
-        ship(&body).map(|text| ("application/json", text))
     } else {
         None
     };
@@ -397,156 +356,6 @@ fn live_invoke_tree_generates_through_the_grandchild() {
 }
 
 // ---------------------------------------------------------------- spike (b)
-
-const DECISION_ENV: &str = "TYPESAFE_API_KEY={key}\nTYPESAFE_BASE_URL={base}\n";
-
-fn decision_env(test: &str, mock: &Mock) -> PathBuf {
-    env_file(
-        test,
-        &DECISION_ENV
-            .replace("{key}", FAKE_KEY)
-            .replace("{base}", &format!("{}/ship", mock.origin)),
-    )
-}
-
-#[test]
-fn a_childs_choice_relays_through_its_parent_to_a_third_sessions_decision() {
-    let mock = Mock::start();
-    let env = decision_env("choices-relay", &mock);
-    let mut run = Run::start(&args(&[env], &fixture("choice_relay/root.scx")), &[]);
-    run.end_input();
-    let finished = run.finish(Duration::from_secs(120));
-    let records = &finished.records;
-    assert!(support::finished(records), "{records:?}");
-    assert_eq!(
-        logs(records),
-        labelled(&[
-            ("offerer.choices.bytes", "504"),
-            ("root.choices.bytes", "504"),
-            ("chosen", r#"order.ship {"carrier":"fedex","sku":"A-1"}"#),
-        ]),
-        "{records:?}"
-    );
-    let seen = mock.seen();
-    let [Seen::Request { target, body, .. }] = seen.as_slice() else {
-        panic!("exactly one decision request: {seen:?}");
-    };
-    assert_eq!(target, "/ship/v1/systemone");
-    assert_eq!(
-        body["questions"]["selection"]["criteria"],
-        json!({
-            "order.ship": "Ship the order to the customer.",
-            "order.cancel": "Cancel the order.",
-            "__unhandled__": "None of these: leave the turn unhandled.",
-        }),
-        "the decider offers exactly the offerer's choices"
-    );
-}
-
-/// The choices relay with an offerer of 30 extra schema transitions whose
-/// descriptions are `pad` bytes long: its choices are `16464 + 60 * (pad - 200)`
-/// bytes (each description appears twice). `decide` keeps the decider hop; without it the root finishes on
-/// receiving the choices.
-fn big_choices(test: &str, pad: usize, decide: bool, env: &[PathBuf]) -> Finished {
-    let dir = support::unique_scratch(&format!("choices-{test}"));
-    let read = |name: &str| {
-        std::fs::read_to_string(fixture(&format!("choice_relay/{name}")))
-            .expect("the fixture is readable")
-    };
-    let mut root = read("root.scx");
-    if !decide {
-        root = root.replace(
-            r#"cond="_event.invokeid === 'offerer'" target="deciding""#,
-            r#"cond="_event.invokeid === 'offerer'" target="chosen""#,
-        );
-    }
-    let padding = "x".repeat(pad);
-    let mut extra = String::new();
-    for index in 0..30 {
-        writeln!(
-            extra,
-            "    <transition event=\"order.note{index}\" event:schema='{{\"description\":\"Note {index}: {padding}\",\"type\":\"object\",\"additionalProperties\":false}}' target=\"done\"/>"
-        )
-        .expect("writing to a String cannot fail");
-    }
-    let offerer = read("offerer.scx").replace(
-        "  </state>\n  <final",
-        &format!("{extra}  </state>\n  <final"),
-    );
-    support::write(&dir, "root.scx", &root);
-    support::write(&dir, "decider.scx", &read("decider.scx"));
-    support::write(&dir, "offerer.scx", &offerer);
-    let mut run = Run::start(&args(env, &dir.join("root.scx")), &[]);
-    run.end_input();
-    run.finish(Duration::from_secs(120))
-}
-
-#[test]
-fn a_choices_of_47364_bytes_relays_and_is_decided() {
-    let mock = Mock::start();
-    let env = decision_env("choices-47364", &mock);
-    let finished = big_choices("47364", 715, true, &[env]);
-    let records = &finished.records;
-    assert!(support::finished(records), "{records:?}");
-    assert_eq!(
-        logs(records),
-        labelled(&[
-            ("offerer.choices.bytes", "47364"),
-            ("root.choices.bytes", "47364"),
-            ("chosen", r#"order.ship {"carrier":"fedex","sku":"A-1"}"#),
-        ]),
-        "{records:?}"
-    );
-}
-
-/// A child's `#_parent` send whose data the child's own bound admits (a
-/// choice list of 48264 bytes, under 64 KiB) but whose event, with the raw
-/// message the SCXML processor renders, is over the 96 KiB event bound
-/// raises `error.execution` in the child; the parent never receives it and
-/// the tree keeps running (scxml.rs `bb917ad5` fixed the fatal
-/// `invalid-input` in the parent this used to pin).
-#[test]
-fn a_choices_of_48264_bytes_sent_to_the_parent_raises_error_execution_in_the_child() {
-    let finished = big_choices("48264", 730, false, &[]);
-    let records = &finished.records;
-    assert_eq!(
-        logs(records),
-        labelled(&[
-            ("offerer.choices.bytes", "48264"),
-            ("offerer.error", "error.execution"),
-        ]),
-        "the parent never receives the choices: {records:?}"
-    );
-    assert_eq!(support::closed_status(records).as_deref(), Some("running"));
-}
-
-#[test]
-fn a_choices_of_64464_bytes_is_written_but_its_send_raises_error_execution_in_the_child() {
-    let finished = big_choices("64464", 1000, false, &[]);
-    let records = &finished.records;
-    assert_eq!(
-        logs(records),
-        labelled(&[
-            ("offerer.choices.bytes", "64464"),
-            ("offerer.error", "error.execution"),
-        ]),
-        "the parent never receives the choices: {records:?}"
-    );
-    assert_eq!(support::closed_status(records).as_deref(), Some("running"));
-}
-
-#[test]
-fn a_choices_over_the_value_bound_is_never_written() {
-    let finished = big_choices("70464", 1100, false, &[]);
-    let records = &finished.records;
-    assert_eq!(
-        logs(records),
-        labelled(&[("offerer.error", "error.execution")]),
-        "<decision:choice> raises error.execution and assigns nothing: {records:?}"
-    );
-}
-
-// ---------------------------------------------------------------- spike (c)
 
 #[test]
 fn replayed_internal_events_run_before_a_pending_external_one_and_lose_their_invokeid() {

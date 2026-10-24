@@ -47,10 +47,7 @@ const DEAF_SPEAKING: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="speaking" initial="idle">
   <state id="idle">
     <onentry>
-      <send event="bot.ability.offers" target="#_parent">
-        <param name="ability" expr="'speaking'"/>
-        <param name="choices" expr="[]"/>
-      </send>
+      <send event="bot.ability.ready" target="#_parent"/>
     </onentry>
     <transition event="bot.ability.speaking.input">
       <log label="deaf.input" expr="_event.data.parts.map(function (part) { return part.words; }).join('')"/>
@@ -72,8 +69,8 @@ const COMMUNICATION_HARNESS: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
     <invoke id="communication" type="scxml" src="communication/communication.scx">
       <param name="environment" expr="_sessionid"/>
     </invoke>
-    <transition event="bot.ability.offers" cond="_event.invokeid === 'communication'">
-      <log label="harness.offers" expr="_event.data.ability"/>
+    <transition event="bot.ability.ready" cond="_event.invokeid === 'communication'">
+      <log label="harness.ready" expr="'communication'"/>
     </transition>
     <transition event="bot.ability.communication.failed bot.ability.speaking.output" cond="_event.invokeid === 'communication'">
       <log label="harness.answer" expr="_event.name + ' ' + JSON.stringify(_event.data)"/>
@@ -200,12 +197,7 @@ fn layout(speaking: &Speaking, edits: &[(&str, &[(&str, &str)])]) -> PathBuf {
         support::copy_ability(name, &abilities);
     }
     support::copy_listening(&abilities);
-    std::fs::create_dir_all(abilities.join("cognition")).expect("creatable");
-    std::fs::copy(
-        workspace().join("tests/fixtures/phase4/cognition_double.scx"),
-        abilities.join("cognition/cognition.scx"),
-    )
-    .expect("the double is copyable");
+    support::copy_cognition_double(&abilities);
     support::double_speech(&abilities, "'encode'");
     let speaking_path = abilities.join("speaking/speaking.scx");
     match speaking {
@@ -328,25 +320,12 @@ fn a_routed_response_is_said_and_recorded_in_the_conversation() {
     assert_eq!(texts(&records, "conversation"), strings(&["outbound 0"]));
     assert_eq!(texts(&records, "communication.exchange"), strings(&["1"]));
     assert!(texts(&records, "communication.product").is_empty());
-    // While the response is said it offers stop as well; back in active it
-    // offers again (its first offers came before the activation).
     let finished = close(
         run,
         "a_routed_response_is_said_and_recorded_in_the_conversation",
     );
     let mut all = records;
     all.extend(finished.records);
-    assert_eq!(
-        texts(&all, "communication.offers")
-            .iter()
-            .map(|text| support::choice_names(text))
-            .collect::<Vec<_>>(),
-        strings(&[
-            "bot.ability.communication.respond bot.ability.communication.stop",
-            "bot.ability.communication.respond"
-        ]),
-        "{all:?}"
-    );
     assert_eq!(
         texts(&all, "double.input"),
         strings(&[r#"1 reply "reply""#])
@@ -536,7 +515,7 @@ fn communication_hears_while_responding_and_never_reopens_a_finished_response() 
         ("held_responses_bound", "1"),
     ]);
     let mut run = Run::start(&[harness.display().to_string()], &[]);
-    let mut all = run.until(WAIT, label_is("harness.offers"));
+    let mut all = run.until(WAIT, label_is("harness.ready"));
     run.event("harness.r1", &json!({"parts": [{"words": "one"}]}));
     all.extend(run.until(WAIT, label_is("deaf.input")));
     // Heard while r1 is being said: the conversation commits it and its
@@ -610,8 +589,8 @@ const SPEAKING_HARNESS: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="harness" initial="run">
   <state id="run">
     <invoke id="speaking" type="scxml" src="speaking/speaking.scx"/>
-    <transition event="bot.ability.offers" cond="_event.invokeid === 'speaking'">
-      <log label="harness.offers" expr="_event.data.ability"/>
+    <transition event="bot.ability.ready" cond="_event.invokeid === 'speaking'">
+      <log label="harness.ready" expr="'speaking'"/>
     </transition>
     <transition event="bot.ability.failed bot.ability.speaking.output" cond="_event.invokeid === 'speaking'">
       <log label="harness.answer" expr="_event.name + ' ' + JSON.stringify(_event.data)"/>
@@ -638,7 +617,7 @@ const SPEAKING_HARNESS: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
 fn a_stop_ends_the_response_with_what_was_played() {
     let harness = communication_speaking(&[], &[("lookahead_ms", "4000")]);
     let mut run = Run::start(&[harness.display().to_string()], &[]);
-    let mut all = run.until(WAIT, label_is("harness.offers"));
+    let mut all = run.until(WAIT, label_is("harness.ready"));
     // 40 characters: the double measures 4 s.
     let text = "alpha bravo charlie delta echo foxtrot!!";
     run.event("harness.r1", &json!({"parts": [{"words": text}]}));
@@ -680,7 +659,7 @@ fn communication_streaming() -> PathBuf {
 fn a_streamed_response_plays_each_chunk_as_it_arrives() {
     let harness = communication_streaming();
     let mut run = Run::start(&[harness.display().to_string()], &[]);
-    let mut all = run.until(WAIT, label_is("harness.offers"));
+    let mut all = run.until(WAIT, label_is("harness.ready"));
     let text = "alpha bravo charlie delta";
     run.event("harness.r1", &json!({"parts": [{"words": text}]}));
     all.extend(run.until(WAIT, label_is("harness.answer")));
@@ -732,7 +711,7 @@ fn a_streamed_response_plays_each_chunk_as_it_arrives() {
 fn a_stop_mid_stream_says_what_played_and_cancels_the_rest() {
     let harness = communication_streaming();
     let mut run = Run::start(&[harness.display().to_string()], &[]);
-    let mut all = run.until(WAIT, label_is("harness.offers"));
+    let mut all = run.until(WAIT, label_is("harness.ready"));
     let text = "alpha bravo charlie delta";
     run.event("harness.r1", &json!({"parts": [{"words": text}]}));
     all.extend(run.until(WAIT, |record| {
@@ -773,7 +752,7 @@ fn a_stop_mid_stream_says_what_played_and_cancels_the_rest() {
 fn speaking_progress_keeps_a_long_response_from_timing_out() {
     let harness = communication_speaking(&[("response_timeout_ms", "1500")], &[]);
     let mut run = Run::start(&[harness.display().to_string()], &[]);
-    let mut all = run.until(WAIT, label_is("harness.offers"));
+    let mut all = run.until(WAIT, label_is("harness.ready"));
     let text = "alpha bravo charlie delta echo foxtrot!!";
     run.event("harness.r1", &json!({"parts": [{"words": text}]}));
     all.extend(run.until(WAIT, label_is("harness.answer")));
@@ -813,7 +792,7 @@ fn speaking_never_reopens_a_finished_utterance_and_bounds_the_ones_it_holds() {
     let harness = abilities.join("harness.scx");
     std::fs::write(&harness, SPEAKING_HARNESS).expect("the harness is writable");
     let mut run = Run::start(&[harness.display().to_string()], &[]);
-    let mut all = run.until(WAIT, label_is("harness.offers"));
+    let mut all = run.until(WAIT, label_is("harness.ready"));
     run.event("harness.u1", &json!({"parts": [{"words": "one"}]}));
     all.extend(run.until(WAIT, label_is("speech.encode")));
     run.event("harness.u1", &json!({"parts": [{"words": "one again"}]}));

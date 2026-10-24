@@ -9,7 +9,7 @@ FAILED = "bot.ability.conversation.failed"
 COGNITION = "bot.ability.cognition.input"
 SNAPSHOT = "bot.ability.conversation.snapshot.request"
 SNAPSHOT_OUT = "bot.ability.conversation.snapshot.output"
-READY = expect("bot.ability.offers", "_event.data.ability === 'conversation' && _event.data.choices.length === 0")
+READY = expect("bot.ability.ready")
 DB = "'/memory/floppy.sqlite'"
 # Memory under a loaded host can outlast the default 5 s bound: cases
 # that reach the sql service wait longer (the bound itself loses every race to an in-process child: no case can make it fire).
@@ -87,7 +87,7 @@ def exchange(count, cond=""):
 ALICE = [{"ref": "alice", "role": "source"}]
 ALICE_TO_BOT = [{"ref": "alice", "role": "source"}, {"ref": "bot", "role": "target"}]
 
-S.statement(1, "On start it sends `bot.ability.offers` `{ability: \"conversation\", choices: []}` to its parent: it offers nothing.")
+S.statement(1, "On start it sends `bot.ability.ready` to its parent (decision D242), with no data: it offers nothing.")
 S.statement(2, "A direct `bot.ability.conversation.input` (its parent the envelope `{event: \"bot.ability.conversation.input\", data}`) or a `bot.ability.conversation.routed_input` `{parent}` (the communication's envelope, whose data is the input) is committed as an inbound message (provenance event the parent's event; no sequence); an inbound commit of text hands the parent `bot.ability.cognition.input` `{stimulus, participants}` whose stimulus is `{event: \"bot.ability.conversation.output\", data: {parent, messages}, source: \"conversation\"}`, messages the exchange the commit opens.")
 S.statement(3, "Each input is one turn per source identity (names sorted, then embeddings), each exchanged with its own turn detector; what is committed is the turns' product: their stripped texts joined by spaces, each distinct text once, as `text/plain`; with no text, null content for audio and the input's content otherwise. Its provenance's turn_ref is the first turn's, `input-<n>:turn:<track>`. A commit that is not text answers `bot.ability.conversation.output` `{parent, messages}` itself.")
 S.statement(4, "Each input finds its relationship: targetless input shares the first targetless (ambient) relationship; other input takes the relationship whose source and target groups match, in either direction; with no match it begins its own, whose session_ref is `relationship-` and its context reference `{\"identity_groups\":[...]}`. The committed provenance's session_ref is the relationship's.")
@@ -100,7 +100,7 @@ S.statement(10, "An input its schema refuses is never routed here: the send rais
 S.statement(11, "Every output is the current exchange (decision D176), never the cumulative history: an inbound commit opens a new exchange, `[the inbound message]`, its input the exchange's `parent`; each outbound commit joins it; the next inbound replaces it, and nothing earlier is carried.")
 S.statement(12, "Every message carries `participants`, stamped by its producer and never inferred: an inbound message the turn's participants as `<conversation:turn_participants>` stamps them (its string source ids as `{ref, role: \"source\"}`, then its string target ids as `{ref, role: \"target\"}`; an embedding is no ref), which the cognition handoff carries too; an outbound message those its append carries (`[]` when it carries none).")
 
-S.case(100, 1, "the conversation offers nothing on start.", [READY])
+S.case(100, 1, "the conversation is ready on start.", [READY])
 
 S.case(110, 2, "a direct text input is committed and handed to the parent as a cognition input.",
        [READY, say("hello"),
