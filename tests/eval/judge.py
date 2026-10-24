@@ -45,7 +45,7 @@ JUDGE_SYSTEM = (
     "You grade how well floppy, a small companion robot bot, learns from what people tell it: its own name, "
     "reflexes (turn behaviors it learns and then runs on matching input without reasoning) and routines "
     "(persistent behaviors that act on a schedule with no input). You read one scenario run as a transcript of "
-    "its steps: what each person said, the bot's logs for that step, and what it said (floppy.say). "
+    "its steps: what each person said, the bot's logs for that step, and what it said (each reply a 'floppy says:' line, cut at 600 characters). "
     "Log meanings: identity.name 'adopted \"X\"' means the bot took X as its name, 'recalled \"X\"' that a "
     "restarted bot remembered it; identity.heard 'addressed as X' means it heard itself addressed. "
     "cognition.stage 'autonomy handled' means a learned behavior handled the turn (a real reflex); "
