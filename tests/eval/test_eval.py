@@ -86,6 +86,20 @@ class Scorer(unittest.TestCase):
         self.assertEqual(by["broken"], 1.0)
         self.assertEqual(by["no_ticks"], 1.0)
 
+    def test_a_break_by_the_learning_ability_is_broken(self):
+        scenario = self.scenarios["routine_reminder"]
+        session = [
+            log("reflection.inventory", "WaterReminder ACTIVE persistent [] (accept)"),
+            log("floppy.say", "Time to drink some water!"),
+            log("floppy.say", "Okay, I'll stop."),
+            log("learning.learned", "lesson of turn 6: WaterReminder ACTIVE persistent BROKEN"),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            write_job(directory, [session], [step(0, 0, 0, 1), step(0, 1, 1, 2, "wait"), step(0, 2, 2, 4), step(0, 3, 4, 4, "wait")])
+            _, results = score.score(scenario, score.load_job(directory))
+        by = {r["check"]: r["score"] for r in results}
+        self.assertEqual(by["broken"], 1.0)
+
     def test_a_name_is_adopted_recalled_and_heard(self):
         scenario = self.scenarios["name_adopt"]
         session0 = [log("identity.name", 'adopted "Juniper"'), log("identity.heard", "addressed as Juniper"),
@@ -111,6 +125,55 @@ class Builds(unittest.TestCase):
         self.assertEqual([(b["accepted"], b["attempts"], b["reason"], b["cause"]) for b in found],
                          [(True, 2, "done", ""), (False, 2, "no-progress", "validate XML001"), (False, 1, "unfinished", "")])
 
+    def test_a_failure_before_the_first_draft_is_its_build_s(self):
+        session = [
+            log("design", "plan"), log("retry_gate", "failure 1 of 8: generate author-failed (transport)"),
+            log("author", "create draft, attempt 1"), log("retry_gate", "failure 2 of 8: validate XML001"),
+            log("author", "repair draft, attempt 2"), log("done", "built PingPong in 2 attempt(s)"),
+        ]
+        found = score.builds({"steps": [], "sessions": [session], "done": True})
+        self.assertEqual([(b["accepted"], b["attempts"], b["diagnostics"][0][:9]) for b in found], [(True, 2, "failure 1")])
+
+    def test_a_build_cut_in_its_design_is_its_own(self):
+        session = [
+            log("design", "plan"),
+            log("design", "plan"), log("author", "create draft, attempt 1"), log("retry_gate", "failure 1 of 8: validate XML001"),
+            log("triage", "redesign"), log("design", "plan"), log("author", "create draft, attempt 2"),
+            log("done", "built PingPong in 2 attempt(s)"),
+        ]
+        found = score.builds({"steps": [], "sessions": [session], "done": True})
+        self.assertEqual([(b["accepted"], b["attempts"], b["reason"]) for b in found],
+                         [(False, 0, "unfinished"), (True, 2, "done")])
+
+    def test_two_builders_at_once_are_two_builds(self):
+        def at(where, label, text):
+            return {**log(label, text), "session": where}
+        learning, reflection = "session.learning.builder", "session.reflection.builder"
+        session = [
+            at(learning, "author", "create draft, attempt 1"),
+            at(reflection, "author", "change draft, attempt 1"),
+            at(learning, "retry_gate", "failure 1 of 8: validate XML001"),
+            at(learning, "author", "repair draft, attempt 2"),
+            at(reflection, "done", "built PingPong in 1 attempt(s)"),
+            at(learning, "failed", "attempts-exhausted: simulate test-failed"),
+        ]
+        found = score.builds({"steps": [], "sessions": [session], "done": True})
+        self.assertEqual(sorted((b["accepted"], b["attempts"], b["reason"], len(b["diagnostics"])) for b in found),
+                         [(False, 2, "attempts-exhausted", 2), (True, 1, "done", 0)])
+
+
+    def test_a_build_cut_before_a_draft_is_apart_unless_it_failed(self):
+        def build(attempts, failures, reason):
+            return {"accepted": reason == "done", "attempts": attempts, "failures": failures, "reason": reason,
+                    "cause": "", "diagnostics": []}
+        graded = [{"id": "a-pingpong-r0", "scenario": "pingpong", "learned_any": True,
+                   "builds": [build(0, 0, "unfinished"), build(0, 1, "unfinished"), build(1, 0, "done")]}]
+        _, summary = runner.builder_table([{"label": "a", "builder": "m"}], graded)
+        self.assertEqual((summary["a"]["builds"], summary["a"]["cut_before_draft"], summary["a"]["builder"]), (2, 1, "m"))
+        with tempfile.TemporaryDirectory() as directory:
+            runner.write_builder(directory, [{"label": "a", "builder": "m"}], graded)
+            with open(os.path.join(directory, "builder.json"), encoding="utf-8") as handle:
+                self.assertEqual(json.load(handle)["models"], {"a": "m"})
 
 class Codec(unittest.TestCase):
     def test_every_prompt_round_trips(self):
