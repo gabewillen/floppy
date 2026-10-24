@@ -1224,20 +1224,25 @@ fn people_attributes() -> Vec<Attribute> {
         attr("location", "people"),
         attr("input", "input"),
         attr("voices", "voices"),
-        attr("count", "count"),
+        attr("after", "after"),
     ]
 }
 
+/// A representative voice's compact text.
+fn voice(components: &[f64]) -> String {
+    encode_voice(components).expect("the voice has a norm")
+}
+
 /// What `<conversation:people_for_input>` assigns for `input`, the
-/// `voices` memory holds and its `count` of people.
-fn people_of(input: &Json, voices: &Json, count: f64) -> Json {
+/// representative `voices` memory holds and the people numbered `after`.
+fn people_of(input: &Json, voices: &Json, after: f64) -> Json {
     let assigned = run(
         "people_for_input",
         &people_attributes(),
         &[
             ("input", data(input)),
             ("voices", data(voices)),
-            ("count", number(count)),
+            ("after", number(after)),
         ],
     );
     let [(location, people)] = assigned.as_slice() else {
@@ -1247,32 +1252,66 @@ fn people_of(input: &Json, voices: &Json, count: f64) -> Json {
     people.clone()
 }
 
+/// Decision D205: a representative voice is compact, and decodes to its
+/// unit vector within the quantization.
+#[test]
+fn a_representative_voice_is_its_unit_vector_in_signed_bytes() {
+    assert_eq!(encode_voice(&[0.6, 0.8]).as_deref(), Some("i8:TGY="));
+    assert_eq!(encode_voice(&[3.0, 0.0, -4.0]).as_deref(), Some("i8:TACa"));
+    assert_eq!(encode_voice(&[1.0]).as_deref(), Some("i8:fw=="));
+    let decoded = decode_voice("i8:TGY=").expect("it decodes");
+    assert_eq!(decoded.len(), 2);
+    assert!((decoded[0] - 0.6).abs() < 0.005 && (decoded[1] - 0.8).abs() < 0.005);
+    // No norm: no representative.
+    assert_eq!(encode_voice(&[0.0, 0.0]), None);
+    assert_eq!(encode_voice(&[]), None);
+    assert_eq!(encode_voice(&[f64::NAN, 1.0]), None);
+    // Text of another form is a damaged row.
+    for damaged in [
+        "", "i8:", "TGU=", "i8:TGU", "i8:T=U=", "i8:TG!=", "f16:TGU=", "i8:AAA=",
+    ] {
+        assert_eq!(decode_voice(damaged), None, "{damaged}");
+    }
+    // A 256-dimensional voice is 347 characters, and keeps its cosine
+    // with the voice it came from.
+    let long: Vec<f64> = (0..256).map(|n| f64::from(n % 17) - 8.0).collect();
+    let text = voice(&long);
+    assert_eq!(text.len(), 347);
+    let back = decode_voice(&text).expect("it decodes");
+    assert!(cosine_similarity(&long, &back).expect("same size") > 0.999);
+}
+
 /// Decision D194: a voice memory holds is its person, by D90's match
 /// (cosine at 0.85, margin 0.05).
 #[test]
 fn a_voice_memory_holds_is_its_person() {
     let input = json!({"source_ids": [[0.3, 0.95]], "target_ids": ["floppy"], "content": "hi"});
-    let voices = json!([["person-1", "[0.28,0.96]"], ["person-2", "[0.96,-0.28]"]]);
+    let voices = json!([
+        ["person-1", voice(&[0.28, 0.96])],
+        ["person-2", voice(&[0.96, -0.28])]
+    ]);
     assert_eq!(
         people_of(&input, &voices, 2.0),
         json!({
             "input": {"source_ids": ["person-1"], "target_ids": ["floppy"], "content": "hi"},
             "people": [],
             "voices": [["person-1", "[0.3,0.95]"]],
+            "representatives": [],
         })
     );
 }
 
 #[test]
-fn a_voice_no_one_has_is_a_new_person_numbered_on_from_the_count() {
+fn a_voice_no_one_has_is_a_new_person_numbered_on_after_the_sequence() {
     let input = json!({"source_ids": [[0.96, -0.28], "alice"], "target_ids": []});
-    let voices = json!([["person-1", "[0.28,0.96]"]]);
+    let voices = json!([["person-1", voice(&[0.28, 0.96])]]);
     assert_eq!(
-        people_of(&input, &voices, 1.0),
+        people_of(&input, &voices, 7.0),
         json!({
-            "input": {"source_ids": ["person-2", "alice"], "target_ids": []},
-            "people": ["person-2"],
-            "voices": [["person-2", "[0.96,-0.28]"]],
+            "input": {"source_ids": ["person-8", "alice"], "target_ids": []},
+            "people": ["person-8"],
+            "voices": [["person-8", "[0.96,-0.28]"]],
+            "representatives": [["person-8", voice(&[0.96, -0.28])]],
         })
     );
     // With no people held, the first is person-1.
@@ -1300,6 +1339,7 @@ fn the_same_voice_twice_in_one_input_is_one_person() {
                 ["person-6", "[0,1]"],
                 ["person-6", "[0,1]"],
             ],
+            "representatives": [["person-5", voice(&[1.0, 0.0])], ["person-6", voice(&[0.0, 1.0])]],
         })
     );
 }
@@ -1357,9 +1397,9 @@ fn a_person_scores_their_closest_voice_and_two_close_people_are_no_ones() {
 fn a_damaged_voice_row_matches_no_one() {
     let input = json!({"source_ids": [[1, 0]], "target_ids": []});
     let voices = json!([
-        ["", "[1,0]"],
-        ["person-1", "not json"],
-        ["person-2", "[]"],
+        ["", voice(&[1.0, 0.0])],
+        ["person-1", "[1,0]"],
+        ["person-2", "i8:"],
         ["person-3", "{}"],
         ["person-4"],
         7
@@ -1370,34 +1410,204 @@ fn a_damaged_voice_row_matches_no_one() {
     );
 }
 
+/// Decision D205: identification reads one compact row per person, so
+/// two hundred people at 256 dimensions fit the 64 KiB value bound, and
+/// each voice still finds its own person among them.
+#[test]
+fn identification_holds_two_hundred_people_at_256_dimensions() {
+    let person = |n: usize| -> Vec<f64> {
+        (0..256)
+            .map(|d| {
+                if d == n % 256 {
+                    1.0
+                } else if d == (n * 7 + 3) % 256 {
+                    0.5
+                } else {
+                    0.0
+                }
+            })
+            .collect()
+    };
+    let voices: Vec<Json> = (0..170)
+        .map(|n| json!([format!("person-{}", n + 1), voice(&person(n))]))
+        .collect();
+    let text = Json::Array(voices.clone()).to_string();
+    assert!(text.len() < 64 * 1024, "{} bytes", text.len());
+    for n in [0, 41, 169] {
+        let input = json!({"source_ids": [person(n)], "target_ids": []});
+        assert_eq!(
+            people_of(&input, &Json::Array(voices.clone()), 170.0)["input"]["source_ids"],
+            json!([format!("person-{}", n + 1)]),
+            "{n}"
+        );
+    }
+}
+
+/// Decision D205: rest folds the voices heard since into a person's
+/// representative, a running mean of their directions.
+#[test]
+fn fold_voices_is_a_running_mean_of_directions() {
+    let folded = fold_voices(&voice(&[1.0, 0.0]), 1, &[json!("[0,2]")]);
+    assert_eq!(folded["weight"], json!(2));
+    assert_eq!(folded["folded"], json!(1));
+    let centroid = decode_voice(folded["centroid"].as_str().expect("a text")).expect("decodes");
+    assert!((centroid[0] - centroid[1]).abs() < 0.01, "{centroid:?}");
+    // The representative's weight counts: three voices to one.
+    let folded = fold_voices(&voice(&[1.0, 0.0]), 3, &[json!("[0,1]")]);
+    let centroid = decode_voice(folded["centroid"].as_str().expect("a text")).expect("decodes");
+    assert!(
+        (centroid[1] / centroid[0] - 1.0 / 3.0).abs() < 0.02,
+        "{centroid:?}"
+    );
+    assert_eq!(folded["weight"], json!(4));
+    // Damaged voices and voices of another size are skipped.
+    let folded = fold_voices(
+        &voice(&[1.0, 0.0]),
+        1,
+        &[
+            json!("not json"),
+            json!("[1,0,0]"),
+            json!("[0,0]"),
+            json!(7),
+        ],
+    );
+    assert_eq!(
+        folded,
+        json!({"centroid": voice(&[1.0, 0.0]), "weight": 1, "folded": 0})
+    );
+    // A damaged representative starts over from the voices.
+    let folded = fold_voices("i8:", 9, &[json!("[0,1]")]);
+    assert_eq!(
+        folded,
+        json!({"centroid": voice(&[0.0, 1.0]), "weight": 1, "folded": 1})
+    );
+}
+
+/// Decision D205: the two most alike people at D90's threshold merge, the
+/// newer into the older.
+#[test]
+fn people_to_merge_takes_the_most_alike_pair_into_the_older() {
+    let people = json!([
+        ["person-1", voice(&[1.0, 0.0]), 3],
+        ["person-2", voice(&[0.0, 1.0]), 1],
+        ["person-3", voice(&[0.95, 0.312_249_899_919_919_8]), 1],
+        ["person-4", voice(&[0.999, 0.044_710_177_812_216_3]), 1],
+    ]);
+    let merge = people_to_merge(people.as_array().expect("an array"));
+    assert_eq!(merge["into"], json!("person-1"));
+    assert_eq!(merge["from"], json!("person-4"));
+    assert_eq!(merge["weight"], json!(4));
+    let centroid = decode_voice(merge["centroid"].as_str().expect("a text")).expect("decodes");
+    assert!(centroid[0] > 0.99, "{centroid:?}");
+    // Below the threshold no one merges.
+    let apart = json!([
+        ["person-1", voice(&[1.0, 0.0]), 1],
+        ["person-2", voice(&[0.8, 0.6]), 1]
+    ]);
+    assert_eq!(
+        people_to_merge(apart.as_array().expect("an array")),
+        Json::Null
+    );
+    // Damaged rows are skipped.
+    let damaged = json!([
+        ["person-1", "x", 1],
+        ["", voice(&[1.0, 0.0]), 1],
+        ["person-3", voice(&[1.0, 0.0]), -1],
+        7
+    ]);
+    assert_eq!(
+        people_to_merge(damaged.as_array().expect("an array")),
+        Json::Null
+    );
+}
+
+/// Decision D205: a merged person's relationships keep the bytes the
+/// conversation computes for them.
+#[test]
+fn merged_context_refs_recompute_each_relationship() {
+    let refs = json!([
+        r#"{"identity_groups":[[],["person-2"]]}"#,
+        r#"{"identity_groups":[["person-10"],["person-2"]]}"#,
+        r#"{"identity_groups":[[],["person-10","person-2"]]}"#,
+        r#"{"identity_groups":[[],["person-3"]]}"#,
+        r#"{"identity_groups":[[],["person-20"]]}"#,
+        "not json",
+        r#"{"identity_groups":[[]]}"#,
+        7
+    ]);
+    assert_eq!(
+        merged_context_refs(refs.as_array().expect("an array"), "person-2", "person-10"),
+        json!([
+            [
+                r#"{"identity_groups":[[],["person-2"]]}"#,
+                r#"{"identity_groups":[[],["person-10"]]}"#
+            ],
+            [
+                r#"{"identity_groups":[["person-10"],["person-2"]]}"#,
+                r#"{"identity_groups":[["person-10"],["person-10"]]}"#
+            ],
+            [
+                r#"{"identity_groups":[[],["person-10","person-2"]]}"#,
+                r#"{"identity_groups":[[],["person-10"]]}"#
+            ],
+        ])
+    );
+}
+
+/// Asserts that `element` with `attributes` and `values` raises
+/// `error.execution` with `detail` and assigns nothing.
+fn assert_malformed(
+    element: &str,
+    attributes: &[Attribute],
+    values: Vec<(&str, Data)>,
+    detail: &str,
+) {
+    let mut host = FakeHost {
+        values: values
+            .into_iter()
+            .map(|(expression, value)| (expression.to_owned(), value))
+            .collect(),
+        ..FakeHost::default()
+    };
+    assert_eq!(
+        execution(execute(element, attributes, &[], &mut host)),
+        detail
+    );
+    assert!(host.assigned.is_empty());
+}
+
 #[test]
 fn malformed_people_for_input_raises_error_execution_and_assigns_nothing() {
     let input = data(&json!({"source_ids": [[1, 0]], "target_ids": []}));
-    for (attributes, values, detail) in [
+    for (element, attributes, values, detail) in [
         (
+            "people_for_input",
             vec![
                 attr("location", "people"),
                 attr("input", "input"),
                 attr("voices", "voices"),
             ],
             vec![],
-            "conversation:people_for_input requires a count",
+            "conversation:people_for_input requires after",
         ),
         (
+            "people_for_input",
             [people_attributes(), vec![attr("other", "x")]].concat(),
             vec![],
-            "conversation:people_for_input takes only the location, input, voices and count attributes",
+            "conversation:people_for_input takes only the location, input, voices and after attributes",
         ),
         (
+            "people_for_input",
             people_attributes(),
             vec![
                 ("input", data(&json!([]))),
                 ("voices", data(&json!([]))),
-                ("count", number(0.0)),
+                ("after", number(0.0)),
             ],
             "conversation:people_for_input input is not an object",
         ),
         (
+            "people_for_input",
             people_attributes(),
             vec![
                 (
@@ -1405,58 +1615,189 @@ fn malformed_people_for_input_raises_error_execution_and_assigns_nothing() {
                     data(&json!({"source_ids": [{"a": 1}], "target_ids": []})),
                 ),
                 ("voices", data(&json!([]))),
-                ("count", number(0.0)),
+                ("after", number(0.0)),
             ],
             "conversation:people_for_input input source_ids or target_ids is not an array of identities",
         ),
         (
+            "people_for_input",
             people_attributes(),
             vec![
                 ("input", input.clone()),
                 ("voices", data(&json!({}))),
-                ("count", number(0.0)),
+                ("after", number(0.0)),
             ],
             "conversation:people_for_input voices is not an array",
         ),
         (
+            "people_for_input",
             people_attributes(),
             vec![
                 ("input", input.clone()),
                 ("voices", data(&json!([]))),
-                ("count", number(1.5)),
+                ("after", number(1.5)),
             ],
-            "conversation:people_for_input count is not a whole number of people",
+            "conversation:people_for_input after is not a whole number",
         ),
         (
+            "people_for_input",
             people_attributes(),
             vec![
                 ("input", input.clone()),
                 ("voices", data(&json!([]))),
-                ("count", number(-1.0)),
+                ("after", number(-1.0)),
             ],
-            "conversation:people_for_input count is not a whole number of people",
+            "conversation:people_for_input after is not a whole number",
         ),
         (
+            "people_for_input",
             people_attributes(),
             vec![
                 ("input", input.clone()),
                 ("voices", data(&json!([]))),
-                ("count", Data::String("1".into())),
+                ("after", Data::String("1".into())),
             ],
-            "conversation:people_for_input count is not a whole number of people",
+            "conversation:people_for_input after is not a whole number",
         ),
     ] {
-        let mut host = FakeHost {
-            values: values
-                .into_iter()
-                .map(|(expression, value)| (expression.to_owned(), value))
-                .collect(),
-            ..FakeHost::default()
-        };
-        assert_eq!(
-            execution(execute("people_for_input", &attributes, &[], &mut host)),
-            detail
-        );
-        assert!(host.assigned.is_empty());
+        assert_malformed(element, &attributes, values, detail);
     }
+}
+
+#[test]
+fn malformed_consolidation_elements_raise_error_execution_and_assign_nothing() {
+    let fold = || {
+        vec![
+            attr("location", "l"),
+            attr("centroid", "c"),
+            attr("weight", "w"),
+            attr("voices", "v"),
+        ]
+    };
+    for (element, attributes, values, detail) in [
+        (
+            "fold_voices",
+            fold()[..3].to_vec(),
+            vec![],
+            "conversation:fold_voices requires voices",
+        ),
+        (
+            "fold_voices",
+            fold(),
+            vec![
+                ("c", Data::String(String::new())),
+                ("w", number(1.0)),
+                ("v", data(&json!([]))),
+            ],
+            "conversation:fold_voices centroid is not a string",
+        ),
+        (
+            "fold_voices",
+            fold(),
+            vec![
+                ("c", Data::String("i8:fw==".into())),
+                ("w", number(0.5)),
+                ("v", data(&json!([]))),
+            ],
+            "conversation:fold_voices weight is not a whole number",
+        ),
+        (
+            "fold_voices",
+            fold(),
+            vec![
+                ("c", Data::String("i8:fw==".into())),
+                ("w", number(1.0)),
+                ("v", data(&json!({}))),
+            ],
+            "conversation:fold_voices voices is not an array",
+        ),
+        (
+            "people_to_merge",
+            vec![attr("location", "l")],
+            vec![],
+            "conversation:people_to_merge requires people",
+        ),
+        (
+            "people_to_merge",
+            vec![attr("location", "l"), attr("people", "p")],
+            vec![("p", Data::String("x".into()))],
+            "conversation:people_to_merge people is not an array",
+        ),
+        (
+            "merged_context_refs",
+            vec![attr("location", "l"), attr("refs", "r"), attr("from", "f")],
+            vec![],
+            "conversation:merged_context_refs requires into",
+        ),
+        (
+            "merged_context_refs",
+            vec![
+                attr("location", "l"),
+                attr("refs", "r"),
+                attr("from", "f"),
+                attr("into", "i"),
+            ],
+            vec![
+                ("r", data(&json!([]))),
+                ("f", number(1.0)),
+                ("i", Data::String("person-1".into())),
+            ],
+            "conversation:merged_context_refs from is not a person",
+        ),
+    ] {
+        assert_malformed(element, &attributes, values, detail);
+    }
+}
+
+#[test]
+fn the_people_elements_write_their_locations() {
+    let assigned = run(
+        "fold_voices",
+        &[
+            attr("location", "l"),
+            attr("centroid", "c"),
+            attr("weight", "w"),
+            attr("voices", "v"),
+        ],
+        &[
+            ("c", Data::String(voice(&[1.0, 0.0]))),
+            ("w", number(1.0)),
+            ("v", data(&json!(["[1,0]"]))),
+        ],
+    );
+    assert_eq!(assigned[0].0, "l");
+    assert_eq!(
+        assigned[0].1,
+        json!({"centroid": voice(&[1.0, 0.0]), "weight": 2, "folded": 1})
+    );
+    let assigned = run(
+        "people_to_merge",
+        &[attr("location", "l"), attr("people", "p")],
+        &[("p", data(&json!([])))],
+    );
+    assert_eq!(assigned, [("l".to_owned(), Json::Null)]);
+    let assigned = run(
+        "merged_context_refs",
+        &[
+            attr("location", "l"),
+            attr("refs", "r"),
+            attr("from", "f"),
+            attr("into", "i"),
+        ],
+        &[
+            (
+                "r",
+                data(&json!([r#"{"identity_groups":[[],["person-2"]]}"#])),
+            ),
+            ("f", Data::String("person-2".into())),
+            ("i", Data::String("person-1".into())),
+        ],
+    );
+    assert_eq!(
+        assigned[0].1,
+        json!([[
+            r#"{"identity_groups":[[],["person-2"]]}"#,
+            r#"{"identity_groups":[[],["person-1"]]}"#
+        ]])
+    );
 }

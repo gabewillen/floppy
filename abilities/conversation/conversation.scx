@@ -9,8 +9,8 @@
   bot.ability.conversation.input is taken too.
 
     inactive -input-> active { waiting -input-> running -> waiting }
-    running { identifying_from -> identifying_memory? -> tagging_memory?
-              -> relating -> recalling_from -> recalling_memory?
+    running { identifying_from -> identifying_memory? -> numbering_from?
+              -> numbering_memory? -> tagging_memory? -> relating -> recalling_from -> recalling_memory?
               -> turn_exchange { readiness -> exchanging } (per source)
               -> remembering_from -> remembering_memory? -> committing }
     append, snapshot.request (any state)
@@ -36,25 +36,40 @@
   remember restores the participants the relationship had before the input,
   so a participant stays one while it has a detector.
 
-  People (decision D194): long-term memory holds people, each a stable
-  participant ref person-<n> with the voice embeddings heard for them
-  (bot_person, and bot_person_embedding of kind voice). With a database,
-  an input with an embedding among its identities is identified before
-  its relationship is found: identifying_memory invokes the memory ability
-  as "identify" with the voice each person was first heard with (oldest
-  first) and the number of people, and <conversation:people_for_input>
-  matches each embedding by the relationships' match (cosine at 0.85, its
-  margin 0.05, decision D90): the closest person, unless another comes
-  within the margin, else a new person numbered on from the count. The
-  input in hand then holds each person's ref in its embedding's place, so
-  its relationship, turns, participants, memory and committed message key
-  on the person; tagging_memory then invokes it as "tag" to store the new
-  people and every voice heard, each for its person, in one transaction.
-  Each is bounded by memory_timeout_ms; a failure or timeout answers
-  bot.ability.conversation.failed {stage: "memory", message} and commits
-  nothing. Without a database there are no people: an embedding is its own
-  participant (D79). Faces, the bot's own voice and rest's consolidation
-  (D195) are not built.
+  People (decisions D194 and D205): long-term memory holds people, each a
+  stable participant ref person-<n> with the voice embeddings heard for
+  them (bot_person, and bot_person_embedding of kind voice) and one
+  representative voice (bot_person_centroid: its compact text, which the
+  cognition's rest reinforces, abilities/consolidation/consolidation.scx).
+  With a database, an input with an embedding among its identities is
+  identified before its relationship is found: identifying_memory invokes
+  the memory ability as "identify" with one read, every person's
+  representative (oldest person first), and
+  <conversation:people_for_input> matches each embedding by the
+  relationships' match (cosine at 0.85, its margin 0.05, decision D90):
+  the closest person, unless another comes within the margin, else a new
+  person. When the input has new people, numbering_memory invokes it as
+  "number" to take as many numbers from the people sequence (bot_sequence
+  person, one upsert), and the input is matched again with the new people
+  numbered on after the numbers taken before (the same match, so the same
+  people), never from a count, so two bots on one database never number
+  two people alike. The input in hand then holds each person's ref in its
+  embedding's place, so its relationship, turns, participants, memory and
+  committed message key on the person; tagging_memory then invokes it as
+  "tag" to store the new people, every voice heard (each for its person,
+  skipped when its person is no longer held: rest merged them meanwhile)
+  and each new person's first voice as their representative, in one
+  transaction. Each is bounded by memory_timeout_ms; a failure or timeout
+  answers bot.ability.conversation.failed {stage: "memory", message} and
+  commits nothing (numbers taken stay taken, as a sequence's do). Reading
+  one compact row per person, identification holds about 100 people at
+  256 dimensions: the memory ability's output event carries a result of
+  about 43 KB and not one of about 47 KB (measured; a row is about 430
+  bytes with its columns), and past it the identification times out at
+  the memory stage. The namespace element's 64 KiB value bound (about 170
+  people) and the sql service's 88 KiB result bound are above it.
+  Without a database there are no people: an embedding is its own
+  participant (D79). Faces and the bot's own voice are not built.
 
   Memory (before and after the turns):
   with a database (the <param> database, the memory database file) it
@@ -208,13 +223,17 @@
     <data id="recalled" expr="0"/>
     <!-- The input as <memory:to_json> writes it, to remember. -->
     <data id="memory_payload" expr="null"/>
-    <!-- People (decision D194): the voice each person was first heard
-         with, the number of people, a new person, a voice heard for one;
-         and what <conversation:people_for_input> made of the input. -->
-    <data id="voice_select" expr="'SELECT person_id, embedding FROM bot_person_embedding AS e WHERE kind = ?1 AND seq = (SELECT MIN(seq) FROM bot_person_embedding AS f WHERE f.kind = e.kind AND f.person_id = e.person_id) ORDER BY seq'"/>
-    <data id="people_count_select" expr="'SELECT COUNT(*) FROM bot_person'"/>
+    <!-- People (decisions D194 and D205): every person's representative
+         voice, numbers taken from the people sequence, a new person, a
+         voice heard for one (while they are held), a new person's
+         representative; the representatives read, and what
+         <conversation:people_for_input> made of the input. -->
+    <data id="voice_select" expr="'SELECT person_id, centroid FROM bot_person_centroid WHERE kind = ?1 ORDER BY first_seq, person_id'"/>
+    <data id="sequence_next" expr="'INSERT INTO bot_sequence (name, value) VALUES (?1, ?2) ON CONFLICT (name) DO UPDATE SET value = bot_sequence.value + excluded.value RETURNING value'"/>
     <data id="person_insert" expr="'INSERT INTO bot_person (person_id) VALUES (?1)'"/>
-    <data id="voice_insert" expr="'INSERT INTO bot_person_embedding (person_id, kind, embedding) VALUES (?1, ?2, ?3)'"/>
+    <data id="voice_insert" expr="'INSERT INTO bot_person_embedding (person_id, kind, embedding) SELECT CAST(?1 AS TEXT), CAST(?2 AS TEXT), CAST(?3 AS TEXT) WHERE EXISTS (SELECT 1 FROM bot_person WHERE person_id = ?1)'"/>
+    <data id="representative_insert" expr="'INSERT INTO bot_person_centroid (person_id, kind, centroid, weight, first_seq, through_seq) SELECT CAST(?1 AS TEXT), CAST(?2 AS TEXT), CAST(?3 AS TEXT), 1, MIN(seq), MIN(seq) FROM bot_person_embedding WHERE person_id = ?1 AND kind = ?2'"/>
+    <data id="held_voices" expr="[]"/>
     <data id="people" expr="null"/>
   </datamodel>
   <script src="conversation.js"/>
@@ -284,10 +303,9 @@
             <param name="database" expr="database"/>
             <param name="statements" expr="identifyStatements()"/>
           </invoke>
-          <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="tagging_memory">
-            <conversation:people_for_input location="people" input="input" voices="heardVoices(_event)"
-                                           count="peopleCount(_event)"/>
-            <assign location="input" expr="people.input"/>
+          <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="numbering_from">
+            <assign location="held_voices" expr="heardVoices(_event)"/>
+            <conversation:people_for_input location="people" input="input" voices="held_voices" after="0"/>
           </transition>
           <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="waiting">
             <send event="bot.ability.conversation.failed" target="#_parent">
@@ -302,8 +320,50 @@
             </send>
           </transition>
         </state>
-        <!-- Store the new people and every voice heard, each for its
-             person. -->
+        <!-- New people take their numbers from the people sequence. -->
+        <state id="numbering_from">
+          <transition cond="hasNewPeople()" target="numbering_memory"/>
+          <transition target="tagging_memory">
+            <assign location="input" expr="people.input"/>
+          </transition>
+        </state>
+        <state id="numbering_memory">
+          <onentry>
+            <send id="number-after" event="numbering_memory.after" delayexpr="memoryTimeoutDelay()"/>
+          </onentry>
+          <onexit>
+            <cancel sendid="number-after"/>
+          </onexit>
+          <invoke id="number" type="scxml" src="../memory/memory.scx">
+            <param name="database" expr="database"/>
+            <param name="statements" expr="numberStatements()"/>
+          </invoke>
+          <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="tagging_memory">
+            <conversation:people_for_input location="people" input="input" voices="held_voices"
+                                           after="numbersBefore(_event)"/>
+            <assign location="input" expr="people.input"/>
+          </transition>
+          <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="waiting">
+            <send event="bot.ability.conversation.failed" target="#_parent">
+              <param name="stage" expr="'memory'"/>
+              <param name="message" expr="memoryFailedMessage(_event)"/>
+            </send>
+          </transition>
+          <transition event="numbering_memory.after" target="waiting">
+            <send event="bot.ability.conversation.failed" target="#_parent">
+              <param name="stage" expr="'memory'"/>
+              <param name="message" expr="'Conversation memory numbering timed out.'"/>
+            </send>
+          </transition>
+          <transition event="error.*" target="waiting">
+            <send event="bot.ability.conversation.failed" target="#_parent">
+              <param name="stage" expr="'memory'"/>
+              <param name="message" expr="identifyErrorMessage(_event)"/>
+            </send>
+          </transition>
+        </state>
+        <!-- Store the new people, every voice heard, each for its person,
+             and each new person's representative. -->
         <state id="tagging_memory">
           <onentry>
             <send id="tag-after" event="tagging_memory.after" delayexpr="memoryTimeoutDelay()"/>

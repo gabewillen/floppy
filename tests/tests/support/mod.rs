@@ -958,6 +958,9 @@ pub fn copy_ability(name: &str, abilities: &Path) -> PathBuf {
     if name == "autonomy" {
         copy_ability("candidates_runner", abilities);
     }
+    if name == "consolidation" {
+        copy_ability("memory", abilities);
+    }
     if name == "seeing" {
         copy_ability("object_detection", abilities);
         copy_ability("description", abilities);

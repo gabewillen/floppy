@@ -256,6 +256,7 @@ D33 to D43.
 | A routine's next `at` occurrence | `next_after` in `abilities/reflection/reflection.js`, carried by a routine as data (a draft cannot use a namespace element: `<scx:validate>` binds no package, D116) | routine ECMAScript |
 | A behavior's input | `<autonomy:behavior_input_payload>` (D116) | `namespaces/autonomy` element |
 | Cognition | `abilities/cognition/cognition.scx` | ability `.scx` child |
+| Rest and consolidation (reinforcing each person's representative voice, merging duplicate people) | the cognition's `idle { awake, resting }`: on resting it invokes `abilities/consolidation/consolidation.scx` over the memory ability with `<conversation:fold_voices>`, `<conversation:people_to_merge>` and `<conversation:merged_context_refs>`; input cancels it (D195, D205) | ability `.scx` child + namespace |
 | Autonomy | `abilities/autonomy/autonomy.scx` (phase 5: the inventory's ACTIVE turn behaviors the stimulus triggers run as `<invoke srcexpr>` children of the chain `abilities/candidates_runner/candidates_runner.scx`, D93, each by its row's path, D121) | stage `.scx` child |
 | Intuition | `abilities/intuition/intuition.scx` invoking `services/decision` | stage `.scx` child and service |
 | Reasoning | `abilities/reasoning/reasoning.scx` invoking `services/generate` | stage `.scx` child and service |
@@ -278,9 +279,9 @@ D33 to D43.
 | Object detection, description | `abilities/object_detection/object_detection.scx`, `abilities/description/description.scx`: seeing's per-view stage children over `services/generate`, whose cancel ends a stuck stage (D186) | stage `.scx` child and service |
 | Face detection, face identity | not built until decision 6 (D188) | open |
 | The turn detector | `abilities/turn_detector/turn_detector.scx`, which the conversation invokes once per source of each input (its `turn_exchange`; decisions D76 to D79, [conventions](#turn-detector-conventions)) | ability `.scx` child |
-| People: matching a voice to a person in long-term memory | the conversation's `identifying_memory` and `tagging_memory` over the memory ability (`bot_person`, `bot_person_embedding`) with `<conversation:people_for_input>`; faces, the bot's own voice and consolidation are not built (D194, D204) | ability `.scx` child + namespace |
+| People: matching a voice to a person in long-term memory | the conversation's `identifying_memory`, `numbering_memory` and `tagging_memory` over the memory ability (`bot_person`, `bot_person_embedding`, each person's compact representative in `bot_person_centroid`, new people numbered from `bot_sequence`) with `<conversation:people_for_input>`; faces and the bot's own voice are not built (D194, D204, D205) | ability `.scx` child + namespace |
 | The body's short-term register (`bot.register`) of admitted stimuli and of heard and said turns | `abilities/stm/stm.scx`, the body's long-lived child `stm` over the memory ability (`bot_stm_memory`, `bot_stm_turn`); the body builds each admitted stimulus's record with `<memory:stm_projection>`, and a turn's producer cuts its words with `<memory:cut_at_word>` (no child writes turns yet) | ability `.scx` child |
-| Learning; short- and long-term memory, consolidation, associative memory, memory classification and generation; text generation for host turns | not built: Learning is #16, associative memory and consolidation are the [graph memory plan](plans/graph-memory.md). floppy's memory is the Memory ability | open |
+| Learning; short- and long-term memory, consolidation into episodes and links, associative memory, memory classification and generation; text generation for host turns | not built: Learning is #16, associative memory and consolidation are the [graph memory plan](plans/graph-memory.md). floppy's memory is the Memory ability | open |
 | payload validators | `event:schema` on the receiving transition plus a short correlation cond | `event:schema` |
 
 ### Builder output

@@ -73,7 +73,8 @@ function hasAllTurns() {
   return turn_index >= turn_sources.length;
 }
 
-// identifying_from, identifying_memory and tagging_memory (decision D194)
+// identifying_from, identifying_memory, numbering_from, numbering_memory and
+// tagging_memory (decisions D194 and D205)
 
 // Nothing to identify: no memory, or no embedding among the input's
 // identities.
@@ -81,23 +82,34 @@ function isUnidentified() {
   return database === null || !input.source_ids.concat(input.target_ids).some(Array.isArray);
 }
 
-// The voice each person was first heard with, and the number of people.
+// Every person's representative voice (decision D205).
 function identifyStatements() {
-  return [{sql: voice_select, parameters: ['voice']}, {sql: people_count_select}];
+  return [{sql: voice_select, parameters: ['voice']}];
 }
 
-// The voices memory holds, [person_ref, embedding] each.
+// The representatives memory holds, [person_ref, voice] each.
 function heardVoices(_event) {
   return _event.data.results[0].rows.map(function (row) { return row.values; });
 }
 
-function peopleCount(_event) {
-  return Number(_event.data.results[1].rows[0].values[0]);
+function hasNewPeople() {
+  return people !== null && people.people.length > 0;
 }
 
-// The new people, then every voice heard, each for its person.
+// The new people's numbers, taken from the people sequence.
+function numberStatements() {
+  return [{sql: sequence_next, parameters: ['person', people.people.length]}];
+}
+
+// The last number taken before this input's.
+function numbersBefore(_event) {
+  return Number(_event.data.results[0].rows[0].values[0]) - people.people.length;
+}
+
+// The new people, then every voice heard, each for its person, then the
+// new people's representatives.
 function tagStatements() {
-  return people.people.map(personStatement).concat(people.voices.map(voiceStatement));
+  return people.people.map(personStatement).concat(people.voices.map(voiceStatement), people.representatives.map(representativeStatement));
 }
 
 function personStatement(person) {
@@ -106,6 +118,10 @@ function personStatement(person) {
 
 function voiceStatement(voice) {
   return {sql: voice_insert, parameters: [voice[0], 'voice', voice[1]]};
+}
+
+function representativeStatement(representative) {
+  return {sql: representative_insert, parameters: [representative[0], 'voice', representative[1]]};
 }
 
 function identifyErrorMessage(_event) {
