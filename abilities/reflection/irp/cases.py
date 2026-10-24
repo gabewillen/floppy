@@ -39,8 +39,6 @@ def persona_turn(n):
     return js(data)
 
 
-
-
 def completion(content):
     return {"object": "chat.completion",
             "choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": content}}]}
@@ -219,3 +217,10 @@ S.case(200, 11, "a selected persona revision is sent to the invoker, then the ou
 S.case(201, 11, "two selected revisions, refused twice running, fail the turn.",
        [send(INPUT, persona_turn(1)), failed_prefix("Selection rejected: select at most one")],
        params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(REVISE, REVISE), select(REVISE, REVISE)], clock="wall")
+S.case(202, 11, "a revision selected after a create is sent to the invoker before the create is built, then the output answers.",
+       [send(INPUT, persona_turn(1)),
+        expect(PERSONA_REVISE, "_event.data.text === 'I am a warm greeter.'"), expect(OUTPUT)],
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE, REVISE), PLAN, draft(BEHAVIOR)], clock="wall")
+S.case(203, 11, "two selected inventory events, refused twice running, fail the turn.",
+       [send(INPUT, persona_turn(1)), failed_prefix("Selection rejected: select at most one")],
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE, CREATE), select(CREATE, CREATE)], clock="wall")
