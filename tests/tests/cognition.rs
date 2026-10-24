@@ -1258,18 +1258,11 @@ fn reasoning_selects_from_the_turns_choices() {
     let pinned: Vec<String> = branches
         .iter()
         .map(|branch| {
-            // Each branch: event and target required, data when
-            // its schema requires a field, reason optional.
-            let data_required = branch["properties"]["data"]["required"]
-                .as_array()
-                .is_some_and(|required| !required.is_empty());
+            // Each branch: event, data and target required (D231),
+            // reason optional.
             assert_eq!(
                 branch["required"],
-                if data_required {
-                    json!(["event", "data", "target"])
-                } else {
-                    json!(["event", "target"])
-                },
+                json!(["event", "data", "target"]),
                 "{branch}"
             );
             assert_eq!(branch["additionalProperties"], false);

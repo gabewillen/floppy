@@ -57,7 +57,7 @@
     </test>
   </assert>
   <assert id="reasoning-6" specnum="6" specid="#reasoning-6">
-    <![CDATA[Each selection is sent, in order, to the session its target names (`#_scxml_` + target) before the turn ends, its data `{}` when it has none (decision D113); a send that fails fails the turn with reason `the reasoning could not run (<error>)`.]]>
+    <![CDATA[Each selection is sent, in order, to the session its target names (`#_scxml_` + target) before the turn ends; a selection without its data is refused by the dispatch tool, whose every branch requires it (decision D231, where D113 sent it with `{}`); a send that fails fails the turn with reason `the reasoning could not run (<error>)`.]]>
     <test id="150" conformance="mandatory" manual="false">
       <start uri="150/test150.scxml"/>
     </test>

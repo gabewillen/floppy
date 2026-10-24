@@ -6,9 +6,9 @@
     "kind": "namespace-irp",
     "source": "namespaces/processing/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "55e69eee21a73de01e52fc6fc88f391e9d265f54ac29fd386be2058553d8b079",
-    "source_digest": "f03926dea288271b590ec443863e96155af70f3519ca5106ceb67f6c0e33facb",
-    "manifest_digest": "a87662536725ac45495ba15c4633907caa6eba0bf96fa5f545061caf34f93d68",
+    "corpus_digest": "e4216be1be35c5ab1cee94fdc11dabd5a10fc22c478890918f4d9ac968a408a8",
+    "source_digest": "d9b9391a70b42fa1cc27eb547abcb7d04e6f29c97e6c80468ebae3f3c8d21a74",
+    "manifest_digest": "030bf513916c05c571114bc4e955c21f77fe5a5b10d0acacb0ab6d9c13dc524d",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
@@ -18,7 +18,7 @@
       "command_argv": [
         "saxon"
       ],
-      "executable_digest": "012b6e274f9fa87155e1527848af8d41f19c6e89d7266a3b50716d5891eb739b"
+      "executable_digest": "abe0eb79234866c5e416e1d85e4198081d0f03c97ae0422000399fba1bca9262"
     },
     "datamodel": "ecmascript",
     "provenance": "baseuri=https://github.com/stateforward/floppy/tree/main/namespaces/processing/irp/sources"
@@ -55,7 +55,7 @@
       "package_version": "0.1.0",
       "manifest_sha256": "8d9e47dae322d09e33a345e82a7bed50d1b61384cf10638161f0bb412c0f7a9e",
       "schema_sha256": "9189653574d411e609e01e412ec2c2715082275b57fef13115d60df6d83ebabe",
-      "component_sha256": "0db3b8153bbaf8d5020d472c88cf18fb0c9291d56e6200edc6bd44225642833d"
+      "component_sha256": "df9bf2aaec66b6021224b4df29303568acc16cfdbbb339cad49823caab6e6aed"
     }
   ],
   "ir_version": 5,
@@ -68,7 +68,7 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "acbb130d6b728f9c843f68666f9540ac9714701b90e6aab4966bef5d7683f77a",
+  "identity_digest": "1579aa6cfac3d23460a8d6a72ffeb7d05048e642d25631b4afb54668a9e50f9a",
   "summary": {
     "total_selected": 15,
     "applicable_selected": 15,

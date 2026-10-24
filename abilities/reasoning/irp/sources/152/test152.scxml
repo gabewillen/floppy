@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- reasoning-6: a selection without data is sent with {}. -->
+<!-- reasoning-6: a selection without data is refused, every branch requiring its data. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="reasoning" type="scxml" src="../../../reasoning.scx">
@@ -15,12 +15,9 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="lamp.on" cond="JSON.stringify(_event.data) === '{}'" target="step1"/>
+    <transition event="done.invoke.reasoning" cond="_event.data.turn === 1 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.failed === true &amp;&amp; _event.data.reason === &quot;Selection rejected: /events/0: missing properties 'data'&quot;" target="step1"/>
   </state>
   <state id="step1">
-    <transition event="done.invoke.reasoning" cond="_event.data.handled === true &amp;&amp; _event.data.selected.length === 1" target="step2"/>
-  </state>
-  <state id="step2">
     <transition target="pass"/>
   </state>
   <transition event="generate.progress"/>
