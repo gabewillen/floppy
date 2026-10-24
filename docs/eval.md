@@ -50,8 +50,21 @@ A scenario is `{category, intent, bot_name, sessions, checks, criteria}`.
 Each session is the bot started again on the same memory and behaviors
 directories (a restart with what it learned). A step is `{"say": text,
 "source"?: id, "timeout_s"?: n}`, one `bot.ability.communication.input`
-waited on until its reflection settles (or its turn fails) and then 15 s more, since its reply can be said after its reflection settles, or `{"wait_s":
-n}`, the wall clock passing with no input. `criteria` are what the judges
+waited on until its reflection settles (or its turn fails) and then 15 s
+more, since its reply can be said after its reflection settles. A lesson
+the turn gave the learning ability (`learning.recalled`) is learned after
+the turn, so the step then also waits, bounded by `timeout_s` again, until
+each lesson closes (`learning.learned` or `learning.failed`) and one more
+turn has settled for each (the turn carrying its result). A settle
+from another turn meanwhile (a routine's tick) also counts, so the wait
+can end early, never late. `steps.json` records, per step, whether its
+turn settled (`completed`), how many lessons closed during it
+(`lessons`, a count, not attributed to a lesson) and whether the lesson
+wait finished (`lessons_settled`); a step whose lessons did not finish
+still lets the session go on, and a turn that never settled has
+`lessons_settled` false. The other step is `{"wait_s": n}`,
+the wall clock passing with no input; its `lessons` counts the lessons
+closed in it, which it does not wait on (`lessons_settled` is true). `criteria` are what the judges
 score, 0 to 10 each.
 
 ### Checks
@@ -66,7 +79,7 @@ Each check reads a log label the bot already writes, at one step (`at:
 | `recalled_name` | `identity.name` is `recalled "<name>"` in that session (a restarted bot remembered it) |
 | `addressed`, `not_addressed` | `identity.heard` is (is not) `addressed as <name>` |
 | `learned` | `reflection.inventory` accepts a behavior: `<Name> ACTIVE <lifetime> ... (accept)`, `turn` for a reflex, `persistent` for a routine (the revision logs it for reflection and for a lesson alike) |
-| `broken` | `reflection.inventory` breaks one: `<Name> BROKEN (break)` |
+| `broken` | `reflection.inventory` breaks one: `<Name> BROKEN (break)`, or the learning ability does: `learning.learned` `lesson of turn N: <Name> … BROKEN` |
 | `reflex`, `not_reflex` | `cognition.stage` is (is not) `autonomy handled`: a learned behavior, not reasoning, handled the real input |
 | `says`, `not_says` | a `floppy.say` matches (none matches) the pattern, case-insensitive |
 | `ticks` | at least `min` `floppy.say` matching the pattern during a wait (no input, so each is a routine's turn); partial credit below `min` |
@@ -151,9 +164,15 @@ model), so the bot reasons and reflects on its own model (`bot`, else
 served by the column's `FLOPPY_BASE_URL` (its `env` files, else
 `FLOPPY_LIVE_ENV_FILE`).
 
-`score.builds` reads each build from the builder's own logs (`author`
-attempt 1 starts one; `done` "built X in N attempt(s)" or `failed`
-"<reason>: ..." ends it; a build its turn cancelled stays `unfinished`),
+`score.builds` reads each build from the builder's own logs, followed by
+each record's `session` since reflection's and the learning ability's
+builders can run at once (`author`
+attempt 1, or a `design` that follows neither `triage` nor `retry_gate`, starts one, and any
+other builder line with no build open opens one; `done` "built X in N attempt(s)" or `failed`
+"<reason>: ..." ends it; a build its turn cancelled stays `unfinished`, and
+one cut before any draft or failure (or whose log ended there, at the job's end) is counted apart as "cut before a draft", since it
+measures the turn, not the builder; the 8-failure budget also counts a
+failed design, so a build can exhaust it in fewer than 8 attempts),
 and `builder.md` gives, per column and scenario, the builds, the accepted
 ones, the success rate, the attempts per accepted build and whether the
 scenario's behavior was learned anywhere in the job, then per column the
@@ -184,7 +203,7 @@ export FLOPPY_LIVE_ENV_FILE=env.lab:env.speech FLOPPY_LIVE_MODEL=gemma-4-26b-a4b
 python3 tests/eval/eval.py run --judge-env-file .env           # the suite once
 python3 tests/eval/eval.py run --scenario reflex --repeats 3   # one category
 python3 tests/eval/eval.py climb --judge-env-file .env --generations 6 --budget-hours 8
-python3 tests/eval/eval.py grade target/floppy-eval/run-<time>  # grade again
+python3 tests/eval/eval.py grade target/floppy-eval/run-<time>  # grade again (a builder run: its table too)
 python3 -m unittest discover -s tests/eval                     # offline tests
 ```
 

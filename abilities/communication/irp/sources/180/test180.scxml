@@ -25,7 +25,7 @@
     <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 0.1 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step3"/>
   </state>
   <state id="step3">
-    <transition event="environment.sound" cond="_event.data.audio === &quot;media/speaking-1.pcm&quot; &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.source === 'speaking'" target="step4"/>
+    <transition event="environment.sound" cond="_event.data.audio === &quot;media/speaking-1.0.pcm&quot; &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.source === 'speaking'" target="step4"/>
   </state>
   <state id="step4">
     <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 0 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step5"/>
@@ -43,7 +43,7 @@
     <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 0.1 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step9"/>
   </state>
   <state id="step9">
-    <transition event="environment.sound" cond="_event.data.audio === &quot;media/speaking-2.pcm&quot; &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.source === 'speaking'" target="step10"/>
+    <transition event="environment.sound" cond="_event.data.audio === &quot;media/speaking-2.0.pcm&quot; &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.source === 'speaking'" target="step10"/>
   </state>
   <state id="step10">
     <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 0 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step11"/>

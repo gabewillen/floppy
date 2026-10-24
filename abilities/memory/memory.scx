@@ -24,8 +24,10 @@
   floppy's revisions in the engine's dialect (abilities/memory/sqlite/ and
   abilities/memory/postgresql/): one revision, 0001 (decision D193),
   creates the memory, behavior (with its lifetime), behavior trigger and
-  short-term register tables and bot_stm_turn, the short-term memory of
-  turns. On Postgres the defaulted created_at and updated_at
+  short-term register tables, bot_stm_turn, the short-term memory of
+  turns, and the people long-term memory holds (bot_person, and
+  bot_person_embedding, the embeddings heard for each person, kind
+  voice; decision D194). On Postgres the defaulted created_at and updated_at
   are TIMESTAMPTZ DEFAULT NOW(). The database carries Alembic's
   alembic_version. A database at a revision the history does not hold is
   refused untouched. applying then runs the statements in one

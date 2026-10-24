@@ -17,7 +17,11 @@
   both: the invoker names them), parts (the service says each pause as
   silence and applies no other cue, decision D178), output (where the
   service writes the audio: a path in the media directory the run grants
-  it, which the invoker names) and media_type, and answers the parent with
+  it, which the invoker names) and media_type. The service streams its
+  encoding (decision D203): each bot.ability.vocal.speech.encoding.chunk
+  {audio, sequence, media_type, sample_rate_hz, channels, duration} it
+  returns is sent on to the parent at once, as it arrives, so playout can
+  start on the first chunk. Then it answers the parent with
   the service's bot.ability.vocal.speech.encoding.output {audio,
   media_type, sample_rate_hz, channels} (the audio as a reference, never
   bytes; a measured duration, when the service gives one, rides along), or
@@ -83,6 +87,16 @@
       <param name="media_type" expr="media_type"/>
     </invoke>
 
+    <!-- Each chunk of the streamed encoding, sent on as it arrives. -->
+    <transition event="bot.ability.vocal.speech.encoding.chunk" event:schema="../schemas/bot.ability.vocal.speech.encoding.chunk.json"
+                cond="isChunk(_event)">
+      <send event="bot.ability.vocal.speech.encoding.chunk" target="#_parent">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <transition event="bot.ability.vocal.speech.encoding.chunk" event:schema="../schemas/bot.ability.vocal.speech.encoding.chunk.json">
+      <log label="vocal.dropped" expr="_event.name"/>
+    </transition>
     <!-- The speech service's answer, kept until it ends. -->
     <transition event="bot.ability.vocal.speech.encoding.output" event:schema="../schemas/bot.ability.vocal.speech.encoding.output.json">
       <assign location="encoded" expr="encodedAnswer(_event)"/>

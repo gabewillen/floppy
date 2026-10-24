@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- cognition-13: a turn that selects a lesson outputs it, and the lesson's result (without a database, not learned) is handed back as a stimulus. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="cognition" type="scxml" src="../../../cognition.scx">
+    <param name="child_operation_timeout_ms" expr="300000"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'cognition' &amp;&amp; _event.data.choices.length === 2 &amp;&amp; _event.data.choices[0].event === &quot;bot.ability.cognition.ignore&quot; &amp;&amp; _event.data.choices[1].event === &quot;bot.ability.learning.input&quot; &amp;&amp; _event.data.choices[0].schema.title === undefined" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.cognition.input" target="#_cognition"><content expr="{&quot;turn&quot;: 1, &quot;stimulus&quot;: {&quot;event&quot;: &quot;bot.input&quot;, &quot;data&quot;: {&quot;text&quot;: &quot;hello&quot;}, &quot;source&quot;: &quot;conversation&quot;}, &quot;focus&quot;: null, &quot;focus_candidates&quot;: [], &quot;choices&quot;: [{&quot;event&quot;: &quot;bot.ability.cognition.ignore&quot;, &quot;schema&quot;: {&quot;additionalProperties&quot;: false, &quot;description&quot;: &quot;Deliberately ignore this stimulus: no device command, no focus change, no speech. Required when no other offered event should run. Do not use a device command or focus as a stand-in for ignore. Put why on the selection envelope reason field, not on this empty payload.&quot;, &quot;properties&quot;: {}, &quot;type&quot;: &quot;object&quot;}, &quot;target&quot;: &quot;session.cognition&quot;}, {&quot;event&quot;: &quot;bot.ability.learning.input&quot;, &quot;schema&quot;: {&quot;additionalProperties&quot;: false, &quot;description&quot;: &quot;Learn a lesson someone is teaching the bot: a rule for how to answer something from now on (when I say ping, say pong), or something to do on a schedule or repeatedly (remind me to drink water every hour). The bot practices it after this turn and is told how it went; select it when someone asks the bot to learn, remember to do, or keep doing something, and say what you will try. The data for this event must contain exactly content (and optionally media_type); reason belongs on the selection envelope itself, never inside data.&quot;, &quot;properties&quot;: {&quot;content&quot;: {&quot;description&quot;: &quot;The lesson in the teacher's own words, as one self-contained instruction: what should happen, when, and in reply to what.&quot;, &quot;examples&quot;: [&quot;Whenever I say exactly 'ping', reply with exactly 'pong'.&quot;], &quot;minLength&quot;: 1, &quot;title&quot;: &quot;Content&quot;, &quot;type&quot;: &quot;string&quot;}, &quot;media_type&quot;: {&quot;anyOf&quot;: [{&quot;minLength&quot;: 1, &quot;type&quot;: &quot;string&quot;}, {&quot;type&quot;: &quot;null&quot;}], &quot;default&quot;: null, &quot;description&quot;: &quot;The media type of content; null or text/plain for text.&quot;, &quot;examples&quot;: [&quot;text/plain&quot;], &quot;title&quot;: &quot;Media Type&quot;}}, &quot;required&quot;: [&quot;content&quot;], &quot;type&quot;: &quot;object&quot;}, &quot;target&quot;: &quot;session.cognition&quot;}]}"/></send>
+    </onentry>
+    <transition event="bot.ability.cognition.output" cond='_event.data.turn === 1 &amp;&amp; _event.data.output.length === 1 &amp;&amp; _event.data.output[0].event === "bot.ability.learning.input"' target="step2"/>
+  </state>
+  <state id="step2">
+    <transition event="bot.ability.cognition.input" cond="_event.data.stimulus.event === 'bot.ability.learning.output' &amp;&amp; _event.data.stimulus.data.learned === false &amp;&amp; _event.data.stimulus.data.lesson === 'say hi back' &amp;&amp; _event.data.stimulus.data.behavior === null" target="step3"/>
+  </state>
+  <state id="step3">
+    <transition target="pass"/>
+  </state>
+  <transition event="bot.ability.offers"/>
+  <transition event="bot.ability.identity.ask"/>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>
