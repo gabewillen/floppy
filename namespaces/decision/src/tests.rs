@@ -15,6 +15,8 @@ struct FakeHost {
     assigned: Vec<(String, Data)>,
     fail_assign: bool,
     values: BTreeMap<String, Data>,
+    target_read: Option<SnapshotRead>,
+    read_targets: Vec<String>,
 }
 
 impl ChoiceHost for FakeHost {
@@ -45,6 +47,16 @@ impl ChoiceHost for FakeHost {
     fn snapshot(&mut self, exclude: &[Section]) -> Result<Result<String, ()>, &'static str> {
         self.snapshot_requests.push(exclude.to_vec());
         Ok(self.choices_snapshot.clone().ok_or(()))
+    }
+
+    fn snapshot_of(
+        &mut self,
+        exclude: &[Section],
+        target: &str,
+    ) -> Result<SnapshotRead, &'static str> {
+        self.snapshot_requests.push(exclude.to_vec());
+        self.read_targets.push(target.to_owned());
+        Ok(self.target_read.clone().unwrap_or(SnapshotRead::NotRunning))
     }
 }
 
@@ -908,4 +920,273 @@ fn a_pin_keeps_a_declared_effort_and_refuses_a_malformed_one() {
             Err("decision:pin found a malformed choice")
         );
     }
+}
+
+/// A child's snapshot with `offerable` (its JSON text) in its data model.
+fn child_snapshot(offerable: Option<&Json>, transitions: &[Json]) -> String {
+    let mut document: Json = serde_json::from_str(&snapshot(transitions)).expect("JSON");
+    if let Some(offerable) = offerable {
+        document["snapshot"]["root"]["data_model"] = json!([
+            {"name": "unrelated", "value": {"type": "number", "value": 1}},
+            {"name": "offerable", "value": {"type": "json-object", "value": offerable.to_string()}},
+        ]);
+    }
+    document.to_string()
+}
+
+/// The child's offers: the order machine's transitions, a guarded
+/// `order.ship` listed first.
+fn offers_snapshot(offerable: Option<&Json>) -> String {
+    child_snapshot(
+        offerable,
+        &[
+            guarded(with_schema(&["order.ship"], &ship_schema()), "ready"),
+            with_schema(&["order.ship"], &ship_schema()),
+            with_schema(&["order.cancel"], &cancel_schema()),
+            with_schema(&["order.hold.*"], &hold_schema()),
+            without_schema(&["order.note"]),
+        ],
+    )
+}
+
+fn offers_attributes(undeclared: Option<&str>) -> Vec<Attribute> {
+    let mut attributes = vec![location("offers"), attr("target", "child")];
+    if let Some(undeclared) = undeclared {
+        attributes.push(attr("undeclared", undeclared));
+    }
+    attributes
+}
+
+/// The offers `<decision:offers>` assigns for `read`, or why it failed.
+fn executed_offers(
+    attributes: &[Attribute],
+    read: SnapshotRead,
+) -> Result<Option<Json>, &'static str> {
+    let mut host = FakeHost {
+        target_read: Some(read),
+        ..FakeHost::default()
+    };
+    host.values
+        .insert("child".into(), Data::String("#_child".into()));
+    let outcome = execute("offers", attributes, &[], &mut host);
+    match outcome {
+        Ok(Executed::Handled) => {}
+        Err(Failure::Execution(detail)) => {
+            assert!(host.assigned.is_empty(), "a failure assigns nothing");
+            return Err(detail);
+        }
+        other => panic!("unexpected outcome {other:?}"),
+    }
+    assert_eq!(host.read_targets, ["#_child"], "the target's value is read");
+    assert_eq!(
+        host.snapshot_requests,
+        [OFFERS_SNAPSHOT_EXCLUDE.to_vec()],
+        "the system, queue and pending-send sections are excluded"
+    );
+    match host.assigned.as_slice() {
+        [] => Ok(None),
+        [(location, Data::JsonArray(offers))] => {
+            assert_eq!(location, "offers");
+            Ok(Some(
+                serde_json::from_str(offers).expect("the offers are JSON"),
+            ))
+        }
+        other => panic!("one offers array is assigned: {other:?}"),
+    }
+}
+
+fn offered_events(offers: &Json) -> Vec<(String, Option<u64>)> {
+    offers
+        .as_array()
+        .expect("the offers are an array")
+        .iter()
+        .map(|entry| {
+            (
+                entry["event"].as_str().expect("event").to_owned(),
+                entry.get("effort").and_then(Json::as_u64),
+            )
+        })
+        .collect()
+}
+
+/// Only the declared events are offered, with their declared efforts; a
+/// guarded transition is never offered but shadows the later one for its
+/// event; a schemaless transition offers nothing.
+#[test]
+fn offers_writes_the_declared_events_of_the_unguarded_schema_transitions() {
+    let offerable = json!({
+        "order.ship": {},
+        "order.cancel": {"effort": 2},
+        "order.note": {},
+        "order.absent": {"effort": 1},
+    });
+    let offers = executed_offers(
+        &offers_attributes(None),
+        SnapshotRead::Document(offers_snapshot(Some(&offerable))),
+    )
+    .expect("handled")
+    .expect("assigned");
+    assert_eq!(
+        offered_events(&offers),
+        [("order.cancel".to_owned(), Some(2))],
+        "ship is shadowed by its guarded transition, hold undeclared, note schemaless"
+    );
+    assert_eq!(
+        offers,
+        serde_json::from_str::<Json>(&choices_json(&[Choice {
+            event: "order.cancel".into(),
+            schema: cancel_schema(),
+            description: Some("Cancel the order".into()),
+            effort: Some(2),
+        }]))
+        .expect("JSON"),
+        "the canonical choices"
+    );
+}
+
+/// `undeclared="all"` offers every event the walk finds, with the efforts
+/// of those declared; a session that declares nothing offers nothing by
+/// default.
+#[test]
+fn undeclared_all_offers_every_event_and_none_offers_only_declared_ones() {
+    let offerable = json!({"order.hold": {"effort": 3}});
+    let all = executed_offers(
+        &offers_attributes(Some("all")),
+        SnapshotRead::Document(offers_snapshot(Some(&offerable))),
+    )
+    .expect("handled")
+    .expect("assigned");
+    assert_eq!(
+        offered_events(&all),
+        [
+            ("order.cancel".to_owned(), None),
+            ("order.hold".to_owned(), Some(3))
+        ]
+    );
+    let undeclared = executed_offers(
+        &offers_attributes(Some("all")),
+        SnapshotRead::Document(offers_snapshot(None)),
+    )
+    .expect("handled")
+    .expect("assigned");
+    assert_eq!(offered_events(&undeclared).len(), 2);
+    for none in [None, Some("none")] {
+        assert_eq!(
+            executed_offers(
+                &offers_attributes(none),
+                SnapshotRead::Document(offers_snapshot(None))
+            ),
+            Ok(Some(json!([]))),
+            "nothing declared, nothing offered"
+        );
+    }
+}
+
+/// A target no running session answers is nothing to read (decision
+/// D109): nothing is assigned and nothing raised; a failed read is
+/// `error.execution`.
+#[test]
+fn a_target_not_running_assigns_nothing_and_a_failed_read_raises() {
+    assert_eq!(
+        executed_offers(&offers_attributes(None), SnapshotRead::NotRunning),
+        Ok(None)
+    );
+    assert_eq!(
+        executed_offers(&offers_attributes(None), SnapshotRead::Failed),
+        Err("decision:offers cannot read the target session")
+    );
+    assert_eq!(
+        executed_offers(
+            &offers_attributes(None),
+            SnapshotRead::Document("{}".into())
+        ),
+        Err("the session snapshot is malformed")
+    );
+}
+
+/// A declaration that is not an object of `{effort?}` entries is
+/// `error.execution`.
+#[test]
+fn a_malformed_offerable_raises_error_execution() {
+    for offerable in [
+        json!({"order.cancel": 1}),
+        json!({"order.cancel": {"effort": 1001}}),
+        json!({"order.cancel": {"effort": -1}}),
+        json!({"order.cancel": {"effort": 1.5}}),
+        json!({"order.cancel": {"cost": 1}}),
+    ] {
+        assert_eq!(
+            executed_offers(
+                &offers_attributes(None),
+                SnapshotRead::Document(offers_snapshot(Some(&offerable)))
+            ),
+            Err(MALFORMED_OFFERABLE),
+            "{offerable}"
+        );
+    }
+    let mut document: Json = serde_json::from_str(&offers_snapshot(None)).expect("JSON");
+    document["snapshot"]["root"]["data_model"] =
+        json!([{"name": "offerable", "value": {"type": "json-array", "value": "[]"}}]);
+    assert_eq!(
+        executed_offers(
+            &offers_attributes(None),
+            SnapshotRead::Document(document.to_string())
+        ),
+        Err(MALFORMED_OFFERABLE)
+    );
+}
+
+/// A malformed element raises `error.execution` and reads nothing.
+#[test]
+fn malformed_offers_elements_raise_error_execution() {
+    let read = || SnapshotRead::Document(offers_snapshot(None));
+    let cases: [(Vec<Attribute>, &str); 5] = [
+        (
+            vec![attr("target", "child")],
+            "decision:offers requires a non-empty location",
+        ),
+        (
+            vec![location("offers")],
+            "decision:offers requires a non-empty target",
+        ),
+        (
+            offers_attributes(Some("some")),
+            "decision:offers undeclared is none or all",
+        ),
+        (
+            vec![
+                location("offers"),
+                attr("target", "child"),
+                attr("events", "x"),
+            ],
+            "decision:offers takes only the location, target and undeclared attributes",
+        ),
+        (
+            vec![location("offers"), attr("target", "missing")],
+            "decision:offers target is not a string",
+        ),
+    ];
+    for (attributes, detail) in cases {
+        let mut host = FakeHost {
+            target_read: Some(read()),
+            ..FakeHost::default()
+        };
+        host.values
+            .insert("child".into(), Data::String("#_child".into()));
+        assert_eq!(
+            execute("offers", &attributes, &[], &mut host),
+            Err(Failure::Execution(detail))
+        );
+        assert!(host.assigned.is_empty() && host.read_targets.is_empty());
+    }
+    let mut host = FakeHost::default();
+    assert_eq!(
+        execute(
+            "offers",
+            &offers_attributes(None),
+            &[Content::Start, Content::End],
+            &mut host
+        ),
+        Err(Failure::Execution("decision:offers holds no content"))
+    );
 }

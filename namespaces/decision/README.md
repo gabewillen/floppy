@@ -15,6 +15,7 @@ through the data model; it never sends, and it does no I/O.
 | Element | Reads | Writes |
 | --- | --- | --- |
 | `<decision:choice location events? effort?>` | the offered events of the active state, and what they cost (`effort`, decision D206) | the choices `[{event, schema, description?, effort?}]` (`location`) |
+| `<decision:offers location target undeclared?>` | another session's live session (`target`, decision D230): its enabled transitions and its `offerable` data | the choices `[{event, schema, description?, effort?}]` it offers its parent (`location`) |
 | `<decision:pin location event property values>` | the values to ground a property in (for example `bot.focus_device`'s `device` in the focus candidates) | the choices with the property's `enum` pinned (`location`) |
 
 The exact semantics and failures are in [`src/lib.rs`](src/lib.rs); the
@@ -36,3 +37,5 @@ through the pipeline of scxml.rs's namespace suites.
 - <a id="decision-4"></a>**decision-4**. `<decision:pin>` sets the values as the enum of the named property of every entry for the event, removes those entries when the values are empty, and raises `error.execution`, assigning nothing, for an entry whose schema has no such property.
 - <a id="decision-5"></a>**decision-5**. A location that does not hold what the element reads raises `error.execution` and assigns nothing.
 - <a id="decision-6"></a>**decision-6**. An `effort`, an expression of a whole number from 0 to 1000, is written as the `effort` of every choice `<decision:choice>` writes; a choice written without one carries none, and an `effort` that is not such a number raises `error.execution` and assigns nothing.
+- <a id="decision-7"></a>**decision-7**. `<decision:offers>` writes, for the session its target names, one choice {event, schema, description?, effort?} per event its event:schema transitions without a cond take that its offerable data declares, with the declared effort, in the selection walk's order; a transition with a cond is never offered but still takes its events from later transitions, and undeclared="all" offers every such event.
+- <a id="decision-8"></a>**decision-8**. A `<decision:offers>` target that no running session of the run answers assigns nothing and raises nothing; an offerable that is not an object of {effort?} entries raises `error.execution` and assigns nothing.

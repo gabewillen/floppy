@@ -1,5 +1,5 @@
-//! The `decision` extension namespace: `<decision:choice>` and
-//! `<decision:pin>` as a
+//! The `decision` extension namespace: `<decision:choice>`,
+//! `<decision:offers>` and `<decision:pin>` as a
 //! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
 //! Executable content is synchronous and quick, so this namespace holds only
@@ -80,6 +80,46 @@
 //!   in this bot, not part of the event's data contract; an expression lets
 //!   an invoker's `<param>` set it.
 //!
+//! # `<decision:offers location="L" target="T" undeclared="none|all"/>`
+//!
+//! What another session of the run offers its parent, read from its live
+//! session (decision D230): `target` (required) is an expression whose
+//! value, a string, names the session as a `<send>` target does
+//! (`#_<invokeid>` of a live invoked child, `#_scxml_<sessionid>` of any
+//! running session of the run), and `location` (required) receives the
+//! canonical choices `[{event, schema, description?, effort?}]` as
+//! `<decision:choice>` writes them. The read is
+//! `session-snapshot-host.snapshot` with that target, without the system,
+//! queue and pending-send sections, as `<device:snapshot>` reads a device.
+//!
+//! * **The offers** are the target's choices by the same selection walk as
+//!   `<decision:choice>`'s, with one difference: a transition with a `cond`
+//!   is never offered, since its condition belongs to the other session's
+//!   data model, but it still takes its events from later transitions. So
+//!   an offered event is one a transition without a guard takes, with an
+//!   `event:schema`, that no earlier transition of its chain matches.
+//! * **The declaration.** The target declares what it offers in its
+//!   `<data id="offerable">` ([`OFFERABLE_DATA_ID`]): a JSON object mapping
+//!   each offered event name to `{effort?}`, the effort a whole number from
+//!   0 to [`MAX_EFFORT`] (decision D206), so an invoker's `<param>` can set
+//!   it. Only the declared events are offered, each with its declared
+//!   effort, and a session that declares none offers nothing.
+//!   `undeclared="all"` (the default is `none`) offers every event the walk
+//!   finds instead, with the effort of those declared: it is for a document
+//!   that declares nothing, such as the owner's firmware. A declaration
+//!   that is not such an object is `error.execution`.
+//!
+//! A target that no running session of the run answers (a session that is
+//! not running, finished or failed, or a target that names none) is
+//! nothing to read: the element assigns nothing and raises nothing, so
+//! `location` keeps its value (decision D109, as amended). A malformed
+//! element, a target that is not a string, a read the host fails (one of
+//! its bounds: 32 MiB a document, 64 reads a call, 1 MiB an event schema,
+//! 64 KiB a variable), a malformed snapshot or declaration, or a failed
+//! assignment is `error.execution`, and nothing is assigned; a document
+//! reads each session with its own element, so one failed read leaves the
+//! others.
+//!
 //! The choices' schemas are the contracts of the events the decision service
 //! may return: it validates the chosen event's data against them before it
 //! returns it (the document declares its events, not the service package).
@@ -129,6 +169,8 @@
 
 use scxml_event_schema::{CompiledSchema, canonical_json, sha256_hex};
 use scxml_types::{DataValue as Data, exceeds_wasm_bound, wasm_bound};
+use std::collections::BTreeMap;
+
 use serde_json::{Map, Value as Json};
 
 /// The namespace's name: the last path segment of its repository namespace
@@ -193,6 +235,16 @@ pub const CHOICES_SNAPSHOT_EXCLUDE: [Section; 4] = [
     Section::PendingSends,
 ];
 
+/// The snapshot read for another session's offers (`<decision:offers>`):
+/// its configuration, its data model (the `offerable` declaration) and its
+/// transitions, as `<device:snapshot>` reads a device.
+pub const OFFERS_SNAPSHOT_EXCLUDE: [Section; 3] =
+    [Section::System, Section::Queues, Section::PendingSends];
+
+/// The `<data>` id a session declares its offerable events in (decision
+/// D230): each event it offers its parent, mapped to `{effort?}`.
+pub const OFFERABLE_DATA_ID: &str = "offerable";
+
 /// What `execute` did with the element.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Executed {
@@ -250,6 +302,31 @@ pub trait ChoiceHost {
     ///
     /// A non-recoverable host failure.
     fn snapshot(&mut self, exclude: &[Section]) -> Result<Result<String, ()>, Self::Error>;
+
+    /// The `scxml.session-snapshot/v2` document of the session `target`
+    /// names (as a `<send>` target does), with `exclude` omitted, or why
+    /// there is none.
+    ///
+    /// # Errors
+    ///
+    /// A non-recoverable host failure.
+    fn snapshot_of(
+        &mut self,
+        exclude: &[Section],
+        target: &str,
+    ) -> Result<SnapshotRead, Self::Error>;
+}
+
+/// What a host read of another session gave.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SnapshotRead {
+    /// The session's `scxml.session-snapshot/v2` document.
+    Document(String),
+    /// No running session of the run answers the target (it is not
+    /// running, or the target names none).
+    NotRunning,
+    /// The read failed (a bound, or the host).
+    Failed,
 }
 
 /// One event among the choices.
@@ -305,6 +382,7 @@ pub fn execute<H: ChoiceHost>(
 ) -> Result<Executed, Failure<H::Error>> {
     match local_name {
         "choice" => choice(attributes, content, host),
+        "offers" => offers(attributes, content, host),
         "pin" => pin(attributes, content, host),
         _ => Ok(Executed::NotHandled),
     }
@@ -614,6 +692,147 @@ fn choice<H: ChoiceHost>(
     Ok(Executed::Handled)
 }
 
+/// Which of the walk's events `<decision:offers>` offers.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Undeclared {
+    /// Only the events the session declares offerable (the default).
+    None,
+    /// Every event the walk finds (a session that declares nothing, such as
+    /// the owner's firmware).
+    All,
+}
+
+/// Executes `<decision:offers>`.
+fn offers<H: ChoiceHost>(
+    attributes: &[Attribute],
+    content: &[Content],
+    host: &mut H,
+) -> Result<Executed, Failure<H::Error>> {
+    let [location, target, undeclared] = attribute_values(
+        attributes,
+        ["location", "target", "undeclared"],
+        "decision:offers takes only the location, target and undeclared attributes",
+        "decision:offers repeats an attribute",
+    )?;
+    let location = required(location, "decision:offers requires a non-empty location")?;
+    let target = required(target, "decision:offers requires a non-empty target")?;
+    let undeclared = match undeclared.map(str::trim) {
+        None | Some("none") => Undeclared::None,
+        Some("all") => Undeclared::All,
+        Some(_) => {
+            return Err(Failure::Execution(
+                "decision:offers undeclared is none or all",
+            ));
+        }
+    };
+    no_content(content, "decision:offers holds no content")?;
+    let Data::String(target) = host
+        .read(target)
+        .map_err(Failure::Host)?
+        .map_err(|()| Failure::Execution("decision:offers target is not a string"))?
+    else {
+        return Err(Failure::Execution("decision:offers target is not a string"));
+    };
+    let document = match host
+        .snapshot_of(&OFFERS_SNAPSHOT_EXCLUDE, &target)
+        .map_err(Failure::Host)?
+    {
+        SnapshotRead::Document(document) => document,
+        // Nothing to read (decision D109, as amended): the location is left
+        // as it was.
+        SnapshotRead::NotRunning => return Ok(Executed::Handled),
+        SnapshotRead::Failed => {
+            return Err(Failure::Execution(
+                "decision:offers cannot read the target session",
+            ));
+        }
+    };
+    let offered = session_offers(&document, undeclared)?;
+    assign_to(
+        host,
+        location,
+        &Data::JsonArray(choices_json(&offered)),
+        "decision:offers could not assign the offers to location",
+    )?;
+    Ok(Executed::Handled)
+}
+
+/// The offers of another session's `scxml.session-snapshot/v2` document:
+/// see the crate documentation (`<decision:offers>`). A transition with a
+/// `cond` is never offered (its condition is the other session's), but it
+/// still takes its events from later transitions.
+///
+/// # Errors
+///
+/// [`Failure::Execution`] with a static detail when the document or its
+/// `offerable` declaration is malformed, or a schema does not compile or
+/// match its digest.
+pub fn session_offers<E>(
+    document: &str,
+    undeclared: Undeclared,
+) -> Result<Vec<Choice>, Failure<E>> {
+    let document: Json = serde_json::from_str(document).map_err(|_| malformed())?;
+    let root = document.pointer("/snapshot/root").ok_or_else(malformed)?;
+    let declared = offerable(root)?;
+    let walked = selection_walk(root, &mut |_| Ok(Guard::Unknown))?;
+    Ok(walked
+        .into_iter()
+        .filter_map(|mut entry| {
+            match (declared.get(&entry.event), undeclared) {
+                (Some(effort), _) => entry.effort = *effort,
+                (None, Undeclared::All) => {}
+                (None, Undeclared::None) => return None,
+            }
+            Some(entry)
+        })
+        .collect())
+}
+
+/// A malformed `offerable` declaration's failure.
+const MALFORMED_OFFERABLE: &str = "the target's offerable is not an object of {effort?} entries";
+
+/// The `offerable` declaration of one session object: each declared event
+/// and its effort, when it declares one. A session without the variable
+/// (or with no data model image yet) declares nothing.
+fn offerable<E>(root: &Json) -> Result<BTreeMap<String, Option<u32>>, Failure<E>> {
+    let mut declared = BTreeMap::new();
+    let Some(data_model) = root.get("data_model") else {
+        return Ok(declared);
+    };
+    let Some(entry) = data_model
+        .as_array()
+        .ok_or_else(malformed)?
+        .iter()
+        .find(|entry| entry.get("name").and_then(Json::as_str) == Some(OFFERABLE_DATA_ID))
+    else {
+        return Ok(declared);
+    };
+    let value = entry.get("value").ok_or_else(malformed)?;
+    if value.get("type").and_then(Json::as_str) != Some("json-object") {
+        return Err(Failure::Execution(MALFORMED_OFFERABLE));
+    }
+    let object: Json = value
+        .get("value")
+        .and_then(Json::as_str)
+        .and_then(|text| serde_json::from_str(text).ok())
+        .ok_or(Failure::Execution(MALFORMED_OFFERABLE))?;
+    for (event, declaration) in object
+        .as_object()
+        .ok_or(Failure::Execution(MALFORMED_OFFERABLE))?
+    {
+        let declaration = declaration
+            .as_object()
+            .filter(|declaration| declaration.keys().all(|key| key == "effort"))
+            .ok_or(Failure::Execution(MALFORMED_OFFERABLE))?;
+        let effort = declaration
+            .get("effort")
+            .map(|effort| effort_of(effort).ok_or(Failure::Execution(MALFORMED_OFFERABLE)))
+            .transpose()?;
+        declared.insert(event.clone(), effort);
+    }
+    Ok(declared)
+}
+
 /// The event descriptors of an `events` attribute: its white-space
 /// separated tokens, each `*` or an event name with an optional trailing
 /// `.*` (SCXML 3.12.1).
@@ -845,7 +1064,9 @@ mod guest {
     };
     use stateforward::scxml::{data_model_host, session_snapshot_host};
 
-    use super::{Attribute, ChoiceHost, Content, Data, Executed, Failure, GuardValue, Section};
+    use super::{
+        Attribute, ChoiceHost, Content, Data, Executed, Failure, GuardValue, Section, SnapshotRead,
+    };
 
     /// The lifecycle of this instance.
     #[derive(Clone, Copy, Eq, PartialEq)]
@@ -892,6 +1113,7 @@ mod guest {
             match data_model_host::evaluate(location) {
                 Ok(DataValue::JsonArray(text)) => Ok(Ok(Data::JsonArray(text))),
                 Ok(DataValue::JsonObject(text)) => Ok(Ok(Data::JsonObject(text))),
+                Ok(DataValue::Text(text)) => Ok(Ok(Data::String(text))),
                 Ok(DataValue::Number(value)) => Ok(scxml_types::FiniteNumber::new(value)
                     .map(Data::Number)
                     .map_err(|_| ())),
@@ -923,17 +1145,7 @@ mod guest {
         }
 
         fn snapshot(&mut self, exclude: &[Section]) -> Result<Result<String, ()>, ComponentError> {
-            let exclude: Vec<session_snapshot_host::Section> = exclude
-                .iter()
-                .map(|section| match section {
-                    Section::System => session_snapshot_host::Section::System,
-                    Section::DataModel => session_snapshot_host::Section::DataModel,
-                    Section::Queues => session_snapshot_host::Section::Queues,
-                    Section::PendingSends => session_snapshot_host::Section::PendingSends,
-                    Section::Transitions => session_snapshot_host::Section::Transitions,
-                })
-                .collect();
-            match session_snapshot_host::snapshot(&exclude, None) {
+            match session_snapshot_host::snapshot(&sections(exclude), None) {
                 Ok(document) => Ok(Ok(document)),
                 // No image for this call, the call bound, or a document
                 // bound: the element cannot read the choices (`error.execution`).
@@ -945,6 +1157,40 @@ mod guest {
                 Err(error) => Err(error),
             }
         }
+
+        fn snapshot_of(
+            &mut self,
+            exclude: &[Section],
+            target: &str,
+        ) -> Result<SnapshotRead, ComponentError> {
+            match session_snapshot_host::snapshot(&sections(exclude), Some(target)) {
+                Ok(document) => Ok(SnapshotRead::Document(document)),
+                // No running session of the run answers the target: nothing
+                // to read.
+                Err(error) if error.code == ErrorCode::Unavailable => Ok(SnapshotRead::NotRunning),
+                // The call bound or a document bound: the element cannot
+                // read it (`error.execution`).
+                Err(error)
+                    if recoverable(error.code) || error.code == ErrorCode::CapacityExhausted =>
+                {
+                    Ok(SnapshotRead::Failed)
+                }
+                Err(error) => Err(error),
+            }
+        }
+    }
+
+    fn sections(exclude: &[Section]) -> Vec<session_snapshot_host::Section> {
+        exclude
+            .iter()
+            .map(|section| match section {
+                Section::System => session_snapshot_host::Section::System,
+                Section::DataModel => session_snapshot_host::Section::DataModel,
+                Section::Queues => session_snapshot_host::Section::Queues,
+                Section::PendingSends => session_snapshot_host::Section::PendingSends,
+                Section::Transitions => session_snapshot_host::Section::Transitions,
+            })
+            .collect()
     }
 
     fn content(items: Vec<ExtensionContent>) -> Vec<Content> {

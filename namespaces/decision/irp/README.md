@@ -4,8 +4,8 @@ The implementation report plan of the `decision` namespace, in the format of the
 [W3C SCXML IRP](../../../scxml.rs/tests/conformance/w3c-irp/README.md) and of
 scxml.rs's own namespace suites
 ([scxml.rs/docs/conformance.md](../../../scxml.rs/docs/conformance.md#namespace-suites)):
-6 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
-("Statements"), tested by 13 mandatory documents. It runs through exactly
+8 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
+("Statements"), tested by 18 mandatory documents. It runs through exactly
 the pipeline the W3C IRP runs through (the canonical compiler, the shipped
 Wasm components under the Wasmtime session host, the same oracles and report
 envelope), with the namespace's own extension package and component bound,
@@ -35,12 +35,12 @@ SAXON='java -jar /opt/saxon/saxon-he-12.8.jar' sh scripts/namespace-irp.sh prepa
 sh scripts/namespace-irp.sh baselines decision
 ```
 
-The current baseline (manifest SHA-256 `6e7338861e89574a5f6882ff0da95fce8a0eaab93ddd63b2fdeba23274c10d85`,
+The current baseline (manifest SHA-256 `cd590ac9afe0d5524c09433bebcd0d92f20db834c7b2dc828d72a7c33d85f044`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
-measured on Linux x86_64 after `<decision:choice>` gained `effort`, decision
-D206; regenerate it on Linux x86_64, the host
+measured on Linux x86_64 after `<decision:offers>` was added, decision
+D230; regenerate it on Linux x86_64, the host
 `tests/tests/namespace_irp.rs` compares fuel on) measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 13 / 13 | 0 | `6a627bf030bded3605b2657bf6cb04f06e8df4b07f19c8528608e12fb04030fd` | `8a1371ef4b839deb733c16a457c9484ac72968d45145120ab8b81b2f77586f66` |
+| ECMAScript | 18 / 18 | 0 | `4b8923625ef39405cdd694810375f9f876a3aaf8be90a4acffb1b53e5cd6ee80` | `dd458ffa90f4ceecdc6bddceb98954575429ec5730ca8d053d88ade8804431d0` |
