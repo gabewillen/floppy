@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/cognition/irp/sources">
   <assert id="cognition-1" specnum="1" specid="#cognition-1">
-    <![CDATA[On start it sends `bot.ability.ready` to its parent, once and with no data (decision D242). What it offers, read from its live session (`<decision:offers>`), idle or processing, is its one choice `bot.ability.cognition.ignore`, of no effort, with its schema.]]>
+    <![CDATA[On start it sends `bot.ability.ready` to its parent, once (never on a later return to `idle`) and with no data (decision D242). What it offers in `idle`, read from its live session (`<decision:offers>`), is its one choice `bot.ability.cognition.ignore`, of no effort, with its schema as written (its parent makes it model-facing).]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -81,7 +81,7 @@
     </test>
   </assert>
   <assert id="cognition-11" specnum="11" specid="#cognition-11">
-    <![CDATA[Until it is told the bot's name (`bot.ability.identity.named`), every return to `idle` sends `bot.ability.identity.ask` `{}` to its parent (after its readiness, on start); once told, it asks no more.]]>
+    <![CDATA[Until it is told the bot's name (`bot.ability.identity.named`), every return to `idle` sends `bot.ability.identity.ask` `{}` to its parent, the first after the one `bot.ability.ready` it sends on start; once told, it asks no more.]]>
     <test id="200" conformance="mandatory" manual="false">
       <start uri="200/test200.scxml"/>
     </test>
