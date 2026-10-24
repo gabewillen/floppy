@@ -59,8 +59,8 @@ USAGE = {
         "nothing, the lesson is not learned."
     ),
     "change_instructions": (
-        "the spec the revision gives the builder bot for a create or change (reflection's, or a lesson's with the lesson as its instruction): the builder writes the behavior's SCXML "
-        "from it, validates it and simulates it; a draft that fails repeatedly is given up after max_attempts (attempts-exhausted)."
+        "the spec the revision gives the builder bot for a create or change (reflection's, or a lesson's with the "
+        "lesson as its instruction): the builder writes the behavior's SCXML from it, validates it and simulates it; a draft that fails repeatedly is given up after max_attempts (attempts-exhausted)."
     ),
     "author_system": (
         "the builder's author stage system prompt: it writes one complete SCXML document from the plan and spec; "
