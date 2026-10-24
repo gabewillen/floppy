@@ -49,6 +49,15 @@
     {
       "check": "not_says",
       "at": [
+        0,
+        2
+      ],
+      "pattern": "\\b(i am|i'm|my name is) juniper\\b",
+      "weight": 1
+    },
+    {
+      "check": "not_says",
+      "at": [
         1,
         1
       ],

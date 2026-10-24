@@ -58,6 +58,15 @@ class Scorer(unittest.TestCase):
         scenario = {"sessions": [{"steps": [{"say": "ping"}]}], "checks": [{"check": "reflex", "at": [0, 0]}]}
         with self.assertRaises(ValueError):
             score.score(scenario, {"steps": [], "sessions": [], "done": False})
+        scenario["checks"] = [{"check": "sayz", "at": [0, 0]}]
+        with self.assertRaisesRegex(ValueError, "unknown check: sayz"):
+            score.score(scenario, {"steps": [], "sessions": [], "done": False})
+
+    def test_a_probe_after_a_restart_carries_the_largest_weight(self):
+        for name, scenario in self.scenarios.items():
+            later = [c["weight"] for c in scenario["checks"] if c["check"] == "says" and (c.get("at") or c.get("by"))[0] > 0]
+            if later:
+                self.assertTrue(all(max(later) >= c["weight"] for c in scenario["checks"]), name)
 
     def test_a_reflex_answered_by_reasoning_scores_and_shows_inside(self):
         scenario = self.scenarios["reflex_pingpong"]

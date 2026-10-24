@@ -48,6 +48,8 @@ import re
 
 # The checks a grade scores: each reads only what floppy said.
 BLACK_BOX = ("says", "not_says", "ticks", "no_ticks")
+# The diagnostics: each reads floppy's own logs, so it is reported, never scored.
+DIAGNOSTIC = ("adopted_name", "recalled_name", "addressed", "not_addressed", "learned", "broken", "reflex", "not_reflex")
 
 RESPOND = "bot.ability.communication.respond"
 
@@ -230,8 +232,10 @@ def score(scenario, job):
     """The checks' weighted score (0..1) and each check's result. Every
     check is black box; a scenario that scores floppy's logs is refused."""
     for spec in scenario["checks"]:
-        if spec["check"] not in BLACK_BOX:
+        if spec["check"] in DIAGNOSTIC:
             raise ValueError(f"{spec['check']} reads floppy's logs: it is a diagnostic, not a check")
+        if spec["check"] not in BLACK_BOX:
+            raise ValueError("unknown check: " + spec["check"])
     results = _results(job, scenario["checks"])
     weights = sum(r["weight"] for r in results)
     total = sum(r["score"] * r["weight"] for r in results)

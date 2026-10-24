@@ -54,6 +54,15 @@
       ],
       "pattern": "juniper",
       "weight": 3
+    },
+    {
+      "check": "not_says",
+      "at": [
+        1,
+        1
+      ],
+      "pattern": "\\b(i am|i'm|my name is) pixel\\b",
+      "weight": 1
     }
   ],
   "criteria": {

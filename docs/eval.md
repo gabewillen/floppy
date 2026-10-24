@@ -34,8 +34,8 @@ never edits the workspace: everything goes under `target/floppy-eval/`.
 
 | Scenario | Category | What it teaches, then probes |
 | --- | --- | --- |
-| `name_adopt` | name | "your name is Juniper"; answers to Juniper and does not claim to be Pixel; restarted, says it is Juniper |
-| `name_rename` | name | Juniper, then Biscuit; answers to Biscuit; restarted, says it is Biscuit and does not claim to be Juniper |
+| `name_adopt` | name | "your name is Juniper"; answers to Juniper and does not claim to be Pixel; restarted, says it is Juniper and still does not claim to be Pixel |
+| `name_rename` | name | Juniper, then Biscuit; answers to Biscuit and no longer claims to be Juniper; restarted, says it is Biscuit and does not claim to be Juniper |
 | `reflex_pingpong` | reflex | "whenever I say exactly 'ping', reply 'pong'"; two pings, an unrelated question, a ping after a restart |
 | `reflex_greeting` | reflex | "good morning" gets "Good morning, sunshine!"; a variation from another person; "good night" must not; "good morning" again after a restart |
 | `reflex_keyword` | reflex | any mention of bananas gets "yellow alert", inside longer sentences, also after a restart |
@@ -84,9 +84,11 @@ What is learned shows in what floppy says: a name is the name it gives when
 asked, a reflex is the taught reply to the trigger and no reply of it to a
 near miss, a routine is replies coming with no input and stopping when
 asked, and a name floppy claims (`not_says` "I am Pixel") is checked as a
-claim, so a reply that only mentions it passes. In every scenario with a
-probe after a restart, that probe carries the largest weight: it shows the
-lesson outlasted the session that taught it.
+claim, so a reply that only mentions it passes. By convention, in every
+scenario with a probe after a restart, that probe carries the largest weight
+of any check: it shows the lesson outlasted the session that taught it
+(`test_a_probe_after_a_restart_carries_the_largest_weight` holds the
+scenarios in `tests/eval/scenarios/` to it).
 
 A scenario's `diagnostics` read floppy's own logs. They say how it got
 there and are reported in `report.md` beside the grade ("Inside floppy"),
