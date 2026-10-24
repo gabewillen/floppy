@@ -59,7 +59,8 @@ const SLOW_REFLEX_BOUNDS: &str = "({reflex_timeout_ms: 30000})";
 const STALLED_REASONING_BOUNDS: &str =
     "({child_operation_timeout_ms: 8000, reflex_timeout_ms: 30000})";
 /// A model context whose budget (three bytes a token) holds the first
-/// turn's prompt but not the second's with its recalled episode.
+/// turn's prompt, the lesson offer's schema among its choices (decision
+/// D149), but not the second's with its recalled episode.
 const FITTED_TOKENS: u32 = 4_000;
 /// The model a bot composing the intuition tier gives it.
 const INTUITION_MODEL: &str = "chat-model";
@@ -1314,10 +1315,6 @@ fn reasoning_selects_from_the_turns_choices() {
     );
 }
 
-/// The whole text path on fake backends: "say hi" escalates to reasoning,
-/// which selects the communication's respond and sends it to the
-/// communication, which says the response through speaking
-/// and records it in its conversation.
 /// A turn that selects a lesson sends it, with the turn it was taught on,
 /// to the learning; the lesson's result is the next turn's stimulus, which
 /// sends no lesson of its own (decision D149).
@@ -1361,6 +1358,10 @@ fn a_lesson_is_learned_and_its_result_perceived() {
     );
 }
 
+/// The whole text path on fake backends: "say hi" escalates to reasoning,
+/// which selects the communication's respond and sends it to the
+/// communication, which says the response through speaking
+/// and records it in its conversation.
 #[test]
 fn a_reasoned_response_is_said_through_the_communication() {
     let mock = Mock::start();

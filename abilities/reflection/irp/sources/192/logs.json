@@ -1,0 +1,9 @@
+{
+  "reflection": [
+    "turn 1: bot.behavior.tick",
+    "turn 2: 1 episodes, 0 behaviors"
+  ],
+  "reflection.selected": [
+    "none"
+  ]
+}

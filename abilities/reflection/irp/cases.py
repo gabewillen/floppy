@@ -46,6 +46,14 @@ def tick_turn(n):
     return js(data)
 
 
+def lesson_turn(n):
+    data = json.loads(turn(n))
+    data["cognition_input"]["stimulus"] = {"event": "bot.ability.learning.output", "data": {
+        "lesson": "Whenever I say exactly 'ping', reply with exactly 'pong'.", "learned": True,
+        "behavior": {"name": "PingPong", "description": "Reply pong to ping."}}}
+    return js(data)
+
+
 def persona_turn(n):
     data = json.loads(turn(n))
     data["self"] = {"traits": ["friendly"], "description": "I like company."}
@@ -141,9 +149,9 @@ S.statement(7, "`revising` is bounded by `revising_timeout_ms` without progress 
 S.statement(8, "A memory transaction that fails (here the recall, on a database the run does not grant) fails the turn with `Reflection memory recall failed: <detail>`; after any failure the turn's episode is stored with no behavior (unless storing it is what failed; decision D97) and the reflection is idle again and takes the next input.")
 S.statement(9, "An input that arrives while a reflection is in hand waits and runs after it, in order: each turn gets its own answer.")
 S.statement(10, "An input whose `outcome` is `failed` or `cancelled` (a turn that failed or was cancelled; `completed` by default) is only remembered: after the recall it goes to `storing`, asking no model, and its episode carries its `outcome` and `failure` (decision D139).")
+S.statement(11, "With `self` holding the owner's traits, `processing` also offers `bot.ability.persona.revise` (its `events` at most two) and sends a selected revision to the invoker, before an inventory event of the same reply; more than one inventory event or more than one revision is refused as `over-selection` and repaired as any rejection (decision D145).")
 S.statement(12, "An input whose `cognition_output` holds a `bot.ability.learning.input` (a turn that taught the bot a lesson, which the learning learns itself) is only remembered too: after the recall it goes to `storing`, asking no model (decision D149).")
 S.statement(13, "An input whose stimulus is `bot.behavior.tick` or `bot.ability.learning.output` (a turn the bot's own routine or lesson caused) is only remembered too: after the recall it goes to `storing`, asking no model (decision D151).")
-S.statement(11, "With `self` holding the owner's traits, `processing` also offers `bot.ability.persona.revise` (its `events` at most two) and sends a selected revision to the invoker, before an inventory event of the same reply; more than one inventory event or more than one revision is refused as `over-selection` and repaired as any rejection (decision D145).")
 
 S.case(100, 1, "without a database each input is answered at once with an output.",
        [send(INPUT, turn(1)), expect(OUTPUT, "_event.data === null || _event.data === undefined"),
@@ -228,10 +236,16 @@ S.case(190, 10, "a failed turn and a cancelled one each answer the output asking
 
 S.case(191, 12, "a taught turn answers the output asking no model; the next turn selects.",
        [send(INPUT, taught_turn(1)), expect(OUTPUT), send(INPUT, turn(2)), expect(OUTPUT)],
-       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select()], clock="wall")
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select()], clock="wall",
+       logs={"reflection": ["turn 1: taught", "turn 2: 1 episodes, 0 behaviors"], "reflection.selected": ["none"]})
 S.case(192, 13, "a routine's tick turn answers the output asking no model; the next turn selects.",
        [send(INPUT, tick_turn(1)), expect(OUTPUT), send(INPUT, turn(2)), expect(OUTPUT)],
-       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select()], clock="wall")
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select()], clock="wall",
+       logs={"reflection": ["turn 1: bot.behavior.tick", "turn 2: 1 episodes, 0 behaviors"], "reflection.selected": ["none"]})
+S.case(193, 13, "a lesson's output turn answers the output asking no model; the next turn selects.",
+       [send(INPUT, lesson_turn(1)), expect(OUTPUT), send(INPUT, turn(2)), expect(OUTPUT)],
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select()], clock="wall",
+       logs={"reflection": ["turn 1: bot.ability.learning.output", "turn 2: 1 episodes, 0 behaviors"], "reflection.selected": ["none"]})
 S.case(200, 11, "a selected persona revision is sent to the invoker, then the output answers.",
        [send(INPUT, persona_turn(1)),
         expect(PERSONA_REVISE, "_event.data.text === 'I am a warm greeter.'"), expect(OUTPUT)],

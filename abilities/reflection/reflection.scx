@@ -42,7 +42,10 @@
   A failed or cancelled turn goes on to storing: reflection selects
   nothing for it and only remembers it (decision D139), and so does a
   turn whose output selected bot.ability.learning.input: the learning
-  learns that lesson (decision D149).
+  learns that lesson (decision D149). A turn the bot's own routine or
+  lesson caused (its stimulus bot.behavior.tick or
+  bot.ability.learning.output) is only remembered too: no one's input
+  caused it (decision D151).
 
   processing (the select call, select_instructions): its
   transitions for the three inventory events are the enabled transitions

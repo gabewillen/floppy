@@ -90,8 +90,16 @@ function isOnlyRemembered() {
   return isUnreflected() || isTaught() || isOwnStimulus();
 }
 
+// Why a turn isOnlyRemembered(): its outcome, a lesson taught, or its own
+// stimulus's event.
 function unreflectedLog() {
-  return 'turn ' + turn + ': ' + (isUnreflected() ? outcome : isTaught() ? 'taught' : Object(cognition_input.stimulus).event);
+  if (isUnreflected()) {
+    return 'turn ' + turn + ': ' + outcome;
+  }
+  if (isTaught()) {
+    return 'turn ' + turn + ': taught';
+  }
+  return 'turn ' + turn + ': ' + Object(cognition_input.stimulus).event;
 }
 
 function recallFailedMessage(detail) {
