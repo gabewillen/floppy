@@ -197,7 +197,7 @@ def aggregate(graded):
     for g in graded:
         for r in g["results"]:
             checks.setdefault(r["check"], []).append(r["score"])
-        for r in g.get("diagnostics", []):
+        for r in g["diagnostics"]:
             diagnostics.setdefault(r["check"], []).append(r["score"])
         for grade in g["grades"]:
             for name, value in grade.get("criteria", {}).items():
@@ -243,7 +243,7 @@ def report_markdown(title, summary, graded):
         for r in g["results"]:
             mark = "pass" if r["score"] >= 1 else ("part" if r["score"] > 0 else "fail")
             lines.append(f"- {mark} `{r['check']}` at {r['where']}: {r['why'][:240]}")
-        for r in g.get("diagnostics", []):
+        for r in g["diagnostics"]:
             mark = "yes" if r["score"] >= 1 else "no"
             lines.append(f"- inside: {mark} `{r['check']}` at {r['where']}: {r['why'][:240]}")
         for grade in g["grades"]:
@@ -313,11 +313,11 @@ def failure_evidence(graded, limit=120):
     the judges' main failure, and reflection's and the builder's logs."""
     lines = []
     for g in sorted(graded, key=lambda x: x["score"]):
-        if g["score"] >= 0.999 and all(r["score"] >= 1 for r in g.get("diagnostics", [])):
+        if g["score"] >= 0.999 and all(r["score"] >= 1 for r in g["diagnostics"]):
             continue
         lines.append(f"== {g['id']} (score {g['score']:.2f}, {g['category']})")
         lines += [f"failed {r['check']} at {r['where']}: {r['why'][:200]}" for r in g["results"] if r["score"] < 1]
-        lines += [f"inside, not {r['check']} at {r['where']}: {r['why'][:200]}" for r in g.get("diagnostics", []) if r["score"] < 1]
+        lines += [f"inside, not {r['check']} at {r['where']}: {r['why'][:200]}" for r in g["diagnostics"] if r["score"] < 1]
         lines += [f"judge {x['judge']}: {x['failure']}" for x in g["grades"] if x.get("failure")]
         lines += g["evidence"][:25]
     return lines[:limit]
