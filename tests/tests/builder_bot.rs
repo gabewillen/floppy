@@ -2983,7 +2983,8 @@ fn a_live_turn_its_schema_rejects_is_refused_before_the_builder() {
         ("target-number", "/apply/targets", json!([1])),
         ("target-empty", "/apply/targets", json!([""])),
         ("targets-many", "/apply/targets", json!(many)),
-        ("extra-member", "/apply/handled", json!(true)),
+        ("extra-member", "/apply/extra", json!(true)),
+        ("handled-string", "/apply/handled", json!("no")),
         ("apply-null", "/apply", Json::Null),
     ];
     for (case, pointer, value) in bounds {
