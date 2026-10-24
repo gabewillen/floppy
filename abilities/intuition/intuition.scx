@@ -13,11 +13,14 @@
   the <param> choices (the
   body's assembled snapshot choices: its own enabled event:schema
   transitions and each ability's latest offers, tagged with the offering
-  ability as target), go to the
+  ability as target), within the decision layer's effort ceiling (the
+  cognition frames them, decision D206), go to the
   decision service, which never offers the deliberate handoff
   bot.ability.reasoning.input. Its state is {turn: T}, T the model-facing
-  text of the stimulus alone (<cognition:model_facing_content>, decision
-  D150: what reasoning reads, never the raw envelope); the
+  text of the stimulus (<cognition:model_facing_content>, decision
+  D150: what reasoning reads, never the raw envelope), after the <held>
+  block of the actions over the ceiling (the <param> held, decision
+  D206), which the decision cannot choose and only a pass hands on; the
   stimulus goes too, but only to ground each event's required data from its
   data's value, else the schema's enum; an event it cannot fill is not
   offered, so a reply that needs free text goes on to a later tier (user
@@ -105,6 +108,10 @@
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
     <data id="choices" expr="[]"/>
+    <!-- The actions held from this tier, over its effort ceiling (decision
+         D206): {event, description?} each, rendered as the <held> block of
+         the state the decision reads, so a pass can hand them on. -->
+    <data id="held" expr="[]"/>
     <!-- The bot's environment (decision D106): the decision's situation once
          the cognition's situation renderer gives it one (D150). -->
     <data id="environment" expr="null"/>
@@ -134,7 +141,7 @@
     <onentry>
       <send idlocation="decision_timer" event="deciding.after" delayexpr="decisionTimeoutDelay()"/>
       <cognition:model_facing_content location="stimulus_content" stimulus="stimulus"
-                                      prior_episodes="[]" standing_directives="[]"/>
+                                      prior_episodes="[]" standing_directives="[]" held="held"/>
     </onentry>
     <onexit>
       <cancel sendidexpr="decision_timer"/>
