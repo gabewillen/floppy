@@ -2,20 +2,10 @@
   "clock": "wall",
   "answers": [
     {
-      "path": "/interactions",
+      "path": "/audio/transcriptions",
       "status": 200,
       "body": {
-        "steps": [
-          {
-            "type": "model_output",
-            "content": [
-              {
-                "type": "text",
-                "text": "hey floppy"
-              }
-            ]
-          }
-        ]
+        "text": "hey floppy"
       }
     }
   ]

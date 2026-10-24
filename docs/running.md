@@ -63,6 +63,21 @@ printf '%s\n' \
     --fuel 9223372036854775807 environments/room/room.scx
 ```
 
+Talk to the floppy bot out loud from a Mac with
+[`scripts/talk.py`](../scripts/talk.py) (decision D206), run in a terminal
+that has microphone access, with ffmpeg installed: it runs the room above
+under `scx run`, gives each utterance the microphone hears to the room as
+`environment.sound`, and plays each sound floppy makes on the speaker
+(muting the microphone while it does). A typed line is sent as text, and
+`--say FILE` sends a recorded utterance instead. The env file names the
+lab's speech gateway for both speech variables
+(`FLOPPY_SPEECH_BASE_URL=http://192.168.2.2:8090/v1`, and the same for
+`FLOPPY_VOICE_BASE_URL`):
+
+```console
+python3 scripts/talk.py --env-file .env --scx scx
+```
+
 A bot against floppy's latest GitHub release (once one is published:
 [release.md](release.md)) drops `--offline --cache-dir`:
 

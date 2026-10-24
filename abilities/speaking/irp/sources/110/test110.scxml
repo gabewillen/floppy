@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- speaking-2: the text of record is the words exactly as written, nothing stripped, encoded by the gemini encoder and written to media/speaking-1.pcm. -->
+<!-- speaking-2: the text of record is the words exactly as written, nothing stripped, encoded by the default encoder and written to media/speaking-1.pcm. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="speaking" type="scxml" src="../../../speaking.scx">

@@ -51,7 +51,7 @@ EFFERENCE = "bot.ability.speaking.efference"
 SOUND = "environment.sound"
 SPOKEN = "bot.ability.speaking.output"
 STOP = "bot.ability.communication.stop"
-INTERACTIONS = "/interactions"
+SPEECH = "/audio/speech"
 
 # The offer: respond alone, its schema compacted ($schema, title and
 # examples dropped), no target.
@@ -68,16 +68,13 @@ RESPONDING = expect(OFFERS, "_event.data.ability === 'communication' && _event.d
                             " 'bot.ability.communication.respond bot.ability.communication.stop'"
                             " && _event.data.choices.every(function (c) { return c.schema.title === undefined; })")
 
-# A tenth of a second of 24 kHz mono 16-bit PCM (4800 zero bytes), as the
-# Gemini speech backend answers it.
-AUDIO = {"path": INTERACTIONS, "status": 200, "body": {"steps": [{"type": "model_output", "content": [{
-    "type": "audio", "data": "A" * 6400, "sample_rate": 24000, "channels": 1,
-    "mime_type": "audio/l16; rate=24000; channels=1"}]}]}}
-# Two seconds of the same (96000 bytes): four pieces of playout.
-LONG_AUDIO = {"path": INTERACTIONS, "status": 200, "body": {"steps": [{"type": "model_output", "content": [{
-    "type": "audio", "data": "A" * 128000, "sample_rate": 24000, "channels": 1,
-    "mime_type": "audio/l16; rate=24000; channels=1"}]}]}}
-BOOM = {"path": INTERACTIONS, "status": 500, "body": {"error": {"message": "boom"}}}
+# A tenth of a second of 24 kHz mono 16-bit PCM (4800 bytes), as the
+# OpenAI-compatible speech backend answers it.
+AUDIO = {"path": SPEECH, "status": 200, "body": "A" * 4800}
+# Two seconds of the same (96000 bytes): four pieces of playout, streamed
+# as four 0.5 s chunks (decision D203).
+LONG_AUDIO = {"path": SPEECH, "status": 200, "body": "A" * 96000}
+BOOM = {"path": SPEECH, "status": 500, "body": {"error": {"message": "boom"}}}
 
 
 def said(content, content_type="text/plain"):
@@ -274,7 +271,7 @@ S.case(210, 12, "past held_responses_bound a respond is refused; the held one is
        params=SPEECH_BOUNDS + [("held_responses_bound", "1")], backend=[AUDIO], clock="wall")
 
 S.case(220, 13, "a stop while a response is said stops speaking: nothing was played, so nothing is said or recorded.",
-       [READY, send(RESPOND, respond("one two three four")), RESPONDING, efference("2"), send(STOP, js({})),
+       [READY, send(RESPOND, respond("one two three four")), RESPONDING, efference("0.5"), send(STOP, js({})),
         efference("0"),
         expect(SPOKEN, "_event.data.text === 'one two three four' && _event.data.spoken === ''"
                        " && _event.data.unspoken === 'one two three four' && _event.data.outcome === 'stopped'"),

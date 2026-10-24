@@ -11,8 +11,10 @@
 
   Input: the <param>s audio (a reference to the utterance's audio in the
   directory the run grants the speech service), media_type, provider and
-  model (gemini and gemini-3.5-flash by default; provider null is the
-  OpenAI-compatible POST {base}/audio/transcriptions, whisper-1 for example).
+  model (by default provider null, the OpenAI-compatible POST
+  {base}/audio/transcriptions, with the lab's Nemotron streaming model,
+  nemotron-speech-streaming-en-0.6b; provider gemini is Gemini's
+  Interactions API).
 
   Output: <donedata>, received by the interpretation as
   done.invoke.speech_decoding: {text} (the decoded speech, as words)
@@ -37,8 +39,8 @@
     <!-- The invoker's <param>s. -->
     <data id="audio" expr="null"/>
     <data id="media_type" expr="null"/>
-    <data id="provider" expr="'gemini'"/>
-    <data id="model" expr="'gemini-3.5-flash'"/>
+    <data id="provider" expr="null"/>
+    <data id="model" expr="'nemotron-speech-streaming-en-0.6b'"/>
     <!-- The result. -->
     <data id="output" expr="null"/>
   </datamodel>

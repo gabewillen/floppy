@@ -12,7 +12,7 @@
     </test>
   </assert>
   <assert id="speaking-2" specnum="2" specid="#speaking-2">
-    <![CDATA[`bot.ability.speaking.input` `{parts}` (1 to 64 parts `{expression?, words?}`, decision D178) is encoded by the vocal child, which gets the parts, with the speaking's `provider`, `model`, `voice` and `media_type` (by default the gemini encoder, `audio/pcm`), written to `output_prefix` + the utterance's number + `.` + the media subtype (`media/speaking-<n>.pcm`); the utterance's text of record is the parts' words joined exactly as written (nothing stripped).]]>
+    <![CDATA[`bot.ability.speaking.input` `{parts}` (1 to 64 parts `{expression?, words?}`, decision D178) is encoded by the vocal child, which gets the parts, with the speaking's `provider`, `model`, `voice` and `media_type` (by default the OpenAI-compatible encoder, provider `null`, model `sidekick-tts-engine-breeze`, voice `warm`, `audio/pcm`), written to `output_prefix` + the utterance's number + `.` + the media subtype (`media/speaking-<n>.pcm`); the utterance's text of record is the parts' words joined exactly as written (nothing stripped).]]>
     <test id="110" conformance="mandatory" manual="false">
       <start uri="110/test110.scxml"/>
     </test>

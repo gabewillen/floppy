@@ -7,6 +7,7 @@ S.media({"speech.wav": wav(1000), "empty.wav": b""})
 DONE = "done.invoke.speech_decoding"
 AUDIO = ("audio", "'media/speech.wav'")
 WHISPER = [("provider", "null"), ("model", "'whisper-1'")]
+GEMINI = [("provider", "'gemini'"), ("model", "'gemini-3.5-flash'")]
 
 
 def text(value):
@@ -17,19 +18,19 @@ def message(value):
     return f"_event.data.message === {js(value)} && Object.keys(_event.data).length === 1"
 
 
-S.statement(1, "By default it decodes through Gemini: the speech service's `decode` with provider `gemini` and model `gemini-3.5-flash`, `POST {base}/interactions`. The service's `bot.ability.hearing.speech.decoding.output` `{text}` ends it in `applied`, its done data (`done.invoke.speech_decoding`) exactly `{text}`: the answer's `output_text`, or its `model_output` steps' text, trimmed.")
+S.statement(1, "By default it decodes through the OpenAI-compatible API: the speech service's `decode` with provider `null` and model `nemotron-speech-streaming-en-0.6b` (the lab's Nemotron), `POST {base}/audio/transcriptions`. The service's `bot.ability.hearing.speech.decoding.output` `{text}` ends it in `applied`, its done data (`done.invoke.speech_decoding`) exactly `{text}`: the answer's `text`, trimmed.")
 S.statement(2, "Speech the backend heard none of decodes to empty words: done data `{text: \"\"}`, not a failure.")
-S.statement(3, "The `provider` and `model` `<param>`s choose the backend: provider `null` is the OpenAI-compatible `POST {base}/audio/transcriptions`, whose answer's `text` becomes the done data's `text`.")
+S.statement(3, "The `provider` and `model` `<param>`s choose the backend: provider `gemini` is Gemini's `POST {base}/interactions`, whose answer's `output_text`, or its `model_output` steps' text, trimmed, becomes the done data's `text`; provider `null` is the OpenAI-compatible `POST {base}/audio/transcriptions` and never calls Gemini's.")
 S.statement(4, "When the service answers `bot.ability.failed` `{message}` (an unreadable or empty audio file, an error status, a malformed answer), the done data is exactly `{message}` with the service's message.")
 S.statement(5, "When the decoder cannot run (a missing `audio`, or a malformed `media_type`, rejects its start with `error.execution`), the done data is `{message: \"SpeechDecoding could not run (<error event>)\"}`.")
 
-# 1: the gemini default.
-S.case(100, 1, "the default gemini decoder's output_text comes back trimmed as the done data.",
+# 1: the OpenAI-compatible default.
+S.case(100, 1, "the default decoder's transcription text comes back trimmed as the done data.",
        [expect(DONE, text("hello there"))],
-       params=[AUDIO], backend=[{"path": "/v1/interactions", "body": {"output_text": "  hello there \n"}}])
-S.case(101, 1, "the gemini answer's model_output steps' text is joined as the words.",
+       params=[AUDIO], backend=[{"path": "/v1/audio/transcriptions", "body": {"text": "  hello there \n"}}])
+S.case(101, 3, "the gemini answer's model_output steps' text is joined as the words.",
        [expect(DONE, text("hello\nthere"))],
-       params=[AUDIO, ("media_type", "'audio/wav'")],
+       params=[AUDIO, ("media_type", "'audio/wav'")] + GEMINI,
        backend=[{"path": "/v1/interactions", "body": {"steps": [
            {"type": "user_input", "content": [{"type": "text", "text": "ignored"}]},
            {"type": "model_output", "content": [{"type": "text", "text": " hello "}, {"type": "text", "text": "there"}]}]}}])
@@ -37,7 +38,7 @@ S.case(101, 1, "the gemini answer's model_output steps' text is joined as the wo
 # 2: no speech heard.
 S.case(110, 2, "a gemini model output with no text decodes to empty words.",
        [expect(DONE, text(""))],
-       params=[AUDIO], backend=[{"path": "/v1/interactions", "body": {"steps": [{"type": "model_output", "content": []}]}}])
+       params=[AUDIO] + GEMINI, backend=[{"path": "/v1/interactions", "body": {"steps": [{"type": "model_output", "content": []}]}}])
 S.case(111, 2, "an OpenAI-compatible transcription of silence decodes to empty words.",
        [expect(DONE, text(""))],
        params=[AUDIO] + WHISPER, backend=[{"path": "/v1/audio/transcriptions", "body": {"text": "   "}}])
@@ -55,7 +56,7 @@ S.case(121, 3, "provider null never calls the gemini API (its answer there would
 # 4: the service's failures.
 S.case(130, 4, "an error status is the service's failure message.",
        [expect(DONE, message("Speech decoding failed: the backend answered an error status."))],
-       params=[AUDIO], backend=[{"path": "/v1/interactions", "status": 500, "body": {"error": {"message": "boom"}}}])
+       params=[AUDIO], backend=[{"path": "/v1/audio/transcriptions", "status": 500, "body": {"error": {"message": "boom"}}}])
 S.case(131, 4, "a malformed answer is the service's failure message.",
        [expect(DONE, message("Speech decoding failed: the backend's answer is malformed."))],
        params=[AUDIO] + WHISPER, backend=[{"path": "/v1/audio/transcriptions", "body": {"words": "no text field"}}])

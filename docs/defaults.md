@@ -52,14 +52,16 @@ The listening's hearing leaves name the speech service's models:
 `pyannote-diarization`, and
 `abilities/voice_identification/voice_identification.scx`'s is
 `voice-detect-wespeaker-resnet34` (LocalAI's model names);
-`abilities/speech_decoding/speech_decoding.scx`'s `provider` is `gemini` and
-its `model` `gemini-3.5-flash`. `abilities/speaking/speaking.scx`'s
-`provider` is `gemini`, its `model` `gemini-3.1-flash-tts-preview` and its
-`voice` `Kore`, which it passes to vocal for the speech service (vocal's own
+`abilities/speech_decoding/speech_decoding.scx`'s `provider` is `null` and
+its `model` `nemotron-speech-streaming-en-0.6b`. `abilities/speaking/speaking.scx`'s
+`provider` is `null`, its `model` `sidekick-tts-engine-breeze` and its
+`voice` `warm`, which it passes to vocal for the speech service (vocal's own
 are `null`: its invoker names them). Both directions therefore call the
-Gemini API, so `FLOPPY_SPEECH_BASE_URL` is its version root,
-`https://generativelanguage.googleapis.com/v1beta` (decision D94); a
-`provider` of `null` is the OpenAI-compatible API (`whisper-1`, `tts-1`).
+OpenAI-compatible audio API on the lab's speech gateway, so
+`FLOPPY_SPEECH_BASE_URL` and `FLOPPY_VOICE_BASE_URL` are
+`http://192.168.2.2:8090/v1`: Nemotron streaming STT, Breeze TTS and the
+LocalAI voice models behind one origin (decision D206). A `provider` of
+`gemini` is the Gemini API (decision D94).
 
 ## Timeouts and bounds
 

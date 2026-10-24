@@ -13,7 +13,7 @@ ASK = "bot.ability.identity.ask"
 NAMED = "bot.ability.identity.named"
 GAVE_UP = "Identity could not recall a name: memory did not answer within the bring-up budget."
 DB = ("database", "'/memory/floppy.sqlite'")
-INTERACTIONS = "/interactions"
+TRANSCRIPTIONS = "/audio/transcriptions"
 
 # The offer: the adopt event alone, its schema compacted ($schema, title
 # and examples dropped), with the schema's description.
@@ -45,8 +45,7 @@ def sound(audio="media/hey.wav"):
 
 
 def transcript(text):
-    return {"path": INTERACTIONS, "status": 200,
-            "body": {"steps": [{"type": "model_output", "content": [{"type": "text", "text": text}]}]}}
+    return {"path": TRANSCRIPTIONS, "status": 200, "body": {"text": text}}
 
 
 S.statement(1, "Without a database it recalls the name it was started with (the `<param>` `name`, else none) and is ready: on entering knowing it sends `bot.ability.offers` `{ability: \"identity\", choices}`, choices the one model-callable `bot.ability.identity.adopt` with its schema compacted (no `$schema`, title or examples) and the schema's description, no target.")
@@ -142,14 +141,14 @@ S.case(151, 6, "a sound whose transcript does not name it produces nothing.",
        params=[named("Floppy")], backend=[transcript("hello there")], clock="wall")
 S.case(152, 6, "a nameless identity decodes no sound (the backend would fail it).",
        [READY, send(SOUND, sound()), wait("1s")],
-       backend=[{"path": INTERACTIONS, "status": 500, "body": {"error": {"message": "boom"}}}], clock="wall")
+       backend=[{"path": TRANSCRIPTIONS, "status": 500, "body": {"error": {"message": "boom"}}}], clock="wall")
 
 S.case(160, 7, "a decoding the backend fails answers bot.ability.failed and the identity listens again.",
        [READY, send(SOUND, sound()),
         expect(FAILED, "typeof _event.data.message === 'string' && _event.data.message.length > 0"),
         send(INPUT, said("Floppy")), expect(HANDOFF, addressed("Floppy"))],
        params=[named("Floppy")],
-       backend=[{"path": INTERACTIONS, "status": 500, "body": {"error": {"message": "boom"}}}], clock="wall")
+       backend=[{"path": TRANSCRIPTIONS, "status": 500, "body": {"error": {"message": "boom"}}}], clock="wall")
 S.case(161, 7, "a sound with no file in the media directory fails the decoding.",
        [READY, send(SOUND, sound("media/missing.wav")),
         expect(FAILED, "typeof _event.data.message === 'string' && _event.data.message.length > 0")],
@@ -166,7 +165,7 @@ S.case(172, 8, "text that arrives while a sound is being recognized waits for it
        [READY, send(SOUND, sound()), send(INPUT, said("Floppy")),
         expect(FAILED, "typeof _event.data.message === 'string'"), expect(HANDOFF, addressed("Floppy"))],
        params=[named("Floppy")],
-       backend=[{"path": INTERACTIONS, "status": 500, "body": {"error": {"message": "boom"}}}], clock="wall")
+       backend=[{"path": TRANSCRIPTIONS, "status": 500, "body": {"error": {"message": "boom"}}}], clock="wall")
 
 S.case(180, 9, "a nameless identity is asked and answers that it has no name.",
        [READY, send(ASK, js({})), expect(NAMED, "_event.data.name === null")])

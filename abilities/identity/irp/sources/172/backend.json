@@ -2,7 +2,7 @@
   "clock": "wall",
   "answers": [
     {
-      "path": "/interactions",
+      "path": "/audio/transcriptions",
       "status": 500,
       "body": {
         "error": {
