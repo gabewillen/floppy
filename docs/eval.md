@@ -190,9 +190,12 @@ python3 tests/eval/eval.py builder --judges none --repeats 2 \
   --column "sparks=sparks/qwen3.8-flash-next;env=.env.cpa-lab;bot=sparks/qwen3.8-flash-next"
 ```
 
-Sparks is the bar (the builder must work on a small model, taking more
-attempts if it must), and everything inside floppy's framework runs on it:
-the bot, the builder and no hosted speech. Hosted models only judge.
+Sparks is the bar (the maintainer, 2026-10-24: "try it on sparks if that
+model can do it i'm fine with that being the bar"; the builder must work on
+a small model, taking more attempts if it must). Everything inside floppy's
+framework runs on it, the bot and the builder, with no hosted speech; hosted
+models only judge or play the person ("i'm fine with using that as a judge /
+person just not within the framework").
 
 ## Running it
 

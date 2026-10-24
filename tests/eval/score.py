@@ -128,7 +128,8 @@ def _replies(text):
     for entry in output:
         if not isinstance(entry, dict) or entry.get("event") != RESPOND:
             continue
-        parts = (entry.get("data") or {}).get("parts")
+        data = entry.get("data")
+        parts = data.get("parts") if isinstance(data, dict) else None
         words = "".join(p["words"] for p in parts or [] if isinstance(p, dict) and isinstance(p.get("words"), str))
         if words.strip():
             out.append(words)
