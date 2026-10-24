@@ -218,3 +218,41 @@ S.case(212, 12, "an outbound message carries the participants its append stamps,
        [READY, outbound("hi", "r-1", participants=[{"ref": "voice:warm", "role": "source", "own": True}]),
         exchange(1, participants("_event.data.messages[0].participants", [{"ref": "voice:warm", "role": "source", "own": True}])),
         outbound("again", "r-2"), exchange(2, participants("_event.data.messages[1].participants", []))])
+
+PERSON_1 = 'relationship-{"identity_groups":[[],["person-1"]]}'
+VOICE_A = [0.28, 0.96]
+VOICE_A_AGAIN = [0.3, 0.95]
+VOICE_B = [0.96, -0.28]
+
+
+def heard(content, voice):
+    return send(INPUT, js(text_input(content, sources=(voice,))))
+
+
+def by(person):
+    return (" && JSON.stringify(" + last("source_ids") + ") === " + js(json_text([person]))
+            + " && " + participants("_event.data.participants", [{"ref": person, "role": "source"}]))
+
+
+S.statement(13, "With a `database` param, an input with a voice embedding among its identities is identified through long-term memory first (decision D194): each embedding is the person memory holds whose voice it matches (cosine at 0.85, margin 0.05, as relationships match), else a new person `person-<n>`, and the person's ref takes the embedding's place, so the relationship, the turns, the participants and the committed message key on the person; every voice heard is stored for its person. Without one an embedding is its own participant, its track `track-` and its unit vector. A memory failure there answers `bot.ability.conversation.failed` `{stage: \"memory\", message}` and commits nothing.")
+
+S.case(220, 13, "the same voice twice is one person, across inputs.",
+       [READY, heard("hi", VOICE_A), committed("hi", turn_ref="input-1:turn:person-1", session_ref=PERSON_1, extra=by("person-1")),
+        heard("again", VOICE_A_AGAIN),
+        committed("again", turn_ref="input-2:turn:person-1", session_ref=PERSON_1, extra=by("person-1"))],
+       params=MEMORY, clock="wall")
+S.case(221, 13, "a different voice is a new person.",
+       [READY, heard("hi", VOICE_A), committed("hi", turn_ref="input-1:turn:person-1", session_ref=PERSON_1, extra=by("person-1")),
+        heard("hello", VOICE_B),
+        committed("hello", turn_ref="input-2:turn:person-2", session_ref=PERSON_1, extra=by("person-2"))],
+       params=MEMORY, clock="wall")
+S.case(222, 13, "without a database an embedding is its own participant.",
+       [READY, heard("hi", VOICE_A),
+        committed("hi", turn_ref="input-1:turn:track-[0.28,0.96]",
+                  session_ref='relationship-{"identity_groups":[[],[[0.28,0.96]]]}',
+                  extra=" && " + participants("_event.data.participants", []))])
+S.case(223, 13, "a database the memory cannot open fails a voice at the memory stage, and commits nothing.",
+       [READY, heard("hi", VOICE_A),
+        expect(FAILED, "_event.data.stage === 'memory' && typeof _event.data.message === 'string' && _event.data.message.length > 0")]
+       + snapshot([]),
+       params=[("database", "'/nowhere/floppy.sqlite'"), ("memory_timeout_ms", "600000")], clock="wall")

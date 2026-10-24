@@ -28,16 +28,16 @@
     <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 0.1 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step4"/>
   </state>
   <state id="step4">
-    <transition event="environment.sound" cond="_event.data.audio === 'media/speaking-2.pcm' &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.source === 'speaking'" target="step5"/>
+    <transition event="environment.sound" cond="_event.data.audio === 'media/speaking-2.0.pcm' &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.source === 'speaking'" target="step5"/>
   </state>
   <state id="step5">
     <transition event="bot.ability.speaking.progress" cond="_event.data.spoken_seconds === 0" target="step6"/>
   </state>
   <state id="step6">
-    <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 0 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step7"/>
+    <transition event="bot.ability.speaking.progress" cond="_event.data.spoken_seconds === 0.1" target="step7"/>
   </state>
   <state id="step7">
-    <transition event="bot.ability.speaking.progress" cond="_event.data.spoken_seconds === 0.1" target="step8"/>
+    <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 0 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step8"/>
   </state>
   <state id="step8">
     <transition event="bot.ability.conversation.append" cond="_event.data.message.direction === 'outbound' &amp;&amp; _event.data.message.content === &quot;again&quot; &amp;&amp; _event.data.message.content_type === 'text/plain' &amp;&amp; !('sequence' in _event.data.message) &amp;&amp; Array.isArray(_event.data.message.participants) &amp;&amp; _event.data.message.participants.length === 0 &amp;&amp; _event.data.message.source_ids.length === 0 &amp;&amp; _event.data.message.target_ids.length === 0 &amp;&amp; _event.data.message.provenance.id === 'speaking-2' &amp;&amp; _event.data.message.provenance.event === 'bot.ability.conversation.append'" target="step9"/>

@@ -107,9 +107,12 @@
 //!   with `authorization: Bearer <apikey>` and the canonical JSON body
 //!   `{"input", "model", "response_format", "voice"}`
 //!   ([`encoding_request`]); with `provider` `elevenlabs`,
-//!   `POST {base}/text-to-speech/{voice}?output_format=F` with
+//!   `POST {base}/text-to-speech/{voice}/stream?output_format=F` with
 //!   `xi-api-key: <apikey>` and the body `{"model_id", "text"}` (its
-//!   `text-to-speech` API; `F` from [`FORMATS`]). A reply without a pause
+//!   streaming `text-to-speech` API; `F` from [`FORMATS`]). Both answer
+//!   the audio as it is synthesized, and the service reads each answer as
+//!   it arrives (`outbound-http.send`), returning its chunks
+//!   ([`chunks`]) before the answer ends. A reply without a pause
 //!   is one request, and its answer is written as it is. With a pause, the
 //!   answers are joined as signed 16-bit little-endian PCM (raw `pcm` at
 //!   [`PCM_SAMPLE_RATE_HZ`] mono, a WAV answer at its own rate and
@@ -119,6 +122,7 @@
 //!   invocation, and nothing is written.
 //! * with `provider` `gemini`, either direction: `POST {base}/interactions`
 //!   with `x-goog-api-key: <apikey>` ([`gemini`] documents the bodies).
+//!   Gemini answers each stretch whole, so each is one chunk.
 //!
 //! # Events
 //!
@@ -126,10 +130,19 @@
 //! one event to the stream it returns, then resolves its result future (the
 //! invoking session receives `done.invoke.<id>` after the event): with no
 //! data, except that a media step that succeeds writes no event and
-//! resolves with its result as the done data. The names and data are
-//! those of the event schemas (`services/speech/schemas/` and
+//! resolves with its result as the done data, and that an encoding writes
+//! each of its chunks first, as it is cut (decision D203). The names and
+//! data are those of the event schemas (`services/speech/schemas/` and
 //! `abilities/schemas/`):
 //!
+//! * [`chunks::CHUNK_EVENT`] `{"audio": R, "sequence": S, "media_type": M,
+//!   "sample_rate_hz": N, "channels": C, "duration": D}`, before the
+//!   output, once per chunk: `R` is chunk `S`'s file (the `output`
+//!   reference with `.<S>` before its extension), written before the event
+//!   names it, `S` counts from 0, and `N`, `C` and `D` are those of its
+//!   audio, as the output's are. The chunks in order are the whole reply,
+//!   each pause a chunk of its silence; a failure after some chunks still
+//!   answers [`FAILED_EVENT`], and the chunks' files stay.
 //! * [`DECODING_OUTPUT_EVENT`] `{"text": T}`: the decoded speech (empty when
 //!   the backend heard none).
 //! * [`ENCODING_OUTPUT_EVENT`] `{"audio": R, "media_type": M,
@@ -165,7 +178,8 @@
 //! `invoke` records one observation through scxml.rs's `telemetry` WIT
 //! facade (operation `start`: its closed outcome, `ok`, `rejected`, or
 //! `failed`, and one closed signal event), and one closed signal event
-//! (operation `send`) when it returns its event. No attribute carries the
+//! (operation `send`) when it returns its last event (an encoding's chunks
+//! record none). No attribute carries the
 //! words, the text, the audio, a reference, the model, the voice, or a URL, so the
 //! cardinality is the product of the closed enums.
 
@@ -180,6 +194,7 @@
 
 use std::io::Read as _;
 
+pub mod chunks;
 pub mod gemini;
 pub mod voice;
 
@@ -205,6 +220,9 @@ pub const TRANSCRIPTIONS_PATH: &str = "/audio/transcriptions";
 pub const SPEECH_PATH: &str = "/audio/speech";
 /// The `ElevenLabs` encoding path appended to the base URL, before the voice.
 pub const TEXT_TO_SPEECH_PATH: &str = "/text-to-speech/";
+/// The `ElevenLabs` streaming path after the voice: its answer's audio
+/// arrives as it is synthesized.
+pub const STREAM_PATH: &str = "/stream";
 /// The encoded media type when the invocation names none: `mp3`, the
 /// default of both backends.
 pub const DEFAULT_MEDIA_TYPE: &str = "audio/mpeg";
@@ -1189,8 +1207,9 @@ pub fn decoding_request(
 /// The speech request of one stretch's `words`: `POST {base}/audio/speech`
 /// with a bearer key and the canonical JSON body `{"input", "model",
 /// "response_format", "voice"}`, or, for `ElevenLabs`,
-/// `POST {base}/text-to-speech/{voice}?output_format=F` with `xi-api-key`
-/// and the body `{"model_id", "text"}`.
+/// `POST {base}/text-to-speech/{voice}/stream?output_format=F` (its
+/// streaming endpoint) with `xi-api-key` and the body `{"model_id",
+/// "text"}`.
 #[must_use]
 pub fn encoding_request(
     base_url: u32,
@@ -1215,7 +1234,7 @@ pub fn encoding_request(
             url: vec![
                 Part::Reference(base_url),
                 Part::Literal(format!(
-                    "{TEXT_TO_SPEECH_PATH}{}?output_format={output_format}",
+                    "{TEXT_TO_SPEECH_PATH}{}{STREAM_PATH}?output_format={output_format}",
                     encoding.voice
                 )),
             ],
@@ -1683,44 +1702,47 @@ mod guest {
                 status: response.status,
                 body: response.body,
             })
-            .map_err(|failure| match failure.code {
-                ErrorCode::PayloadTooLarge => TransportFailure::TooLarge,
-                _ => TransportFailure::Unavailable,
-            })
+            .map_err(|failure| transport_failure(&failure))
     }
 
-    /// Runs the accepted operation to how it ends.
-    async fn run(operation: Operation, endpoint: Option<(u32, Option<u32>)>) -> super::Finished {
+    /// Runs the accepted operation to how it ends, `None` when the invoking
+    /// session stopped reading `returned` (an encoding returns its chunks
+    /// there as they are written).
+    async fn run(
+        operation: Operation,
+        endpoint: Option<(u32, Option<u32>)>,
+        returned: &mut wit_bindgen::StreamWriter<Event>,
+    ) -> Option<super::Finished> {
         use super::{Finished, voice};
         match &operation {
             Operation::Normalize(normalization) => {
-                return Finished::step(
+                return Some(Finished::step(
                     &operation,
                     voice::normalized(normalization, super::read_audio, super::write_audio),
-                );
+                ));
             }
             Operation::Append(appending) => {
-                return Finished::step(
+                return Some(Finished::step(
                     &operation,
                     voice::appended(appending, super::read_audio, super::write_audio),
-                );
+                ));
             }
             Operation::Clip(clipping) => {
-                return Finished::step(
+                return Some(Finished::step(
                     &operation,
                     voice::clipped(clipping, super::read_audio, super::write_audio),
-                );
+                ));
             }
             _ => {}
         }
         let Some((base_url, api_key)) = endpoint else {
-            return Finished::event(Returned::failed(
+            return Some(Finished::event(Returned::failed(
                 &operation,
                 super::FailureCode::Unconfigured,
-            ));
+            )));
         };
-        let failed = |code| Finished::event(Returned::failed(&operation, code));
-        Finished::event(match &operation {
+        let failed = |code| Some(Finished::event(Returned::failed(&operation, code)));
+        Some(Finished::event(match &operation {
             Operation::Decode(decoding) => {
                 let audio = match super::read_audio(&decoding.audio.path) {
                     Ok(audio) => audio,
@@ -1735,30 +1757,168 @@ mod guest {
                 super::decoding_outcome(&operation, answered)
             }
             Operation::Encode(encoding) => {
-                // One stretch at a time, in order, until one fails or the
-                // answers together pass what may be assembled.
-                let mut answered = Vec::with_capacity(encoding.stretches.len());
-                let mut held = 0_usize;
-                for words in encoding.said() {
-                    let built = super::encoding_request(base_url, api_key, encoding, words);
-                    let answer = fetch(built).await;
-                    let settled =
-                        matches!(&answer, Ok(response) if (200..300).contains(&response.status));
-                    if let Ok(response) = &answer {
-                        held = held.saturating_add(response.body.len());
-                        if scxml_types::exceeds_wasm_bound(held, super::MAX_ASSEMBLED_BYTES) {
-                            return failed(super::FailureCode::Malformed);
-                        }
-                    }
-                    answered.push(answer);
-                    if !settled {
-                        break;
-                    }
-                }
-                super::encoding_outcome(&operation, answered, super::write_audio)
+                return encode(&operation, encoding, base_url, api_key, returned).await;
             }
-            _ => return run_voice(&operation, base_url, api_key).await,
-        })
+            _ => return Some(run_voice(&operation, base_url, api_key).await),
+        }))
+    }
+
+    /// Bytes of one read of a streamed answer's body.
+    const READ_BYTES: usize = 64 * 1024;
+
+    /// Why an encoding stopped before its outcome.
+    enum Stopped {
+        /// It failed: its one event.
+        Failed(super::FailureCode),
+        /// The invoking session stopped reading.
+        Gone,
+    }
+
+    /// Writes each chunk's file, then returns its event (decision D203).
+    async fn emit(
+        encoding: &super::Encoding,
+        chunks: Vec<super::chunks::Chunk>,
+        returned: &mut wit_bindgen::StreamWriter<Event>,
+    ) -> Result<(), Stopped> {
+        for chunk in chunks {
+            let media = super::chunks::chunk_media(&encoding.output, chunk.sequence)
+                .map_err(Stopped::Failed)?;
+            super::write_audio(&media.path, &chunk.audio)
+                .map_err(|_| Stopped::Failed(super::FailureCode::Unwritable))?;
+            let reply = super::chunks::chunk_returned(encoding, &media, &chunk);
+            if returned.write_one(event(&reply)).await.is_some() {
+                return Err(Stopped::Gone);
+            }
+        }
+        Ok(())
+    }
+
+    /// One stretch's request, its answer read as it arrives
+    /// (`outbound-http.send`) and cut into chunks while it is a success;
+    /// Gemini's, which answers whole, fetched and returned as one chunk.
+    async fn stretch(
+        encoding: &super::Encoding,
+        built: Request,
+        chunker: &mut super::chunks::Chunker,
+        returned: &mut wit_bindgen::StreamWriter<Event>,
+        held: &mut usize,
+    ) -> Result<Result<Response, TransportFailure>, Stopped> {
+        let mut count = |bytes: usize| {
+            *held = held.saturating_add(bytes);
+            if scxml_types::exceeds_wasm_bound(*held, super::MAX_ASSEMBLED_BYTES) {
+                Err(Stopped::Failed(super::FailureCode::Malformed))
+            } else {
+                Ok(())
+            }
+        };
+        if encoding.provider == super::Provider::Gemini {
+            let answer = fetch(built).await;
+            if let Ok(response) = &answer {
+                count(response.body.len())?;
+                if (200..300).contains(&response.status)
+                    && let Ok(pcm) = super::gemini::audio(&response.body)
+                {
+                    emit(encoding, chunker.whole(pcm), returned).await?;
+                }
+            }
+            return Ok(answer);
+        }
+        let (status, mut body, end) = match outbound_http::send(http(built)).await {
+            Ok(opened) => opened,
+            Err(failure) => return Ok(Err(transport_failure(&failure))),
+        };
+        let success = (200..300).contains(&status);
+        let mut bytes = Vec::new();
+        loop {
+            let (result, read) = body.read(Vec::with_capacity(READ_BYTES)).await;
+            if !read.is_empty() {
+                count(read.len())?;
+                if success {
+                    let chunks = chunker.read(&read).map_err(Stopped::Failed)?;
+                    emit(encoding, chunks, returned).await?;
+                }
+                bytes.extend_from_slice(&read);
+            }
+            if !matches!(result, wit_bindgen::StreamResult::Complete(_)) {
+                break;
+            }
+        }
+        drop(body);
+        if let Err(failure) = end.await {
+            return Ok(Err(transport_failure(&failure)));
+        }
+        if success {
+            emit(encoding, chunker.end(), returned).await?;
+        }
+        Ok(Ok(Response {
+            status,
+            body: bytes,
+        }))
+    }
+
+    /// Runs an encoding: one stretch at a time, in order, until one fails
+    /// or the answers together pass what may be assembled, returning each
+    /// chunk as it is cut, then its outcome.
+    async fn encode(
+        operation: &Operation,
+        encoding: &super::Encoding,
+        base_url: u32,
+        api_key: Option<u32>,
+        returned: &mut wit_bindgen::StreamWriter<Event>,
+    ) -> Option<super::Finished> {
+        use super::Finished;
+        let mut chunker = super::chunks::Chunker::new(encoding);
+        let mut answered = Vec::with_capacity(encoding.stretches.len());
+        let mut held = 0_usize;
+        let mut settled = true;
+        for each in &encoding.stretches {
+            let streamed = async {
+                emit(encoding, chunker.open(each.pause), returned).await?;
+                if each.words.trim().is_empty() {
+                    return Ok(None);
+                }
+                let built = super::encoding_request(base_url, api_key, encoding, &each.words);
+                stretch(encoding, built, &mut chunker, returned, &mut held)
+                    .await
+                    .map(Some)
+            }
+            .await;
+            let answer = match streamed {
+                Ok(Some(answer)) => answer,
+                Ok(None) => continue,
+                Err(Stopped::Gone) => return None,
+                Err(Stopped::Failed(code)) => {
+                    return Some(Finished::event(Returned::failed(operation, code)));
+                }
+            };
+            settled = matches!(&answer, Ok(response) if (200..300).contains(&response.status));
+            answered.push(answer);
+            if !settled {
+                break;
+            }
+        }
+        if settled {
+            match emit(encoding, chunker.close(), returned).await {
+                Ok(()) => {}
+                Err(Stopped::Gone) => return None,
+                Err(Stopped::Failed(code)) => {
+                    return Some(Finished::event(Returned::failed(operation, code)));
+                }
+            }
+        }
+        Some(Finished::event(super::encoding_outcome(
+            operation,
+            answered,
+            super::write_audio,
+        )))
+    }
+
+    /// What a transport failure is for the answer.
+    fn transport_failure(failure: &ComponentError) -> TransportFailure {
+        match failure.code {
+            ErrorCode::PayloadTooLarge => TransportFailure::TooLarge,
+            _ => TransportFailure::Unavailable,
+        }
     }
 
     /// Runs a voice classifier operation to its one event.
@@ -1858,7 +2018,10 @@ mod guest {
                 ))
             });
             wit_bindgen::spawn(async move {
-                let finished = run(operation, endpoint).await;
+                let Some(finished) = run(operation, endpoint, &mut returned).await else {
+                    // The invoking session stopped reading.
+                    return;
+                };
                 telemetry::event(
                     Op::Send,
                     if finished

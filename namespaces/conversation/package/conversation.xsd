@@ -18,6 +18,25 @@
                    the input.
                    indexlocation (required): receives the relationship's
                    index. input (required): an expression.
+  conversation:people_for_input
+                   location (required): receives the input with each voice
+                   embedding replaced by its person, the people created,
+                   the voices to store and the new people's representative
+                   voices (decisions D194 and D205).
+                   input, voices, after (required): expressions.
+  conversation:fold_voices
+                   location (required): receives a person's representative
+                   voice with more voices folded in (decision D205).
+                   centroid, weight, voices (required): expressions.
+  conversation:people_to_merge
+                   location (required): receives the two people to merge
+                   first and their merged representative, or null
+                   (decision D205). people (required): an expression.
+  conversation:merged_context_refs
+                   location (required): receives the relationship context
+                   references that change when one person is merged into
+                   another (decision D205). refs, from, into (required):
+                   expressions.
   conversation:participant_for_source, conversation:fail_turn
                    location (required): holds and receives one
                    relationship, the source added as a participant
@@ -80,6 +99,36 @@
       <xs:attribute name="location" type="xs:string" use="required"/>
       <xs:attribute name="indexlocation" type="xs:string" use="required"/>
       <xs:attribute name="input" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="people_for_input">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="input" type="xs:string" use="required"/>
+      <xs:attribute name="voices" type="xs:string" use="required"/>
+      <xs:attribute name="after" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="fold_voices">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="centroid" type="xs:string" use="required"/>
+      <xs:attribute name="weight" type="xs:string" use="required"/>
+      <xs:attribute name="voices" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="people_to_merge">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="people" type="xs:string" use="required"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="merged_context_refs">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="refs" type="xs:string" use="required"/>
+      <xs:attribute name="from" type="xs:string" use="required"/>
+      <xs:attribute name="into" type="xs:string" use="required"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="participant_for_source">
