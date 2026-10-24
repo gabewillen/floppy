@@ -736,7 +736,7 @@
              (decision D149), unless the turn perceives a lesson's result
              or a routine's tick (decision D220);
              last: a send that fails ends the rest of this block. -->
-        <if cond="perceivesLesson()">
+        <if cond="perceivesLessonOrTick()">
           <log label="cognition.lesson" expr="'bounded'"/>
         <elseif cond="hasLesson()"/>
           <send event="bot.ability.learning.lesson" target="#_learning">
@@ -867,12 +867,14 @@
         <param name="bounds" expr="bounds"/>
       </invoke>
       <transition event="bot.ability.learning.output" event:schema="../schemas/bot.ability.learning.output.json">
-        <send event="bot.ability.routines.reconcile" target="#_routines">
-          <content expr="({})"/>
-        </send>
+        <!-- The result first: with the routines stopped the reconcile's
+             send fails and ends the block. -->
         <send event="bot.ability.cognition.input" target="#_parent">
           <param name="stimulus" expr="lessonStimulus(_event)"/>
           <param name="participants" expr="_event.data.participants"/>
+        </send>
+        <send event="bot.ability.routines.reconcile" target="#_routines">
+          <content expr="({})"/>
         </send>
       </transition>
       <transition event="error.communication.learning" target="learning_stopped">

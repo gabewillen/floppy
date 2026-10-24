@@ -107,6 +107,10 @@ S.case(161, 7, "a selection whose target no session of the run answers cannot be
        [answer(["Nowhere"], False, "Autonomy behavior dispatch failed: error.communication (selected bot.say to session.nowhere)")],
        params=run([("Nowhere", behavior("({turn: turn, handled: true, selected: [{event: 'bot.say', data: {}, target: 'session.nowhere'}]})"))]))
 
+S.case(162, 7, "the rejection names each selection, in order, with its target or that it has none.",
+       [answer(["Both"], False, "Autonomy behavior dispatch failed: error.communication (selected bot.say to session.nowhere, bot.ability.reasoning.input with no target)")],
+       params=run([("Both", behavior("({turn: turn, handled: true, selected: [{event: 'bot.say', data: {}, target: 'session.nowhere'}, {event: 'bot.ability.reasoning.input', data: {}}]})"))]))
+
 S.case(170, 8, "a use whose persistence fails still answers the turn.",
        [answer(["A"], True, extra=HANDLED_SELECTED)], params=run([("A", HANDLES)], database="'/elsewhere/floppy.sqlite'"))
 S.case(171, 8, "a use whose persistence outlasts memory_timeout_ms still answers the turn.",
