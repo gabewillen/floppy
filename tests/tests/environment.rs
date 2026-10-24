@@ -317,6 +317,169 @@ fn a_voice_is_one_person_across_turns_and_restarts() {
     }
 }
 
+/// The compact text of the representative voice of 256 dimensions along
+/// `axis` (`i8:` and the base64 of its signed bytes: 127 there, 0
+/// elsewhere), as the conversation namespace writes it.
+fn axis_representative(axis: usize) -> String {
+    const BASE64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut bytes = vec![0_u8; 256];
+    bytes[axis] = 127;
+    let mut text = String::from("i8:");
+    for chunk in bytes.chunks(3) {
+        let [a, b, c] = [0, 1, 2].map(|i| chunk.get(i).copied().unwrap_or(0));
+        let sextets = [
+            a >> 2,
+            ((a & 3) << 4) | (b >> 4),
+            ((b & 15) << 2) | (c >> 6),
+            c & 63,
+        ];
+        for (i, sextet) in sextets.iter().enumerate() {
+            text.push(if i <= chunk.len() {
+                char::from(BASE64[usize::from(*sextet)])
+            } else {
+                '='
+            });
+        }
+    }
+    text
+}
+
+/// Runs `statements` in one transaction of the memory ability on the
+/// SQLite database in `memory`.
+fn seed_memory(memory: &Path, statements: &Json) {
+    let dir = unique_scratch("seed");
+    support::copy_ability("memory", &dir);
+    let document = format!(
+        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="applying">
+  <datamodel><data id="statements" expr="{}"/></datamodel>
+  <state id="applying">
+    <invoke id="memory" type="scxml" src="memory/memory.scx">
+      <param name="database" expr="'/memory/floppy.sqlite'"/>
+      <param name="statements" expr="statements"/>
+    </invoke>
+    <transition event="bot.ability.memory.output" target="done"><log label="output" expr="'seeded'"/></transition>
+    <transition event="*" target="done"><log label="failed" expr="_event.name"/></transition>
+  </state>
+  <final id="done"/>
+</scxml>"#,
+        statements
+            .to_string()
+            .replace('&', "&amp;")
+            .replace('"', "&quot;")
+            .replace('<', "&lt;"),
+    );
+    let path = write(&dir, "seed.scx", &document);
+    let run = Run::start(
+        &[
+            "--dir".to_owned(),
+            format!(
+                "{}={}::/memory",
+                support::service_uri("sql"),
+                memory.display()
+            ),
+            path.display().to_string(),
+        ],
+        &[],
+    );
+    let finished = run.finish(WAIT);
+    assert!(
+        logs(&finished.all).contains(&("output".to_owned(), "seeded".to_owned())),
+        "{:?}",
+        finished.all
+    );
+}
+
+/// Decision D205: identification reads one compact representative a
+/// person, so memory holding 96 people at 256 dimensions (D204 read every
+/// voice heard and failed at about a dozen) still identifies each, and a
+/// new voice is numbered from the people sequence, after them.
+#[test]
+fn a_voice_is_identified_among_ninety_six_people() {
+    let dir = layout(&[]);
+    let memory = unique_scratch("people");
+    let insert_people = "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 96) INSERT INTO bot_person (person_id) SELECT 'person-' || i FROM n";
+    let mut statements = vec![
+        json!({"sql": insert_people}),
+        json!({"sql": "INSERT INTO bot_sequence (name, value) VALUES ('person', 96)"}),
+    ];
+    for batch in 0..4 {
+        let people: Vec<usize> = (batch * 24..batch * 24 + 24).collect();
+        let values = vec!["(?, 'voice', ?, 1, ?, ?)"; people.len()].join(", ");
+        let parameters: Vec<Json> = people
+            .iter()
+            .flat_map(|axis| {
+                [
+                    json!(format!("person-{}", axis + 1)),
+                    json!(axis_representative(*axis)),
+                    json!(axis + 1),
+                    json!(axis + 1),
+                ]
+            })
+            .collect();
+        statements.push(json!({
+            "sql": format!("INSERT INTO bot_person_centroid (person_id, kind, centroid, weight, first_seq, through_seq) VALUES {values}"),
+            "parameters": parameters,
+        }));
+    }
+    // One statement a transaction: each invocation's statements stay
+    // well within what one invoke carries.
+    for statement in statements {
+        seed_memory(&memory, &json!([statement]));
+    }
+    let room = support::environment(&dir, &["floppy"], &[]);
+    let mut run = Run::start(
+        &[
+            "--dir".to_owned(),
+            format!(
+                "{}={}::/memory",
+                support::service_uri("sql"),
+                memory.display()
+            ),
+            room.display().to_string(),
+        ],
+        &[],
+    );
+    all_activated(&run, &["floppy"]);
+    let mut person_of = |voice: Vec<f64>| {
+        run.event(
+            "bot.ability.communication.input",
+            &json!({"source_ids": [voice], "target_ids": ["floppy"], "content": {"a": 1}, "content_type": "application/json"}),
+        );
+        let heard = run.until(WAIT, label_is("bot.ability.conversation.output"));
+        let output = logged(&heard, "bot.ability.conversation.output")
+            .pop()
+            .expect("the conversation's output");
+        output["messages"][0]["source_ids"].clone()
+    };
+    let near = |axis: usize| -> Vec<f64> {
+        (0..256)
+            .map(|d| {
+                if d == axis {
+                    0.95
+                } else if d == (axis + 1) % 256 {
+                    0.2
+                } else {
+                    0.0
+                }
+            })
+            .collect()
+    };
+    let first = person_of(near(0));
+    let late = person_of(near(79));
+    let last = person_of(near(95));
+    let newcomer = person_of(vec![0.0625; 256]);
+    drop(run.close(WAIT));
+    assert_eq!(
+        [first, late, last, newcomer],
+        [
+            json!(["person-1"]),
+            json!(["person-80"]),
+            json!(["person-96"]),
+            json!(["person-97"]),
+        ]
+    );
+}
+
 #[test]
 fn host_communication_input_goes_to_the_participants_it_targets() {
     let dir = layout(&[]);

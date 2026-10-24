@@ -1,0 +1,312 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's Consolidation ability (decisions D195 and D205): what memory
+  does while the cognition rests. The cognition
+  (abilities/cognition/cognition.scx) invokes it as its child
+  "consolidation" on entering rest, with the <param> database (the memory
+  database; null: no memory), and leaving rest (any input) cancels it. It
+  never identifies anyone (the conversation does, live, D194): it
+  reinforces the people memory holds.
+
+    consolidating { consolidating_from
+      -> folding_pause -> folding_reading -> folding_from -> folding_writing
+         -> folding_pause ...
+      -> merging_pause -> merging_reading -> merging_from -> merging_refs
+         -> merging_writing -> merging_pause ... }
+      -> done (final) | failed (final)
+    consolidating_from -no database-> done
+
+  Each step is one transaction of the memory ability
+  (abilities/memory/memory.scx): a read, then a write guarded so that it
+  commits only on the rows it read (a statement with an expected
+  rowcount, which the sql and pgsql services check: a write whose guard
+  does not hold fails and commits nothing). A step cancelled meanwhile
+  (leaving rest cancels the invocation, and the service rolls the open
+  transaction back) leaves nothing half-written, and the next rest begins
+  again from what memory holds. Each step begins after a pause of
+  step_pause_ms (consolidation.step.next): a memory step runs to its end
+  within one call of the run, so the pause is where the run takes the
+  input that arrived meanwhile, and input that leaves rest cancels the
+  consolidation between two steps (it waits at most for the step in
+  hand). A delay counts from the session time of the call that arms it,
+  and a delayed send already due when a call's work ends fires in that
+  call, so the pause must outlast a step (on a loaded machine too): 5 s
+  by default, the bounds' consolidation_pause_ms overriding it.
+
+  Folding (reinforcing identity): a person's representative voice
+  (bot_person_centroid, kind voice: its compact text, its weight, the
+  voices folded into it, and through_seq, the last of their
+  bot_person_embedding rows folded in) takes in the voices heard for them
+  since, at most fold_batch per step, oldest person first:
+  <conversation:fold_voices> writes the unit vector of weight times the
+  representative plus each voice's unit vector (a running mean of
+  directions), and the write moves through_seq on, guarded by the
+  through_seq it read. So identification (the conversation's identify)
+  reads one compact row per person.
+
+  Merging: two people whose representatives are at D90's threshold of each
+  other (cosine 0.85 or more; <conversation:people_to_merge>, the most
+  alike pair first) are one person: the newer is merged into the older
+  (first heard first), in one transaction that writes the older's
+  representative (both weighted by their weights; guarded by both
+  representatives' weights and through_seq, and by neither having voices
+  not yet folded) and re-points everything keyed on the newer person: their
+  voices (bot_person_embedding), the short-term turns' speakers
+  (bot_stm_turn speakers_json) and the short-term records (bot_stm_memory
+  payload_json, source, target), every memory's content (cognitive
+  episodes, relationship memories: bot_memory content) and subject_ref,
+  and each relationship context reference that names them (bot_memory
+  context_ref, recomputed by <conversation:merged_context_refs> to the
+  bytes the conversation computes, at most merge_refs_limit), then deletes
+  the newer person, guarded by no context reference naming them being left.
+  A JSON text is re-pointed where it holds the person's ref as a whole
+  string ("person-<n>" with its quotes); a ref inside another string (a
+  session_ref's escaped context reference, which is provenance) is left
+  as it was. A learned behavior's program is not rewritten: behaviors name
+  events, not people. Merging ends when no two people are alike enough.
+
+  Episodes: short-term turns are not turned into episodes here. Each turn's
+  episode is already recorded by reflection (decision D97), and the
+  short-term register (abilities/stm/stm.scx) sheds its turns by halves
+  with no mechanism that makes episodes of them, so the seam is a step
+  after merging (none yet).
+
+  Bounds: steps (each write) at most max_steps per rest; each memory step
+  within step_timeout_ms (consolidation.step.after). A memory failure, a
+  timeout, an unmet guard or an error.* ends it in failed; the next rest
+  begins again.
+
+  Output (to the cognition, through done.invoke.consolidation):
+  {folded, merged, steps, failed, reason}: the voices folded, the people
+  merged, the writes made, and whether and why it failed (reason null when
+  it did not, 'absent' when there is no memory). Logs: memory ('absent').
+
+  Bindings: the conversation namespace package, and the memory ability's
+  sql and pgsql service packages.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="consolidation" initial="consolidating">
+  <datamodel>
+    <!-- The invoker's <param>: the memory database (null: no memory). -->
+    <data id="database" expr="null"/>
+    <!-- The embeddings' kind consolidated (faces are D188's seam). -->
+    <data id="kind" expr="'voice'"/>
+    <!-- The voices one fold step reads (a voice's JSON text is about 5 KiB
+         at 256 dimensions, under the sql service's 88 KiB result). -->
+    <data id="fold_batch" expr="8"/>
+    <!-- The relationship context references one merge re-points (the
+         transaction's 64 statements less the merge's own). -->
+    <data id="merge_refs_limit" expr="48"/>
+    <!-- The writes one rest makes at most. -->
+    <data id="max_steps" expr="256"/>
+    <!-- The invoker's <param>: the bot's time bounds (its
+         consolidation_pause_ms overrides step_pause_ms). -->
+    <data id="bounds" expr="({})"/>
+    <!-- The pause before each step, where the run takes input: longer
+         than a step takes, so that the run's call ends between two steps
+         (a delayed send already due when a step ends fires in the same
+         call, and input waits for the call to end). -->
+    <data id="step_pause_ms" expr="5000"/>
+    <!-- Each memory step's bound. -->
+    <data id="step_timeout_ms" expr="30000"/>
+    <!-- What was done. -->
+    <data id="steps" expr="0"/>
+    <data id="folded" expr="0"/>
+    <data id="merged" expr="0"/>
+    <data id="failure" expr="null"/>
+    <!-- The step in hand: the rows read, the representative folded, the
+         people to merge and their context references. -->
+    <data id="rows" expr="[]"/>
+    <data id="fold" expr="null"/>
+    <data id="merge" expr="null"/>
+    <data id="refs" expr="[]"/>
+    <!-- The statements (written for both engines). -->
+    <data id="fold_select" expr="'SELECT c.person_id, c.centroid, c.weight, c.through_seq, e.seq, e.embedding FROM bot_person_centroid AS c JOIN bot_person_embedding AS e ON e.person_id = c.person_id AND e.kind = c.kind AND e.seq > c.through_seq WHERE c.kind = ?1 AND c.person_id = (SELECT d.person_id FROM bot_person_centroid AS d WHERE d.kind = ?1 AND EXISTS (SELECT 1 FROM bot_person_embedding AS f WHERE f.person_id = d.person_id AND f.kind = d.kind AND f.seq > d.through_seq) ORDER BY d.first_seq, d.person_id LIMIT 1) ORDER BY e.seq LIMIT ?2'"/>
+    <data id="fold_update" expr="'UPDATE bot_person_centroid SET centroid = ?1, weight = ?2, through_seq = ?3, updated_at = CURRENT_TIMESTAMP WHERE person_id = ?4 AND kind = ?5 AND through_seq = ?6'"/>
+    <data id="people_select" expr="'SELECT person_id, centroid, weight, through_seq FROM bot_person_centroid WHERE kind = ?1 ORDER BY first_seq, person_id'"/>
+    <data id="refs_select" expr="'SELECT DISTINCT context_ref FROM bot_memory WHERE context_ref LIKE ?1 ORDER BY context_ref LIMIT ?2'"/>
+    <data id="merge_centroid" expr="'UPDATE bot_person_centroid SET centroid = ?1, weight = ?2, through_seq = ?3, updated_at = CURRENT_TIMESTAMP WHERE person_id = ?4 AND kind = ?5 AND weight = ?6 AND through_seq = ?7 AND EXISTS (SELECT 1 FROM bot_person_centroid AS g WHERE g.person_id = ?8 AND g.kind = ?5 AND g.weight = ?9 AND g.through_seq = ?10) AND NOT EXISTS (SELECT 1 FROM bot_person_embedding AS e WHERE e.kind = ?5 AND ((e.person_id = ?4 AND e.seq > ?7) OR (e.person_id = ?8 AND e.seq > ?10)))'"/>
+    <data id="merge_voices" expr="'UPDATE bot_person_embedding SET person_id = ?1 WHERE person_id = ?2'"/>
+    <data id="merge_drop_centroids" expr="'DELETE FROM bot_person_centroid WHERE person_id = ?1'"/>
+    <data id="merge_speakers" expr="'UPDATE bot_stm_turn SET speakers_json = REPLACE(speakers_json, ?1, ?2) WHERE speakers_json LIKE ?3'"/>
+    <data id="merge_records" expr="'UPDATE bot_stm_memory SET payload_json = REPLACE(payload_json, ?1, ?2) WHERE payload_json LIKE ?3'"/>
+    <data id="merge_record_sources" expr="'UPDATE bot_stm_memory SET source = ?1 WHERE source = ?2'"/>
+    <data id="merge_record_targets" expr="'UPDATE bot_stm_memory SET target = ?1 WHERE target = ?2'"/>
+    <data id="merge_contents" expr="'UPDATE bot_memory SET content = REPLACE(content, ?1, ?2) WHERE content LIKE ?3'"/>
+    <data id="merge_subjects" expr="'UPDATE bot_memory SET subject_ref = ?1 WHERE subject_ref = ?2'"/>
+    <data id="merge_context" expr="'UPDATE bot_memory SET context_ref = ?1 WHERE context_ref = ?2'"/>
+    <data id="merge_person" expr="'DELETE FROM bot_person WHERE person_id = ?1 AND NOT EXISTS (SELECT 1 FROM bot_memory WHERE context_ref LIKE ?2)'"/>
+  </datamodel>
+  <script src="consolidation.js"/>
+
+  <state id="consolidating" initial="consolidating_from">
+    <!-- A memory step that fails, does not answer in time, or whose guard
+         does not hold ends this rest's consolidation. -->
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failed">
+      <assign location="failure" expr="_event.data.message"/>
+    </transition>
+    <transition event="consolidation.step.after" target="failed">
+      <assign location="failure" expr="timeoutFailure()"/>
+    </transition>
+    <transition event="error.*" target="failed">
+      <assign location="failure" expr="errorFailure(_event)"/>
+    </transition>
+
+    <state id="consolidating_from">
+      <transition cond="isAbsent()" target="absent"/>
+      <transition target="folding_pause"/>
+    </state>
+
+    <!-- Reinforce: the voices heard for one person since their
+         representative was last folded. -->
+    <state id="folding_pause">
+      <onentry>
+        <send id="fold-next" event="consolidation.step.next" delayexpr="pauseDelay()"/>
+      </onentry>
+      <onexit>
+        <cancel sendid="fold-next"/>
+      </onexit>
+      <transition event="consolidation.step.next" target="folding_reading"/>
+    </state>
+    <state id="folding_reading">
+      <onentry>
+        <assign location="fold" expr="null"/>
+        <send id="fold-read-after" event="consolidation.step.after" delayexpr="stepDelay()"/>
+      </onentry>
+      <onexit>
+        <cancel sendid="fold-read-after"/>
+      </onexit>
+      <invoke id="fold_read" type="scxml" src="../memory/memory.scx">
+        <param name="database" expr="database"/>
+        <param name="statements" expr="foldReadStatements()"/>
+      </invoke>
+      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="folding_from">
+        <assign location="rows" expr="resultRows(_event, 0)"/>
+      </transition>
+    </state>
+    <state id="folding_from">
+      <transition cond="hasNoRows()" target="merging_pause"/>
+      <transition cond="isBounded()" target="done"/>
+      <transition target="folding_writing">
+        <conversation:fold_voices location="fold" centroid="foldCentroid()" weight="foldWeight()" voices="foldVoices()"/>
+      </transition>
+    </state>
+    <state id="folding_writing">
+      <onentry>
+        <send id="fold-write-after" event="consolidation.step.after" delayexpr="stepDelay()"/>
+      </onentry>
+      <onexit>
+        <cancel sendid="fold-write-after"/>
+      </onexit>
+      <invoke id="fold_write" type="scxml" src="../memory/memory.scx">
+        <param name="database" expr="database"/>
+        <param name="statements" expr="foldWriteStatements()"/>
+      </invoke>
+      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="folding_pause">
+        <assign location="folded" expr="foldedAfter()"/>
+        <assign location="steps" expr="stepsAfter()"/>
+      </transition>
+    </state>
+
+    <!-- Merge: the two people most alike, the newer into the older. -->
+    <state id="merging_pause">
+      <onentry>
+        <send id="merge-next" event="consolidation.step.next" delayexpr="pauseDelay()"/>
+      </onentry>
+      <onexit>
+        <cancel sendid="merge-next"/>
+      </onexit>
+      <transition event="consolidation.step.next" target="merging_reading"/>
+    </state>
+    <state id="merging_reading">
+      <onentry>
+        <assign location="merge" expr="null"/>
+        <send id="people-read-after" event="consolidation.step.after" delayexpr="stepDelay()"/>
+      </onentry>
+      <onexit>
+        <cancel sendid="people-read-after"/>
+      </onexit>
+      <invoke id="people_read" type="scxml" src="../memory/memory.scx">
+        <param name="database" expr="database"/>
+        <param name="statements" expr="peopleReadStatements()"/>
+      </invoke>
+      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="merging_from">
+        <assign location="rows" expr="resultRows(_event, 0)"/>
+        <conversation:people_to_merge location="merge" people="peopleRows()"/>
+      </transition>
+    </state>
+    <state id="merging_from">
+      <transition cond="hasNoMerge()" target="done"/>
+      <transition cond="isBounded()" target="done"/>
+      <transition target="merging_refs"/>
+    </state>
+    <state id="merging_refs">
+      <onentry>
+        <send id="refs-read-after" event="consolidation.step.after" delayexpr="stepDelay()"/>
+      </onentry>
+      <onexit>
+        <cancel sendid="refs-read-after"/>
+      </onexit>
+      <invoke id="refs_read" type="scxml" src="../memory/memory.scx">
+        <param name="database" expr="database"/>
+        <param name="statements" expr="refsReadStatements()"/>
+      </invoke>
+      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="merging_writing">
+        <conversation:merged_context_refs location="refs" refs="contextRefs(_event)" from="merge.from" into="merge.into"/>
+      </transition>
+    </state>
+    <state id="merging_writing">
+      <onentry>
+        <send id="merge-write-after" event="consolidation.step.after" delayexpr="stepDelay()"/>
+      </onentry>
+      <onexit>
+        <cancel sendid="merge-write-after"/>
+      </onexit>
+      <invoke id="merge_write" type="scxml" src="../memory/memory.scx">
+        <param name="database" expr="database"/>
+        <param name="statements" expr="mergeWriteStatements()"/>
+      </invoke>
+      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="merging_pause">
+        <assign location="merged" expr="mergedAfter()"/>
+        <assign location="steps" expr="stepsAfter()"/>
+      </transition>
+    </state>
+  </state>
+
+  <state id="absent">
+    <onentry>
+      <log label="memory" expr="'absent'"/>
+    </onentry>
+    <transition target="nothing"/>
+  </state>
+
+  <final id="done">
+    <donedata>
+      <param name="folded" expr="folded"/>
+      <param name="merged" expr="merged"/>
+      <param name="steps" expr="steps"/>
+      <param name="failed" expr="false"/>
+      <param name="reason" expr="null"/>
+    </donedata>
+  </final>
+  <final id="nothing">
+    <donedata>
+      <param name="folded" expr="0"/>
+      <param name="merged" expr="0"/>
+      <param name="steps" expr="0"/>
+      <param name="failed" expr="false"/>
+      <param name="reason" expr="'absent'"/>
+    </donedata>
+  </final>
+  <final id="failed">
+    <donedata>
+      <param name="folded" expr="folded"/>
+      <param name="merged" expr="merged"/>
+      <param name="steps" expr="steps"/>
+      <param name="failed" expr="true"/>
+      <param name="reason" expr="failure"/>
+    </donedata>
+  </final>
+</scxml>

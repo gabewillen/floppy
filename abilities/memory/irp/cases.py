@@ -17,7 +17,7 @@ def failed(cond, kind=None):
     return expect(FAILED, f"typeof _event.data.message === 'string' && {cond}{kinded}")
 
 
-S.statement(1, "Before the statements, it brings the database to the head of floppy's revisions (one revision, 0001, decision D193; in the engine's dialect) through the migration ability, so the statements see Alembic's `alembic_version` at `0001` and the tables, `bot_behavior` with its `lifetime` column, `bot_stm_turn`, and the people `bot_person` and `bot_person_embedding` (decision D194).")
+S.statement(1, "Before the statements, it brings the database to the head of floppy's revisions (one revision, 0001, decision D193; in the engine's dialect) through the migration ability, so the statements see Alembic's `alembic_version` at `0001` and the tables, `bot_behavior` with its `lifetime` column, `bot_stm_turn`, the people `bot_person` and `bot_person_embedding` (decision D194), and each person's representative `bot_person_centroid` and the named sequences `bot_sequence` (decision D205).")
 S.statement(2, "It runs the `statements` <param> (`[{sql, parameters?}]`) in order in one transaction and answers its parent `bot.ability.memory.output` `{results}`: one result per statement, in order, each `{rowcount, rows}` with every row `{columns, values}`; a statement's `parameters` bind its placeholders.")
 S.statement(3, "A statement that fails (the engine refuses it, or its `rowcount` is not the one it expects) answers `bot.ability.failed` `{message, kind}`, the engine's message and kind `store_failed`, and no `bot.ability.memory.output`.")
 S.statement(4, "A database the migration cannot bring to head answers `bot.ability.failed` `{message, kind}` with the migration's message and kind `unavailable`, and the statements never run.")
@@ -27,7 +27,7 @@ S.statement(6, "After its one answer (`bot.ability.memory.output` or `bot.abilit
 S.case(100, 1, "a fresh database is at 0001 with the tables before the statements run.",
        [expect(OUTPUT, "_event.data.results.length === 3"
                        " && _event.data.results[0].rows.length === 1 && _event.data.results[0].rows[0].values[0] === '0001'"
-                       " && _event.data.results[1].rows[0].values[0] === 7"
+                       " && _event.data.results[1].rows[0].values[0] === 9"
                        " && _event.data.results[2].rows[0].values[0] === 1"),
         DONE],
        params=run([{"sql": "SELECT version_num FROM alembic_version"},

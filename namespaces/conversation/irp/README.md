@@ -4,8 +4,8 @@ The implementation report plan of the `conversation` namespace, in the format of
 [W3C SCXML IRP](../../../scxml.rs/tests/conformance/w3c-irp/README.md) and of
 scxml.rs's own namespace suites
 ([scxml.rs/docs/conformance.md](../../../scxml.rs/docs/conformance.md#namespace-suites)):
-10 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
-("Statements"), tested by 33 mandatory documents. It runs through exactly
+11 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
+("Statements"), tested by 37 mandatory documents. It runs through exactly
 the pipeline the W3C IRP runs through (the canonical compiler, the shipped
 Wasm components under the Wasmtime session host, the same oracles and report
 envelope), with the namespace's own extension package and component bound,
@@ -35,12 +35,14 @@ SAXON='java -jar /opt/saxon/saxon-he-12.8.jar' sh scripts/namespace-irp.sh prepa
 sh scripts/namespace-irp.sh baselines conversation
 ```
 
-The current baseline (manifest SHA-256 `0394544312798fb806c222421e57933b852c8686531bb8c1bdc24d5f23b75f85`,
+The current baseline (manifest SHA-256 `642f1c1139d88c6e54f6d42ce1239e76e4fd2c1a14f3d6853faa7df915a5f880`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
 measured on Linux x86_64, the host `tests/tests/namespace_irp.rs` compares
-fuel on, when the namespace took `<conversation:people_for_input>`,
-decision D204, 2026-10-23) measures:
+fuel on, when the namespace took `<conversation:fold_voices>`,
+`<conversation:people_to_merge>` and `<conversation:merged_context_refs>`
+and `<conversation:people_for_input>` read representatives, decision
+D205, 2026-10-24) measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 33 / 33 | 0 | `632d5dbdbf5d39d325782f1e52175be04f288a49bf9770269ff07eb50f97f5d0` | `9d7bfa18263a2da6b2a591ccefda0e457b027bd7082cbfc7821bd4b92155a486` |
+| ECMAScript | 37 / 37 | 0 | `068ca9b7d03eda7e784a9ead90b61fffa1bc4fdde83adbfa115832376c1345f0` | `f8a2631b28a4c9aa1e7954620f4ed7ffde453d224a9a21f7d7baebf53949604c` |

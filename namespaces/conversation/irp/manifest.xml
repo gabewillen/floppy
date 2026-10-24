@@ -120,7 +120,7 @@
     </test>
   </assert>
   <assert id="conversation-10" specnum="10" specid="#conversation-10">
-    <![CDATA[<conversation:people_for_input> writes {input, people, voices} (decision D194): each embedding of the input's source_ids, then target_ids, is the person memory holds whose closest voice is at least 0.85 alike by cosine, unless another person comes within 0.05, else a new person person-<n> numbered on from count; input is the input with each embedding replaced by its person's ref and each list without repeats, people the refs created, and voices [person_ref, embedding JSON text] for each embedding heard; a voice row of another shape is skipped, and a count that is not a whole number raises error.execution and assigns nothing.]]>
+    <![CDATA[<conversation:people_for_input> writes {input, people, voices, representatives} (decisions D194 and D205): each embedding of the input's source_ids, then target_ids, is the person memory holds whose representative voice (one compact i8: text per person) or whose voice heard earlier in the same input is at least 0.85 alike by cosine, unless another person comes within 0.05, else a new person person-<n> numbered on after the after number; input is the input with each embedding replaced by its person's ref and each list without repeats, people the refs created, voices [person_ref, embedding JSON text] for each embedding heard, and representatives [person_ref, voice] each new person's first voice in compact text; a voice row of another shape is skipped, and an after that is not a whole number raises error.execution and assigns nothing.]]>
     <test id="390" conformance="mandatory" manual="false">
       <start uri="390/test390.txml"/>
     </test>
@@ -129,6 +129,21 @@
     </test>
     <test id="392" conformance="mandatory" manual="false">
       <start uri="392/test392.txml"/>
+    </test>
+  </assert>
+  <assert id="conversation-11" specnum="11" specid="#conversation-11">
+    <![CDATA[Rest's consolidation elements (decision D205): <conversation:fold_voices> writes {centroid, weight, folded}, the unit vector of weight times the representative plus each voice heard since (skipping voices of another form or size), its weight grown by the voices folded; <conversation:people_to_merge> writes {into, from, centroid, weight} for the two most alike people at 0.85 or more, into the older, centroid their representatives weighted by their weights, or null; <conversation:merged_context_refs> writes [old, new] for each relationship context reference naming from, new its identity groups' reference with from replaced by into; a weight that is not a whole number raises error.execution and assigns nothing.]]>
+    <test id="393" conformance="mandatory" manual="false">
+      <start uri="393/test393.txml"/>
+    </test>
+    <test id="394" conformance="mandatory" manual="false">
+      <start uri="394/test394.txml"/>
+    </test>
+    <test id="395" conformance="mandatory" manual="false">
+      <start uri="395/test395.txml"/>
+    </test>
+    <test id="396" conformance="mandatory" manual="false">
+      <start uri="396/test396.txml"/>
     </test>
   </assert>
 </assertions>

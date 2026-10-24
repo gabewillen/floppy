@@ -230,3 +230,11 @@ _case(200, 11, "the cognition asks the identity for the bot's name after its off
        send(NAMED, js({"name": "Pip"})), send(INPUT, turn(2)), output(2, IGNORED), READY,
        send(CANCEL, js({"turn": 3})), expect(CANCELLED, "_event.data.turn === 3")],
       params=[SLOW], backend=[DECIDE_IGNORE, DECIDE_IGNORE], clock="logical")
+
+S.statement(12, "With no input for `rest_after_ms` (the `<param>`, else the `bounds`' `rest_after_ms`; 5 minutes by default) `idle` rests (decisions D195 and D205): it logs `cognition.rest` `resting` and invokes the consolidation with its database (with none there is nothing to consolidate, logged `cognition.consolidated`), and stays at rest until input, which leaves rest at once (`cognition.rest` `awake`, cancelling a consolidation in progress) and is taken as a normal turn.")
+
+S.case(210, 12, "after a stretch without input the cognition rests and consolidates, and input wakes it for a normal turn.",
+       [READY, wait("1500ms"), send(INPUT, turn(1)), output(1, IGNORED)],
+       params=[("rest_after_ms", "1000")], backend=[DECIDE_IGNORE], clock="wall", ignore=[OFFERS],
+       logs={"cognition.rest": ["resting", "awake"],
+             "cognition.consolidated": ['{"folded":0,"merged":0,"steps":0,"failed":false,"reason":"absent"}']})

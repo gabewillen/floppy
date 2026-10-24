@@ -104,4 +104,10 @@
       <start uri="180/test180.scxml"/>
     </test>
   </assert>
+  <assert id="cognition-12" specnum="12" specid="#cognition-12">
+    <![CDATA[With no input for `rest_after_ms` (the `<param>`, else the `bounds`' `rest_after_ms`; 5 minutes by default) `idle` rests (decisions D195 and D205): it logs `cognition.rest` `resting` and invokes the consolidation with its database (with none there is nothing to consolidate, logged `cognition.consolidated`), and stays at rest until input, which leaves rest at once (`cognition.rest` `awake`, cancelling a consolidation in progress) and is taken as a normal turn.]]>
+    <test id="210" conformance="mandatory" manual="false">
+      <start uri="210/test210.scxml"/>
+    </test>
+  </assert>
 </assertions>
