@@ -313,7 +313,9 @@ fn memory(id: &str, context_ref: Option<&str>, subject_ref: Option<&str>, conten
     )
 }
 
-fn merges_people(database: &str, grant: &[String]) {
+/// Three people, the second alike enough to the first to be merged into
+/// them, and every kind of row keyed on the second.
+fn duplicate_people() -> Vec<Json> {
     let mut seed = person("person-1", &[1.0, 0.0]);
     seed.extend(person("person-2", &[0.98, 0.2]));
     seed.extend(person("person-3", &[0.0, 1.0]));
@@ -353,6 +355,11 @@ fn merges_people(database: &str, grant: &[String]) {
             &json!([r#"{"source":"person-2"}"#]),
         ),
     ]);
+    seed
+}
+
+fn merges_people(database: &str, grant: &[String]) {
+    let seed = duplicate_people();
     let inspect = [
         json!({"sql": "SELECT person_id FROM bot_person ORDER BY person_id"}),
         json!({"sql": "SELECT person_id, weight FROM bot_person_centroid ORDER BY person_id"}),
