@@ -140,6 +140,11 @@ class Scorer(unittest.TestCase):
         self.assertIn("floppy.output (unreadable): not json", score.summary(scenario, job))
         value, why = score.check(job, {"check": "no_ticks", "at": [0, 0]})
         self.assertEqual(value, 0.0, why)
+        # So does a reply whose words are not text; a reply of a sound alone is silent.
+        sound = {"event": "bot.ability.communication.respond", "data": {"parts": [{"expression": {"sound": "laugh"}}]}}
+        self.assertEqual(score._replies(json.dumps({"turn": 4, "output": [sound]})), [])
+        bad = {"event": "bot.ability.communication.respond", "data": {"parts": [{"words": ["Time", "to"]}]}}
+        self.assertIsNone(score._replies(json.dumps({"turn": 4, "output": [bad]})))
 
 
 class Builds(unittest.TestCase):

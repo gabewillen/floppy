@@ -128,9 +128,13 @@ def _replies(text):
     for entry in output:
         if not isinstance(entry, dict) or entry.get("event") != RESPOND:
             continue
+        # A reply the eval cannot read makes the whole output unreadable; a
+        # part with no words (a sound or a pause) is not.
         data = entry.get("data")
         parts = data.get("parts") if isinstance(data, dict) else None
-        words = "".join(p["words"] for p in (parts if isinstance(parts, list) else []) if isinstance(p, dict) and isinstance(p.get("words"), str))
+        if not isinstance(parts, list) or not all(isinstance(p, dict) and isinstance(p.get("words", ""), str) for p in parts):
+            return None
+        words = "".join(p.get("words", "") for p in parts)
         if words.strip():
             out.append(words)
     return out
