@@ -194,6 +194,11 @@ fn lessons_settle(run: &Run, limit: Duration, before: Tally) -> (bool, usize) {
             return (true, closed);
         }
         let left = deadline.saturating_duration_since(Instant::now());
+        // Past the deadline, only the records already queued would end the
+        // wait: it ends here, not at the next one.
+        if left.is_zero() {
+            return (false, closed);
+        }
         if !wait(run, left, |r| {
             is_log_of(r, LESSON_CLOSE_LABELS) || is_settled(r)
         }) {
