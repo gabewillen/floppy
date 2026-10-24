@@ -228,6 +228,15 @@ class Builds(unittest.TestCase):
             with open(os.path.join(directory, "builder.json"), encoding="utf-8") as handle:
                 self.assertEqual(json.load(handle)["models"], {"a": "m"})
 
+class Evidence(unittest.TestCase):
+    def test_a_full_grade_with_a_failed_diagnostic_reaches_the_proposer(self):
+        graded = [{"id": "pingpong-r0", "score": 1.0, "category": "reflex", "results": [], "grades": [], "evidence": [],
+                   "diagnostics": [{"check": "reflex", "where": [0, 1], "score": 0.0, "why": "reasoning handled"}]}]
+        self.assertIn("inside, not reflex at [0, 1]: reasoning handled", runner.failure_evidence(graded))
+        graded[0]["diagnostics"][0]["score"] = 1.0
+        self.assertEqual(runner.failure_evidence(graded), [])
+
+
 class Codec(unittest.TestCase):
     def test_every_prompt_round_trips(self):
         for target in prompts.discover():

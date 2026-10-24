@@ -45,6 +45,15 @@
       ],
       "pattern": "biscuit",
       "weight": 2
+    },
+    {
+      "check": "not_says",
+      "at": [
+        1,
+        1
+      ],
+      "pattern": "\\b(i am|i'm|my name is) juniper\\b",
+      "weight": 1
     }
   ],
   "criteria": {

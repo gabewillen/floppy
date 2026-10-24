@@ -269,7 +269,7 @@ def summary(scenario, job, limit=600):
             for words in said or []:
                 lines.append(f"  floppy says: {words[:limit]}")
         if not step["completed"]:
-            lines.append("  (the step timed out)")
+            lines.append("  (the step did not settle within its bound; a later reply is not shown)")
     ran = {(s["session"], s["step"]) for s in job["steps"]}
     for session, spec in enumerate(scenario["sessions"]):
         for index, _ in enumerate(spec["steps"]):

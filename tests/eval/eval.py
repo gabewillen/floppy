@@ -313,7 +313,7 @@ def failure_evidence(graded, limit=120):
     the judges' main failure, and reflection's and the builder's logs."""
     lines = []
     for g in sorted(graded, key=lambda x: x["score"]):
-        if g["score"] >= 0.999:
+        if g["score"] >= 0.999 and all(r["score"] >= 1 for r in g.get("diagnostics", [])):
             continue
         lines.append(f"== {g['id']} (score {g['score']:.2f}, {g['category']})")
         lines += [f"failed {r['check']} at {r['where']}: {r['why'][:200]}" for r in g["results"] if r["score"] < 1]
