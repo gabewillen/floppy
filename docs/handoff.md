@@ -604,6 +604,16 @@ Last updated: 2026-10-24.
   scxml.rs; bot policy lives in floppy.
 - **Hard cutovers.** 0.2.0 is unreleased: no aliases or fallbacks.
 - Pinned `wasm-tools` 1.244.0 is installed globally in `~/.cargo/bin`.
+- **Shared Rust compile cache (2026-10-24).** Cloud sessions share one
+  sccache cache: a Garage (S3-compatible) bucket `floppy-sccache` in CT 111
+  `sccache` (192.168.2.187) on `lab`, published as `https://s3.willen.dev`
+  through the cloudflared tunnel in CT 106. The cloud environment runs
+  `scripts/cloud-sccache-setup.sh` as its setup script; its header lists the
+  environment variables and allowed domains. The `floppy-cloud` key (this
+  bucket only) is in `~/.config/floppy-sccache.env` on Gabe's Mac. The Mac
+  keeps its own local sccache (Mac and Linux builds share no entries).
+  Open: the DHCP reservation for 192.168.2.187, and confirming cache hits
+  from a cloud session once the environment is saved.
 
 ## Running things
 
