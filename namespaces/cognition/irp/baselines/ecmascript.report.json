@@ -6,9 +6,9 @@
     "kind": "namespace-irp",
     "source": "namespaces/cognition/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "eeb30efd046d5f84a541207982d112d1e6cf9b806fc44e69db14abde64d17bea",
-    "source_digest": "6f32cbe2f24db67c700153184ef713171514d839a10303da38891107acd26374",
-    "manifest_digest": "083e2981a28648f95446a3f3274c53c58a7260bf1940a446d97d804f3aee7e39",
+    "corpus_digest": "ee679e56b6d68175182328344b7554de716dff51a4a99da598cc725dee4c5dea",
+    "source_digest": "fcf86057f14d6617b6165b62c050ccb3ae810babdcf13c5f9e01e46303d31781",
+    "manifest_digest": "ab5d5cc0aec504be02e3ed9d2c3cfb971b5f5e4c21c17e825bfdbde693b9d892",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
@@ -18,7 +18,7 @@
       "command_argv": [
         "saxon"
       ],
-      "executable_digest": "012b6e274f9fa87155e1527848af8d41f19c6e89d7266a3b50716d5891eb739b"
+      "executable_digest": "abe0eb79234866c5e416e1d85e4198081d0f03c97ae0422000399fba1bca9262"
     },
     "datamodel": "ecmascript",
     "provenance": "baseuri=https://github.com/stateforward/floppy/tree/main/namespaces/cognition/irp/sources"
@@ -53,9 +53,9 @@
     {
       "namespace_uri": "https://github.com/stateforward/floppy/namespaces/cognition",
       "package_version": "0.1.0",
-      "manifest_sha256": "c3803310bb98f56e650ab7d6c0e3adb78f12d1d50d15456a62d969ceb5435d15",
-      "schema_sha256": "8bbe54b7c48afd3d3dbbf43838fc2d5b04b17effbfaf0776d6762693683911de",
-      "component_sha256": "86a220b8896d757782c68880df70041aaae954fc1104466e5ac6f618217df28b"
+      "manifest_sha256": "d491d75bf42695b6650794883333d16238d793ab1b35b803cc23f2ec115b03ed",
+      "schema_sha256": "30752c350f197de0d9fe98660531f05f1f9904ddce2be6a3b6fe9eb96608719f",
+      "component_sha256": "f57e4ec894976511ef5da781b963dd92c89e59ab4e2fd255fcd3eea0feb581b9"
     }
   ],
   "ir_version": 5,
@@ -68,11 +68,11 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "d15a52533ebe7945ad8dee382df0d99a9ffc4a7ca15ec88e713f0af468b12629",
+  "identity_digest": "4c9a61af7a438c66b401412d96ef8d79288be5225bdb3a45895c270263a2ce11",
   "summary": {
-    "total_selected": 21,
-    "applicable_selected": 21,
-    "passed": 21,
+    "total_selected": 23,
+    "applicable_selected": 23,
+    "passed": 23,
     "failed": 0,
     "unsupported": 0,
     "invalid": 0,
@@ -82,8 +82,8 @@
     "not_passing": 0,
     "passed_under_erratum": 0,
     "mandatory": {
-      "applicable_selected": 21,
-      "passed": 21,
+      "applicable_selected": 23,
+      "passed": 23,
       "failed": 0,
       "unsupported": 0,
       "invalid": 0,
@@ -165,12 +165,24 @@
         "not_applicable": 0,
         "not_passing": 0,
         "passed_under_erratum": 0
+      },
+      "#cognition-6": {
+        "applicable_selected": 2,
+        "passed": 2,
+        "failed": 0,
+        "unsupported": 0,
+        "invalid": 0,
+        "harness_error": 0,
+        "skipped": 0,
+        "not_applicable": 0,
+        "not_passing": 0,
+        "passed_under_erratum": 0
       }
     },
     "by_datamodel": {
       "ecmascript": {
-        "applicable_selected": 21,
-        "passed": 21,
+        "applicable_selected": 23,
+        "passed": 23,
         "failed": 0,
         "unsupported": 0,
         "invalid": 0,
@@ -688,6 +700,56 @@
       "assertion_id": "cognition-5",
       "spec_num": "5",
       "spec_id": "#cognition-5",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "750",
+      "assertion_id": "cognition-6",
+      "spec_num": "6",
+      "spec_id": "#cognition-6",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "751",
+      "assertion_id": "cognition-6",
+      "spec_num": "6",
+      "spec_id": "#cognition-6",
       "datamodel": "ecmascript",
       "conformance": "mandatory",
       "manual": false,
