@@ -262,7 +262,7 @@ def builds(job):
                 # Attempt 1 after an earlier author call is a new build
                 # (one its turn cancelled before it ended).
                 if build is not None and attempt == 1 and build["attempts"] >= 1:
-                    out.append(build)
+                    out.append(_closed(build))
                     build = None
             elif label == "design" and build is not None and build["last"] not in ("triage", "retry_gate"):
                 # A build redesigns only after triage: a design after any
