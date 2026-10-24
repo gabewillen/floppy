@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "bot.ability.ready",
-  "description": "[floppy name] An ability is serving: sent once to its parent when it starts serving, with no data. What it offers, its parent reads from its live session (<decision:offers>, decision D230).",
+  "description": "[floppy name] An ability is serving: sent once to its parent when it starts serving, with no data. What it offers, its parent reads from its live session (<decision:offers>, decision D242).",
   "type": "null",
   "examples": [
     null

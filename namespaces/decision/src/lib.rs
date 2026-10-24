@@ -83,7 +83,7 @@
 //! # `<decision:offers location="L" target="T" undeclared="none|all"/>`
 //!
 //! What another session of the run offers its parent, read from its live
-//! session (decision D230): `target` (required) is an expression whose
+//! session (decision D242): `target` (required) is an expression whose
 //! value, a string, names the session as a `<send>` target does
 //! (`#_<invokeid>` of a live invoked child, `#_scxml_<sessionid>` of any
 //! running session of the run), and `location` (required) receives the
@@ -242,7 +242,7 @@ pub const OFFERS_SNAPSHOT_EXCLUDE: [Section; 3] =
     [Section::System, Section::Queues, Section::PendingSends];
 
 /// The `<data>` id a session declares its offerable events in (decision
-/// D230): each event it offers its parent, mapped to `{effort?}`.
+/// D242): each event it offers its parent, mapped to `{effort?}`.
 pub const OFFERABLE_DATA_ID: &str = "offerable";
 
 /// What `execute` did with the element.

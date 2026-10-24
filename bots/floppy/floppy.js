@@ -65,7 +65,7 @@ function waitingWithout(_event) {
 }
 
 // waiting without the ability that sent _event, its readiness (decision
-// D230): a bare bot.ability.ready names its sender by its invoke id only.
+// D242): a bare bot.ability.ready names its sender by its invoke id only.
 function waitingWithoutSender(_event) {
   return waiting.filter(function (ability) { return ability !== _event.invokeid; });
 }
@@ -86,7 +86,7 @@ function turnOffers() {
 }
 
 // Whether what an ability offers, read from its live session this turn,
-// differs from its latest pushed offers (decision D230, while both are
+// differs from its latest pushed offers (decision D242, while both are
 // read): the reads are canonical, so equal offers stringify alike.
 function offersDiffer(ability) {
   return JSON.stringify(read_offers[ability]) !== JSON.stringify(offers[ability] === undefined ? [] : offers[ability]);

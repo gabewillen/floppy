@@ -18,7 +18,7 @@
                    synchronous and quick.
   decision:offers  location (required): receives the canonical choices
                    another session offers its parent, read from its live
-                   session (decision D230). target (required): an
+                   session (decision D242). target (required): an
                    expression of the session's <send> target. undeclared
                    (optional, none or all): whether only the events the
                    session declares in its offerable data are offered (none,

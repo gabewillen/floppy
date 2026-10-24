@@ -88,7 +88,7 @@
     <transition event="bot.ability.offers" event:schema="../schemas/bot.ability.offers.json">
       <assign location="ready[_event.data.ability]" expr="true"/>
     </transition>
-    <!-- A child's readiness (decision D230), named by its invoke id. -->
+    <!-- A child's readiness (decision D242), named by its invoke id. -->
     <transition event="bot.ability.ready" event:schema="../schemas/bot.ability.ready.json">
       <assign location="ready[_event.invokeid]" expr="true"/>
     </transition>

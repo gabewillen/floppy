@@ -38,7 +38,7 @@ sh scripts/namespace-irp.sh baselines decision
 The current baseline (manifest SHA-256 `cd590ac9afe0d5524c09433bebcd0d92f20db834c7b2dc828d72a7c33d85f044`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
 measured on Linux x86_64 after `<decision:offers>` was added, decision
-D230; regenerate it on Linux x86_64, the host
+D242; regenerate it on Linux x86_64, the host
 `tests/tests/namespace_irp.rs` compares fuel on) measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |

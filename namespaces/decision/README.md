@@ -15,7 +15,7 @@ through the data model; it never sends, and it does no I/O.
 | Element | Reads | Writes |
 | --- | --- | --- |
 | `<decision:choice location events? effort?>` | the offered events of the active state, and what they cost (`effort`, decision D206) | the choices `[{event, schema, description?, effort?}]` (`location`) |
-| `<decision:offers location target undeclared?>` | another session's live session (`target`, decision D230): its enabled transitions and its `offerable` data | the choices `[{event, schema, description?, effort?}]` it offers its parent (`location`) |
+| `<decision:offers location target undeclared?>` | another session's live session (`target`, decision D242): its enabled transitions and its `offerable` data | the choices `[{event, schema, description?, effort?}]` it offers its parent (`location`) |
 | `<decision:pin location event property values>` | the values to ground a property in (for example `bot.focus_device`'s `device` in the focus candidates) | the choices with the property's `enum` pinned (`location`) |
 
 The exact semantics and failures are in [`src/lib.rs`](src/lib.rs); the

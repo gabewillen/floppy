@@ -27,7 +27,7 @@ step is one of
                                     each (location, expr)
   offers(cond, undeclared=None)     reads what the child offers from its
                                     live session (<decision:offers
-                                    location="offers">, decision D230) and
+                                    location="offers">, decision D242) and
                                     goes on when `cond` holds of `offers`;
                                     otherwise the case fails, logging them
   ignore(event)                     drops `event` wherever it arrives

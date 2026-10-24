@@ -364,7 +364,7 @@
     <data id="choices_over" expr="false"/>
     <data id="choices_size" expr="0"/>
     <!-- This turn's reads of what each ability offers (<decision:offers>,
-         decision D230): ability to its compacted choices. -->
+         decision D242): ability to its compacted choices. -->
     <data id="read_offers" expr="({})"/>
     <data id="offers_over" expr="false"/>
     <data id="selections" expr="[]"/>
@@ -420,7 +420,7 @@
         <assign location="waiting" expr="waitingWithout(_event)"/>
       </if>
     </transition>
-    <!-- An ability's readiness, once a run (decision D230): it is no longer
+    <!-- An ability's readiness, once a run (decision D242): it is no longer
          waited for. -->
     <transition event="bot.ability.ready" event:schema="../../abilities/schemas/bot.ability.ready.json">
       <assign location="waiting" expr="waitingWithoutSender(_event)"/>
@@ -752,7 +752,7 @@
             </if>
           </onentry>
           <!-- What each ability offers, read from its live session
-               (decision D230), each in its own block so a read that fails
+               (decision D242), each in its own block so a read that fails
                leaves the others (SCXML 4.9). Compacted as the abilities
                compact their pushed offers; any difference from the pushed
                offers is logged while both are read. -->
