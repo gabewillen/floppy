@@ -80,6 +80,7 @@ S.statement(1, "A create (`create` true) stores a DRAFT stub for its name, invok
 S.statement(2, "A change of a name the inventory does not hold fails with `bot.ability.failed` `{message: \"Revision selected unknown behavior: <name>.\"}`, asking no model.")
 S.statement(3, "A builder that fails with the last draft it rejected (`abandoning`) keeps that draft's path in the row as DRAFT (unless the row was ACTIVE, which keeps its program, decision D209) and fails with `Reflection change abandoned: attempts exhausted:` and the rendered diagnostics (decision D133); a builder that fails with no draft fails with `Reflection revision failed: <reason>: <first diagnostic>`.")
 S.statement(4, "A memory transaction that fails (here the preparing one, on a database the run does not grant) fails with `Reflection revision failed: <detail>`.")
+S.statement(6, "With an example, the builder also runs the behavior on the lesson's own message, which it must decline (decision D214): a draft that answers it too is refused.")
 S.statement(5, "A lesson (`instruction`) whose intent carries an `example`, on a conversation turn, has the builder run the behavior on this turn's input with the lesson's message replaced by the example, which the behavior must handle (decision D213): a draft that answers the example is accepted, and one that declines it is refused on the live turn.")
 
 S.case(100, 1, "a create is built and stored, and the applied behavior names the built documents.",
@@ -144,6 +145,7 @@ PINGPONG = """<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datam
   </final>
 </scxml>"""
 DECLINES = PINGPONG.replace("=== 'ping'", "=== 'never'")
+CLAIMS = PINGPONG.replace("input.parent.data.content === 'ping'", "true")
 
 S.case(140, 5, "a lesson's draft that answers its example is accepted.",
        [expect(OUTPUT, "_event.data.behavior.name === 'PingPong'")],
@@ -151,3 +153,6 @@ S.case(140, 5, "a lesson's draft that answers its example is accepted.",
 S.case(141, 5, "a lesson's draft that declines its example is refused on the live turn.",
        [failed_prefix("Reflection change abandoned: attempts exhausted:")],
        params=LESSON, backend=[PLAN] + [draft(DECLINES)] * 8, clock="wall", ignore=PROGRESS)
+S.case(142, 6, "a lesson's draft that also answers the lesson's own message is refused.",
+       [failed_prefix("Reflection change abandoned: attempts exhausted:")],
+       params=LESSON, backend=[PLAN] + [draft(CLAIMS)] * 8, clock="wall", ignore=PROGRESS)

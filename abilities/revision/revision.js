@@ -111,7 +111,11 @@ function probedInput() {
 // check, decision D131): this turn, its behavior_input as autonomy builds it, and the
 // sessions its output names (a learned behavior names its targets, D104).
 function liveTurn() {
-  return ({turn: turn, input: behavior_input, targets: outputTargets(), choices: turn_choices, handled: instruction === null || probing});
+  var live = {turn: turn, input: behavior_input, targets: outputTargets(), choices: turn_choices, handled: instruction === null || probing};
+  if (probing) {
+    live.decline = lesson_input;
+  }
+  return live;
 }
 
 // The distinct targets of this turn's cognition_output, at most 32.
