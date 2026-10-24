@@ -7,10 +7,28 @@ history lives in [decisions.md](decisions.md) (numbered decisions),
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
-Last updated: 2026-10-23.
+Last updated: 2026-10-24.
 
 ## Current state (2026-10-09) — resume here
 
+- **Rest and consolidation (2026-10-24, D205, #49):** after
+  `rest_after_ms` (5 minutes) without input the cognition rests and
+  invokes `abilities/consolidation/consolidation.scx`, which folds the
+  voices heard into each person's compact representative
+  (`bot_person_centroid`) and merges two people at D90's threshold,
+  re-pointing everything keyed on the newer one. Each step is one guarded
+  transaction after a five-second pause, and input leaves rest at once,
+  cancelling the consolidation between two steps. Identification reads
+  one representative a person (about 100 people at 256 dimensions), and
+  new people are numbered from `bot_sequence`. Episodes from short-term
+  turns are a seam (reflection already records each turn's, D97).
+- **Voices are people in long-term memory (2026-10-23, D204, #49):** the
+  conversation identifies each voice embedding through the memory ability
+  before it finds the input's relationship: a voice memory holds is its
+  `person-<n>`, any other a new person, and every voice heard is stored
+  for its person (`bot_person`, `bot_person_embedding` in `0001`). The
+  person is the participant the rest of the bot sees, across restarts.
+  Faces and `voice_id` are what is left of #49 (rest is D205).
 - **The docs describe floppy on its own terms (2026-10-23, #19):** the
   plans that tracked floppy against another system are retired. What they
   left open is under [Open work](#open-work),
@@ -855,9 +873,8 @@ The remaining phases run as one ultracode run with these grants:
 - **scxml.rs names approved:** the datamodel pass's names, with the example
   package renamed to `datamodels/example`; `deny.toml` allows ISC and
   CDLA-Permissive-2.0 (TLS stack).
-- **Live model while the Sparks are saturated:** CPA gateway via the
-  gitignored `.env.cpa`, model `gabe-codex-1/gpt-6-luna` (fallback
-  `gabe-xai/grok-4.6`).
+- **Live model:** the DGX Sparks only (direct vLLM); never hosted models
+  (user, 2026-10-24).
 - **Behaviors and routines (phase 5) use the builder:** a behavior or
   routine is an SCXML document `bots/builder` authors, validates, and
   hands back, and the bot then invokes it.
@@ -932,25 +949,35 @@ What is still to build, each item with its issue where one exists.
   catch a repeat.
 - **Interpretation reads `producing`** (#30, D177).
 - **Streaming speech** (S5 step B; step A, #18, is D179): streaming
-  encoding and per-chunk playout, drafts spoken while the reply is
-  generated with an `abandoned` outcome, and streaming decoding with an
-  end of turn. Today vocal encodes each stretch whole (D178) and speaking
-  paces its playout (D179). It waits on the maintainer: the chunk event's
-  name, whether to chunk a backend that answers one chunk per stretch,
-  how a draft is correlated with its final respond (an SCXML `<send>`
-  takes no id from an expression), who produces drafts, and the draft
-  timeout.
+  encoding and per-chunk playout are built (D202, D203, #55): the speech
+  service returns `bot.ability.vocal.speech.encoding.chunk`s as its
+  answers arrive and speaking plays each as it comes. Still open: drafts
+  spoken while the reply is generated with an `abandoned` outcome (they
+  wait until something produces them, D202; how a draft is correlated
+  with its final respond, since an SCXML `<send>` takes no id from an
+  expression, and the draft timeout), streaming decoding with an end of
+  turn, a live run against a streaming backend (none has been measured),
+  and a `spoken` that knows the reply's total length while it still
+  streams (D203 counts the share of the audio received).
 - **Voicing**: voice catalogs, voice design and the bot's own voice;
   `bot.ability.speaking.output`'s `voice_id` is null until then (D179).
 - **Graph memory and embeddings** ([plan](plans/graph-memory.md)):
   episodes as nodes with vectors, associative recall,
   `bot.ability.memory.recall`, an embedding ability for text and images
   over a remote embedder, and consolidation while the cognition rests.
-  Persons are D194 and consolidation D195 (#49); the schema is one revision (D193).
-- **Hearing identity**: participant refs through an identification
-  registry, overlap while speaking, tone, and enrolling the bot's own
-  voice. Today the hearing gives voice embeddings and each embedding
-  source is its own participant (D79); people in long-term memory are D194 (#49).
+  People are D194, their voices built by D204, and consolidation D195,
+  built by D205 (#49); the schema is one revision (D193). Matching reads
+  one compact representative per person (D205), which holds about 100
+  people at 256 dimensions (the memory ability's output event):
+  an embedding index is where that bound goes. Consolidation into
+  episodes and links waits on graph memory.
+- **Hearing identity**: overlap while speaking, tone, and enrolling the
+  bot's own voice. People in long-term memory (D194) are built for voices
+  by D204 (#49): the conversation matches each voice embedding to a
+  `person-<n>` memory holds (cosine 0.85, margin 0.05) or makes a new one,
+  and stores every voice heard for its person; at rest (D205) each
+  person's voices fold into their representative and duplicate people
+  merge. Still open on #49: faces (below) and `voice_id` (D179).
 - **Multimodal turns**: `<conversation:ingest_content>` takes no
   `image/*` content, so an image adds nothing to a turn and a turn of
   images alone fails as empty (`Turn closed with neither text, audio, nor
@@ -960,7 +987,8 @@ What is still to build, each item with its issue where one exists.
   placeholders and content parts in a turn's content, and a typed
   `environment.visual` image.
 - **Faces** (D188): face detection and face identity in seeing follow
-  D194's voices (#49); an embedding change measure and a cascade of measures wait
+  D194's voices, built by D204 (#49; `bot_person_embedding`'s `kind`
+  `face` is the seam); an embedding change measure and a cascade of measures wait
   on embeddings.
 - **Effort ceilings**: each stage narrowing the turn's frame to its own
   effort ceiling (D196, #50).

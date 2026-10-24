@@ -1,0 +1,9 @@
+{
+  "cognition.rest": [
+    "resting",
+    "awake"
+  ],
+  "cognition.consolidated": [
+    "{\"folded\":0,\"merged\":0,\"steps\":0,\"failed\":false,\"reason\":\"absent\"}"
+  ]
+}

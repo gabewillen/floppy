@@ -4,6 +4,13 @@
 
 // applying
 
+// A chunk of the streamed encoding (D203), when it has an audio reference
+// and a sequence number (D41: its events are unchecked).
+function isChunk(_event) {
+  var data = Object(_event.data);
+  return typeof data.audio === 'string' && typeof data.sequence === 'number';
+}
+
 // The speech service's encoding output, when it has an audio reference;
 // else the answer kept so far (D41: its events are unchecked).
 function encodedAnswer(_event) {

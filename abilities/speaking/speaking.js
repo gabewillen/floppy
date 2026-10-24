@@ -112,24 +112,35 @@ function outputPath() {
   return output_prefix + operation + '.' + media_type.split('/')[1];
 }
 
-// vocal's encoded speech, copied.
-function encodedSpeech(_event) {
-  return Object.assign({}, _event.data);
+// The sound fields of vocal's chunk or output: a rate, channel count or
+// media type it leaves null is speaking's own.
+function soundFormat(data) {
+  return ({media_type: data.media_type == null ? media_type : data.media_type,
+    sample_rate_hz: data.sample_rate_hz == null ? sample_rate_hz : data.sample_rate_hz,
+    channels: data.channels == null ? channels : data.channels});
 }
 
-// The encoded speech's sample rate, else speaking's own.
-function encodedSampleRate() {
-  return encoded.sample_rate_hz == null ? sample_rate_hz : encoded.sample_rate_hz;
+// The encoded speech's format, from its first chunk.
+function chunkFormat(_event) {
+  return soundFormat(_event.data);
 }
 
-// The encoded speech's channels, else speaking's own.
-function encodedChannels() {
-  return encoded.channels == null ? channels : encoded.channels;
+// The encoded speech's format, from its output.
+function encodedFormat(_event) {
+  return soundFormat(_event.data);
 }
 
-// The encoded speech's media type, else speaking's own.
-function encodedMediaType() {
-  return encoded.media_type == null ? media_type : encoded.media_type;
+// A chunk's measured length in ms, 0 when it has none (decision D203).
+function chunkMs(_event) {
+  var duration = _event.data.duration;
+  return typeof duration === 'number' && duration > 0 ? Math.round(duration * 1000) : 0;
+}
+
+// The chunks waiting to sound, with this one behind them.
+function queued(_event) {
+  var format = soundFormat(_event.data);
+  return chunks.concat([{audio: _event.data.audio, media_type: format.media_type,
+    sample_rate_hz: format.sample_rate_hz, channels: format.channels, duration_ms: chunkMs(_event)}]);
 }
 
 function encodingTimedOutLog() {
@@ -142,16 +153,30 @@ function encodingRunFailure(_event) {
 
 // playing
 
-// The playout's length in ms: the encoded speech's measured duration, 0
-// when it has none.
-function durationMs() {
-  return typeof encoded.duration === 'number' && encoded.duration > 0 ? Math.round(encoded.duration * 1000) : 0;
+// Some measured audio was received: without any no efference copy is
+// sent and no pieces are commanded.
+function hasDuration() {
+  return received_ms > 0;
 }
 
-// The encoded speech has a measured duration: without one no efference
-// copy is sent and no pieces are commanded.
-function hasDuration() {
-  return duration_ms > 0;
+// Measured audio was received and has not played yet.
+function hasRemaining() {
+  return received_ms > played_ms;
+}
+
+// Chunks wait to sound.
+function hasQueued() {
+  return chunks.length > 0;
+}
+
+// The chunk in hand is the utterance's first sound.
+function isFirstSound() {
+  return sounds === 0;
+}
+
+// The chunk in hand has a measured duration: it is played piece by piece.
+function chunkHasDuration() {
+  return chunk.duration_ms > 0;
 }
 
 // The encoded speech's format, speaking's own before anything was encoded.
@@ -166,14 +191,15 @@ function efferenceCopy(seconds) {
     sample_rate_hz: format.sample_rate_hz, channels: format.channels});
 }
 
+// The seconds of measured audio received and not yet played.
 function remainingSeconds() {
-  return (duration_ms - played_ms) / 1000;
+  return (received_ms - played_ms) / 1000;
 }
 
 // The next piece commanded to the mouth: at most half the lookahead, the
-// rest of the playout at the end (decision D179).
+// rest of the chunk in hand at its end (decision D179).
 function nextPieceMs() {
-  return Math.min(lookahead_ms / 2, duration_ms - played_ms);
+  return Math.min(lookahead_ms / 2, chunk.duration_ms - chunk_played_ms);
 }
 
 // The mark of a commanded piece: u<utterance>.<piece> (decision D179).
@@ -191,20 +217,40 @@ function isMark(_event) {
   return _event.sendid === mark;
 }
 
-// The report of the last piece.
-function isLastMark(_event) {
-  return isMark(_event) && played_ms + nextPieceMs() >= duration_ms;
+// The report of the chunk's last piece.
+function isChunkEnd(_event) {
+  return isMark(_event) && chunk_played_ms + nextPieceMs() >= chunk.duration_ms;
+}
+
+// The chunk's last piece played, and another chunk waits.
+function endsChunkWithMore(_event) {
+  return isChunkEnd(_event) && hasQueued();
+}
+
+// The chunk's last piece played, and it was the utterance's last.
+function endsUtterance(_event) {
+  return isChunkEnd(_event) && encoded_all;
+}
+
+// The chunk's last piece played, and the next has not arrived.
+function endsChunk(_event) {
+  return isChunkEnd(_event);
 }
 
 // The words the played share of the audio covers, rounded down to whole
-// words (decision D179): all of them once all of it played.
+// words (decision D179): all of them once all of it played. While the
+// encoding still streams, the audio is what has been received (decision
+// D203); nothing is spoken when none of it was measured.
 function spokenWords() {
-  if (played_ms >= duration_ms) {
+  if (encoded_all && played_ms >= received_ms) {
     return text;
+  }
+  if (received_ms <= 0) {
+    return '';
   }
   var ends = [];
   text.replace(/\S+/g, function (word, at) { ends.push(at + word.length); return word; });
-  var count = Math.floor(ends.length * played_ms / duration_ms);
+  var count = Math.floor(ends.length * played_ms / received_ms);
   return count > 0 ? text.slice(0, ends[count - 1]) : '';
 }
 

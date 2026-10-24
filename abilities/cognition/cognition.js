@@ -25,6 +25,24 @@ function inputChoices(_event) {
   return _event.data.choices === undefined ? [] : _event.data.choices;
 }
 
+// awake and resting (decisions D195 and D205)
+
+// The stretch without input after which idle rests: the bounds'
+// rest_after_ms, else this document's default.
+function restDelay() {
+  return (typeof bounds.rest_after_ms === 'number' ? bounds.rest_after_ms : rest_after_ms) + 'ms';
+}
+
+// What the consolidation did: {folded, merged, steps, failed, reason}.
+function consolidatedLog(_event) {
+  var data = Object(_event.data);
+  return ({folded: data.folded, merged: data.merged, steps: data.steps, failed: data.failed, reason: data.reason});
+}
+
+function consolidationFailedLog(_event) {
+  return ({folded: 0, merged: 0, steps: 0, failed: true, reason: _event.name});
+}
+
 // processing
 
 function processingLog() {

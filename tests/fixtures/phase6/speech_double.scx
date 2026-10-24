@@ -6,11 +6,19 @@
   whose speech <invoke> it rewrites to <invoke type="scxml"
   src="speech_double.scx">, so vocal's <param>s reach it as its data.
 
-  mode (rewritten by a test) picks the answer:
-    'encode'  bot.ability.vocal.speech.encoding.output {audio: output,
-              media_type, sample_rate_hz: 24000, channels: 1, duration:
-              the words' length / 10 seconds}
-    'unmeasured'  the same with duration, sample_rate_hz and channels null
+  mode (rewritten by a test) picks the answer, streamed as the service
+  streams it (decision D203): each chunk is
+  bot.ability.vocal.speech.encoding.chunk {audio: output with .<sequence>
+  before its extension, sequence, media_type, sample_rate_hz, channels,
+  duration}, then the output:
+    'encode'  one chunk of the words' length / 10 seconds at 24000 Hz
+              mono, then bot.ability.vocal.speech.encoding.output {audio:
+              output, media_type, sample_rate_hz: 24000, channels: 1,
+              duration: the same}
+    'stream'  three chunks of 0.5 s: two at once, the third
+              stream_delay (3 s) later, and the output (1.5 s) with it
+    'unmeasured'  the 'encode' answer with duration, sample_rate_hz and
+              channels null
     'fail'    bot.ability.failed {message: "unconfigured"}
     'silent'  no answer, ever (a request that hangs)
   then it ends (final), as the service does, except 'silent'. It logs
@@ -20,6 +28,7 @@
        version="1.0" datamodel="ecmascript" name="speech_double" initial="answering">
   <datamodel>
     <data id="mode" expr="'encode'"/>
+    <data id="stream_delay" expr="'3s'"/>
     <data id="operation" expr="null"/>
     <data id="model" expr="null"/>
     <data id="parts" expr="null"/>
@@ -34,6 +43,14 @@
       <assign location="text" expr="parts.map(function (part) { return part.words || ''; }).join('')"/>
       <log label="speech.encode" expr="operation + ' ' + text + ' -> ' + output"/>
       <if cond="mode === 'encode'">
+        <send event="bot.ability.vocal.speech.encoding.chunk" target="#_parent">
+          <param name="audio" expr="output.replace(/(\.[^./]+)?$/, '.0$&amp;')"/>
+          <param name="sequence" expr="0"/>
+          <param name="media_type" expr="media_type"/>
+          <param name="sample_rate_hz" expr="24000"/>
+          <param name="channels" expr="1"/>
+          <param name="duration" expr="text.length / 10"/>
+        </send>
         <send event="bot.ability.vocal.speech.encoding.output" target="#_parent">
           <param name="audio" expr="output"/>
           <param name="media_type" expr="media_type"/>
@@ -41,7 +58,27 @@
           <param name="channels" expr="1"/>
           <param name="duration" expr="text.length / 10"/>
         </send>
+      <elseif cond="mode === 'stream'"/>
+        <foreach array="[0, 1]" item="sequence">
+          <send event="bot.ability.vocal.speech.encoding.chunk" target="#_parent">
+            <param name="audio" expr="output.replace(/(\.[^./]+)?$/, '.' + sequence + '$&amp;')"/>
+            <param name="sequence" expr="sequence"/>
+            <param name="media_type" expr="media_type"/>
+            <param name="sample_rate_hz" expr="24000"/>
+            <param name="channels" expr="1"/>
+            <param name="duration" expr="0.5"/>
+          </send>
+        </foreach>
+        <send event="double.rest" delayexpr="stream_delay"/>
       <elseif cond="mode === 'unmeasured'"/>
+        <send event="bot.ability.vocal.speech.encoding.chunk" target="#_parent">
+          <param name="audio" expr="output.replace(/(\.[^./]+)?$/, '.0$&amp;')"/>
+          <param name="sequence" expr="0"/>
+          <param name="media_type" expr="media_type"/>
+          <param name="sample_rate_hz" expr="null"/>
+          <param name="channels" expr="null"/>
+          <param name="duration" expr="null"/>
+        </send>
         <send event="bot.ability.vocal.speech.encoding.output" target="#_parent">
           <param name="audio" expr="output"/>
           <param name="media_type" expr="media_type"/>
@@ -55,7 +92,24 @@
         </send>
       </if>
     </onentry>
-    <transition cond="mode !== 'silent'" target="done"/>
+    <transition cond="mode !== 'silent' &amp;&amp; mode !== 'stream'" target="done"/>
+    <transition event="double.rest" target="done">
+      <send event="bot.ability.vocal.speech.encoding.chunk" target="#_parent">
+        <param name="audio" expr="output.replace(/(\.[^./]+)?$/, '.2$&amp;')"/>
+        <param name="sequence" expr="2"/>
+        <param name="media_type" expr="media_type"/>
+        <param name="sample_rate_hz" expr="24000"/>
+        <param name="channels" expr="1"/>
+        <param name="duration" expr="0.5"/>
+      </send>
+      <send event="bot.ability.vocal.speech.encoding.output" target="#_parent">
+        <param name="audio" expr="output"/>
+        <param name="media_type" expr="media_type"/>
+        <param name="sample_rate_hz" expr="24000"/>
+        <param name="channels" expr="1"/>
+        <param name="duration" expr="1.5"/>
+      </send>
+    </transition>
   </state>
   <final id="done"/>
 </scxml>

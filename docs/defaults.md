@@ -77,6 +77,10 @@ Gemini API, so `FLOPPY_SPEECH_BASE_URL` is its version root,
 | `bots/floppy/floppy.scx` | `reading_turns_timeout_ms` | `1000` | reading the short-term register's recent turns before each turn; the turn starts without them after it |
 | `abilities/cognition/cognition.scx` | `child_operation_timeout_ms` | `30000` | each cascade stage without progress: autonomy's and the decision layer's from their start, reasoning's once its reply streams (the first progress arms it, each later one re-arms it); live streamed replies had at most 6.2 s between chunks (decision D101; the bot's `bounds` param's `child_operation_timeout_ms` overrides it) |
 | `abilities/cognition/cognition.scx` | `child_operation_ceiling_ms` | `240000` | each cascade stage in all, the backstop and the only bound of a reasoning reply that is not streamed, inside the body's `processing_timeout_ms` with the stages before reasoning (decision D101; the bot's `bounds` param's `child_operation_ceiling_ms` overrides it) |
+| `abilities/cognition/cognition.scx` | `rest_after_ms` | `300000` | idle with no input before the cognition rests and memory consolidates: the short-term register's recency window, 5 minutes, after which no exchange is recent (decisions D195 and D205; the bot's `bounds` param's `rest_after_ms` overrides it) |
+| `abilities/consolidation/consolidation.scx` | `step_timeout_ms` | `30000` | each consolidation step's memory transaction (a read or a guarded write); one that does not answer in time ends the rest's consolidation, and the next rest begins again |
+| `abilities/consolidation/consolidation.scx` | `step_pause_ms` | `5000` | the pause before each consolidation step, longer than a step takes even on a loaded machine, so the run takes input between two steps and input that leaves rest cancels the consolidation there (the bot's `bounds` param's `consolidation_pause_ms` overrides it) |
+| `abilities/consolidation/consolidation.scx` | `max_steps` | `256` | the writes one rest's consolidation makes at most |
 | `abilities/cognition/cognition.scx` | `decision_timeout_ms` | `20000` | the decision layer's own bound on its decision, passed to it as its `decision_timeout_ms` param; a decision not made in time cascades the turn to reasoning; the bot's `bounds` param's `reflex_timeout_ms` is the reflex step's bound, which fails the turn |
 | `abilities/intuition/intuition.scx` | `decision_timeout_ms` | `20000` | the decision layer's decision when its invoker passes no bound |
 | `abilities/autonomy/autonomy.scx` | `silence_ms` | `1000` | a behavior's answer |
@@ -98,9 +102,9 @@ Gemini API, so `FLOPPY_SPEECH_BASE_URL` is its version root,
 | `abilities/reading/reading.scx` | `stage_timeout_ms` | `30000` | each reading stage |
 | `abilities/conversation/conversation.scx` | `turn_timeout_ms` | `5000` | a turn detector's readiness, and then its turn, for each source of an input |
 | `abilities/turn_detector/turn_detector.scx` | `end_of_turn_silence_seconds` | `0.5` | the silence that closes an open or paused turn (at least 0.01 s) |
-| `abilities/speaking/speaking.scx` | `encoding_timeout_ms` | `30000` | one speech synthesis: Gemini answers only once the whole clip is synthesized, so the bound covers a whole clip, not a sentence (decision D98) |
+| `abilities/speaking/speaking.scx` | `encoding_timeout_ms` | `30000` | one speech synthesis, until its output: playout starts on the first chunk (decision D203), but the bound still covers the whole synthesis, and Gemini answers each stretch only once it is synthesized (decision D98) |
 | `abilities/speaking/speaking.scx` | `recording_timeout_ms` | `5000` | recording the spoken words in the conversation |
-| `abilities/speaking/speaking.scx` | `lookahead_ms` | `1000` | the most playout commanded ahead of the mouth; each played piece is at most half of it (decision D179) |
+| `abilities/speaking/speaking.scx` | `lookahead_ms` | `1000` | the most playout commanded ahead of the mouth; each played piece is at most half of it and never past its chunk's end (decisions D179, D203) |
 | `abilities/listening/listening.scx` | `sensitivity_timeout_ms` | `30000` | scoring one sound |
 | `abilities/interpretation/interpretation.scx` | `stage_timeout_ms` | `30000` | each interpretation stage |
 | `abilities/interpretation/interpretation.scx` | `recognize_timeout_ms` | `2000` | identification's extra time past the stage timeout (decision D177) |

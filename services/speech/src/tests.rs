@@ -385,7 +385,7 @@ fn an_elevenlabs_encoding_is_its_text_to_speech_request() {
         request.url,
         [
             Part::Reference(2),
-            Part::Literal("/text-to-speech/alloy?output_format=mp3_44100_128".into())
+            Part::Literal("/text-to-speech/alloy/stream?output_format=mp3_44100_128".into())
         ]
     );
     assert_eq!(

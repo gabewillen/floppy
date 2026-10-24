@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- conversation-11: fold_voices folds the voices heard since into a person's representative, a running mean of directions, and skips a damaged voice. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation">
+<datamodel>
+  <data id="f" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:fold_voices location="f" centroid="'i8:fwA='" weight="1" voices="['[0,2]', 'damaged', '[1,0,0]']"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="f.weight === 2 &amp;&amp; f.folded === 1 &amp;&amp; f.centroid === 'i8:Wlo='" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

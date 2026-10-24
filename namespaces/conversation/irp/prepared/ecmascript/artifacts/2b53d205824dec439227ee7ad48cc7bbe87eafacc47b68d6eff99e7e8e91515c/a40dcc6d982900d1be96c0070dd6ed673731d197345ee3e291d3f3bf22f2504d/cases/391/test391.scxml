@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- conversation-10: two people within the margin of a voice leave it no one's, and a damaged voice row is skipped. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="p" expr="null"/>
+  <data id="input" expr="({source_ids: [[1, 0]], target_ids: []})"/>
+  <data id="voices" expr="[['person-1', 'i8:fwA='], ['person-2', 'i8:eiQ='], ['person-3', '[1,0]'], ['person-4', 'i8:'], 7]"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:people_for_input location="p" input="input" voices="voices" after="3"/>
+  </onentry>
+  <transition event="error.execution" target="fail"/>
+  <transition cond="p.input.source_ids.join() === 'person-4' &amp;&amp; p.people.join() === 'person-4' &amp;&amp; p.voices.length === 1" target="pass"/>
+  <transition target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>
