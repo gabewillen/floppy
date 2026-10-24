@@ -17,7 +17,7 @@ Last updated: 2026-10-24.
   voices heard into each person's compact representative
   (`bot_person_centroid`) and merges two people at D90's threshold,
   re-pointing everything keyed on the newer one. Each step is one guarded
-  transaction after a one-second pause, and input leaves rest at once,
+  transaction after a five-second pause, and input leaves rest at once,
   cancelling the consolidation between two steps. Identification reads
   one representative a person (about 100 people at 256 dimensions), and
   new people are numbered from `bot_sequence`. Episodes from short-term

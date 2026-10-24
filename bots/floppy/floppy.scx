@@ -245,7 +245,8 @@
   reasoning's max_context_tokens and
   completion_reserve_tokens (its model's context fit, decision D143), the
   cognition's rest_after_ms (how long it stays awake with no input before
-  it rests and memory consolidates, decision D205) and
+  it rests and memory consolidates, decision D205), the consolidation's
+  consolidation_pause_ms (the pause before each of its steps) and
   reflection's revising_timeout_ms
   and revising_ceiling_ms (likewise for a revision through the builder),
   [floppy fields]; the body passes those it was given to the cognition as

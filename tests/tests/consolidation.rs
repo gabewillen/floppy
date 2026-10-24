@@ -173,6 +173,7 @@ fn consolidate(
     {stopping}
     <invoke id="consolidation" type="scxml" src="abilities/consolidation/consolidation.scx">
       <param name="database" expr="'{database}'"/>
+      <param name="bounds" expr="({{consolidation_pause_ms: 100}})"/>
     </invoke>
     <transition event="error.*" target="done"><log label="failed" expr="_event.name"/></transition>
     <transition event="done.invoke.consolidation" target="inspecting">
@@ -467,8 +468,10 @@ fn a_consolidation_cancelled_mid_way_leaves_every_representative_whole() {
     let inspect = [
         json!({"sql": "SELECT c.person_id, c.weight, (SELECT COUNT(*) FROM bot_person_embedding AS e WHERE e.person_id = c.person_id AND e.seq <= c.through_seq) AS folded, (SELECT COUNT(*) FROM bot_person_embedding AS e WHERE e.person_id = c.person_id) AS heard FROM bot_person_centroid AS c ORDER BY c.person_id"}),
     ];
-    // Each step follows a one-second pause: by three and a half seconds a
-    // few steps have committed.
+    // Each step follows a pause of a tenth of a second (the harness's
+    // bounds; with no input to take, steps then follow each other in one
+    // call, and the harness's timer fires among them in deadline order):
+    // by three and a half seconds some steps have committed.
     let finished = consolidate(SQLITE, &sqlite_grant(), &seed, &inspect, Some("3500ms"));
     assert_eq!(logged(&finished, "stopped").as_deref(), Some("stopped"));
     assert_eq!(logged(&finished, "consolidated"), None);

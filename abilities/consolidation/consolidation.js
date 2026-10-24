@@ -13,9 +13,11 @@ function stepDelay() {
   return step_timeout_ms + 'ms';
 }
 
-// The pause before each step.
+// The pause before each step: the bounds' consolidation_pause_ms, else
+// this document's default.
 function pauseDelay() {
-  return step_pause_ms + 'ms';
+  var bound = Object(bounds).consolidation_pause_ms;
+  return (typeof bound === 'number' ? bound : step_pause_ms) + 'ms';
 }
 
 function timeoutFailure() {

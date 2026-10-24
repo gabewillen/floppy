@@ -2864,8 +2864,8 @@ fn input_during_a_consolidation_cancels_it_and_is_a_normal_turn() {
         label_is("cognition.rest")(record) && record["text"] == "resting"
     });
     assert!(texts(&resting, "cognition.consolidated").is_empty());
-    // A step follows each one-second pause: input comes after a few.
-    std::thread::sleep(Duration::from_millis(3500));
+    // A step follows each five-second pause: input comes after the first.
+    std::thread::sleep(Duration::from_millis(9000));
     run.event(
         "bot.input",
         &json!({"observation": {"event": "text", "data": "background noise"}}),

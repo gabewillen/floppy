@@ -182,7 +182,7 @@
   never competes with a live one). When it fires with no input meanwhile,
   the cognition rests: resting logs cognition.rest "resting" and invokes
   abilities/consolidation/consolidation.scx as its child "consolidation"
-  with the database, which reinforces the people memory holds and merges
+  with the database and the bounds, which reinforces the people memory holds and merges
   duplicates, one guarded transaction per step; its done.invoke donedata
   {folded, merged, steps, failed, reason} is logged as
   cognition.consolidated, and the cognition stays at rest (consolidated)
@@ -377,6 +377,7 @@
       <state id="consolidating">
         <invoke id="consolidation" type="scxml" src="../consolidation/consolidation.scx">
           <param name="database" expr="database"/>
+          <param name="bounds" expr="bounds"/>
         </invoke>
         <transition event="done.invoke.consolidation" target="consolidated">
           <log label="cognition.consolidated" expr="consolidatedLog(_event)"/>

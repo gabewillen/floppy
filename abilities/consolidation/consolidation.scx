@@ -28,7 +28,10 @@
   within one call of the run, so the pause is where the run takes the
   input that arrived meanwhile, and input that leaves rest cancels the
   consolidation between two steps (it waits at most for the step in
-  hand).
+  hand). A delay counts from the session time of the call that arms it,
+  and a delayed send already due when a call's work ends fires in that
+  call, so the pause must outlast a step (on a loaded machine too): 5 s
+  by default, the bounds' consolidation_pause_ms overriding it.
 
   Folding (reinforcing identity): a person's representative voice
   (bot_person_centroid, kind voice: its compact text, its weight, the
@@ -98,11 +101,14 @@
     <data id="merge_refs_limit" expr="48"/>
     <!-- The writes one rest makes at most. -->
     <data id="max_steps" expr="256"/>
+    <!-- The invoker's <param>: the bot's time bounds (its
+         consolidation_pause_ms overrides step_pause_ms). -->
+    <data id="bounds" expr="({})"/>
     <!-- The pause before each step, where the run takes input: longer
          than a step takes, so that the run's call ends between two steps
          (a delayed send already due when a step ends fires in the same
          call, and input waits for the call to end). -->
-    <data id="step_pause_ms" expr="1000"/>
+    <data id="step_pause_ms" expr="5000"/>
     <!-- Each memory step's bound. -->
     <data id="step_timeout_ms" expr="30000"/>
     <!-- What was done. -->
