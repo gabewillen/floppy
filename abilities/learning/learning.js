@@ -113,7 +113,7 @@ function progressTarget() {
 
 // The lesson as the revision's instruction (decision D149).
 // The teaching turn's output and choices without the lesson itself: a
-// behavior never teaches the bot (decisions D220 and D221).
+// behavior never teaches the bot (decisions D221 and D222).
 function lessonOutput() {
   return lesson.cognition_output.filter(function (s) { return Object(s).event !== 'bot.ability.learning.input'; });
 }
@@ -155,7 +155,7 @@ function lessonOf() {
   return 'lesson of turn ' + lesson.turn + ': ';
 }
 
-// breaking (decision D219)
+// breaking (decision D220)
 
 function breakStatements() {
   return [{sql: break_behavior, parameters: [typeof intent.reason === 'string' ? intent.reason.trim() : '', intent.name]}];

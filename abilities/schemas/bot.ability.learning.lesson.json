@@ -44,7 +44,7 @@
       "type": "array"
     },
     "choices": {
-      "description": "The turn's choices, each event with its schema and the session it goes to, which a behavior learned from the turn is checked against before it is accepted (decision D220) [floppy field].",
+      "description": "The turn's choices, each event with its schema and the session it goes to, which a behavior learned from the turn is checked against before it is accepted (decision D221) [floppy field].",
       "items": {
         "additionalProperties": true,
         "properties": {

@@ -123,7 +123,7 @@
     <data id="max_completion_tokens" expr="8192"/>
     <!-- A design generation that is truncated doubles it for the next
          design call, up to document_token_ceiling, as the author call's
-         bound grows (decision D222: a reasoning model's plan ran past 8192
+         bound grows (decision D223: a reasoning model's plan ran past 8192
          on the 2026-10-23 learning runs). -->
     <!-- The author call's token bound: a whole document needs more than
          8192 tokens, which truncated whole documents on 2026-10-21
@@ -262,7 +262,7 @@
       <assign location="min_every_ms" expr="requestBound(_event.data.min_every_ms)"/>
       <assign location="turn_after_bound_ms" expr="requestBound(_event.data.turn_after_bound_ms)"/>
       <assign location="live_turn" expr="requestApply(_event)"/>
-      <!-- The request as the build reads it, once (decision D225). -->
+      <!-- The request as the build reads it, once (decision D226). -->
       <log label="builder.request" expr="requestLog()"/>
     </transition>
     <transition event="builder.request" target="failed">
@@ -469,7 +469,7 @@
         <param name="text" expr="draft.script"/>
       </invoke>
       <transition event="done.invoke.write_script" target="validate">
-        <!-- Each attempt's draft, by path and digest (decision D225). -->
+        <!-- Each attempt's draft, by path and digest (decision D226). -->
         <log label="builder.draft" expr="draftLog()"/>
       </transition>
     </state>

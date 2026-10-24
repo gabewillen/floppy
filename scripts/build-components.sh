@@ -374,7 +374,7 @@ build_component() {
     case "$component" in
         floppy_behavior|floppy_decision|floppy_service_generate|floppy_service_decision|floppy_service_generate_validator|floppy_service_vision)
         # <behavior:verify_apply> checks each selection against its turn
-        # choice's schema (decision D220), <decision:choice> compiles each
+        # choice's schema (decision D221), <decision:choice> compiles each
         # offered schema, the generate service
         # checks structured output, and the decision service checks the
         # choices' schemas and the filled event data with the same `event`

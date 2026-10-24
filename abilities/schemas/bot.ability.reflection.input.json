@@ -260,7 +260,7 @@
       "type": "integer"
     },
     "choices": {
-      "description": "The turn's choices, each event with its schema and the session it goes to, which a behavior learned from the turn is checked against before it is accepted (decision D220) [floppy field].",
+      "description": "The turn's choices, each event with its schema and the session it goes to, which a behavior learned from the turn is checked against before it is accepted (decision D221) [floppy field].",
       "items": {
         "additionalProperties": true,
         "properties": {
@@ -285,7 +285,7 @@
       "type": "array"
     },
     "declined": {
-      "description": "The learned behaviors autonomy ran this turn that declined it, which reflection does not change on this turn (decision D229) [floppy field].",
+      "description": "The learned behaviors autonomy ran this turn that declined it, which reflection does not change on this turn (decision D230) [floppy field].",
       "items": {
         "minLength": 1,
         "type": "string"

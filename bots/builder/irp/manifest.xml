@@ -87,7 +87,7 @@
     </test>
   </assert>
   <assert id="builder-9" specnum="9" specid="#builder-9">
-    <![CDATA[With the request's `apply` `{turn, input, targets, choices?, handled?}`, a draft that sends no `bot.behavior.tick` also runs once with the params `turn` and `input` (the simulation result `live turn`) and must end within min(`turn_after_bound_ms`, 2000) ms in a top-level final state whose donedata is `{turn, handled: true, selected}` (or, with `handled` false, a turn that taught the behavior, `handled` false) with the live turn and selections naming targets among `targets` with data agreeing with `input` and, with `choices`, each an event its target takes with data its schema admits, else an `apply` diagnostic `E0008` (`<behavior:verify_apply>`, decisions D131, D220 and D221).]]>
+    <![CDATA[With the request's `apply` `{turn, input, targets, choices?, handled?}`, a draft that sends no `bot.behavior.tick` also runs once with the params `turn` and `input` (the simulation result `live turn`) and must end within min(`turn_after_bound_ms`, 2000) ms in a top-level final state whose donedata is `{turn, handled: true, selected}` (or, with `handled` false, a turn that taught the behavior, `handled` false) with the live turn and selections naming targets among `targets` with data agreeing with `input` and, with `choices`, each an event its target takes with data its schema admits, else an `apply` diagnostic `E0008` (`<behavior:verify_apply>`, decisions D131, D221 and D222).]]>
     <test id="180" conformance="mandatory" manual="false">
       <start uri="180/test180.scxml"/>
     </test>

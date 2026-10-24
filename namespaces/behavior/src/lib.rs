@@ -124,12 +124,12 @@
 //! evaluates to the turn's choices, `[{event, target, schema}]`, or `null`:
 //! with any, a selection whose event is not one its target takes on that
 //! turn, or whose data its choice's schema does not admit, is a message too
-//! (decision D220), since the candidates runner's send of it is checked
+//! (decision D221), since the candidates runner's send of it is checked
 //! against the receiving transition and fails with `error.execution`.
 //! `handled` (optional, default `true`) evaluates to whether the run must
 //! handle the turn: `false` for a turn that taught the behavior, whose
 //! message is the lesson rather than an instance of what it answers
-//! (decision D221), where an unhandled run writes nothing and a handled
+//! (decision D222), where an unhandled run writes nothing and a handled
 //! one is checked as above.
 //!
 //! # Failures
@@ -1660,7 +1660,7 @@ pub fn verify_apply(
     errors
 }
 
-/// Why the target would refuse a selection (decision D220): the candidates
+/// Why the target would refuse a selection (decision D221): the candidates
 /// runner's send to it is checked against the receiving transition's
 /// schema, so data the turn's choice of that event and target does not
 /// admit fails the dispatch with `error.execution`. `None` without choices,

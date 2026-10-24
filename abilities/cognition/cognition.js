@@ -180,7 +180,7 @@ function isHandled(_event) {
 }
 
 // A done.invoke.<stage> that did not handle the turn in hand, and did not fail.
-// The learned behaviors that ran and declined this turn (decision D229).
+// The learned behaviors that ran and declined this turn (decision D230).
 function declinedCandidates(_event) {
   return Array.isArray(_event.data.candidates) ? _event.data.candidates.filter(function (c) { return typeof c === 'string'; }) : [];
 }
@@ -324,7 +324,7 @@ function hasLesson() {
 
 // A turn the bot's own lesson or routine caused (it perceives a lesson's
 // result or a routine's tick) selects no lesson of its own, so neither a
-// lesson nor a routine can keep teaching the bot (decision D219).
+// lesson nor a routine can keep teaching the bot (decision D220).
 function perceivesLesson() {
   return (stimulus.event === 'bot.ability.learning.output' || stimulus.event === 'bot.behavior.tick') && hasLesson();
 }

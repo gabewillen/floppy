@@ -137,8 +137,8 @@
   as the long-lived child "reflection", beside the turns, and each output is followed by bot.ability.reflection.input
   {turn, cognition_input, cognition_output, self, choices, declined} to it (choices
   the turn's, which a learned behavior's live-turn check holds its
-  selections to, decision D220, and declined the learned behaviors
-  autonomy ran that declined the turn, decision D229), and each failed or
+  selections to, decision D221, and declined the learned behaviors
+  autonomy ran that declined the turn, decision D230), and each failed or
   cancelled turn by one with outcome failed (and the failure) or cancelled
   and no output, which reflection only remembers (decision D139); a
   bot.ability.persona.revise reflection selects goes to the body, for the
@@ -171,7 +171,7 @@
   "bot.ability.learning.output", data: {lesson, lesson_turn, learned,
   behavior}, source: "learning"}, participants}, a turn the bot tells its
   teacher in. Bounded: a turn that perceives a lesson's result or a routine's
-  tick sends no lesson of its own (decision D219). Each lesson's result
+  tick sends no lesson of its own (decision D220). Each lesson's result
   reconciles the routines at once, so a routine learned, changed or
   broken starts or stops without waiting for the next reflection.
 
@@ -262,7 +262,7 @@
     <data id="participants" expr="[]"/>
     <data id="choices" expr="[]"/>
     <!-- The learned behaviors autonomy ran this turn that declined it,
-         for reflection (decision D229). -->
+         for reflection (decision D230). -->
     <data id="declined" expr="[]"/>
     <!-- The bot's environment this turn (decision D106), for reasoning's
          prompt and the decision layer's instructions. -->
@@ -707,7 +707,7 @@
         </send>
         <!-- A lesson the turn selected goes to the learning with the turn
              (decision D149), unless the turn perceives a lesson's result
-             or a routine's tick (decision D219);
+             or a routine's tick (decision D220);
              last: a send that fails ends the rest of this block. -->
         <if cond="perceivesLesson()">
           <log label="cognition.lesson" expr="'bounded'"/>

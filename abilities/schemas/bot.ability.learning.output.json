@@ -37,7 +37,7 @@
               ]
             },
             "status": {
-              "description": "ACTIVE: the bot does it now; BROKEN: the bot stopped it, as the lesson asked (decision D219).",
+              "description": "ACTIVE: the bot does it now; BROKEN: the bot stopped it, as the lesson asked (decision D220).",
               "enum": [
                 "ACTIVE",
                 "BROKEN"

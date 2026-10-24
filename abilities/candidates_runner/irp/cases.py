@@ -55,7 +55,7 @@ S.statement(3, "An answer that does not handle this turn (`handled` not `true`, 
 S.statement(4, "When its candidate does not handle the turn and candidates are left, the runner invokes itself for the rest (with the same turn, input, database and bounds) and ends with the rest's donedata, its own candidate first in `tried`.")
 S.statement(5, "A candidate that does not answer within `silence_ms` is passed over, and the rest run.")
 S.statement(6, "A candidate whose source cannot run has its failure persisted, and the rest run.")
-S.statement(7, "A handled candidate a selection of which cannot be sent (a send that raises `error.*`) has its failure persisted, and the runner ends with `{tried: [name], handled: false, selected: null, rejection}`, rejection `Autonomy behavior dispatch failed: <error> (selected <event> to <target>, ...)` (each selection, `with no target` for one without; decision D220); the rest do not run.")
+S.statement(7, "A handled candidate a selection of which cannot be sent (a send that raises `error.*`) has its failure persisted, and the runner ends with `{tried: [name], handled: false, selected: null, rejection}`, rejection `Autonomy behavior dispatch failed: <error> (selected <event> to <target>, ...)` (each selection, `with no target` for one without; decision D221); the rest do not run.")
 S.statement(8, "Each persistence is one transaction of the Memory ability on the `database` <param>; one that fails or outlasts `memory_timeout_ms` takes the same effect as one persisted.")
 
 S.case(100, 1, "a handled candidate answers the turn with its own selections.",

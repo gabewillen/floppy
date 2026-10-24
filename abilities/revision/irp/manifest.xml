@@ -15,7 +15,7 @@
     </test>
   </assert>
   <assert id="revision-3" specnum="3" specid="#revision-3">
-    <![CDATA[A builder that fails with the last draft it rejected (`abandoning`) keeps that draft's path in the row as DRAFT (unless the row was ACTIVE, which keeps its program, decision D223) and fails with `Reflection change abandoned: attempts exhausted:` and the rendered diagnostics (decision D133); a builder that fails with no draft fails with `Reflection revision failed: <reason>: <first diagnostic>`.]]>
+    <![CDATA[A builder that fails with the last draft it rejected (`abandoning`) keeps that draft's path in the row as DRAFT (unless the row was ACTIVE, which keeps its program, decision D224) and fails with `Reflection change abandoned: attempts exhausted:` and the rendered diagnostics (decision D133); a builder that fails with no draft fails with `Reflection revision failed: <reason>: <first diagnostic>`.]]>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>
@@ -30,13 +30,13 @@
     </test>
   </assert>
   <assert id="revision-6" specnum="6" specid="#revision-6">
-    <![CDATA[With an example and a counterexample, the builder also runs the behavior on the counterexample, which it must decline (decision D228): a draft that answers it too is refused.]]>
+    <![CDATA[With an example and a counterexample, the builder also runs the behavior on the counterexample, which it must decline (decision D229): a draft that answers it too is refused.]]>
     <test id="142" conformance="mandatory" manual="false">
       <start uri="142/test142.scxml"/>
     </test>
   </assert>
   <assert id="revision-5" specnum="5" specid="#revision-5">
-    <![CDATA[A lesson (`instruction`) whose intent carries an `example`, on a conversation turn, has the builder run the behavior on this turn's input with the lesson's message replaced by the example, which the behavior must handle (decision D227): a draft that answers the example is accepted, and one that declines it is refused on the live turn.]]>
+    <![CDATA[A lesson (`instruction`) whose intent carries an `example`, on a conversation turn, has the builder run the behavior on this turn's input with the lesson's message replaced by the example, which the behavior must handle (decision D228): a draft that answers the example is accepted, and one that declines it is refused on the live turn.]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>

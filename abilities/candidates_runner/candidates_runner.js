@@ -47,7 +47,7 @@ function candidateFailedLog(event) {
 
 // A dispatch that failed, with the error and what the candidate selected
 // (an error.execution is most often data its target's schema refuses,
-// decision D220).
+// decision D221).
 function dispatchFailure(_event) {
   return 'Autonomy behavior dispatch failed: ' + _event.name + ' (selected ' + answer.map(selectionText).join(', ') + ')';
 }

@@ -104,7 +104,7 @@ def greeter(data, handled="true"):
 DECIDES = [{"name": "decides", "events": [], "settle_ms": 500, "expect_events": [], "expect_done": True}]
 # The live turn (decision D131): a knock at the door on turn 2.
 LIVE = {"turn_after_bound_ms": 1000, "apply": {"turn": 2, "input": {"label": "knock", "focus": "door"}, "targets": ["communication"]}}
-# A live turn that taught the behavior (decision D221): the run may leave it unhandled.
+# A live turn that taught the behavior (decision D222): the run may leave it unhandled.
 LIVE_TAUGHT = {"turn_after_bound_ms": 1000, "apply": dict(LIVE["apply"], handled=False)}
 # The live turn with its choices: communication takes respond only with parts.
 PARTS_ONLY = {"type": "object", "properties": {"parts": {"type": "array"}}, "required": ["parts"], "additionalProperties": False}
@@ -142,7 +142,7 @@ S.statement(6, "Each check has its own diagnostics: a validator error (`kind` `v
 S.statement(7, "A generation that fails (`generate.failed`) is a `generate` diagnostic `<stage>-failed`; one that runs `generate_ceiling_ms` in all, or, once its reply streams, makes no progress for `generate_timeout_ms` (the first `generate.progress` arms it, each later one re-arms it), is cancelled, a `timeout` diagnostic `<stage>-timeout` (decision D101).")
 S.statement(8, "With the request's lifetime bounds (`min_every_ms`, `turn_after_bound_ms`), a draft that sends `bot.behavior.tick` (a persistent routine) whose schedule is shorter than `min_every_ms` is a `lifetime` diagnostic `E0009`; a routine within the bounds also gets a forced first tick, whose output must select at least one event (else an `apply` diagnostic `E0008`).")
 
-S.statement(9, "With the request's `apply` `{turn, input, targets, choices?, handled?}`, a draft that sends no `bot.behavior.tick` also runs once with the params `turn` and `input` (the simulation result `live turn`) and must end within min(`turn_after_bound_ms`, 2000) ms in a top-level final state whose donedata is `{turn, handled: true, selected}` (or, with `handled` false, a turn that taught the behavior, `handled` false) with the live turn and selections naming targets among `targets` with data agreeing with `input` and, with `choices`, each an event its target takes with data its schema admits, else an `apply` diagnostic `E0008` (`<behavior:verify_apply>`, decisions D131, D220 and D221).")
+S.statement(9, "With the request's `apply` `{turn, input, targets, choices?, handled?}`, a draft that sends no `bot.behavior.tick` also runs once with the params `turn` and `input` (the simulation result `live turn`) and must end within min(`turn_after_bound_ms`, 2000) ms in a top-level final state whose donedata is `{turn, handled: true, selected}` (or, with `handled` false, a turn that taught the behavior, `handled` false) with the live turn and selections naming targets among `targets` with data agreeing with `input` and, with `choices`, each an event its target takes with data its schema admits, else an `apply` diagnostic `E0008` (`<behavior:verify_apply>`, decisions D131, D221 and D222).")
 
 S.case(100, 1, "a request refused by its schema raises error.execution at the sender; the builder keeps waiting and answers a whitespace spec invalid-request.",
        [send(REQUEST, js({"spec": "x", "colour": "blue"})), expect("error.execution"),

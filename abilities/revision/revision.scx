@@ -51,7 +51,7 @@
   a change of an ACTIVE behavior instead writes the documents it read
   back over the rejected draft (restoring) and keeps the row as it was,
   ACTIVE on its working program, failing with the same message
-  (decision D223).
+  (decision D224).
   Its failed with no draft (no backend, generation failures) fails the
   revision with no draft.
 
@@ -96,21 +96,21 @@
          taught one (decision D149); null: none. -->
     <data id="instruction" expr="null"/>
     <!-- Whether the builder's run is on the lesson's example in place of
-         its message (decision D227). -->
+         its message (decision D228). -->
     <data id="probing" expr="false"/>
     <!-- This turn's own input, before the example replaced its message
-         (decision D227). -->
+         (decision D228). -->
     <data id="lesson_input" expr="null"/>
     <!-- The turn's choices, [{event, schema, target?}]: the live-turn check
          holds the behavior's selections to them, and the builder's context
-         carries them (decision D220). -->
+         carries them (decision D221). -->
     <data id="turn_choices" expr="[]"/>
     <!-- The stored row, the builder's request (the change input) and its
          answer. -->
     <data id="prepared" expr="[]"/>
     <data id="existing_behavior" expr="null"/>
     <!-- The stored schemas document as it was read, which restoring
-         writes back (decision D223). -->
+         writes back (decision D224). -->
     <data id="existing_schemas" expr="''"/>
     <data id="write" expr="null"/>
     <data id="request" expr="null"/>
@@ -140,7 +140,7 @@
     <data id="change_instructions" expr="'Author or revise the SCXML program of the stored behavior. existing_behavior is the current inventory row (its source is the path of its program, empty for a new create stub, and scxml, schemas, and script are the documents of that program; status may be DRAFT or BROKEN for unfinished or retired behaviors). If existing_behavior.source is empty, write a full new program from this turn, prior_episodes, and intent: invent event contracts, guards, and effects from the observed pattern only. If source is non-empty, rewrite or patch its documents so they better fit this turn and prior_episodes, keeping every case the existing program already answers: a change adds to what it does or corrects it, never drops a rule it was taught. The output is a cognition event selection object (keys: event, target?, data?, reason?) or a list of such objects, matching the shape of prior episode and this-turn outputs. Derive input fields, guards, and selection field names from the observed pattern. At runtime, fill selection data from the live input; never hardcode identifier values copied from episode examples. A turn behavior (default) answers one matching turn. When the intent or the turn calls for something recurring or time-based (or the user asked for it), write a persistent routine instead, scheduled by every or at delayed sends whose transitions send bot.behavior.tick with its selections: a persistent routine is checked by one forced tick, not the live turn, and needs no triggers.'"/>
     <data id="turn_contract" expr="'Write a turn behavior: its datamodel declares turn and input, which its invoker sets with param elements ; its invoker runs it only for a turn whose stimulus event is one of its triggers TRIGGERS, and no stimulus, event name or trigger reaches it, so it never tests one: input is the stimulus data (its fields, or {event: the data} when the data is not an object) with focus and focus_candidates added, and for this turn input is INPUT, shown as XML of the JavaScript object the behavior reads: each attribute and child element is the field of its name, an element with a count attribute is an array of its item elements (input.messages[0] is the first item, never input.messages.items), an entry element is the field its key names, and every other element holding only text is a string; when input holds messages and parent (a conversation\'s output), parent.data is the message this turn answers and messages is the whole conversation so far, earlier turns included, so it decides from parent.data; it sends nothing to its invoker and ends within one second in a top-level final state whose donedata content is the object {turn, handled, selected}: handled true with selected the list of selections, each naming its target, the session that receives its event, exactly as this turn\'s cognition_output names it, and being an event context\'s turn_choices offers for that target, with data that event\'s schema admits (its target refuses any other), or handled false with selected an empty list when the behavior does not apply to this turn (never handled true with an empty list). The builder runs it once itself, as its invoker will, with this turn\'s turn and input, even when this turn\'s stimulus is not one of its triggers, and accepts it only when that run ends within one second with handled true and selections whose targets are among TARGETS and whose data agrees with the fields of input of the same names; its own tests run it with no param, so they drive no input events and expect only what it does with its data items\' own values: its answer is its donedata, which is no output event, so each test expects no events (expect_events empty) and expect_done true.'"/>
     <!-- A taught behavior's addition to the turn behavior contract
-         (decision D221): the teaching turn is not an instance of what the
+         (decision D222): the teaching turn is not an instance of what the
          behavior answers. -->
     <data id="lesson_contract" expr="'This turn taught the behavior (instruction is the lesson): its message is the lesson itself, not something the behavior answers, so the builder\'s run on it may end with handled false, and this turn\'s cognition_output is the bot\'s acknowledgment of the lesson, never the behavior\'s output: the behavior answers what the lesson says to answer, with the reply the lesson asks for, and never acknowledges, repeats or selects the lesson.'"/>
     <data id="probe_contract" expr="'This turn taught the behavior (instruction is the lesson), and its input above is the lesson\'s example: the lesson\'s message replaced by one message the behavior must answer, so the builder\'s run on it must end with handled true, as the contract says; the example is one instance of what the lesson describes, so the behavior answers every message the lesson\'s wording covers, not only the example\'s words. When the lesson names a counterexample, a message close to the example that the lesson does not describe, the builder also runs it on that message, which it must decline (handled false, selected empty), as it declines every message the lesson does not describe; selecting bot.ability.cognition.ignore is not declining. This turn\'s cognition_output is the bot\'s acknowledgment of the lesson, never the behavior\'s output: the behavior answers what the lesson says to answer, with the reply the lesson asks for, and never acknowledges, repeats or selects the lesson.'"/>
@@ -259,7 +259,7 @@
       <autonomy:behavior_input_payload location="behavior_input" stimulus="cognition_input.stimulus"
           focus="cognition_input.focus" focus_candidates="cognition_input.focus_candidates"/>
       <!-- A lesson with an example: the run is on the example in place
-           of the lesson's message (decision D227). -->
+           of the lesson's message (decision D228). -->
       <assign location="probing" expr="isProbe()"/>
       <assign location="lesson_input" expr="behavior_input"/>
       <assign location="behavior_input" expr="probedInput()"/>
@@ -275,7 +275,7 @@
       <assign location="path" expr="_event.data.path"/>
     </transition>
     <!-- A failed change of an ACTIVE behavior keeps it ACTIVE: the
-         working program stays in autonomy (decision D223). -->
+         working program stays in autonomy (decision D224). -->
     <transition event="done.invoke.builder" cond="hasRejectedDraft(_event) &amp;&amp; isActive()" target="restoring">
       <assign location="failure" expr="abandonedMessage(_event)"/>
     </transition>
@@ -320,7 +320,7 @@
 
   <!-- Restoring: the builder wrote each rejected draft over the ACTIVE
        behavior's documents, so the documents read are written back and
-       the row is kept as it was; the turn fails (decision D223). -->
+       the row is kept as it was; the turn fails (decision D224). -->
   <state id="restoring" initial="restoring_scxml">
     <transition event="error.*" target="failed"/>
     <state id="restoring_scxml">

@@ -47,7 +47,7 @@
   Logs: learning.recalled (the episodes and behaviors read), learning.selected
   (the selected event, or none), learning.learned (the behavior's name and
   source), learning.failed (why a lesson failed), each but
-  learning.selected after "lesson of turn <turn>: " (decision D218); the
+  learning.selected after "lesson of turn <turn>: " (decision D219); the
   revision logs reflection.revision and reflection.inventory as for a
   reflection.
 
@@ -114,7 +114,7 @@
     <data id="select_episodes">SELECT content FROM (SELECT content, created_at, memory_id FROM bot_memory WHERE query_tags = 'cognitive_episode' AND content_format = 'application/json' ORDER BY created_at DESC, memory_id DESC LIMIT 50) AS recent ORDER BY created_at, memory_id</data>
     <data id="select_behaviors">SELECT name, source, description, examples_json AS examples, lifetime, status, status_reason, status_updated_at, used_count, last_used_at, failed_count, last_failed_at FROM bot_behavior ORDER BY name</data>
     <data id="select_triggers">SELECT behavior_name, "trigger" FROM bot_behavior_trigger ORDER BY behavior_name, "trigger"</data>
-    <!-- A break (decision D219): status BROKEN with the trimmed reason. -->
+    <!-- A break (decision D220): status BROKEN with the trimmed reason. -->
     <data id="break_behavior">UPDATE bot_behavior SET status = 'BROKEN', status_reason = ?, status_updated_at = replace(substr(CAST(CURRENT_TIMESTAMP AS TEXT), 1, 19), ' ', 'T') || 'Z', updated_at = CURRENT_TIMESTAMP WHERE name = ?</data>
   </datamodel>
   <script src="learning.js"/>
@@ -304,7 +304,7 @@
     </transition>
   </state>
 
-  <!-- A lesson to stop a behavior (decision D219): its row is BROKEN,
+  <!-- A lesson to stop a behavior (decision D220): its row is BROKEN,
        so autonomy no longer runs it and a routine stops at the
        reconcile its result brings. -->
   <state id="breaking">
