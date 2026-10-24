@@ -1103,3 +1103,40 @@ fn an_element_the_namespace_does_not_declare_is_not_handled() {
         Ok(Executed::NotHandled)
     );
 }
+
+#[test]
+fn every_element_keeps_a_declared_effort_and_the_dispatch_tool_never_shows_it() {
+    let heavy = json!({"event": "bot.ability.persona.revise", "schema": {"type": "object", "title": "t"}, "effort": 2});
+    let (compacted, over) = model_facing_choices(&json!([heavy.clone()]), DEFAULT_BOUND)
+        .expect("an effort is a member");
+    assert!(!over);
+    let compacted: Json = serde_json::from_str(&compacted).expect("canonical JSON");
+    assert_eq!(
+        compacted,
+        json!([{"event": "bot.ability.persona.revise", "schema": {"type": "object"}, "effort": 2}])
+    );
+    let collected = collected_offered_events(
+        "session",
+        &json!([]),
+        &json!({"persona": [heavy.clone()]}),
+        None,
+        DEFAULT_BOUND,
+    )
+    .expect("an offer's effort is kept");
+    let collected: Json = serde_json::from_str(&collected.choices).expect("canonical JSON");
+    assert_eq!(collected[0]["effort"], json!(2));
+    assert_eq!(collected[0]["target"], json!("session.persona"));
+    let tool = dispatch_tool(&json!([heavy]), None).expect("an effort is a member");
+    assert!(
+        !tool.contains("effort"),
+        "the dispatch tool never shows the effort: {tool}"
+    );
+    for effort in [json!(-1), json!(1.5), json!(1001), json!("2"), json!(null)] {
+        let entry = json!([{"event": "e", "schema": {}, "effort": effort}]);
+        assert!(
+            model_facing_choices(&entry, DEFAULT_BOUND).is_err(),
+            "{effort} is refused"
+        );
+        assert!(dispatch_tool(&entry, None).is_err(), "{effort} is refused");
+    }
+}

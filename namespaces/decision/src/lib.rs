@@ -25,10 +25,12 @@
 //!
 //! `location` (required) receives the canonical choices: a JSON array of
 //! objects with `event` (an event name), `schema` (the transition's resolved
-//! `event:schema`), and `description` (the schema's `description`, else its
-//! `title`, first line; omitted when it has neither), canonical JSON with
+//! `event:schema`), `description` (the schema's `description`, else its
+//! `title`, first line; omitted when it has neither), and `effort` (only with
+//! the `effort` attribute), canonical JSON with
 //! members sorted by key, in the session snapshot's walk order. `events`
-//! (optional) filters it: see "The filter". Every other attribute
+//! (optional) filters it: see "The filter". `effort` (optional) declares
+//! what the choices cost: see "The effort". Every other attribute
 //! (unqualified or namespaced), any child element, and any non-white-space
 //! text is refused.
 //!
@@ -66,6 +68,17 @@
 //!   descriptor, is refused. Without `events` the choices are unfiltered. A
 //!   document uses it to offer a model only the events meant for it (tool
 //!   events) and not, say, its own input or completion events.
+//!
+//! * **The effort** (decision D206). `effort="EXPR"` is an expression of
+//!   the data model that evaluates to a whole number from 0 to
+//!   [`MAX_EFFORT`], and every choice the element writes carries it as
+//!   `effort`: how heavy an action it is to take, which the cognition holds
+//!   against each tier's effort ceiling (`<cognition:within_ceiling>`). A
+//!   choice without `effort` weighs 0, within every ceiling. An `effort`
+//!   that fails to evaluate or is not such a number is `error.execution`.
+//!   The offering document declares it because it is what the action costs
+//!   in this bot, not part of the event's data contract; an expression lets
+//!   an invoker's `<param>` set it.
 //!
 //! The choices' schemas are the contracts of the events the decision service
 //! may return: it validates the chosen event's data against them before it
@@ -129,6 +142,10 @@ pub const NAMESPACE_URI: &str = "https://github.com/stateforward/floppy/namespac
 
 /// Upper bound on a choice event name's bytes (wasm builds only).
 pub const MAX_EVENT_NAME_BYTES: usize = wasm_bound(256);
+
+/// The greatest effort a choice may declare (decision D206): an effort is a
+/// small whole number, compared only with tier ceilings.
+pub const MAX_EFFORT: u32 = 1_000;
 
 /// One attribute of an element.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -244,10 +261,14 @@ pub struct Choice {
     pub schema: Json,
     /// What the event means, when its schema says.
     pub description: Option<String>,
+    /// How heavy an action it is (decision D206), when the offering document
+    /// declares it.
+    pub effort: Option<u32>,
 }
 
 /// The canonical choices document of `entries`: a JSON array of
-/// `{"description"?, "event", "schema"}` objects in order, canonical JSON.
+/// `{"description"?, "effort"?, "event", "schema"}` objects in order,
+/// canonical JSON.
 #[must_use]
 pub fn choices_json(entries: &[Choice]) -> String {
     canonical_json(&Json::Array(
@@ -259,6 +280,9 @@ pub fn choices_json(entries: &[Choice]) -> String {
                 object.insert("schema".into(), entry.schema.clone());
                 if let Some(description) = &entry.description {
                     object.insert("description".into(), description.clone().into());
+                }
+                if let Some(effort) = entry.effort {
+                    object.insert("effort".into(), effort.into());
                 }
                 Json::Object(object)
             })
@@ -451,7 +475,8 @@ const PIN_ENTRIES: [&str; 3] = [
 
 /// The entries of `choices`, each checked to be a choice entry: an object
 /// with a non-empty string `event`, a `schema`, optionally a string
-/// `description` and a non-empty string `target`, and nothing else;
+/// `description`, a non-empty string `target` and an `effort` (a whole
+/// number from 0 to [`MAX_EFFORT`]), and nothing else;
 /// `details` are the failures: not an array, an entry not an object, a
 /// malformed entry.
 fn checked_entries<'a>(
@@ -468,9 +493,11 @@ fn checked_entries<'a>(
                     .filter(|text| key == "description" || !text.is_empty())
             })
         };
-        if entry
-            .keys()
-            .any(|key| !["event", "schema", "description", "target"].contains(&key.as_str()))
+        if entry.keys().any(|key| {
+            !["event", "schema", "description", "target", "effort"].contains(&key.as_str())
+        }) || entry
+            .get("effort")
+            .is_some_and(|effort| effort_of(effort).is_none())
             || text("event").flatten().is_none()
             || !entry.contains_key("schema")
             || matches!(text("description"), Some(None))
@@ -482,6 +509,39 @@ fn checked_entries<'a>(
     Ok(entries)
 }
 
+/// A declared effort: a whole number from 0 to [`MAX_EFFORT`], else `None`.
+#[must_use]
+pub fn effort_of(value: &Json) -> Option<u32> {
+    value
+        .as_u64()
+        .and_then(|effort| u32::try_from(effort).ok())
+        .filter(|effort| *effort <= MAX_EFFORT)
+}
+
+/// The effort `expression` evaluates to (see [`effort_of`]).
+fn read_effort<H: ChoiceHost>(host: &mut H, expression: &str) -> Result<u32, Failure<H::Error>> {
+    const MALFORMED: &str = "decision:choice effort is not a whole number from 0 to 1000";
+    match host
+        .read(expression)
+        .map_err(Failure::Host)?
+        .map_err(|()| Failure::Execution("decision:choice effort did not evaluate"))?
+    {
+        Data::Number(number) => {
+            let number = number.get();
+            if number.fract() != 0.0 || !(0.0..=f64::from(MAX_EFFORT)).contains(&number) {
+                return Err(Failure::Execution(MALFORMED));
+            }
+            #[expect(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "a whole number from 0 to MAX_EFFORT, checked above"
+            )]
+            Ok(number as u32)
+        }
+        _ => Err(Failure::Execution(MALFORMED)),
+    }
+}
+
 /// Executes `<decision:choice>`.
 fn choice<H: ChoiceHost>(
     attributes: &[Attribute],
@@ -490,6 +550,7 @@ fn choice<H: ChoiceHost>(
 ) -> Result<Executed, Failure<H::Error>> {
     let mut location = None;
     let mut events = None;
+    let mut effort = None;
     for attribute in attributes {
         let slot = match (
             attribute.namespace_uri.as_deref(),
@@ -497,9 +558,10 @@ fn choice<H: ChoiceHost>(
         ) {
             (None, "location") => &mut location,
             (None, "events") => &mut events,
+            (None, "effort") => &mut effort,
             _ => {
                 return Err(Failure::Execution(
-                    "decision:choice takes only the location and events attributes",
+                    "decision:choice takes only the location, events and effort attributes",
                 ));
             }
         };
@@ -520,6 +582,15 @@ fn choice<H: ChoiceHost>(
     {
         return Err(Failure::Execution("decision:choice holds no content"));
     }
+    let effort = effort
+        .map(|effort| {
+            Some(effort.trim())
+                .filter(|effort| !effort.is_empty())
+                .ok_or(Failure::Execution("decision:choice has an empty effort"))
+        })
+        .transpose()?
+        .map(|effort| read_effort(host, effort))
+        .transpose()?;
     let document = host
         .snapshot(&CHOICES_SNAPSHOT_EXCLUDE)
         .map_err(Failure::Host)?
@@ -531,6 +602,9 @@ fn choice<H: ChoiceHost>(
                 .iter()
                 .any(|descriptor| matches(descriptor, &entry.event))
         });
+    }
+    for entry in &mut choices {
+        entry.effort = effort;
     }
     host.assign(location, &Data::JsonArray(choices_json(&choices)))
         .map_err(Failure::Host)?
@@ -713,6 +787,7 @@ pub fn snapshot_choices<E>(
                 choices.push(Choice {
                     event: event.to_owned(),
                     description: description_of(&schema),
+                    effort: None,
                     schema: schema.clone(),
                 });
             }
