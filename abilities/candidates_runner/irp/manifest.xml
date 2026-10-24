@@ -70,6 +70,9 @@
     <test id="161" conformance="mandatory" manual="false">
       <start uri="161/test161.scxml"/>
     </test>
+    <test id="162" conformance="mandatory" manual="false">
+      <start uri="162/test162.scxml"/>
+    </test>
   </assert>
   <assert id="candidates_runner-8" specnum="8" specid="#candidates_runner-8">
     <![CDATA[Each persistence is one transaction of the Memory ability on the `database` <param>; one that fails or outlasts `memory_timeout_ms` takes the same effect as one persisted.]]>

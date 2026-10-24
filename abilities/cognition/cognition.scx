@@ -709,7 +709,7 @@
              (decision D149), unless the turn perceives a lesson's result
              or a routine's tick (decision D220);
              last: a send that fails ends the rest of this block. -->
-        <if cond="perceivesLesson()">
+        <if cond="perceivesLessonOrTick()">
           <log label="cognition.lesson" expr="'bounded'"/>
         <elseif cond="hasLesson()"/>
           <send event="bot.ability.learning.lesson" target="#_learning">
