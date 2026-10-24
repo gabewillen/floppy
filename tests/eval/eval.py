@@ -274,7 +274,7 @@ def cmd_grade(args):
     with open(os.path.join(args.dir, "plan.json"), encoding="utf-8") as handle:
         jobs = json.load(handle)["jobs"]
     # A builder track's run: its table again, from the models it saved.
-    # Checked before anything is written, so a regrade is whole or none.
+    # Checked before anything is written: a run without them fails at once.
     builder_json = os.path.join(args.dir, "builder.json")
     models = None
     if os.path.exists(builder_json):

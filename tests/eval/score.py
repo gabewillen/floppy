@@ -267,7 +267,7 @@ def builds(job):
             elif label == "design" and build is not None and build["last"] not in ("triage", "retry_gate"):
                 # A build redesigns only after triage: a design after any
                 # other line starts a new build (the open one was cut).
-                out.append(build)
+                out.append(_closed(build))
                 build = None
             if build is None:
                 # Any of a builder's lines opens a build: a failure before
@@ -288,7 +288,7 @@ def builds(job):
             elif label == "done":
                 match = re.search(r"in (\d+) attempt", text)
                 build.update(accepted=True, reason="done", attempts=int(match.group(1)) if match else build["attempts"])
-                out.append(current.pop(where))
+                out.append(_closed(current.pop(where)))
             elif label == "failed":
                 # "<reason>: <kind> <code> ...": the reason alone hides
                 # whether the draft failed its schema, validation or tests.
@@ -296,9 +296,15 @@ def builds(job):
                 build["reason"] = words[0][:40] if words else "failed"
                 build["cause"] = " ".join(words[1:3])[:60]
                 build["diagnostics"].append(text[:200])
-                out.append(current.pop(where))
-        out.extend(current.values())
+                out.append(_closed(current.pop(where)))
+        out.extend(_closed(build) for build in current.values())
     return out
+
+
+def _closed(build):
+    """A build without its bookkeeping (`last`, its previous builder line)."""
+    build.pop("last", None)
+    return build
 
 
 def complete(scenario, job):
