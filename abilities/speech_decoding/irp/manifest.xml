@@ -22,6 +22,9 @@
     <test id="101" conformance="mandatory" manual="false">
       <start uri="101/test101.scxml"/>
     </test>
+    <test id="102" conformance="mandatory" manual="false">
+      <start uri="102/test102.scxml"/>
+    </test>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>

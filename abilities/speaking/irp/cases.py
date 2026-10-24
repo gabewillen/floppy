@@ -46,7 +46,8 @@ PATIENT = [("encoding_timeout_ms", "600000")]
 # Two seconds of the same (96000 bytes): four pieces of half the 1 s
 # lookahead. Gemini's Interactions API answers it whole, one chunk, so the
 # playout's pieces are not also chunk boundaries (the OpenAI-compatible
-# answer is cut every 0.5 s, decision D203).
+# answer is cut every 0.5 s, decision D203). Its path and base64 `data` are
+# Gemini's, so it answers only a case that also passes GEMINI.
 LONG_PCM = {"path": "/interactions", "status": 200,
             "body": {"steps": [{"type": "model_output", "content": [{"type": "audio", "data": "A" * 128000}]}]}}
 GEMINI = [("provider", "'gemini'"), ("model", "'gemini-3.1-flash-tts-preview'"), ("voice", "'Kore'")]
@@ -257,3 +258,7 @@ S.case(201, 12, "the progress counts the seconds played across the chunks, up to
        [READY, say("one two three four"), progress("0"), progress("0.5"), progress("1"), progress("1.5"), progress("2"),
         output("one two three four"), READY],
        ignore=[EFFERENCE, SOUND, APPEND], params=OPENAI_PCM, backend=[STREAMED_PCM])
+S.case(202, 12, "the default encoder (provider null, the lab's voice) streams the same chunks: each sounds in turn, then the copy of nothing left.",
+       [READY, say("one two three four"), efference("0.5"), sound(1), sound(1, chunk=1), sound(1, chunk=2), sound(1, chunk=3),
+        efference("0"), appended("one two three four", 1), output("one two three four"), READY],
+       ignore=[EFFERENCE, PROGRESS], params=PATIENT, backend=[STREAMED_PCM])

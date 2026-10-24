@@ -153,8 +153,10 @@ class Speaker:
                 out.writeframes(path.read_bytes())
             path = wav
         self.until = float("inf")
-        subprocess.run(["afplay", str(path)], check=False)
-        self.until = time.monotonic()
+        try:
+            subprocess.run(["afplay", str(path)], check=False)
+        finally:
+            self.until = time.monotonic()
 
 
 class Room:
@@ -185,10 +187,14 @@ class Room:
         self.lock = threading.Lock()
 
     def send(self, name: str, data: dict) -> None:
+        """Sends an event to the room; once the room has exited it is dropped."""
         with self.lock:
             assert self.process.stdin is not None
-            self.process.stdin.write(json.dumps({"name": name, "data": data}) + "\n")
-            self.process.stdin.flush()
+            try:
+                self.process.stdin.write(json.dumps({"name": name, "data": data}) + "\n")
+                self.process.stdin.flush()
+            except (BrokenPipeError, ValueError):
+                pass
 
     def records(self):
         assert self.process.stdout is not None
@@ -238,11 +244,14 @@ def main() -> None:
     ready = threading.Event()
     done = threading.Event()
     count = 0
+    count_lock = threading.Lock()
+    mic = None
 
     def hear(pcm: bytes) -> None:
         nonlocal count
-        count += 1
-        name = f"heard-{os.getpid()}-{count}.pcm"
+        with count_lock:
+            count += 1
+            name = f"heard-{os.getpid()}-{count}.pcm"
         (media / name).write_bytes(pcm)
         print(f"[you] ({len(pcm) / 2 / RATE:.1f} s)", flush=True)
         # A second of silence after it, as the live tests give: the listening
@@ -318,11 +327,20 @@ def main() -> None:
     except KeyboardInterrupt:
         pass
     finally:
+        if mic is not None:
+            mic.terminate()
+            mic.wait()
         room.send("bot.deactivate", {})
         try:
             room.process.wait(timeout=10)
         except subprocess.TimeoutExpired:
             room.process.terminate()
+        if speaker.player.stdin is not None:
+            try:
+                speaker.player.stdin.close()
+            except BrokenPipeError:
+                pass
+        speaker.player.terminate()
 
 
 if __name__ == "__main__":

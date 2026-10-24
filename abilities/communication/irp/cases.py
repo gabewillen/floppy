@@ -71,8 +71,9 @@ RESPONDING = expect(OFFERS, "_event.data.ability === 'communication' && _event.d
 # A tenth of a second of 24 kHz mono 16-bit PCM (4800 bytes), as the
 # OpenAI-compatible speech backend answers it.
 AUDIO = {"path": SPEECH, "status": 200, "body": "A" * 4800}
-# Two seconds of the same (96000 bytes): four pieces of playout, streamed
-# as four 0.5 s chunks (decision D203).
+# Two seconds of the same (96000 bytes), one answer the fake backend sends
+# whole: the speech service cuts it at fixed offsets into four 0.5 s chunks,
+# which playout plays as four pieces (decision D203).
 LONG_AUDIO = {"path": SPEECH, "status": 200, "body": "A" * 96000}
 BOOM = {"path": SPEECH, "status": 500, "body": {"error": {"message": "boom"}}}
 

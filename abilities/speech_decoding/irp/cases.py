@@ -28,12 +28,6 @@ S.statement(5, "When the decoder cannot run (a missing `audio`, or a malformed `
 S.case(100, 1, "the default decoder's transcription text comes back trimmed as the done data.",
        [expect(DONE, text("hello there"))],
        params=[AUDIO], backend=[{"path": "/v1/audio/transcriptions", "body": {"text": "  hello there \n"}}])
-S.case(101, 3, "the gemini answer's model_output steps' text is joined as the words.",
-       [expect(DONE, text("hello\nthere"))],
-       params=[AUDIO, ("media_type", "'audio/wav'")] + GEMINI,
-       backend=[{"path": "/v1/interactions", "body": {"steps": [
-           {"type": "user_input", "content": [{"type": "text", "text": "ignored"}]},
-           {"type": "model_output", "content": [{"type": "text", "text": " hello "}, {"type": "text", "text": "there"}]}]}}])
 
 # 2: no speech heard.
 S.case(110, 2, "a gemini model output with no text decodes to empty words.",
@@ -44,6 +38,15 @@ S.case(111, 2, "an OpenAI-compatible transcription of silence decodes to empty w
        params=[AUDIO] + WHISPER, backend=[{"path": "/v1/audio/transcriptions", "body": {"text": "   "}}])
 
 # 3: provider and model.
+S.case(101, 3, "the gemini answer's model_output steps' text is joined as the words.",
+       [expect(DONE, text("hello\nthere"))],
+       params=[AUDIO, ("media_type", "'audio/wav'")] + GEMINI,
+       backend=[{"path": "/v1/interactions", "body": {"steps": [
+           {"type": "user_input", "content": [{"type": "text", "text": "ignored"}]},
+           {"type": "model_output", "content": [{"type": "text", "text": " hello "}, {"type": "text", "text": "there"}]}]}}])
+S.case(102, 3, "the gemini answer's output_text comes back trimmed as the words.",
+       [expect(DONE, text("hello there"))],
+       params=[AUDIO] + GEMINI, backend=[{"path": "/v1/interactions", "body": {"output_text": "  hello there \n"}}])
 S.case(120, 3, "provider null decodes through /audio/transcriptions.",
        [expect(DONE, text("good morning"))],
        params=[AUDIO] + WHISPER, backend=[{"path": "/v1/audio/transcriptions", "body": {"text": " good morning "}}])
