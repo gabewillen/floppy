@@ -80,8 +80,8 @@
   run's consent and grants allow (its env scopes, origins, and its dir
   and wasi grants), nothing more (docs/decisions.md, D28).
 
-  Bindings: the scx namespace (built into scx), and the decision and
-  behavior namespace packages and the generate, decision and files service packages, resolved from their
+  Bindings: the scx namespace (built into scx), and the cognition, decision
+  and behavior namespace packages and the generate, decision and files service packages, resolved from their
   repository URIs (the files service's directory is the run's dir grant,
   https://github.com/stateforward/floppy/services/files=HOST::/behaviors,
   HOST the behaviors directory beside bots, ../../behaviors/ from here); the env
@@ -96,6 +96,7 @@
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:scx="https://github.com/stateforward/scxml.rs/namespaces/scx"
        xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior"
+       xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
@@ -103,6 +104,8 @@
   <datamodel>
     <!-- The request. -->
     <data id="spec" expr="''"/>
+    <!-- The data the spec refers to (null: none). -->
+    <data id="context" expr="null"/>
     <data id="constraints" expr="[]"/>
     <!-- The name the draft's documents are written under (the plan's
          name unless the request names one). -->
@@ -118,6 +121,10 @@
          max_completion_tokens): a model that reasons on without answering
          stops there, as truncated, and the build goes on (decision D101). -->
     <data id="max_completion_tokens" expr="8192"/>
+    <!-- A design generation that is truncated doubles it for the next
+         design call, up to document_token_ceiling, as the author call's
+         bound grows (decision D223: a reasoning model's plan ran past 8192
+         on the 2026-10-23 learning runs). -->
     <!-- The author call's token bound: a whole document needs more than
          8192 tokens, which truncated whole documents on 2026-10-21
          (decision D131); design keeps max_completion_tokens. The request
@@ -164,6 +171,8 @@
     <data id="rejected" expr="null"/>
     <!-- Model calls: the invocation in flight, its failure code, and the
          stage run its builder.timeout carries. -->
+    <!-- The generation's request as model-facing XML (decision D201). -->
+    <data id="request" expr="null"/>
     <data id="gen_id" expr="null"/>
     <!-- The generation's inactivity timer (re-armed on progress). -->
     <data id="generate_timer" expr="null"/>
@@ -242,6 +251,7 @@
                 cond="satisfiesBuilderRequest(_event)"
                 target="design">
       <assign location="spec" expr="_event.data.spec"/>
+      <assign location="context" expr="requestContext(_event)"/>
       <assign location="constraints" expr="requestConstraints(_event)"/>
       <assign location="name" expr="requestName(_event)"/>
       <assign location="max_attempts" expr="requestMaxAttempts(_event)"/>
@@ -252,6 +262,8 @@
       <assign location="min_every_ms" expr="requestBound(_event.data.min_every_ms)"/>
       <assign location="turn_after_bound_ms" expr="requestBound(_event.data.turn_after_bound_ms)"/>
       <assign location="live_turn" expr="requestApply(_event)"/>
+      <!-- The request as the build reads it, once (decision D226). -->
+      <log label="builder.request" expr="requestLog()"/>
     </transition>
     <transition event="builder.request" target="failed">
       <assign location="failure_reason" expr="'invalid-request'"/>
@@ -280,6 +292,7 @@
           <content expr="progressData('design')"/>
         </send>
       </if>
+      <cognition:model_facing_data location="request" root="request" data="designRequest()"/>
     </onentry>
     <onexit>
       <cancel sendidexpr="generate_timer"/>
@@ -289,7 +302,7 @@
             env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL" env:stream="FLOPPY_STREAM">
       <param name="model" expr="model"/>
       <param name="system" expr="design_system"/>
-      <param name="prompt" expr="designPrompt()"/>
+      <param name="prompt" expr="request"/>
       <param name="schema" expr="plan_schema"/>
       <param name="schemaname" expr="'topology_plan'"/>
       <param name="max_completion_tokens" expr="max_completion_tokens"/>
@@ -325,6 +338,7 @@
     </transition>
     <transition event="done.invoke" cond="isFrom(_event, gen_id)" target="retry_gate">
       <assign location="diagnostics" expr="generationFailedDiagnostics('design', 'plan')"/>
+      <assign location="max_completion_tokens" expr="grownDesignTokens()"/>
     </transition>
     <!-- Only this stage run's own timeout; it preempts the call in flight
          (leaving design cancels the invocation). -->
@@ -362,6 +376,7 @@
           <content expr="progressData('author')"/>
         </send>
       </if>
+      <cognition:model_facing_data location="request" root="request" data="authorRequest()"/>
     </onentry>
     <onexit>
       <cancel sendidexpr="generate_timer"/>
@@ -371,7 +386,7 @@
             env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL" env:stream="FLOPPY_STREAM">
       <param name="model" expr="model"/>
       <param name="system" expr="authorSystem()"/>
-      <param name="prompt" expr="authorPrompt()"/>
+      <param name="prompt" expr="request"/>
       <param name="schema" expr="draft_schema"/>
       <param name="schemaname" expr="'scxml_draft'"/>
       <param name="max_completion_tokens" expr="document_max_completion_tokens"/>
@@ -453,7 +468,10 @@
         <param name="name" expr="draftFile('.js')"/>
         <param name="text" expr="draft.script"/>
       </invoke>
-      <transition event="done.invoke.write_script" target="validate"/>
+      <transition event="done.invoke.write_script" target="validate">
+        <!-- Each attempt's draft, by path and digest (decision D226). -->
+        <log label="builder.draft" expr="draftLog()"/>
+      </transition>
     </state>
   </state>
 
@@ -681,7 +699,9 @@
           <behavior:verify_tick location="apply" ticks="ticks"/>
         <elseif cond="isApplyTest()"/>
           <behavior:verify_apply location="apply" done="child_data" turn="testTurn()"
-              input="testInput()" targets="testTargets()" error="applyError()"/>
+              input="testInput()" targets="testTargets()" error="applyError()"
+              choices="testChoices()" handled="testHandled()"/>
+          <assign location="apply" expr="declinedApply()"/>
         </if>
         <assign location="sim_results" expr="nextSimResults()"/>
         <assign location="sim_index" expr="increment(sim_index)"/>

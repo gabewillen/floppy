@@ -1,6 +1,6 @@
 [package]
 name = "floppy-cognition"
-description = "The `cognition` namespace: `<cognition:attention_bias_for_turn>` and `<cognition:model_facing_content>` (the turn's attention bias and the model-facing projection of a turn's input) as a Wasm extension component"
+description = "The `cognition` namespace: `<cognition:attention_bias_for_turn>`, `<cognition:model_facing_content>` and `<cognition:model_facing_data>` (the turn's attention bias, the model-facing projection of a turn's input, and any data as model-facing XML) as a Wasm extension component"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

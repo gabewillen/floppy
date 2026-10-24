@@ -1057,7 +1057,7 @@ fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
     );
     assert_eq!(
         texts(&records, "autonomy.candidate.advance"),
-        strings(&["Bdeclines"])
+        strings(&["Bdeclines (handled false)"])
     );
     assert_eq!(texts(&records, "behavior.double"), strings(&["turn 1"]));
     assert_eq!(
@@ -1120,7 +1120,7 @@ fn a_learned_behavior_whose_selection_cannot_be_sent_fails_the_turn() {
     let mut run = start_with(&bot, &grant);
     say(&mut run, "background noise");
     let records = until_turn_ended(&run, 1);
-    let message = "Autonomy behavior dispatch failed: error.communication";
+    let message = "Autonomy behavior dispatch failed: error.communication (selected bot.ability.reasoning.input with no target)";
     assert_eq!(
         texts(&records, "autonomy.candidate.failed"),
         strings(&[&format!("Unoffered ({message})")])
@@ -1258,18 +1258,11 @@ fn reasoning_selects_from_the_turns_choices() {
     let pinned: Vec<String> = branches
         .iter()
         .map(|branch| {
-            // Each branch: event and target required, data when
-            // its schema requires a field, reason optional.
-            let data_required = branch["properties"]["data"]["required"]
-                .as_array()
-                .is_some_and(|required| !required.is_empty());
+            // Each branch: event, data and target required (D231),
+            // reason optional.
             assert_eq!(
                 branch["required"],
-                if data_required {
-                    json!(["event", "data", "target"])
-                } else {
-                    json!(["event", "target"])
-                },
+                json!(["event", "data", "target"]),
                 "{branch}"
             );
             assert_eq!(branch["additionalProperties"], false);
@@ -1338,7 +1331,7 @@ fn a_lesson_is_learned_and_its_result_perceived() {
     });
     assert_eq!(
         texts(&records, "learning.failed"),
-        strings(&["Learning select returned an empty selection."])
+        strings(&["lesson of turn 1: Learning select returned an empty selection."])
     );
     let requests = reasoning_requests(&mock);
     assert_eq!(requests.len(), 2, "{requests:?}");
@@ -2805,7 +2798,7 @@ fn the_speech_heard_seed_admits_identified_speech_as_communication_input() {
     );
     assert_eq!(
         texts(&finished.all, "autonomy.candidate.advance"),
-        strings(&["SpeechHeard"])
+        strings(&["SpeechHeard (handled false)"])
     );
     trace::assert_trace(
         "the_speech_heard_seed_admits_identified_speech_as_communication_input",

@@ -13,7 +13,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.candidates_runner" cond="_event.data.tried.join(' ') === &quot;Nowhere&quot; &amp;&amp; _event.data.tried.length === 1 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.rejection === &quot;Autonomy behavior dispatch failed: error.communication&quot; &amp;&amp; _event.data.selected === null" target="step1"/>
+    <transition event="done.invoke.candidates_runner" cond="_event.data.tried.join(' ') === &quot;Nowhere&quot; &amp;&amp; _event.data.tried.length === 1 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.rejection === &quot;Autonomy behavior dispatch failed: error.communication (selected bot.say to session.nowhere)&quot; &amp;&amp; _event.data.selected === null" target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

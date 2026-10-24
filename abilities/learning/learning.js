@@ -33,7 +33,7 @@ function recalledEpisodes(_event) {
 }
 
 function recalledLog() {
-  return 'lesson of turn ' + lesson.turn + ': ' + prior_episodes.length + ' episodes, ' + behaviors.length + ' behaviors';
+  return lessonOf() + prior_episodes.length + ' episodes, ' + behaviors.length + ' behaviors';
 }
 
 function recallFailedMessage(detail) {
@@ -48,9 +48,9 @@ function behaviorNames() {
 }
 
 // The lesson, the turn it was taught on, the prior episodes and the
-// inventory.
-function selectPrompt() {
-  return JSON.stringify({lesson: lesson.content, cognition_input: lesson.cognition_input, cognition_output: lesson.cognition_output, prior_episodes: prior_episodes, behaviors: behaviors});
+// inventory (the select input, as model-facing XML: decision D201).
+function selectInput() {
+  return {content: lesson.content, cognition_input: lesson.cognition_input, cognition_output: lesson.cognition_output, prior_episodes: prior_episodes, behaviors: behaviors};
 }
 
 function selectTimeoutDelay() {
@@ -112,6 +112,16 @@ function progressTarget() {
 }
 
 // The lesson as the revision's instruction (decision D149).
+// The teaching turn's output and choices without the lesson itself: a
+// behavior never teaches the bot (decisions D221 and D222).
+function lessonOutput() {
+  return lesson.cognition_output.filter(function (s) { return Object(s).event !== 'bot.ability.learning.input'; });
+}
+
+function lessonChoices() {
+  return (Array.isArray(lesson.choices) ? lesson.choices : []).filter(function (c) { return Object(c).event !== 'bot.ability.learning.input'; });
+}
+
 function lessonInstruction() {
   return ({text: lesson.content, kind: 'instruction'});
 }
@@ -132,12 +142,42 @@ function revisionFailedMessage(detail) {
 
 // reporting and failing
 
+// The lesson's log lines name its turn, so a reader ties each to its lesson.
 function learnedLog() {
-  return behavior.name + ' ' + behavior.source;
+  return lessonOf() + behavior.name + ' ' + behavior.source + (behavior.status === 'BROKEN' ? ' BROKEN' : '');
+}
+
+function failedLog() {
+  return lessonOf() + failure;
+}
+
+function lessonOf() {
+  return 'lesson of turn ' + lesson.turn + ': ';
+}
+
+// breaking (decision D220)
+
+function breakStatements() {
+  return [{sql: break_behavior, parameters: [typeof intent.reason === 'string' ? intent.reason.trim() : '', intent.name]}];
+}
+
+function hasBroken(_event) {
+  return _event.data.results[0].rowcount === 1;
+}
+
+// The broken behavior as the lesson's result names it: its source is the
+// inventory's (a break builds nothing).
+function brokenBehavior() {
+  var row = behaviors.filter(function (b) { return b.name === intent.name; })[0];
+  return ({name: intent.name, source: row === undefined ? '' : row.source, description: row === undefined ? null : row.description, status: 'BROKEN'});
+}
+
+function breakFailedMessage(detail) {
+  return 'Learning break failed: ' + detail;
 }
 
 // The lesson's result: whether it took and the behavior it became, never
 // why it failed, with the teaching turn's participants.
 function learningOutput(learned) {
-  return ({lesson: lesson.content, learned: learned, behavior: learned ? {name: behavior.name, description: behavior.description === undefined ? null : behavior.description} : null, participants: lesson.participants});
+  return ({lesson: lesson.content, lesson_turn: lesson.turn, learned: learned, behavior: learned ? {name: behavior.name, description: behavior.description === undefined ? null : behavior.description, status: behavior.status === 'BROKEN' ? 'BROKEN' : 'ACTIVE'} : null, participants: lesson.participants});
 }

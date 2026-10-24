@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!-- cognition-6: model_facing_data writes an object as the root's fields: a scalar an attribute, an array an element of items, and a string over one line holding markup a CDATA section. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition">
+<datamodel>
+  <data id="l" expr="null"/>
+  <data id="want" expr="'&lt;input task=&quot;design&quot;&gt;\n  &lt;doc&gt;&lt;![CDATA[&lt;a/&gt;\nb]]&gt;&lt;/doc&gt;\n  &lt;names count=&quot;1&quot;&gt;\n    &lt;item&gt;a&lt;/item&gt;\n  &lt;/names&gt;\n&lt;/input&gt;'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <cognition:model_facing_data location="l" root="input" data="({task: 'design', names: ['a'], plan: null, doc: '&lt;a/&gt;\nb'})"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="executed" cond="l === want" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

@@ -41,6 +41,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use serde_json::{Map, Value as Json, json};
+use support::model_facing::{read, rendered};
 use support::{Run, output, scratch, workspace, write};
 
 /// The fake keys (not secrets): the mock checks they arrive as bearers.
@@ -850,6 +851,7 @@ fn answers_plan(path: &str) -> bool {
         path,
         "/repair/v1/chat/completions"
             | "/truncated/v1/chat/completions"
+            | "/truncatedplan/v1/chat/completions"
             | "/broken/v1/chat/completions"
             | "/service/v1/chat/completions"
             | "/impostor/v1/chat/completions"
@@ -872,6 +874,17 @@ fn answers_plan(path: &str) -> bool {
     )
 }
 
+/// Whether the request is one a reasoning model cut off at its token
+/// bound: the first two drafts on `/truncated/v1` and the first two plans
+/// on `/truncatedplan/v1`.
+fn truncates(path: &str, schema: Option<&str>, authors: usize, plans: usize) -> bool {
+    match (path, schema) {
+        ("/truncated/v1/chat/completions", Some("scxml_draft")) => authors <= 2,
+        ("/truncatedplan/v1/chat/completions", Some("topology_plan")) => plans <= 2,
+        _ => false,
+    }
+}
+
 /// The mock's answer to one request on `path` requiring the function of
 /// `schema`, after `authors` draft and `plans` plan requests on that path.
 fn mock_reply(
@@ -881,6 +894,9 @@ fn mock_reply(
     plans: usize,
     body: &[u8],
 ) -> Option<String> {
+    if truncates(path, schema, authors, plans) {
+        return Some(truncated_completion());
+    }
     match (path, schema) {
         (_, Some("topology_plan")) if answers_plan(path) => Some(completion(PLAN)),
         ("/flaky/v1/chat/completions", Some("topology_plan")) => {
@@ -893,14 +909,11 @@ fn mock_reply(
         ("/slow/v1/chat/completions", Some("topology_plan")) => {
             Some(completion(if plans == 1 { LATE_PLAN } else { PLAN }))
         }
-        // Two replies a reasoning model cut off at its token bound, then a draft.
-        ("/truncated/v1/chat/completions", Some("scxml_draft")) if authors <= 2 => {
-            Some(truncated_completion())
-        }
         (
             "/slow/v1/chat/completions"
             | "/afterbound/v1/chat/completions"
-            | "/truncated/v1/chat/completions",
+            | "/truncated/v1/chat/completions"
+            | "/truncatedplan/v1/chat/completions",
             Some("scxml_draft"),
         ) => Some(completion(&draft(&traffic_light(&green_separate(), "red")))),
         ("/service/v1/chat/completions", Some("scxml_draft")) => Some(completion(&service_draft())),
@@ -1004,8 +1017,8 @@ impl Received {
             .and_then(Json::as_str)
     }
 
-    /// The user message of a Chat Completions request, parsed (the builder
-    /// sends JSON text).
+    /// The user message of a Chat Completions request, read back (the
+    /// builder sends its request as model-facing XML, decision D201).
     fn user_input(&self) -> Json {
         let text = self
             .body
@@ -1019,7 +1032,7 @@ impl Received {
             .and_then(|message| message.get("content"))
             .and_then(Json::as_str)
             .expect("a user message");
-        serde_json::from_str(text).expect("the builder's user message is JSON")
+        read(text)
     }
 }
 
@@ -1561,12 +1574,12 @@ fn assert_repair_requests(received: &[Received]) {
     );
     assert_eq!(
         second["previous_tests"],
-        tests(),
+        rendered("previous_tests", &tests()),
         "the repair sees the failed draft's tests"
     );
     assert_eq!(
         second["previous_schemas"],
-        schemas(&["pedestrian.button"]),
+        rendered("previous_schemas", &schemas(&["pedestrian.button"])),
         "the repair sees the failed draft's schemas"
     );
     assert_eq!(second["previous_script"], "");
@@ -1695,6 +1708,41 @@ fn a_truncated_author_generation_doubles_the_next_token_bound() {
     assert_eq!(bounds, [&json!(16384), &json!(32768), &json!(65536)]);
 }
 
+/// A design generation cut off at its token bound doubles the bound for
+/// the next design call, up to 65536 (decision D223): 8192 becomes 16384
+/// and then 32768, and the third plan is built.
+#[test]
+fn a_truncated_design_generation_doubles_the_next_token_bound() {
+    let mock = Mock::start();
+    let records = run(
+        &mock,
+        "truncatedplan",
+        "truncatedplan",
+        &["FLOPPY_API_KEY", "FLOPPY_BASE_URL"],
+        &json!({"spec": SPEC}),
+    );
+    assert!(finished(&records), "{records:?}");
+    let (label, done) = answer(&records);
+    assert_eq!(label, "done", "{done}");
+    let history = done["report"]["history"].as_array().expect("the history");
+    assert_eq!(history.len(), 2, "{done}");
+    assert!(
+        history.iter().all(
+            |failure| failure["diagnostics"][0]["code"] == "design-failed"
+                && failure["diagnostics"][0]["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains("(truncated)"))
+        ),
+        "{done}"
+    );
+    let received = mock.received();
+    let bounds: Vec<&Json> = chat_requests(&received, "topology_plan")
+        .iter()
+        .map(|request| &request.body["max_completion_tokens"])
+        .collect();
+    assert_eq!(bounds, [&json!(8192), &json!(16384), &json!(32768)]);
+}
+
 /// Without the decision key the builder falls back to its cond-based
 /// triage; a repair that fails with the same diagnostic as the draft before
 /// it goes on (decision D133): the next author call carries that diagnostic
@@ -1742,8 +1790,8 @@ fn the_same_diagnostic_again_is_repeated_and_the_build_runs_to_its_cap() {
             .is_some_and(|system| system.ends_with(&xsd))),
         "every author call is given the schema"
     );
-    assert_eq!(drafts[0].user_input()["repeated"], json!([]));
-    assert_eq!(drafts[1].user_input()["repeated"], json!([]));
+    assert_eq!(drafts[0].user_input()["repeated"], Json::Null);
+    assert_eq!(drafts[1].user_input()["repeated"], Json::Null);
     let repeated = drafts[2].user_input()["repeated"].clone();
     assert!(
         repeated
@@ -2345,7 +2393,7 @@ fn the_same_validate_diagnostic_on_another_line_is_repeated() {
     let received = mock.received();
     let drafts = chat_requests(&received, "scxml_draft");
     assert_eq!(drafts.len(), 3, "no fourth draft");
-    assert_eq!(drafts[1].user_input()["repeated"], json!([]));
+    assert_eq!(drafts[1].user_input()["repeated"], Json::Null);
     assert_eq!(
         drafts[2].user_input()["repeated"].as_array().map(Vec::len),
         Some(1),
@@ -2391,7 +2439,7 @@ fn a_failure_after_another_is_repeated() {
     let received = mock.received();
     let drafts = chat_requests(&received, "scxml_draft");
     assert_eq!(drafts.len(), 4);
-    assert_eq!(drafts[2].user_input()["repeated"], json!([]));
+    assert_eq!(drafts[2].user_input()["repeated"], Json::Null);
     assert!(
         drafts[3].user_input()["repeated"]
             .as_array()
@@ -2542,7 +2590,10 @@ fn a_redesign_sends_the_previous_plan() {
     let designs = chat_requests(&received, "topology_plan");
     assert_eq!(designs.len(), 2, "one design, then the redesign");
     assert_eq!(designs[0].user_input()["previous_plan"], Json::Null);
-    let expected: Json = serde_json::from_str(PLAN).expect("the plan is JSON");
+    let expected = rendered(
+        "previous_plan",
+        &serde_json::from_str(PLAN).expect("the plan is JSON"),
+    );
     let second = designs[1].user_input();
     assert_eq!(
         second["previous_plan"], expected,
@@ -2570,7 +2621,10 @@ fn a_failed_redesign_keeps_the_previous_plan() {
     let received = mock.received();
     let designs = chat_requests(&received, "topology_plan");
     assert_eq!(designs.len(), 3, "a design, a failed redesign, a redesign");
-    let expected: Json = serde_json::from_str(PLAN).expect("the plan is JSON");
+    let expected = rendered(
+        "previous_plan",
+        &serde_json::from_str(PLAN).expect("the plan is JSON"),
+    );
     assert_eq!(designs[1].user_input()["previous_plan"], expected);
     assert_eq!(
         designs[2].user_input()["previous_plan"],
@@ -2929,7 +2983,8 @@ fn a_live_turn_its_schema_rejects_is_refused_before_the_builder() {
         ("target-number", "/apply/targets", json!([1])),
         ("target-empty", "/apply/targets", json!([""])),
         ("targets-many", "/apply/targets", json!(many)),
-        ("extra-member", "/apply/handled", json!(true)),
+        ("extra-member", "/apply/extra", json!(true)),
+        ("handled-string", "/apply/handled", json!("no")),
         ("apply-null", "/apply", Json::Null),
     ];
     for (case, pointer, value) in bounds {

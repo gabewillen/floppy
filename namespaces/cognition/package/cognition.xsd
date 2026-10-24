@@ -24,7 +24,12 @@
                    stimulus, self, recent, environment, acted,
                    prior_episodes, standing_directives, feedback,
                    instructions, schema, budget (optional): expressions.
-                   Neither takes another attribute or content.
+  cognition:model_facing_data
+                   location (required): receives the data as model-facing
+                   XML.
+                   root (required): the root element's name, an XML name.
+                   data (required): an expression.
+                   None takes another attribute or content.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="https://github.com/stateforward/floppy/namespaces/cognition"
@@ -55,6 +60,13 @@
       <xs:attribute name="instructions" type="xs:string" use="optional"/>
       <xs:attribute name="schema" type="xs:string" use="optional"/>
       <xs:attribute name="budget" type="xs:string" use="optional"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="model_facing_data">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="root" type="xs:NCName" use="required"/>
+      <xs:attribute name="data" type="xs:string" use="required"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>

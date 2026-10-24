@@ -202,7 +202,7 @@
    {
     "code": "E0009",
     "kind": "lifetime",
-    "message": "a persistent routine must schedule at least one transition with every or at: a delayed send of an event whose transition sends bot.behavior.tick. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+    "message": "a persistent routine must schedule at least one transition with every or at: a delayed send of an event whose transition sends bot.behavior.tick. It is a persistent routine because it sends bot.behavior.tick; a turn behavior never sends bot.behavior.tick: it answers its one turn by its donedata. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
    }
   ],
   "lifetime": "persistent",
@@ -226,7 +226,7 @@
    {
     "code": "E0009",
     "kind": "lifetime",
-    "message": "a persistent routine must schedule at least one transition with every or at: a delayed send of an event whose transition sends bot.behavior.tick. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+    "message": "a persistent routine must schedule at least one transition with every or at: a delayed send of an event whose transition sends bot.behavior.tick. It is a persistent routine because it sends bot.behavior.tick; a turn behavior never sends bot.behavior.tick: it answers its one turn by its donedata. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
    }
   ],
   "lifetime": "persistent",
@@ -241,7 +241,7 @@
    {
     "code": "E0009",
     "kind": "lifetime",
-    "message": "a persistent routine must schedule at least one transition with every or at: a delayed send of an event whose transition sends bot.behavior.tick. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
+    "message": "a persistent routine must schedule at least one transition with every or at: a delayed send of an event whose transition sends bot.behavior.tick. It is a persistent routine because it sends bot.behavior.tick; a turn behavior never sends bot.behavior.tick: it answers its one turn by its donedata. Help: A turn behavior lives for one turn and is silenced about a second after it starts: keep its delayed sends within that bound, or make it a persistent routine that sends bot.behavior.tick on every / at schedules. A persistent routine's every interval must be at least the minimum the check names."
    }
   ],
   "lifetime": "persistent",

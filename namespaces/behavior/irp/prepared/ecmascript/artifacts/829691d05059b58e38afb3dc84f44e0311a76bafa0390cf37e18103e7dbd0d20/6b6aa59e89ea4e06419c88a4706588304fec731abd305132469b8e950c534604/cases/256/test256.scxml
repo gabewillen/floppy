@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- behavior-6: verify_apply with handled false (a teaching turn) writes nothing for an unhandled run, and still checks a handled one. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior" xmlns:conf="http://www.w3.org/2005/scxml-conformance" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="unhandled" expr="null"/>
+  <data id="untargeted" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <behavior:verify_apply location="unhandled" done="({turn: 1, handled: false, selected: []})" turn="1" input="({})" targets="['communication']" handled="false"/>
+    <behavior:verify_apply location="untargeted" done="({turn: 1, handled: true, selected: [{event: 'respond', data: {}}]})" turn="1" input="({})" targets="['communication']" handled="false"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="executed" cond="unhandled.length === 0 &amp;&amp; untargeted.length === 1" target="pass"/>
+  <transition event="*" target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

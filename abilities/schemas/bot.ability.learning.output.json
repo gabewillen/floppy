@@ -10,6 +10,12 @@
       "title": "Lesson",
       "type": "string"
     },
+    "lesson_turn": {
+      "description": "The turn it was taught on [floppy field].",
+      "minimum": 1,
+      "title": "Lesson turn",
+      "type": "integer"
+    },
     "learned": {
       "description": "Whether the bot learned it.",
       "title": "Learned",
@@ -29,11 +35,19 @@
                 "string",
                 "null"
               ]
+            },
+            "status": {
+              "description": "ACTIVE: the bot does it now; BROKEN: the bot stopped it, as the lesson asked (decision D220).",
+              "enum": [
+                "ACTIVE",
+                "BROKEN"
+              ]
             }
           },
           "required": [
             "name",
-            "description"
+            "description",
+            "status"
           ],
           "type": "object"
         },
@@ -41,7 +55,7 @@
           "type": "null"
         }
       ],
-      "description": "The behavior it learned (null when it did not): its name and what it does.",
+      "description": "The behavior it learned or stopped (null when it did not): its name, what it does, and whether it now runs.",
       "title": "Behavior"
     },
     "participants": {
@@ -55,6 +69,7 @@
   },
   "required": [
     "lesson",
+    "lesson_turn",
     "learned",
     "behavior"
   ],
@@ -62,14 +77,17 @@
   "examples": [
     {
       "lesson": "Whenever I say exactly 'ping', reply with exactly 'pong'.",
+      "lesson_turn": 3,
       "learned": true,
       "behavior": {
         "name": "PingPong",
-        "description": "Reply pong to ping."
+        "description": "Reply pong to ping.",
+        "status": "ACTIVE"
       }
     },
     {
       "lesson": "Remind me to drink water every hour.",
+      "lesson_turn": 5,
       "learned": false,
       "behavior": null
     }

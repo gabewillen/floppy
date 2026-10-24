@@ -42,6 +42,31 @@
       },
       "maxItems": 32,
       "type": "array"
+    },
+    "choices": {
+      "description": "The turn's choices, each event with its schema and the session it goes to, which a behavior learned from the turn is checked against before it is accepted (decision D221) [floppy field].",
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "event": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "schema": {
+            "description": "The event's offered schema."
+          },
+          "target": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "schema"
+        ],
+        "type": "object"
+      },
+      "type": "array"
     }
   },
   "required": [

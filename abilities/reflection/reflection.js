@@ -19,6 +19,16 @@ function inputFailure(input) {
 }
 
 // What the bot knows of itself (decision D145), null when not told.
+// The turn's choices (decision D221), none when the input has none.
+function inputChoices(input) {
+  return Array.isArray(input.choices) ? input.choices : [];
+}
+
+// The learned behaviors that declined the turn (decision D230).
+function inputDeclined(input) {
+  return Array.isArray(input.declined) ? input.declined : [];
+}
+
 function inputSelf(input) {
   return input.self === undefined ? null : input.self;
 }
@@ -46,6 +56,12 @@ function recalledEpisodes(_event) {
 // The recalled inventory's names, which a change or a break may name.
 function behaviorNames() {
   return behaviors.map(function (b) { return b.name; });
+}
+
+// The behaviors a change may name: not one that declined this turn,
+// which rightly did not answer it (decision D230).
+function changeableNames() {
+  return behaviorNames().filter(function (n) { return declined.indexOf(n) < 0; });
 }
 
 function recalledLog() {
@@ -92,18 +108,19 @@ function selectCeilingDelay() {
   return select_ceiling_ms + 'ms';
 }
 
-// The select input, with the repair feedback (selection_feedback, decision
-// D130) last when this attempt repairs a rejection.
+// The select input (as model-facing XML, decision D201), with the repair
+// feedback (selection_feedback, decision D130) last when this attempt
+// repairs a rejection.
 function selectPrompt() {
-  return selectInputJson() + selectFeedback();
+  return select_input + selectFeedback();
 }
 
-function selectInputJson() {
+function selectInput() {
   var input = {cognition_input: cognition_input, cognition_output: cognition_output, prior_episodes: prior_episodes, behaviors: behaviors};
   if (hasPersona()) {
     input.self = self;
   }
-  return JSON.stringify(input);
+  return input;
 }
 
 // A persona to revise: the bot was told its owner's traits (decision D145).

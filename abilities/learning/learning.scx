@@ -11,6 +11,7 @@
 
     idle -bot.ability.learning.lesson-> recalling -> selecting -> revising
       -> reporting (bot.ability.learning.output, learned) -> idle
+    selecting -bot.behavior.break-> breaking -> reporting
     any failure -> failing (bot.ability.learning.output, not learned) -> idle
     a lesson outside idle waits in deferred and runs from idle, in order
 
@@ -18,9 +19,9 @@
   oldest first) and the behavior inventory in one memory transaction.
   selecting asks the generate service (schema dispatch, its events at
   most one) to implement the lesson as one inventory event, the
-  bot.behavior.create or bot.behavior.change this session offers (a
-  change's name pinned to the inventory's names, and no change offered
-  when the inventory is empty), with learn_instructions as the system
+  bot.behavior.create, bot.behavior.change or bot.behavior.break this
+  session offers (a change's or a break's name pinned to the inventory's
+  names, and neither offered when the inventory is empty), with learn_instructions as the system
   prompt and the lesson, the teaching turn, the prior episodes and the
   inventory as the prompt; the selection is sent to this session, and a
   reply that selects nothing fails. revising invokes the revision ability
@@ -34,7 +35,8 @@
   the cognition's bounds param may set both.
 
   Output: the lesson's result goes to the cognition,
-  bot.ability.learning.output {lesson, learned, behavior, participants}
+  bot.ability.learning.output {lesson, lesson_turn, learned, behavior,
+  participants}
   (the teaching turn's participants), which the cognition hands to the
   body as a stimulus to perceive in a turn of its own, so the bot tells
   its teacher in its own words. A lesson that failed anywhere is
@@ -44,18 +46,21 @@
 
   Logs: learning.recalled (the episodes and behaviors read), learning.selected
   (the selected event, or none), learning.learned (the behavior's name and
-  source), learning.failed (why a lesson failed); the revision logs
-  reflection.revision and reflection.inventory as for a reflection.
+  source), learning.failed (why a lesson failed), each but
+  learning.selected after "lesson of turn <turn>: " (decision D219); the
+  revision logs reflection.revision and reflection.inventory as for a
+  reflection.
 
   Contracts: the events it takes reference abilities/schemas/ by
   event:schema (never inline).
 
-  Bindings: the decision, processing and behavior namespace packages and
-  the generate service package, and the revision's; env scopes
+  Bindings: the cognition, decision, processing and behavior namespace
+  packages and the generate service package, and the revision's; env scopes
   FLOPPY_API_KEY, FLOPPY_BASE_URL and FLOPPY_STREAM to the select call.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior"
+       xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
@@ -79,9 +84,10 @@
     <data id="prior_episodes" expr="[]"/>
     <data id="behaviors" expr="[]"/>
     <data id="statements" expr="[]"/>
-    <!-- The select call. -->
+    <!-- The select call, its input as model-facing XML (decision D201). -->
     <data id="choices" expr="[]"/>
     <data id="schema" expr="null"/>
+    <data id="select_input" expr="null"/>
     <data id="gen_id" expr="null"/>
     <data id="answered" expr="false"/>
     <data id="gen_failure" expr="null"/>
@@ -99,7 +105,7 @@
     <data id="failure" expr="null"/>
 
     <!-- The select call's instructions. -->
-    <data id="learn_instructions" expr="'You are taught a lesson: implement it as exactly one offered behavior inventory event. Select bot.behavior.create with a new PascalCase name for a new behavior, or bot.behavior.change naming an installed behavior the lesson revises (behaviors lists them). A lesson that says how to answer something (when I say X, say Y) is a turn behavior: its triggers are the stimulus event names it answers, such as the teaching turn\'s stimulus event. A lesson that asks for something on a schedule or repeatedly (every hour, each morning at 8) is a persistent routine: it needs no triggers, and its description says the schedule. description says what the behavior does; reason says why, from the lesson. Never answer with an empty selection. Use only offered events; data must match the event schema.'"/>
+    <data id="learn_instructions" expr="'You are taught a lesson: implement it as exactly one offered behavior inventory event. Select bot.behavior.create with a new PascalCase name for a new behavior, or bot.behavior.change naming an installed behavior the lesson revises (behaviors lists them). A lesson that asks to stop, cancel or forget a behavior (stop reminding me, do not say that any more) is bot.behavior.break naming it, never a change: a break stops it at once. A lesson that says how to answer something (when I say X, say Y) is a turn behavior: its triggers are the stimulus event names it answers, such as the teaching turn\'s stimulus event. A lesson that asks for something on a schedule or repeatedly (every hour, each morning at 8) is a persistent routine: it needs no triggers, and its description says the schedule. For a turn behavior, example is one message it must answer, as the user would say it (for when I say ping, say pong: ping); the behavior is run on it before it is learned, and answers every message the lesson describes, not only the example\'s words. counterexample is one message close to the example that the lesson does not describe (for ping: pin), which the behavior must not answer. description says what the behavior does; reason says why, from the lesson. Never answer with an empty selection. Use only offered events; data must match the event schema.'"/>
 
     <!-- The episodes' select (the 50 most recent episodes by created_at,
          then memory_id, read oldest first, any focus) and the inventory's
@@ -108,6 +114,8 @@
     <data id="select_episodes">SELECT content FROM (SELECT content, created_at, memory_id FROM bot_memory WHERE query_tags = 'cognitive_episode' AND content_format = 'application/json' ORDER BY created_at DESC, memory_id DESC LIMIT 50) AS recent ORDER BY created_at, memory_id</data>
     <data id="select_behaviors">SELECT name, source, description, examples_json AS examples, lifetime, status, status_reason, status_updated_at, used_count, last_used_at, failed_count, last_failed_at FROM bot_behavior ORDER BY name</data>
     <data id="select_triggers">SELECT behavior_name, "trigger" FROM bot_behavior_trigger ORDER BY behavior_name, "trigger"</data>
+    <!-- A break (decision D220): status BROKEN with the trimmed reason. -->
+    <data id="break_behavior">UPDATE bot_behavior SET status = 'BROKEN', status_reason = ?, status_updated_at = replace(substr(CAST(CURRENT_TIMESTAMP AS TEXT), 1, 19), ' ', 'T') || 'Z', updated_at = CURRENT_TIMESTAMP WHERE name = ?</data>
   </datamodel>
   <script src="learning.js"/>
 
@@ -166,12 +174,14 @@
       <assign location="deferred" expr="deferred.concat([_event.data])"/>
     </transition>
     <onentry>
-      <decision:choice location="choices" events="bot.behavior.create bot.behavior.change"/>
+      <decision:choice location="choices" events="bot.behavior.create bot.behavior.change bot.behavior.break"/>
       <processing:collect_offered_events location="choices" choices="choices"/>
       <!-- A change names a behavior the inventory holds; with none, it is
            not offered (decision D100). -->
       <decision:pin location="choices" event="bot.behavior.change" property="name" values="behaviorNames()"/>
+      <decision:pin location="choices" event="bot.behavior.break" property="name" values="behaviorNames()"/>
       <processing:send location="schema" choices="choices" max="1"/>
+      <cognition:model_facing_data location="select_input" root="lesson" data="selectInput()"/>
       <assign location="answered" expr="false"/>
       <assign location="gen_failure" expr="null"/>
       <!-- The inactivity bound starts with the streamed reply's first
@@ -187,7 +197,7 @@
             env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL" env:stream="FLOPPY_STREAM">
       <param name="model" expr="model"/>
       <param name="system" expr="learn_instructions"/>
-      <param name="prompt" expr="selectPrompt()"/>
+      <param name="prompt" expr="select_input"/>
       <param name="schema" expr="schema"/>
       <param name="schemaname" expr="'dispatch'"/>
     </invoke>
@@ -218,6 +228,9 @@
     </transition>
     <transition event="bot.behavior.change" event:schema="../schemas/bot.behavior.change.json" target="revising">
       <assign location="create_intent" expr="null"/>
+      <assign location="intent" expr="_event.data"/>
+    </transition>
+    <transition event="bot.behavior.break" event:schema="../schemas/bot.behavior.break.json" target="breaking">
       <assign location="intent" expr="_event.data"/>
     </transition>
     <!-- After the selection, if any: none was selected. -->
@@ -260,9 +273,10 @@
       <param name="create" expr="isCreate()"/>
       <param name="turn" expr="lesson.turn"/>
       <param name="cognition_input" expr="lesson.cognition_input"/>
-      <param name="cognition_output" expr="lesson.cognition_output"/>
+      <param name="cognition_output" expr="lessonOutput()"/>
       <param name="prior_episodes" expr="prior_episodes"/>
       <param name="instruction" expr="lessonInstruction()"/>
+      <param name="turn_choices" expr="lessonChoices()"/>
     </invoke>
     <transition event="revising.after" target="failing">
       <assign location="failure" expr="'Learning revision timed out.'"/>
@@ -290,6 +304,35 @@
     </transition>
   </state>
 
+  <!-- A lesson to stop a behavior (decision D220): its row is BROKEN,
+       so autonomy no longer runs it and a routine stops at the
+       reconcile its result brings. -->
+  <state id="breaking">
+    <transition event="bot.ability.learning.lesson" event:schema="../schemas/bot.ability.learning.lesson.json">
+      <assign location="deferred" expr="deferred.concat([_event.data])"/>
+    </transition>
+    <onentry>
+      <assign location="statements" expr="breakStatements()"/>
+    </onentry>
+    <invoke id="breaking_memory" type="scxml" src="../memory/memory.scx">
+      <param name="database" expr="database"/>
+      <param name="statements" expr="statements"/>
+    </invoke>
+    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json"
+                cond="hasBroken(_event)" target="reporting">
+      <assign location="behavior" expr="brokenBehavior()"/>
+    </transition>
+    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="failing">
+      <assign location="failure" expr="breakFailedMessage('no behavior is named ' + intent.name)"/>
+    </transition>
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failing">
+      <assign location="failure" expr="breakFailedMessage(_event.data.message)"/>
+    </transition>
+    <transition event="error.*" target="failing">
+      <assign location="failure" expr="breakFailedMessage(_event.name)"/>
+    </transition>
+  </state>
+
   <!-- The lesson took: the bot is told. -->
   <state id="reporting">
     <onentry>
@@ -307,7 +350,7 @@
       <assign location="deferred" expr="deferred.concat([_event.data])"/>
     </transition>
     <onentry>
-      <log label="learning.failed" expr="failure"/>
+      <log label="learning.failed" expr="failedLog()"/>
       <send event="bot.ability.learning.output" target="#_parent">
         <content expr="learningOutput(false)"/>
       </send>

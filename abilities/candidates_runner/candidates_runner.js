@@ -24,6 +24,26 @@ function isBehaviorHandled(event) {
   return event.data.turn === turn && event.data.handled === true && Array.isArray(event.data.selected) && event.data.selected.length > 0;
 }
 
+// Why a candidate that finished did not handle the turn: its donedata is
+// not an object, names another turn, is not handled, or selects nothing.
+function candidateAdvanceLog(event) {
+  return candidateName() + ' (' + unhandledReason(event.data) + ')';
+}
+
+// Why a donedata does not handle this turn (isBehaviorHandled's checks, in order).
+function unhandledReason(d) {
+  if (d === null || typeof d !== 'object') {
+    return 'no donedata object';
+  }
+  if (d.turn !== turn) {
+    return 'donedata turn ' + JSON.stringify(d.turn) + ' is not the turn ' + turn;
+  }
+  if (d.handled !== true) {
+    return 'handled ' + JSON.stringify(d.handled);
+  }
+  return 'no selections';
+}
+
 function candidateSilentLog() {
   return candidateName() + ' after ' + silence_ms + ' ms';
 }
@@ -34,9 +54,16 @@ function candidateFailedLog(event) {
 
 // dispatching and recorded_failure
 
-// A dispatch that failed, with the error.
+// A dispatch that failed, with the error and what the candidate selected
+// (an error.execution is most often data its target's schema refuses,
+// decision D221).
 function dispatchFailure(_event) {
-  return 'Autonomy behavior dispatch failed: ' + _event.name;
+  return 'Autonomy behavior dispatch failed: ' + _event.name + ' (selected ' + (Array.isArray(answer) && answer.length > 0 ? answer.map(selectionText).join(', ') : 'nothing') + ')';
+}
+
+function selectionText(s) {
+  var selection = Object(s);
+  return String(selection.event) + (typeof selection.target === 'string' ? ' to ' + selection.target : ' with no target');
 }
 
 function isRejected() {

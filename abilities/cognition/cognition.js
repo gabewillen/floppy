@@ -184,6 +184,11 @@ function isUnhandled(_event) {
   return _event.data.turn === turn && typeof _event.data.handled === 'boolean' && _event.data.failed !== true;
 }
 
+// The learned behaviors that ran and declined this turn (decision D230).
+function declinedCandidates(_event) {
+  return Array.isArray(_event.data.candidates) ? _event.data.candidates.filter(function (c) { return typeof c === 'string'; }) : [];
+}
+
 // Any well-formed done.invoke.<stage> for the turn in hand (after isHandled and isUnhandled: a failure).
 function matchesStageOutput(_event) {
   return _event.data.turn === turn && typeof _event.data.handled === 'boolean';
@@ -317,16 +322,17 @@ function hasLesson() {
   return selectedLesson() !== null;
 }
 
-// A turn that perceives a lesson's result selects no lesson of its own,
-// so a lesson cannot keep teaching another.
+// A turn the bot's own lesson or routine caused (it perceives a lesson's
+// result or a routine's tick) selects no lesson of its own, so neither a
+// lesson nor a routine can keep teaching the bot (decision D220).
 function perceivesLesson() {
-  return stimulus.event === 'bot.ability.learning.output' && hasLesson();
+  return (stimulus.event === 'bot.ability.learning.output' || stimulus.event === 'bot.behavior.tick') && hasLesson();
 }
 
 // The lesson with the turn it was taught on (decision D149).
 function turnLesson() {
   var data = Object(selectedLesson().data);
-  return ({turn: turn, content: data.content, media_type: data.media_type === undefined ? null : data.media_type, cognition_input: cognitionInput(), cognition_output: selected, participants: participants});
+  return ({turn: turn, content: data.content, media_type: data.media_type === undefined ? null : data.media_type, cognition_input: cognitionInput(), cognition_output: selected, participants: participants, choices: choices});
 }
 
 // learning_region
@@ -334,5 +340,5 @@ function turnLesson() {
 // A lesson's result as the stimulus the body grants a turn: whether it
 // took and the behavior it became, without the participants it carries.
 function lessonStimulus(_event) {
-  return ({event: 'bot.ability.learning.output', data: {lesson: _event.data.lesson, learned: _event.data.learned, behavior: _event.data.behavior}, source: 'learning'});
+  return ({event: 'bot.ability.learning.output', data: {lesson: _event.data.lesson, lesson_turn: _event.data.lesson_turn, learned: _event.data.learned, behavior: _event.data.behavior}, source: 'learning'});
 }

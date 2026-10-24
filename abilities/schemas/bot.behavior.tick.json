@@ -14,7 +14,7 @@
       "type": "string"
     },
     "trigger": {
-      "description": "Schedule kind that fired: every (hsm.every fixed interval) or at (hsm.at wall-clock time of day on chosen weekdays in a named time zone).",
+      "description": "Schedule kind that fired: every (a fixed interval) or at (a wall-clock time of day on chosen weekdays in a named time zone).",
       "enum": [
         "every",
         "at"

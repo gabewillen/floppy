@@ -258,6 +258,40 @@
       "description": "The body's processing turn this event belongs to, counted from 1 [floppy field].",
       "minimum": 1,
       "type": "integer"
+    },
+    "choices": {
+      "description": "The turn's choices, each event with its schema and the session it goes to, which a behavior learned from the turn is checked against before it is accepted (decision D221) [floppy field].",
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "event": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "schema": {
+            "description": "The event's offered schema."
+          },
+          "target": {
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "event",
+          "schema"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "declined": {
+      "description": "The learned behaviors autonomy ran this turn that declined it, which reflection does not change on this turn (decision D230) [floppy field].",
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array",
+      "maxItems": 64
     }
   },
   "required": [

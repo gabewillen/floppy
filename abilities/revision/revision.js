@@ -57,7 +57,7 @@ function revisionLog() {
 // The change input: the turn, and the lesson taught when there is one
 // (decision D149).
 function changeWriteInput() {
-  var input = {cognition_input: cognition_input, cognition_output: cognition_output, prior_episodes: prior_episodes};
+  var input = {cognition_input: cognition_input, cognition_output: cognition_output, prior_episodes: prior_episodes, turn_choices: turn_choices};
   if (instruction !== null) {
     input.instruction = instruction;
   }
@@ -69,18 +69,62 @@ function changeWriteInputWithIntent() {
   return Object.assign(write, {intent: intent, existing_behavior: existing_behavior});
 }
 
-// The change instructions with the change input, for the builder, which
-// checks the document it builds against the lifetime bounds (min_every,
-// turn_after_bound).
+// The change instructions with the change input as their context, for the
+// builder, which checks the document it builds against the lifetime bounds
+// (min_every, turn_after_bound).
 function builderRequest() {
-  return ({spec: change_instructions + '\n\n' + JSON.stringify(write), name: intent.name, model: model, min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms, apply: liveTurn()});
+  return ({spec: change_instructions, context: write, name: intent.name, model: model, min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms, apply: liveTurn()});
+}
+
+// Whether the lesson's intent carries an example and this turn's input
+// holds the message it replaces (a conversation's parent.data.content,
+// decision D228).
+function isProbe() {
+  var example = intent === null ? undefined : intent.example;
+  var parent = behavior_input === null ? undefined : behavior_input.parent;
+  return instruction !== null && typeof example === 'string' && example.length > 0 && parent !== null && typeof parent === 'object' && parent.data !== null && typeof parent.data === 'object' && typeof parent.data.content === 'string';
+}
+
+// This turn's input with the lesson's message replaced by its example,
+// where parent.data names it and in the conversation's message that
+// holds it.
+function probedInput() {
+  return probing ? withMessage(intent.example) : behavior_input;
+}
+
+// The lesson's input with its message replaced by text (lesson_input is
+// this turn's own input, kept before the example replaced it).
+function withMessage(text) {
+  var probe = JSON.parse(JSON.stringify(lesson_input));
+  var lesson = probe.parent.data.content;
+  probe.parent.data.content = text;
+  if (Array.isArray(probe.messages)) {
+    for (var i = probe.messages.length - 1; i >= 0; i--) {
+      var m = probe.messages[i];
+      if (m !== null && typeof m === 'object' && m.content === lesson) {
+        m.content = text;
+        break;
+      }
+    }
+  }
+  return probe;
+}
+
+// Whether the lesson's intent carries a counterexample to decline
+// beside its example (decision D229).
+function hasCounterexample() {
+  return probing && typeof intent.counterexample === 'string' && intent.counterexample.length > 0 && intent.counterexample !== intent.example;
 }
 
 // The live turn the builder runs a turn behavior on (the live-turn
 // check, decision D131): this turn, its behavior_input as autonomy builds it, and the
 // sessions its output names (a learned behavior names its targets, D104).
 function liveTurn() {
-  return ({turn: turn, input: behavior_input, targets: outputTargets()});
+  var live = {turn: turn, input: behavior_input, targets: outputTargets(), choices: turn_choices, handled: instruction === null || probing};
+  if (hasCounterexample()) {
+    live.decline = withMessage(intent.counterexample);
+  }
+  return live;
 }
 
 // The distinct targets of this turn's cognition_output, at most 32.
@@ -95,9 +139,15 @@ function builderConstraints() {
 // The turn behavior contract with the grounded triggers it is stored under
 // (autonomy matches them against the stimulus event), the targets this
 // turn's output names, and this turn's input (behavior_input, as autonomy
-// builds it).
+// builds it, in model-facing XML: decision D201).
 function turnContract() {
-  return turn_contract.replace(/TRIGGERS|TARGETS|INPUT/g, function (m) { return JSON.stringify(m === 'INPUT' ? behavior_input : m === 'TARGETS' ? outputTargets() : triggers); });
+  var contract = turn_contract.replace(/TRIGGERS|TARGETS|INPUT/g, function (m) { return m === 'INPUT' ? turn_input : namesText(m === 'TARGETS' ? outputTargets() : triggers); });
+  return instruction === null ? contract : contract + ' ' + (probing ? probe_contract : lesson_contract);
+}
+
+// Names as a parenthesized, comma-separated list.
+function namesText(names) {
+  return '(' + names.join(', ') + ')';
 }
 
 // The next occurrence of an at schedule {time: 'HH:MM', days, tz, rule}:
@@ -172,6 +222,15 @@ function renderedReport(diagnostics) {
 }
 
 // A build that used its attempts ends with its last diagnostics (decision D133).
+// Whether the revised row is ACTIVE: a failed change keeps it (D224).
+function isActive() {
+  return existing_behavior !== null && existing_behavior !== undefined && existing_behavior.status === 'ACTIVE';
+}
+
+function keptLog() {
+  return intent.name + ' ACTIVE kept (change abandoned)';
+}
+
 function abandonedMessage(_event) {
   return _event.data.reason === 'attempts-exhausted' ? 'Reflection change abandoned: attempts exhausted:\n' + renderedReport(_event.data.diagnostics) : 'Reflection change abandoned: ' + _event.data.reason + '.';
 }

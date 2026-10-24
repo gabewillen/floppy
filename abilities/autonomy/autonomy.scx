@@ -157,7 +157,7 @@
         <assign location="answer" expr="_event.data.selected"/>
       </transition>
       <transition event="done.invoke.seed" target="inventory">
-        <log label="autonomy.candidate.advance" expr="'SpeechHeard'"/>
+        <log label="autonomy.candidate.advance" expr="seedAdvanceLog(_event)"/>
       </transition>
       <transition event="bot.ability.autonomy.candidate.silent" target="inventory">
         <log label="autonomy.candidate.silent" expr="seedSilentLog()"/>

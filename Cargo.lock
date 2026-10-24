@@ -301,6 +301,7 @@ name = "floppy-behavior"
 version = "0.1.0"
 dependencies = [
  "quick-xml",
+ "scxml-event-schema",
  "scxml-types",
  "scxml-validator-core",
  "serde_json",
@@ -507,6 +508,8 @@ dependencies = [
 name = "floppy-tests"
 version = "0.1.0"
 dependencies = [
+ "floppy-cognition",
+ "quick-xml",
  "scx",
  "scxml-event-schema",
  "scxml-reporting",

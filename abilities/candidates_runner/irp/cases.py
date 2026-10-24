@@ -55,7 +55,7 @@ S.statement(3, "An answer that does not handle this turn (`handled` not `true`, 
 S.statement(4, "When its candidate does not handle the turn and candidates are left, the runner invokes itself for the rest (with the same turn, input, database and bounds) and ends with the rest's donedata, its own candidate first in `tried`.")
 S.statement(5, "A candidate that does not answer within `silence_ms` is passed over, and the rest run.")
 S.statement(6, "A candidate whose source cannot run has its failure persisted, and the rest run.")
-S.statement(7, "A handled candidate a selection of which cannot be sent (a send that raises `error.*`) has its failure persisted, and the runner ends with `{tried: [name], handled: false, selected: null, rejection}`, rejection `Autonomy behavior dispatch failed: <error>`; the rest do not run.")
+S.statement(7, "A handled candidate a selection of which cannot be sent (a send that raises `error.*`) has its failure persisted, and the runner ends with `{tried: [name], handled: false, selected: null, rejection}`, rejection `Autonomy behavior dispatch failed: <error> (selected <event> to <target>, ...)` (each selection, `with no target` for one without; decision D221); the rest do not run.")
 S.statement(8, "Each persistence is one transaction of the Memory ability on the `database` <param>; one that fails or outlasts `memory_timeout_ms` takes the same effect as one persisted.")
 
 S.case(100, 1, "a handled candidate answers the turn with its own selections.",
@@ -100,11 +100,11 @@ S.case(151, 6, "a last source that cannot run leaves the turn unhandled.",
        [answer(["Broken"], False)], params=run([("Broken", BROKEN)]))
 
 S.case(160, 7, "a selection that names no target cannot be sent, and the rest do not run.",
-       [answer(["Untargeted"], False, "Autonomy behavior dispatch failed: error.communication")],
+       [answer(["Untargeted"], False, "Autonomy behavior dispatch failed: error.communication (selected bot.ability.reasoning.input with no target)")],
        params=run([("Untargeted", behavior("({turn: turn, handled: true, selected: [{event: 'bot.ability.reasoning.input', data: {}}]})")),
                    ("B", HANDLES)]))
 S.case(161, 7, "a selection whose target no session of the run answers cannot be sent.",
-       [answer(["Nowhere"], False, "Autonomy behavior dispatch failed: error.communication")],
+       [answer(["Nowhere"], False, "Autonomy behavior dispatch failed: error.communication (selected bot.say to session.nowhere)")],
        params=run([("Nowhere", behavior("({turn: turn, handled: true, selected: [{event: 'bot.say', data: {}, target: 'session.nowhere'}]})"))]))
 
 S.case(170, 8, "a use whose persistence fails still answers the turn.",
@@ -115,6 +115,6 @@ S.case(172, 8, "a failure whose persistence fails still lets the rest run.",
        [answer(["Broken", "B"], True, extra=HANDLED_SELECTED)],
        params=run([("Broken", BROKEN), ("B", HANDLES)], database="'/elsewhere/floppy.sqlite'"))
 S.case(173, 8, "with no database, a failed dispatch is still answered.",
-       [answer(["Untargeted"], False, "Autonomy behavior dispatch failed: error.communication")],
+       [answer(["Untargeted"], False, "Autonomy behavior dispatch failed: error.communication (selected bot.ability.reasoning.input with no target)")],
        params=run([("Untargeted", behavior("({turn: turn, handled: true, selected: [{event: 'bot.ability.reasoning.input', data: {}}]})"))],
                   database="null"))

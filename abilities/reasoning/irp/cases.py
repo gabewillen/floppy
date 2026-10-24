@@ -69,7 +69,7 @@ S.statement(2, "With no choices it fails the turn without a model call: reason `
 S.statement(3, "With choices it makes one generate call offering the dispatch tool, which allows only the offered events (with their targets); the events of its dispatch calls, in order, are returned as the model gave them with `handled: true`, each `{event, data, reason, target}`, `bot.ability.cognition.ignore` selections included; an empty selection is handled with nothing selected.")
 S.statement(4, "A generate call that fails fails the turn with reason `the reasoning failed (<code>)`, the generate service's failure code: `status` for an error status, `truncated` for a reply cut short, `malformed` for an answer that is no chat completion. A selection the dispatch tool refuses (`schema-mismatch`, or `not-json`) is repaired first (decision D142): the call is made again with the rejection as the prompt's feedback, at most twice, and the same rejection twice running, or one once the repairs are spent, fails the turn with reason `Selection rejected: <message>` (the rejection's message, else its code).")
 S.statement(5, "A prompt over the projection budgets (262144 encoded bytes, 4096 nodes, 4096 collection items, 65536 characters per scalar) fails the turn without a model call, its reason the budget's message (for example `prompt projection collection item budget exceeded`).")
-S.statement(6, "Each selection is sent, in order, to the session its target names (`#_scxml_` + target) before the turn ends, its data `{}` when it has none (decision D113); a send that fails fails the turn with reason `the reasoning could not run (<error>)`.")
+S.statement(6, "Each selection is sent, in order, to the session its target names (`#_scxml_` + target) before the turn ends; a selection without its data is refused by the dispatch tool, whose every branch requires it (decision D231, where D113 sent it with `{}`); a send that fails fails the turn with reason `the reasoning could not run (<error>)`.")
 S.statement(7, "With a database it recalls prior episodes, standing directives and the bot's active learned behaviors (named in the system channel's self block, decision D154) before the model call and writes nothing (reflection stores the turn's episode, decision D97), and the turn is handled as without one; a memory that fails fails the turn with reason `Reasoning memory recall failed: ...` without a model call.")
 
 S.statement(8, "Its model call streams its reply when the run's `FLOPPY_STREAM` is `true`, and each `generate.progress` the generate service returns while the reply arrives is sent on to the parent unchanged, so the cognition can bound the stage by inactivity (decision D101).")
@@ -147,9 +147,8 @@ S.case(150, 6, "a focus_device and a device action are sent to their target, in 
                      " && _event.data.selected[1].event === 'lamp.on'")],
        params=turn(), backend=selection({"event": FOCUS, "data": {"device": "lamp"}, "reason": "look", "target": HARNESS},
                                         {"event": LAMP, "data": {}, "reason": "light", "target": HARNESS}))
-S.case(152, 6, "a selection without data is sent with {}.",
-       [expect(LAMP, "JSON.stringify(_event.data) === '{}'"),
-        expect(DONE, "_event.data.handled === true && _event.data.selected.length === 1")],
+S.case(152, 6, "a selection without data is refused, every branch requiring its data.",
+       [failed("Selection rejected: /events/0: missing properties 'data'")],
        params=turn(), backend=selection({"event": LAMP, "reason": "light", "target": HARNESS}))
 S.case(151, 6, "a selection whose target no session of the run answers fails the turn.",
        [failed("the reasoning could not run (error.communication)")],
