@@ -21,7 +21,7 @@ function silenceDelay() {
 // The candidate answered the turn with at least one selection (an empty one
 // is unhandled).
 function isBehaviorHandled(event) {
-  return event.data.turn === turn && event.data.handled === true && Array.isArray(event.data.selected) && event.data.selected.length > 0;
+  return unhandledReason(event.data) === null;
 }
 
 // Why a candidate that finished did not handle the turn: its donedata is
@@ -30,7 +30,7 @@ function candidateAdvanceLog(event) {
   return candidateName() + ' (' + unhandledReason(event.data) + ')';
 }
 
-// Why a donedata does not handle this turn (isBehaviorHandled's checks, in order).
+// Why a donedata does not handle this turn, or null when it handles it.
 function unhandledReason(d) {
   if (d === null || typeof d !== 'object') {
     return 'no donedata object';
@@ -41,7 +41,10 @@ function unhandledReason(d) {
   if (d.handled !== true) {
     return 'handled ' + JSON.stringify(d.handled);
   }
-  return 'no selections';
+  if (!Array.isArray(d.selected) || d.selected.length === 0) {
+    return 'no selections';
+  }
+  return null;
 }
 
 function candidateSilentLog() {
