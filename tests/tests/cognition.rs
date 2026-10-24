@@ -60,15 +60,18 @@ const STALLED_REASONING_BOUNDS: &str =
     "({child_operation_timeout_ms: 8000, reflex_timeout_ms: 30000})";
 /// A model context whose budget (three bytes a token) holds the first
 /// turn's prompt but not the second's with its recalled episode.
-const FITTED_TOKENS: u32 = 3_300;
+const FITTED_TOKENS: u32 = 4_000;
 /// The model a bot composing the intuition tier gives it.
 const INTUITION_MODEL: &str = "chat-model";
 const ADOPT: &str = "bot.ability.identity.adopt";
+/// The lesson the cognition offers (decision D149).
+const LEARN: &str = "bot.ability.learning.input";
 /// The turn's choices as the body collects them, each `event@target`: the
-/// cognition's offer, the communication's and the identity's, each tagged
+/// cognition's offers (its ignore and a lesson), the communication's and the identity's, each tagged
 /// with its offering session's id.
-const CHOICES: &str = "bot.ability.cognition.ignore@session.floppy.cognition bot.ability.communication.respond@session.floppy.communication bot.ability.identity.adopt@session.floppy.identity";
-/// The cognition's session id in the body, the target of its ignore.
+const CHOICES: &str = "bot.ability.cognition.ignore@session.floppy.cognition bot.ability.learning.input@session.floppy.cognition bot.ability.communication.respond@session.floppy.communication bot.ability.identity.adopt@session.floppy.identity";
+/// The cognition's session id in the body, the target of its ignore and
+/// its lesson.
 const COGNITION: &str = "session.floppy.cognition";
 
 /// The decision backend's scripted answer.
@@ -135,6 +138,8 @@ enum Generation {
     HandOff,
     /// The intuition tier's model answers 500; any other as [`Self::Respond`].
     IntuitionFails,
+    /// A lesson for the learning and a reply that says it will try.
+    Learn,
 }
 
 impl Generation {
@@ -151,6 +156,7 @@ impl Generation {
             Self::Hang => "ghang",
             Self::HandOff => "ghandoff",
             Self::IntuitionFails => "gintuitionfails",
+            Self::Learn => "glearn",
         }
     }
 }
@@ -236,6 +242,22 @@ fn is_reflection(body: &Json) -> bool {
 /// The start of reflection's select instructions.
 const REFLECTION_SELECT: &str = "Select at most one offered behavior inventory event";
 
+/// Whether `body` is the learning's select call (its instructions as the
+/// system message).
+fn is_learning(body: &Json) -> bool {
+    body["messages"].as_array().is_some_and(|messages| {
+        messages.iter().any(|message| {
+            message["role"] == "system"
+                && message["content"]
+                    .as_str()
+                    .is_some_and(|text| text.starts_with(LEARNING_SELECT))
+        })
+    })
+}
+
+/// The start of the learning's select instructions.
+const LEARNING_SELECT: &str = "You are taught a lesson";
+
 /// The scripted answer to one request, or `None` to never answer.
 fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
     let ok = |text: String| Some(("200 OK", text));
@@ -252,7 +274,8 @@ fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
     };
     // Reflection's select after each output: an empty selection (no
     // behavior to revise), so reflection stores the turn's episode.
-    if is_reflection(body) {
+    // The learning's select: an empty selection, so the lesson fails.
+    if is_reflection(body) || is_learning(body) {
         return selection(json!([]));
     }
     match target {
@@ -277,6 +300,10 @@ fn answer(target: &str, body: &Json) -> Option<(&'static str, String)> {
                 {"event": RESPOND, "data": {"parts": [{"words": "Hi! I am floppy."}]}, "reason": "greet"}
             ]))
         }
+        "/glearn/v1/chat/completions" => selection(json!([
+            {"event": LEARN, "data": {"content": "when I knock, say who is there"}, "reason": "a lesson"},
+            {"event": RESPOND, "data": {"parts": [{"words": "I will try."}]}, "reason": "answer"}
+        ])),
         "/grepeat/v1/chat/completions" => selection(json!([
             {"event": RESPOND, "data": {"parts": [{"words": "hi"}]}, "reason": "answer"}
         ])),
@@ -655,7 +682,7 @@ fn close(run: Run, mock: &Mock, test: &str) -> Finished {
 fn reasoning_requests(mock: &Mock) -> Vec<Received> {
     mock.received("/chat/completions")
         .into_iter()
-        .filter(|request| !is_reflection(&request.body))
+        .filter(|request| !is_reflection(&request.body) && !is_learning(&request.body))
         .collect()
 }
 
@@ -726,14 +753,14 @@ fn the_decision_layer_handles_an_ignore_without_reasoning() {
         strings(&["turn 1"])
     );
     assert_eq!(mock.received("/chat/completions").len(), 1);
-    // The cognition offers ignore from each idle entry (the activation's
-    // and the turn's end).
+    // The cognition offers ignore and a lesson from each idle entry (the
+    // activation's and the turn's end).
     let mut all = records;
     all.extend(finished.records);
     assert!(
         texts(&all, "cognition.offers")
             .iter()
-            .all(|t| support::choice_names(t) == IGNORE),
+            .all(|t| support::choice_names(t) == format!("{IGNORE} {LEARN}")),
         "{all:?}"
     );
 }
@@ -1199,7 +1226,7 @@ fn reasoning_selects_from_the_turns_choices() {
                 .as_str()
                 .expect("a pinned event")
                 .to_owned();
-            let target = if event == IGNORE {
+            let target = if event == IGNORE || event == LEARN {
                 COGNITION
             } else if event == ADOPT {
                 "session.floppy.identity"
@@ -1210,7 +1237,7 @@ fn reasoning_selects_from_the_turns_choices() {
             event
         })
         .collect();
-    assert_eq!(pinned, strings(&[IGNORE, RESPOND, ADOPT]));
+    assert_eq!(pinned, strings(&[IGNORE, LEARN, RESPOND, ADOPT]));
     let prompt = body["messages"]
         .as_array()
         .and_then(|messages| messages.last())
@@ -1243,6 +1270,49 @@ fn reasoning_selects_from_the_turns_choices() {
 /// which selects the communication's respond and sends it to the
 /// communication, which says the response through speaking
 /// and records it in its conversation.
+/// A turn that selects a lesson sends it, with the turn it was taught on,
+/// to the learning; the lesson's result is the next turn's stimulus, which
+/// sends no lesson of its own (decision D149).
+#[test]
+fn a_lesson_is_learned_and_its_result_perceived() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Learn, &[]);
+    let mut run = start(&bot);
+    say(&mut run, "when I knock, say who is there");
+    // The lesson's result came back as the next turn's stimulus, which
+    // selected a lesson again but sent none.
+    let records = run.until(WAIT, |record| {
+        label_is("cognition.lesson")(record) && record["text"] == "bounded"
+    });
+    assert_eq!(
+        texts(&records, "learning.failed"),
+        strings(&["Learning select returned an empty selection."])
+    );
+    let requests = reasoning_requests(&mock);
+    assert_eq!(requests.len(), 2, "{requests:?}");
+    let second = requests[1].body["messages"]
+        .as_array()
+        .and_then(|messages| messages.last())
+        .and_then(|message| message["content"].as_str())
+        .expect("the user message")
+        .to_owned();
+    assert!(second.contains("bot.ability.learning.output"), "{second}");
+    let learning: Vec<Received> = mock
+        .received("/chat/completions")
+        .into_iter()
+        .filter(|request| is_learning(&request.body))
+        .collect();
+    assert_eq!(learning.len(), 1, "one lesson was learned");
+    let finished = close(run, &mock, "a_lesson_is_learned_and_its_result_perceived");
+    // Reflection only remembered each taught turn: the learning learns
+    // the lesson itself.
+    let reflected = texts(&finished.all, "reflection");
+    assert!(
+        reflected.contains(&"turn 1: taught".to_owned()),
+        "{reflected:?}"
+    );
+}
+
 #[test]
 fn a_reasoned_response_is_said_through_the_communication() {
     let mock = Mock::start();
@@ -1994,7 +2064,7 @@ fn a_selection_outside_the_choices_never_becomes_output() {
     assert_eq!(
         json_text(&records, "bot.processing.failed"),
         json!({
-            "message": "Selection rejected: /events/0/event: value must be one of \"bot.ability.cognition.ignore\", \"bot.ability.communication.respond\", \"bot.ability.identity.adopt\"",
+            "message": "Selection rejected: /events/0/event: value must be one of \"bot.ability.cognition.ignore\", \"bot.ability.learning.input\", \"bot.ability.communication.respond\", \"bot.ability.identity.adopt\"",
             "turn": 1
         })
     );

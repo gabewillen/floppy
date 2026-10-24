@@ -18,7 +18,9 @@
   intent_event (which of the two it is), create (true for a create of a
   name the inventory does not hold), turn, cognition_input,
   cognition_output and prior_episodes (the turn the revision learns from,
-  the change input).
+  the change input), and instruction ({text, kind}, the lesson taught,
+  which the change input then carries; null when none was, decision
+  D149).
 
   preparing stores a create's DRAFT stub (empty source, its triggers and
   description) and loads the row (a change of an unknown name fails). A
@@ -85,6 +87,9 @@
     <data id="cognition_input" expr="null"/>
     <data id="cognition_output" expr="[]"/>
     <data id="prior_episodes" expr="[]"/>
+    <!-- The lesson the revision implements, {text, kind}, when it was
+         taught one (decision D149); null: none. -->
+    <data id="instruction" expr="null"/>
     <!-- The stored row, the builder's request (the change input) and its
          answer. -->
     <data id="prepared" expr="[]"/>

@@ -94,7 +94,7 @@ const BODY_EVENTS: [&str; 12] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 104] = [
+const ABILITY_EVENTS: [&str; 107] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -161,6 +161,11 @@ const ABILITY_EVENTS: [&str; 104] = [
     "bot.ability.reflection.output",
     // The revision's applied behavior (decision D148).
     "bot.ability.reflection.revision.output",
+    // The learning (decision D149): the lesson a turn selects, the lesson
+    // with its teaching turn, and how it went.
+    "bot.ability.learning.input",
+    "bot.ability.learning.lesson",
+    "bot.ability.learning.output",
     "bot.ability.routines.reconcile",
     "bot.ability.offers",
     // Phase 3: the memory service's committed transaction, described where
@@ -224,7 +229,7 @@ const ABILITY_EVENTS: [&str; 104] = [
 /// The correlated events of one processing turn: each requires `turn`.
 /// Tool events (the ones a model chooses, such as
 /// `bot.ability.cognition.ignore`) never do: their data is the model's.
-const CORRELATED: [&str; 18] = [
+const CORRELATED: [&str; 19] = [
     "bot.processing.completed",
     "bot.processing.failed",
     "bot.processing.timed_out",
@@ -241,6 +246,7 @@ const CORRELATED: [&str; 18] = [
     "bot.ability.intuition.input",
     "bot.ability.intuition.output",
     "bot.ability.reflection.input",
+    "bot.ability.learning.lesson",
     "bot.ability.reasoning.output",
     "bot.ability.reasoning.recalled",
 ];
@@ -547,10 +553,11 @@ fn every_event_name_is_a_listed_name_or_a_marked_floppy_name() {
     assert_eq!(
         floppy,
         BTreeSet::from([
+            "bot.ability.learning.lesson".to_owned(),
             "bot.ability.migration.output".to_owned(),
             "bot.ability.offers".to_owned()
         ]),
-        "the floppy-only events: phase 4's offers and the migration ability's output"
+        "the floppy-only events: phase 4's offers, the migration ability's output and the learning's lesson"
     );
     for event in schemas.keys() {
         assert!(

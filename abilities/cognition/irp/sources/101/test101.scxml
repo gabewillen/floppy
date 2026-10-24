@@ -10,7 +10,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'cognition' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === &quot;bot.ability.cognition.ignore&quot; &amp;&amp; _event.data.choices[0].schema.title === undefined" target="step1"/>
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'cognition' &amp;&amp; _event.data.choices.length === 2 &amp;&amp; _event.data.choices[0].event === &quot;bot.ability.cognition.ignore&quot; &amp;&amp; _event.data.choices[1].event === &quot;bot.ability.learning.input&quot; &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[1].schema.title === undefined" target="step1"/>
   </state>
   <state id="step1">
     <onentry>
@@ -19,7 +19,7 @@
     <transition event="bot.ability.cognition.output" cond='_event.data.turn === 1 &amp;&amp; _event.data.output.length === 1 &amp;&amp; _event.data.output[0].event === "bot.ability.cognition.ignore"' target="step2"/>
   </state>
   <state id="step2">
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'cognition' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === &quot;bot.ability.cognition.ignore&quot; &amp;&amp; _event.data.choices[0].schema.title === undefined" target="step3"/>
+    <transition event="bot.ability.offers" cond="_event.data.ability === 'cognition' &amp;&amp; _event.data.choices.length === 2 &amp;&amp; _event.data.choices[0].event === &quot;bot.ability.cognition.ignore&quot; &amp;&amp; _event.data.choices[1].event === &quot;bot.ability.learning.input&quot; &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[1].schema.title === undefined" target="step3"/>
   </state>
   <state id="step3">
     <transition target="pass"/>

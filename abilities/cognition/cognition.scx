@@ -154,9 +154,25 @@
   handed to the body as bot.ability.cognition.input {stimulus} (the tick's
   envelope, source "routines"), which the body grants a turn. With no database it runs no routine.
 
+  Learning (decision D149): bot.ability.learning.input, a lesson as its
+  teacher put it, is this ability's offer too (its transitions, in idle
+  and processing, only log). After the output of a turn that selected
+  one, completing sends the long-lived child "learning"
+  (abilities/learning/learning.scx, the learning region, with the
+  database, the model and the bounds as <param>s)
+  bot.ability.learning.lesson {turn, content, media_type,
+  cognition_input, cognition_output, participants}: the lesson with the
+  turn it was taught on. Its bot.ability.learning.output {lesson,
+  learned, behavior, participants} is handed to the body as
+  bot.ability.cognition.input {stimulus: {event:
+  "bot.ability.learning.output", data: {lesson, learned, behavior},
+  source: "learning"}, participants}, a turn the bot tells its teacher
+  in. Bounded: a turn that perceives a lesson's result sends no lesson
+  of its own.
+
   Readiness: every entry into idle sends bot.ability.offers {ability,
   choices} to the parent: the choices <decision:choice events=...> reads,
-  bot.ability.cognition.ignore, made model-facing by
+  bot.ability.cognition.ignore and bot.ability.learning.input, made model-facing by
   <processing:model_facing_schema> ($schema, title and examples dropped;
   over 32 KiB descriptions dropped too; still over, the offer is empty and
   logged). The stages are per-turn children
@@ -314,7 +330,7 @@
   <state id="idle" initial="awake">
     <onentry>
       <assign location="offering" expr="true"/>
-      <decision:choice location="offered" events="bot.ability.cognition.ignore"/>
+      <decision:choice location="offered" events="bot.ability.cognition.ignore bot.ability.learning.input"/>
       <decision:choice location="handoff" events="bot.ability.reasoning.input"/>
       <assign location="offering" expr="false"/>
       <processing:model_facing_schema location="offered" bound="32768" overlocation="offers_over"/>
@@ -353,6 +369,9 @@
     </transition>
     <transition event="bot.ability.cognition.ignore" event:schema="../schemas/bot.ability.cognition.ignore.json">
       <log label="cognition.ignore" expr="'idle'"/>
+    </transition>
+    <transition event="bot.ability.learning.input" event:schema="../schemas/bot.ability.learning.input.json">
+      <log label="cognition.lesson" expr="'idle'"/>
     </transition>
     <!-- The deliberative handoff is this ability's call surface: the
          intuition tier never sends it. -->
@@ -407,6 +426,10 @@
     </onentry>
     <transition event="bot.ability.cognition.ignore" event:schema="../schemas/bot.ability.cognition.ignore.json">
       <log label="cognition.ignore" expr="turnLog()"/>
+    </transition>
+    <!-- A lesson is taken after the turn's output (completing). -->
+    <transition event="bot.ability.learning.input" event:schema="../schemas/bot.ability.learning.input.json">
+      <log label="cognition.lesson" expr="turnLog()"/>
     </transition>
     <transition event="bot.ability.reasoning.input" event:schema="../schemas/bot.ability.reasoning.input.json">
       <log label="cognition.handoff" expr="turnLog()"/>
@@ -670,6 +693,16 @@
           <param name="cognition_output" expr="selected"/>
           <param name="self" expr="selfFact()"/>
         </send>
+        <!-- A lesson the turn selected goes to the learning with the turn
+             (decision D149), unless the turn perceives a lesson's result;
+             last: a send that fails ends the rest of this block. -->
+        <if cond="perceivesLesson()">
+          <log label="cognition.lesson" expr="'bounded'"/>
+        <elseif cond="hasLesson()"/>
+          <send event="bot.ability.learning.lesson" target="#_learning">
+            <content expr="turnLesson()"/>
+          </send>
+        </if>
       </onentry>
       <transition target="idle"/>
     </state>
@@ -781,6 +814,29 @@
       </transition>
     </state>
     <state id="reflection_stopped"/>
+  </state>
+
+  <!-- The learning: a long-lived child that learns each lesson a turn
+       selected, and whose result goes to the body, which grants it a turn
+       (decision D149). -->
+  <state id="learning_region" initial="learning_running">
+    <state id="learning_running">
+      <invoke id="learning" type="scxml" src="../learning/learning.scx">
+        <param name="database" expr="database"/>
+        <param name="model" expr="model"/>
+        <param name="bounds" expr="bounds"/>
+      </invoke>
+      <transition event="bot.ability.learning.output" event:schema="../schemas/bot.ability.learning.output.json">
+        <send event="bot.ability.cognition.input" target="#_parent">
+          <param name="stimulus" expr="lessonStimulus(_event)"/>
+          <param name="participants" expr="_event.data.participants"/>
+        </send>
+      </transition>
+      <transition event="error.communication.learning" target="learning_stopped">
+        <log label="cognition.learning.failed" expr="_event.name"/>
+      </transition>
+    </state>
+    <state id="learning_stopped"/>
   </state>
 
   <!-- The routines: a long-lived child whose ticks go to the body, which

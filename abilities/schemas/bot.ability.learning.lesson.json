@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.learning.lesson",
+  "additionalProperties": false,
+  "description": "[floppy name] A lesson the cognition hands its learning after the turn that selected it: the selected bot.ability.learning.input with the turn it was taught on, its input and output, and who took part.",
+  "properties": {
+    "turn": {
+      "description": "The body's processing turn the lesson was taught on, counted from 1.",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "content": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "media_type": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "cognition_input": {
+      "description": "The teaching turn's input: its stimulus, focus and focus candidates.",
+      "type": "object"
+    },
+    "cognition_output": {
+      "description": "The teaching turn's output selections.",
+      "items": {
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "participants": {
+      "description": "Who took part in the teaching turn, as the turn's stimulus named them.",
+      "items": {
+        "type": "object"
+      },
+      "maxItems": 32,
+      "type": "array"
+    }
+  },
+  "required": [
+    "turn",
+    "content",
+    "cognition_input",
+    "cognition_output",
+    "participants"
+  ],
+  "type": "object"
+}

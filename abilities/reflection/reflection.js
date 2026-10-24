@@ -57,8 +57,25 @@ function isUnreflected() {
   return outcome !== 'completed';
 }
 
+// A turn that taught the learning a lesson, which learns it itself
+// (decision D149).
+function isTaught() {
+  return cognition_output.some(function (s) { return s.event === 'bot.ability.learning.input'; });
+}
+
+// A turn the bot's own abilities caused (a routine's tick, a lesson's
+// result), with no one's input to learn from (decision D151).
+function isOwnStimulus() {
+  var event = Object(cognition_input.stimulus).event;
+  return event === 'bot.behavior.tick' || event === 'bot.ability.learning.output';
+}
+
+function isOnlyRemembered() {
+  return isUnreflected() || isTaught() || isOwnStimulus();
+}
+
 function unreflectedLog() {
-  return 'turn ' + turn + ': ' + outcome;
+  return 'turn ' + turn + ': ' + (isUnreflected() ? outcome : isTaught() ? 'taught' : Object(cognition_input.stimulus).event);
 }
 
 function recallFailedMessage(detail) {
