@@ -45,15 +45,18 @@ RESPOND_PARTS = {"type": "object", "properties": {"parts": {
                  "required": ["parts"], "additionalProperties": False}
 
 
-def turn(n, data=None, choices=(IGNORE,), event="bot.input", source="conversation"):
+def turn(n, data=None, choices=(IGNORE,), event="bot.input", source="conversation", efforts=None):
     # Tagged with their offering sessions' ids: the cognition's own ignore and lesson,
-    # and respond offered by the harness (the run's root, "session").
+    # and respond offered by the harness (the run's root, "session"); an
+    # event in efforts carries that effort (decision D206).
     targets = {IGNORE: "session.cognition", LEARN: "session.cognition", RESPOND: "session"}
     schemas = {IGNORE: offered(IGNORE), LEARN: offered(LEARN), RESPOND: RESPOND_PARTS}
+    efforts = efforts or {}
     return js({"turn": n,
                "stimulus": {"event": event, "data": data or {"text": "hello"}, "source": source},
                "focus": None, "focus_candidates": [],
-               "choices": [{"event": e, "schema": schemas[e], "target": targets[e]} for e in choices]})
+               "choices": [dict({"event": e, "schema": schemas[e], "target": targets[e]},
+                                **({"effort": efforts[e]} if e in efforts else {})) for e in choices]})
 
 
 def completion(content):
@@ -250,6 +253,26 @@ S.statement(12, "With no input for `rest_after_ms` (the `<param>`, else the `bou
 
 S.case(210, 12, "after a stretch without input the cognition rests and consolidates, and input wakes it for a normal turn.",
        [READY, wait("1500ms"), send(INPUT, turn(1)), output(1, IGNORED)],
-       params=[("rest_after_ms", "1000")], backend=[DECIDE_IGNORE], clock="wall", ignore=[OFFERS],
+       # On the wall clock a loaded machine can take the decision layer past its own 20 s bound, so the
+       # case gives it the stage's generous bound.
+       params=[("rest_after_ms", "1000"), SLOW, ("decision_timeout_ms", "300000")], backend=[DECIDE_IGNORE],
+       clock="wall", ignore=[OFFERS],
        logs={"cognition.rest": ["resting", "awake"],
              "cognition.consolidated": ['{"folded":0,"merged":0,"steps":0,"failed":false,"reason":"absent"}']})
+
+S.statement(14, "Each tier is offered only the turn's choices within its effort ceiling (decisions D196 and D206): a choice's `effort` (0 without one) at most the decision layer's `decision_effort_ceiling` (0) or intuition's `intuition_effort_ceiling` (1), each the `bounds`' member of that name when it is a number, and every choice for reasoning, whose ceiling is the whole frame. What is over a tier's ceiling is not among its choices, so the tier cannot select it and only hands it on.")
+
+S.case(230, 14, "a respond over the decision layer's ceiling is not the decision layer's to send: reasoning answers the turn, and nothing is said.",
+       [READY, send(INPUT, turn(1, HI, choices=(IGNORE, RESPOND), efforts={RESPOND: 1})), output(1, REASONED)],
+       params=[SLOW], backend=[DECIDE_LOW, REASONED_IGNORE], clock="logical", ignore=[OFFERS])
+S.case(231, 14, "a respond over intuition's ceiling is refused at its dispatch, so intuition cascades and reasoning, offered the whole frame, says it.",
+       [READY, send(INPUT, turn(1, HI, choices=(IGNORE, RESPOND), efforts={RESPOND: 2})), SAID_HI,
+        output(1, f"_event.data.output.length === 1 && _event.data.output[0].event === {js(RESPOND)}")],
+       params=[SLOW, INTUITION], backend=[DECIDE_TO_INTUITION, INTUITED_HANDOFF, INTUITED_HANDOFF, REASONED_REPEAT],
+       clock="logical", ignore=[OFFERS])
+S.case(232, 14, "the bounds raise the decision layer's ceiling: its low-confidence respond is sent before reasoning's ignore.",
+       [READY, send(INPUT, turn(1, HI, choices=(IGNORE, RESPOND), efforts={RESPOND: 1})), SAID_HI,
+        output(1, f"_event.data.output.length === 2 && _event.data.output[0].event === {js(RESPOND)}"
+                  f" && _event.data.output[1].event === {js(IGNORE)}")],
+       params=[SLOW, ("bounds", "({decision_effort_ceiling: 1})")], backend=[DECIDE_LOW, REASONED_IGNORE],
+       clock="logical", ignore=[OFFERS])

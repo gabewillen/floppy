@@ -334,7 +334,9 @@ Nothing is held by default. The service component receives an opaque
 reference for its whole invocation, never the value, and a slot whose
 variable holds no value is absent (see
 [invoked-services.md](invoked-services.md#values-are-references-env-slots)), and every value is masked (`[masked]`) in the text the CLI
-writes (notes, diagnostics, live-session records); canonical snapshot
+writes (notes, diagnostics, live-session records; in a record only inside
+its JSON strings, never in a literal or a number, so a value such as `true`
+leaves every record one JSON line); canonical snapshot
 documents are written exactly (their `sha256` covers their bytes) and get
 the protections of the canonical artifacts they are.
 Every command that reads a document (`validate` in its human format, which

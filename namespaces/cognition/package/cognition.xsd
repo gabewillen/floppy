@@ -23,7 +23,16 @@
                    when a budget is given.
                    stimulus, self, recent, environment, acted,
                    prior_episodes, standing_directives, feedback,
-                   instructions, schema, budget (optional): expressions.
+                   instructions, schema, budget, held (optional):
+                   expressions.
+  cognition:within_ceiling
+                   location (required): receives the choices within the
+                   tier's effort ceiling, without their effort (decision
+                   D206).
+                   heldlocation (optional): receives the actions held from
+                   the tier, {event, description?} once per event.
+                   choices (required), ceiling (optional; null or none is
+                   the whole frame): expressions.
   cognition:model_facing_data
                    location (required): receives the data as model-facing
                    XML.
@@ -60,6 +69,15 @@
       <xs:attribute name="instructions" type="xs:string" use="optional"/>
       <xs:attribute name="schema" type="xs:string" use="optional"/>
       <xs:attribute name="budget" type="xs:string" use="optional"/>
+      <xs:attribute name="held" type="xs:string" use="optional"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="within_ceiling">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="heldlocation" type="xs:string" use="optional"/>
+      <xs:attribute name="choices" type="xs:string" use="required"/>
+      <xs:attribute name="ceiling" type="xs:string" use="optional"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="model_facing_data">

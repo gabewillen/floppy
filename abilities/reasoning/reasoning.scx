@@ -46,7 +46,9 @@
   trimmed to the newest that fit the byte budget), the recalled prior_episodes (cognition:cognitive_episode)
   and standing_directives (cognition:directive) after the turn's
   situation (the environment block, decision D106, then what earlier
-  stages already did on the turn, the <param> acted), then the stimulus as
+  stages already did on the turn, the <param> acted, then the <held> block
+  of the actions over the tier's effort ceiling, the <param> held, decision
+  D206), then the stimulus as
   the root element of its own block, stamped stimulus:event, stimulus:id,
   stimulus:source and stimulus:target. The stimulus's data is JSON here,
   so it renders as plain data: a content field, an object as entry elements, an array as item elements,
@@ -108,7 +110,7 @@
   cognition, which passes it to the next turn's reasoning.
 
   Input: the <param>s turn, stimulus, focus, focus_candidates, choices,
-  tier, model, database, environment, self, recent, acted, max_context_tokens,
+  held, tier, model, database, environment, self, recent, acted, max_context_tokens,
   completion_reserve_tokens and bytes_per_token. Output: <donedata>, received by the cognition as
   done.invoke.reasoning:
 
@@ -149,6 +151,11 @@
          intuition, the chat tier the cognition invokes it as. -->
     <data id="tier" expr="'reasoning'"/>
     <data id="choices" expr="[]"/>
+    <!-- The actions held from this tier, over its effort ceiling (decision
+         D206): {event, description?} each, rendered as the <held> block
+         after the acted fact. Intuition can only hand them on to reasoning;
+         reasoning holds nothing (its ceiling is the whole frame). -->
+    <data id="held" expr="[]"/>
     <!-- The bot's environment (decision D106): its prompt renders it as
          the environment block. -->
     <data id="environment" expr="null"/>
@@ -293,7 +300,7 @@
                                       environment="environment" acted="acted" prior_episodes="prior_episodes"
                                       standing_directives="standing_directives" feedback="feedback"
                                       instructions="instructions" schema="schema" budget="budget"
-                                      fitlocation="fit"/>
+                                      held="held" fitlocation="fit"/>
       <if cond="isFitted()">
         <log label="cognition.fit" expr="fit"/>
       </if>

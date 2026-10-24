@@ -3109,3 +3109,101 @@ fn axis_base64(axis: u8) -> String {
     }
     text
 }
+
+/// The `<held>` block of the identity's adopt, its one held action.
+const HELD_ADOPT: &str = "<held count=\"1\">\n  <event name=\"bot.ability.identity.adopt\">";
+
+/// Effort ceilings (decision D206): the decision layer's ceiling (0) is
+/// under the identity's adopt (effort 1), so its choices leave adopt out and
+/// the state it decides about renders it held; reasoning, whose ceiling is
+/// the whole frame, is offered it and holds nothing.
+#[test]
+fn the_decision_layer_holds_what_is_over_its_effort_ceiling() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Ignore, &[]);
+    let mut run = start(&bot);
+    say(&mut run, "hello");
+    let records = run.until(WAIT, turn_ended);
+    assert_eq!(
+        texts(&records, "cognition.stage"),
+        strings(&[
+            "autonomy unhandled (no-behaviors)",
+            "decision unhandled (empty_product)",
+            "reasoning handled"
+        ]),
+        "{records:?}"
+    );
+    let decisions = mock.received("/systemone");
+    let state = decisions[0].body["state"]["turn"]
+        .as_str()
+        .expect("the decision's state is the turn's text");
+    assert!(state.starts_with(HELD_ADOPT), "{state}");
+    assert!(
+        !decisions[0].body["questions"].to_string().contains(ADOPT),
+        "the decision layer is not offered adopt"
+    );
+    let reasoning = reasoning_requests(&mock);
+    assert_eq!(reasoning.len(), 1);
+    assert!(reasoning[0].body["tools"].to_string().contains(ADOPT));
+    assert!(!prompts(&mock)[0].contains("<held count"));
+    drop(run.close(WAIT));
+}
+
+/// The intuition tier's ceiling (1) offers it adopt; the bot's bounds may
+/// lower it (`intuition_effort_ceiling`), and then intuition is not
+/// offered adopt, its prompt renders adopt held, and the handoff takes the
+/// turn to reasoning, which is offered it.
+#[test]
+fn the_bounds_lower_the_intuition_tiers_effort_ceiling() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::ToIntuition, Generation::HandOff, &[]);
+    let mut run = start_activated(
+        &bot,
+        &[
+            with_intuition()[0],
+            ("bounds", "({intuition_effort_ceiling: 0})"),
+        ],
+    );
+    say(&mut run, "hello");
+    let records = run.until(WAIT, turn_ended);
+    assert_eq!(
+        texts(&records, "cognition.stage")
+            .last()
+            .map(String::as_str),
+        Some("reasoning handled"),
+        "{records:?}"
+    );
+    let intuition = intuition_requests(&mock);
+    assert_eq!(intuition.len(), 1);
+    assert!(offers_handoff(&intuition[0]));
+    assert!(!intuition[0].body["tools"].to_string().contains(ADOPT));
+    let prompt = intuition[0].body["messages"]
+        .as_array()
+        .and_then(|messages| messages.last())
+        .and_then(|message| message["content"].as_str())
+        .expect("the user message");
+    assert!(prompt.contains(HELD_ADOPT), "{prompt}");
+    let reasoning: Vec<Received> = reasoning_requests(&mock)
+        .into_iter()
+        .filter(|request| request.body["model"] != INTUITION_MODEL)
+        .collect();
+    assert_eq!(reasoning.len(), 1);
+    assert!(reasoning[0].body["tools"].to_string().contains(ADOPT));
+    drop(run.close(WAIT));
+}
+
+/// With its default ceiling the intuition tier is offered adopt and holds
+/// nothing.
+#[test]
+fn the_intuition_tier_is_offered_what_is_within_its_ceiling() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::ToIntuition, Generation::Respond, &[]);
+    let mut run = start_activated(&bot, &with_intuition());
+    say(&mut run, "hello");
+    run.until(WAIT, turn_ended);
+    let intuition = intuition_requests(&mock);
+    assert_eq!(intuition.len(), 1);
+    assert!(intuition[0].body["tools"].to_string().contains(ADOPT));
+    assert!(!prompts(&mock)[0].contains("<held count"));
+    drop(run.close(WAIT));
+}

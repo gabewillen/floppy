@@ -1,16 +1,21 @@
 <?xml version="1.0"?>
-<!-- cognition-6: model_facing_data writes an object as the root's fields: a scalar an attribute, an array an element of items, and a string over one line holding markup a CDATA section. -->
+<!-- cognition-6: the held actions render after the acted fact as a held element with their count, one event element each named by its event and holding its description. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition">
 <datamodel>
-  <data id="l" expr="null"/>
-  <data id="want" expr="'&lt;input task=&quot;design&quot;&gt;\n  &lt;doc&gt;&lt;![CDATA[&lt;a/&gt;\nb]]&gt;&lt;/doc&gt;\n  &lt;names count=&quot;1&quot;&gt;\n    &lt;item&gt;a&lt;/item&gt;\n  &lt;/names&gt;\n&lt;/input&gt;'"/>
+  <data id="p" expr="null"/>
+  <data id="q" expr="null"/>
+  <data id="s" expr='({event: "bot.input", data: "hi", source: "gabe"})'/>
+  <data id="a" expr='[{target: "t", event: "e"}]'/>
+  <data id="h" expr='[{event: "bot.ability.persona.revise", description: "Revise."}, {event: "bot.ability.identity.adopt"}]'/>
+  <data id="expected" expr="'&lt;held count=&quot;2&quot;&gt;\n  &lt;event name=&quot;bot.ability.persona.revise&quot;&gt;Revise.&lt;/event&gt;\n  &lt;event name=&quot;bot.ability.identity.adopt&quot; /&gt;\n&lt;/held&gt;\n&lt;string '"/>
 </datamodel>
 <state id="s0">
   <onentry>
-    <cognition:model_facing_data location="l" root="input" data="({task: 'design', names: ['a'], plan: null, doc: '&lt;a/&gt;\nb'})"/>
+    <cognition:model_facing_content location="p" stimulus="s" acted="a" held="h"/>
+    <cognition:model_facing_content location="q" stimulus="s" held="[]"/>
     <raise event="executed"/>
   </onentry>
-  <transition event="executed" cond="l === want" conf:targetpass=""/>
+  <transition event="executed" cond="p.indexOf('&lt;/cognition:acted&gt;\n' + expected) &gt; 0 &amp;&amp; q.indexOf('&lt;held') === -1" conf:targetpass=""/>
   <transition event="*" conf:targetfail=""/>
 </state>
 <conf:pass/>

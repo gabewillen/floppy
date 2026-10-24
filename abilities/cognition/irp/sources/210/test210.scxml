@@ -4,6 +4,8 @@
 <state id="harness" initial="boot">
   <invoke id="cognition" type="scxml" src="../../../cognition.scx">
     <param name="rest_after_ms" expr="1000"/>
+    <param name="child_operation_timeout_ms" expr="300000"/>
+    <param name="decision_timeout_ms" expr="300000"/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>

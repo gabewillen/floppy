@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!-- decision-6: an effort is written as the effort of every choice the element writes, and a choice without one carries none. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event">
+<datamodel>
+  <data id="weight" expr="2"/>
+  <data id="heavy" expr="null"/>
+  <data id="light" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <decision:choice location="heavy" effort="weight"/>
+    <decision:choice location="light" events="tool.alpha"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition event="tool.alpha" event:schema='{"type": "object"}' target="s0"/>
+  <transition event="tool.beta" event:schema='{"type": "object"}' target="s0"/>
+  <transition cond="heavy.length === 2 &amp;&amp; heavy[0].effort === 2 &amp;&amp; heavy[1].effort === 2 &amp;&amp; light.length === 1 &amp;&amp; !('effort' in light[0])" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

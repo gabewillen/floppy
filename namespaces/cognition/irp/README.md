@@ -4,8 +4,8 @@ The implementation report plan of the `cognition` namespace, in the format of th
 [W3C SCXML IRP](../../../scxml.rs/tests/conformance/w3c-irp/README.md) and of
 scxml.rs's own namespace suites
 ([scxml.rs/docs/conformance.md](../../../scxml.rs/docs/conformance.md#namespace-suites)):
-6 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
-("Statements"), tested by 19 mandatory documents. It runs through exactly
+8 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
+("Statements"), tested by 26 mandatory documents. It runs through exactly
 the pipeline the W3C IRP runs through (the canonical compiler, the shipped
 Wasm components under the Wasmtime session host, the same oracles and report
 envelope), with the namespace's own extension package and component bound,
@@ -35,12 +35,12 @@ SAXON='java -jar /opt/saxon/saxon-he-12.8.jar' sh scripts/namespace-irp.sh prepa
 sh scripts/namespace-irp.sh baselines cognition
 ```
 
-The current baseline (manifest SHA-256 `083e2981a28648f95446a3f3274c53c58a7260bf1940a446d97d804f3aee7e39`,
+The current baseline (manifest SHA-256 `3a3cef65963cf6e10df5e4efcb41e00ab48c89423f4f3d0e4627f001742414cf`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
 measured on Linux x86_64, the host `tests/tests/namespace_irp.rs` compares fuel on (re-measured
-2026-10-23 for the stimulus tagged with JSON Schema type names, decision D192))
+2026-10-24 for the held block and `<cognition:within_ceiling>`, decision D206))
 measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 21 / 21 | 0 | `eeb30efd046d5f84a541207982d112d1e6cf9b806fc44e69db14abde64d17bea` | `67860b482e7276423fce53eaee9948acab8272d979cb40c7a365caf162dccf5f` |
+| ECMAScript | 24 / 24 | 0 | `3e40f3149ad1a7276f95269be1bc4cf01fa42b6d0f213a899932601df948cc4e` | `b655ed0e305ffe4cdd4453df90b6204b08ca103c53cb903c8307a0f3dca3190e` |

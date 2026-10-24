@@ -11,6 +11,18 @@ Last updated: 2026-10-24.
 
 ## Current state (2026-10-09) — resume here
 
+- **Effort ceilings (2026-10-24, D206, #50):** each tier of a turn is
+  offered only the actions within its effort ceiling (D196). An offering
+  document declares an action's effort on `<decision:choice effort>` (an
+  expression, 0 when absent, so the ignore and every other offer stay
+  light); identity's adopt weighs 1 and persona's revise 2. The cognition
+  frames each stage's choices with the new `<cognition:within_ceiling>`
+  against `decision_effort_ceiling` (0) and `intuition_effort_ceiling` (1),
+  which the bounds override; reasoning's ceiling is the whole frame. What a
+  tier is not offered is its `held` param, rendered as the `<held>` block
+  of its model-facing content (the decision layer's state, intuition's
+  prompt), so it can only hand it on. The efforts and ceilings are the
+  maintainer's to tune; no live run has measured them.
 - **Rest and consolidation (2026-10-24, D205, #49):** after
   `rest_after_ms` (5 minutes) without input the cognition rests and
   invokes `abilities/consolidation/consolidation.scx`, which folds the
@@ -302,7 +314,7 @@ Last updated: 2026-10-24.
   address; the cognition input's `environment` field is rendered by
   reasoning as its `<environment>` block. Every environment run
   passes `--fuel 9223372036854775807` until average usage is measured
-  (D111). scxml.rs is at `5bc75e72` (D125's `..` in `event:schema`), on top of `cf8f293a` (D123's eventless-cond fix), on top of `f920cb47` (D122), on top of `c8bb69a8` (D121) and `b59f8111` (D104, D109, D110). Speech and voice
+  (D111). scxml.rs is at `cf27c2e7` (D217's env masking only inside a record's JSON strings), on top of `5bc75e72` (D125's `..` in `event:schema`), on top of `cf8f293a` (D123's eventless-cond fix), on top of `f920cb47` (D122), on top of `c8bb69a8` (D121) and `b59f8111` (D104, D109, D110). Speech and voice
   backends exist now, each through an env file in the session scratchpad
   (outside the repository) named in `FLOPPY_LIVE_ENV_FILE` with `.env`:
   `env.speech` (Gemini's OpenAI-compatible API, `FLOPPY_SPEECH_*`) and
@@ -990,8 +1002,6 @@ What is still to build, each item with its issue where one exists.
   D194's voices, built by D204 (#49; `bot_person_embedding`'s `kind`
   `face` is the seam); an embedding change measure and a cascade of measures wait
   on embeddings.
-- **Effort ceilings**: each stage narrowing the turn's frame to its own
-  effort ceiling (D196, #50).
 - **Sandbox, devices and transport** (D200, #53): a sandbox ability over
   a Docker or Podman host; computer, HID keyboard and pointer, audio
   microphone and speaker, and phone devices, with owner-command routing;
@@ -1038,7 +1048,7 @@ What is still to build, each item with its issue where one exists.
 
 ## Design decisions for the maintainer
 
-All answered on 2026-10-23: decision 2 by D199, 3 by D193, 4 by D198, 5 by D200, 6 by D194, 7 by D195, 8 by D196, 9 by D197. D192, D201 and D202 were decided with them.
+All answered on 2026-10-23: decision 2 by D199, 3 by D193, 4 by D198, 5 by D200, 6 by D194, 7 by D195, 8 by D196 (built by D206), 9 by D197. D192, D201 and D202 were decided with them.
 
 ## Choices to review
 
@@ -1049,6 +1059,18 @@ was taken on the recommendation and is not exercised: every document
 still has functions. Two names are open: `<processing:model_facing_schema>`
 (or `<processing:schema>`) and `<conversation:message_for_turn>`;
 `<decision:pin>` keeps its name until the maintainer names it (Q11).
+
+**D206, effort ceilings:**
+
+1. An action's effort is declared by its offerer (`<decision:choice
+   effort>`), not by its event schema or the bot's bounds; undeclared is 0.
+2. The weights: `bot.ability.identity.adopt` 1, `bot.ability.persona.revise`
+   2, everything else 0; the ceilings: the decision layer 0, intuition 1.
+3. The decision layer's `<held>` block goes into the state its decision
+   reads (before the stimulus), so the decision service's request grows by
+   the held descriptions.
+4. An event offered by two sessions, one within the ceiling and one over,
+   is offered (from the one within) and not held.
 
 **D113, the processing namespace and every stage's sends:**
 

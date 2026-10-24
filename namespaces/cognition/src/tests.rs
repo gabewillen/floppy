@@ -326,12 +326,13 @@ const EXPECTED: &str = include_str!("testdata/model_facing_content.expected.json
 
 /// Every input attribute, each named after its input field (the
 /// instructions as `system_text`).
-const INPUT_ATTRIBUTES: [&str; 10] = [
+const INPUT_ATTRIBUTES: [&str; 11] = [
     "stimulus",
     "self",
     "recent",
     "environment",
     "acted",
+    "held",
     "prior_episodes",
     "standing_directives",
     "feedback",
@@ -825,7 +826,7 @@ fn malformed_content_elements_or_values_raise_error_execution() {
         ),
         (
             unknown,
-            "cognition:model_facing_content takes only the location, failurelocation, systemlocation, fitlocation, stimulus, self, recent, environment, acted, prior_episodes, standing_directives, feedback, instructions, schema and budget attributes",
+            "cognition:model_facing_content takes only the location, failurelocation, systemlocation, fitlocation, stimulus, self, recent, environment, acted, prior_episodes, standing_directives, feedback, instructions, schema, budget and held attributes",
         ),
         (
             empty,
@@ -1098,4 +1099,247 @@ fn model_facing_data_rejects_a_root_that_is_not_a_name() {
         ))
     );
     assert!(host.assigned.is_empty());
+}
+
+#[test]
+fn the_held_actions_render_as_the_held_block_after_the_acted_fact() {
+    let mut input = stimulus_with(&json!({}));
+    input["instructions"] = Json::Null;
+    input["acted"] = json!([{"target": "t", "event": "e"}]);
+    input["held"] = json!([
+        {"event": "bot.ability.persona.revise", "description": "Revise <who> you are."},
+        {"event": "bot.ability.identity.adopt"},
+        {"description": "no event, not rendered"},
+    ]);
+    let rendered = prompt(&input);
+    let held = "<held count=\"2\">\n  <event name=\"bot.ability.persona.revise\">Revise &lt;who&gt; you are.</event>\n  <event name=\"bot.ability.identity.adopt\" />\n</held>\n<object ";
+    assert!(
+        rendered.contains("</cognition:acted>\n<held count"),
+        "{rendered}"
+    );
+    assert!(rendered.contains(held), "{rendered}");
+    input["held"] = json!([]);
+    assert!(!prompt(&input).contains("<held"));
+    input["held"] = Json::Null;
+    assert!(!prompt(&input).contains("<held"));
+}
+
+#[test]
+fn a_held_block_over_its_bound_drops_its_descriptions_then_its_events() {
+    let mut input = stimulus_with(&json!({}));
+    input["instructions"] = Json::Null;
+    input["held"] = json!([{"event": "e", "description": "d".repeat(20_000)}]);
+    assert!(
+        prompt(&input).starts_with("<held count=\"1\">\n  <event name=\"e\" />\n</held>\n<object ")
+    );
+    let many: Vec<Json> = (0..2_000)
+        .map(|n| json!({"event": format!("event.number.{n}")}))
+        .collect();
+    input["held"] = Json::Array(many);
+    assert!(prompt(&input).starts_with("<held count=\"2000\" omitted=\"size\" />\n<object "));
+}
+
+#[test]
+fn a_held_that_is_not_an_array_raises_error_execution() {
+    let mut host = content_host(&stimulus_with(&json!({})));
+    host.values.insert("held".into(), Data::String("x".into()));
+    assert_eq!(
+        execution(execute(CONTENT, &content_attributes(), &[], &mut host)),
+        "cognition:model_facing_content held is not an array"
+    );
+    assert!(host.assigned.is_empty());
+}
+
+// <cognition:within_ceiling>
+
+fn ceiling_host(choices: &Json, ceiling: Option<Data>) -> FakeHost {
+    let mut values = BTreeMap::from([("choices".to_owned(), data(choices))]);
+    if let Some(ceiling) = ceiling {
+        values.insert("ceiling".to_owned(), ceiling);
+    }
+    FakeHost {
+        values,
+        ..FakeHost::default()
+    }
+}
+
+fn ceiling_attributes() -> Vec<Attribute> {
+    vec![
+        attr("location", "offered"),
+        attr("heldlocation", "held"),
+        attr("choices", "choices"),
+        attr("ceiling", "ceiling"),
+    ]
+}
+
+fn turn_choices() -> Json {
+    json!([
+        {"event": "bot.ability.cognition.ignore", "schema": {}, "target": "c"},
+        {"event": "bot.ability.seeing.look", "schema": {}, "target": "s", "effort": 1},
+        {"event": "bot.ability.persona.revise", "schema": {}, "target": "p", "effort": 2, "description": "Revise."},
+        {"event": "bot.ability.identity.adopt", "schema": {}, "target": "i", "effort": 0},
+        {"event": "bot.ability.persona.revise", "schema": {}, "target": "q", "effort": 3},
+    ])
+}
+
+/// What `<cognition:within_ceiling>` assigns for `ceiling`, in order.
+fn framed(ceiling: Option<Data>) -> Vec<(String, Json)> {
+    let mut attributes = ceiling_attributes();
+    if ceiling.is_none() {
+        attributes.pop();
+    }
+    let mut host = ceiling_host(&turn_choices(), ceiling);
+    assert_eq!(
+        execute("within_ceiling", &attributes, &[], &mut host),
+        Ok(Executed::Handled)
+    );
+    host.assigned
+        .into_iter()
+        .map(|(location, value)| match value {
+            Data::JsonArray(text) => (location, serde_json::from_str(&text).expect("JSON")),
+            other => panic!("expected an array, got {other:?}"),
+        })
+        .collect()
+}
+
+#[test]
+fn within_ceiling_offers_the_choices_at_most_the_ceiling_and_holds_the_rest() {
+    let assigned = framed(Some(Data::Number(
+        scxml_types::FiniteNumber::new(1.0).expect("finite"),
+    )));
+    assert_eq!(
+        assigned,
+        [
+            (
+                "held".to_owned(),
+                json!([{"event": "bot.ability.persona.revise", "description": "Revise."}])
+            ),
+            (
+                "offered".to_owned(),
+                json!([
+                    {"event": "bot.ability.cognition.ignore", "schema": {}, "target": "c"},
+                    {"event": "bot.ability.seeing.look", "schema": {}, "target": "s"},
+                    {"event": "bot.ability.identity.adopt", "schema": {}, "target": "i"},
+                ])
+            ),
+        ],
+        "held first, once per event; offered in order, without effort"
+    );
+    let zero = framed(Some(Data::Number(
+        scxml_types::FiniteNumber::new(0.0).expect("finite"),
+    )));
+    assert_eq!(
+        zero[0].1,
+        json!([
+            {"event": "bot.ability.seeing.look"},
+            {"event": "bot.ability.persona.revise", "description": "Revise."},
+        ])
+    );
+}
+
+#[test]
+fn without_a_ceiling_the_whole_frame_is_offered_and_nothing_held() {
+    for ceiling in [None, Some(Data::Null)] {
+        let assigned = framed(ceiling);
+        assert_eq!(assigned[0], ("held".to_owned(), json!([])));
+        assert_eq!(assigned[1].1.as_array().map(Vec::len), Some(5));
+        assert!(!assigned[1].1.to_string().contains("effort"));
+    }
+}
+
+#[test]
+fn an_event_offered_within_the_ceiling_by_one_target_is_not_held() {
+    let choices = json!([
+        {"event": "e", "schema": {}, "target": "a", "effort": 5},
+        {"event": "e", "schema": {}, "target": "b"},
+    ]);
+    let framed = frame(&choices, Some(0)).expect("choices");
+    assert!(framed.held.is_empty());
+    assert_eq!(
+        framed.offered,
+        [json!({"event": "e", "schema": {}, "target": "b"})]
+    );
+}
+
+#[test]
+fn malformed_within_ceiling_elements_or_values_raise_error_execution() {
+    let number = |value: f64| Data::Number(scxml_types::FiniteNumber::new(value).expect("finite"));
+    for (attributes, choices, ceiling, detail) in [
+        (
+            vec![attr("choices", "choices")],
+            turn_choices(),
+            None,
+            "cognition:within_ceiling requires a location",
+        ),
+        (
+            vec![attr("location", "offered")],
+            turn_choices(),
+            None,
+            "cognition:within_ceiling requires choices",
+        ),
+        (
+            vec![
+                attr("location", "offered"),
+                attr("choices", "choices"),
+                attr("effort", "x"),
+            ],
+            turn_choices(),
+            None,
+            "cognition:within_ceiling takes only the location, heldlocation, choices and ceiling attributes",
+        ),
+        (
+            ceiling_attributes(),
+            turn_choices(),
+            Some(number(1.5)),
+            "cognition:within_ceiling ceiling is not a whole number or null",
+        ),
+        (
+            ceiling_attributes(),
+            turn_choices(),
+            Some(number(-1.0)),
+            "cognition:within_ceiling ceiling is not a whole number or null",
+        ),
+        (
+            ceiling_attributes(),
+            turn_choices(),
+            Some(Data::String("1".into())),
+            "cognition:within_ceiling ceiling is not a whole number or null",
+        ),
+        (
+            ceiling_attributes(),
+            json!([{"event": "e", "effort": "heavy"}]),
+            Some(number(1.0)),
+            "cognition:within_ceiling choices is not an array of choices",
+        ),
+        (
+            ceiling_attributes(),
+            json!([{"schema": {}}]),
+            Some(number(1.0)),
+            "cognition:within_ceiling choices is not an array of choices",
+        ),
+        (
+            ceiling_attributes(),
+            json!({"event": "e"}),
+            Some(number(1.0)),
+            "cognition:within_ceiling choices is not an array of choices",
+        ),
+    ] {
+        let mut host = ceiling_host(&choices, ceiling);
+        assert_eq!(
+            execution(execute("within_ceiling", &attributes, &[], &mut host)),
+            detail
+        );
+        assert!(host.assigned.is_empty(), "{detail}: nothing is assigned");
+    }
+    let mut host = ceiling_host(&turn_choices(), Some(Data::Null));
+    host.fail_assign = true;
+    assert_eq!(
+        execution(execute(
+            "within_ceiling",
+            &ceiling_attributes(),
+            &[],
+            &mut host
+        )),
+        "cognition:within_ceiling could not assign heldlocation"
+    );
 }

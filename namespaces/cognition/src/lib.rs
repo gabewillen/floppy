@@ -1,9 +1,11 @@
 //! The `cognition` extension namespace: `<cognition:attention_bias_for_turn>`,
-//! `<cognition:model_facing_content>` and `<cognition:model_facing_data>` as a
+//! `<cognition:model_facing_content>`, `<cognition:model_facing_data>` and
+//! `<cognition:within_ceiling>` as a
 //! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
-//! The turn's attention policy, and the projection of a turn for a model,
-//! fitted to the model's context when a budget is given. Both are
+//! The turn's attention policy, the projection of a turn for a model,
+//! fitted to the model's context when a budget is given, and each tier's
+//! frame of the turn's choices under its effort ceiling. All are
 //! synchronous and quick, so they are executable content here. Documents
 //! bind [`NAMESPACE_URI`] (conventionally with the prefix `cognition`):
 //!
@@ -14,14 +16,16 @@
 //!     systemlocation="system" fitlocation="fit" stimulus="stimulus" self="self" recent="recent"
 //!     environment="environment" acted="acted" prior_episodes="prior_episodes"
 //!     standing_directives="standing_directives" feedback="feedback" instructions="instructions"
-//!     schema="schema" budget="budget"/>
+//!     schema="schema" budget="budget" held="held"/>
+//! <cognition:within_ceiling location="decision_choices" heldlocation="decision_held"
+//!     choices="choices" ceiling="decision_effort_ceiling"/>
 //! <cognition:model_facing_data location="prompt" root="lesson" data="lessonInput()"/>
 //! ```
 //!
 //! Every attribute but `location`, `focuslocation`, `failurelocation`,
-//! `systemlocation`, `fitlocation` and `root` is an expression of the
-//! document's data model. Each element writes to its locations and never
-//! sends.
+//! `systemlocation`, `fitlocation`, `heldlocation` and `root` is an
+//! expression of the document's data model. Each element writes to its
+//! locations and never sends.
 //!
 //! # `<cognition:model_facing_data location="L" root="R" data="D"/>`
 //!
@@ -82,7 +86,12 @@
 //!    selections they dispatched, an array, or `{percepts, acts}`) as
 //!    `<cognition:acted>` with the `percepts` (`[0]` for an array: floppy's
 //!    turn has one) and the `acts` as `cognition:event`s, or `<cognition:acted
-//!    omitted="size" />` over its 16384 bytes;
+//!    omitted="size" />` over its 16384 bytes, then the actions held from
+//!    this tier (`held`, optional: an array of `{event, description?}`, as
+//!    `<cognition:within_ceiling>` writes them; decision D206) as `<held
+//!    count>` of one `<event name>` each, holding its description, or
+//!    without the descriptions over 16384 bytes, or `<held count omitted="size"
+//!    />` still over; nothing when none is held;
 //! 3. the rest of what the bot has in mind: `<cognition:recalled>` holding
 //!    `prior_episodes` (an array of cognitive episodes: `focus`,
 //!    `focus_candidates`, `stimulus_name`, a failed or cancelled turn's
@@ -166,6 +175,20 @@
 //! No metric counts the left-out items or the fits: this component's
 //! telemetry is the closed per-entry-point observation below, so the count
 //! is only the `omitted` attribute and the fit is `fitlocation`.
+//!
+//! # `<cognition:within_ceiling location="L" heldlocation="H" choices="C" ceiling="N"/>`
+//!
+//! One tier's frame of the turn's choices (decision D206): `choices`
+//! (required) evaluates to the turn's choice entries, each an object with a
+//! string `event` and optionally an `effort` (a whole number, as
+//! `<decision:choice effort>` declares it; 0 without one), and `ceiling`
+//! (optional) to the tier's effort ceiling, a whole number, or `null` (or no
+//! attribute) for the whole frame. `location` (required) receives, in order,
+//! the entries whose effort is at most the ceiling, each without its
+//! `effort` (no stage reads it), and `heldlocation` (optional) receives the
+//! actions held from the tier: one `{event, description?}` per event that
+//! only entries over the ceiling offer, in order, the description the first
+//! such entry's. Both are canonical JSON; `heldlocation` is assigned first.
 //!
 //! # Failures
 //!
@@ -308,6 +331,7 @@ pub fn execute<H: CognitionHost>(
         "attention_bias_for_turn" => attention_bias_for_turn(attributes, content, host),
         "model_facing_content" => model_facing_content(attributes, content, host),
         "model_facing_data" => model_facing_data_element(attributes, content, host),
+        "within_ceiling" => within_ceiling(attributes, content, host),
         _ => Ok(Executed::NotHandled),
     }
 }
@@ -540,6 +564,129 @@ fn input_device(stimulus: &Map<String, Json>) -> Json {
     Json::Null
 }
 
+/// Executes `<cognition:within_ceiling>`.
+fn within_ceiling<H: CognitionHost>(
+    attributes: &[Attribute],
+    content: &[Content],
+    host: &mut H,
+) -> Result<Executed, Failure<H::Error>> {
+    let [location, held_location, choices, ceiling] = attribute_values(
+        attributes,
+        ["location", "heldlocation", "choices", "ceiling"],
+        [
+            "cognition:within_ceiling takes only the location, heldlocation, choices and ceiling attributes",
+            "cognition:within_ceiling repeats an attribute",
+            "cognition:within_ceiling has an empty attribute",
+        ],
+    )?;
+    let location = location.ok_or(Failure::Execution(
+        "cognition:within_ceiling requires a location",
+    ))?;
+    let choices = choices.ok_or(Failure::Execution(
+        "cognition:within_ceiling requires choices",
+    ))?;
+    no_content(content, "cognition:within_ceiling holds no content")?;
+    let choices = json_of(&evaluate(
+        host,
+        choices,
+        "cognition:within_ceiling choices did not evaluate",
+    )?)
+    .ok_or(Failure::Execution(
+        "cognition:within_ceiling choices is not an array of choices",
+    ))?;
+    let ceiling = match ceiling {
+        None => None,
+        Some(ceiling) => match json_of(&evaluate(
+            host,
+            ceiling,
+            "cognition:within_ceiling ceiling did not evaluate",
+        )?) {
+            Some(Json::Null) => None,
+            Some(ceiling) => Some(ceiling.as_u64().ok_or(Failure::Execution(
+                "cognition:within_ceiling ceiling is not a whole number or null",
+            ))?),
+            None => {
+                return Err(Failure::Execution(
+                    "cognition:within_ceiling ceiling is not a whole number or null",
+                ));
+            }
+        },
+    };
+    let framed = frame(&choices, ceiling).map_err(Failure::Execution)?;
+    if let Some(held_location) = held_location {
+        assign_to(
+            host,
+            held_location,
+            &Data::JsonArray(Json::Array(framed.held).to_string()),
+            "cognition:within_ceiling could not assign heldlocation",
+        )?;
+    }
+    assign_to(
+        host,
+        location,
+        &Data::JsonArray(Json::Array(framed.offered).to_string()),
+        "cognition:within_ceiling could not assign the choices",
+    )?;
+    Ok(Executed::Handled)
+}
+
+/// One tier's frame of the turn's choices (see [`frame`]).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Frame {
+    /// The choices within the ceiling, each without its `effort`.
+    pub offered: Vec<Json>,
+    /// The actions held from the tier: `{event, description?}` each.
+    pub held: Vec<Json>,
+}
+
+/// The frame of `choices` under `ceiling` (`None`: the whole frame): see the
+/// crate documentation (`<cognition:within_ceiling>`).
+///
+/// # Errors
+///
+/// A static detail when `choices` is not an array of objects with a string
+/// `event` and an optional whole-number `effort`.
+pub fn frame(choices: &Json, ceiling: Option<u64>) -> Result<Frame, &'static str> {
+    const MALFORMED: &str = "cognition:within_ceiling choices is not an array of choices";
+    let entries = choices.as_array().ok_or(MALFORMED)?;
+    let mut offered = Vec::with_capacity(entries.len());
+    let mut over = Vec::new();
+    for entry in entries {
+        let mut entry = entry.as_object().cloned().ok_or(MALFORMED)?;
+        let event = entry
+            .get("event")
+            .and_then(Json::as_str)
+            .ok_or(MALFORMED)?
+            .to_owned();
+        let effort = match entry.remove("effort") {
+            None => 0,
+            Some(effort) => effort.as_u64().ok_or(MALFORMED)?,
+        };
+        if ceiling.is_none_or(|ceiling| effort <= ceiling) {
+            offered.push((event, Json::Object(entry)));
+        } else {
+            over.push((event, entry));
+        }
+    }
+    let mut held: Vec<Json> = Vec::new();
+    for (event, entry) in over {
+        let named = |item: &Json| item.get("event").and_then(Json::as_str) == Some(&event);
+        if offered.iter().any(|(name, _)| *name == event) || held.iter().any(named) {
+            continue;
+        }
+        let mut item = Map::new();
+        if let Some(description) = entry.get("description").filter(|value| value.is_string()) {
+            item.insert("description".into(), description.clone());
+        }
+        item.insert("event".into(), Json::String(event));
+        held.push(Json::Object(item));
+    }
+    Ok(Frame {
+        offered: offered.into_iter().map(|(_, entry)| entry).collect(),
+        held,
+    })
+}
+
 /// Executes `<cognition:model_facing_content>`.
 fn model_facing_content<H: CognitionHost>(
     attributes: &[Attribute],
@@ -562,6 +709,7 @@ fn model_facing_content<H: CognitionHost>(
         instructions,
         schema,
         budget,
+        held,
     ] = attribute_values(
         attributes,
         [
@@ -580,9 +728,10 @@ fn model_facing_content<H: CognitionHost>(
             "instructions",
             "schema",
             "budget",
+            "held",
         ],
         [
-            "cognition:model_facing_content takes only the location, failurelocation, systemlocation, fitlocation, stimulus, self, recent, environment, acted, prior_episodes, standing_directives, feedback, instructions, schema and budget attributes",
+            "cognition:model_facing_content takes only the location, failurelocation, systemlocation, fitlocation, stimulus, self, recent, environment, acted, prior_episodes, standing_directives, feedback, instructions, schema, budget and held attributes",
             "cognition:model_facing_content repeats an attribute",
             "cognition:model_facing_content has an empty attribute",
         ],
@@ -600,6 +749,7 @@ fn model_facing_content<H: CognitionHost>(
     let standing_directives = read_list(host, standing_directives, "standing_directives")?;
     let environment = read_json(host, environment, "environment")?.unwrap_or(Json::Null);
     let acted = read_json(host, acted, "acted")?.unwrap_or(Json::Null);
+    let held = read_list(host, held, "held")?;
     let feedback = read_text(host, feedback, "feedback")?;
     let instructions = read_text(host, instructions, "instructions")?;
     let tool_bytes =
@@ -614,6 +764,7 @@ fn model_facing_content<H: CognitionHost>(
         recent: &recent,
         environment: &environment,
         acted: &acted,
+        held: &held,
         prior_episodes: &prior_episodes,
         standing_directives: &standing_directives,
         feedback: &feedback,
@@ -888,6 +1039,10 @@ fn input_failures(name: &str) -> (&'static str, &'static str) {
             "cognition:model_facing_content acted did not evaluate",
             "cognition:model_facing_content acted is not a JSON value",
         ),
+        "held" => (
+            "cognition:model_facing_content held did not evaluate",
+            "cognition:model_facing_content held is not an array",
+        ),
         "feedback" => (
             "cognition:model_facing_content feedback did not evaluate",
             "cognition:model_facing_content feedback is not a string",
@@ -1012,6 +1167,9 @@ pub struct TurnInput<'a> {
     /// dispatched (an array), or `{percepts, acts}`; `null` or an empty
     /// array for nothing.
     pub acted: &'a Json,
+    /// The actions held from the tier (decision D206): `{event,
+    /// description?}` each; empty for none.
+    pub held: &'a [Json],
     /// The prior cognitive episodes (floppy's recalled memory until
     /// associative memory exists, decision D97).
     pub prior_episodes: &'a [Json],
@@ -1207,7 +1365,7 @@ fn content(
     tool_bytes: usize,
     budget_bytes: Option<usize>,
 ) -> Result<String, &'static str> {
-    let situation = situation(input.environment, input.acted)?;
+    let situation = situation(input.environment, input.acted, input.held)?;
     let around: Vec<&str> = [situation.as_str(), input.feedback]
         .into_iter()
         .filter(|block| !block.is_empty())
@@ -1309,12 +1467,14 @@ fn content(
 }
 
 /// The turn's situation: the environment block, then what earlier stages
-/// already did on it, joined by a newline; empty for neither.
-fn situation(environment: &Json, acted: &Json) -> Result<String, &'static str> {
+/// already did on it, then what is held from the tier, joined by newlines;
+/// empty for none.
+fn situation(environment: &Json, acted: &Json, held: &[Json]) -> Result<String, &'static str> {
     let mut budget = Budget::default();
     let world = environment_element(environment, &mut budget)?.map(|element| element.text(0));
     let fact = acted_fact(acted);
-    Ok([world, fact]
+    let held = held_block(held);
+    Ok([world, fact, held]
         .into_iter()
         .flatten()
         .collect::<Vec<_>>()
@@ -1365,7 +1525,49 @@ fn acted_fact(acted: &Json) -> Option<String> {
     Some(rendered.unwrap_or_else(|_| "<cognition:acted omitted=\"size\" />".to_owned()))
 }
 
-/// The bytes the acted fact may take: a sixteenth of
+/// The actions held from the tier (decision D206), within
+/// `MAX_ACTED_BYTES`: `<held count>` of one `<event name>` per item with a
+/// string `event`, holding its description; without the descriptions when
+/// that does not fit, and `<held count omitted="size" />` when that does not
+/// either; `None` when nothing is held.
+fn held_block(held: &[Json]) -> Option<String> {
+    let held: Vec<(&str, Option<&str>)> = held
+        .iter()
+        .filter_map(|item| {
+            let event = item.get("event")?.as_str()?;
+            Some((event, item.get("description").and_then(Json::as_str)))
+        })
+        .collect();
+    if held.is_empty() {
+        return None;
+    }
+    let render = |descriptions: bool| {
+        let mut budget = Budget::default();
+        budget.collection(held.len())?;
+        let mut element = budget.element("held")?;
+        budget.attribute(&mut element, "count", held.len().to_string())?;
+        for (event, description) in &held {
+            let mut child = match description.filter(|_| descriptions) {
+                Some(text) => budget.text_element("event", (*text).to_owned())?,
+                None => budget.element("event")?,
+            };
+            budget.attribute(&mut child, "name", (*event).to_owned())?;
+            element.children.push(child);
+        }
+        let text = element.text(0);
+        if text.len() > MAX_ACTED_BYTES {
+            return Err(BYTE_BUDGET);
+        }
+        Ok::<_, &'static str>(text)
+    };
+    Some(
+        render(true)
+            .or_else(|_| render(false))
+            .unwrap_or_else(|_| format!("<held count=\"{}\" omitted=\"size\" />", held.len())),
+    )
+}
+
+/// The bytes the acted fact may take, and the held block: a sixteenth of
 /// [`MAX_PROJECTION_BYTES`].
 const MAX_ACTED_BYTES: usize = 16_384;
 

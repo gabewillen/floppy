@@ -51,7 +51,8 @@
 
   Offers: bot.ability.persona.revise {text, reason} (text at most 2000 characters, reason at most 500, neither
   blank) is offered on every entry into knowing, through
-  <decision:choice events="bot.ability.persona.revise">, made
+  <decision:choice events="bot.ability.persona.revise"
+  effort="revise_effort"> (its effort, 2 by default, decision D206), made
   model-facing by <processing:model_facing_schema> ($schema, title and
   examples dropped), in bot.ability.offers {ability: "persona", choices},
   from knowing's onentry, after the output; the first offers are the
@@ -105,6 +106,12 @@
        xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
        version="1.0" datamodel="ecmascript" name="persona" initial="recalling">
   <datamodel>
+    <!-- How heavy an action bot.ability.persona.revise is (decision D206),
+         which the cognition holds against each tier's effort ceiling.
+         Rewriting who the bot is is deliberate: only reasoning, whose
+         ceiling is the whole frame, is offered it, and the earlier tiers
+         can only hand it on. An invoker's <param> sets it. -->
+    <data id="revise_effort" expr="2"/>
     <!-- The owner's traits, the invoker's <param> (null: none given, which
          the output's schema refuses). -->
     <data id="traits" expr="null"/>
@@ -233,7 +240,7 @@
         </send>
         <assign location="telling" expr="false"/>
       </if>
-      <decision:choice location="offered" events="bot.ability.persona.revise"/>
+      <decision:choice location="offered" events="bot.ability.persona.revise" effort="revise_effort"/>
       <processing:model_facing_schema location="offered" bound="32768" overlocation="offers_over"/>
       <if cond="offers_over">
         <log label="persona.offers.dropped" expr="'the offers are over 32768 bytes'"/>

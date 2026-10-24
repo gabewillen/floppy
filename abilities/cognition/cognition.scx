@@ -185,11 +185,26 @@
 
   Choices: each turn's input carries the body's collected choices (its own
   and every ability's offers, each tagged with the session id of its
-  offerer); they go to the decision layer (the decision service's enabled transitions) and
+  offerer); they go to the decision layer (the decision service's enabled transitions),
+  intuition and
   reasoning (its dispatch tool; autonomy's learned behaviors name their
   targets themselves), and each stage sends its selections to their
   targets. A send a stage cannot make (an autonomy candidate's)
   fails the stage, which this ability answers as bot.ability.failed.
+
+  Effort ceilings (decisions D196 and D206): a choice carries the effort its
+  offerer declares (<decision:choice effort>; 0 without one, so an
+  always-offered event such as the ignore is within every ceiling). Each
+  stage's substate frames the turn's choices on entry with
+  <cognition:within_ceiling> against its tier's ceiling: the decision
+  layer's (decision_effort_ceiling, 0) and intuition's
+  (intuition_effort_ceiling, 1), each of which the bounds override [floppy
+  fields], and reasoning's, the whole frame. The stage is offered only the
+  choices within it (tier_choices, without their effort) and is given the
+  heavier ones as held (tier_held, {event, description?} once per event,
+  its <param> held), which its prompt renders as the <held> block, so it
+  can only hand them on: the decision layer by its pass, intuition by the
+  deliberative handoff.
 
   Contracts: the events it takes reference abilities/schemas/ by
   event:schema (never inline). scxml.rs checks them where each event is
@@ -218,7 +233,7 @@
   What idle takes besides input (a cancel, the ignore, the handoff, the
   identity's name, the persona, the recent turns) leaves rest as it is.
 
-  Bindings: the bot, decision and processing namespace packages; the stages bind their own
+  Bindings: the bot, cognition, decision and processing namespace packages; the stages bind their own
   services (the decision layer: decision with TYPESAFE_API_KEY and
   TYPESAFE_BASE_URL; reasoning: generate with FLOPPY_API_KEY and
   FLOPPY_BASE_URL). The model is the body's (a <param> of the body's
@@ -226,6 +241,7 @@
   intuition_model goes to intuition.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition"
        xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
@@ -251,7 +267,8 @@
     <data id="decision_timeout_ms" expr="20000"/>
     <!-- The bounds the body's bounds param overrides (its <param>): these
          two, each tier's own (reflex_timeout_ms, intuition_timeout_ms,
-         reasoning_timeout_ms), and
+         reasoning_timeout_ms), the effort ceilings
+         (decision_effort_ceiling, intuition_effort_ceiling), and
          reflection's revising_timeout_ms and revising_ceiling_ms. -->
     <data id="bounds" expr="({})"/>
     <!-- The turn in hand. -->
@@ -264,6 +281,17 @@
     <!-- The learned behaviors autonomy ran this turn that declined it,
          for reflection (decision D230). -->
     <data id="declined" expr="[]"/>
+    <!-- Each tier's effort ceiling (decision D206): the decision layer and
+         intuition are offered only the choices whose effort (0 when its
+         offerer declares none) is at most theirs, and the heavier ones are
+         rendered as held, so they can only hand them on; reasoning's
+         ceiling is the whole frame. The bounds' decision_effort_ceiling and
+         intuition_effort_ceiling override them. -->
+    <data id="decision_effort_ceiling" expr="0"/>
+    <data id="intuition_effort_ceiling" expr="1"/>
+    <!-- The stage in hand's frame: its choices and what is held from it. -->
+    <data id="tier_choices" expr="[]"/>
+    <data id="tier_held" expr="[]"/>
     <!-- The bot's environment this turn (decision D106), for reasoning's
          prompt and the decision layer's instructions. -->
     <data id="environment" expr="null"/>
@@ -506,6 +534,8 @@
     <state id="running_decision">
       <onentry>
         <assign location="stage" expr="'decision'"/>
+        <cognition:within_ceiling location="tier_choices" heldlocation="tier_held" choices="choices"
+                                  ceiling="decisionCeiling()"/>
         <send idlocation="hop_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="hopDelay()">
           <param name="turn" expr="turn"/>
         </send>
@@ -522,7 +552,8 @@
         <param name="stimulus" expr="stimulus"/>
         <param name="focus" expr="focus"/>
         <param name="focus_candidates" expr="focus_candidates"/>
-        <param name="choices" expr="choices"/>
+        <param name="choices" expr="tier_choices"/>
+        <param name="held" expr="tier_held"/>
         <param name="environment" expr="environment"/>
         <param name="confidence_tuner" expr="confidence_tuner"/>
         <param name="decision_timeout_ms" expr="decision_timeout_ms"/>
@@ -575,6 +606,8 @@
     <state id="running_intuition">
       <onentry>
         <assign location="stage" expr="'intuition'"/>
+        <cognition:within_ceiling location="tier_choices" heldlocation="tier_held" choices="choices"
+                                  ceiling="intuitionCeiling()"/>
         <!-- Its inactivity bound starts with its streamed reply, as
              reasoning's does (decision D101). -->
         <assign location="hop_timer" expr="'unarmed'"/>
@@ -593,6 +626,7 @@
         <param name="focus" expr="focus"/>
         <param name="focus_candidates" expr="focus_candidates"/>
         <param name="choices" expr="intuitionChoices()"/>
+        <param name="held" expr="tier_held"/>
         <param name="environment" expr="environment"/>
         <param name="acted" expr="actedFact()"/>
         <param name="self" expr="selfFact()"/>
@@ -636,6 +670,8 @@
     <state id="running_reasoning">
       <onentry>
         <assign location="stage" expr="'reasoning'"/>
+        <!-- Reasoning's ceiling is the whole frame: nothing is held. -->
+        <cognition:within_ceiling location="tier_choices" choices="choices"/>
         <!-- Reasoning's inactivity bound starts with its streamed reply's
              first progress (below): until then, and for a reply that is not
              streamed, only the backstop applies (decision D101). -->
@@ -653,7 +689,7 @@
         <param name="stimulus" expr="stimulus"/>
         <param name="focus" expr="focus"/>
         <param name="focus_candidates" expr="focus_candidates"/>
-        <param name="choices" expr="choices"/>
+        <param name="choices" expr="tier_choices"/>
         <param name="environment" expr="environment"/>
         <param name="acted" expr="actedFact()"/>
         <param name="self" expr="selfFact()"/>
