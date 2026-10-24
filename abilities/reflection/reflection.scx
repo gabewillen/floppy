@@ -9,8 +9,9 @@
   database (the memory database; null: no memory) and
   model, and sends it bot.ability.reflection.input {turn,
   cognition_input, cognition_output, self} after each turn's output, and
-  {turn, cognition_input, outcome, failure, self} after each turn that
-  failed or was cancelled (outcome failed or cancelled; decision D139).
+  {turn, cognition_input, cognition_output: [], outcome, failure, self}
+  after each turn that failed or was cancelled (outcome failed or
+  cancelled; decision D139).
 
     idle -bot.ability.reflection.input-> recalling -> processing
       recalling -failed or cancelled turn-> storing
