@@ -35,7 +35,7 @@
         0,
         1
       ],
-      "pattern": "sunshine",
+      "pattern": "good morning,? sunshine",
       "weight": 1
     },
     {
@@ -44,7 +44,7 @@
         0,
         2
       ],
-      "pattern": "sunshine",
+      "pattern": "good morning,? sunshine",
       "weight": 1
     },
     {
@@ -62,7 +62,7 @@
         1,
         0
       ],
-      "pattern": "sunshine",
+      "pattern": "good morning,? sunshine",
       "weight": 3
     }
   ],

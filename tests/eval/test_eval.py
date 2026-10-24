@@ -61,6 +61,9 @@ class Scorer(unittest.TestCase):
         scenario["checks"] = [{"check": "sayz", "at": [0, 0]}]
         with self.assertRaisesRegex(ValueError, "unknown check: sayz"):
             score.score(scenario, {"steps": [], "sessions": [], "done": False})
+        scenario["checks"], scenario["diagnostics"] = [], [{"check": "says", "at": [0, 0], "pattern": "pong"}]
+        with self.assertRaisesRegex(ValueError, "it is a check, not a diagnostic"):
+            score.diagnostics(scenario, {"steps": [], "sessions": [], "done": False})
 
     def test_a_probe_after_a_restart_carries_the_largest_weight(self):
         for name, scenario in self.scenarios.items():

@@ -244,7 +244,10 @@ def score(scenario, job):
 
 def diagnostics(scenario, job):
     """Each diagnostic's result: what floppy's logs say happened inside it.
-    Reported, never scored."""
+    Reported, never scored; a black-box check listed here is refused."""
+    for spec in scenario.get("diagnostics", []):
+        if spec["check"] in BLACK_BOX:
+            raise ValueError(f"{spec['check']} reads only what floppy said: it is a check, not a diagnostic")
     return _results(job, scenario.get("diagnostics", []))
 
 

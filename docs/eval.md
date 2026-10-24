@@ -83,10 +83,14 @@ the end of one (`by`), and scores 0 to 1 with a `weight`:
 What is learned shows in what floppy says: a name is the name it gives when
 asked, a reflex is the taught reply to the trigger and no reply of it to a
 near miss, a routine is replies coming with no input and stopping when
-asked, and a name floppy claims (`not_says` "I am Pixel") is checked as a
-claim, so a reply that only mentions it passes. By convention, in every
-scenario with a probe after a restart, that probe carries the largest weight
-of any check: it shows the lesson outlasted the session that taught it
+asked, and a name floppy claims is checked as a claim: `not_says`
+`\b(i am|i'm|my name is) pixel\b`, matched without case, so a reply that
+only mentions the name passes; a claim in another phrasing is left to the
+judges. A taught reply is matched as the reply (`^\W*pong\W*$`, `^\W*yellow
+alert\W*$`) or as the whole taught phrase, never one word of it. By
+convention, in every scenario with a probe after a restart (a `says` check in
+a session after the first), that probe carries the largest weight of any
+check: it shows the lesson outlasted the session that taught it
 (`test_a_probe_after_a_restart_carries_the_largest_weight` holds the
 scenarios in `tests/eval/scenarios/` to it).
 
@@ -94,7 +98,12 @@ A scenario's `diagnostics` read floppy's own logs. They say how it got
 there and are reported in `report.md` beside the grade ("Inside floppy"),
 and the hill climb's proposer reads the failed ones, but they are never
 scored: `score.score` raises `ValueError` on a scenario that lists one
-under `checks`, so a misplaced diagnostic is an error, never a silent 0:
+under `checks`, and `score.diagnostics` raises on a black-box check listed
+under `diagnostics`, so a misfiled spec is an error, never a silent change. A
+full grade is therefore not proof that floppy learned anything: reasoning
+that recites the lesson passes every check. Whether a behavior was accepted
+is the `learned` diagnostic, which the report shows per job as "inside" and
+the builder track counts:
 
 | Diagnostic | Passes when |
 | --- | --- |
