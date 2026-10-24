@@ -81,9 +81,17 @@ Each check reads a log label the bot already writes, at one step (`at:
 | `learned` | `reflection.inventory` accepts a behavior: `<Name> ACTIVE <lifetime> ... (accept)`, `turn` for a reflex, `persistent` for a routine |
 | `broken` | `reflection.inventory` breaks one: `<Name> BROKEN (break)`, or the learning ability does: `learning.learned` `lesson of turn N: <Name> … BROKEN` |
 | `reflex`, `not_reflex` | `cognition.stage` is (is not) `autonomy handled`: a learned behavior, not reasoning, handled the real input |
-| `says`, `not_says` | a `floppy.say` matches (none matches) the pattern, case-insensitive |
-| `ticks` | at least `min` `floppy.say` matching the pattern during a wait (no input, so each is a routine's turn); partial credit below `min` |
-| `no_ticks` | no `floppy.say` during a wait |
+| `says`, `not_says` | a reply matches (none matches) the pattern, case-insensitive |
+| `ticks` | at least `min` replies matching the pattern during a wait (no input, so each is a routine's turn); partial credit below `min` |
+| `no_ticks` | no reply during a wait |
+
+A reply is a `bot.ability.communication.respond` the turn selected, read
+from `floppy.output` (its parts' words, joined). That is what floppy chose
+to say, with or without a speech service: `floppy.say` is logged only once
+speech encoded the words, and an eval column runs floppy on Sparks alone,
+with no hosted speech (decision D216). A turn output the eval cannot read
+fails `not_says` and `no_ticks` rather than passing them. The judges read
+each reply as `floppy says: …`.
 
 `reflex` is the check that exposes the gap: the conversation's history
 reaches reasoning (decision D99), so reasoning can answer "ping" with
@@ -181,23 +189,28 @@ gateway with the decision server on the lab:
 
 ```sh
 python3 tests/eval/eval.py builder --judges none --repeats 2 \
-  --column "luna=gabe-codex-1/gpt-6-luna;env=.env.cpa-lab" \
-  --column "lite=gemini-3.1-flash-lite;env=.env.cpa-lab;bot=gabe-codex-1/gpt-6-luna" \
-  --column "qwen27=cerebras/qwen-3.8-27b;env=.env.cpa-lab;bot=gabe-codex-1/gpt-6-luna" \
-  --column "gemma=gemma-4-26b-a4b;env=.env.lab:.env.speech;bot=gemma-4-26b-a4b"
+  --column "sparks=sparks/qwen3.8-flash-next;env=.env.cpa-lab;bot=sparks/qwen3.8-flash-next"
 ```
+
+Sparks is the bar (the maintainer, 2026-10-24: "try it on sparks if that
+model can do it i'm fine with that being the bar"; the builder must work on
+a small model, taking more attempts if it must). Everything inside floppy's
+framework runs on it, the bot and the builder, with no hosted speech; hosted
+models only judge or play the person ("i'm fine with using that as a judge /
+person just not within the framework"; decision D216).
 
 ## Running it
 
 The bot's backends are the live tests' (`FLOPPY_LIVE_ENV_FILE`,
-`FLOPPY_LIVE_MODEL`; floppy_live's module comment). On the maintainer's lab
-(docs/live-proof.md 2026-10-21: `gemma-4-26b-a4b` on the
-vLLM at `192.168.2.2:8100`, the systemone decision server at
-`192.168.2.2:8102`, reachable from the maintainer's network only), with
-`env.lab` and `env.speech` as there:
+`FLOPPY_LIVE_MODEL`; floppy_live's module comment). On Sparks through the
+CPA gateway, with the systemone decision server on the maintainer's lab
+(`192.168.2.2:8102`, docs/live-proof.md 2026-10-21, reachable from the
+maintainer's network only), `.env.cpa-lab` as in the builder example above. The judges' hosted models
+take their keys from `--judge-env-file` (see Grading); nothing else in a
+run uses a hosted model:
 
 ```sh
-export FLOPPY_LIVE_ENV_FILE=env.lab:env.speech FLOPPY_LIVE_MODEL=gemma-4-26b-a4b
+export FLOPPY_LIVE_ENV_FILE=.env.cpa-lab FLOPPY_LIVE_MODEL=sparks/qwen3.8-flash-next
 python3 tests/eval/eval.py run --judge-env-file .env           # the suite once
 python3 tests/eval/eval.py run --scenario reflex --repeats 3   # one category
 python3 tests/eval/eval.py climb --judge-env-file .env --generations 6 --budget-hours 8
@@ -205,11 +218,11 @@ python3 tests/eval/eval.py grade target/floppy-eval/run-<time>  # grade again (a
 python3 -m unittest discover -s tests/eval                     # offline tests
 ```
 
-`--parallel` (4) bot runs share the lab at a time (its four L4s serve the
-vLLM). A scenario takes 5 to 15 minutes (a said step waits for its
-reflection and any builder revision, at most `timeout_s`, 15 minutes by
-default; a wait step its seconds), so the suite takes about half an hour
-at four at a time and a climb generation of two candidates about an hour.
+`--parallel` (4) bot runs at a time. A scenario takes 5 to
+15 minutes (a said step waits for its reflection and any builder revision,
+at most `timeout_s`, 15 minutes by default; a wait step its seconds), so
+the suite takes about half an hour at four at a time and a climb
+generation of two candidates about an hour (estimates).
 
 Every run writes, under `target/floppy-eval/<run>/`: `plan.json`,
 `driver.log` (the driver's output; no value is printed), per job

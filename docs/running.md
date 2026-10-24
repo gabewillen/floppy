@@ -64,7 +64,7 @@ printf '%s\n' \
 ```
 
 Talk to the floppy bot out loud from a Mac with
-[`scripts/talk.py`](../scripts/talk.py) (decision D206), run in a terminal
+[`scripts/talk.py`](../scripts/talk.py) (decision D240), run in a terminal
 that has microphone access, with ffmpeg installed: it runs the room above
 under `scx run`, gives each utterance the microphone hears to the room as
 `environment.sound`, and plays each sound floppy makes on the speaker

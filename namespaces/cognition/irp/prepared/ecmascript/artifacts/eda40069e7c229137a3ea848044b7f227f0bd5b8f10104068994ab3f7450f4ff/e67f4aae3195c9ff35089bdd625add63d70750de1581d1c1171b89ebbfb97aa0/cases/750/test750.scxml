@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- cognition-6: the held actions render after the acted fact as a held element with their count, one event element each named by its event and holding its description. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition" xmlns:conf="http://www.w3.org/2005/scxml-conformance" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="p" expr="null"/>
+  <data id="q" expr="null"/>
+  <data id="s" expr="({event: &#34;bot.input&#34;, data: &#34;hi&#34;, source: &#34;gabe&#34;})"/>
+  <data id="a" expr="[{target: &#34;t&#34;, event: &#34;e&#34;}]"/>
+  <data id="h" expr="[{event: &#34;bot.ability.persona.revise&#34;, description: &#34;Revise.&#34;}, {event: &#34;bot.ability.identity.adopt&#34;}]"/>
+  <data id="expected" expr="'&lt;held count=&#34;2&#34;&gt;\n  &lt;event name=&#34;bot.ability.persona.revise&#34;&gt;Revise.&lt;/event&gt;\n  &lt;event name=&#34;bot.ability.identity.adopt&#34; /&gt;\n&lt;/held&gt;\n&lt;string '"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <cognition:model_facing_content location="p" stimulus="s" acted="a" held="h"/>
+    <cognition:model_facing_content location="q" stimulus="s" held="[]"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="executed" cond="p.indexOf('&lt;/cognition:acted&gt;\n' + expected) &gt; 0 &amp;&amp; q.indexOf('&lt;held') === -1" target="pass"/>
+  <transition event="*" target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

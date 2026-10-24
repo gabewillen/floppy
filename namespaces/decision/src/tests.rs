@@ -665,7 +665,7 @@ fn a_malformed_events_attribute_raises_error_execution() {
             &[],
             &mut host
         )),
-        "decision:choice takes only the location and events attributes",
+        "decision:choice takes only the location, events and effort attributes",
         "only the unqualified events attribute"
     );
 }
@@ -803,5 +803,109 @@ fn malformed_pins_raise_error_execution_and_assign_nothing() {
             detail
         );
         assert!(host.assigned.is_empty(), "{detail}");
+    }
+}
+
+fn number(value: f64) -> Data {
+    Data::Number(scxml_types::FiniteNumber::new(value).expect("a finite test number"))
+}
+
+#[test]
+fn the_effort_is_written_on_every_choice_the_element_writes() {
+    let mut host = FakeHost {
+        choices_snapshot: Some(order_snapshot()),
+        values: BTreeMap::from([("weight".to_owned(), number(2.0))]),
+        ..FakeHost::default()
+    };
+    assert_eq!(
+        execute(
+            "choice",
+            &[
+                location("choices"),
+                attr("events", "order.cancel order.hold"),
+                attr("effort", "weight")
+            ],
+            &[],
+            &mut host
+        ),
+        Ok(Executed::Handled)
+    );
+    let expected = canonical_json(&json!([
+        {"event": "order.cancel", "schema": cancel_schema(), "description": "Cancel the order", "effort": 2},
+        {"event": "order.hold", "schema": hold_schema(), "effort": 2},
+    ]));
+    assert_eq!(
+        host.assigned,
+        [("choices".to_owned(), Data::JsonArray(expected))]
+    );
+}
+
+#[test]
+fn an_effort_that_is_not_a_whole_number_in_range_raises_error_execution() {
+    for (value, detail) in [
+        (
+            Some(number(1.5)),
+            "decision:choice effort is not a whole number from 0 to 1000",
+        ),
+        (
+            Some(number(-1.0)),
+            "decision:choice effort is not a whole number from 0 to 1000",
+        ),
+        (
+            Some(number(1001.0)),
+            "decision:choice effort is not a whole number from 0 to 1000",
+        ),
+        (
+            Some(Data::String("2".into())),
+            "decision:choice effort is not a whole number from 0 to 1000",
+        ),
+        (None, "decision:choice effort did not evaluate"),
+    ] {
+        let mut host = FakeHost {
+            choices_snapshot: Some(order_snapshot()),
+            values: value
+                .into_iter()
+                .map(|value| ("weight".to_owned(), value))
+                .collect(),
+            ..FakeHost::default()
+        };
+        assert_eq!(
+            execution(execute(
+                "choice",
+                &[location("choices"), attr("effort", "weight")],
+                &[],
+                &mut host
+            )),
+            detail
+        );
+        assert!(host.assigned.is_empty(), "nothing is assigned");
+    }
+    let mut host = FakeHost::default();
+    assert_eq!(
+        execution(execute(
+            "choice",
+            &[location("choices"), attr("effort", " ")],
+            &[],
+            &mut host
+        )),
+        "decision:choice has an empty effort"
+    );
+}
+
+#[test]
+fn a_pin_keeps_a_declared_effort_and_refuses_a_malformed_one() {
+    let choices =
+        json!([{"event": "e", "schema": {"type": "object", "properties": {"p": {}}}, "effort": 3}]);
+    let pinned: Json = serde_json::from_str(
+        &pin_choices(&choices, "e", "p", &[json!("a")]).expect("an effort is a choice member"),
+    )
+    .expect("canonical JSON");
+    assert_eq!(pinned[0]["effort"], json!(3));
+    for effort in [json!(-1), json!(1.5), json!(1001), json!("1")] {
+        let choices = json!([{"event": "e", "schema": {}, "effort": effort}]);
+        assert_eq!(
+            pin_choices(&choices, "e", "p", &[]),
+            Err("decision:pin found a malformed choice")
+        );
     }
 }

@@ -256,7 +256,7 @@ function takesIntuition() {
 // The turn's choices and the deliberative handoff, offered by this ability
 // (its call surface, offered to intuition only).
 function intuitionChoices() {
-  return choices.concat(handoff.map(function (choice) {
+  return tier_choices.concat(handoff.map(function (choice) {
     return Object.assign({}, choice, {target: _sessionid});
   }));
 }
@@ -276,6 +276,16 @@ function cognitionInput() {
 
 // Context fit (decision D143): the bounds' model context and the tokens
 // reserved for the reply, [floppy fields]; null fits nothing.
+// Each tier's effort ceiling (decision D206): the bounds' when it is a
+// number, else this document's.
+function decisionCeiling() {
+  return typeof bounds.decision_effort_ceiling === 'number' ? bounds.decision_effort_ceiling : decision_effort_ceiling;
+}
+
+function intuitionCeiling() {
+  return typeof bounds.intuition_effort_ceiling === 'number' ? bounds.intuition_effort_ceiling : intuition_effort_ceiling;
+}
+
 function contextTokens() {
   return typeof bounds.max_context_tokens === 'number' ? bounds.max_context_tokens : null;
 }
