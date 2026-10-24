@@ -104,8 +104,12 @@ function isRevision(s) {
   return s.event === 'bot.ability.persona.revise';
 }
 
-// More than one inventory event or more than one revision (decision D145).
+// This hop's answer with more than one inventory event or more than one
+// revision (decision D145).
 function isOverSelection(_event) {
+  if (!isGenerate(_event)) {
+    return false;
+  }
   var selections = replySelections(_event);
   var revisions = selections.filter(isRevision).length;
   return revisions > 1 || selections.length - revisions > 1;
@@ -115,8 +119,12 @@ function overSelectionRejection() {
   return ({key: 'over-selection', message: 'select at most one of bot.behavior.create, bot.behavior.change or bot.behavior.break, and at most one bot.ability.persona.revise'});
 }
 
-// A call's selections with a revision first.
+// A call's selections with a revision first (none when it holds no list,
+// as replySelections reads it).
 function revisionsFirst(events) {
+  if (!Array.isArray(events)) {
+    return [];
+  }
   return events.filter(isRevision).concat(events.filter(function (s) { return !isRevision(s); }));
 }
 

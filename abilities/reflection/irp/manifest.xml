@@ -97,5 +97,11 @@
     <test id="201" conformance="mandatory" manual="false">
       <start uri="201/test201.scxml"/>
     </test>
+    <test id="202" conformance="mandatory" manual="false">
+      <start uri="202/test202.scxml"/>
+    </test>
+    <test id="203" conformance="mandatory" manual="false">
+      <start uri="203/test203.scxml"/>
+    </test>
   </assert>
 </assertions>

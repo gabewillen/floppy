@@ -190,7 +190,7 @@
     },
     "outcome": {
       "default": "completed",
-      "description": "How the turn ended: completed (its output was sent), failed (the turn failed: failure says why) or cancelled. Reflection stores a failed or cancelled turn's episode with its outcome and failure and selects nothing for it (decision D139).",
+      "description": "How the turn ended: completed (its output was sent), failed (the turn failed: failure says why) or cancelled. Reflection stores a failed or cancelled turn's episode with its outcome and failure and selects nothing for it (decision D139). [floppy field].",
       "enum": [
         "completed",
         "failed",
@@ -209,7 +209,7 @@
         }
       ],
       "default": null,
-      "description": "Why a failed turn failed, the message of the cognition's bot.ability.failed; null otherwise.",
+      "description": "Why a failed turn failed, the message of the cognition's bot.ability.failed; null otherwise. [floppy field].",
       "title": "Failure"
     },
     "self": {
