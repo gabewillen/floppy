@@ -1,6 +1,6 @@
 {
   "category": "reflex",
-  "intent": "The user teaches a keyword reflex: whenever they mention bananas, reply just 'yellow alert'. The keyword is inside longer sentences, so the behavior must match real input, not one fixed string.",
+  "intent": "The user teaches a keyword reflex: whenever they mention bananas, reply just 'yellow alert'. The keyword is inside longer sentences, so the bot must recognize real input, not one fixed string, and keep doing it after a restart.",
   "bot_name": null,
   "sessions": [
     {
@@ -26,37 +26,12 @@
   ],
   "checks": [
     {
-      "check": "learned",
-      "by": [
-        0,
-        0
-      ],
-      "lifetime": "turn",
-      "weight": 3
-    },
-    {
-      "check": "reflex",
-      "at": [
-        0,
-        1
-      ],
-      "weight": 2
-    },
-    {
       "check": "says",
       "at": [
         0,
         1
       ],
       "pattern": "yellow alert",
-      "weight": 1
-    },
-    {
-      "check": "not_reflex",
-      "at": [
-        0,
-        2
-      ],
       "weight": 1
     },
     {
@@ -69,26 +44,49 @@
       "weight": 1
     },
     {
-      "check": "reflex",
-      "at": [
-        1,
-        0
-      ],
-      "weight": 2
-    },
-    {
       "check": "says",
       "at": [
         1,
         0
       ],
       "pattern": "yellow alert",
-      "weight": 1
+      "weight": 3
     }
   ],
   "criteria": {
-    "learning": "The keyword rule becomes a learned behavior on the teaching turn.",
-    "firing": "Sentences mentioning bananas get 'yellow alert' from the behavior, also after the restart.",
+    "learning": "After the one instruction, the bot answers a mention of bananas with 'yellow alert'.",
+    "firing": "Sentences mentioning bananas get 'yellow alert', also after the restart.",
     "precision": "The unrelated request gets a normal answer."
-  }
+  },
+  "diagnostics": [
+    {
+      "check": "learned",
+      "by": [
+        0,
+        0
+      ],
+      "lifetime": "turn"
+    },
+    {
+      "check": "reflex",
+      "at": [
+        0,
+        1
+      ]
+    },
+    {
+      "check": "not_reflex",
+      "at": [
+        0,
+        2
+      ]
+    },
+    {
+      "check": "reflex",
+      "at": [
+        1,
+        0
+      ]
+    }
+  ]
 }

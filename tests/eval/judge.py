@@ -43,19 +43,15 @@ JUDGES = (
 
 JUDGE_SYSTEM = (
     "You grade how well floppy, a small companion robot bot, learns from what people tell it: its own name, "
-    "reflexes (turn behaviors it learns and then runs on matching input without reasoning) and routines "
-    "(persistent behaviors that act on a schedule with no input). You read one scenario run as a transcript of "
-    "its steps: what each person said, the bot's logs for that step, and what it said (each reply a 'floppy says:' line, cut at 600 characters). "
-    "Log meanings: identity.name 'adopted \"X\"' means the bot took X as its name, 'recalled \"X\"' that a "
-    "restarted bot remembered it; identity.heard 'addressed as X' means it heard itself addressed. "
-    "cognition.stage 'autonomy handled' means a learned behavior handled the turn (a real reflex); "
-    "'reasoning handled' means the language model answered it, which for a probe of a learned reflex is NOT the "
-    "reflex firing even if the words are right. reflection.inventory '<Name> ACTIVE turn ... (accept)' is a turn "
-    "behavior learned, 'ACTIVE persistent' a routine, 'BROKEN' one stopped. reflection.revision and *.failed lines "
-    "show learning attempts and failures. A session after the first is the bot restarted with its memory. "
-    "Grade strictly from the evidence; a behavior the bot only promised in words but never learned scores low. "
+    "reflexes (a reply it is taught to give whenever a kind of message comes) and routines (something it is "
+    "asked to say on a schedule, with no input). You read one scenario run as the conversation alone: what each "
+    "person said, the time that passed with no input, when floppy was restarted (it keeps what it learned), and "
+    "what floppy said back (each reply a 'floppy says:' line, cut at 600 characters). You see nothing of how "
+    "floppy works inside: grade only what a person talking to it would see. A turn with no 'floppy says:' line "
+    "got no reply. Grade strictly from the conversation: a promise in words that floppy then does not keep "
+    "scores low, and so does a taught reply that stops after the restart. "
     "Answer with one JSON object: {\"criteria\": {<each criterion name>: <integer 0-10>}, \"overall\": <integer "
-    "0-10>, \"learned\": <true if the bot actually learned what it was taught>, \"failure\": <the main reason it "
+    "0-10>, \"learned\": <true if floppy did what it was taught>, \"failure\": <the main reason it "
     "fell short, or \"\">, \"explanation\": <two or three sentences>}."
 )
 

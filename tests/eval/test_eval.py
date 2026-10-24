@@ -46,12 +46,20 @@ class Scorer(unittest.TestCase):
             for spec in scenario["checks"]:
                 where = tuple(spec.get("at") or spec.get("by"))
                 self.assertIn(where, steps, f"{name}: {spec}")
-            # An empty job scores every check 0 without raising.
+            for spec in scenario.get("diagnostics", []):
+                self.assertIn(tuple(spec.get("at") or spec.get("by")), steps, f"{name}: {spec}")
+            # Every check is black box, and an empty job scores each 0 without raising.
+            self.assertTrue(all(c["check"] in score.BLACK_BOX for c in scenario["checks"]), name)
             value, results = score.score(scenario, {"steps": [], "sessions": [], "done": False})
             self.assertEqual(value, 0.0)
             self.assertEqual(len(results), len(scenario["checks"]))
 
-    def test_a_reflex_answered_by_reasoning_is_not_a_reflex(self):
+    def test_a_check_on_floppy_s_logs_is_refused(self):
+        scenario = {"sessions": [{"steps": [{"say": "ping"}]}], "checks": [{"check": "reflex", "at": [0, 0]}]}
+        with self.assertRaises(ValueError):
+            score.score(scenario, {"steps": [], "sessions": [], "done": False})
+
+    def test_a_reflex_answered_by_reasoning_scores_and_shows_inside(self):
         scenario = self.scenarios["reflex_pingpong"]
         session0 = [
             log("reflection.inventory", 'PingPong ACTIVE turn [{"event":"bot.ability.cognition.input"}] (accept)'),
@@ -66,14 +74,22 @@ class Scorer(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             write_job(directory, [session0, session1], [
                 step(0, 0, 0, 1), step(0, 1, 1, 3), step(0, 2, 3, 5), step(0, 3, 5, 7), step(1, 0, 0, 2)])
-            value, results = score.score(scenario, score.load_job(directory))
-        by = {(r["check"], tuple(r["where"])): r["score"] for r in results}
-        self.assertEqual(by[("learned", (0, 0))], 1.0)
-        self.assertEqual(by[("reflex", (0, 1))], 0.0)
-        self.assertEqual(by[("says", (0, 1))], 1.0)
-        self.assertEqual(by[("not_reflex", (0, 2))], 1.0)
-        self.assertEqual(by[("reflex", (1, 0))], 1.0)
-        self.assertAlmostEqual(value, 10 / 12)
+            job = score.load_job(directory)
+        # The grade sees only the replies: every one is right.
+        value, _ = score.score(scenario, job)
+        self.assertEqual(value, 1.0)
+        # Inside, the first ping was reasoning's, not the reflex's.
+        inside = {(r["check"], tuple(r["where"])): r["score"] for r in score.diagnostics(scenario, job)}
+        self.assertEqual(inside[("learned", (0, 0))], 1.0)
+        self.assertEqual(inside[("reflex", (0, 1))], 0.0)
+        self.assertEqual(inside[("not_reflex", (0, 2))], 1.0)
+        self.assertEqual(inside[("reflex", (1, 0))], 1.0)
+        # The judges read the conversation alone.
+        transcript = score.summary(scenario, job)
+        self.assertIn("(floppy is restarted)", transcript)
+        self.assertIn("floppy says: Pong!", transcript)
+        self.assertNotIn("handled", transcript)
+        self.assertNotIn("PingPong", transcript)
 
     def test_ticks_count_the_routine_s_words_in_a_wait(self):
         scenario = self.scenarios["routine_reminder"]
@@ -85,8 +101,8 @@ class Scorer(unittest.TestCase):
         ]
         with tempfile.TemporaryDirectory() as directory:
             write_job(directory, [session], [step(0, 0, 0, 1), step(0, 1, 1, 3, "wait"), step(0, 2, 3, 4), step(0, 3, 4, 4, "wait")])
-            _, results = score.score(scenario, score.load_job(directory))
-        by = {r["check"]: r["score"] for r in results}
+            job = score.load_job(directory)
+        by = {r["check"]: r["score"] for r in score.score(scenario, job)[1] + score.diagnostics(scenario, job)}
         self.assertEqual(by["learned"], 1.0)
         self.assertEqual(by["ticks"], 0.5)
         self.assertEqual(by["broken"], 1.0)
@@ -102,7 +118,7 @@ class Scorer(unittest.TestCase):
         ]
         with tempfile.TemporaryDirectory() as directory:
             write_job(directory, [session], [step(0, 0, 0, 1), step(0, 1, 1, 2, "wait"), step(0, 2, 2, 4), step(0, 3, 4, 4, "wait")])
-            _, results = score.score(scenario, score.load_job(directory))
+            results = score.diagnostics(scenario, score.load_job(directory))
         by = {r["check"]: r["score"] for r in results}
         self.assertEqual(by["broken"], 1.0)
 
@@ -114,8 +130,10 @@ class Scorer(unittest.TestCase):
                     said("Yes!"), said("My name is Juniper.")]
         with tempfile.TemporaryDirectory() as directory:
             write_job(directory, [session0, session1], [step(0, 0, 0, 1), step(0, 1, 1, 3), step(0, 2, 3, 4), step(1, 0, 0, 3), step(1, 1, 3, 4)])
-            value, _ = score.score(scenario, score.load_job(directory))
+            job = score.load_job(directory)
+        value, _ = score.score(scenario, job)
         self.assertEqual(value, 1.0)
+        self.assertTrue(all(r["score"] == 1.0 for r in score.diagnostics(scenario, job)))
 
     def test_a_reply_is_the_respond_the_turn_selected(self):
         output = [
@@ -137,7 +155,7 @@ class Scorer(unittest.TestCase):
         # An output that is not a turn's says so, rather than looking silent.
         job["sessions"][0].append(log("floppy.output", "not json"))
         job["steps"][0]["end_index"] = 4
-        self.assertIn("floppy.output (unreadable): not json", score.summary(scenario, job))
+        self.assertIn("(a reply of floppy's could not be read)", score.summary(scenario, job))
         value, why = score.check(job, {"check": "no_ticks", "at": [0, 0]})
         self.assertEqual(value, 0.0, why)
         # So does a reply whose words are not text; a reply of a sound alone is silent.

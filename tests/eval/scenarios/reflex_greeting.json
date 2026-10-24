@@ -1,6 +1,6 @@
 {
   "category": "reflex",
-  "intent": "The user teaches a greeting reflex: whenever anyone says good morning, answer 'Good morning, sunshine!'. Probes check the exact trigger, a natural variation, and a near miss that must not trigger it.",
+  "intent": "The user teaches a greeting reflex: whenever anyone says good morning, answer 'Good morning, sunshine!'. Probes check the exact trigger, a natural variation, a near miss that must not trigger it, and the trigger again after a restart.",
   "bot_name": null,
   "sessions": [
     {
@@ -19,27 +19,17 @@
           "say": "good night"
         }
       ]
+    },
+    {
+      "steps": [
+        {
+          "say": "good morning"
+        }
+      ]
     }
   ],
   "checks": [
     {
-      "check": "learned",
-      "by": [
-        0,
-        0
-      ],
-      "lifetime": "turn",
-      "weight": 3
-    },
-    {
-      "check": "reflex",
-      "at": [
-        0,
-        1
-      ],
-      "weight": 2
-    },
-    {
       "check": "says",
       "at": [
         0,
@@ -49,28 +39,12 @@
       "weight": 1
     },
     {
-      "check": "reflex",
-      "at": [
-        0,
-        2
-      ],
-      "weight": 1
-    },
-    {
       "check": "says",
       "at": [
         0,
         2
       ],
       "pattern": "sunshine",
-      "weight": 1
-    },
-    {
-      "check": "not_reflex",
-      "at": [
-        0,
-        3
-      ],
       "weight": 1
     },
     {
@@ -81,11 +55,58 @@
       ],
       "pattern": "sunshine",
       "weight": 1
+    },
+    {
+      "check": "says",
+      "at": [
+        1,
+        0
+      ],
+      "pattern": "sunshine",
+      "weight": 2
     }
   ],
   "criteria": {
-    "learning": "The greeting rule becomes a learned behavior on the teaching turn.",
-    "firing": "'good morning' and a natural variation from another person get 'Good morning, sunshine!'.",
+    "learning": "After the one instruction, the bot answers 'good morning' with 'Good morning, sunshine!'.",
+    "firing": "'good morning' and a natural variation from another person get 'Good morning, sunshine!', also after the restart.",
     "precision": "'good night' does not get the morning greeting."
-  }
+  },
+  "diagnostics": [
+    {
+      "check": "learned",
+      "by": [
+        0,
+        0
+      ],
+      "lifetime": "turn"
+    },
+    {
+      "check": "reflex",
+      "at": [
+        0,
+        1
+      ]
+    },
+    {
+      "check": "reflex",
+      "at": [
+        0,
+        2
+      ]
+    },
+    {
+      "check": "not_reflex",
+      "at": [
+        0,
+        3
+      ]
+    },
+    {
+      "check": "reflex",
+      "at": [
+        1,
+        0
+      ]
+    }
+  ]
 }

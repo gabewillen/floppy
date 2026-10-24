@@ -29,24 +29,6 @@
   ],
   "checks": [
     {
-      "check": "adopted_name",
-      "at": [
-        0,
-        0
-      ],
-      "name": "Juniper",
-      "weight": 3
-    },
-    {
-      "check": "addressed",
-      "at": [
-        0,
-        1
-      ],
-      "name": "Juniper",
-      "weight": 2
-    },
-    {
       "check": "says",
       "at": [
         0,
@@ -56,12 +38,43 @@
       "weight": 1
     },
     {
+      "check": "says",
+      "at": [
+        1,
+        1
+      ],
+      "pattern": "juniper",
+      "weight": 3
+    }
+  ],
+  "criteria": {
+    "adoption": "Given the name Juniper, the bot calls itself Juniper from then on.",
+    "addressing": "The bot answers to Juniper, and does not answer to 'Pixel' as if it were its name.",
+    "persistence": "After the restart the bot still says its name is Juniper."
+  },
+  "diagnostics": [
+    {
+      "check": "adopted_name",
+      "at": [
+        0,
+        0
+      ],
+      "name": "Juniper"
+    },
+    {
+      "check": "addressed",
+      "at": [
+        0,
+        1
+      ],
+      "name": "Juniper"
+    },
+    {
       "check": "not_addressed",
       "at": [
         0,
         2
-      ],
-      "weight": 1
+      ]
     },
     {
       "check": "recalled_name",
@@ -69,8 +82,7 @@
         1,
         0
       ],
-      "name": "Juniper",
-      "weight": 2
+      "name": "Juniper"
     },
     {
       "check": "addressed",
@@ -78,22 +90,7 @@
         1,
         0
       ],
-      "name": "Juniper",
-      "weight": 1
-    },
-    {
-      "check": "says",
-      "at": [
-        1,
-        1
-      ],
-      "pattern": "juniper",
-      "weight": 2
+      "name": "Juniper"
     }
-  ],
-  "criteria": {
-    "adoption": "When given the name Juniper, the bot takes it as its own name (not just acknowledging it in words).",
-    "addressing": "The bot answers to Juniper and does not treat 'Pixel' as its name.",
-    "persistence": "After the restart the bot still knows and answers to Juniper."
-  }
+  ]
 }

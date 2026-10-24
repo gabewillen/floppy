@@ -1,6 +1,6 @@
 {
   "category": "reflex",
-  "intent": "The user teaches a reflex once: whenever they say exactly 'ping', reply exactly 'pong'. The bot should learn it as a turn behavior on that turn, then answer real 'ping' inputs from the learned behavior (autonomy), leave an unrelated question to reasoning, and keep the reflex after a restart.",
+  "intent": "The user teaches a reflex once: whenever they say exactly 'ping', reply exactly 'pong'. The bot should answer each 'ping' with exactly 'pong' from then on, answer an unrelated question normally, and still answer 'ping' with 'pong' after a restart.",
   "bot_name": null,
   "sessions": [
     {
@@ -29,37 +29,12 @@
   ],
   "checks": [
     {
-      "check": "learned",
-      "by": [
-        0,
-        0
-      ],
-      "lifetime": "turn",
-      "weight": 3
-    },
-    {
-      "check": "reflex",
-      "at": [
-        0,
-        1
-      ],
-      "weight": 2
-    },
-    {
       "check": "says",
       "at": [
         0,
         1
       ],
       "pattern": "^\\W*pong\\W*$",
-      "weight": 1
-    },
-    {
-      "check": "not_reflex",
-      "at": [
-        0,
-        2
-      ],
       "weight": 1
     },
     {
@@ -72,20 +47,13 @@
       "weight": 1
     },
     {
-      "check": "reflex",
+      "check": "says",
       "at": [
         0,
         3
       ],
+      "pattern": "^\\W*pong\\W*$",
       "weight": 1
-    },
-    {
-      "check": "reflex",
-      "at": [
-        1,
-        0
-      ],
-      "weight": 2
     },
     {
       "check": "says",
@@ -94,13 +62,51 @@
         0
       ],
       "pattern": "^\\W*pong\\W*$",
-      "weight": 1
+      "weight": 3
     }
   ],
   "criteria": {
-    "learning": "The bot turns the one-time instruction into a learned behavior right away.",
-    "firing": "Real 'ping' inputs are answered 'pong' by the learned behavior, not only by reasoning reading the history.",
+    "learning": "After the one instruction, 'ping' gets 'pong'.",
+    "firing": "Each 'ping' is answered with exactly 'pong'.",
     "precision": "The unrelated question gets a normal answer, not 'pong'.",
-    "persistence": "After the restart 'ping' still gets 'pong' from the behavior."
-  }
+    "persistence": "After the restart 'ping' still gets exactly 'pong'."
+  },
+  "diagnostics": [
+    {
+      "check": "learned",
+      "by": [
+        0,
+        0
+      ],
+      "lifetime": "turn"
+    },
+    {
+      "check": "reflex",
+      "at": [
+        0,
+        1
+      ]
+    },
+    {
+      "check": "not_reflex",
+      "at": [
+        0,
+        2
+      ]
+    },
+    {
+      "check": "reflex",
+      "at": [
+        0,
+        3
+      ]
+    },
+    {
+      "check": "reflex",
+      "at": [
+        1,
+        0
+      ]
+    }
+  ]
 }

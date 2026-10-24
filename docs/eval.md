@@ -17,10 +17,10 @@ It has three parts:
   `floppy_live`: it runs the bot in the room on real backends through the
   steps of each scenario of a plan, several at a time, and writes every
   run's records. It asserts nothing about the bot.
-- **The grade**, `tests/eval/score.py` and `tests/eval/judge.py`: each
-  scenario's checks read the bot's own logs, and two LLM judges (a CPA
-  `gabe-codex-*` model and Gemini) grade the transcript against the
-  scenario's criteria.
+- **The grade**, `tests/eval/score.py` and `tests/eval/judge.py`, black
+  box: each scenario's checks read what the bot said back, and two LLM
+  judges (a CPA `gabe-codex-*` model and Gemini) grade the conversation
+  alone against the scenario's criteria.
 - **The hill climb**, `tests/eval/eval.py climb`: an LLM proposes a rewrite
   of one learning prompt from the failures, the eval scores it, and the best
   is kept, one prompt per generation.
@@ -35,9 +35,9 @@ never edits the workspace: everything goes under `target/floppy-eval/`.
 | Scenario | Category | What it teaches, then probes |
 | --- | --- | --- |
 | `name_adopt` | name | "your name is Juniper"; addressed as Juniper, not as Pixel; restarted, recalls and answers to Juniper |
-| `name_rename` | name | Juniper, then Biscuit; answers to Biscuit; restarted, still Biscuit |
+| `name_rename` | name | Juniper, then Biscuit; answers to Biscuit; restarted, still says it is Biscuit |
 | `reflex_pingpong` | reflex | "whenever I say exactly 'ping', reply 'pong'"; two pings, an unrelated question, a ping after a restart |
-| `reflex_greeting` | reflex | "good morning" gets "Good morning, sunshine!"; a variation from another person; "good night" must not |
+| `reflex_greeting` | reflex | "good morning" gets "Good morning, sunshine!"; a variation from another person; "good night" must not; "good morning" again after a restart |
 | `reflex_keyword` | reflex | any mention of bananas gets "yellow alert", inside longer sentences, also after a restart |
 | `routine_reminder` | routine | a water reminder every minute; reminders with no input; stopped when asked; quiet after |
 | `routine_restart` | routine | "stretch break" every minute; keeps running after a restart with no new request |
@@ -67,13 +67,31 @@ the wall clock passing with no input; its `lessons` counts the lessons
 closed in it, which it does not wait on (`lessons_settled` is true). `criteria` are what the judges
 score, 0 to 10 each.
 
-### Checks
+### Checks and diagnostics
 
-Each check reads a log label the bot already writes, at one step (`at:
-[session, step]`) or up to the end of one (`by`), and scores 0 to 1 with a
-`weight`:
+The grade is black box (decision D217): a scenario's `checks` score only
+what floppy said back to what it was told, and the judges read only the
+conversation. A check looks at one step (`at: [session, step]`) or up to
+the end of one (`by`), and scores 0 to 1 with a `weight`:
 
 | Check | Passes when |
+| --- | --- |
+| `says`, `not_says` | a reply matches (none matches) the pattern, case-insensitive |
+| `ticks` | at least `min` replies matching the pattern during a wait (no input, so each is a routine's turn); partial credit below `min` |
+| `no_ticks` | no reply during a wait |
+
+What is learned shows in what floppy says: a name is the name it gives when
+asked, a reflex is the taught reply to the trigger and no reply of it to a
+near miss, a routine is replies coming with no input and stopping when
+asked. A probe after a restart weighs most: it shows the lesson outlasted
+the session that taught it.
+
+A scenario's `diagnostics` read floppy's own logs. They say how it got
+there and are reported in `report.md` beside the grade ("Inside floppy"),
+and the hill climb's proposer reads the failed ones, but they are never
+scored, and `score.score` refuses a scenario that scores one:
+
+| Diagnostic | Passes when |
 | --- | --- |
 | `adopted_name` | `identity.name` is `adopted "<name>"` |
 | `recalled_name` | `identity.name` is `recalled "<name>"` in that session (a restarted bot remembered it) |
@@ -81,9 +99,6 @@ Each check reads a log label the bot already writes, at one step (`at:
 | `learned` | `reflection.inventory` accepts a behavior: `<Name> ACTIVE <lifetime> ... (accept)`, `turn` for a reflex, `persistent` for a routine |
 | `broken` | `reflection.inventory` breaks one: `<Name> BROKEN (break)`, or the learning ability does: `learning.learned` `lesson of turn N: <Name> … BROKEN` |
 | `reflex`, `not_reflex` | `cognition.stage` is (is not) `autonomy handled`: a learned behavior, not reasoning, handled the real input |
-| `says`, `not_says` | a reply matches (none matches) the pattern, case-insensitive |
-| `ticks` | at least `min` replies matching the pattern during a wait (no input, so each is a routine's turn); partial credit below `min` |
-| `no_ticks` | no reply during a wait |
 
 A reply is a `bot.ability.communication.respond` the turn selected, read
 from `floppy.output` (its parts' words, joined). That is what floppy chose
@@ -91,12 +106,13 @@ to say, with or without a speech service: `floppy.say` is logged only once
 speech encoded the words, and an eval column runs floppy on Sparks alone,
 with no hosted speech (decision D216). A turn output the eval cannot read
 fails `not_says` and `no_ticks` rather than passing them. The judges read
-each reply as `floppy says: …`.
+each reply as `floppy says: …`, each restart as `(floppy is restarted)`,
+and nothing else: no log of floppy's.
 
-`reflex` is the check that exposes the gap: the conversation's history
-reaches reasoning (decision D99), so reasoning can answer "ping" with
-"pong" from the instruction alone. That is the bot following the
-conversation, not a reflex it learned; only `autonomy handled` is.
+Within a session the conversation's history reaches reasoning (decision
+D99), so reasoning can answer "ping" with "pong" from the instruction
+alone. The grade counts that as a right answer, as a person would; the
+`reflex` diagnostic shows whether a learned behavior or reasoning gave it.
 
 ## Grading
 
@@ -117,7 +133,8 @@ Keys come from the calling environment or the `--judge-env-file` files
 (only the variables a judge names are used), go only to their own backend,
 and are never printed or written. A key left unset sends no credential,
 for a network that injects it (a cloud session's proxy). The judges read
-only the step summary `score.summary` builds from the bot's logs.
+only the conversation `score.summary` builds: what each person said, the time
+passing, each restart and what floppy said.
 
 ## Hill climbing
 

@@ -2,10 +2,29 @@
 scenario check reads the records tests/tests/learning_eval.rs wrote for one
 job and scores 0 to 1.
 
+The grade is black box (decision D217): a scenario's `checks` read only
+what floppy said back, and the judges read only the conversation, never
+how floppy got there. Its `diagnostics` read floppy's own logs and are
+reported beside the grade, never scored.
+
 Every check names where it looks: `at: [session, step]` is that step's
 records only, `by: [session, step]` is every record up to the end of that
-step (every earlier session included). What each reads is a log label the
-bot already writes:
+step (every earlier session included).
+
+Checks, on floppy's replies:
+
+  says           a reply matches `pattern` (case-insensitive regex)
+  not_says       the step completed and no reply matches `pattern`
+  ticks          at least `min` replies matching `pattern` in a wait
+                 step (with no input, so each is a routine's turn); scores
+                 the fraction of `min` reached
+  no_ticks       no reply in a wait step
+
+A reply is a bot.ability.communication.respond the turn selected, from
+floppy.output (its parts' words, joined): what floppy chose to say, with or
+without a speech service (floppy.say is logged only once speech encoded it).
+
+Diagnostics, on the log labels the bot writes:
 
   adopted_name   identity.name `adopted "<name>"` (the identity took it)
   recalled_name  identity.name `recalled "<name>"` in the session up to the
@@ -21,38 +40,14 @@ bot already writes:
   reflex         cognition.stage `autonomy handled`: a learned behavior,
                  not reasoning, handled the real input
   not_reflex     no cognition.stage `autonomy handled`
-  says           a reply matches `pattern` (case-insensitive regex)
-  not_says       the step completed and no reply matches `pattern`
-  ticks          at least `min` replies matching `pattern` in a wait
-                 step (with no input, so each is a routine's turn); scores
-                 the fraction of `min` reached
-  no_ticks       no reply in a wait step
-
-A reply is a bot.ability.communication.respond the turn selected, from
-floppy.output (its parts' words, joined): what floppy chose to say, with or
-without a speech service (floppy.say is logged only once speech encoded it).
 """
 
 import json
 import os
 import re
 
-# Labels a step summary keeps, beside every label that names a failure.
-SUMMARY_LABELS = (
-    "cognition.stage",
-    "identity.name",
-    "identity.heard",
-    "reflection.selected",
-    "reflection.revision",
-    "reflection.inventory",
-    "learning.recalled",
-    "learning.selected",
-    "learning.learned",
-    "autonomy",
-    "autonomy.candidate",
-    "routines",
-    "bot.ability.routines.reconciled",
-)
+# The checks a grade scores: each reads only what floppy said.
+BLACK_BOX = ("says", "not_says", "ticks", "no_ticks")
 
 RESPOND = "bot.ability.communication.respond"
 
@@ -222,46 +217,59 @@ def check(job, spec):
     raise ValueError("unknown check: " + kind)
 
 
-def score(scenario, job):
-    """The checks' weighted score (0..1) and each check's result."""
+def _results(job, specs):
     results = []
-    total = 0.0
-    weights = 0.0
-    for spec in scenario["checks"]:
+    for spec in specs:
         value, why = check(job, spec)
-        weight = float(spec.get("weight", 1))
-        total += value * weight
-        weights += weight
-        results.append({"check": spec["check"], "where": spec.get("at") or spec.get("by"), "score": value, "weight": weight, "why": why})
+        results.append({"check": spec["check"], "where": spec.get("at") or spec.get("by"), "score": value,
+                        "weight": float(spec.get("weight", 1)), "why": why})
+    return results
+
+
+def score(scenario, job):
+    """The checks' weighted score (0..1) and each check's result. Every
+    check is black box; a scenario that scores floppy's logs is refused."""
+    for spec in scenario["checks"]:
+        if spec["check"] not in BLACK_BOX:
+            raise ValueError(f"{spec['check']} reads floppy's logs: it is a diagnostic, not a check")
+    results = _results(job, scenario["checks"])
+    weights = sum(r["weight"] for r in results)
+    total = sum(r["score"] * r["weight"] for r in results)
     return (total / weights if weights else 0.0), results
 
 
+def diagnostics(scenario, job):
+    """Each diagnostic's result: what floppy's logs say happened inside it.
+    Reported, never scored."""
+    return _results(job, scenario.get("diagnostics", []))
+
+
 def summary(scenario, job, limit=600):
-    """The job, step by step, as the judges read it: what was said to the
-    bot, what it said, which stage handled each turn, and what it learned
-    or failed at. Text only; nothing here holds a secret (records are the
-    bot's own logs)."""
+    """The job as the judges read it: the conversation alone, what each
+    person said to floppy, the time that passed with no input, each restart
+    and what floppy said back. Nothing of how floppy got there. Text only;
+    nothing here holds a secret."""
     lines = []
+    restarted = set()
     for step in job["steps"]:
         spec = scenario["sessions"][step["session"]]["steps"][step["step"]]
+        if step["session"] > 0 and step["session"] not in restarted:
+            restarted.add(step["session"])
+            lines.append("(floppy is restarted)")
         head = f"[session {step['session']} step {step['step']}]"
         if step["kind"] == "say":
             lines.append(f"{head} {spec.get('source', 'gabe')} says: {spec['say']!r}")
         else:
             lines.append(f"{head} {spec['wait_s']} s pass with no input")
-        if not step["completed"]:
-            lines.append("  (the step did not settle within its bound)")
         records = job["sessions"][step["session"]][step["start_index"] : step["end_index"]]
-        for label, text in logs(records):
-            if label == "floppy.output":
-                # Each reply, not the raw output (not one of SUMMARY_LABELS).
-                said = _replies(text)
-                if said is None:
-                    lines.append(f"  floppy.output (unreadable): {text[:limit]}")
-                for words in said or []:
-                    lines.append(f"  floppy says: {words[:limit]}")
-            elif label in SUMMARY_LABELS or "failed" in label or "degraded" in label:
-                lines.append(f"  {label}: {text[:limit]}")
+        for text in _texts(records, "floppy.output"):
+            said = _replies(text)
+            if said is None:
+                lines.append("  (a reply of floppy's could not be read)")
+            for words in said or []:
+                lines.append(f"  floppy says: {words[:limit]}")
+        if not step["completed"]:
+            lines.append("  (the step timed out)")
     ran = {(s["session"], s["step"]) for s in job["steps"]}
     for session, spec in enumerate(scenario["sessions"]):
         for index, _ in enumerate(spec["steps"]):
@@ -364,8 +372,8 @@ def complete(scenario, job):
 
 def learned_any(scenario, job):
     """Whether the job learned, anywhere, a behavior of the lifetime its
-    scenario's first `learned` check asks for (None without one)."""
-    spec = next((c for c in scenario["checks"] if c["check"] == "learned"), None)
+    scenario's first `learned` diagnostic asks for (None without one)."""
+    spec = next((c for c in scenario.get("diagnostics", []) if c["check"] == "learned"), None)
     if spec is None or not job["steps"]:
         return None if spec is None else False
     last = job["steps"][-1]

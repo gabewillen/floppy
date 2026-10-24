@@ -1,6 +1,6 @@
 {
   "category": "routine",
-  "intent": "The user asks for a reminder to drink water every minute. The bot should learn a persistent routine, remind on its own with no input while the clock runs, stop when asked, and stay quiet afterwards.",
+  "intent": "The user asks for a reminder to drink water every minute. The bot should remind on its own with no input while the clock runs, stop when asked, and stay quiet afterwards.",
   "bot_name": null,
   "sessions": [
     {
@@ -22,15 +22,6 @@
   ],
   "checks": [
     {
-      "check": "learned",
-      "by": [
-        0,
-        0
-      ],
-      "lifetime": "persistent",
-      "weight": 3
-    },
-    {
       "check": "ticks",
       "at": [
         0,
@@ -39,14 +30,6 @@
       "pattern": "water",
       "min": 2,
       "weight": 3
-    },
-    {
-      "check": "broken",
-      "by": [
-        0,
-        2
-      ],
-      "weight": 2
     },
     {
       "check": "no_ticks",
@@ -58,8 +41,25 @@
     }
   ],
   "criteria": {
-    "learning": "The request becomes a persistent routine on the turn it is asked.",
+    "learning": "The bot agrees to remind and then does so without being asked again.",
     "schedule": "Water reminders arrive about once a minute with no input.",
-    "stopping": "Asked to stop, the bot stops the routine and no more reminders come."
-  }
+    "stopping": "Asked to stop, the bot stops and no more reminders come."
+  },
+  "diagnostics": [
+    {
+      "check": "learned",
+      "by": [
+        0,
+        0
+      ],
+      "lifetime": "persistent"
+    },
+    {
+      "check": "broken",
+      "by": [
+        0,
+        2
+      ]
+    }
+  ]
 }
