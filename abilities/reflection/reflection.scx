@@ -165,6 +165,9 @@
     <!-- The turn's choices, which the revision's live-turn check holds a
          behavior's selections to (decision D206). -->
     <data id="turn_choices" expr="[]"/>
+    <!-- The learned behaviors that declined this turn, which a change
+         may not name (decision D215). -->
+    <data id="declined" expr="[]"/>
     <!-- Recalled (with the turn, the select input). -->
     <data id="prior_episodes" expr="[]"/>
     <data id="behaviors" expr="[]"/>
@@ -238,6 +241,7 @@
       <assign location="turn_failure" expr="inputFailure(deferred[0])"/>
       <assign location="self" expr="inputSelf(deferred[0])"/>
       <assign location="turn_choices" expr="inputChoices(deferred[0])"/>
+      <assign location="declined" expr="inputDeclined(deferred[0])"/>
       <assign location="deferred" expr="deferred.slice(1)"/>
       <assign location="prior_episodes" expr="[]"/>
       <assign location="behaviors" expr="[]"/>
@@ -256,6 +260,7 @@
       <assign location="turn_failure" expr="inputFailure(_event.data)"/>
       <assign location="self" expr="inputSelf(_event.data)"/>
       <assign location="turn_choices" expr="inputChoices(_event.data)"/>
+      <assign location="declined" expr="inputDeclined(_event.data)"/>
       <assign location="prior_episodes" expr="[]"/>
       <assign location="behaviors" expr="[]"/>
       <assign location="behavior" expr="null"/>
@@ -318,8 +323,9 @@
       <decision:choice location="choices" events="bot.behavior.create bot.behavior.change bot.behavior.break bot.ability.persona.revise"/>
       <processing:collect_offered_events location="choices" choices="choices"/>
       <!-- A change or a break names a behavior the inventory holds; with
-           none, neither is offered (decision D100). -->
-      <decision:pin location="choices" event="bot.behavior.change" property="name" values="behaviorNames()"/>
+           none, neither is offered (decision D100). A change never names
+           one that declined this turn (decision D215). -->
+      <decision:pin location="choices" event="bot.behavior.change" property="name" values="changeableNames()"/>
       <decision:pin location="choices" event="bot.behavior.break" property="name" values="behaviorNames()"/>
       <!-- At most one inventory event, and with a persona at most one
            revision beside it (decision D145): more is refused below. -->

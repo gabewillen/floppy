@@ -283,6 +283,15 @@
         "type": "object"
       },
       "type": "array"
+    },
+    "declined": {
+      "description": "The learned behaviors autonomy ran this turn that declined it, which reflection does not change on this turn (decision D215) [floppy field].",
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "type": "array",
+      "maxItems": 64
     }
   },
   "required": [
