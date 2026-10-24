@@ -9,7 +9,8 @@
   {message, turn, input}, and acknowledges bot.ability.cognition.cancel {turn}
   with bot.ability.cognition.cancelled {turn}.
 
-    idle -input-> processing { running_autonomy, after_autonomy,
+    idle { awake -rest_after_ms without input-> resting { consolidating
+           -> consolidated } } -input-> processing { running_autonomy, after_autonomy,
                                running_decision, after_decision,
                                running_intuition, running_reasoning,
                                completing, failing,
@@ -199,6 +200,24 @@
   own child's failure by name. The stages' donedata is not checked by scxml.rs, so the
   done.invoke conds also check its turn and shape.
 
+  Rest (decisions D195 and D205): every entry into idle starts in awake,
+  which arms awake.after for rest_after_ms (the bounds' rest_after_ms
+  [floppy field], else this document's default, 5 minutes: the short-term
+  register's recency window, after which no exchange is recent, so rest
+  never competes with a live one). When it fires with no input meanwhile,
+  the cognition rests: resting logs cognition.rest "resting" and invokes
+  abilities/consolidation/consolidation.scx as its child "consolidation"
+  with the database and the bounds, which reinforces the people memory holds and merges
+  duplicates, one guarded transaction per step; its done.invoke donedata
+  {folded, merged, steps, failed, reason} is logged as
+  cognition.consolidated, and the cognition stays at rest (consolidated)
+  until input. Any bot.ability.cognition.input leaves rest at once
+  (cognition.rest "awake"): it is taken as a normal turn, and leaving rest
+  cancels a consolidation in progress, whose open transaction commits
+  nothing (each step is one transaction, so nothing is half-written).
+  What idle takes besides input (a cancel, the ignore, the handoff, the
+  identity's name, the persona, the recent turns) leaves rest as it is.
+
   Bindings: the bot, decision and processing namespace packages; the stages bind their own
   services (the decision layer: decision with TYPESAFE_API_KEY and
   TYPESAFE_BASE_URL; reasoning: generate with FLOPPY_API_KEY and
@@ -221,6 +240,11 @@
     <!-- A stage's inactivity bound and its backstop (decision D101). -->
     <data id="child_operation_timeout_ms" expr="30000"/>
     <data id="child_operation_ceiling_ms" expr="240000"/>
+    <!-- How long idle stays awake with no input before it rests and memory
+         consolidates (decisions D195 and D205): the short-term register's
+         recency window, 5 minutes (the bounds' rest_after_ms overrides
+         it). -->
+    <data id="rest_after_ms" expr="300000"/>
     <!-- The decision layer's own bound on its decision. A decision not made in time cascades; the
          reflex tier's step bound (bounds.reflex_timeout_ms), when shorter,
          fails the turn first (decision D140). -->
@@ -310,8 +334,8 @@
     <assign location="recent_turns" expr="_event.data.turns"/>
   </transition>
   <state id="turns" initial="idle">
-  <!-- Waits for the body's turn. -->
-  <state id="idle">
+  <!-- Waits for the body's turn, awake and then at rest. -->
+  <state id="idle" initial="awake">
     <onentry>
       <assign location="offering" expr="true"/>
       <decision:choice location="offered" events="bot.ability.cognition.ignore bot.ability.learning.input"/>
@@ -363,6 +387,39 @@
     <transition event="bot.ability.reasoning.input" event:schema="../schemas/bot.ability.reasoning.input.json">
       <log label="cognition.handoff" expr="'idle'"/>
     </transition>
+    <!-- No input for rest_after_ms: rest. -->
+    <state id="awake">
+      <onentry>
+        <send id="rest-after" event="awake.after" delayexpr="restDelay()"/>
+      </onentry>
+      <onexit>
+        <cancel sendid="rest-after"/>
+      </onexit>
+      <transition event="awake.after" target="resting"/>
+    </state>
+    <!-- At rest memory consolidates; input leaves rest at once, which
+         cancels the consolidation. -->
+    <state id="resting" initial="consolidating">
+      <onentry>
+        <log label="cognition.rest" expr="'resting'"/>
+      </onentry>
+      <onexit>
+        <log label="cognition.rest" expr="'awake'"/>
+      </onexit>
+      <state id="consolidating">
+        <invoke id="consolidation" type="scxml" src="../consolidation/consolidation.scx">
+          <param name="database" expr="database"/>
+          <param name="bounds" expr="bounds"/>
+        </invoke>
+        <transition event="done.invoke.consolidation" target="consolidated">
+          <log label="cognition.consolidated" expr="consolidatedLog(_event)"/>
+        </transition>
+        <transition event="error.communication.consolidation" target="consolidated">
+          <log label="cognition.consolidated" expr="consolidationFailedLog(_event)"/>
+        </transition>
+      </state>
+      <state id="consolidated"/>
+    </state>
   </state>
 
   <!-- One turn of the cascade. -->

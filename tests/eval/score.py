@@ -15,7 +15,9 @@ bot already writes:
   learned        reflection.inventory `<name> ACTIVE <lifetime> ... (accept)`
                  (reflection learned a behavior, and the builder's draft
                  passed)
-  broken         reflection.inventory `<name> BROKEN (break)`
+  broken         reflection.inventory `<name> BROKEN (break)`, or the
+                 learning ability's learning.learned `lesson of turn N:
+                 <name> ... BROKEN`
   reflex         cognition.stage `autonomy handled`: a learned behavior,
                  not reasoning, handled the real input
   not_reflex     no cognition.stage `autonomy handled`
@@ -39,6 +41,9 @@ SUMMARY_LABELS = (
     "reflection.selected",
     "reflection.revision",
     "reflection.inventory",
+    "learning.recalled",
+    "learning.selected",
+    "learning.learned",
     "autonomy",
     "autonomy.candidate",
     "routines",
@@ -63,12 +68,16 @@ def load_job(out):
     return job
 
 
-def logs(records):
-    return [
-        (r.get("label") or "", r.get("text") if isinstance(r.get("text"), str) else json.dumps(r.get("text")))
-        for r in records
-        if r.get("type") == "log"
-    ]
+def logs(records, sessions=False):
+    """(label, text) of each log record; with `sessions`, (label, text,
+    session), the session path of the child that logged it."""
+    out = []
+    for r in records:
+        if r.get("type") != "log":
+            continue
+        line = (r.get("label") or "", r.get("text") if isinstance(r.get("text"), str) else json.dumps(r.get("text")))
+        out.append((line + (r.get("session") or "",)) if sessions else line)
+    return out
 
 
 def _step(job, at):
@@ -143,7 +152,8 @@ def check(job, spec):
         revisions = _texts(records, "reflection.revision")
         return 0.0, f"no {lifetime} behavior accepted (revisions {revisions[:4]})"
     if kind == "broken":
-        broken = [t for t in _texts(records, "reflection.inventory") if " BROKEN" in t]
+        texts = _texts(records, "reflection.inventory") + _texts(records, "learning.learned")
+        broken = [t for t in texts if " BROKEN" in t]
         return float(bool(broken)), (broken[0] if broken else "nothing was broken")
     stages = _texts(records, "cognition.stage")
     says = _texts(records, "floppy.say")
@@ -217,49 +227,84 @@ def evidence(job, limit=400):
     lines = []
     for index, records in enumerate(job["sessions"]):
         for label, text in logs(records):
-            if label.startswith("reflection") or label.startswith("builder") or "failed" in label:
+            if label.startswith(("reflection", "learning", "builder")) or "failed" in label:
                 lines.append(f"session {index} {label}: {text[:limit]}")
     return lines
 
 
+# The builder's own log labels (bots/builder/builder.scx), each logged in
+# the builder's session.
+BUILDER_LABELS = ("design", "author", "validate", "simulate", "triage", "retry_gate", "done", "failed")
+
+
 def builds(job):
-    """Every build the builder ran in the job (reflection invokes it for each
-    create or change), from its own logs: `author` "<mode> draft, attempt
-    N" (attempt 1 starts a build), `retry_gate` "failure N ...", and its
-    final state, `done` "built <name> in N attempt(s)" or `failed`
-    "<reason>: <diagnostic>". A build the turn cancelled has no final
-    state. Each is {accepted, attempts, reason, diagnostics}."""
+    """Every build the builder ran in the job (reflection or the learning
+    ability invokes it for each create or change), from its own logs
+    (BUILDER_LABELS): its first line opens a build, `author` "<mode> draft,
+    attempt N" counts its attempts, `retry_gate` "failure N ..." its
+    failures, and its final state is `done` "built <name> in N attempt(s)"
+    or `failed` "<reason>: <diagnostic>". Two builders can
+    run at once (reflection's and the learning ability's), so each build is
+    followed by its record's `session`. A build the turn cancelled has no
+    final state; the next `author` attempt 1, or a `design` that follows
+    neither `triage` nor `retry_gate`, starts the next build. Each is {accepted, attempts, failures, reason, cause,
+    diagnostics}."""
     out = []
     for records in job["sessions"]:
-        current = None
-        for label, text in logs(records):
+        current = {}
+        for label, text, where in logs(records, sessions=True):
+            if label not in BUILDER_LABELS:
+                continue
+            build = current.get(where)
             if label == "author":
                 match = re.search(r"attempt (\d+)$", text)
                 attempt = int(match.group(1)) if match else 1
-                if current is None or attempt == 1:
-                    if current is not None:
-                        out.append(current)
-                    current = {"accepted": False, "attempts": 0, "reason": "unfinished", "cause": "", "diagnostics": []}
-                current["attempts"] = max(current["attempts"], attempt)
-            elif current is not None and label == "retry_gate":
-                current["diagnostics"].append(text[:200])
-            elif current is not None and label == "done":
+                # Attempt 1 after an earlier author call is a new build
+                # (one its turn cancelled before it ended).
+                if build is not None and attempt == 1 and build["attempts"] >= 1:
+                    out.append(_closed(build))
+                    build = None
+            elif label == "design" and build is not None and build["last"] not in ("triage", "retry_gate"):
+                # A build redesigns only after triage: a design after any
+                # other line starts a new build (the open one was cut).
+                out.append(_closed(build))
+                build = None
+            if build is None:
+                # Any of a builder's lines opens a build: a failure before
+                # its first author call (its design) is that build's too.
+                build = current[where] = {"accepted": False, "attempts": 0, "failures": 0, "reason": "unfinished", "cause": "", "diagnostics": []}
+            build["last"] = label
+            if label == "author":
+                build["attempts"] = max(build["attempts"], attempt)
+            elif label == "retry_gate":
+                # "failure N of M": the budget counts a failed design as
+                # well as each failed draft.
+                match = re.match(r"failure (\d+)", text)
+                if match:
+                    build["failures"] = max(build["failures"], int(match.group(1)))
+                else:
+                    build["failures"] += 1
+                build["diagnostics"].append(text[:200])
+            elif label == "done":
                 match = re.search(r"in (\d+) attempt", text)
-                current.update(accepted=True, reason="done", attempts=int(match.group(1)) if match else current["attempts"])
-                out.append(current)
-                current = None
-            elif current is not None and label == "failed":
-                # "<reason>: <kind> <code> ...": no-progress alone hides
+                build.update(accepted=True, reason="done", attempts=int(match.group(1)) if match else build["attempts"])
+                out.append(_closed(current.pop(where)))
+            elif label == "failed":
+                # "<reason>: <kind> <code> ...": the reason alone hides
                 # whether the draft failed its schema, validation or tests.
                 words = re.findall(r"[A-Za-z0-9_.-]+", text)
-                current["reason"] = words[0][:40] if words else "failed"
-                current["cause"] = " ".join(words[1:3])[:60]
-                current["diagnostics"].append(text[:200])
-                out.append(current)
-                current = None
-        if current is not None:
-            out.append(current)
+                build["reason"] = words[0][:40] if words else "failed"
+                build["cause"] = " ".join(words[1:3])[:60]
+                build["diagnostics"].append(text[:200])
+                out.append(_closed(current.pop(where)))
+        out.extend(_closed(build) for build in current.values())
     return out
+
+
+def _closed(build):
+    """A build without its bookkeeping (`last`, its previous builder line)."""
+    build.pop("last", None)
+    return build
 
 
 def complete(scenario, job):

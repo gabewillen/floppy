@@ -28,7 +28,7 @@ const P=[
 </invoke>`},
  {id:'speech',kind:'service',uri:GH+'services/speech',ver:'0.1.0',
   sum:'One speech or voice operation per <invoke>: decode, encode, detect, diarize, identify, and PCM steps in a granted directory.',
-  params:['operation','model','audio','text','provider'],events:['bot.ability.hearing.speech.decoding.output','bot.ability.vocal.speech.encoding.output','bot.ability.failed'],env:['apikey','baseurl'],origins:[],grant:'--dir …/services/speech=$PWD/media::/media',
+  params:['operation','model','audio','text','provider'],events:['bot.ability.hearing.speech.decoding.output','bot.ability.vocal.speech.encoding.chunk','bot.ability.vocal.speech.encoding.output','bot.ability.failed'],env:['apikey','baseurl'],origins:[],grant:'--dir …/services/speech=$PWD/media::/media',
   artifact:'floppy_service_speech.virtualized.wasm',wit:'stateforward:scxml/invoked-service 0.2.0',used:['abilities/interpretation','abilities/speech_decoding','abilities/vocal','abilities/voice_detection','abilities/voice_diarization','abilities/voice_identification'],
   snip:`<invoke id="decoder" type="${GH}services/speech"
         env:apikey="FLOPPY_SPEECH_API_KEY" env:baseurl="FLOPPY_SPEECH_BASE_URL">

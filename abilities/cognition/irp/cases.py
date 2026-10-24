@@ -121,7 +121,7 @@ S.statement(7, "`bot.ability.cognition.cancel` `{turn}` for the turn in hand can
 S.statement(8, "`bot.ability.cognition.ignore` (its offer) is taken in `idle` and while processing, and only logged: it sends nothing and does not end a turn.")
 S.statement(11, "Until it is told the bot's name (`bot.ability.identity.named`), every return to `idle` sends `bot.ability.identity.ask` `{}` to its parent after its offers; once told, it asks no more.")
 S.statement(10, "With an `intuition_model` (the `<param>`; none by default composes no intuition tier, decision D144), a turn the decision layer leaves unhandled goes to the intuition tier first, offered the deliberative handoff `bot.ability.reasoning.input` as the cognition's own: its selections handle the turn, or, when they hold the handoff, the others are sent first and the turn goes on to reasoning, whose output follows them. An intuition that fails hands the same turn on to reasoning (`cognition.cascaded`).")
-S.statement(12, "A turn whose selections hold `bot.ability.learning.input` (taken in `idle` and while processing, and only logged) sends the lesson to its learning child after the turn's output; the lesson's result `bot.ability.learning.output` comes back to its parent as a `bot.ability.cognition.input` whose stimulus is that result (decision D149), a lesson the learning cannot learn (without a database) included, with `learned` false. A turn whose stimulus is a lesson's result or a routine's `bot.behavior.tick` sends no lesson (`cognition.lesson` `bounded`, decision D219).")
+S.statement(13, "A turn whose selections hold `bot.ability.learning.input` (taken in `idle` and while processing, and only logged) sends the lesson to its learning child after the turn's output; the lesson's result `bot.ability.learning.output` comes back to its parent as a `bot.ability.cognition.input` whose stimulus is that result (decision D149), a lesson the learning cannot learn (without a database) included, with `learned` false.")
 S.statement(9, "The events it takes are checked against `abilities/schemas/` where they are created: a `bot.ability.cognition.input` without a stimulus is refused at its sender (`error.execution` there) and starts no turn.")
 
 ASK = "bot.ability.identity.ask"
@@ -234,14 +234,22 @@ _case(200, 11, "the cognition asks the identity for the bot's name after its off
        send(CANCEL, js({"turn": 3})), expect(CANCELLED, "_event.data.turn === 3")],
       params=[SLOW], backend=[DECIDE_IGNORE, DECIDE_IGNORE], clock="logical")
 
-S.case(210, 12, "a turn that selects a lesson outputs it, and the lesson's result (without a database, not learned) is handed back as a stimulus.",
+S.case(220, 13, "a turn that selects a lesson outputs it, and the lesson's result (without a database, not learned) is handed back as a stimulus.",
        [READY, send(INPUT, turn(1, choices=(IGNORE, LEARN))),
         output(1, f"_event.data.output.length === 1 && _event.data.output[0].event === {js(LEARN)}"),
         expect(INPUT, f"_event.data.stimulus.event === 'bot.ability.learning.output' && _event.data.stimulus.data.learned === false"
                       " && _event.data.stimulus.data.lesson === 'say hi back' && _event.data.stimulus.data.behavior === null")],
        params=[SLOW], backend=[DECIDE_ABSTAIN, REASONED_LEARN], clock="logical", ignore=[OFFERS])
-S.case(211, 12, "a routine's tick turn that selects a lesson outputs it but sends no lesson.",
+S.case(221, 13, "a routine's tick turn that selects a lesson outputs it but sends no lesson.",
        [READY, send(INPUT, turn(1, data={"name": "WaterReminder"}, choices=(IGNORE, LEARN), event="bot.behavior.tick", source="routines")),
         output(1, f"_event.data.output.length === 1 && _event.data.output[0].event === {js(LEARN)}"), READY],
        params=[SLOW], backend=[DECIDE_ABSTAIN, REASONED_LEARN], clock="logical", ignore=[OFFERS],
        logs={"cognition.lesson": ["turn 1", "bounded"]})
+
+S.statement(12, "With no input for `rest_after_ms` (the `<param>`, else the `bounds`' `rest_after_ms`; 5 minutes by default) `idle` rests (decisions D195 and D205): it logs `cognition.rest` `resting` and invokes the consolidation with its database (with none there is nothing to consolidate, logged `cognition.consolidated`), and stays at rest until input, which leaves rest at once (`cognition.rest` `awake`, cancelling a consolidation in progress) and is taken as a normal turn.")
+
+S.case(210, 12, "after a stretch without input the cognition rests and consolidates, and input wakes it for a normal turn.",
+       [READY, wait("1500ms"), send(INPUT, turn(1)), output(1, IGNORED)],
+       params=[("rest_after_ms", "1000")], backend=[DECIDE_IGNORE], clock="wall", ignore=[OFFERS],
+       logs={"cognition.rest": ["resting", "awake"],
+             "cognition.consolidated": ['{"folded":0,"merged":0,"steps":0,"failed":false,"reason":"absent"}']})

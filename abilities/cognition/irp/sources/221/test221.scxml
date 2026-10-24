@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- cognition-12: a routine's tick turn that selects a lesson outputs it but sends no lesson. -->
+<!-- cognition-13: a routine's tick turn that selects a lesson outputs it but sends no lesson. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="cognition" type="scxml" src="../../../cognition.scx">

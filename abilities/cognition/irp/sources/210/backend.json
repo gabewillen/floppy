@@ -1,5 +1,5 @@
 {
-  "clock": "logical",
+  "clock": "wall",
   "answers": [
     {
       "path": "/v1/systemone",
@@ -9,11 +9,11 @@
         "answers": {
           "selection": {
             "type": "choice",
-            "choice": "__reasoning__",
+            "choice": "bot.ability.cognition.ignore",
             "confidence": 0.8,
             "probabilities": {
-              "bot.ability.cognition.ignore": 0.2,
-              "__reasoning__": 0.8
+              "bot.ability.cognition.ignore": 0.8,
+              "__reasoning__": 0.2
             }
           }
         },
@@ -21,23 +21,6 @@
           "input_tokens": 1,
           "output_tokens": 1
         }
-      }
-    },
-    {
-      "path": "/v1/chat/completions",
-      "status": 200,
-      "body": {
-        "object": "chat.completion",
-        "choices": [
-          {
-            "index": 0,
-            "finish_reason": "stop",
-            "message": {
-              "role": "assistant",
-              "content": "{\"events\": [{\"event\": \"bot.ability.learning.input\", \"data\": {\"content\": \"say hi back\"}, \"reason\": \"a lesson\", \"target\": \"session.cognition\"}]}"
-            }
-          }
-        ]
       }
     }
   ]
