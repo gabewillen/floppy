@@ -243,7 +243,9 @@
   inactivity bound and its backstop), its per-tier reflex_timeout_ms,
   intuition_timeout_ms and reasoning_timeout_ms (one tier's step bound),
   reasoning's max_context_tokens and
-  completion_reserve_tokens (its model's context fit, decision D143) and
+  completion_reserve_tokens (its model's context fit, decision D143), the
+  cognition's rest_after_ms (how long it stays awake with no input before
+  it rests and memory consolidates, decision D205) and
   reflection's revising_timeout_ms
   and revising_ceiling_ms (likewise for a revision through the builder),
   [floppy fields]; the body passes those it was given to the cognition as
