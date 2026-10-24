@@ -200,7 +200,9 @@ The bot's backends are the live tests' (`FLOPPY_LIVE_ENV_FILE`,
 `FLOPPY_LIVE_MODEL`; floppy_live's module comment). On Sparks through the
 CPA gateway, with the systemone decision server on the maintainer's lab
 (`192.168.2.2:8102`, docs/live-proof.md 2026-10-21, reachable from the
-maintainer's network only), `.env.cpa-lab` as in the builder example above:
+maintainer's network only), `.env.cpa-lab` as in the builder example above. The judges' hosted models
+take their keys from `--judge-env-file` (see Grading); nothing else in a
+run uses a hosted model:
 
 ```sh
 export FLOPPY_LIVE_ENV_FILE=.env.cpa-lab FLOPPY_LIVE_MODEL=sparks/qwen3.8-flash-next
@@ -211,10 +213,11 @@ python3 tests/eval/eval.py grade target/floppy-eval/run-<time>  # grade again (a
 python3 -m unittest discover -s tests/eval                     # offline tests
 ```
 
-`--parallel` (4) bot runs at a time. A scenario takes 5 to 15 minutes (a said step waits for its
-reflection and any builder revision, at most `timeout_s`, 15 minutes by
-default; a wait step its seconds), so the suite takes about half an hour
-at four at a time and a climb generation of two candidates about an hour.
+`--parallel` (4) bot runs at a time. A scenario takes 5 to
+15 minutes (a said step waits for its reflection and any builder revision,
+at most `timeout_s`, 15 minutes by default; a wait step its seconds), so
+the suite takes about half an hour at four at a time and a climb
+generation of two candidates about an hour (estimates).
 
 Every run writes, under `target/floppy-eval/<run>/`: `plan.json`,
 `driver.log` (the driver's output; no value is printed), per job

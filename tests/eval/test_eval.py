@@ -134,6 +134,10 @@ class Scorer(unittest.TestCase):
         job = {"steps": [step(0, 0, 0, 3, "wait")], "sessions": [records], "done": True}
         self.assertIn("floppy says: Time to drink water!", score.summary(scenario, job))
         self.assertNotIn("spoken twice", score.summary(scenario, job))
+        # An output that is not a turn's says so, rather than looking silent.
+        job["sessions"][0].append(log("floppy.output", "not json"))
+        job["steps"][0]["end_index"] = 4
+        self.assertIn("floppy.output (unreadable): not json", score.summary(scenario, job))
 
 
 class Builds(unittest.TestCase):

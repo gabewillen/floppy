@@ -116,16 +116,19 @@ def _texts(records, label):
 
 
 def _replies(text):
-    """The words of each reply one floppy.output text selected."""
+    """The words of each reply one floppy.output text selected, or None
+    when the text is not a turn's output."""
     try:
         output = json.loads(text).get("output")
     except (ValueError, AttributeError):
-        return []
+        return None
+    if not isinstance(output, list):
+        return None
     out = []
-    for selection in output if isinstance(output, list) else []:
-        if not isinstance(selection, dict) or selection.get("event") != RESPOND:
+    for entry in output:
+        if not isinstance(entry, dict) or entry.get("event") != RESPOND:
             continue
-        parts = (selection.get("data") or {}).get("parts")
+        parts = (entry.get("data") or {}).get("parts")
         words = "".join(p["words"] for p in parts or [] if isinstance(p, dict) and isinstance(p.get("words"), str))
         if words.strip():
             out.append(words)
@@ -134,7 +137,7 @@ def _replies(text):
 
 def replies(records):
     """The words of each reply the records' turns selected (floppy.output)."""
-    return [words for text in _texts(records, "floppy.output") for words in _replies(text)]
+    return [words for text in _texts(records, "floppy.output") for words in _replies(text) or []]
 
 
 def _matches(pattern, text):
@@ -239,7 +242,11 @@ def summary(scenario, job, limit=600):
         records = job["sessions"][step["session"]][step["start_index"] : step["end_index"]]
         for label, text in logs(records):
             if label == "floppy.output":
-                for words in _replies(text):
+                # Each reply, not the raw output (not one of SUMMARY_LABELS).
+                said = _replies(text)
+                if said is None:
+                    lines.append(f"  floppy.output (unreadable): {text[:limit]}")
+                for words in said or []:
                     lines.append(f"  floppy says: {words[:limit]}")
             elif label in SUMMARY_LABELS or "failed" in label or "degraded" in label:
                 lines.append(f"  {label}: {text[:limit]}")
