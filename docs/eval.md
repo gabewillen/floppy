@@ -104,8 +104,9 @@ under `diagnostics`, and both refuse an unknown kind (`unknown check: <kind>`),
 so a misfiled or misspelled spec is an error, never a silent change. A
 full grade is therefore not proof that floppy learned anything: reasoning
 that recites the lesson passes every check. Whether a behavior was accepted
-is the `learned` diagnostic, which those "- inside:" lines show and
-the builder track counts:
+is the `learned` diagnostic, which those "- inside:" lines show and the
+builder track tallies as its own "Learned" rate, a separate number that no
+grade or suite score includes:
 
 | Diagnostic | Passes when |
 | --- | --- |
