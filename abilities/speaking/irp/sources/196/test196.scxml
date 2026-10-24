@@ -4,6 +4,9 @@
 <state id="harness" initial="boot">
   <invoke id="speaking" type="scxml" src="../../../speaking.scx">
     <param name="encoding_timeout_ms" expr="600000"/>
+    <param name="provider" expr="'gemini'"/>
+    <param name="model" expr="'gemini-3.1-flash-tts-preview'"/>
+    <param name="voice" expr="'Kore'"/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>

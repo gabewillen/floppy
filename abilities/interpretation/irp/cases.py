@@ -29,11 +29,10 @@ EMBEDDED = {"path": "/voice/embed", "status": 200, "body": {"embedding": [0.5, -
 
 
 def decoded(text):
-    return {"path": "/interactions", "status": 200,
-            "body": {"steps": [{"type": "model_output", "content": [{"type": "text", "text": text}]}]}}
+    return {"path": "/audio/transcriptions", "status": 200, "body": {"text": text}}
 
 
-DECODE_ERROR = {"path": "/interactions", "status": 500, "body": {"error": {"message": "boom"}}}
+DECODE_ERROR = {"path": "/audio/transcriptions", "status": 500, "body": {"error": {"message": "boom"}}}
 
 
 def wav(name, level=None, **extra):

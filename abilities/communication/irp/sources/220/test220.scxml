@@ -21,7 +21,7 @@
     <transition event="bot.ability.offers" cond="_event.data.ability === 'communication' &amp;&amp; _event.data.choices.length === 2 &amp;&amp; _event.data.choices.map(function (c) { return c.event; }).sort().join(' ') === 'bot.ability.communication.respond bot.ability.communication.stop' &amp;&amp; _event.data.choices.every(function (c) { return c.schema.title === undefined; })" target="step2"/>
   </state>
   <state id="step2">
-    <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 2 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step3"/>
+    <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 0.5 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step3"/>
   </state>
   <state id="step3">
     <onentry>

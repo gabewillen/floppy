@@ -3,12 +3,9 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/speech_decoding/irp/sources">
   <assert id="speech_decoding-1" specnum="1" specid="#speech_decoding-1">
-    <![CDATA[By default it decodes through Gemini: the speech service's `decode` with provider `gemini` and model `gemini-3.5-flash`, `POST {base}/interactions`. The service's `bot.ability.hearing.speech.decoding.output` `{text}` ends it in `applied`, its done data (`done.invoke.speech_decoding`) exactly `{text}`: the answer's `output_text`, or its `model_output` steps' text, trimmed.]]>
+    <![CDATA[By default it decodes through the OpenAI-compatible API: the speech service's `decode` with provider `null` and model `nemotron-speech-streaming-en-0.6b` (the lab's Nemotron), `POST {base}/audio/transcriptions`. The service's `bot.ability.hearing.speech.decoding.output` `{text}` ends it in `applied`, its done data (`done.invoke.speech_decoding`) exactly `{text}`: the answer's `text`, trimmed.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
-    </test>
-    <test id="101" conformance="mandatory" manual="false">
-      <start uri="101/test101.scxml"/>
     </test>
   </assert>
   <assert id="speech_decoding-2" specnum="2" specid="#speech_decoding-2">
@@ -21,7 +18,13 @@
     </test>
   </assert>
   <assert id="speech_decoding-3" specnum="3" specid="#speech_decoding-3">
-    <![CDATA[The `provider` and `model` `<param>`s choose the backend: provider `null` is the OpenAI-compatible `POST {base}/audio/transcriptions`, whose answer's `text` becomes the done data's `text`.]]>
+    <![CDATA[The `provider` and `model` `<param>`s choose the backend: provider `gemini` is Gemini's `POST {base}/interactions`, whose answer's `output_text`, or its `model_output` steps' text, trimmed, becomes the done data's `text`; provider `null` is the OpenAI-compatible `POST {base}/audio/transcriptions` and never calls Gemini's.]]>
+    <test id="101" conformance="mandatory" manual="false">
+      <start uri="101/test101.scxml"/>
+    </test>
+    <test id="102" conformance="mandatory" manual="false">
+      <start uri="102/test102.scxml"/>
+    </test>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>

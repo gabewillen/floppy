@@ -1330,11 +1330,10 @@ fn speech_encoding_is_bounded_by_its_timeout() {
     close(run, "speech_encoding_is_bounded_by_its_timeout");
 }
 
-/// A fake Gemini speech backend on 127.0.0.1: every
-/// `POST /v1/interactions` answers, after `latency`, a tenth of a second
-/// of raw 24 kHz mono 16-bit PCM (4800 bytes, base64 in its audio part),
-/// and its request bodies are recorded. Gemini's speech generation is not
-/// streamed: the answer comes once the whole clip is synthesized, so
+/// A fake OpenAI-compatible speech backend on 127.0.0.1: every
+/// `POST /v1/audio/speech` answers, after `latency`, a tenth of a second
+/// of raw 24 kHz mono 16-bit PCM (4800 bytes), and its request bodies are
+/// recorded. The answer comes once the whole clip is synthesized, so
 /// `latency` stands for a sentence's synthesis time.
 fn speech_backend(latency: Duration) -> (String, std::sync::Arc<std::sync::Mutex<Vec<Json>>>) {
     use std::io::{BufRead as _, BufReader, Read as _, Write as _};
@@ -1368,17 +1367,13 @@ fn speech_backend(latency: Duration) -> (String, std::sync::Arc<std::sync::Mutex
                 .expect("the request log")
                 .push(serde_json::from_slice(&body).unwrap_or(Json::Null));
             std::thread::sleep(latency);
-            // 4800 zero bytes in base64.
-            let answer = json!({"steps": [{"type": "model_output", "content": [{
-                "type": "audio", "data": "A".repeat(6400), "sample_rate": 24000,
-                "channels": 1, "mime_type": "audio/l16; rate=24000; channels=1",
-            }]}]})
-            .to_string();
+            let answer = vec![0_u8; 4800];
             let _ = write!(
                 stream,
-                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{answer}",
+                "HTTP/1.1 200 OK\r\ncontent-type: audio/pcm\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
                 answer.len()
             );
+            let _ = stream.write_all(&answer);
         }
     });
     (origin, requests)
@@ -1463,14 +1458,12 @@ fn a_response_is_spoken_through_the_speech_service() {
     assert_eq!(written.len(), 4800);
     let requests = requests.lock().expect("the request log").clone();
     assert_eq!(requests.len(), 1, "{requests:?}");
-    // speaking's defaults: the gemini speech encoder, its model and voice.
-    assert_eq!(requests[0]["model"], "gemini-3.1-flash-tts-preview");
+    // speaking's defaults: the OpenAI-compatible speech API with the lab's
+    // Breeze engine and its warm voice.
+    assert_eq!(requests[0]["model"], "sidekick-tts-engine-breeze");
     assert_eq!(requests[0]["input"], "reply 1");
-    assert_eq!(
-        requests[0]["generation_config"],
-        json!({"speech_config": [{"voice": "Kore"}]})
-    );
-    assert_eq!(requests[0]["response_format"], json!({"type": "audio"}));
+    assert_eq!(requests[0]["voice"], "warm");
+    assert_eq!(requests[0]["response_format"], "pcm");
     close(run, "a_response_is_spoken_through_the_speech_service");
 }
 

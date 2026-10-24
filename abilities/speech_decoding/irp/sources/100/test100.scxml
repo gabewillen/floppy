@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- speech_decoding-1: the default gemini decoder's output_text comes back trimmed as the done data. -->
+<!-- speech_decoding-1: the default decoder's transcription text comes back trimmed as the done data. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="speech_decoding" type="scxml" src="../../../speech_decoding.scx">
