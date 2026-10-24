@@ -99,7 +99,7 @@
     </test>
   </assert>
   <assert id="cognition-12" specnum="12" specid="#cognition-12">
-    <![CDATA[A turn whose selections hold `bot.ability.learning.input` (taken in `idle` and while processing, and only logged) sends the lesson to its learning child after the turn's output; the lesson's result `bot.ability.learning.output` comes back to its parent as a `bot.ability.cognition.input` whose stimulus is that result (decision D149), a lesson the learning cannot learn (without a database) included, with `learned` false. A turn whose stimulus is a lesson's result or a routine's `bot.behavior.tick` sends no lesson (`cognition.lesson` `bounded`, decision D205).]]>
+    <![CDATA[A turn whose selections hold `bot.ability.learning.input` (taken in `idle` and while processing, and only logged) sends the lesson to its learning child after the turn's output; the lesson's result `bot.ability.learning.output` comes back to its parent as a `bot.ability.cognition.input` whose stimulus is that result (decision D149), a lesson the learning cannot learn (without a database) included, with `learned` false. A turn whose stimulus is a lesson's result or a routine's `bot.behavior.tick` sends no lesson (`cognition.lesson` `bounded`, decision D219).]]>
     <test id="210" conformance="mandatory" manual="false">
       <start uri="210/test210.scxml"/>
     </test>

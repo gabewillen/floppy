@@ -1709,7 +1709,7 @@ fn a_truncated_author_generation_doubles_the_next_token_bound() {
 }
 
 /// A design generation cut off at its token bound doubles the bound for
-/// the next design call, up to 65536 (decision D208): 8192 becomes 16384
+/// the next design call, up to 65536 (decision D222): 8192 becomes 16384
 /// and then 32768, and the third plan is built.
 #[test]
 fn a_truncated_design_generation_doubles_the_next_token_bound() {

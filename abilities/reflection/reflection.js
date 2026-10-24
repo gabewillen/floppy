@@ -19,12 +19,12 @@ function inputFailure(input) {
 }
 
 // What the bot knows of itself (decision D145), null when not told.
-// The turn's choices (decision D206), none when the input has none.
+// The turn's choices (decision D220), none when the input has none.
 function inputChoices(input) {
   return Array.isArray(input.choices) ? input.choices : [];
 }
 
-// The learned behaviors that declined the turn (decision D215).
+// The learned behaviors that declined the turn (decision D229).
 function inputDeclined(input) {
   return Array.isArray(input.declined) ? input.declined : [];
 }
@@ -59,7 +59,7 @@ function behaviorNames() {
 }
 
 // The behaviors a change may name: not one that declined this turn,
-// which rightly did not answer it (decision D215).
+// which rightly did not answer it (decision D229).
 function changeableNames() {
   return behaviorNames().filter(function (n) { return declined.indexOf(n) < 0; });
 }

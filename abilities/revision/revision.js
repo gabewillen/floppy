@@ -78,7 +78,7 @@ function builderRequest() {
 
 // Whether the lesson's intent carries an example and this turn's input
 // holds the message it replaces (a conversation's parent.data.content,
-// decision D213).
+// decision D227).
 function isProbe() {
   var example = intent === null ? undefined : intent.example;
   var parent = behavior_input === null ? undefined : behavior_input.parent;
@@ -111,7 +111,7 @@ function withMessage(text) {
 }
 
 // Whether the lesson's intent carries a counterexample to decline
-// beside its example (decision D214).
+// beside its example (decision D228).
 function hasCounterexample() {
   return probing && typeof intent.counterexample === 'string' && intent.counterexample.length > 0 && intent.counterexample !== intent.example;
 }
@@ -222,7 +222,7 @@ function renderedReport(diagnostics) {
 }
 
 // A build that used its attempts ends with its last diagnostics (decision D133).
-// Whether the revised row is ACTIVE: a failed change keeps it (D209).
+// Whether the revised row is ACTIVE: a failed change keeps it (D223).
 function isActive() {
   return existing_behavior !== null && existing_behavior !== undefined && existing_behavior.status === 'ACTIVE';
 }

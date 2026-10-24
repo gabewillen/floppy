@@ -93,7 +93,7 @@ function grownDocumentTokens() {
 }
 
 // The next design call's token bound: doubled after a truncated design
-// generation, up to document_token_ceiling (decision D208).
+// generation, up to document_token_ceiling (decision D222).
 function grownDesignTokens() {
   return gen_failure === 'truncated' ? Math.min(max_completion_tokens * 2, document_token_ceiling) : max_completion_tokens;
 }
@@ -230,7 +230,7 @@ function fileName() {
   return String(name !== null ? name : plan.name).replace(/[^A-Za-z0-9_-]+/g, '_');
 }
 
-// The request as the build reads it (decision D211): the name, the
+// The request as the build reads it (decision D225): the name, the
 // spec, the constraints, the context's fields, the bounds, and the live
 // turn's turn, targets, choice events and handled.
 function requestLog() {
@@ -238,7 +238,7 @@ function requestLog() {
     apply: live_turn === null ? null : {turn: live_turn.turn, targets: live_turn.targets, choices: (live_turn.choices || []).map(function (c) { return c.event; }), handled: live_turn.handled !== false, decline: live_turn.decline !== undefined}});
 }
 
-// One attempt's draft (decision D211): the attempt, its path, and each
+// One attempt's draft (decision D225): the attempt, its path, and each
 // document's length and FNV-1a digest.
 function draftLog() {
   return 'attempt ' + attempt + ' ' + draftPath() + ' scxml ' + digestOf(scxml_text) + ' schemas ' + digestOf(schemasText()) + ' script ' + digestOf(draft.script);
@@ -478,7 +478,7 @@ function liveTurnTest() {
 }
 
 // The live run, then, with the request's decline, a run on that input
-// that must decline (decision D214).
+// that must decline (decision D228).
 function liveTurnTests() {
   var live = liveTurnTest();
   if (live_turn.decline === undefined) {
@@ -564,19 +564,19 @@ function testTargets() {
 }
 
 // Whether the live run must handle its turn: not on a turn that taught
-// the behavior (decision D207).
+// the behavior (decision D221).
 function testHandled() {
   return currentTest().handled !== false;
 }
 
-// The live turn's choices its selections are held to (decision D206),
+// The live turn's choices its selections are held to (decision D220),
 // null for none.
 function testChoices() {
   return currentTest().choices === undefined ? null : currentTest().choices;
 }
 
 // A declined run's messages and, when it handled the input it must
-// decline, why that is refused (decision D214).
+// decline, why that is refused (decision D228).
 function declinedApply() {
   var d = child_data;
   if (currentTest().decline !== true || d === null || typeof d !== 'object' || d.handled !== true || !Array.isArray(d.selected) || d.selected.length === 0) {

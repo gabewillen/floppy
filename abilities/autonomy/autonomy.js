@@ -47,7 +47,7 @@ function isBehaviorHandled(event) {
 }
 
 // Why the seed finished without handling the turn, as the candidates
-// runner logs a learned candidate's (decision D210).
+// runner logs a learned candidate's (decision D224).
 function seedAdvanceLog(event) {
   var d = event.data;
   var why = d === null || typeof d !== 'object' ? 'no donedata object'

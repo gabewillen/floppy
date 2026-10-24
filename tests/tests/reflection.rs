@@ -1332,7 +1332,7 @@ fn a_change_reads_the_stored_documents_back_for_the_builder() {
     );
 }
 
-/// A failed change of an ACTIVE behavior keeps it (decision D209): the
+/// A failed change of an ACTIVE behavior keeps it (decision D223): the
 /// stored documents the builder's rejected drafts were written over are
 /// written back, the row stays ACTIVE on its path, and the turn fails
 /// with the abandon message.
