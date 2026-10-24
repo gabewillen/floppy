@@ -160,6 +160,7 @@ def grade_job(job, env, judge_names, check_weight):
         "judged": judged,
         "score": combined,
         "results": results,
+        "diagnostics": score.diagnostics(scenario, records),
         "grades": grades,
         "evidence": score.evidence(records),
         "builds": score.builds(records),
@@ -191,10 +192,13 @@ def aggregate(graded):
     for name, runs in by_scenario.items():
         categories.setdefault(runs[0]["category"], []).append(scenarios[name])
     checks = {}
+    diagnostics = {}
     criteria = {}
     for g in graded:
         for r in g["results"]:
             checks.setdefault(r["check"], []).append(r["score"])
+        for r in g["diagnostics"]:
+            diagnostics.setdefault(r["check"], []).append(r["score"])
         for grade in g["grades"]:
             for name, value in grade.get("criteria", {}).items():
                 criteria.setdefault(f"{g['category']}.{name}", []).append(value)
@@ -208,6 +212,7 @@ def aggregate(graded):
         "categories": {k: statistics.mean(v) for k, v in sorted(categories.items())},
         "scenarios": dict(sorted(scenarios.items())),
         "checks": {k: statistics.mean(v) for k, v in sorted(checks.items())},
+        "diagnostics": {k: statistics.mean(v) for k, v in sorted(diagnostics.items())},
         "criteria": {k: statistics.mean(v) for k, v in sorted(criteria.items())},
         "judge_disagreement": statistics.mean(agreement) if agreement else None,
         "jobs": len(graded),
@@ -227,6 +232,9 @@ def report_markdown(title, summary, graded):
     if summary["criteria"]:
         lines += ["", "| Judge criterion | Mean (0-1) |", "| --- | --- |"]
         lines += [f"| {k} | {v:.2f} |" for k, v in summary["criteria"].items()]
+    if summary["diagnostics"]:
+        lines += ["", "Inside floppy (its own logs; not scored):", "", "| Diagnostic | Pass rate |", "| --- | --- |"]
+        lines += [f"| {k} | {v:.2f} |" for k, v in summary["diagnostics"].items()]
     lines += ["", "## Jobs", ""]
     for g in sorted(graded, key=lambda x: x["id"]):
         judged = "n/a" if g["judged"] is None else f"{g['judged']:.2f}"
@@ -235,6 +243,9 @@ def report_markdown(title, summary, graded):
         for r in g["results"]:
             mark = "pass" if r["score"] >= 1 else ("part" if r["score"] > 0 else "fail")
             lines.append(f"- {mark} `{r['check']}` at {r['where']}: {r['why'][:240]}")
+        for r in g["diagnostics"]:
+            mark = "yes" if r["score"] >= 1 else "no"
+            lines.append(f"- inside (not scored): {mark} `{r['check']}` at {r['where']}: {r['why'][:240]}")
         for grade in g["grades"]:
             if "error" in grade:
                 lines.append(f"- judge {grade['judge']}: {grade['error']}")
@@ -298,14 +309,15 @@ def cmd_grade(args):
 
 
 def failure_evidence(graded, limit=120):
-    """What the proposer reads: each job's failed checks, the judges' main
-    failure, and reflection's and the builder's logs."""
+    """What the proposer reads: each job's failed checks and diagnostics,
+    the judges' main failure, and reflection's and the builder's logs."""
     lines = []
     for g in sorted(graded, key=lambda x: x["score"]):
-        if g["score"] >= 0.999:
+        if g["score"] >= 0.999 and all(r["score"] >= 1 for r in g["diagnostics"]):
             continue
         lines.append(f"== {g['id']} (score {g['score']:.2f}, {g['category']})")
         lines += [f"failed {r['check']} at {r['where']}: {r['why'][:200]}" for r in g["results"] if r["score"] < 1]
+        lines += [f"inside, not {r['check']} at {r['where']}: {r['why'][:200]}" for r in g["diagnostics"] if r["score"] < 1]
         lines += [f"judge {x['judge']}: {x['failure']}" for x in g["grades"] if x.get("failure")]
         lines += g["evidence"][:25]
     return lines[:limit]

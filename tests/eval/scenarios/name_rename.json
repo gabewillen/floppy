@@ -1,6 +1,6 @@
 {
   "category": "name",
-  "intent": "The user names the bot Juniper, then renames it Biscuit. The bot should end up called Biscuit, answer to Biscuit, and still be Biscuit after a restart.",
+  "intent": "The user names the bot Juniper, then renames it Biscuit. The bot should end up called Biscuit, answer to Biscuit, and still say it is Biscuit after a restart.",
   "bot_name": null,
   "sessions": [
     {
@@ -20,38 +20,14 @@
       "steps": [
         {
           "say": "Biscuit, hello again!"
+        },
+        {
+          "say": "What is your name?"
         }
       ]
     }
   ],
   "checks": [
-    {
-      "check": "adopted_name",
-      "at": [
-        0,
-        0
-      ],
-      "name": "Juniper",
-      "weight": 1
-    },
-    {
-      "check": "adopted_name",
-      "at": [
-        0,
-        1
-      ],
-      "name": "Biscuit",
-      "weight": 3
-    },
-    {
-      "check": "addressed",
-      "at": [
-        0,
-        2
-      ],
-      "name": "Biscuit",
-      "weight": 1
-    },
     {
       "check": "says",
       "at": [
@@ -62,13 +38,70 @@
       "weight": 1
     },
     {
+      "check": "says",
+      "at": [
+        1,
+        1
+      ],
+      "pattern": "biscuit",
+      "weight": 3
+    },
+    {
+      "check": "not_says",
+      "at": [
+        0,
+        2
+      ],
+      "pattern": "\\b(i am|i['\u2019]m|my name is|my name['\u2019]s) juniper\\b",
+      "weight": 1
+    },
+    {
+      "check": "not_says",
+      "at": [
+        1,
+        1
+      ],
+      "pattern": "\\b(i am|i['\u2019]m|my name is|my name['\u2019]s) juniper\\b",
+      "weight": 1
+    }
+  ],
+  "criteria": {
+    "adoption": "The bot takes each name it is given, and the second replaces the first.",
+    "addressing": "The bot answers to Biscuit after the rename and says Biscuit when asked its name.",
+    "persistence": "After the restart the bot still says its name is Biscuit, not Juniper."
+  },
+  "diagnostics": [
+    {
+      "check": "adopted_name",
+      "at": [
+        0,
+        0
+      ],
+      "name": "Juniper"
+    },
+    {
+      "check": "adopted_name",
+      "at": [
+        0,
+        1
+      ],
+      "name": "Biscuit"
+    },
+    {
+      "check": "addressed",
+      "at": [
+        0,
+        2
+      ],
+      "name": "Biscuit"
+    },
+    {
       "check": "recalled_name",
       "at": [
         1,
         0
       ],
-      "name": "Biscuit",
-      "weight": 2
+      "name": "Biscuit"
     },
     {
       "check": "addressed",
@@ -76,13 +109,7 @@
         1,
         0
       ],
-      "name": "Biscuit",
-      "weight": 1
+      "name": "Biscuit"
     }
-  ],
-  "criteria": {
-    "adoption": "The bot takes each name it is given, and the second replaces the first.",
-    "addressing": "The bot answers to Biscuit after the rename.",
-    "persistence": "After the restart the bot is still Biscuit, not Juniper."
-  }
+  ]
 }
