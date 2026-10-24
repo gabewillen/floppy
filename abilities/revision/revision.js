@@ -76,11 +76,42 @@ function builderRequest() {
   return ({spec: change_instructions, context: write, name: intent.name, model: model, min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms, apply: liveTurn()});
 }
 
+// Whether the lesson's intent carries an example and this turn's input
+// holds the message it replaces (a conversation's parent.data.content,
+// decision D213).
+function isProbe() {
+  var example = intent === null ? undefined : intent.example;
+  var parent = behavior_input === null ? undefined : behavior_input.parent;
+  return instruction !== null && typeof example === 'string' && example.length > 0 && parent !== null && typeof parent === 'object' && parent.data !== null && typeof parent.data === 'object' && typeof parent.data.content === 'string';
+}
+
+// This turn's input with the lesson's message replaced by its example,
+// where parent.data names it and in the conversation's message that
+// holds it.
+function probedInput() {
+  if (!probing) {
+    return behavior_input;
+  }
+  var probe = JSON.parse(JSON.stringify(behavior_input));
+  var lesson = probe.parent.data.content;
+  probe.parent.data.content = intent.example;
+  if (Array.isArray(probe.messages)) {
+    for (var i = probe.messages.length - 1; i >= 0; i--) {
+      var m = probe.messages[i];
+      if (m !== null && typeof m === 'object' && m.content === lesson) {
+        m.content = intent.example;
+        break;
+      }
+    }
+  }
+  return probe;
+}
+
 // The live turn the builder runs a turn behavior on (the live-turn
 // check, decision D131): this turn, its behavior_input as autonomy builds it, and the
 // sessions its output names (a learned behavior names its targets, D104).
 function liveTurn() {
-  return ({turn: turn, input: behavior_input, targets: outputTargets(), choices: turn_choices, handled: instruction === null});
+  return ({turn: turn, input: behavior_input, targets: outputTargets(), choices: turn_choices, handled: instruction === null || probing});
 }
 
 // The distinct targets of this turn's cognition_output, at most 32.
@@ -98,7 +129,7 @@ function builderConstraints() {
 // builds it, in model-facing XML: decision D201).
 function turnContract() {
   var contract = turn_contract.replace(/TRIGGERS|TARGETS|INPUT/g, function (m) { return m === 'INPUT' ? turn_input : namesText(m === 'TARGETS' ? outputTargets() : triggers); });
-  return instruction === null ? contract : contract + ' ' + lesson_contract;
+  return instruction === null ? contract : contract + ' ' + (probing ? probe_contract : lesson_contract);
 }
 
 // Names as a parenthesized, comma-separated list.

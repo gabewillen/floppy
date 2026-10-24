@@ -29,4 +29,13 @@
       <start uri="130/test130.scxml"/>
     </test>
   </assert>
+  <assert id="revision-5" specnum="5" specid="#revision-5">
+    <![CDATA[A lesson (`instruction`) whose intent carries an `example`, on a conversation turn, has the builder run the behavior on this turn's input with the lesson's message replaced by the example, which the behavior must handle (decision D213): a draft that answers the example is accepted, and one that declines it is refused on the live turn.]]>
+    <test id="140" conformance="mandatory" manual="false">
+      <start uri="140/test140.scxml"/>
+    </test>
+    <test id="141" conformance="mandatory" manual="false">
+      <start uri="141/test141.scxml"/>
+    </test>
+  </assert>
 </assertions>

@@ -1,0 +1,39 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "{\"name\":\"GreetOnKnock\",\"summary\":\"Answer a knock with a greeting.\",\"states\":[{\"id\":\"answering\",\"kind\":\"atomic\",\"parent\":\"\",\"purpose\":\"Decide the answer.\"},{\"id\":\"answered\",\"kind\":\"final\",\"parent\":\"\",\"purpose\":\"Carry the answer.\"}],\"events\":[],\"transitions\":[{\"source\":\"answering\",\"event\":\"\",\"target\":\"answered\",\"description\":\"Answer at once.\"}]}"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "{\"scxml\": \"<scxml xmlns=\\\"http://www.w3.org/2005/07/scxml\\\" version=\\\"1.0\\\" datamodel=\\\"ecmascript\\\" name=\\\"PingPong\\\" initial=\\\"deciding\\\">\\n  <datamodel>\\n    <data id=\\\"turn\\\" expr=\\\"0\\\"/>\\n    <data id=\\\"input\\\" expr=\\\"null\\\"/>\\n  </datamodel>\\n  <state id=\\\"deciding\\\">\\n    <transition cond=\\\"input !== null &amp;&amp; input.parent.data.content === 'ping'\\\" target=\\\"answered\\\"/>\\n    <transition target=\\\"declined\\\"/>\\n  </state>\\n  <final id=\\\"answered\\\">\\n    <donedata>\\n      <content expr=\\\"({turn: turn, handled: true, selected: [{event: 'bot.ability.communication.respond', target: 'communication', data: {parts: [{words: 'pong'}]}, reason: 'ping'}]})\\\"/>\\n    </donedata>\\n  </final>\\n  <final id=\\\"declined\\\">\\n    <donedata>\\n      <content expr=\\\"({turn: turn, handled: false, selected: []})\\\"/>\\n    </donedata>\\n  </final>\\n</scxml>\", \"schemas\": {\"$defs\": {}}, \"script\": \"\", \"tests\": [{\"name\": \"answers its turn\", \"events\": [], \"settle_ms\": 2000, \"expect_events\": [], \"expect_done\": true}]}"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

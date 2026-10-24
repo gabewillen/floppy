@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- revision-5: a lesson's draft that declines its example is refused on the live turn. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="revision" type="scxml" src="../../../revision.scx">
+    <param name="database" expr="'/memory/floppy.sqlite'"/>
+    <param name="intent" expr='({"event": "bot.behavior.create", "name": "PingPong", "triggers": ["bot.ability.conversation.output"], "description": "Say pong when the user says ping.", "reason": "The user taught it.", "source": null, "example": "ping"})'/>
+    <param name="intent_event" expr="'bot.behavior.create'"/>
+    <param name="create" expr="true"/>
+    <param name="turn" expr="1"/>
+    <param name="cognition_input" expr='{"stimulus": {"event": "bot.ability.conversation.output", "data": {"parent": {"data": {"content": "When I say ping, say pong."}}, "messages": [{"content": "When I say ping, say pong."}]}}, "focus": "gabe", "focus_candidates": ["gabe"]}'/>
+    <param name="cognition_output" expr="[{&quot;event&quot;: &quot;bot.ability.communication.respond&quot;, &quot;data&quot;: {&quot;parts&quot;: [{&quot;words&quot;: &quot;I'll remember that.&quot;}]}, &quot;reason&quot;: &quot;a lesson&quot;, &quot;target&quot;: &quot;communication&quot;}]"/>
+    <param name="instruction" expr='({"text": "When I say ping, say pong.", "kind": "instruction"})'/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.failed" cond='_event.data.message.indexOf("Reflection change abandoned: attempts exhausted:") === 0' target="step1"/>
+  </state>
+  <state id="step1">
+    <transition target="pass"/>
+  </state>
+  <transition event="builder.progress"/>
+  <transition event="generate.progress"/>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

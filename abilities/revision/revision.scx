@@ -95,6 +95,9 @@
     <!-- The lesson the revision implements, {text, kind}, when it was
          taught one (decision D149); null: none. -->
     <data id="instruction" expr="null"/>
+    <!-- Whether the builder's run is on the lesson's example in place of
+         its message (decision D213). -->
+    <data id="probing" expr="false"/>
     <!-- The turn's choices, [{event, schema, target?}]: the live-turn check
          holds the behavior's selections to them, and the builder's context
          carries them (decision D206). -->
@@ -137,6 +140,7 @@
          (decision D207): the teaching turn is not an instance of what the
          behavior answers. -->
     <data id="lesson_contract" expr="'This turn taught the behavior (instruction is the lesson): its message is the lesson itself, not something the behavior answers, so the builder\'s run on it may end with handled false, and this turn\'s cognition_output is the bot\'s acknowledgment of the lesson, never the behavior\'s output: the behavior answers what the lesson says to answer, with the reply the lesson asks for, and never acknowledges, repeats or selects the lesson.'"/>
+    <data id="probe_contract" expr="'This turn taught the behavior (instruction is the lesson), and its input above is the lesson\'s example: the lesson\'s message replaced by one message the behavior must answer, so the builder\'s run on it must end with handled true, as the contract says. This turn\'s cognition_output is the bot\'s acknowledgment of the lesson, never the behavior\'s output: the behavior answers what the lesson says to answer, with the reply the lesson asks for, and never acknowledges, repeats or selects the lesson.'"/>
     <!-- The persistent routine contract (lifetime persistent, every and at
          schedules): an at schedule's occurrences are computed in the
          routine's data model by next_after (revision.js), which
@@ -251,6 +255,10 @@
       <assign location="write" expr="changeWriteInputWithIntent()"/>
       <autonomy:behavior_input_payload location="behavior_input" stimulus="cognition_input.stimulus"
           focus="cognition_input.focus" focus_candidates="cognition_input.focus_candidates"/>
+      <!-- A lesson with an example: the run is on the example in place
+           of the lesson's message (decision D213). -->
+      <assign location="probing" expr="isProbe()"/>
+      <assign location="behavior_input" expr="probedInput()"/>
       <cognition:model_facing_data location="turn_input" root="input" data="behavior_input"/>
       <assign location="request" expr="builderRequest()"/>
       <assign location="request.constraints" expr="builderConstraints()"/>
