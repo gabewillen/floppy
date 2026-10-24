@@ -243,11 +243,11 @@ S.case(220, 13, "a turn that selects a lesson outputs it, and the lesson's resul
         output(1, f"_event.data.output.length === 1 && _event.data.output[0].event === {js(LEARN)}"),
         expect(INPUT, f"_event.data.stimulus.event === 'bot.ability.learning.output' && _event.data.stimulus.data.learned === false"
                       " && _event.data.stimulus.data.lesson === 'say hi back' && _event.data.stimulus.data.behavior === null")],
-       params=[SLOW], backend=[DECIDE_ABSTAIN, REASONED_LEARN], clock="logical", ignore=[OFFERS])
+       params=[SLOW], backend=[DECIDE_ABSTAIN, REASONED_LEARN], clock="logical")
 S.case(221, 13, "a routine's tick turn that selects a lesson outputs it but sends no lesson.",
        [READY, send(INPUT, turn(1, data={"name": "WaterReminder"}, choices=(IGNORE, LEARN), event="bot.behavior.tick", source="routines")),
-        output(1, f"_event.data.output.length === 1 && _event.data.output[0].event === {js(LEARN)}"), READY],
-       params=[SLOW], backend=[DECIDE_ABSTAIN, REASONED_LEARN], clock="logical", ignore=[OFFERS],
+        output(1, f"_event.data.output.length === 1 && _event.data.output[0].event === {js(LEARN)}"), OFFERED],
+       params=[SLOW], backend=[DECIDE_ABSTAIN, REASONED_LEARN], clock="logical",
        logs={"cognition.lesson": ["turn 1", "bounded"]})
 
 S.statement(12, "With no input for `rest_after_ms` (the `<param>`, else the `bounds`' `rest_after_ms`; 5 minutes by default) `idle` rests (decisions D195 and D205): it logs `cognition.rest` `resting` and invokes the consolidation with its database (with none there is nothing to consolidate, logged `cognition.consolidated`), and stays at rest until input, which leaves rest at once (`cognition.rest` `awake`, cancelling a consolidation in progress) and is taken as a normal turn.")

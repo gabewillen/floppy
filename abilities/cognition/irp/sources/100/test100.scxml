@@ -17,7 +17,7 @@
     <onentry>
       <decision:offers location="offers" target="'#_cognition'"/>
     </onentry>
-    <transition cond="offers.length === 1 &amp;&amp; offers[0].event === &quot;bot.ability.cognition.ignore&quot; &amp;&amp; offers[0].effort === undefined &amp;&amp; offers[0].schema.type === 'object'" target="step2"/>
+    <transition cond="offers.length === 2 &amp;&amp; offers.map(function (o) { return o.event; }).sort().join(' ') === &quot;bot.ability.cognition.ignore bot.ability.learning.input&quot; &amp;&amp; offers.every(function (o) { return o.effort === undefined &amp;&amp; o.schema.type === 'object'; })" target="step2"/>
     <transition target="fail"><log label="unexpected" expr="'offers ' + JSON.stringify(offers)"/></transition>
   </state>
   <state id="step2">
