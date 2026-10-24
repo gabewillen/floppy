@@ -366,6 +366,74 @@ fn the_lifetime_check_reads_the_document_as_xml() {
     );
 }
 
+/// A schedule sent to a literal target never reaches the routine (the
+/// Sparks builder's `#_self`, which never armed in the room, decision
+/// D147): it is a diagnostic, and a schedule with no target is not.
+#[test]
+fn a_schedule_with_a_target_is_a_lifetime_error() {
+    let routine = |target: &str| {
+        format!(
+            r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+  <state id="wait">
+    <onentry><send event="timer.expire"{target} delay="60s" id="t"/></onentry>
+    <transition event="timer.expire" target="wait"><send event="bot.behavior.tick" target="#_parent"/></transition>
+  </state>
+</scxml>"##
+        )
+    };
+    let misdirected = lifetime_errors(
+        &routine(r##" target="#_self""##),
+        Some(60000.0),
+        Some(1000.0),
+    );
+    assert_eq!(misdirected.lifetime, "persistent");
+    assert_eq!(misdirected.schedules, ["timer.expire"]);
+    assert_eq!(misdirected.errors.len(), 1, "{:?}", misdirected.errors);
+    assert!(
+        misdirected.errors[0]["message"]
+            .as_str()
+            .is_some_and(|message| message.starts_with(
+                "the timer.expire schedule is sent to #_self, so it never reaches the routine"
+            )),
+        "{:?}",
+        misdirected.errors
+    );
+    let own = lifetime_errors(&routine(""), Some(60000.0), Some(1000.0));
+    assert_eq!(own.errors, Vec::<Json>::new());
+}
+
+/// A schedule whose send carries an `event:schema` fails that check when
+/// it sends no data, and the routine never arms (the Sparks builder's
+/// `StretchBreakReminder`, decision D152): it is a diagnostic, and the
+/// same schema on the transition that takes the schedule is not.
+#[test]
+fn a_schedule_with_a_schema_is_a_lifetime_error() {
+    let routine = |send: &str, transition: &str| {
+        format!(
+            r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:ev="https://github.com/stateforward/scxml.rs/namespaces/event" version="1.0">
+  <state id="wait">
+    <onentry><send event="tick.every"{send} delay="60s" id="t"/></onentry>
+    <transition event="tick.every"{transition} target="wait"><send event="bot.behavior.tick" target="#_parent"/></transition>
+  </state>
+</scxml>"##
+        )
+    };
+    let schema = r#" ev:schema="R.json#/$defs/tick.every""#;
+    let checked = lifetime_errors(&routine(schema, ""), Some(60000.0), Some(1000.0));
+    assert_eq!(checked.schedules, ["tick.every"]);
+    assert_eq!(checked.errors.len(), 1, "{:?}", checked.errors);
+    assert!(
+        checked.errors[0]["message"]
+            .as_str()
+            .is_some_and(|message| message
+                .starts_with("the tick.every schedule's send carries event:schema")),
+        "{:?}",
+        checked.errors
+    );
+    let taken = lifetime_errors(&routine("", schema), Some(60000.0), Some(1000.0));
+    assert_eq!(taken.errors, Vec::<Json>::new());
+}
+
 #[test]
 fn malformed_lifetime_checks_raise_error_execution_and_assign_nothing() {
     assert_eq!(
@@ -650,4 +718,35 @@ fn a_malformed_verify_apply_element_raises_error_execution_and_assigns_nothing()
         "behavior:verify_apply could not assign the messages"
     );
     assert!(host.assigned.is_empty());
+}
+
+/// The forced tick's copy of a routine (decision D153) shortens only its
+/// schedules, `delay` or `delayexpr`, to 1500ms, and keeps every other byte:
+/// the routine's own send must fire its first tick.
+#[test]
+fn the_forced_tick_copy_shortens_only_the_schedules() {
+    let routine = r##"<?xml version="1.0"?>
+<!-- a routine -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:ev="https://github.com/stateforward/scxml.rs/namespaces/event" version="1.0">
+  <state id="wait">
+    <onentry>
+      <send event="tick.every" id="t" delay="3600s"/>
+      <send event="tick.at" delayexpr="untilEight()"><param name="n" expr="1"/></send>
+      <send event="settle" delay="2s"/>
+    </onentry>
+    <transition event="tick.every tick.at" ev:schema="R.json#/$defs/tick" target="wait"><send event="bot.behavior.tick" target="#_parent"/></transition>
+    <transition event="settle"><log expr="'a &amp; b'"/></transition>
+  </state>
+</scxml>"##;
+    let copy = forced_tick_copy(routine).expect("the routine parses");
+    assert_eq!(
+        copy,
+        routine
+            .replace(r#"id="t" delay="3600s""#, r#"id="t" delay="1500ms""#)
+            .replace(
+                r#"<send event="tick.at" delayexpr="untilEight()">"#,
+                r#"<send event="tick.at" delay="1500ms">"#
+            )
+    );
+    assert_eq!(forced_tick_copy("<scxml"), None);
 }

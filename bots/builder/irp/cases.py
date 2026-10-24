@@ -47,7 +47,7 @@ PINGER = """<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="https://
 INVALID = PINGER.replace('target="done"', 'target="nowhere"')
 # SCXML013 (a machine-applicable fix): a comma-separated descriptor list.
 FIXABLE = PINGER.replace('event="ping" event:schema="pinger.json#/$defs/ping"', 'event="ping,poke"')
-PING_TEST = {"name": "a ping is answered", "events": [{"name": "ping", "data": "{}", "delay_ms": 0}],
+PING_TEST = {"name": "a ping is answered", "events": [{"name": "ping", "data": {}, "delay_ms": 0}],
              "settle_ms": 1000, "expect_events": ["pong"], "expect_done": True}
 
 
@@ -127,11 +127,11 @@ def built(extra=""):
                         " && _event.data.report.simulation.every(function (r) { return r.passed; })" + (f" && {extra}" if extra else ""))
 
 
-S.statement(1, "It waits in `intake` for `builder.request` `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?}`; data its schema refuses is refused at the sender (its send raises `error.execution` there) and the builder keeps waiting; a request whose spec is only whitespace ends in the final state `failed` with `{reason: \"invalid-request\", diagnostics: [{kind: \"request\", code: \"invalid-request\"}]}`, which the invoker receives as `done.invoke.<id>`.")
+S.statement(1, "It waits in `intake` for `builder.request` `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?, document_max_completion_tokens?}`; data its schema refuses is refused at the sender (its send raises `error.execution` there) and the builder keeps waiting; a request whose spec is only whitespace ends in the final state `failed` with `{reason: \"invalid-request\", diagnostics: [{kind: \"request\", code: \"invalid-request\"}]}`, which the invoker receives as `done.invoke.<id>`.")
 S.statement(2, "A request is planned (`design`, schema `topology_plan`), authored (`author`, schema `scxml_draft`: its `scxml`, `schemas` and `script`), written as `<name>.scx`, `<name>.json` and `<name>.js` through the files service (`writing`; the request's `name`, else the plan's; decision D121), validated (`validate`) and simulated (`simulate`, each test script driving the draft as an invoked child by `srcexpr` on its path); a draft that validates and passes every test ends in the final state `done` with `{scxml, schemas, script, path, tests, report: {attempts, failures, fixes_applied, warnings, plan, decisions, history, simulation}}`, `path` `../../behaviors/<name>.scx`.")
 S.statement(3, "A draft whose validator errors all have machine-applicable fixes is fixed (`apply_fixes`, at most 2 passes per draft) and validated again, without a new attempt: `report.fixes_applied` counts it.")
 S.statement(4, "Every failure goes through `retry_gate`, then `triage`, which asks the decision service to choose among its enabled transitions: `triage.repair` authors the draft again from the same plan (`report.decisions` `[\"triage.repair\"]`), `triage.redesign` plans again, `triage.abandon` ends in `failed` `{reason: \"abandoned\"}`. When the decision is unavailable it falls back (`fallback`): repair when there is a plan, else redesign.")
-S.statement(5, "A failure with any diagnostic an earlier failure of the build had, consecutive or not (decision D124), ends in `failed` `{reason: \"no-progress\"}` with those diagnostics and, when a check rejected a draft, its `scxml`; at the request's `max_attempts` failures it ends in `failed` `{reason: \"attempts-exhausted\"}`.")
+S.statement(5, "A failure with a diagnostic an earlier failure of the build had does not end the build (decision D133); at `max_attempts` failures, 8 unless the request sets it, it ends in `failed` `{reason: \"attempts-exhausted\"}` with the last diagnostics and, when a check rejected a draft, its `scxml`.")
 S.statement(6, "Each check has its own diagnostics: a validator error (`kind` `validate`, its code), a draft that cannot be written (`draft` `write-failed`), test scripts out of bounds (`draft` `tests-out-of-bounds`, one to eight), and a test whose outputs or done differ from its expectations (`simulate` `test-failed`).")
 S.statement(7, "A generation that fails (`generate.failed`) is a `generate` diagnostic `<stage>-failed`; one that runs `generate_ceiling_ms` in all, or, once its reply streams, makes no progress for `generate_timeout_ms` (the first `generate.progress` arms it, each later one re-arms it), is cancelled, a `timeout` diagnostic `<stage>-timeout` (decision D101).")
 S.statement(8, "With the request's lifetime bounds (`min_every_ms`, `turn_after_bound_ms`), a draft that sends `bot.behavior.tick` (a persistent routine) whose schedule is shorter than `min_every_ms` is a `lifetime` diagnostic `E0009`; a routine within the bounds also gets a forced first tick, whose output must select at least one event (else an `apply` diagnostic `E0008`).")
@@ -182,9 +182,9 @@ S.case(134, 4, "the decision unavailable and no plan yet (the plan generation fa
               " && JSON.stringify(_event.data.report.decisions) === '[\"fallback:unavailable\"]' && _event.data.report.plan.name === 'pinger'")],
        backend=[chat(status=500), PLAN, draft(PINGER)], clock="wall")
 
-S.case(140, 5, "the same validator error twice is no progress: failed with the rejected draft.",
+S.case(140, 5, "the same validator error every time goes on to the default cap of 8: attempts-exhausted with the rejected draft.",
        [send(REQUEST, request()),
-        failed("no-progress", diagnostic("validate", "SCXML005") + " && _event.data.scxml.indexOf('nowhere') >= 0 && _event.data.history.length === 2")],
+        failed("attempts-exhausted", diagnostic("validate", "SCXML005") + " && _event.data.scxml.indexOf('nowhere') >= 0 && _event.data.history.length === 8")],
        backend=[PLAN, draft(INVALID)], clock="wall")
 S.case(141, 5, "max_attempts 1 ends at the first failure: attempts-exhausted.",
        [send(REQUEST, request(max_attempts=1)),
@@ -204,9 +204,9 @@ S.case(152, 6, "a test whose expected outputs never come is a simulate test-fail
         failed("attempts-exhausted", diagnostic("simulate", "test-failed") + " && _event.data.scxml.indexOf('pinger') >= 0")],
        backend=[PLAN, draft(PINGER, tests=[dict(PING_TEST, expect_events=["pang"])])], clock="wall")
 
-S.case(160, 7, "a design generation that fails is a generate design-failed diagnostic; twice is no progress, with no draft.",
-       [send(REQUEST, request()),
-        failed("no-progress", diagnostic("generate", "design-failed") + " && _event.data.scxml === undefined")],
+S.case(160, 7, "a design generation that fails is a generate design-failed diagnostic; at max_attempts 2, with no draft.",
+       [send(REQUEST, request(max_attempts=2)),
+        failed("attempts-exhausted", diagnostic("generate", "design-failed") + " && _event.data.scxml === undefined && _event.data.history.length === 2")],
        backend=[chat(status=500)], clock="wall")
 S.case(161, 7, "an author generation that fails is a generate author-failed diagnostic.",
        [send(REQUEST, request(max_attempts=1)),

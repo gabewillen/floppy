@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/bots/builder/irp/sources">
   <assert id="builder-1" specnum="1" specid="#builder-1">
-    <![CDATA[It waits in `intake` for `builder.request` `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?}`; data its schema refuses is refused at the sender (its send raises `error.execution` there) and the builder keeps waiting; a request whose spec is only whitespace ends in the final state `failed` with `{reason: "invalid-request", diagnostics: [{kind: "request", code: "invalid-request"}]}`, which the invoker receives as `done.invoke.<id>`.]]>
+    <![CDATA[It waits in `intake` for `builder.request` `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?, document_max_completion_tokens?}`; data its schema refuses is refused at the sender (its send raises `error.execution` there) and the builder keeps waiting; a request whose spec is only whitespace ends in the final state `failed` with `{reason: "invalid-request", diagnostics: [{kind: "request", code: "invalid-request"}]}`, which the invoker receives as `done.invoke.<id>`.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -42,7 +42,7 @@
     </test>
   </assert>
   <assert id="builder-5" specnum="5" specid="#builder-5">
-    <![CDATA[A failure with any diagnostic an earlier failure of the build had, consecutive or not (decision D124), ends in `failed` `{reason: "no-progress"}` with those diagnostics and, when a check rejected a draft, its `scxml`; at the request's `max_attempts` failures it ends in `failed` `{reason: "attempts-exhausted"}`.]]>
+    <![CDATA[A failure with a diagnostic an earlier failure of the build had does not end the build (decision D133); at `max_attempts` failures, 8 unless the request sets it, it ends in `failed` `{reason: "attempts-exhausted"}` with the last diagnostics and, when a check rejected a draft, its `scxml`.]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>

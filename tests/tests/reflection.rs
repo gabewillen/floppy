@@ -396,17 +396,6 @@ impl Mock {
     }
 }
 
-fn copy_dir(from: &Path, to: &Path) {
-    std::fs::create_dir_all(to).expect("the directory is creatable");
-    for entry in std::fs::read_dir(from).expect("the directory is readable") {
-        let path = entry.expect("a directory entry").path();
-        if path.is_file() {
-            std::fs::copy(&path, to.join(path.file_name().expect("a file name")))
-                .expect("the file is copyable");
-        }
-    }
-}
-
 /// The harness's SQLite database, in the directory each run is granted.
 const SQLITE: &str = "/memory/floppy.sqlite";
 
@@ -428,11 +417,7 @@ fn layout_bounded(
 ) -> (PathBuf, PathBuf) {
     let dir = unique_scratch("reflection");
     support::copy_tree(&workspace().join("abilities"), &dir.join("abilities"));
-    copy_dir(&workspace().join("bots/builder"), &dir.join("bots/builder"));
-    copy_dir(
-        &workspace().join("bots/builder/schemas"),
-        &dir.join("bots/builder/schemas"),
-    );
+    support::copy_tree(&workspace().join("bots/builder"), &dir.join("bots/builder"));
     let harness = std::fs::read_to_string(
         workspace().join("tests/fixtures/phase5/reflection_harness.scx"),
     )
@@ -1095,7 +1080,7 @@ fn a_create_whose_draft_hardcodes_an_input_value_is_abandoned() {
     assert_eq!(failed.len(), 1, "{records:?}");
     assert!(
         failed[0].starts_with(
-            "Reflection change abandoned: same diagnostic message after fix:\nbehavior validation failed:\n  error[E0008] apply: selection data[\"label\"]=\"doorbell\" does not match live event value \"knock\"; read identifiers from input at runtime."
+            "Reflection change abandoned: attempts exhausted:\nbehavior validation failed:\n  error[E0008] apply: selection data[\"label\"]=\"doorbell\" does not match live event value \"knock\"; read identifiers from input at runtime."
         ),
         "{failed:?}"
     );
@@ -1231,7 +1216,7 @@ fn a_failed_build_leaves_a_validation_draft_on(database: &str) {
     assert_eq!(failed.len(), 1, "{records:?}");
     assert!(
         failed[0].starts_with(
-            "Reflection change abandoned: same diagnostic message after fix:\nbehavior validation failed:\n  error[SCXML005] validate: "
+            "Reflection change abandoned: attempts exhausted:\nbehavior validation failed:\n  error[SCXML005] validate: "
         ),
         "{failed:?}"
     );
@@ -1334,8 +1319,9 @@ fn a_failed_change_call_drafts_nothing_on(database: &str) {
     let failed = texts(&records, "harness.failed");
     assert_eq!(failed.len(), 1, "{records:?}");
     assert!(
-        failed[0]
-            .starts_with("Reflection revision failed: no-progress: the author generation failed"),
+        failed[0].starts_with(
+            "Reflection revision failed: attempts-exhausted: the author generation failed"
+        ),
         "{failed:?}"
     );
     assert!(

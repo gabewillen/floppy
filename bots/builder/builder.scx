@@ -34,16 +34,19 @@
   min_every_ms and turn_after_bound_ms, the lifetime bounds, E0009,
   <behavior:lifetime_errors>) -> simulate (each test script drives the draft as an invoked
   child, by <invoke srcexpr> on its path, with its own invoke id; with those bounds, a persistent routine,
-  a draft that sends bot.behavior.tick, also gets its first schedule's
-  event at once and must tick with a selection (the forced tick, E0008,
+  a draft that sends bot.behavior.tick, also runs as its forced tick copy
+  (<name>.tick.scx, written by writing_tick: each schedule 1500 ms away, sent
+  nothing, so its own schedule send must arm and fire, decision D153) and
+  must tick with a selection within 2 s (the forced tick, E0008,
   <behavior:verify_tick>); and, with the request's apply, a turn behavior
   (one that sends no bot.behavior.tick) also runs once on that live turn, as the
   candidates runner runs it, by <invoke srcexpr> with the params turn and input,
   within min(turn_after_bound_ms, 2000) ms, and <behavior:verify_apply> checks its
   donedata, the live-turn check of a turn behavior, E0008, decision D131) -> done. Every failure goes through retry_gate, which takes its
-  fingerprint and gives up (no-progress) when any of its diagnostics is one an
-  earlier failure of the build had, consecutive or not (decision D124), or at
-  the request's optional max_attempts; triage then reads its enabled
+  fingerprint, marks the diagnostics an earlier failure of the build already
+  had as repeated for the next author call, and ends the build
+  (attempts-exhausted) at max_attempts failures, 8 unless the request sets
+  it (decision D133, replacing D124's end at the first repeat); triage then reads its enabled
   event:schema transitions with decision:choice and invokes the decision
   service to pick one (repair while there is a plan, redesign, abandon).
   When the decision is unavailable (no key granted, backend failure:
@@ -104,8 +107,8 @@
     <!-- The name the draft's documents are written under (the plan's
          name unless the request names one). -->
     <data id="name" expr="null"/>
-    <!-- An optional failure cap; null (no cap) unless the request sets it. -->
-    <data id="max_attempts" expr="null"/>
+    <!-- The failure cap (decision D133): the request's, else 8. -->
+    <data id="max_attempts" expr="8"/>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
     <!-- A generation's inactivity bound (a streamed reply's progress starts
          it over) and its backstop (decision D101). -->
@@ -117,8 +120,12 @@
     <data id="max_completion_tokens" expr="8192"/>
     <!-- The author call's token bound: a whole document needs more than
          8192 tokens, which truncated whole documents on 2026-10-21
-         (decision D131); design keeps max_completion_tokens. -->
+         (decision D131); design keeps max_completion_tokens. The request
+         may set it, and an author generation that is truncated doubles it
+         for the next author call, up to document_token_ceiling (decision
+         D135: a reasoning model spends its bound on reasoning first). -->
     <data id="document_max_completion_tokens" expr="16384"/>
+    <data id="document_token_ceiling" expr="65536"/>
     <!-- Where the builder reports its progress (a stage entered, a
          generation's reply arriving) as builder.progress: '#_parent' for an
          invoker that bounds the build by inactivity, null for none. -->
@@ -149,6 +156,10 @@
          and a persistent routine's schedule events, in document order. -->
     <data id="lifetime" expr="'turn'"/>
     <data id="schedules" expr="[]"/>
+    <!-- The forced tick's copy of the draft: each schedule's delay
+         shortened, so its own send must fire the first tick (decision
+         D153). -->
+    <data id="tick_scxml" expr="null"/>
     <!-- The last draft a check rejected (the failed donedata's scxml). -->
     <data id="rejected" expr="null"/>
     <!-- Model calls: the invocation in flight, its failure code, and the
@@ -161,10 +172,14 @@
     <data id="choices" expr="[]"/>
     <data id="stage_run" expr="0"/>
     <data id="design_system" expr="'You are the design stage of the floppy builder bot. Plan the topology of one SCXML 1.0 state machine that implements the specification and honours every constraint. Use concise lowercase state ids (letters, digits, underscores). Name events with dotted lowercase names. Inputs are events the machine receives from its invoker; outputs are events it sends to its invoker. Model timing with delayed timer events, never with loops. Answer with exactly one call of topology_plan. When diagnostics or a previous plan are given, the previous attempt failed: plan again so that it cannot fail the same way. Answer with the plan only.'"/>
-    <data id="author_system" expr="'You are the author stage of the floppy builder bot. Write one complete SCXML 1.0 document that implements the plan and the specification, and answer with exactly one call of scxml_draft that holds it (never a second call, a placeholder or a partial draft); where the constraints and these rules differ, the constraints win. Rules: scxml is the whole document text, from its root element to its end, never escaped, abbreviated, wrapped in CDATA or a code fence, nor a diff of a previous draft; the root element is scxml in the namespace http://www.w3.org/2005/07/scxml with version 1.0 and datamodel ecmascript; give each input event a JSON Schema in schemas, under $defs keyed by the event name, and reference it on the transitions that take it with the schema attribute of the namespace https://github.com/stateforward/scxml.rs/namespaces/event (bound to the prefix event) as NAME.json#/$defs/EVENT, where NAME is the name given and EVENT the event name; every cond and every expr that is more than a literal, an identifier or a dotted path calls a function of script (for example cond=&quot;isPing(input)&quot; and expr=&quot;selections(input)&quot;), so no attribute holds &amp;, &lt;, &gt; or a statement; script is plain ECMAScript: the function declarations those calls name, which read the values they are given and return a value, or empty when nothing calls one; when script is not empty the root holds exactly one script element, its first child after datamodel, with src NAME.js and no content, and the document holds no other script element; a state has an initial attribute or initial element only when it has child states; every transition target is a state id exactly as declared, with no # before it; executable content (assign, send, raise, if, elseif, else, log, foreach, cancel) appears only inside onentry, onexit or transition, if takes cond, foreach takes array and item, send takes one of event and eventexpr and one of target and targetexpr; event descriptors are separated by spaces, never commas; an output is an event the machine sends to its invoker with a send element whose target is #_parent, exactly once per occurrence (announce a state from its own onentry, not also from the transitions into it), and a machine that sends nothing to its invoker has no outputs: its result is the donedata of its final state; the machine starts on its own in its initial state unless the specification names a start event, and decides on its own with eventless transitions (no event attribute, taken as soon as their cond holds), never by waiting for an event nothing sends it; every state is reachable; implement timing with delayed sends (for example delay 3s) and cancel pending timers on exit. Also return tests: one to eight test scripts, each with input events (name, data as JSON object text or the empty string, delay_ms from the start of the test), settle_ms (the total observation time from the start of the test, larger than every delay_ms), expect_events (the output event names the machine must send to #_parent, in order; other outputs may appear between them; never an event sent to another target, and never the donedata, which a test cannot observe), and expect_done (whether the machine reaches a top-level final state within settle_ms; a machine that cycles forever never does). A test invokes the machine with no param, so each data item keeps the value of its own expr, and sends it only the test events, so expect only what the machine does with those values; when the request gives a live turn, the builder itself also runs a machine that never sends bot.behavior.tick once with the params turn and input of that turn, as its invoker will, and requires it to reach a top-level final state at once whose donedata is {turn, handled: true, selected} with at least one selection, each naming one of the targets of that turn and carrying data that agrees with the same-named fields of input, so the tests need not repeat that run. A machine that finishes ends in a final element that is a child of scxml itself; a final inside a state only completes that state. When the task is repair, previous_scxml, previous_schemas, previous_script and previous_tests failed with the given diagnostics, each validate diagnostic rendered with the line and column of previous_scxml it marks: a simulate diagnostic means either the machine or the test expectation is wrong, so fix whichever disagrees with the specification and the constraints, fix every other diagnostic at the place it marks, and keep what already works.'"/>
+    <data id="author_system" expr="'You are the author stage of the floppy builder bot. Write one complete SCXML 1.0 document that implements the plan and the specification, and answer with exactly one call of scxml_draft that holds it (never a second call, a placeholder or a partial draft); where the constraints and these rules differ, the constraints win. Rules: scxml is the whole document text, from its root element to its end, never escaped, abbreviated, wrapped in CDATA or a code fence, nor a diff of a previous draft; the root element is scxml in the namespace http://www.w3.org/2005/07/scxml with version 1.0 and datamodel ecmascript; give each input event a JSON Schema in schemas, under $defs keyed by the event name, and reference it on the transitions that take it with the schema attribute of the namespace https://github.com/stateforward/scxml.rs/namespaces/event (bound to the prefix event) as NAME.json#/$defs/EVENT, where NAME is the name given and EVENT the event name; every cond and every expr that is more than a literal, an identifier or a dotted path calls a function of script (for example cond=&quot;isPing(input)&quot; and expr=&quot;selections(input)&quot;), so no attribute holds &amp;, &lt;, &gt; or a statement; script is plain ECMAScript: the function declarations those calls name, which read the values they are given and return a value, or empty when nothing calls one; when script is not empty the root holds exactly one script element, its first child after datamodel, with src NAME.js and no content, and the document holds no other script element; a state has an initial attribute or initial element only when it has child states; every transition target is a state id exactly as declared, with no # before it; executable content (assign, send, raise, if, elseif, else, log, foreach, cancel) appears only inside onentry, onexit or transition, if takes cond, foreach takes array and item, send takes one of event and eventexpr and one of target and targetexpr; event descriptors are separated by spaces, never commas; an output is an event the machine sends to its invoker with a send element whose target is #_parent, exactly once per occurrence (announce a state from its own onentry, not also from the transitions into it), and a machine that sends nothing to its invoker has no outputs: its result is the donedata of its final state; the machine starts on its own in its initial state unless the specification names a start event, and decides on its own with eventless transitions (no event attribute, taken as soon as their cond holds), never by waiting for an event nothing sends it; every state is reachable; implement timing with delayed sends (for example delay 3s) and cancel pending timers on exit. Also return tests: one to eight test scripts, each with input events (name, data the event\'s data object, {} for none, delay_ms from the start of the test), settle_ms (the total observation time from the start of the test, larger than every delay_ms), expect_events (the output event names the machine must send to #_parent, in order; other outputs may appear between them; never an event sent to another target, and never the donedata, which a test cannot observe), and expect_done (whether the machine reaches a top-level final state within settle_ms; a machine that cycles forever never does). A test invokes the machine with no param, so each data item keeps the value of its own expr, and sends it only the test events, so expect only what the machine does with those values; when the request gives a live turn, the builder itself also runs a machine that never sends bot.behavior.tick once with the params turn and input of that turn, as its invoker will, and requires it to reach a top-level final state at once whose donedata is {turn, handled: true, selected} with at least one selection, each naming one of the targets of that turn and carrying data that agrees with the same-named fields of input, so the tests need not repeat that run. A machine that finishes ends in a final element that is a child of scxml itself; a final inside a state only completes that state. When the task is repair, previous_scxml, previous_schemas, previous_script and previous_tests failed with the given diagnostics, each validate diagnostic rendered with the line and column of previous_scxml it marks and, in schema, what the SCXML schema declares for the element it marks (its attributes, its content and the element): a simulate diagnostic means either the machine or the test expectation is wrong, so fix whichever disagrees with the specification and the constraints, fix every other diagnostic at the place it marks, and keep what already works; repeated lists the diagnostics an earlier draft of this build already failed with, so the fix tried for them did not work: fix those another way.'"/>
+    <!-- The W3C SCXML 1.0 schema, its modules without comments or
+         annotations (decision D134): the author writes against it, and
+         validate holds the draft to it and to scxml.rs's own rules. -->
+    <data id="scxml_xsd" src="xsd/scxml-1.0.json"/>
     <data id="triage_instructions" expr="'An SCXML draft failed. Choose how the builder continues: repair the draft from its diagnostics when they are local mistakes, redesign the plan when the diagnostics show the topology is wrong or there is no plan, abandon only when the specification cannot be built as a state machine.'"/>
     <data id="plan_schema" expr='({"type":"object","properties":{"name":{"type":"string"},"summary":{"type":"string"},"states":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"kind":{"type":"string","enum":["atomic","compound","parallel","final"]},"parent":{"type":"string"},"purpose":{"type":"string"}},"required":["id","kind","parent","purpose"],"additionalProperties":false}},"events":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"direction":{"type":"string","enum":["input","output","internal"]},"description":{"type":"string"}},"required":["name","direction","description"],"additionalProperties":false}},"transitions":{"type":"array","items":{"type":"object","properties":{"source":{"type":"string"},"event":{"type":"string"},"target":{"type":"string"},"description":{"type":"string"}},"required":["source","event","target","description"],"additionalProperties":false}}},"required":["name","summary","states","events","transitions"],"additionalProperties":false})'/>
-    <data id="draft_schema" expr='({"type":"object","description":"The one SCXML draft (call this function exactly once): its document, its input events schemas, its script and its test scripts.","properties":{"scxml":{"type":"string","description":"The whole SCXML document text, from its root element scxml to its end tag: never escaped, abbreviated, wrapped in CDATA or a code fence, nor a diff."},"schemas":{"type":"object","properties":{"$defs":{"type":"object","additionalProperties":{"type":"object"}}},"required":["$defs"],"additionalProperties":false},"script":{"type":"string"},"tests":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"events":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"data":{"type":"string"},"delay_ms":{"type":"integer"}},"required":["name","data","delay_ms"],"additionalProperties":false}},"settle_ms":{"type":"integer"},"expect_events":{"type":"array","description":"The names of the events the machine sends to #_parent, in order; never the donedata.","items":{"type":"string"}},"expect_done":{"type":"boolean"}},"required":["name","events","settle_ms","expect_events","expect_done"],"additionalProperties":false}}},"required":["scxml","schemas","script","tests"],"additionalProperties":false})'/>
+    <data id="draft_schema" expr='({"type":"object","description":"The one SCXML draft (call this function exactly once): its document, its input events schemas, its script and its test scripts.","properties":{"scxml":{"type":"string","description":"The whole SCXML document text, from its root element scxml to its end tag: never escaped, abbreviated, wrapped in CDATA or a code fence, nor a diff."},"schemas":{"type":"object","properties":{"$defs":{"type":"object","additionalProperties":{"type":"object"}}},"required":["$defs"],"additionalProperties":false},"script":{"type":"string"},"tests":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"events":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"data":{"type":"object","description":"The event data object; {} for none."},"delay_ms":{"type":"integer"}},"required":["name","data","delay_ms"],"additionalProperties":false}},"settle_ms":{"type":"integer"},"expect_events":{"type":"array","description":"The names of the events the machine sends to #_parent, in order; never the donedata.","items":{"type":"string"}},"expect_done":{"type":"boolean"}},"required":["name","events","settle_ms","expect_events","expect_done"],"additionalProperties":false}}},"required":["scxml","schemas","script","tests"],"additionalProperties":false})'/>
     <!-- Counters. -->
     <data id="attempt" expr="0"/>
     <data id="failures" expr="0"/>
@@ -186,6 +201,10 @@
          rest are the builder's own or a namespace's). -->
     <data id="fingerprint" expr="[]"/>
     <data id="fingerprints" expr="[]"/>
+    <!-- The failure's diagnostics an earlier failure already had (retry_gate,
+         decision D133): the next author call is told its earlier fix of them
+         did not work. -->
+    <data id="repeated" expr="[]"/>
     <!-- Simulation. -->
     <data id="max_tests" expr="8"/>
     <data id="sim_test_cap_ms" expr="120000"/>
@@ -226,6 +245,7 @@
       <assign location="constraints" expr="requestConstraints(_event)"/>
       <assign location="name" expr="requestName(_event)"/>
       <assign location="max_attempts" expr="requestMaxAttempts(_event)"/>
+      <assign location="document_max_completion_tokens" expr="requestDocumentTokens(_event)"/>
       <assign location="model" expr="requestModel(_event)"/>
       <assign location="generate_timeout_ms" expr="requestGenerateTimeoutMs(_event)"/>
       <assign location="generate_ceiling_ms" expr="requestGenerateCeilingMs(_event)"/>
@@ -350,7 +370,7 @@
     <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
             env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL" env:stream="FLOPPY_STREAM">
       <param name="model" expr="model"/>
-      <param name="system" expr="author_system"/>
+      <param name="system" expr="authorSystem()"/>
       <param name="prompt" expr="authorPrompt()"/>
       <param name="schema" expr="draft_schema"/>
       <param name="schemaname" expr="'scxml_draft'"/>
@@ -391,6 +411,7 @@
     </transition>
     <transition event="done.invoke" cond="isFrom(_event, gen_id)" target="retry_gate">
       <assign location="diagnostics" expr="generationFailedDiagnostics('author', 'draft')"/>
+      <assign location="document_max_completion_tokens" expr="grownDocumentTokens()"/>
     </transition>
     <transition event="builder.timeout" cond="isOwnEvent(_event, stage_run)" target="retry_gate">
       <assign location="diagnostics" expr="generationTimeoutDiagnostics('author')"/>
@@ -451,7 +472,7 @@
       <assign location="fixed" expr="null"/>
       <behavior:lifetime_errors location="lifetime_errors" scxml="scxml_text"
           min_every="min_every_ms" turn_after_bound="turn_after_bound_ms"
-          lifetimelocation="lifetime" scheduleslocation="schedules"/>
+          lifetimelocation="lifetime" scheduleslocation="schedules" ticklocation="tick_scxml"/>
       <scx:validate location="report" expr="scxml_text" name="draft.scx"
                    applyfixes="machine-applicable" fixedlocation="fixed"/>
       <assign location="script_errors" expr="scriptErrors()"/>
@@ -464,6 +485,9 @@
     <!-- The lifetime check: E0009 when the request names the bounds. -->
     <transition cond="hasLifetimeErrors()" target="retry_gate">
       <assign location="diagnostics" expr="lifetime_errors"/>
+    </transition>
+    <transition cond="isReadyToTick()" target="writing_tick">
+      <assign location="warnings" expr="report.validator.counts.warnings"/>
     </transition>
     <transition cond="isReadyToSimulate()"
                 target="simulate">
@@ -479,6 +503,21 @@
     </transition>
     <transition event="error.execution" target="retry_gate">
       <assign location="diagnostics" expr="validatorFailedDiagnostics()"/>
+    </transition>
+  </state>
+
+  <!-- Writes a persistent routine's forced tick copy, <name>.tick.scx,
+       beside the draft (decision D153): the forced tick runs it, so the
+       routine's own schedule send must arm and fire, not an event the
+       builder delivers. -->
+  <state id="writing_tick">
+    <invoke id="write_tick" type="https://github.com/stateforward/floppy/services/files">
+      <param name="name" expr="draftFile('.tick.scx')"/>
+      <param name="text" expr="tick_scxml"/>
+    </invoke>
+    <transition event="done.invoke.write_tick" target="simulate"/>
+    <transition event="error.*" target="retry_gate">
+      <assign location="diagnostics" expr="writeFailedDiagnostics()"/>
     </transition>
   </state>
 
@@ -554,7 +593,7 @@
         </foreach>
         <cancel sendid="sim-settle"/>
       </onexit>
-      <invoke idlocation="candidate_id" type="scxml" srcexpr="draftPath()"/>
+      <invoke idlocation="candidate_id" type="scxml" srcexpr="testPath()"/>
       <!-- The builder's own control events never carry an invoke id and
            carry this run's tag; a candidate's events of the same names fall
            through to the recorder below, and an earlier run's are dropped. -->
@@ -562,7 +601,7 @@
         <foreach array="currentTestEvents()" item="step">
           <send eventexpr="step.name" targetexpr="candidateTarget()" idlocation="sent_id"
                 delayexpr="stepDelay(step)">
-            <content expr="stepData(step)"/>
+            <content expr="step.data"/>
           </send>
           <assign location="sim_sends" expr="appended(sim_sends, sent_id)"/>
         </foreach>
@@ -659,21 +698,18 @@
   </state>
 
   <!-- Counts one failure and takes its fingerprint; a diagnostic an earlier
-       failure of the build already had, consecutive or not, is no progress,
-       so the build ends there (decision D124: "if it gets the same failure
-       more than once it should end"), or at the request's optional
-       max_attempts. -->
+       failure of the build already had, consecutive or not, is marked
+       repeated for the next author call, and the build ends only at
+       max_attempts failures (decision D133). -->
   <state id="retry_gate">
     <onentry>
       <assign location="failures" expr="increment(failures)"/>
       <assign location="fingerprint" expr="diagnosticsFingerprint()"/>
+      <assign location="repeated" expr="repeatedDiagnostics()"/>
       <assign location="rejected" expr="rejectedDraft()"/>
       <assign location="attempt_log" expr="nextAttemptLog()"/>
       <log label="retry_gate" expr="retryGateLog()"/>
     </onentry>
-    <transition cond="isNoProgress()" target="failed">
-      <assign location="failure_reason" expr="'no-progress'"/>
-    </transition>
     <transition cond="isAttemptsExhausted()" target="failed">
       <assign location="failure_reason" expr="'attempts-exhausted'"/>
     </transition>

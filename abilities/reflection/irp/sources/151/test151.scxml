@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- reflection-6: a build whose every draft generation fails fails the turn with no draft, and the create's stub stays (a break of it answers). -->
+<!-- reflection-6: a build whose 8 draft generations all fail fails the turn with no draft, and the create's stub stays (a break of it answers). -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="reflection" type="scxml" src="../../../reflection.scx">
@@ -15,7 +15,7 @@
     <onentry>
       <send event="bot.ability.reflection.input" target="#_reflection"><content expr='{"turn": 1, "cognition_input": {"stimulus": {"event": "environment.sound", "data": {"label": "knock"}}, "focus": "door", "focus_candidates": ["door"]}, "cognition_output": [{"event": "bot.ability.communication.respond", "data": {"parts": [{"words": "Hello!"}]}, "reason": "a knock", "target": "communication"}]}'/></send>
     </onentry>
-    <transition event="bot.ability.failed" cond='_event.data.message.indexOf("Reflection revision failed: no-progress: the author generation failed (status)") === 0' target="step1"/>
+    <transition event="bot.ability.failed" cond='_event.data.message.indexOf("Reflection revision failed: attempts-exhausted: the author generation failed (status)") === 0' target="step1"/>
   </state>
   <state id="step1">
     <onentry>

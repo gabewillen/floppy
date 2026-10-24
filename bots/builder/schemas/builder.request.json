@@ -13,6 +13,7 @@
     "generate_ceiling_ms": {"type": "integer", "minimum": 1, "maximum": 3600000},
     "min_every_ms": {"type": "integer", "minimum": 1, "maximum": 86400000},
     "turn_after_bound_ms": {"type": "integer", "minimum": 1, "maximum": 86400000},
+    "document_max_completion_tokens": {"type": "integer", "minimum": 1024, "maximum": 65536, "description": "The author call's first token bound (default 16384); a truncated author generation doubles it for the next, up to 65536 (decision D135) [floppy field]."},
     "apply": {
       "type": "object",
       "description": "The live turn a turn behavior is run on before it is built (the input of the live-turn check, decision D131): the turn, the behavior input as autonomy builds it, and the sessions that turn's output names [floppy field].",

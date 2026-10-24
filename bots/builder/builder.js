@@ -43,7 +43,7 @@ function firstDiagnosticSummary() {
 
 // Whether the builder.request data satisfies schemas/builder.request.json.
 function satisfiesBuilderRequest(_event) {
-  return _event.data !== null && typeof _event.data === 'object' && !Array.isArray(_event.data) && Object.keys(_event.data).every(function (k) { return ['spec', 'name', 'constraints', 'max_attempts', 'model', 'generate_timeout_ms', 'generate_ceiling_ms', 'min_every_ms', 'turn_after_bound_ms', 'apply'].indexOf(k) >= 0; }) && isOptionalBound(_event.data.min_every_ms) && isOptionalBound(_event.data.turn_after_bound_ms) && isOptionalApply(_event.data.apply) && typeof _event.data.spec === 'string' && _event.data.spec.trim().length > 0 && (_event.data.name === undefined || (typeof _event.data.name === 'string' && _event.data.name.length > 0)) && (_event.data.constraints === undefined || (Array.isArray(_event.data.constraints) && _event.data.constraints.length <= 32 && _event.data.constraints.every(function (c) { return typeof c === 'string'; }))) && (_event.data.max_attempts === undefined || (Number.isInteger(_event.data.max_attempts) && _event.data.max_attempts >= 1 && _event.data.max_attempts <= 8)) && (_event.data.model === undefined || (typeof _event.data.model === 'string' && _event.data.model.length > 0)) && isOptionalGenerateBound(_event.data.generate_timeout_ms) && isOptionalGenerateBound(_event.data.generate_ceiling_ms);
+  return _event.data !== null && typeof _event.data === 'object' && !Array.isArray(_event.data) && Object.keys(_event.data).every(function (k) { return ['spec', 'name', 'constraints', 'max_attempts', 'model', 'generate_timeout_ms', 'generate_ceiling_ms', 'min_every_ms', 'turn_after_bound_ms', 'apply', 'document_max_completion_tokens'].indexOf(k) >= 0; }) && isOptionalBound(_event.data.min_every_ms) && isOptionalBound(_event.data.turn_after_bound_ms) && isOptionalApply(_event.data.apply) && typeof _event.data.spec === 'string' && _event.data.spec.trim().length > 0 && (_event.data.name === undefined || (typeof _event.data.name === 'string' && _event.data.name.length > 0)) && (_event.data.constraints === undefined || (Array.isArray(_event.data.constraints) && _event.data.constraints.length <= 32 && _event.data.constraints.every(function (c) { return typeof c === 'string'; }))) && (_event.data.max_attempts === undefined || (Number.isInteger(_event.data.max_attempts) && _event.data.max_attempts >= 1 && _event.data.max_attempts <= 8)) && (_event.data.model === undefined || (typeof _event.data.model === 'string' && _event.data.model.length > 0)) && isOptionalGenerateBound(_event.data.generate_timeout_ms) && isOptionalGenerateBound(_event.data.generate_ceiling_ms) && (_event.data.document_max_completion_tokens === undefined || (Number.isInteger(_event.data.document_max_completion_tokens) && _event.data.document_max_completion_tokens >= 1024 && _event.data.document_max_completion_tokens <= document_token_ceiling));
 }
 
 // An absent lifetime bound, or one of 1 ms to 1 day.
@@ -75,7 +75,17 @@ function requestConstraints(_event) {
 }
 
 function requestMaxAttempts(_event) {
-  return _event.data.max_attempts === undefined ? null : _event.data.max_attempts;
+  return _event.data.max_attempts === undefined ? max_attempts : _event.data.max_attempts;
+}
+
+function requestDocumentTokens(_event) {
+  return _event.data.document_max_completion_tokens === undefined ? document_max_completion_tokens : _event.data.document_max_completion_tokens;
+}
+
+// The next author call's token bound: doubled after a truncated author
+// generation, up to document_token_ceiling (decision D135).
+function grownDocumentTokens() {
+  return gen_failure === 'truncated' ? Math.min(document_max_completion_tokens * 2, document_token_ceiling) : document_max_completion_tokens;
 }
 
 function requestModel(_event) {
@@ -174,9 +184,15 @@ function previousDraft(field) {
   return draft === null ? null : draft[field];
 }
 
+// The author rules and the SCXML schema the draft is written against
+// (decision D134).
+function authorSystem() {
+  return author_system + '\n\nThe SCXML 1.0 XML Schema (W3C), whose modules follow, each after its file name: the document is valid against it, and every element, attribute and child it holds is one the schema declares for that place (attributes of another namespace, such as event:schema, are allowed where the schema allows ##other).\n\n' + scxml_xsd;
+}
+
 function authorPrompt() {
   var repair = mode === 'repair';
-  return JSON.stringify({task: mode, name: fileName(), spec: spec, constraints: constraints, plan: plan, previous_scxml: repair ? scxml_text : null, previous_schemas: repair ? previous_schemas : null, previous_script: repair ? previous_script : null, previous_tests: repair ? previous_tests : null, diagnostics: diagnostics});
+  return JSON.stringify({task: mode, name: fileName(), spec: spec, constraints: constraints, plan: plan, previous_scxml: repair ? scxml_text : null, previous_schemas: repair ? previous_schemas : null, previous_script: repair ? previous_script : null, previous_tests: repair ? previous_tests : null, diagnostics: diagnostics, repeated: repeated.map(function (d) { return d.message; })});
 }
 
 function draftGenerated(_event) {
@@ -239,6 +255,11 @@ function hasTestsWithinBounds() {
 
 function isReadyToSimulate() {
   return isValidatorClean() && hasTestsWithinBounds();
+}
+
+// A routine whose forced tick runs its copy (decision D153).
+function isReadyToTick() {
+  return isReadyToSimulate() && isRoutineTicked() && tick_scxml !== null;
 }
 
 function testsOutOfBoundsDiagnostics() {
@@ -309,7 +330,31 @@ function isValidated() {
 // Each error with rendered, the form scx validate prints it in (rustc's):
 // a repair is told the line and column of what it names, not only its code.
 function validateDiagnostics() {
-  return validatorErrors().slice(0, 20).map(function (d) { var at = sourceAt(d.primary.span); return {kind: 'validate', code: d.code, label: d.primary.message ? d.primary.message : d.message, line: at.text.trim(), message: d.help ? d.message + ' Help: ' + d.help : d.message, rendered: renderedDiagnostic(d, at)}; });
+  return validatorErrors().slice(0, 20).map(function (d) { var at = sourceAt(d.primary.span); return {kind: 'validate', code: d.code, label: d.primary.message ? d.primary.message : d.message, line: at.text.trim(), message: d.help ? d.message + ' Help: ' + d.help : d.message, rendered: renderedDiagnostic(d, at), schema: elementSchema(elementAt(d.primary.span))}; });
+}
+
+// The SCXML element whose start tag holds or begins at a span: the name
+// after the last < at or before it, null for another namespace's element
+// or none (decision D137).
+function elementAt(span) {
+  var text = report.validator.source_text;
+  var start = charIndexOfByte(text, span.start);
+  var open = text.lastIndexOf('<', text.charAt(start) === '<' ? start : start - 1);
+  var name = open < 0 ? null : /^<\/?([A-Za-z_][A-Za-z0-9_.-]*)(?=[\s/>])/.exec(text.slice(open, open + 64));
+  return name === null ? null : name[1];
+}
+
+// What the SCXML schema declares for an element (decision D137): its
+// attributes, its content and the element itself, the scxml_xsd lines from
+// its attlist to its element declaration; '' when it declares none.
+function elementSchema(element) {
+  if (element === null) {
+    return '';
+  }
+  var from = scxml_xsd.indexOf('<xsd:attributeGroup name="scxml.' + element + '.attlist">');
+  var declared = '<xsd:element name="' + element + '" type="scxml.' + element + '.type"/>';
+  var to = scxml_xsd.indexOf(declared, from);
+  return from < 0 || to < 0 ? '' : scxml_xsd.slice(from, to + declared.length);
 }
 
 // The character index of the UTF-8 byte offset of the report's source text
@@ -376,10 +421,11 @@ function isRoutineTicked() {
   return isLifetimeChecked() && lifetime === 'persistent' && schedules.length > 0;
 }
 
-// The routine's tick, forced by delivering its first schedule's event at once (the
-// timer clock fires its first schedule wait at once, decision D84), within 2 s.
+// The routine's forced tick (decision D84): its copy with each schedule 1500 ms
+// away runs with no event sent to it, so its own schedule send must fire its first
+// tick within 2 s (decision D153).
 function firstTickTest() {
-  return {name: 'first tick', events: [{name: schedules[0], data: '', delay_ms: 0}], settle_ms: 2000, expect_events: ['bot.behavior.tick'], expect_done: false, tick: true};
+  return {name: 'first tick', events: [], settle_ms: 2000, expect_events: ['bot.behavior.tick'], expect_done: false, tick: true};
 }
 
 // lifetime is written by validate's <behavior:lifetime_errors>, with or without bounds.
@@ -423,6 +469,11 @@ function currentTest() {
   return sim_tests[sim_index];
 }
 
+// The forced tick runs the routine's copy (decision D153), every other test the draft.
+function testPath() {
+  return isTickTest() ? '../../behaviors/' + draftFile('.tick.scx') : draftPath();
+}
+
 function currentTestEvents() {
   return currentTest().events;
 }
@@ -433,10 +484,6 @@ function candidateTarget() {
 
 function stepDelay(step) {
   return delay(Math.min(Math.max(step.delay_ms, 0), 60000));
-}
-
-function stepData(step) {
-  return step.data === '' ? null : JSON.parse(step.data);
 }
 
 // The settle time: the script's settle_ms, after its last event, within sim_test_cap_ms.
@@ -540,13 +587,17 @@ function hasTopLevelFinal() {
 
 // retry_gate
 
+function diagnosticIdentity(d) {
+  return d.kind + '|' + d.code + '|' + (d.kind === 'validate' ? d.label : d.message);
+}
+
 // The sorted, distinct identities of the failure's diagnostics: kind|code
 // and, for a validate diagnostic, its primary label (not the line it marks:
 // the same mistake moves around between drafts), else its message (a
 // simulate message names the test, its expected and observed outputs, its
 // done and its error; the rest are the builder's own or a namespace's).
 function diagnosticsFingerprint() {
-  return diagnostics.map(function (d) { return d.kind + '|' + d.code + '|' + (d.kind === 'validate' ? d.label : d.message); }).sort().filter(function (key, i, keys) { return i === 0 || key !== keys[i - 1]; });
+  return diagnostics.map(diagnosticIdentity).sort().filter(function (key, i, keys) { return i === 0 || key !== keys[i - 1]; });
 }
 
 // The last draft a check rejected (validate, lifetime, simulate, apply),
@@ -562,13 +613,14 @@ function nextAttemptLog() {
 }
 
 function retryGateLog() {
-  return 'failure ' + failures + (max_attempts === null ? '' : ' of ' + max_attempts) + firstDiagnosticSummary();
+  return 'failure ' + failures + ' of ' + max_attempts + (repeated.length > 0 ? ', ' + repeated.length + ' repeated' : '') + firstDiagnosticSummary();
 }
 
-// A diagnostic an earlier failure of this build already had, consecutive
-// or not: the same failure more than once ends the build (decision D124).
-function isNoProgress() {
-  return fingerprint.some(function (key) { return fingerprints.indexOf(key) >= 0; });
+// The failure's diagnostics whose identity an earlier failure of this build
+// already had, consecutive or not (decision D133): the build goes on, and
+// the next author call is told that its earlier fix of them did not work.
+function repeatedDiagnostics() {
+  return diagnostics.filter(function (d) { return fingerprints.indexOf(diagnosticIdentity(d)) >= 0; });
 }
 
 // The identities of every failure so far, this one's included.
@@ -577,7 +629,7 @@ function nextFingerprints() {
 }
 
 function isAttemptsExhausted() {
-  return max_attempts !== null && failures >= max_attempts;
+  return failures >= max_attempts;
 }
 
 // triage

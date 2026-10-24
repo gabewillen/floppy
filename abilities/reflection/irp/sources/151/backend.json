@@ -55,6 +55,60 @@
     },
     {
       "path": "/v1/chat/completions",
+      "status": 500,
+      "body": {
+        "error": {
+          "message": "boom"
+        }
+      }
+    },
+    {
+      "path": "/v1/chat/completions",
+      "status": 500,
+      "body": {
+        "error": {
+          "message": "boom"
+        }
+      }
+    },
+    {
+      "path": "/v1/chat/completions",
+      "status": 500,
+      "body": {
+        "error": {
+          "message": "boom"
+        }
+      }
+    },
+    {
+      "path": "/v1/chat/completions",
+      "status": 500,
+      "body": {
+        "error": {
+          "message": "boom"
+        }
+      }
+    },
+    {
+      "path": "/v1/chat/completions",
+      "status": 500,
+      "body": {
+        "error": {
+          "message": "boom"
+        }
+      }
+    },
+    {
+      "path": "/v1/chat/completions",
+      "status": 500,
+      "body": {
+        "error": {
+          "message": "boom"
+        }
+      }
+    },
+    {
+      "path": "/v1/chat/completions",
       "status": 200,
       "body": {
         "object": "chat.completion",

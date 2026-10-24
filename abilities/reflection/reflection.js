@@ -332,9 +332,9 @@ function renderedReport(diagnostics) {
   return 'behavior validation failed:' + (Array.isArray(diagnostics) ? diagnostics : []).map(function (d) { return '\n  error[' + d.code + '] ' + d.kind + ': ' + d.message; }).join('');
 }
 
-// Abandoning: the same diagnostics after a fix.
+// A build that used its attempts ends with its last diagnostics (decision D133).
 function abandonedMessage(_event) {
-  return _event.data.reason === 'no-progress' ? 'Reflection change abandoned: same diagnostic message after fix:\n' + renderedReport(_event.data.diagnostics) : 'Reflection change abandoned: ' + _event.data.reason + '.';
+  return _event.data.reason === 'attempts-exhausted' ? 'Reflection change abandoned: attempts exhausted:\n' + renderedReport(_event.data.diagnostics) : 'Reflection change abandoned: ' + _event.data.reason + '.';
 }
 
 // The change call failed, with no draft.
