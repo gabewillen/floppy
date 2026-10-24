@@ -166,6 +166,15 @@ fn break_selection(name: &str) -> Json {
     }])
 }
 
+/// A persona revision (decision D145).
+fn revise_selection(text: &str) -> Json {
+    json!([{
+        "event": "bot.ability.persona.revise",
+        "data": {"text": text, "reason": "I noticed I like greeting people."},
+        "reason": "I see myself differently",
+    }])
+}
+
 /// Arguments the generate service refuses as not-json.
 const NOT_JSON: &str = r#"{"events": ["#;
 
@@ -222,6 +231,15 @@ fn selection(route: &str) -> Option<Json> {
         "two" => Some(json!([
             break_selection("GreetOnKnock")[0].clone(),
             create_selection()[0].clone()
+        ])),
+        "revise" => Some(revise_selection("I am a warm greeter.")),
+        "revisecreate" => Some(json!([
+            create_selection()[0].clone(),
+            revise_selection("I am a warm greeter.")[0].clone()
+        ])),
+        "tworevise" => Some(json!([
+            revise_selection("I am a warm greeter.")[0].clone(),
+            revise_selection("I am a quiet greeter.")[0].clone()
         ])),
         _ => None,
     }
@@ -482,10 +500,30 @@ fn input(turn: u64) -> Json {
 /// Sends one turn and returns its answer's records through the logged
 /// inventory and episodes.
 fn reflect(run: &mut Run, turn: u64) -> Vec<Json> {
-    run.event("bot.ability.reflection.input", &input(turn));
+    reflect_on(run, &input(turn))
+}
+
+/// [`reflect`] with the reflection input `input`.
+fn reflect_on(run: &mut Run, input: &Json) -> Vec<Json> {
+    run.event("bot.ability.reflection.input", input);
     run.until(WAIT, |record| {
         record["type"] == "log" && record["label"] == "episodes"
     })
+}
+
+/// [`input`] with `fields` added: a failed or cancelled turn's outcome
+/// (decision D139) or what the bot knows of itself (decision D145).
+fn input_with(turn: u64, fields: &Json) -> Json {
+    let mut input = input(turn);
+    if let (Some(input), Some(fields)) = (input.as_object_mut(), fields.as_object()) {
+        input.extend(fields.clone());
+    }
+    input
+}
+
+/// A bot with a persona: its owner's traits and the description it wrote.
+fn persona_self() -> Json {
+    json!({"self": {"traits": ["friendly"], "description": "I like company."}})
 }
 
 fn texts(records: &[Json], label: &str) -> Vec<String> {
@@ -1339,4 +1377,136 @@ fn a_failed_change_call_drafts_nothing_on(database: &str) {
         }])
     );
     assert_eq!(json_log(&records, "episodes"), stored(&unapplied_episode()));
+}
+
+/// A failed turn and a cancelled one are remembered with their outcome and
+/// nothing is selected for them; the next turn's select recalls both
+/// (decision D139).
+#[test]
+fn failed_and_cancelled_turns_are_remembered_without_a_select() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "none", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let failure = "Cognition reasoning timed out after 30 seconds.";
+    let failed = reflect_on(
+        &mut run,
+        &input_with(
+            1,
+            &json!({"cognition_output": [], "outcome": "failed", "failure": failure}),
+        ),
+    );
+    assert_eq!(texts(&failed, "harness.output"), ["answered"], "{failed:?}");
+    assert_eq!(texts(&failed, "reflection"), ["turn 1: failed"]);
+    let mut failed_episode = unapplied_episode();
+    failed_episode["output"] = json!([]);
+    failed_episode["outcome"] = json!("failed");
+    failed_episode["failure"] = json!(failure);
+    assert_eq!(json_log(&failed, "episodes"), stored(&failed_episode));
+    let cancelled = reflect_on(
+        &mut run,
+        &input_with(2, &json!({"cognition_output": [], "outcome": "cancelled"})),
+    );
+    assert_eq!(texts(&cancelled, "reflection"), ["turn 2: cancelled"]);
+    let mut cancelled_episode = failed_episode.clone();
+    cancelled_episode["outcome"] = json!("cancelled");
+    cancelled_episode["failure"] = Json::Null;
+    assert_eq!(
+        json_log(&cancelled, "episodes")[1]["content"],
+        cancelled_episode
+    );
+    assert!(mock.requests("dispatch").is_empty());
+    let completed = reflect(&mut run, 3);
+    drop(run.close(WAIT));
+    assert_eq!(texts(&completed, "reflection.selected"), ["none"]);
+    let selects = mock.requests("dispatch");
+    assert_eq!(selects.len(), 1);
+    let prompt: Json =
+        serde_json::from_str(&selects[0].message("user")).expect("the select prompt is JSON");
+    assert_eq!(
+        prompt["prior_episodes"],
+        json!([failed_episode, cancelled_episode])
+    );
+    assert_eq!(
+        json_log(&completed, "episodes")[2]["content"],
+        unapplied_episode()
+    );
+}
+
+/// With a persona, reflection offers its revision beside the inventory
+/// events, shows the model the bot's self, and sends a selected revision
+/// up for the persona (decision D145).
+#[test]
+fn a_selected_persona_revision_is_sent_up() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "revise", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let records = reflect_on(&mut run, &input_with(1, &persona_self()));
+    drop(run.close(WAIT));
+    assert_eq!(
+        texts(&records, "harness.output"),
+        ["answered"],
+        "{records:?}"
+    );
+    assert_eq!(
+        texts(&records, "harness.revise"),
+        [revise_selection("I am a warm greeter.")[0]["data"].to_string()]
+    );
+    assert_eq!(json_log(&records, "episodes"), stored(&unapplied_episode()));
+    let selects = mock.requests("dispatch");
+    assert_eq!(selects.len(), 1);
+    assert_eq!(
+        offered_names(&selects[0].body),
+        json!({"bot.behavior.create": null, "bot.ability.persona.revise": null})
+    );
+    assert_eq!(
+        selects[0].body["tools"][0]["function"]["parameters"]["properties"]["events"]["maxItems"],
+        2
+    );
+    let prompt: Json =
+        serde_json::from_str(&selects[0].message("user")).expect("the select prompt is JSON");
+    assert_eq!(prompt["self"], persona_self()["self"]);
+}
+
+/// A revision selected after a create is still sent up, and the create is
+/// built (decision D145).
+#[test]
+fn a_revision_beside_a_create_is_sent_up_and_the_create_built() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "revisecreate", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let records = reflect_on(&mut run, &input_with(1, &persona_self()));
+    drop(run.close(WAIT));
+    assert_eq!(
+        texts(&records, "harness.output"),
+        ["answered"],
+        "{records:?}"
+    );
+    assert_eq!(texts(&records, "harness.revise").len(), 1, "{records:?}");
+    assert_eq!(
+        texts(&records, "reflection.inventory"),
+        [r#"GreetOnKnock ACTIVE turn ["environment.sound"] (accept)"#]
+    );
+}
+
+/// Two revisions are an over-selection, refused as the model's to repair:
+/// the same refusal again fails the turn (decisions D130, D145).
+#[test]
+fn two_persona_revisions_are_refused() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "tworevise", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let records = reflect_on(&mut run, &input_with(1, &persona_self()));
+    drop(run.close(WAIT));
+    assert!(texts(&records, "harness.revise").is_empty(), "{records:?}");
+    assert_eq!(
+        texts(&records, "reflection.rejected"),
+        ["attempt 0: over-selection", "attempt 1: over-selection"]
+    );
+    assert_eq!(
+        texts(&records, "harness.failed"),
+        [
+            "Selection rejected: select at most one of bot.behavior.create, bot.behavior.change or bot.behavior.break, and at most one bot.ability.persona.revise"
+        ]
+    );
+    assert_eq!(mock.requests("dispatch").len(), 2);
 }

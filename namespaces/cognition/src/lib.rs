@@ -68,11 +68,13 @@
 //!    omitted="size" />` over its 16384 bytes;
 //! 3. the rest of what the bot has in mind: `<cognition:recalled>` holding
 //!    `prior_episodes` (an array of cognitive episodes: `focus`,
-//!    `focus_candidates`, `stimulus_name`, `output` as `cognition:event`s and
-//!    `behavior` as a `behavior:create`, `behavior:change` or `behavior:break`)
-//!    and `standing_directives` (an array of directives: `text`, `kind`,
-//!    `instruction` by default), each optional and with its `count`: floppy's
-//!    recalled memory until associative memory exists (decision D97);
+//!    `focus_candidates`, `stimulus_name`, a failed or cancelled turn's
+//!    `outcome` and `failure` (decision D139), `output` as
+//!    `cognition:event`s and `behavior` as a `behavior:create`,
+//!    `behavior:change` or `behavior:break`) and `standing_directives` (an
+//!    array of directives: `text`, `kind`, `instruction` by default), each
+//!    optional and with its `count`: floppy's recalled memory until
+//!    associative memory exists (decision D97);
 //! 4. the stimulus (`stimulus`, optional: without it there is no stimulus
 //!    block, as in a situation render) as the root element of its own block,
 //!    tagged by the JSON Schema type of its data (`object`, `array`, `string`,
@@ -1707,6 +1709,7 @@ fn models(
 }
 
 /// A cognitive episode: `focus`, `focus_candidates`, `stimulus_name`,
+/// `outcome` and `failure` (a failed or cancelled turn's, decision D139),
 /// `output` (as `cognition:event`s), `behavior`.
 fn episode(
     episode: Option<&Map<String, Json>>,
@@ -1729,6 +1732,10 @@ fn episode(
         field("stimulus_name"),
         budget,
     )?;
+    // A failed or cancelled turn's (decision D139); a completed turn's
+    // episode has neither.
+    fill_field(&mut element, "outcome", field("outcome"), budget)?;
+    fill_field(&mut element, "failure", field("failure"), budget)?;
     let output = field("output")
         .and_then(Json::as_array)
         .map_or(&[][..], Vec::as_slice);

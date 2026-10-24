@@ -9,6 +9,20 @@ function hasDeferredInput() {
   return deferred.length > 0;
 }
 
+// How the turn ended (decision D139): completed unless the input says.
+function inputOutcome(input) {
+  return typeof input.outcome === 'string' ? input.outcome : 'completed';
+}
+
+function inputFailure(input) {
+  return typeof input.failure === 'string' ? input.failure : null;
+}
+
+// What the bot knows of itself (decision D145), null when not told.
+function inputSelf(input) {
+  return input.self === undefined ? null : input.self;
+}
+
 // recalling
 
 function hasNoDatabase() {
@@ -38,6 +52,15 @@ function recalledLog() {
   return 'turn ' + turn + ': ' + prior_episodes.length + ' episodes, ' + behaviors.length + ' behaviors';
 }
 
+// A failed or cancelled turn, which reflection only remembers (decision D139).
+function isUnreflected() {
+  return outcome !== 'completed';
+}
+
+function unreflectedLog() {
+  return 'turn ' + turn + ': ' + outcome;
+}
+
 function recallFailedMessage(detail) {
   return 'Reflection memory recall failed: ' + detail;
 }
@@ -59,7 +82,42 @@ function selectPrompt() {
 }
 
 function selectInputJson() {
-  return JSON.stringify({cognition_input: cognition_input, cognition_output: cognition_output, prior_episodes: prior_episodes, behaviors: behaviors});
+  var input = {cognition_input: cognition_input, cognition_output: cognition_output, prior_episodes: prior_episodes, behaviors: behaviors};
+  if (hasPersona()) {
+    input.self = self;
+  }
+  return JSON.stringify(input);
+}
+
+// A persona to revise: the bot was told its owner's traits (decision D145).
+function hasPersona() {
+  return self !== null && Array.isArray(self.traits) && self.traits.length > 0;
+}
+
+// The selections of this hop's reply, every dispatch call's.
+function replySelections(_event) {
+  var calls = Array.isArray(_event.data.tool_calls) ? _event.data.tool_calls : [];
+  return calls.reduce(function (all, call) { return all.concat(Array.isArray(Object(call.args).events) ? call.args.events : []); }, []);
+}
+
+function isRevision(s) {
+  return s.event === 'bot.ability.persona.revise';
+}
+
+// More than one inventory event or more than one revision (decision D145).
+function isOverSelection(_event) {
+  var selections = replySelections(_event);
+  var revisions = selections.filter(isRevision).length;
+  return revisions > 1 || selections.length - revisions > 1;
+}
+
+function overSelectionRejection() {
+  return ({key: 'over-selection', message: 'select at most one of bot.behavior.create, bot.behavior.change or bot.behavior.break, and at most one bot.ability.persona.revise'});
+}
+
+// A call's selections with a revision first.
+function revisionsFirst(events) {
+  return events.filter(isRevision).concat(events.filter(function (s) { return !isRevision(s); }));
 }
 
 function selectFeedback() {
@@ -409,7 +467,12 @@ function draftLog() {
 // The turn's cognitive episode, with the behavior the turn applied (null: none).
 function cognitiveEpisode(applied) {
   var input = cognition_input;
-  return ({focus: input.focus, focus_candidates: input.focus_candidates, stimulus_name: input.stimulus.event, output: cognition_output, behavior: applied});
+  var episode = {focus: input.focus, focus_candidates: input.focus_candidates, stimulus_name: input.stimulus.event, output: cognition_output, behavior: applied};
+  if (isUnreflected()) {
+    episode.outcome = outcome;
+    episode.failure = turn_failure;
+  }
+  return episode;
 }
 
 // Whether a failing turn has not tried to store its episode yet.

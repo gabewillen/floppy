@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- reflection-11: a selected persona revision is sent to the invoker, then the output answers. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="reflection" type="scxml" src="../../../reflection.scx">
+    <param name="database" expr="'/memory/floppy.sqlite'"/>
+    <param name="select_timeout_ms" expr="300000"/>
+    <param name="revising_timeout_ms" expr="300000"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <onentry>
+      <send event="bot.ability.reflection.input" target="#_reflection"><content expr='{"turn": 1, "cognition_input": {"stimulus": {"event": "environment.sound", "data": {"label": "knock"}}, "focus": "door", "focus_candidates": ["door"]}, "cognition_output": [{"event": "bot.ability.communication.respond", "data": {"parts": [{"words": "Hello!"}]}, "reason": "a knock", "target": "communication"}], "self": {"traits": ["friendly"], "description": "I like company."}}'/></send>
+    </onentry>
+    <transition event="bot.ability.persona.revise" cond="_event.data.text === 'I am a warm greeter.'" target="step1"/>
+  </state>
+  <state id="step1">
+    <transition event="bot.ability.reflection.output" target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

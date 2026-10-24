@@ -135,7 +135,11 @@
 
   Reflection: a reflection region invokes abilities/reflection/reflection.scx
   as the long-lived child "reflection", beside the turns, and each output is followed by bot.ability.reflection.input
-  {turn, cognition_input, cognition_output} to it; its
+  {turn, cognition_input, cognition_output, self} to it, and each failed or
+  cancelled turn by one with outcome failed (and the failure) or cancelled
+  and no output, which reflection only remembers (decision D139); a
+  bot.ability.persona.revise reflection selects goes to the body, for the
+  persona (decision D145); its
   bot.ability.reflection.output settles the turn, and its
   bot.ability.failed {message} is logged. The reflection takes the
   database path and the model by <param>; with no database (null) it
@@ -664,6 +668,7 @@
           <param name="turn" expr="turn"/>
           <param name="cognition_input" expr="cognitionInput()"/>
           <param name="cognition_output" expr="selected"/>
+          <param name="self" expr="selfFact()"/>
         </send>
       </onentry>
       <transition target="idle"/>
@@ -686,6 +691,16 @@
             <param name="participants" expr="participants"/>
           </send>
         </if>
+        <!-- The failed turn is remembered (decision D139), last: a send that
+             fails ends the rest of this block. -->
+        <send event="bot.ability.reflection.input" target="#_reflection">
+          <param name="turn" expr="turn"/>
+          <param name="cognition_input" expr="cognitionInput()"/>
+          <param name="cognition_output" expr="[]"/>
+          <param name="outcome" expr="'failed'"/>
+          <param name="failure" expr="failure"/>
+          <param name="self" expr="selfFact()"/>
+        </send>
       </onentry>
       <transition target="idle"/>
     </state>
@@ -712,6 +727,14 @@
         <onentry>
           <send event="bot.ability.cognition.cancelled" target="#_parent">
             <param name="turn" expr="turn"/>
+          </send>
+          <!-- The cancelled turn is remembered (decision D139). -->
+          <send event="bot.ability.reflection.input" target="#_reflection">
+            <param name="turn" expr="turn"/>
+            <param name="cognition_input" expr="cognitionInput()"/>
+            <param name="cognition_output" expr="[]"/>
+            <param name="outcome" expr="'cancelled'"/>
+            <param name="self" expr="selfFact()"/>
           </send>
         </onentry>
         <transition target="idle"/>
@@ -740,6 +763,13 @@
         <log label="cognition.reflection.failed" expr="_event.data.message"/>
         <send event="bot.ability.routines.reconcile" target="#_routines">
           <content expr="({})"/>
+        </send>
+      </transition>
+      <!-- A persona revision reflection selected (decision D145) goes to the
+           body, which passes it to the persona. -->
+      <transition event="bot.ability.persona.revise" event:schema="../schemas/bot.ability.persona.revise.json">
+        <send event="bot.ability.persona.revise" target="#_parent">
+          <content expr="_event.data"/>
         </send>
       </transition>
       <!-- The reflection's reboot: the body restarts this ability. -->
