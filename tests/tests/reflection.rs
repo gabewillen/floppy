@@ -518,9 +518,15 @@ fn reflect_on(run: &mut Run, input: &Json) -> Vec<Json> {
 /// (decision D139) or what the bot knows of itself (decision D145).
 fn input_with(turn: u64, fields: &Json) -> Json {
     let mut input = input(turn);
-    if let (Some(input), Some(fields)) = (input.as_object_mut(), fields.as_object()) {
-        input.extend(fields.clone());
-    }
+    input
+        .as_object_mut()
+        .expect("the input is an object")
+        .extend(
+            fields
+                .as_object()
+                .expect("the fields are an object")
+                .clone(),
+        );
     input
 }
 

@@ -450,6 +450,46 @@ fn every_schema_inlines_the_same_one_participant() {
 }
 
 #[test]
+fn every_episode_inlines_the_same_outcome_and_failure() {
+    // A recalled episode's `outcome` and `failure` (decision D139) are
+    // inlined in each schema that carries episodes, as the Participant is,
+    // and every copy is the same.
+    let mut episodes: Vec<(String, Json, Json)> = Vec::new();
+    for (event, schema) in all_schemas() {
+        walk(&schema, &mut |node| {
+            let Some(properties) = node.get("properties").and_then(Json::as_object) else {
+                return;
+            };
+            if properties.contains_key("output")
+                && let (Some(outcome), Some(failure)) =
+                    (properties.get("outcome"), properties.get("failure"))
+            {
+                episodes.push((event.clone(), outcome.clone(), failure.clone()));
+            }
+        });
+    }
+    let events: BTreeSet<&str> = episodes
+        .iter()
+        .map(|(event, _, _)| event.as_str())
+        .collect();
+    assert_eq!(
+        events,
+        BTreeSet::from(["bot.ability.failed", "bot.ability.reasoning.recalled"])
+    );
+    let (_, outcome, failure) = &episodes[0];
+    for (event, other_outcome, other_failure) in &episodes {
+        assert_eq!(
+            other_outcome, outcome,
+            "{event} inlines the one episode outcome"
+        );
+        assert_eq!(
+            other_failure, failure,
+            "{event} inlines the one episode failure"
+        );
+    }
+}
+
+#[test]
 fn the_schema_set_is_exactly_the_phase4_events_split_body_and_abilities() {
     let body: BTreeSet<String> = schema_files(&body_schemas()).into_keys().collect();
     let abilities: BTreeSet<String> = schema_files(&ability_schemas()).into_keys().collect();

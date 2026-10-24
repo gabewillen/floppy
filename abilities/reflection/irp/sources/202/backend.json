@@ -1,0 +1,56 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "{\"events\": [{\"event\": \"bot.behavior.create\", \"target\": \"session.reflection\", \"data\": {\"event\": \"bot.behavior.create\", \"name\": \"GreetOnKnock\", \"triggers\": [\"phone.incoming_call\", \"environment.sound\"], \"description\": \"Say hello when a knock sound arrives.\", \"reason\": \"Same knock and greeting pattern across recent episodes.\", \"source\": null}, \"reason\": \"a repeated pattern\"}, {\"event\": \"bot.ability.persona.revise\", \"target\": \"session.reflection\", \"data\": {\"text\": \"I am a warm greeter.\", \"reason\": \"I noticed I like greeting people.\"}, \"reason\": \"I see myself differently\"}]}"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "{\"name\":\"GreetOnKnock\",\"summary\":\"Answer a knock with a greeting.\",\"states\":[{\"id\":\"answering\",\"kind\":\"atomic\",\"parent\":\"\",\"purpose\":\"Decide the answer.\"},{\"id\":\"answered\",\"kind\":\"final\",\"parent\":\"\",\"purpose\":\"Carry the answer.\"}],\"events\":[],\"transitions\":[{\"source\":\"answering\",\"event\":\"\",\"target\":\"answered\",\"description\":\"Answer at once.\"}]}"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "{\"scxml\": \"<scxml xmlns=\\\"http://www.w3.org/2005/07/scxml\\\" version=\\\"1.0\\\" datamodel=\\\"ecmascript\\\" name=\\\"GreetOnKnock\\\" initial=\\\"answering\\\">\\n  <datamodel>\\n    <data id=\\\"turn\\\" expr=\\\"0\\\"/>\\n    <data id=\\\"input\\\" expr=\\\"null\\\"/>\\n  </datamodel>\\n  <state id=\\\"answering\\\">\\n    <transition target=\\\"answered\\\"/>\\n  </state>\\n  <final id=\\\"answered\\\">\\n    <donedata>\\n      <content expr=\\\"({turn: turn, handled: true, selected: [{event: 'bot.ability.communication.respond', target: 'communication', data: {parts: [{words: 'Hello!'}]}, reason: 'a knock'}]})\\\"/>\\n    </donedata>\\n  </final>\\n</scxml>\", \"schemas\": {\"$defs\": {}}, \"script\": \"\", \"tests\": [{\"name\": \"answers its turn\", \"events\": [], \"settle_ms\": 2000, \"expect_events\": [], \"expect_done\": true}]}"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
