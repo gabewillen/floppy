@@ -25,3 +25,11 @@
 {"label":"floppy.diagnostic","parent":"session","session":"session.floppy","text":"the abilities [\"cognition\"] were not ready within 3000 ms","type":"log"}
 {"label":"bot.activating.failed","session":"session","text":"{}","type":"log"}
 {"label":"done.invoke","session":"session","text":"{\"invokeid\":\"floppy\"}","type":"log"}
+{"label":"room.restarted","session":"session","text":"{\"participant\":\"floppy\",\"attempt\":4,\"delay_ms\":8000}","type":"log"}
+{"label":"identity.name","parent":"session.floppy","session":"session.floppy.identity","text":"recalled null","type":"log"}
+{"label":"persona.description","parent":"session.floppy","session":"session.floppy.persona","text":"recalled null","type":"log"}
+{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
+{"label":"floppy.diagnostic","parent":"session","session":"session.floppy","text":"the abilities [\"cognition\"] were not ready within 3000 ms","type":"log"}
+{"label":"bot.activating.failed","session":"session","text":"{}","type":"log"}
+{"label":"done.invoke","session":"session","text":"{\"invokeid\":\"floppy\"}","type":"log"}
+{"label":"room.exhausted","session":"session","text":"{\"participant\":\"floppy\",\"attempts\":5}","type":"log"}
