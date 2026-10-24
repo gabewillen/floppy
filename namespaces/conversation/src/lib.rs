@@ -7,6 +7,7 @@
 //! | --- | --- |
 //! | `<conversation:message_for_turn>` | the committed message for a turn and its provenance |
 //! | `<conversation:relationship_for_input>` | the relationship an input belongs to (by identity collection score), or a new one with its context reference |
+//! | `<conversation:people_for_input>` | the input with each voice embedding replaced by its person (decision D194), the people created, and the voices to store |
 //! | `<conversation:participant_for_source>` | the relationship with the source as a participant |
 //! | `<conversation:fail_turn>` | the relationship without the failed source's participant |
 //! | `<conversation:detector_refs>` | every participant's `[session_ref, participant]` |
@@ -81,6 +82,28 @@
 //! its `session_ref` `relationship-` and that, its identities sorted, and
 //! its participants empty. `location` receives the
 //! relationships and `indexlocation` (required) the relationship's index.
+//!
+//! # `<conversation:people_for_input location="L" input="X" voices="V" count="N"/>`
+//!
+//! The people of the input `X` (an object with `source_ids` and
+//! `target_ids`), as long-term memory holds them (decision D194). `voices`
+//! (required) evaluates to the voices memory holds, an array of
+//! `[person_ref, embedding]` (a non-empty string and the JSON text of an
+//! array of numbers; an entry of another shape is a damaged row and is
+//! skipped), and `count` (required) to the number of people it holds, a
+//! whole number. Each embedding of the input's `source_ids`, then of its
+//! `target_ids`, in order, is matched as [`person_for_voice`] matches it,
+//! against the voices and those of the people created before it: a
+//! person scores the highest cosine of the voice with theirs, and the best
+//! at [`SIMILARITY_THRESHOLD`] or more is the voice's person unless another
+//! comes within [`SIMILARITY_MARGIN`]; a voice that is no one's is a new
+//! person, `person-<n>`, numbered on from `count`. `location` (required)
+//! receives `{input, people, voices}`: `input` the input with each
+//! embedding replaced by its person's ref and each list without repeats
+//! (the first kept), its other members as they are; `people` the refs of
+//! the people created, in order; and `voices` `[person_ref, embedding]` for
+//! each embedding heard, the embedding as its JSON text, to store for that
+//! person.
 //!
 //! # `<conversation:participant_for_source location="L" source="S"/>` and `<conversation:fail_turn location="L" source="S"/>`
 //!
@@ -306,6 +329,7 @@ pub fn execute<H: ConversationHost>(
     match local_name {
         "message_for_turn" => message_for_turn(attributes, content, host),
         "relationship_for_input" => relationship_for_input(attributes, content, host),
+        "people_for_input" => people_for_input_element(attributes, content, host),
         "participant_for_source" => participant_for_source(attributes, content, host, true),
         "fail_turn" => participant_for_source(attributes, content, host, false),
         "detector_refs" => detector_refs_element(attributes, content, host),
@@ -1317,6 +1341,231 @@ pub fn relationship_for(
     relationship.insert("participants".into(), Json::Array(Vec::new()));
     relationships.push(Json::Object(relationship));
     Ok(relationships.len() - 1)
+}
+
+/// Executes `<conversation:people_for_input>`.
+fn people_for_input_element<H: ConversationHost>(
+    attributes: &[Attribute],
+    content: &[Content],
+    host: &mut H,
+) -> Result<Executed, Failure<H::Error>> {
+    let [location, input, voices, count] = attribute_values(
+        attributes,
+        ["location", "input", "voices", "count"],
+        "conversation:people_for_input takes only the location, input, voices and count attributes",
+        "conversation:people_for_input repeats an attribute",
+        "conversation:people_for_input has an empty attribute",
+    )?;
+    let location = location.ok_or(Failure::Execution(
+        "conversation:people_for_input requires a location",
+    ))?;
+    let input = input.ok_or(Failure::Execution(
+        "conversation:people_for_input requires an input",
+    ))?;
+    let voices = voices.ok_or(Failure::Execution(
+        "conversation:people_for_input requires voices",
+    ))?;
+    let count = count.ok_or(Failure::Execution(
+        "conversation:people_for_input requires a count",
+    ))?;
+    no_content(content, "conversation:people_for_input holds no content")?;
+    let Json::Object(input) = read_json(
+        host,
+        input,
+        [
+            "conversation:people_for_input input did not evaluate",
+            "conversation:people_for_input input is not an object",
+        ],
+    )?
+    else {
+        return Err(Failure::Execution(
+            "conversation:people_for_input input is not an object",
+        ));
+    };
+    let Json::Array(voices) = read_json(
+        host,
+        voices,
+        [
+            "conversation:people_for_input voices did not evaluate",
+            "conversation:people_for_input voices is not an array",
+        ],
+    )?
+    else {
+        return Err(Failure::Execution(
+            "conversation:people_for_input voices is not an array",
+        ));
+    };
+    let count = match evaluate(
+        host,
+        count,
+        "conversation:people_for_input count did not evaluate",
+    )? {
+        Data::Number(count) => people_count(count.get()),
+        _ => None,
+    }
+    .ok_or(Failure::Execution(
+        "conversation:people_for_input count is not a whole number of people",
+    ))?;
+    let identified =
+        people_for(&input, &known_voices(&voices), count).map_err(Failure::Execution)?;
+    assign_to(
+        host,
+        location,
+        &Data::JsonObject(identified.to_string()),
+        "conversation:people_for_input could not assign the people",
+    )?;
+    Ok(Executed::Handled)
+}
+
+/// A count of people: a whole number from 0 to 2^53.
+fn people_count(value: f64) -> Option<u64> {
+    const EXACT: f64 = 9_007_199_254_740_992.0;
+    if value.fract() == 0.0 && (0.0..EXACT).contains(&value) {
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "a whole number from 0 to 2^53 converts exactly"
+        )]
+        return Some(value as u64);
+    }
+    None
+}
+
+/// The voices memory holds, `[person_ref, embedding]` each (a non-empty
+/// person ref and the JSON text of an embedding), as `(person_ref,
+/// embedding)`; an entry of another shape is a damaged row, which matches
+/// no one, and is skipped.
+fn known_voices(voices: &[Json]) -> Vec<(String, Vec<f64>)> {
+    voices
+        .iter()
+        .filter_map(|voice| match voice.as_array().map(Vec::as_slice) {
+            Some([Json::String(person), Json::String(embedding)]) if !person.is_empty() => {
+                let Ok(Json::Array(components)) = serde_json::from_str::<Json>(embedding) else {
+                    return None;
+                };
+                if components.is_empty() {
+                    return None;
+                }
+                components
+                    .iter()
+                    .map(Json::as_f64)
+                    .collect::<Option<Vec<_>>>()
+                    .map(|components| (person.clone(), components))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// The person a voice is, among the `known` voices (`(person_ref,
+/// embedding)`, in the order memory holds them), by the conversation's
+/// embedding match (decision D90): a person scores the highest cosine
+/// similarity of the voice with any of theirs, and is a candidate at
+/// [`SIMILARITY_THRESHOLD`] or more; the best candidate is the voice's
+/// person unless another candidate comes within [`SIMILARITY_MARGIN`] of
+/// it (as two identity groups' matches are refused), when the voice is no
+/// one's.
+#[must_use]
+pub fn person_for_voice<'a>(voice: &[f64], known: &'a [(String, Vec<f64>)]) -> Option<&'a str> {
+    let mut scores: Vec<(&str, f64)> = Vec::new();
+    for (person, embedding) in known {
+        let Some(score) = cosine_similarity(voice, embedding) else {
+            continue;
+        };
+        match scores.iter_mut().find(|(known, _)| known == person) {
+            Some((_, best)) => *best = best.max(score),
+            None => scores.push((person, score)),
+        }
+    }
+    let mut best: Option<(&str, f64)> = None;
+    let mut second: Option<f64> = None;
+    for (person, score) in scores {
+        if score < SIMILARITY_THRESHOLD {
+            continue;
+        }
+        match best {
+            Some((_, most)) if score <= most => {
+                second = Some(second.map_or(score, |second| second.max(score)));
+            }
+            _ => {
+                second = best.map(|(_, most)| most);
+                best = Some((person, score));
+            }
+        }
+    }
+    let (person, most) = best?;
+    if second.is_some_and(|second| most - second <= SIMILARITY_MARGIN) {
+        return None;
+    }
+    Some(person)
+}
+
+/// The prefix of a person's participant ref, `person-<n>`.
+pub const PERSON_REF_PREFIX: &str = "person-";
+
+/// What `<conversation:people_for_input>` makes of an input: `{input,
+/// people, voices}`. Each embedding of the input's `source_ids`, then of
+/// its `target_ids`, in order, is matched to a person among the `known`
+/// voices and those of the people created before it ([`person_for_voice`]);
+/// a voice that is no one's is a new person, `person-<n>`, numbered on
+/// from `count` (the people memory holds). `input` is the input with each
+/// embedding replaced by its person's ref and each list without repeats
+/// (the first kept); `people` the refs of the people created, in order;
+/// `voices` `[person_ref, embedding]` for each embedding heard, the
+/// embedding as its JSON text, to be stored for that person.
+///
+/// # Errors
+///
+/// A static detail when the input's identities are malformed.
+pub fn people_for(
+    input: &Map<String, Json>,
+    known: &[(String, Vec<f64>)],
+    count: u64,
+) -> Result<Json, &'static str> {
+    let mut known = known.to_vec();
+    let mut people = Vec::new();
+    let mut voices = Vec::new();
+    let mut identified = input.clone();
+    for name in ["source_ids", "target_ids"] {
+        let ids = identities_of(
+            input,
+            name,
+            "conversation:people_for_input input source_ids or target_ids is not an array of identities",
+        )?;
+        let mut refs: Vec<Json> = Vec::with_capacity(ids.len());
+        for id in ids {
+            let id = match embedding(id) {
+                Some(voice) => {
+                    let person = if let Some(person) = person_for_voice(&voice, &known) {
+                        person.to_owned()
+                    } else {
+                        let person = format!(
+                            "{PERSON_REF_PREFIX}{}",
+                            count.saturating_add(people.len() as u64).saturating_add(1)
+                        );
+                        people.push(Json::String(person.clone()));
+                        person
+                    };
+                    known.push((person.clone(), voice));
+                    voices.push(Json::Array(vec![
+                        Json::String(person.clone()),
+                        Json::String(id.to_string()),
+                    ]));
+                    Json::String(person)
+                }
+                None => id.clone(),
+            };
+            if !refs.contains(&id) {
+                refs.push(id);
+            }
+        }
+        identified.insert(name.into(), Json::Array(refs));
+    }
+    let mut out = Map::new();
+    out.insert("input".into(), Json::Object(identified));
+    out.insert("people".into(), Json::Array(people));
+    out.insert("voices".into(), Json::Array(voices));
+    Ok(Json::Object(out))
 }
 
 /// Executes `<conversation:participant_for_source>` (`add`) and

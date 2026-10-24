@@ -73,6 +73,45 @@ function hasAllTurns() {
   return turn_index >= turn_sources.length;
 }
 
+// identifying_from, identifying_memory and tagging_memory (decision D194)
+
+// Nothing to identify: no memory, or no embedding among the input's
+// identities.
+function isUnidentified() {
+  return database === null || !input.source_ids.concat(input.target_ids).some(Array.isArray);
+}
+
+// The voice each person was first heard with, and the number of people.
+function identifyStatements() {
+  return [{sql: voice_select, parameters: ['voice']}, {sql: people_count_select}];
+}
+
+// The voices memory holds, [person_ref, embedding] each.
+function heardVoices(_event) {
+  return _event.data.results[0].rows.map(function (row) { return row.values; });
+}
+
+function peopleCount(_event) {
+  return Number(_event.data.results[1].rows[0].values[0]);
+}
+
+// The new people, then every voice heard, each for its person.
+function tagStatements() {
+  return people.people.map(personStatement).concat(people.voices.map(voiceStatement));
+}
+
+function personStatement(person) {
+  return {sql: person_insert, parameters: [person]};
+}
+
+function voiceStatement(voice) {
+  return {sql: voice_insert, parameters: [voice[0], 'voice', voice[1]]};
+}
+
+function identifyErrorMessage(_event) {
+  return 'Conversation could not identify the input\'s voices (' + _event.name + ')';
+}
+
 // recalling_from and remembering_from
 
 function isMemoryAbsent() {

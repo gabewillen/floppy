@@ -9,7 +9,8 @@
   bot.ability.conversation.input is taken too.
 
     inactive -input-> active { waiting -input-> running -> waiting }
-    running { recalling_from -> recalling_memory?
+    running { identifying_from -> identifying_memory? -> tagging_memory?
+              -> relating -> recalling_from -> recalling_memory?
               -> turn_exchange { readiness -> exchanging } (per source)
               -> remembering_from -> remembering_memory? -> committing }
     append, snapshot.request (any state)
@@ -33,9 +34,27 @@
   once its detector is ready (<conversation:participant_for_source>) and
   stops being one when its turn fails (<conversation:fail_turn>); a failed
   remember restores the participants the relationship had before the input,
-  so a participant stays one while it has a detector. An embedding source
-  is never matched to an earlier participant's voice, so each embedding is
-  its own participant.
+  so a participant stays one while it has a detector.
+
+  People (decision D194): long-term memory holds people, each a stable
+  participant ref person-<n> with the voice embeddings heard for them
+  (bot_person, and bot_person_embedding of kind voice). With a database,
+  an input with an embedding among its identities is identified before
+  its relationship is found: identifying_memory invokes the memory ability
+  as "identify" with the voice each person was first heard with (oldest
+  first) and the number of people, and <conversation:people_for_input>
+  matches each embedding by the relationships' match (cosine at 0.85, its
+  margin 0.05, decision D90): the closest person, unless another comes
+  within the margin, else a new person numbered on from the count. The
+  input in hand then holds each person's ref in its embedding's place, so
+  its relationship, turns, participants, memory and committed message key
+  on the person; tagging_memory then invokes it as "tag" to store the new
+  people and every voice heard, each for its person, in one transaction.
+  Each is bounded by memory_timeout_ms; a failure or timeout answers
+  bot.ability.conversation.failed {stage: "memory", message} and commits
+  nothing. Without a database there are no people: an embedding is its own
+  participant (D79). Faces, the bot's own voice and rest's consolidation
+  (D195) are not built.
 
   Memory (before and after the turns):
   with a database (the <param> database, the memory database file) it
@@ -189,6 +208,14 @@
     <data id="recalled" expr="0"/>
     <!-- The input as <memory:to_json> writes it, to remember. -->
     <data id="memory_payload" expr="null"/>
+    <!-- People (decision D194): the voice each person was first heard
+         with, the number of people, a new person, a voice heard for one;
+         and what <conversation:people_for_input> made of the input. -->
+    <data id="voice_select" expr="'SELECT person_id, embedding FROM bot_person_embedding AS e WHERE kind = ?1 AND seq = (SELECT MIN(seq) FROM bot_person_embedding AS f WHERE f.kind = e.kind AND f.person_id = e.person_id) ORDER BY seq'"/>
+    <data id="people_count_select" expr="'SELECT COUNT(*) FROM bot_person'"/>
+    <data id="person_insert" expr="'INSERT INTO bot_person (person_id) VALUES (?1)'"/>
+    <data id="voice_insert" expr="'INSERT INTO bot_person_embedding (person_id, kind, embedding) VALUES (?1, ?2, ?3)'"/>
+    <data id="people" expr="null"/>
   </datamodel>
   <script src="conversation.js"/>
 
@@ -227,19 +254,10 @@
         </transition>
       </state>
 
-      <!-- The input's relationship; recall its memories, exchange the
-           turns, remember the input (nothing without a database); then
-           commit the turns' product. -->
-      <state id="running" initial="recalling_from">
-        <onentry>
-          <conversation:relationship_for_input location="relationships" indexlocation="relationship_index"
-                                               input="input"/>
-          <assign location="participants" expr="relationship().participants"/>
-          <assign location="inputs" expr="inputs + 1"/>
-          <identity:sorted_identities location="turn_sources" ids="input.source_ids"/>
-          <assign location="turn_index" expr="0"/>
-          <assign location="turns" expr="[]"/>
-        </onentry>
+      <!-- Identify the input's voices; then its relationship; recall
+           its memories, exchange the turns, remember the input (nothing
+           without a database); then commit the turns' product. -->
+      <state id="running" initial="identifying_from">
         <!-- Input that arrives meanwhile waits. -->
         <transition event="bot.ability.conversation.routed_input" event:schema="../schemas/bot.ability.conversation.routed_input.json">
           <event:defer/>
@@ -249,6 +267,89 @@
           <event:defer/>
           <log label="conversation.deferred" expr="_event.name"/>
         </transition>
+        <!-- Identify the people the input's voices are (decision D194). -->
+        <state id="identifying_from">
+          <transition cond="isUnidentified()" target="relating"/>
+          <transition target="identifying_memory"/>
+        </state>
+        <state id="identifying_memory">
+          <onentry>
+            <send id="identify-after" event="identifying_memory.after" delayexpr="memoryTimeoutDelay()"/>
+            <assign location="people" expr="null"/>
+          </onentry>
+          <onexit>
+            <cancel sendid="identify-after"/>
+          </onexit>
+          <invoke id="identify" type="scxml" src="../memory/memory.scx">
+            <param name="database" expr="database"/>
+            <param name="statements" expr="identifyStatements()"/>
+          </invoke>
+          <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="tagging_memory">
+            <conversation:people_for_input location="people" input="input" voices="heardVoices(_event)"
+                                           count="peopleCount(_event)"/>
+            <assign location="input" expr="people.input"/>
+          </transition>
+          <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="waiting">
+            <send event="bot.ability.conversation.failed" target="#_parent">
+              <param name="stage" expr="'memory'"/>
+              <param name="message" expr="memoryFailedMessage(_event)"/>
+            </send>
+          </transition>
+          <transition event="identifying_memory.after" target="waiting">
+            <send event="bot.ability.conversation.failed" target="#_parent">
+              <param name="stage" expr="'memory'"/>
+              <param name="message" expr="'Conversation memory identification timed out.'"/>
+            </send>
+          </transition>
+        </state>
+        <!-- Store the new people and every voice heard, each for its
+             person. -->
+        <state id="tagging_memory">
+          <onentry>
+            <send id="tag-after" event="tagging_memory.after" delayexpr="memoryTimeoutDelay()"/>
+          </onentry>
+          <onexit>
+            <cancel sendid="tag-after"/>
+          </onexit>
+          <invoke id="tag" type="scxml" src="../memory/memory.scx">
+            <param name="database" expr="database"/>
+            <param name="statements" expr="tagStatements()"/>
+          </invoke>
+          <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="relating"/>
+          <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="waiting">
+            <send event="bot.ability.conversation.failed" target="#_parent">
+              <param name="stage" expr="'memory'"/>
+              <param name="message" expr="memoryFailedMessage(_event)"/>
+            </send>
+          </transition>
+          <transition event="tagging_memory.after" target="waiting">
+            <send event="bot.ability.conversation.failed" target="#_parent">
+              <param name="stage" expr="'memory'"/>
+              <param name="message" expr="'Conversation memory tagging timed out.'"/>
+            </send>
+          </transition>
+          <!-- The people could not be made of the input (an error.* of
+               the identification, taken before the tag starts). -->
+          <transition event="error.*" target="waiting">
+            <send event="bot.ability.conversation.failed" target="#_parent">
+              <param name="stage" expr="'memory'"/>
+              <param name="message" expr="identifyErrorMessage(_event)"/>
+            </send>
+          </transition>
+        </state>
+        <!-- The input's relationship and its turns' sources. -->
+        <state id="relating">
+          <onentry>
+            <conversation:relationship_for_input location="relationships" indexlocation="relationship_index"
+                                                 input="input"/>
+            <assign location="participants" expr="relationship().participants"/>
+            <assign location="inputs" expr="inputs + 1"/>
+            <identity:sorted_identities location="turn_sources" ids="input.source_ids"/>
+            <assign location="turn_index" expr="0"/>
+            <assign location="turns" expr="[]"/>
+          </onentry>
+          <transition target="recalling_from"/>
+        </state>
         <!-- Recall the relationship's memories, before the turns. -->
         <state id="recalling_from">
           <transition cond="isMemoryAbsent()" target="turn_exchange">

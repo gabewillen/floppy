@@ -208,8 +208,9 @@ fn a_bot_activates_on_joining_its_environment() {
 }
 
 /// A voice embedding is biometric and never reaches the run's records:
-/// the room logs a conversation output whose source is an embedding with
-/// the marker `<biometric:VoiceEmbedding>` in its place.
+/// the room logs a conversation output whose input's source is an
+/// embedding with the marker `<biometric:VoiceEmbedding>` in its place, and
+/// whose message names the person memory holds for the voice.
 #[test]
 fn a_voice_embedding_is_never_written_to_the_records() {
     let dir = layout(&[]);
@@ -229,7 +230,12 @@ fn a_voice_embedding_is_never_written_to_the_records() {
     };
     let marker = json!(["<biometric:VoiceEmbedding>"]);
     assert_eq!(output["parent"]["data"]["source_ids"], marker, "{output}");
-    assert_eq!(output["messages"][0]["source_ids"], marker, "{output}");
+    // The message names the person the voice is (decision D194).
+    assert_eq!(
+        output["messages"][0]["source_ids"],
+        json!(["person-1"]),
+        "{output}"
+    );
     assert_eq!(
         output["messages"][0]["target_ids"],
         json!(["floppy"]),
@@ -237,6 +243,78 @@ fn a_voice_embedding_is_never_written_to_the_records() {
     );
     let text = serde_json::to_string(&records).expect("the records are JSON");
     assert!(!text.contains("0.28") && !text.contains("0.96"), "{text}");
+}
+
+/// Decision D194: long-term memory holds people. The same voice twice is
+/// one person, a different voice another, and a person outlives the bot:
+/// the bot started again on the same database knows the voice. Each input
+/// is a product that is not text, so the room logs the conversation's
+/// output, whose message names the person in the voice's place.
+#[test]
+fn a_voice_is_one_person_across_turns_and_restarts() {
+    let dir = layout(&[]);
+    let memory = unique_scratch("people");
+    let room = support::environment(&dir, &["floppy"], &[]);
+    let start_on_memory = || {
+        let run = Run::start(
+            &[
+                "--dir".to_owned(),
+                format!(
+                    "{}={}::/memory",
+                    support::service_uri("sql"),
+                    memory.display()
+                ),
+                room.display().to_string(),
+            ],
+            &[],
+        );
+        all_activated(&run, &["floppy"]);
+        run
+    };
+    let person_of = |run: &mut Run, records: &mut Vec<Json>, voice: [f64; 2]| {
+        run.event(
+            "bot.ability.communication.input",
+            &json!({"source_ids": [voice], "target_ids": ["floppy"], "content": {"a": 1}, "content_type": "application/json"}),
+        );
+        let heard = run.until(WAIT, label_is("bot.ability.conversation.output"));
+        let output = logged(&heard, "bot.ability.conversation.output")
+            .pop()
+            .expect("the conversation's output");
+        records.extend(heard);
+        output["messages"][0]["source_ids"].clone()
+    };
+    let mut records = Vec::new();
+    let mut run = start_on_memory();
+    let first = person_of(&mut run, &mut records, [0.28, 0.96]);
+    let again = person_of(&mut run, &mut records, [0.3, 0.95]);
+    let other = person_of(&mut run, &mut records, [0.96, -0.28]);
+    records.extend(run.close(WAIT).records);
+    let mut run = start_on_memory();
+    let restarted = person_of(&mut run, &mut records, [0.27, 0.96]);
+    let newcomer = person_of(&mut run, &mut records, [-0.7, 0.7]);
+    records.extend(run.close(WAIT).records);
+    assert_eq!(
+        [first, again, other, restarted, newcomer],
+        [
+            json!(["person-1"]),
+            json!(["person-1"]),
+            json!(["person-2"]),
+            json!(["person-1"]),
+            json!(["person-3"]),
+        ],
+        "{records:?}"
+    );
+    // The voices are stored, never written to the records.
+    let text = serde_json::to_string(&records).expect("the records are JSON");
+    for voice in [
+        "0.28,0.96",
+        "0.3,0.95",
+        "0.96,-0.28",
+        "0.27,0.96",
+        "-0.7,0.7",
+    ] {
+        assert!(!text.contains(voice), "{voice}: {text}");
+    }
 }
 
 #[test]

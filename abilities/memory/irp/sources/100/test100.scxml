@@ -11,7 +11,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.memory.output" cond="_event.data.results.length === 3 &amp;&amp; _event.data.results[0].rows.length === 1 &amp;&amp; _event.data.results[0].rows[0].values[0] === '0001' &amp;&amp; _event.data.results[1].rows[0].values[0] === 5 &amp;&amp; _event.data.results[2].rows[0].values[0] === 1" target="step1"/>
+    <transition event="bot.ability.memory.output" cond="_event.data.results.length === 3 &amp;&amp; _event.data.results[0].rows.length === 1 &amp;&amp; _event.data.results[0].rows[0].values[0] === '0001' &amp;&amp; _event.data.results[1].rows[0].values[0] === 7 &amp;&amp; _event.data.results[2].rows[0].values[0] === 1" target="step1"/>
   </state>
   <state id="step1">
     <transition event="done.invoke.memory" target="step2"/>
