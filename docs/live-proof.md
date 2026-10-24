@@ -7,6 +7,41 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-24, the builder track on the Sparks (D133 to D138), model `sparks/qwen3.8-flash-next`
+
+`eval.py builder --judges none --repeats 2 --column
+"sparks=sparks/qwen3.8-flash-next"` (docs/eval.md's builder track) on floppy
+commit `24e7c269` (#37's branch), from a cloud session: the bot and the
+builder both on `sparks/qwen3.8-flash-next` through the CPA gateway, and
+the decision service on TypeSafe, each reached by a local relay through the
+session's proxy (`FLOPPY_BASE_URL` and `TYPESAFE_BASE_URL` naming the
+relays, the keys placeholders the proxy replaces). No speech backend was
+configured, so every reply ended `Speech encoding failed: the backend is
+not configured.` and the `says` and `ticks` checks read nothing said; they
+measure the speech backend here, not the builder. Run
+`builder-20261024T183844Z`, 10 jobs 4 at a time, 44 minutes.
+
+| Scenario | Builds | Accepted | Attempts per accepted | Learned |
+| --- | --- | --- | --- | --- |
+| reflex_greeting | 2 | 1 | 1.0 | 0.50 |
+| reflex_keyword | 3 | 2 | 1.5 | 1.00 |
+| reflex_pingpong | 3 | 1 | 3.0 | 0.50 |
+| routine_reminder | 2 | 2 | 1.5 | 1.00 |
+| routine_restart | 2 | 1 | 2.0 | 0.50 |
+
+12 builds, 7 accepted (1.7 attempts each), none failed: the other 5 were
+`unfinished`, cut by the eval's step bound (`timeout_s`, 15 minutes) while
+still repairing, at failure 2 of 8 at most, so D133's cap never ended a
+build. Their failures were 4 `design-failed (truncated)` (D135 grows only
+the author's bound, not the design's), 2 `author-failed (truncated)`
+(each followed by a grown bound) and 3 `simulate test-failed` on a turn
+behavior that never reaches a final state. The accepted routines' first
+drafts twice failed `apply` E0008 (a tick without `name`, `trigger`,
+`scheduled_at` and `fired_at`) and were repaired on attempt 2. Every
+accepted turn behavior handled its probe turns through autonomy and left
+the unrelated question to reasoning; both water reminders were broken
+when asked. On 2026-10-23 the Sparks track accepted 15 of 19 builds.
+
 ## 2026-10-21, D124's no-progress on the maintainer's lab stack, model `gemma-4-26b-a4b`
 
 The first runs on the maintainer's lab stack:
