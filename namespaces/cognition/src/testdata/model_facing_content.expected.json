@@ -59,6 +59,10 @@
   "content": "<integer content=\"7\" stimulus:event=\"bot.tick\" stimulus:source=\"clock\" />",
   "system": null
  },
+ "self_behaviors": {
+  "content": "<object stimulus:event=\"bot.input\" stimulus:source=\"gabe\">\n  <content>\n    <entry key=\"text\" value=\"who are you\" />\n  </content>\n</object>",
+  "system": "Be helpful.\n\n<persona><name taken_by=\"you\">Floppy</name><behaviors learned_by=\"you\"><behavior name=\"PingPong\" lifetime=\"turn\">Reply pong to \"ping\" &amp; &lt;more&gt;.</behavior><behavior name=\"WaterReminder\" lifetime=\"persistent\"></behavior></behaviors></persona>"
+ },
  "self_named": {
   "content": "<object stimulus:event=\"bot.input\" stimulus:source=\"gabe\">\n  <content>\n    <entry key=\"text\" value=\"who are you\" />\n  </content>\n</object>",
   "system": "Be helpful.\n\n<persona><name taken_by=\"you\">Flo &lt;&amp;&gt; py</name><traits given_by=\"owner\"><trait>curious</trait><trait>kind &amp; &lt;warm&gt;</trait></traits><description written_by=\"you\">I like lamps.</description></persona>"

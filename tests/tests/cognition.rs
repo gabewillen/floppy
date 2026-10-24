@@ -927,6 +927,58 @@ fn close_as(run: Run, mock: &Mock, test: Option<&str>) {
     }
 }
 
+/// Reasoning names the bot's active learned behaviors in its self block,
+/// so the bot knows what it has learned (decision D154): a draft is not
+/// one of them.
+#[test]
+fn reasoning_is_told_the_bots_learned_behaviors() {
+    let mock = Mock::start();
+    let silent = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript"><state id="waiting"/></scxml>"#;
+    let bot = layout(
+        &mock,
+        Decision::Abstain,
+        Generation::Ignore,
+        &[(
+            "abilities/cognition/cognition.scx",
+            &[("database", format!("'{DATABASE}'").as_str())],
+        )],
+    );
+    let grant = inventory(
+        DATABASE,
+        bot_layout(&bot),
+        &[
+            Learned {
+                name: "Greeter",
+                trigger: "environment.sound",
+                status: "ACTIVE",
+                source: silent,
+            },
+            Learned {
+                name: "Unbuilt",
+                trigger: "environment.sound",
+                status: "DRAFT",
+                source: silent,
+            },
+        ],
+    );
+    support::use_database(&bot.body, DATABASE);
+    let mut run = start_with(&bot, &grant);
+    say(&mut run, "what can you do?");
+    run.until(WAIT, label_is("bot.processing.completed"));
+    let requests = reasoning_requests(&mock);
+    assert_eq!(requests.len(), 1);
+    let system = requests[0].body["messages"][0]["content"]
+        .as_str()
+        .expect("the system message")
+        .to_owned();
+    assert!(
+        system.contains(r#"<behaviors learned_by="you"><behavior name="Greeter" lifetime="turn"></behavior></behaviors>"#),
+        "{system}"
+    );
+    assert!(!system.contains("Unbuilt"), "{system}");
+    close(run, &mock, "reasoning_is_told_the_bots_learned_behaviors");
+}
+
 /// [`autonomy_runs_the_learned_behaviors_the_stimulus_triggers`] on
 /// `database`; `test` names its pinned trace.
 fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
