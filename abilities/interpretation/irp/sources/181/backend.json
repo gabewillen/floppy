@@ -21,7 +21,7 @@
       }
     },
     {
-      "path": "/interactions",
+      "path": "/audio/transcriptions",
       "status": 500,
       "body": {
         "error": {
@@ -49,20 +49,10 @@
       }
     },
     {
-      "path": "/interactions",
+      "path": "/audio/transcriptions",
       "status": 200,
       "body": {
-        "steps": [
-          {
-            "type": "model_output",
-            "content": [
-              {
-                "type": "text",
-                "text": "again"
-              }
-            ]
-          }
-        ]
+        "text": "again"
       }
     }
   ]

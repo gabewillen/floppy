@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- speech_decoding-1: the gemini answer's model_output steps' text is joined as the words. -->
+<!-- speech_decoding-3: the gemini answer's model_output steps' text is joined as the words. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="speech_decoding" type="scxml" src="../../../speech_decoding.scx">
     <param name="audio" expr="'media/speech.wav'"/>
     <param name="media_type" expr="'audio/wav'"/>
+    <param name="provider" expr="'gemini'"/>
+    <param name="model" expr="'gemini-3.5-flash'"/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>

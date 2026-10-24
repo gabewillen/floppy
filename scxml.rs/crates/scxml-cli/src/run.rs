@@ -714,7 +714,7 @@ mod live {
     impl Sink {
         fn emit(&mut self, line: &str) -> io::Result<()> {
             let mut stdout = self.stdout.lock();
-            stdout.write_all(crate::mask::scrub(line).as_bytes())?;
+            stdout.write_all(crate::mask::scrub_json(line).as_bytes())?;
             stdout.write_all(b"\n")?;
             stdout.flush()
         }

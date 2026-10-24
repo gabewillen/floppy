@@ -2,9 +2,9 @@
   "clock": "wall",
   "answers": [
     {
-      "path": "/v1/interactions",
+      "path": "/v1/audio/transcriptions",
       "body": {
-        "output_text": "  hello there \n"
+        "text": "  hello there \n"
       }
     }
   ]

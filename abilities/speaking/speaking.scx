@@ -138,10 +138,11 @@
     <data id="channels" expr="1"/>
     <data id="media_type" expr="'audio/pcm'"/>
     <!-- The speech provider, model and voice vocal asks the speech
-         service for (Gemini by default). -->
-    <data id="provider" expr="'gemini'"/>
-    <data id="model" expr="'gemini-3.1-flash-tts-preview'"/>
-    <data id="voice" expr="'Kore'"/>
+         service for: the OpenAI-compatible API (provider null) with the lab's
+         Breeze TTS engine and its warm voice by default. -->
+    <data id="provider" expr="null"/>
+    <data id="model" expr="'sidekick-tts-engine-breeze'"/>
+    <data id="voice" expr="'warm'"/>
     <data id="output_prefix" expr="'media/speaking-'"/>
     <!-- The mouth: the efference copy's mouth and the sound's source, so
          the listening can tell its own voice apart. -->
