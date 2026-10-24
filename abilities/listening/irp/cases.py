@@ -20,8 +20,7 @@ SILENT = {"path": "/vad", "status": 200, "body": {"segments": []}}
 
 
 def decoded(text):
-    return {"path": "/interactions", "status": 200,
-            "body": {"steps": [{"type": "model_output", "content": [{"type": "text", "text": text}]}]}}
+    return {"path": "/audio/transcriptions", "status": 200, "body": {"text": text}}
 
 
 def sound(name, **extra):

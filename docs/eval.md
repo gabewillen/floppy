@@ -17,10 +17,10 @@ It has three parts:
   `floppy_live`: it runs the bot in the room on real backends through the
   steps of each scenario of a plan, several at a time, and writes every
   run's records. It asserts nothing about the bot.
-- **The grade**, `tests/eval/score.py` and `tests/eval/judge.py`: each
-  scenario's checks read the bot's own logs, and two LLM judges (a CPA
-  `gabe-codex-*` model and Gemini) grade the transcript against the
-  scenario's criteria.
+- **The grade**, `tests/eval/score.py` and `tests/eval/judge.py`, black
+  box: each scenario's checks read what the bot said back, and two LLM
+  judges (a CPA `gabe-codex-*` model and Gemini) grade the conversation
+  alone against the scenario's criteria.
 - **The hill climb**, `tests/eval/eval.py climb`: an LLM proposes a rewrite
   of one learning prompt from the failures, the eval scores it, and the best
   is kept, one prompt per generation.
@@ -34,11 +34,11 @@ never edits the workspace: everything goes under `target/floppy-eval/`.
 
 | Scenario | Category | What it teaches, then probes |
 | --- | --- | --- |
-| `name_adopt` | name | "your name is Juniper"; addressed as Juniper, not as Pixel; restarted, recalls and answers to Juniper |
-| `name_rename` | name | Juniper, then Biscuit; answers to Biscuit; restarted, still Biscuit |
-| `reflex_pingpong` | reflex | "whenever I say exactly 'ping', reply 'pong'"; two pings, an unrelated question, a ping after a restart |
-| `reflex_greeting` | reflex | "good morning" gets "Good morning, sunshine!"; a variation from another person; "good night" must not |
-| `reflex_keyword` | reflex | any mention of bananas gets "yellow alert", inside longer sentences, also after a restart |
+| `name_adopt` | name | "your name is Juniper"; answers to Juniper and does not claim to be Pixel; restarted, says it is Juniper and still does not claim to be Pixel |
+| `name_rename` | name | Juniper, then Biscuit; answers to Biscuit and no longer claims to be Juniper; restarted, says it is Biscuit and does not claim to be Juniper |
+| `reflex_pingpong` | reflex | "whenever I say exactly 'ping', reply 'pong'"; two pings get exactly "pong", an unrelated question gets no pong, a ping after a restart still gets exactly "pong" |
+| `reflex_greeting` | reflex | "good morning" gets "Good morning, sunshine!"; a variation from another person; "good night" must not; "good morning" again after a restart |
+| `reflex_keyword` | reflex | a mention of bananas inside a longer sentence gets just "yellow alert"; an unrelated request does not; a banana sentence after a restart still gets just "yellow alert" |
 | `routine_reminder` | routine | a water reminder every minute; reminders with no input; stopped when asked; quiet after |
 | `routine_restart` | routine | "stretch break" every minute; keeps running after a restart with no new request |
 
@@ -67,13 +67,50 @@ the wall clock passing with no input; its `lessons` counts the lessons
 closed in it, which it does not wait on (`lessons_settled` is true). `criteria` are what the judges
 score, 0 to 10 each.
 
-### Checks
+### Checks and diagnostics
 
-Each check reads a log label the bot already writes, at one step (`at:
-[session, step]`) or up to the end of one (`by`), and scores 0 to 1 with a
-`weight`:
+The grade is black box (decision D241): a scenario's `checks` score only
+what floppy said back to what it was told, and the judges read only the
+conversation. A check looks at one step (`at: [session, step]`) or up to
+the end of one (`by`), and scores 0 to 1 with a `weight`:
 
 | Check | Passes when |
+| --- | --- |
+| `says`, `not_says` | a reply matches (none matches) the pattern, case-insensitive |
+| `ticks` | at least `min` replies matching the pattern during a wait (no input, so each is a routine's turn); partial credit below `min` |
+| `no_ticks` | no reply during a wait |
+
+What is learned shows in what floppy says: a name is the name it gives when
+asked, a reflex is the taught reply to the trigger and no reply of it to a
+near miss, a routine is replies coming with no input and stopping when
+asked, and a name floppy claims is checked as a claim: `not_says`
+`\b(i am|i['’]m|my name is|my name['’]s) pixel\b`, matched without case,
+so a reply that only mentions the name passes; a claim in another phrasing
+is left to the judges. A taught reply is matched as the reply (`^\W*pong\W*$`, `^\W*yellow
+alert\W*$`) or as the whole taught phrase, never one word of it. By
+convention, in every scenario with a probe after a restart (a `says` or `ticks`
+check in a session after the first), that probe carries the largest weight of any
+check: it shows the lesson outlasted the session that taught it
+(`test_a_probe_after_a_restart_carries_the_largest_weight` holds the
+scenarios in `tests/eval/scenarios/` to it).
+
+A scenario's `diagnostics` read floppy's own logs. They say how it got
+there and are reported in `report.md` beside the grade, in the "Inside
+floppy" table and in each job's "- inside (not scored):" lines,
+and the hill climb's proposer reads the failed ones, but they are never
+scored: `score.score` raises `ValueError` on a scenario that lists one
+under `checks`, and `score.diagnostics` raises on a black-box check listed
+under `diagnostics`; `score.score` refuses an unknown kind
+(`unknown check: <kind>`) and `score.diagnostics` an unknown diagnostic
+(`unknown diagnostic: <kind>`),
+so a misfiled or misspelled spec is an error, never a silent change. A
+full grade is therefore not proof that floppy learned anything: reasoning
+that recites the lesson passes every check. Whether a behavior was accepted
+is the `learned` diagnostic, which those "- inside (not scored):" lines show and the
+builder track tallies as its own "Learned" rate, a separate number that no
+grade or suite score includes:
+
+| Diagnostic | Passes when |
 | --- | --- |
 | `adopted_name` | `identity.name` is `adopted "<name>"` |
 | `recalled_name` | `identity.name` is `recalled "<name>"` in that session (a restarted bot remembered it) |
@@ -81,9 +118,6 @@ Each check reads a log label the bot already writes, at one step (`at:
 | `learned` | `reflection.inventory` accepts a behavior: `<Name> ACTIVE <lifetime> ... (accept)`, `turn` for a reflex, `persistent` for a routine (the revision logs it for reflection and for a lesson alike) |
 | `broken` | `reflection.inventory` breaks one: `<Name> BROKEN (break)`, or the learning ability does: `learning.learned` `lesson of turn N: <Name> … BROKEN` |
 | `reflex`, `not_reflex` | `cognition.stage` is (is not) `autonomy handled`: a learned behavior, not reasoning, handled the real input |
-| `says`, `not_says` | a reply matches (none matches) the pattern, case-insensitive |
-| `ticks` | at least `min` replies matching the pattern during a wait (no input, so each is a routine's turn); partial credit below `min` |
-| `no_ticks` | no reply during a wait |
 
 A reply is a `bot.ability.communication.respond` the turn selected, read
 from `floppy.output` (its parts' words, joined). That is what floppy chose
@@ -91,12 +125,17 @@ to say, with or without a speech service: `floppy.say` is logged only once
 speech encoded the words, and an eval column runs floppy on Sparks alone,
 with no hosted speech (decision D216). A turn output the eval cannot read
 fails `not_says` and `no_ticks` rather than passing them. The judges read
-each reply as `floppy says: …`.
+each reply as `floppy says: …`, each restart as `(floppy is restarted)`
+(also before a restarted session none of whose steps ran), a reply the
+eval cannot read as `(a reply of floppy's could not be read)`, and a step
+that did not settle with a note that whether floppy replied after it is
+unknown; the judge prompt counts both markers as unknown, neither silence
+nor a reply. Nothing else: no log of floppy's.
 
-`reflex` is the check that exposes the gap: the conversation's history
-reaches reasoning (decision D99), so reasoning can answer "ping" with
-"pong" from the instruction alone. That is the bot following the
-conversation, not a reflex it learned; only `autonomy handled` is.
+Within a session the conversation's history reaches reasoning (decision
+D99), so reasoning can answer "ping" with "pong" from the instruction
+alone. The grade counts that as a right answer, as a person would; the
+`reflex` diagnostic shows whether a learned behavior or reasoning gave it.
 
 ## Grading
 
@@ -117,7 +156,10 @@ Keys come from the calling environment or the `--judge-env-file` files
 (only the variables a judge names are used), go only to their own backend,
 and are never printed or written. A key left unset sends no credential,
 for a network that injects it (a cloud session's proxy). The judges read
-only the step summary `score.summary` builds from the bot's logs.
+only the conversation `score.summary` builds: what each person said, the time
+passing, each restart, what floppy said, each step that never ran, and a
+marker where the eval could not read a reply of floppy's or a step did not
+settle.
 
 ## Hill climbing
 

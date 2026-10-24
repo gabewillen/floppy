@@ -4,6 +4,8 @@
 <state id="harness" initial="boot">
   <invoke id="speech_decoding" type="scxml" src="../../../speech_decoding.scx">
     <param name="audio" expr="'media/speech.wav'"/>
+    <param name="provider" expr="'gemini'"/>
+    <param name="model" expr="'gemini-3.5-flash'"/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
