@@ -122,7 +122,7 @@
 //! with behaviors (each `{name, lifetime, description?}`, the bot's active
 //! learned behaviors, decision D154), `<behaviors learned_by="you">` of
 //! `<behavior name lifetime>` holding its description, every value escaped;
-//! `null` when both are empty.
+//! `null` when the instructions and the self block are both empty.
 //!
 //! A field renders so: `null` is skipped, a scalar is an attribute (a number as
 //! its JSON text), an object is an element of `<entry key>` elements each
