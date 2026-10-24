@@ -307,7 +307,7 @@ Last updated: 2026-10-24.
   address; the cognition input's `environment` field is rendered by
   reasoning as its `<environment>` block. Every environment run
   passes `--fuel 9223372036854775807` until average usage is measured
-  (D111). scxml.rs is at `5bc75e72` (D125's `..` in `event:schema`), on top of `cf8f293a` (D123's eventless-cond fix), on top of `f920cb47` (D122), on top of `c8bb69a8` (D121) and `b59f8111` (D104, D109, D110). Speech and voice
+  (D111). scxml.rs is at `cf27c2e7` (D217's env masking only inside a record's JSON strings), on top of `5bc75e72` (D125's `..` in `event:schema`), on top of `cf8f293a` (D123's eventless-cond fix), on top of `f920cb47` (D122), on top of `c8bb69a8` (D121) and `b59f8111` (D104, D109, D110). Speech and voice
   backends exist now, each through an env file in the session scratchpad
   (outside the repository) named in `FLOPPY_LIVE_ENV_FILE` with `.env`:
   `env.speech` (Gemini's OpenAI-compatible API, `FLOPPY_SPEECH_*`) and
