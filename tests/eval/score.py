@@ -276,7 +276,7 @@ def summary(scenario, job, limit=600):
             for words in said or []:
                 lines.append(f"  floppy says: {words[:limit]}")
         if not step["completed"]:
-            lines.append("  (the step did not settle within its bound; a later reply is not shown)")
+            lines.append("  (the step did not settle within its bound; whether floppy replied after this is unknown)")
     ran = {(s["session"], s["step"]) for s in job["steps"]}
     for session, spec in enumerate(scenario["sessions"]):
         for index, _ in enumerate(spec["steps"]):
