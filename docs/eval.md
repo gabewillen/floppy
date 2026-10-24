@@ -197,14 +197,13 @@ the bot, the builder and no hosted speech. Hosted models only judge.
 ## Running it
 
 The bot's backends are the live tests' (`FLOPPY_LIVE_ENV_FILE`,
-`FLOPPY_LIVE_MODEL`; floppy_live's module comment). On the maintainer's lab
-(docs/live-proof.md 2026-10-21: `gemma-4-26b-a4b` on the
-vLLM at `192.168.2.2:8100`, the systemone decision server at
-`192.168.2.2:8102`, reachable from the maintainer's network only), with
-`env.lab` as there:
+`FLOPPY_LIVE_MODEL`; floppy_live's module comment). On Sparks through the
+CPA gateway, with the systemone decision server on the maintainer's lab
+(`192.168.2.2:8102`, docs/live-proof.md 2026-10-21, reachable from the
+maintainer's network only), `.env.cpa-lab` as in the builder example above:
 
 ```sh
-export FLOPPY_LIVE_ENV_FILE=env.lab FLOPPY_LIVE_MODEL=gemma-4-26b-a4b
+export FLOPPY_LIVE_ENV_FILE=.env.cpa-lab FLOPPY_LIVE_MODEL=sparks/qwen3.8-flash-next
 python3 tests/eval/eval.py run --judge-env-file .env           # the suite once
 python3 tests/eval/eval.py run --scenario reflex --repeats 3   # one category
 python3 tests/eval/eval.py climb --judge-env-file .env --generations 6 --budget-hours 8
@@ -212,8 +211,7 @@ python3 tests/eval/eval.py grade target/floppy-eval/run-<time>  # grade again (a
 python3 -m unittest discover -s tests/eval                     # offline tests
 ```
 
-`--parallel` (4) bot runs share the lab at a time (its four L4s serve the
-vLLM). A scenario takes 5 to 15 minutes (a said step waits for its
+`--parallel` (4) bot runs at a time. A scenario takes 5 to 15 minutes (a said step waits for its
 reflection and any builder revision, at most `timeout_s`, 15 minutes by
 default; a wait step its seconds), so the suite takes about half an hour
 at four at a time and a climb generation of two candidates about an hour.
