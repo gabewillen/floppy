@@ -416,6 +416,11 @@
         <assign location="waiting" expr="waitingWithout(_event)"/>
       </if>
     </transition>
+    <!-- An ability's readiness, once a run (decision D230): it is no longer
+         waited for. -->
+    <transition event="bot.ability.ready" event:schema="../../abilities/schemas/bot.ability.ready.json">
+      <assign location="waiting" expr="waitingWithoutSender(_event)"/>
+    </transition>
     <!-- The cognition asks the identity for the bot's own name, and the
          identity's answer (also sent after each adoption) goes back to
          the cognition, from the start of each run: the cognition may ask

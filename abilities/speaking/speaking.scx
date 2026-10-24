@@ -292,6 +292,11 @@
             <param name="parts" expr="parts"/>
           </send>
         </transition>
+        <transition event="bot.ability.ready" event:schema="../schemas/bot.ability.ready.json">
+          <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal">
+            <param name="parts" expr="parts"/>
+          </send>
+        </transition>
         <!-- The first chunk: the sound starts. -->
         <transition event="bot.ability.vocal.speech.encoding.chunk" event:schema="../schemas/bot.ability.vocal.speech.encoding.chunk.json"
                     target="playing">

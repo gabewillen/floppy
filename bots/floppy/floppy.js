@@ -64,6 +64,12 @@ function waitingWithout(_event) {
   return waiting.filter(function (ability) { return ability !== _event.data.ability; });
 }
 
+// waiting without the ability that sent _event, its readiness (decision
+// D230): a bare bot.ability.ready names its sender by its invoke id only.
+function waitingWithoutSender(_event) {
+  return waiting.filter(function (ability) { return ability !== _event.invokeid; });
+}
+
 // The abilities an environment.visual goes to: seeing after the input
 // abilities while it is on.
 function visualInput() {
