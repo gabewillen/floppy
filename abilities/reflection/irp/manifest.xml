@@ -97,6 +97,12 @@
     <test id="201" conformance="mandatory" manual="false">
       <start uri="201/test201.scxml"/>
     </test>
+    <test id="202" conformance="mandatory" manual="false">
+      <start uri="202/test202.scxml"/>
+    </test>
+    <test id="203" conformance="mandatory" manual="false">
+      <start uri="203/test203.scxml"/>
+    </test>
   </assert>
   <assert id="reflection-12" specnum="12" specid="#reflection-12">
     <![CDATA[An input whose `cognition_output` holds a `bot.ability.learning.input` (a turn that taught the bot a lesson, which the learning learns itself) is only remembered too: after the recall it goes to `storing`, asking no model (decision D149).]]>
