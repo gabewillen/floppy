@@ -4,7 +4,7 @@
 <state id="harness" initial="boot">
   <invoke id="revision" type="scxml" src="../../../revision.scx">
     <param name="database" expr="'/memory/floppy.sqlite'"/>
-    <param name="intent" expr='({"event": "bot.behavior.create", "name": "PingPong", "triggers": ["bot.ability.conversation.output"], "description": "Say pong when the user says ping.", "reason": "The user taught it.", "source": null, "example": "ping"})'/>
+    <param name="intent" expr='({"event": "bot.behavior.create", "name": "PingPong", "triggers": ["bot.ability.conversation.output"], "description": "Say pong when the user says ping.", "reason": "The user taught it.", "source": null, "example": "ping", "counterexample": "pin"})'/>
     <param name="intent_event" expr="'bot.behavior.create'"/>
     <param name="create" expr="true"/>
     <param name="turn" expr="1"/>

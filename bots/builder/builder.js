@@ -583,7 +583,7 @@ function declinedApply() {
     return apply;
   }
   var events = d.selected.map(function (s) { return s !== null && typeof s === 'object' ? String(s.event) : String(s); });
-  return apply.concat(['turn behavior handled the input it must decline (the lesson\'s own message), selecting ' + events.join(', ') + ': it answers only the messages the lesson describes and ends handled false with selected [] on every other turn, ignoring included.']);
+  return apply.concat(['turn behavior handled the input it must decline (the lesson\'s counterexample, a message the lesson does not describe), selecting ' + events.join(', ') + ': it answers only the messages the lesson describes and ends handled false with selected [] on every other turn, ignoring included.']);
 }
 
 // done.invoke's donedata, which scxml.rs does not check; none is {}, which

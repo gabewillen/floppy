@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- revision-6: a lesson's draft that also answers the lesson's own message is refused. -->
+<!-- revision-6: a lesson's draft that also answers its counterexample is refused. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="revision" type="scxml" src="../../../revision.scx">
     <param name="database" expr="'/memory/floppy.sqlite'"/>
-    <param name="intent" expr='({"event": "bot.behavior.create", "name": "PingPong", "triggers": ["bot.ability.conversation.output"], "description": "Say pong when the user says ping.", "reason": "The user taught it.", "source": null, "example": "ping"})'/>
+    <param name="intent" expr='({"event": "bot.behavior.create", "name": "PingPong", "triggers": ["bot.ability.conversation.output"], "description": "Say pong when the user says ping.", "reason": "The user taught it.", "source": null, "example": "ping", "counterexample": "pin"})'/>
     <param name="intent_event" expr="'bot.behavior.create'"/>
     <param name="create" expr="true"/>
     <param name="turn" expr="1"/>

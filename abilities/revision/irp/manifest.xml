@@ -30,7 +30,7 @@
     </test>
   </assert>
   <assert id="revision-6" specnum="6" specid="#revision-6">
-    <![CDATA[With an example, the builder also runs the behavior on the lesson's own message, which it must decline (decision D214): a draft that answers it too is refused.]]>
+    <![CDATA[With an example and a counterexample, the builder also runs the behavior on the counterexample, which it must decline (decision D214): a draft that answers it too is refused.]]>
     <test id="142" conformance="mandatory" manual="false">
       <start uri="142/test142.scxml"/>
     </test>

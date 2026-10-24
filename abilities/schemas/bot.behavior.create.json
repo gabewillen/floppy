@@ -82,6 +82,23 @@
       ],
       "title": "Example"
     },
+    "counterexample": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "For a turn behavior: one message close to the example that the behavior must not answer, because the lesson does not describe it (for 'when I say ping, say pong': pin). The behavior is run on it before it is accepted and must decline it. Null for a routine.",
+      "examples": [
+        "pin"
+      ],
+      "title": "Counterexample"
+    },
     "source": {
       "anyOf": [
         {

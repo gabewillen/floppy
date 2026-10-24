@@ -89,17 +89,20 @@ function isProbe() {
 // where parent.data names it and in the conversation's message that
 // holds it.
 function probedInput() {
-  if (!probing) {
-    return behavior_input;
-  }
-  var probe = JSON.parse(JSON.stringify(behavior_input));
+  return probing ? withMessage(intent.example) : behavior_input;
+}
+
+// The lesson's input with its message replaced by text (lesson_input is
+// this turn's own input, kept before the example replaced it).
+function withMessage(text) {
+  var probe = JSON.parse(JSON.stringify(lesson_input));
   var lesson = probe.parent.data.content;
-  probe.parent.data.content = intent.example;
+  probe.parent.data.content = text;
   if (Array.isArray(probe.messages)) {
     for (var i = probe.messages.length - 1; i >= 0; i--) {
       var m = probe.messages[i];
       if (m !== null && typeof m === 'object' && m.content === lesson) {
-        m.content = intent.example;
+        m.content = text;
         break;
       }
     }
@@ -107,13 +110,19 @@ function probedInput() {
   return probe;
 }
 
+// Whether the lesson's intent carries a counterexample to decline
+// beside its example (decision D214).
+function hasCounterexample() {
+  return probing && typeof intent.counterexample === 'string' && intent.counterexample.length > 0 && intent.counterexample !== intent.example;
+}
+
 // The live turn the builder runs a turn behavior on (the live-turn
 // check, decision D131): this turn, its behavior_input as autonomy builds it, and the
 // sessions its output names (a learned behavior names its targets, D104).
 function liveTurn() {
   var live = {turn: turn, input: behavior_input, targets: outputTargets(), choices: turn_choices, handled: instruction === null || probing};
-  if (probing) {
-    live.decline = lesson_input;
+  if (hasCounterexample()) {
+    live.decline = withMessage(intent.counterexample);
   }
   return live;
 }
