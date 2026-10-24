@@ -36,9 +36,9 @@ never edits the workspace: everything goes under `target/floppy-eval/`.
 | --- | --- | --- |
 | `name_adopt` | name | "your name is Juniper"; answers to Juniper and does not claim to be Pixel; restarted, says it is Juniper and still does not claim to be Pixel |
 | `name_rename` | name | Juniper, then Biscuit; answers to Biscuit and no longer claims to be Juniper; restarted, says it is Biscuit and does not claim to be Juniper |
-| `reflex_pingpong` | reflex | "whenever I say exactly 'ping', reply 'pong'"; two pings, an unrelated question, a ping after a restart |
+| `reflex_pingpong` | reflex | "whenever I say exactly 'ping', reply 'pong'"; two pings get exactly "pong", an unrelated question gets no pong, a ping after a restart still gets exactly "pong" |
 | `reflex_greeting` | reflex | "good morning" gets "Good morning, sunshine!"; a variation from another person; "good night" must not; "good morning" again after a restart |
-| `reflex_keyword` | reflex | any mention of bananas gets "yellow alert", inside longer sentences, also after a restart |
+| `reflex_keyword` | reflex | a mention of bananas inside a longer sentence gets just "yellow alert"; an unrelated request does not; a banana sentence after a restart still gets just "yellow alert" |
 | `routine_reminder` | routine | a water reminder every minute; reminders with no input; stopped when asked; quiet after |
 | `routine_restart` | routine | "stretch break" every minute; keeps running after a restart with no new request |
 
@@ -84,9 +84,9 @@ What is learned shows in what floppy says: a name is the name it gives when
 asked, a reflex is the taught reply to the trigger and no reply of it to a
 near miss, a routine is replies coming with no input and stopping when
 asked, and a name floppy claims is checked as a claim: `not_says`
-`\b(i am|i'm|my name is) pixel\b`, matched without case, so a reply that
-only mentions the name passes; a claim in another phrasing is left to the
-judges. A taught reply is matched as the reply (`^\W*pong\W*$`, `^\W*yellow
+`\b(i am|i['’]m|my name is|my name['’]s) pixel\b`, matched without case,
+so a reply that only mentions the name passes; a claim in another phrasing
+is left to the judges. A taught reply is matched as the reply (`^\W*pong\W*$`, `^\W*yellow
 alert\W*$`) or as the whole taught phrase, never one word of it. By
 convention, in every scenario with a probe after a restart (a `says` check in
 a session after the first), that probe carries the largest weight of any
@@ -99,7 +99,8 @@ there and are reported in `report.md` beside the grade ("Inside floppy"),
 and the hill climb's proposer reads the failed ones, but they are never
 scored: `score.score` raises `ValueError` on a scenario that lists one
 under `checks`, and `score.diagnostics` raises on a black-box check listed
-under `diagnostics`, so a misfiled spec is an error, never a silent change. A
+under `diagnostics`, and both refuse an unknown kind (`unknown check: <kind>`),
+so a misfiled or misspelled spec is an error, never a silent change. A
 full grade is therefore not proof that floppy learned anything: reasoning
 that recites the lesson passes every check. Whether a behavior was accepted
 is the `learned` diagnostic, which the report shows per job as "inside" and

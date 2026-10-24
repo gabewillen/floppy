@@ -43,7 +43,7 @@
         0,
         2
       ],
-      "pattern": "\\b(i am|i'm|my name is) pixel\\b",
+      "pattern": "\\b(i am|i['\u2019]m|my name is|my name['\u2019]s) pixel\\b",
       "weight": 1
     },
     {
@@ -61,7 +61,7 @@
         1,
         1
       ],
-      "pattern": "\\b(i am|i'm|my name is) pixel\\b",
+      "pattern": "\\b(i am|i['\u2019]m|my name is|my name['\u2019]s) pixel\\b",
       "weight": 1
     }
   ],
