@@ -231,7 +231,8 @@ S.case(190, 10, "a failed turn and a cancelled one each answer the output asking
        [send(INPUT, outcome_turn(1, "failed", "Cognition reasoning timed out after 30 seconds.")), expect(OUTPUT),
         send(INPUT, outcome_turn(2, "cancelled")), expect(OUTPUT),
         send(INPUT, turn(3)), expect(OUTPUT)],
-       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select()], clock="wall")
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select()], clock="wall",
+       logs={"reflection": ["turn 1: failed", "turn 2: cancelled", "turn 3: 2 episodes, 0 behaviors"], "reflection.selected": ["none"]})
 
 S.case(191, 12, "a taught turn answers the output asking no model; the next turn selects.",
        [send(INPUT, taught_turn(1)), expect(OUTPUT), send(INPUT, turn(2)), expect(OUTPUT)],
