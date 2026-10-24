@@ -67,7 +67,7 @@ class Scorer(unittest.TestCase):
 
     def test_a_probe_after_a_restart_carries_the_largest_weight(self):
         for name, scenario in self.scenarios.items():
-            later = [c["weight"] for c in scenario["checks"] if c["check"] == "says" and (c.get("at") or c.get("by"))[0] > 0]
+            later = [c["weight"] for c in scenario["checks"] if c["check"] in ("says", "ticks") and (c.get("at") or c.get("by"))[0] > 0]
             if later:
                 self.assertTrue(all(max(later) >= c["weight"] for c in scenario["checks"]), name)
 

@@ -88,14 +88,15 @@ asked, and a name floppy claims is checked as a claim: `not_says`
 so a reply that only mentions the name passes; a claim in another phrasing
 is left to the judges. A taught reply is matched as the reply (`^\W*pong\W*$`, `^\W*yellow
 alert\W*$`) or as the whole taught phrase, never one word of it. By
-convention, in every scenario with a probe after a restart (a `says` check in
-a session after the first), that probe carries the largest weight of any
+convention, in every scenario with a probe after a restart (a `says` or `ticks`
+check in a session after the first), that probe carries the largest weight of any
 check: it shows the lesson outlasted the session that taught it
 (`test_a_probe_after_a_restart_carries_the_largest_weight` holds the
 scenarios in `tests/eval/scenarios/` to it).
 
 A scenario's `diagnostics` read floppy's own logs. They say how it got
-there and are reported in `report.md` beside the grade ("Inside floppy"),
+there and are reported in `report.md` beside the grade, in the "Inside
+floppy" table and in each job's "- inside:" lines,
 and the hill climb's proposer reads the failed ones, but they are never
 scored: `score.score` raises `ValueError` on a scenario that lists one
 under `checks`, and `score.diagnostics` raises on a black-box check listed
@@ -103,7 +104,7 @@ under `diagnostics`, and both refuse an unknown kind (`unknown check: <kind>`),
 so a misfiled or misspelled spec is an error, never a silent change. A
 full grade is therefore not proof that floppy learned anything: reasoning
 that recites the lesson passes every check. Whether a behavior was accepted
-is the `learned` diagnostic, which the report shows per job as "inside" and
+is the `learned` diagnostic, which those "- inside:" lines show and
 the builder track counts:
 
 | Diagnostic | Passes when |
