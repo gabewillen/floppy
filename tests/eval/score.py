@@ -130,7 +130,7 @@ def _replies(text):
             continue
         data = entry.get("data")
         parts = data.get("parts") if isinstance(data, dict) else None
-        words = "".join(p["words"] for p in parts or [] if isinstance(p, dict) and isinstance(p.get("words"), str))
+        words = "".join(p["words"] for p in (parts if isinstance(parts, list) else []) if isinstance(p, dict) and isinstance(p.get("words"), str))
         if words.strip():
             out.append(words)
     return out
@@ -139,6 +139,11 @@ def _replies(text):
 def replies(records):
     """The words of each reply the records' turns selected (floppy.output)."""
     return [words for text in _texts(records, "floppy.output") for words in _replies(text) or []]
+
+
+def _unreadable(records):
+    """How many of the records' floppy.output texts are not a turn's output."""
+    return sum(_replies(text) is None for text in _texts(records, "floppy.output"))
 
 
 def _matches(pattern, text):
@@ -197,6 +202,8 @@ def check(job, spec):
     if kind == "says":
         ok = any(_matches(spec["pattern"], t) for t in says)
         return float(ok), f"said {[s[:120] for s in says]}"
+    if kind in ("not_says", "no_ticks") and _unreadable(records):
+        return 0.0, f"{_unreadable(records)} turn output(s) could not be read"
     if kind == "not_says":
         if not step["completed"]:
             return 0.0, "the step did not complete"

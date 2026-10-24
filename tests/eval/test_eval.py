@@ -138,6 +138,8 @@ class Scorer(unittest.TestCase):
         job["sessions"][0].append(log("floppy.output", "not json"))
         job["steps"][0]["end_index"] = 4
         self.assertIn("floppy.output (unreadable): not json", score.summary(scenario, job))
+        value, why = score.check(job, {"check": "no_ticks", "at": [0, 0]})
+        self.assertEqual(value, 0.0, why)
 
 
 class Builds(unittest.TestCase):

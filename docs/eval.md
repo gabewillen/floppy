@@ -89,7 +89,9 @@ A reply is a `bot.ability.communication.respond` the turn selected, read
 from `floppy.output` (its parts' words, joined). That is what floppy chose
 to say, with or without a speech service: `floppy.say` is logged only once
 speech encoded the words, and an eval column runs floppy on Sparks alone,
-with no hosted speech. The judges read each reply as `floppy says: …`.
+with no hosted speech (decision D216). A turn output the eval cannot read
+fails `not_says` and `no_ticks` rather than passing them. The judges read
+each reply as `floppy says: …`.
 
 `reflex` is the check that exposes the gap: the conversation's history
 reaches reasoning (decision D99), so reasoning can answer "ping" with
@@ -195,7 +197,7 @@ model can do it i'm fine with that being the bar"; the builder must work on
 a small model, taking more attempts if it must). Everything inside floppy's
 framework runs on it, the bot and the builder, with no hosted speech; hosted
 models only judge or play the person ("i'm fine with using that as a judge /
-person just not within the framework").
+person just not within the framework"; decision D216).
 
 ## Running it
 
