@@ -4,15 +4,14 @@
   child "cognition" without a model. tests/tests/body.rs copies it to
   abilities/cognition/cognition.scx beside a copy of the body.
 
-  Readiness: each entry into idle sends bot.ability.offers unless mode is
-  'silent' (the test rewrites mode's expr): bot.ability.cognition.ignore
-  with a schema carrying $schema, title, examples and a description (which
-  the body compacts), or, when mode is 'huge', also a choice whose schema
-  is over 32 KiB (the body fails such a turn). It stays near 36 KiB: from
-  about 3050 values the offers event, with the raw message the SCXML
-  processor renders, is over the 96 KiB event bound, so the double's offers
-  send raises error.execution in the double and the body never becomes
-  ready.
+  Readiness: its start sends bot.ability.ready unless mode is 'silent'
+  (the test rewrites mode's expr). What it offers, the body reads from its
+  live session (decision D242): its offerable <data> declares
+  bot.ability.cognition.ignore, whose schema carries $schema, title,
+  examples and a description (which the body compacts), or, when mode is
+  'huge', also double.huge, whose schema (cognition_huge.json beside it,
+  which tests/tests/body.rs copies) is over 32 KiB, so the body drops the
+  double's whole offer.
 
   Each turn's behavior is the name of the bot.input observation the turn
   carries (stimulus.data.observation.event), or, for a conversation
@@ -66,6 +65,7 @@
   cancelled.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="cognition_double" initial="alive">
   <datamodel>
     <data id="model" expr="'none'"/>
@@ -79,27 +79,18 @@
     <data id="choices" expr="[]"/>
     <data id="out" expr="null"/>
     <data id="s" expr="null"/>
-    <data id="ignore" expr="({event: 'bot.ability.cognition.ignore', description: 'Deliberately ignore this stimulus.', schema: {'$schema': 'https://json-schema.org/draft/2020-12/schema', title: 'bot.ability.cognition.ignore', description: 'Deliberately ignore this stimulus.', type: 'object', properties: {}, additionalProperties: false, examples: [{}]}})"/>
+    <data id="offerable" expr="mode === 'huge' ? ({'bot.ability.cognition.ignore': {}, 'double.huge': {}}) : ({'bot.ability.cognition.ignore': {}})"/>
   </datamodel>
   <state id="alive" initial="idle">
+    <onentry>
+      <if cond="mode !== 'silent'">
+        <send event="bot.ability.ready" target="#_parent"/>
+      </if>
+    </onentry>
     <onexit>
       <log label="double.exit" expr="model"/>
     </onexit>
     <state id="idle">
-      <onentry>
-        <if cond="mode === 'ready'">
-          <send event="bot.ability.offers" target="#_parent">
-            <param name="ability" expr="'cognition'"/>
-            <param name="choices" expr="[ignore]"/>
-          </send>
-        </if>
-        <if cond="mode === 'huge'">
-          <send event="bot.ability.offers" target="#_parent">
-            <param name="ability" expr="'cognition'"/>
-            <param name="choices" expr="[ignore, {event: 'bot.ability.cognition.input', schema: {type: 'object', properties: {pick: {type: 'string', 'enum': Array.from({length: 2800}, function (_, i) { return 'value-' + (1000 + i); })}}}}]"/>
-          </send>
-        </if>
-      </onentry>
       <transition event="bot.ability.cognition.input" target="working">
         <assign location="turn" expr="_event.data.turn"/>
         <assign location="stimulus" expr="_event.data.stimulus"/>
@@ -112,9 +103,10 @@
         <log label="double.environment" expr="JSON.stringify(_event.data.environment)"/>
         <log label="double.participants" expr="JSON.stringify(_event.data.participants)"/>
       </transition>
-      <transition event="bot.ability.cognition.ignore">
+      <transition event="bot.ability.cognition.ignore" event:schema="../schemas/bot.ability.cognition.ignore.json">
         <log label="double.ignore" expr="JSON.stringify(_event.data)"/>
       </transition>
+      <transition event="double.huge" event:schema="cognition_huge.json"/>
       <transition event="bot.ability.cognition.cancel">
         <send event="bot.ability.cognition.cancelled" target="#_parent"><param name="turn" expr="_event.data.turn"/></send>
       </transition>

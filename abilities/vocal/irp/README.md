@@ -12,7 +12,7 @@ through `scx run` with the real invoked services (a case's
 
 ## Statements
 
-- <a id="vocal-1"></a>**vocal-1**. On start, and on every later entry into `idle`, it offers nothing: it sends `bot.ability.offers` `{ability: "vocal", choices: []}` to its parent.
+- <a id="vocal-1"></a>**vocal-1**. On start, and only then, it sends `bot.ability.ready` to its parent (decision D242), with no data: it offers nothing, and a later entry into `idle` sends nothing more.
 - <a id="vocal-2"></a>**vocal-2**. `bot.ability.vocal.speech.encoding.input` `{parts}` (1 to 64 parts `{expression?, words?}`) in `idle` is encoded by the speech service's `encode` with the `<param>`s `parts`, `model`, `voice`, `output` and `media_type` (`audio/pcm` by default); with provider `null` (the default) that is the OpenAI-compatible `POST {base}/audio/speech`. The service's answer is sent to the parent as `bot.ability.vocal.speech.encoding.output` `{audio, media_type, sample_rate_hz, channels, duration}` (the audio as the `output` reference; raw PCM is 24 kHz mono, its duration measured from its bytes; a format the service cannot measure has `null`s), and it returns to `idle`.
 - <a id="vocal-3"></a>**vocal-3**. The `provider` `<param>` names another provider instead: `elevenlabs` is `POST {base}/text-to-speech/{voice}/stream?output_format=…`, `gemini` is `POST {base}/interactions` (its answer's base64 audio part), each answered as above.
 - <a id="vocal-4"></a>**vocal-4**. When the service answers `bot.ability.failed` `{message}` (an error status, an empty answer, an `output` that cannot be written), it sends the parent `bot.ability.failed` with the service's message and returns to `idle`.

@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/cognition/irp/sources">
   <assert id="cognition-1" specnum="1" specid="#cognition-1">
-    <![CDATA[On start, and on every return to `idle`, it sends `bot.ability.offers` `{ability: "cognition", choices}` to its parent: its two choices, `bot.ability.cognition.ignore` and `bot.ability.learning.input`, their schemas made model-facing (`$schema`, `title` and `examples` dropped).]]>
+    <![CDATA[On start it sends `bot.ability.ready` to its parent, once (never on a later return to `idle`) and with no data (decision D242). What it offers in `idle`, read from its live session (`<decision:offers>`), is its one choice `bot.ability.cognition.ignore`, of no effort, with its schema as written (its parent makes it model-facing).]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -54,13 +54,13 @@
     </test>
   </assert>
   <assert id="cognition-6" specnum="6" specid="#cognition-6">
-    <![CDATA[A step that makes no progress for `child_operation_timeout_ms` (from its start for autonomy and the decision layer; for reasoning from its streamed reply's first `generate.progress`, each later one starting it over), or runs `child_operation_ceiling_ms` in all (the `<param>` `bounds` overriding either, decision D101, and its `reflex_timeout_ms`, `intuition_timeout_ms` or `reasoning_timeout_ms` bounding one tier), fails only its turn: `bot.ability.failed` `{message: "Cognition's <stage> step took longer than <seconds> seconds, so the turn failed.", turn, input}`, then the failure handed back to its parent as a `bot.ability.cognition.input` whose stimulus is `bot.ability.cognition.step.timed_out` `{message, stage, timeout_seconds, turn}`; the cognition is idle again (it offers). A turn whose stimulus is a handed-back failure hands nothing back when it fails too.]]>
+    <![CDATA[A step that makes no progress for `child_operation_timeout_ms` (from its start for autonomy and the decision layer; for reasoning from its streamed reply's first `generate.progress`, each later one starting it over), or runs `child_operation_ceiling_ms` in all (the `<param>` `bounds` overriding either, decision D101, and its `reflex_timeout_ms`, `intuition_timeout_ms` or `reasoning_timeout_ms` bounding one tier), fails only its turn: `bot.ability.failed` `{message: "Cognition's <stage> step took longer than <seconds> seconds, so the turn failed.", turn, input}`, then the failure handed back to its parent as a `bot.ability.cognition.input` whose stimulus is `bot.ability.cognition.step.timed_out` `{message, stage, timeout_seconds, turn}`; the cognition is idle again. A turn whose stimulus is a handed-back failure hands nothing back when it fails too.]]>
     <test id="150" conformance="mandatory" manual="false">
       <start uri="150/test150.scxml"/>
     </test>
   </assert>
   <assert id="cognition-7" specnum="7" specid="#cognition-7">
-    <![CDATA[`bot.ability.cognition.cancel` `{turn}` for the turn in hand cancels the stage and is acknowledged with `bot.ability.cognition.cancelled` `{turn}`, and the cognition is idle again (it offers); in `idle` a cancel is acknowledged at once; a cancel for another turn is not taken and the turn goes on.]]>
+    <![CDATA[`bot.ability.cognition.cancel` `{turn}` for the turn in hand cancels the stage and is acknowledged with `bot.ability.cognition.cancelled` `{turn}`, and the cognition is idle again; in `idle` a cancel is acknowledged at once; a cancel for another turn is not taken and the turn goes on.]]>
     <test id="160" conformance="mandatory" manual="false">
       <start uri="160/test160.scxml"/>
     </test>
@@ -81,7 +81,7 @@
     </test>
   </assert>
   <assert id="cognition-11" specnum="11" specid="#cognition-11">
-    <![CDATA[Until it is told the bot's name (`bot.ability.identity.named`), every return to `idle` sends `bot.ability.identity.ask` `{}` to its parent after its offers; once told, it asks no more.]]>
+    <![CDATA[Until it is told the bot's name (`bot.ability.identity.named`), every return to `idle` sends `bot.ability.identity.ask` `{}` to its parent, the first after the one `bot.ability.ready` it sends on start; once told, it asks no more.]]>
     <test id="200" conformance="mandatory" manual="false">
       <start uri="200/test200.scxml"/>
     </test>
@@ -96,15 +96,6 @@
     </test>
     <test id="192" conformance="mandatory" manual="false">
       <start uri="192/test192.scxml"/>
-    </test>
-  </assert>
-  <assert id="cognition-13" specnum="13" specid="#cognition-13">
-    <![CDATA[A turn whose selections hold `bot.ability.learning.input` (taken in `idle` and while processing, and only logged) sends the lesson to its learning child after the turn's output; the lesson's result `bot.ability.learning.output` comes back to its parent as a `bot.ability.cognition.input` whose stimulus is that result (decision D149), a lesson the learning cannot learn (without a database) included, with `learned` false.]]>
-    <test id="220" conformance="mandatory" manual="false">
-      <start uri="220/test220.scxml"/>
-    </test>
-    <test id="221" conformance="mandatory" manual="false">
-      <start uri="221/test221.scxml"/>
     </test>
   </assert>
   <assert id="cognition-9" specnum="9" specid="#cognition-9">

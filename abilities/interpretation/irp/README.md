@@ -12,7 +12,7 @@ through `scx run` with the real invoked services (a case's
 
 ## Statements
 
-- <a id="interpretation-1"></a>**interpretation-1**. On start it sends `bot.ability.offers` `{ability: "interpretation", choices: []}` to its parent: it offers nothing.
+- <a id="interpretation-1"></a>**interpretation-1**. On start it sends `bot.ability.ready` to its parent (decision D242), with no data: it offers nothing.
 - <a id="interpretation-2"></a>**interpretation-2**. The configuration's refusals (decision D177): voice identification (`voice_classifier`) with speech decoding (`speech_decoder`), a negative `product_threshold_db`, and a `recognize_timeout_ms` that is not positive each end the interpretation in its final state `degraded` without offering.
 - <a id="interpretation-3"></a>**interpretation-3**. With the default configuration (voice detection, sound classification, speech decoding), a voiced scored sound opens the open-speech window, each further voiced sound joins it, and the first sound without voice closes it; the utterance is joined into a WAV file, decoded, and answered as `bot.ability.listening.speech.output` `{content: <words>, content_type: "text/plain", voice_detection, sample_rate_hz, channels, media_type: "audio/pcm", source_ids: [], parent}`, its parent the loudest frame's (the first with a level when none is louder).
 - <a id="interpretation-4"></a>**interpretation-4**. A sound without voice is classified: a labelled one (a non-blank kind) is handed to the parent as `bot.ability.cognition.input` `{stimulus}`, the stimulus `{event: "environment.sound", data: <the sound as voice detection normalized it, its PCM written beside it as floppy-sound-<n>.pcm>, source: "listening"}`; an unlabelled one is dropped while speech decoding is configured.

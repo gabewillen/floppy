@@ -5,11 +5,11 @@
   abilities/seeing/seeing.scx beside a copy of the body, so the body's
   literal <invoke id="seeing"> reaches it.
 
-  On start it sends bot.ability.offers {ability: "seeing", choices: []}
-  (its readiness) unless mode is 'silent' (the test rewrites mode's expr),
-  in which case it never offers. The first environment.visual it is sent
+  On start it sends bot.ability.ready (decision D242) unless mode is
+  'silent' (the test rewrites mode's expr), in which case it is never
+  ready; it offers nothing. The first environment.visual it is sent
   ends it, and when mode is 'ending' it ends at once, right after its
-  offers: it logs double.end ("seeing") and enters its final state, so
+  readiness: it logs double.end ("seeing") and enters its final state, so
   the body gets done.invoke.seeing.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
@@ -20,10 +20,7 @@
   <state id="perceiving">
     <onentry>
       <if cond="mode !== 'silent'">
-        <send event="bot.ability.offers" target="#_parent">
-          <param name="ability" expr="'seeing'"/>
-          <param name="choices" expr="[]"/>
-        </send>
+        <send event="bot.ability.ready" target="#_parent"/>
       </if>
     </onentry>
     <transition cond="mode === 'ending'" target="ended">

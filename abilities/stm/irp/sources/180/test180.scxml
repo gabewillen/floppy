@@ -16,7 +16,7 @@
       <send event="bot.ability.memory.stm.recent" target="#_stm"><content expr="{}"/></send>
       <send event="bot.ability.memory.stm.recent_turns" target="#_stm"><content expr="{}"/></send>
     </onentry>
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'stm' &amp;&amp; _event.data.choices.length === 0" target="step1"/>
+    <transition event="bot.ability.ready" target="step1"/>
   </state>
   <state id="step1">
     <transition event="bot.ability.memory.stm.recent.output" cond='JSON.stringify(_event.data.entries.map((e) =&gt; e.stimulus_name)) === "[\"environment.sound\"]"' target="step2"/>

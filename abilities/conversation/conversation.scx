@@ -155,9 +155,8 @@
   participants} (the product's envelope with source "conversation";
   participants the turn's); every other commit sends the product itself.
 
-  Readiness: the session's start sends bot.ability.offers
-  {ability: "conversation", choices: []} to the parent; it offers nothing
-  (its input is not a tool event).
+  Readiness: the session's start sends bot.ability.ready to the parent
+  (decision D242); it offers nothing (its input is not a tool event).
 
   Commits: <conversation:complete_turn> builds each inbound message and
   <conversation:message_for_turn> each outbound one; the document opens the exchange with an inbound one
@@ -240,10 +239,7 @@
 
   <state id="conversation" initial="inactive">
     <onentry>
-      <send event="bot.ability.offers" target="#_parent">
-        <param name="ability" expr="'conversation'"/>
-        <param name="choices" expr="[]"/>
-      </send>
+      <send event="bot.ability.ready" target="#_parent"/>
     </onentry>
 
     <state id="inactive">

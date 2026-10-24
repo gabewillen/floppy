@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- identity-5: a name it cannot write down is not taken: the failure is answered and it offers again. -->
-<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision" version="1.0" datamodel="ecmascript" initial="harness">
+<datamodel>
+  <data id="offers" expr="null"/>
+</datamodel>
 <state id="harness" initial="boot">
   <invoke id="identity" type="scxml" src="../../../identity.scx">
     <param name="database" expr="'/nowhere/floppy.sqlite'"/>
@@ -14,7 +17,7 @@
     <transition event="bot.ability.failed" cond='_event.data.message === "Identity could not recall a name: memory did not answer within the bring-up budget."' target="step1"/>
   </state>
   <state id="step1">
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'identity' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === 'bot.ability.identity.adopt' &amp;&amp; _event.data.choices[0].target === undefined &amp;&amp; _event.data.choices[0].schema.required[0] === 'name' &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[0].schema['$schema'] === undefined &amp;&amp; _event.data.choices[0].schema.properties.reason.examples === undefined &amp;&amp; typeof _event.data.choices[0].description === 'string'" target="step2"/>
+    <transition event="bot.ability.ready" target="step2"/>
   </state>
   <state id="step2">
     <onentry>
@@ -23,7 +26,11 @@
     <transition event="bot.ability.failed" cond="_event.data.message.indexOf('Identity could not remember the name it took: ') === 0" target="step3"/>
   </state>
   <state id="step3">
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'identity' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === 'bot.ability.identity.adopt' &amp;&amp; _event.data.choices[0].target === undefined &amp;&amp; _event.data.choices[0].schema.required[0] === 'name' &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[0].schema['$schema'] === undefined &amp;&amp; _event.data.choices[0].schema.properties.reason.examples === undefined &amp;&amp; typeof _event.data.choices[0].description === 'string'" target="step4"/>
+    <onentry>
+      <decision:offers location="offers" target="'#_identity'"/>
+    </onentry>
+    <transition cond="offers.length === 1 &amp;&amp; offers[0].event === 'bot.ability.identity.adopt' &amp;&amp; offers[0].effort === 1 &amp;&amp; offers[0].target === undefined &amp;&amp; offers[0].schema.required[0] === 'name' &amp;&amp; typeof offers[0].description === 'string'" target="step4"/>
+    <transition target="fail"><log label="unexpected" expr="'offers ' + JSON.stringify(offers)"/></transition>
   </state>
   <state id="step4">
     <onentry>

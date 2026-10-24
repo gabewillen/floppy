@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/listening/irp/sources">
   <assert id="listening-1" specnum="1" specid="#listening-1">
-    <![CDATA[It waits for both children, the sensitivity and the interpretation (each ready with its first `bot.ability.offers`), then sends `bot.ability.offers` `{ability: "listening", choices: []}` to its parent: it offers nothing.]]>
+    <![CDATA[It waits for both children, the sensitivity and the interpretation (each ready when it sends `bot.ability.ready`), then sends `bot.ability.ready` to its parent (decision D242), with no data: it offers nothing.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>

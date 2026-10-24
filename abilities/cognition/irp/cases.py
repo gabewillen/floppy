@@ -9,7 +9,6 @@ OUTPUT = "bot.ability.cognition.output"
 FAILED = "bot.ability.failed"
 CANCEL = "bot.ability.cognition.cancel"
 CANCELLED = "bot.ability.cognition.cancelled"
-OFFERS = "bot.ability.offers"
 IGNORE = "bot.ability.cognition.ignore"
 LEARN = "bot.ability.learning.input"
 FAILED_STEP = "bot.ability.cognition.step.failed"
@@ -24,8 +23,12 @@ SCHEMAS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "
 SLOW = ("child_operation_timeout_ms", "300000")
 DB = ("database", "'/memory/floppy.sqlite'")
 
-READY = expect(OFFERS, f"_event.data.ability === 'cognition' && _event.data.choices.length === 2 && _event.data.choices[0].event === {js(IGNORE)}"
-                       f" && _event.data.choices[1].event === {js(LEARN)} && _event.data.choices[0].schema.title === undefined")
+READY = expect("bot.ability.ready")
+# What its parent reads from its live session (decision D242): the ignore and
+# the lesson, of no effort.
+OFFERED = offers("offers.length === 2"
+                 f" && offers.map(function (o) {{ return o.event; }}).sort().join(' ') === {js(IGNORE + ' ' + LEARN)}"
+                 " && offers.every(function (o) { return o.effort === undefined && o.schema.type === 'object'; })")
 
 
 def offered(event):
@@ -114,15 +117,15 @@ REASONED = (f"_event.data.output.length === 1 && _event.data.output[0].event ===
             " && _event.data.output[0].reason === 'nothing to say' && _event.data.output[0].target === 'session.cognition'")
 
 
-S.statement(1, "On start, and on every return to `idle`, it sends `bot.ability.offers` `{ability: \"cognition\", choices}` to its parent: its two choices, `bot.ability.cognition.ignore` and `bot.ability.learning.input`, their schemas made model-facing (`$schema`, `title` and `examples` dropped).")
+S.statement(1, "On start it sends `bot.ability.ready` to its parent, once (never on a later return to `idle`) and with no data (decision D242). What it offers in `idle`, read from its live session (`<decision:offers>`), is its two choices, `bot.ability.cognition.ignore` and `bot.ability.learning.input`, of no effort, with their schemas as written (its parent makes it model-facing).")
 S.statement(2, "A `bot.ability.cognition.input` `{turn, stimulus, focus?, focus_candidates?, choices?}` runs one turn of the cascade: autonomy (without a database it leaves the turn unhandled), then the decision layer, whose confident decision handles the turn: `bot.ability.cognition.output` `{turn, output}`, the output the decision layer's selections, which it has sent to their targets.")
 S.statement(3, "When the decision layer leaves the turn unhandled (its decision abstains), reasoning (the generate service, schema `dispatch`) handles it, and the output is reasoning's selections; with a database (the `<param>` `database`) autonomy and reasoning use the memory and the turn is answered the same way.")
 S.statement(4, "A decision layer that escalates for low confidence sends its environment actions (its selections) before the turn goes on to reasoning; the output is those actions (the turn's acted) followed by reasoning's selections, which reasoning sends after them, a repeat of an environment action included.")
 S.statement(5, "A decision layer that fails (`the decision failed (status)`, or no decision within `decision_timeout_ms`) does not fail the turn: the cognition logs `cognition.cascaded` and reasoning answers it (decision D140). A reasoning stage that fails answers the turn with `bot.ability.failed` `{message, turn, input: {focus, focus_candidates}}`, the message the stage's reason (`the reasoning failed (status)`, or `Selection rejected: <message>` once a refused selection is not repaired, the dispatch tool's rejection message, decisions D126 and D142), then hands the failure back to its parent as a `bot.ability.cognition.input` whose stimulus is `bot.ability.cognition.step.failed` `{message: \"Cognition's reasoning step failed, so the turn failed: <reason>\", stage: \"reasoning\", turn}`.")
-S.statement(6, "A step that makes no progress for `child_operation_timeout_ms` (from its start for autonomy and the decision layer; for reasoning from its streamed reply's first `generate.progress`, each later one starting it over), or runs `child_operation_ceiling_ms` in all (the `<param>` `bounds` overriding either, decision D101, and its `reflex_timeout_ms`, `intuition_timeout_ms` or `reasoning_timeout_ms` bounding one tier), fails only its turn: `bot.ability.failed` `{message: \"Cognition's <stage> step took longer than <seconds> seconds, so the turn failed.\", turn, input}`, then the failure handed back to its parent as a `bot.ability.cognition.input` whose stimulus is `bot.ability.cognition.step.timed_out` `{message, stage, timeout_seconds, turn}`; the cognition is idle again (it offers). A turn whose stimulus is a handed-back failure hands nothing back when it fails too.")
-S.statement(7, "`bot.ability.cognition.cancel` `{turn}` for the turn in hand cancels the stage and is acknowledged with `bot.ability.cognition.cancelled` `{turn}`, and the cognition is idle again (it offers); in `idle` a cancel is acknowledged at once; a cancel for another turn is not taken and the turn goes on.")
+S.statement(6, "A step that makes no progress for `child_operation_timeout_ms` (from its start for autonomy and the decision layer; for reasoning from its streamed reply's first `generate.progress`, each later one starting it over), or runs `child_operation_ceiling_ms` in all (the `<param>` `bounds` overriding either, decision D101, and its `reflex_timeout_ms`, `intuition_timeout_ms` or `reasoning_timeout_ms` bounding one tier), fails only its turn: `bot.ability.failed` `{message: \"Cognition's <stage> step took longer than <seconds> seconds, so the turn failed.\", turn, input}`, then the failure handed back to its parent as a `bot.ability.cognition.input` whose stimulus is `bot.ability.cognition.step.timed_out` `{message, stage, timeout_seconds, turn}`; the cognition is idle again. A turn whose stimulus is a handed-back failure hands nothing back when it fails too.")
+S.statement(7, "`bot.ability.cognition.cancel` `{turn}` for the turn in hand cancels the stage and is acknowledged with `bot.ability.cognition.cancelled` `{turn}`, and the cognition is idle again; in `idle` a cancel is acknowledged at once; a cancel for another turn is not taken and the turn goes on.")
 S.statement(8, "`bot.ability.cognition.ignore` (its offer) is taken in `idle` and while processing, and only logged: it sends nothing and does not end a turn.")
-S.statement(11, "Until it is told the bot's name (`bot.ability.identity.named`), every return to `idle` sends `bot.ability.identity.ask` `{}` to its parent after its offers; once told, it asks no more.")
+S.statement(11, "Until it is told the bot's name (`bot.ability.identity.named`), every return to `idle` sends `bot.ability.identity.ask` `{}` to its parent, the first after the one `bot.ability.ready` it sends on start; once told, it asks no more.")
 S.statement(10, "With an `intuition_model` (the `<param>`; none by default composes no intuition tier, decision D144), a turn the decision layer leaves unhandled goes to the intuition tier first, offered the deliberative handoff `bot.ability.reasoning.input` as the cognition's own: its selections handle the turn, or, when they hold the handoff, the others are sent first and the turn goes on to reasoning, whose output follows them. An intuition that fails hands the same turn on to reasoning (`cognition.cascaded`).")
 S.statement(13, "A turn whose selections hold `bot.ability.learning.input` (taken in `idle` and while processing, and only logged) sends the lesson to its learning child after the turn's output; the lesson's result `bot.ability.learning.output` comes back to its parent as a `bot.ability.cognition.input` whose stimulus is that result (decision D149), a lesson the learning cannot learn (without a database) included, with `learned` false.")
 S.statement(9, "The events it takes are checked against `abilities/schemas/` where they are created: a `bot.ability.cognition.input` without a stimulus is refused at its sender (`error.execution` there) and starts no turn.")
@@ -140,74 +143,74 @@ def _case_dropping_ask(*args, ignore=(), **kwargs):
 
 S.case = _case_dropping_ask
 
-S.case(100, 1, "the cognition offers ignore on start.", [READY])
-S.case(101, 1, "it offers again on the return to idle after a turn.",
-       [READY, send(INPUT, turn(1)), output(1, IGNORED), READY],
+S.case(100, 1, "the cognition is ready on start and offers the ignore.", [READY, OFFERED])
+S.case(101, 1, "it offers the ignore again on the return to idle after a turn.",
+       [READY, send(INPUT, turn(1)), output(1, IGNORED), OFFERED],
        params=[SLOW], backend=[DECIDE_IGNORE], clock="logical")
 
 S.case(110, 2, "a confident intuition handles the turn: the output is its ignore selection.",
        [READY, send(INPUT, turn(1)), output(1, IGNORED)],
-       params=[SLOW], backend=[DECIDE_IGNORE], clock="logical", ignore=[OFFERS])
+       params=[SLOW], backend=[DECIDE_IGNORE], clock="logical")
 S.case(111, 2, "turns are answered one after another, each with its own turn.",
        [READY, send(INPUT, turn(1)), output(1, IGNORED), send(INPUT, turn(2)), output(2, IGNORED)],
-       params=[SLOW], backend=[DECIDE_IGNORE], clock="logical", ignore=[OFFERS])
+       params=[SLOW], backend=[DECIDE_IGNORE], clock="logical")
 
 S.case(120, 3, "an abstaining intuition escalates to reasoning, whose selection is the output.",
        [READY, send(INPUT, turn(1)), output(1, REASONED)],
-       params=[SLOW], backend=[DECIDE_ABSTAIN, REASONED_IGNORE], clock="logical", ignore=[OFFERS])
+       params=[SLOW], backend=[DECIDE_ABSTAIN, REASONED_IGNORE], clock="logical")
 S.case(121, 3, "with a database, the turn goes through autonomy's and reasoning's memory and is answered by reasoning.",
        [READY, send(INPUT, turn(1)), output(1, REASONED)],
-       params=[SLOW, DB], backend=[DECIDE_ABSTAIN, REASONED_IGNORE, chat([])], clock="logical", ignore=[OFFERS])
+       params=[SLOW, DB], backend=[DECIDE_ABSTAIN, REASONED_IGNORE, chat([])], clock="logical")
 
 S.case(130, 4, "a low-confidence decision layer's respond is sent first; the output is that respond, then reasoning's ignore.",
        [READY, send(INPUT, turn(1, HI, choices=(IGNORE, RESPOND))), SAID_HI,
         output(1, f"_event.data.output.length === 2 && _event.data.output[0].event === {js(RESPOND)}"
                   f" && _event.data.output[1].event === {js(IGNORE)} && _event.data.output[1].reason === 'nothing to say'")],
-       params=[SLOW], backend=[DECIDE_LOW, REASONED_IGNORE], clock="logical", ignore=[OFFERS])
+       params=[SLOW], backend=[DECIDE_LOW, REASONED_IGNORE], clock="logical")
 S.case(131, 4, "reasoning's repeat of the low-confidence decision layer's respond is sent again, after it.",
        [READY, send(INPUT, turn(1, HI, choices=(IGNORE, RESPOND))), SAID_HI, SAID_HI,
         output(1, f"_event.data.output.length === 2 && _event.data.output[0].event === {js(RESPOND)}"
                   f" && _event.data.output[1].event === {js(RESPOND)}"
                   " && _event.data.output[1].data.parts[0].words === 'hi' && _event.data.output[1].target === 'session'")],
-       params=[SLOW], backend=[DECIDE_LOW, REASONED_REPEAT], clock="logical", ignore=[OFFERS])
+       params=[SLOW], backend=[DECIDE_LOW, REASONED_REPEAT], clock="logical")
 
 S.case(140, 5, "a failed decision cascades the turn to reasoning, which answers it.",
        [READY, send(INPUT, turn(1)), output(1, REASONED)],
        params=[SLOW], backend=[{"path": DECIDE, "status": 500, "body": {"error": {"message": "boom"}}}, REASONED_IGNORE],
-       clock="logical", ignore=[OFFERS])
+       clock="logical")
 S.case(141, 5, "a failed reasoning call fails the turn, and the failure is handed back.",
        [READY, send(INPUT, turn(1)), failed(1, "the reasoning failed (status)"), handed_back(1, FAILED_STEP, "reasoning")],
-       params=[SLOW], backend=[DECIDE_ABSTAIN, chat(status=500)], clock="logical", ignore=[OFFERS])
+       params=[SLOW], backend=[DECIDE_ABSTAIN, chat(status=500)], clock="logical")
 S.case(142, 5, "a reasoning selection outside the choices, refused again after its repair, fails the turn, and the failure is handed back.",
        [READY, send(INPUT, turn(1)), failed(1, "Selection rejected: /events/0: missing properties 'target'"), handed_back(1, FAILED_STEP, "reasoning")],
-       params=[SLOW], backend=[DECIDE_ABSTAIN, OFF_CHOICE, OFF_CHOICE], clock="logical", ignore=[OFFERS])
+       params=[SLOW], backend=[DECIDE_ABSTAIN, OFF_CHOICE, OFF_CHOICE], clock="logical")
 S.case(143, 5, "a handed-back failure that fails again is not handed back: the cognition is idle again.",
        [READY, send(INPUT, js({"turn": 2, "focus": None, "focus_candidates": [], "choices": [],
                                 "stimulus": {"event": FAILED_STEP, "source": "cognition",
                                              "data": {"message": "earlier", "stage": "reasoning", "turn": 1}}})),
-        expect(FAILED, "_event.data.turn === 2"), READY],
+        expect(FAILED, "_event.data.turn === 2"), OFFERED],
        params=[SLOW], backend=[DECIDE_ABSTAIN], clock="logical")
 
 S.case(150, 6, "a step that does not answer in time fails only its turn, which is handed back; the cognition is idle again.",
        [READY, send(INPUT, turn(1)),
         expect(FAILED, "_event.data.turn === 1 && _event.data.message === \"Cognition's reflex step took longer than 0.001 seconds, so the turn failed.\""),
-        handed_back(1, TIMED_OUT_STEP, "reflex"), READY],
+        handed_back(1, TIMED_OUT_STEP, "reflex"), OFFERED],
        params=[("child_operation_timeout_ms", "1")], backend=[DECIDE_IGNORE], clock="wall")
 
 S.case(160, 7, "a cancel for the turn in hand is acknowledged and the cognition is idle again.",
-       [READY, send(INPUT, turn(1)), send(CANCEL, js({"turn": 1})), expect(CANCELLED, "_event.data.turn === 1"), READY],
+       [READY, send(INPUT, turn(1)), send(CANCEL, js({"turn": 1})), expect(CANCELLED, "_event.data.turn === 1"), OFFERED],
        params=[SLOW], backend=[DECIDE_IGNORE], clock="logical")
 S.case(161, 7, "a cancel in idle is acknowledged at once with its turn.",
        [READY, send(CANCEL, js({"turn": 7})), expect(CANCELLED, "_event.data.turn === 7")])
 S.case(162, 7, "a cancel for another turn is not taken: the turn is answered.",
        [READY, send(INPUT, turn(1)), send(CANCEL, js({"turn": 2})), output(1, IGNORED)],
-       params=[SLOW], backend=[DECIDE_IGNORE], clock="logical", ignore=[OFFERS])
+       params=[SLOW], backend=[DECIDE_IGNORE], clock="logical")
 
 S.case(170, 8, "an ignore in idle sends nothing: the next event answered is the cancel's.",
        [READY, send(IGNORE, js({})), send(CANCEL, js({"turn": 3})), expect(CANCELLED, "_event.data.turn === 3")])
 S.case(171, 8, "an ignore during a turn sends nothing and the turn is answered.",
        [READY, send(INPUT, turn(1)), send(IGNORE, js({})), output(1, IGNORED)],
-       params=[SLOW], backend=[DECIDE_IGNORE], clock="logical", ignore=[OFFERS])
+       params=[SLOW], backend=[DECIDE_IGNORE], clock="logical")
 
 S.case(180, 9, "an input without a stimulus is refused at the sender; the cognition stays idle and acknowledges a cancel at once.",
        [READY, send(INPUT, js({"turn": 1})), expect("error.execution"),
@@ -219,21 +222,19 @@ INTUITED_HANDOFF = chat([{"event": RESPOND, "data": HI, "reason": "hold on", "ta
                          {"event": HANDOFF, "data": {}, "reason": "this needs thought", "target": "session.cognition"}])
 S.case(190, 10, "an intuition tier handles the turn the decision layer left unhandled, without reasoning.",
        [READY, send(INPUT, turn(1)), output(1, REASONED)],
-       params=[SLOW, INTUITION], backend=[DECIDE_TO_INTUITION, REASONED_IGNORE], clock="logical", ignore=[OFFERS])
+       params=[SLOW, INTUITION], backend=[DECIDE_TO_INTUITION, REASONED_IGNORE], clock="logical")
 S.case(191, 10, "an intuition that selects the handoff sends its respond first; the output is it, then reasoning's ignore.",
        [READY, send(INPUT, turn(1, choices=(IGNORE, RESPOND))), SAID_HI,
         output(1, f"_event.data.output.length === 2 && _event.data.output[0].event === {js(RESPOND)}"
                   f" && _event.data.output[1].event === {js(IGNORE)}")],
-       params=[SLOW, INTUITION], backend=[DECIDE_TO_INTUITION, INTUITED_HANDOFF, REASONED_IGNORE], clock="logical",
-       ignore=[OFFERS])
+       params=[SLOW, INTUITION], backend=[DECIDE_TO_INTUITION, INTUITED_HANDOFF, REASONED_IGNORE], clock="logical")
 S.case(192, 10, "a failed intuition cascades the turn to reasoning, which answers it.",
        [READY, send(INPUT, turn(1)), output(1, REASONED)],
-       params=[SLOW, INTUITION], backend=[DECIDE_TO_INTUITION, chat(status=500), REASONED_IGNORE], clock="logical",
-       ignore=[OFFERS])
+       params=[SLOW, INTUITION], backend=[DECIDE_TO_INTUITION, chat(status=500), REASONED_IGNORE], clock="logical")
 
-_case(200, 11, "the cognition asks the identity for the bot's name after its offers, again after a turn, and no more once told.",
-      [READY, expect(ASK), send(INPUT, turn(1)), output(1, IGNORED), READY, expect(ASK),
-       send(NAMED, js({"name": "Pip"})), send(INPUT, turn(2)), output(2, IGNORED), READY,
+_case(200, 11, "the cognition asks the identity for the bot's name once ready, again after a turn, and no more once told.",
+      [READY, expect(ASK), send(INPUT, turn(1)), output(1, IGNORED), OFFERED, expect(ASK),
+       send(NAMED, js({"name": "Pip"})), send(INPUT, turn(2)), output(2, IGNORED), OFFERED,
        send(CANCEL, js({"turn": 3})), expect(CANCELLED, "_event.data.turn === 3")],
       params=[SLOW], backend=[DECIDE_IGNORE, DECIDE_IGNORE], clock="logical")
 
@@ -256,7 +257,7 @@ S.case(210, 12, "after a stretch without input the cognition rests and consolida
        # On the wall clock a loaded machine can take the decision layer past its own 20 s bound, so the
        # case gives it the stage's generous bound.
        params=[("rest_after_ms", "1000"), SLOW, ("decision_timeout_ms", "300000")], backend=[DECIDE_IGNORE],
-       clock="wall", ignore=[OFFERS],
+       clock="wall",
        logs={"cognition.rest": ["resting", "awake"],
              "cognition.consolidated": ['{"folded":0,"merged":0,"steps":0,"failed":false,"reason":"absent"}']})
 
@@ -264,15 +265,15 @@ S.statement(14, "Each tier is offered only the turn's choices within its effort 
 
 S.case(230, 14, "a respond over the decision layer's ceiling is not the decision layer's to send: reasoning answers the turn, and nothing is said.",
        [READY, send(INPUT, turn(1, HI, choices=(IGNORE, RESPOND), efforts={RESPOND: 1})), output(1, REASONED)],
-       params=[SLOW], backend=[DECIDE_LOW, REASONED_IGNORE], clock="logical", ignore=[OFFERS])
+       params=[SLOW], backend=[DECIDE_LOW, REASONED_IGNORE], clock="logical")
 S.case(231, 14, "a respond over intuition's ceiling is refused at its dispatch, so intuition cascades and reasoning, offered the whole frame, says it.",
        [READY, send(INPUT, turn(1, HI, choices=(IGNORE, RESPOND), efforts={RESPOND: 2})), SAID_HI,
         output(1, f"_event.data.output.length === 1 && _event.data.output[0].event === {js(RESPOND)}")],
        params=[SLOW, INTUITION], backend=[DECIDE_TO_INTUITION, INTUITED_HANDOFF, INTUITED_HANDOFF, REASONED_REPEAT],
-       clock="logical", ignore=[OFFERS])
+       clock="logical")
 S.case(232, 14, "the bounds raise the decision layer's ceiling: its low-confidence respond is sent before reasoning's ignore.",
        [READY, send(INPUT, turn(1, HI, choices=(IGNORE, RESPOND), efforts={RESPOND: 1})), SAID_HI,
         output(1, f"_event.data.output.length === 2 && _event.data.output[0].event === {js(RESPOND)}"
                   f" && _event.data.output[1].event === {js(IGNORE)}")],
        params=[SLOW, ("bounds", "({decision_effort_ceiling: 1})")], backend=[DECIDE_LOW, REASONED_IGNORE],
-       clock="logical", ignore=[OFFERS])
+       clock="logical")

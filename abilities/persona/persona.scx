@@ -50,13 +50,11 @@
   traits, and its invoker gets done.invoke.persona.
 
   Offers: bot.ability.persona.revise {text, reason} (text at most 2000 characters, reason at most 500, neither
-  blank) is offered on every entry into knowing, through
-  <decision:choice events="bot.ability.persona.revise"
-  effort="revise_effort"> (its effort, 2 by default, decision D206), made
-  model-facing by <processing:model_facing_schema> ($schema, title and
-  examples dropped), in bot.ability.offers {ability: "persona", choices},
-  from knowing's onentry, after the output; the first offers are the
-  ability's readiness. A bot that never revises is working correctly:
+  blank) is offered while knowing: its parent reads it from the live
+  session with <decision:offers>, the event its offerable <data> declares
+  with its effort (revise_effort, 2 by default, decision D206), while a
+  transition without a cond takes it. The first entry into knowing sends
+  bot.ability.ready to the parent once (decision D242), after the output. A bot that never revises is working correctly:
   keeping the description it has is a decision this ability makes
   available and never makes.
 
@@ -87,8 +85,7 @@
   Logs: persona.description (the description woken with, "recalled" and
   its text or null, and each revision, "revised" and its text),
   persona.recall.failed (each recall attempt that failed),
-  persona.revise.failed, persona.offers, persona.offers.dropped (offers over
-  32768 bytes), memory (absent), and persona.failed.
+  persona.revise.failed, memory (absent), and persona.failed.
 
   Contracts: every event it takes names its abilities/schemas/ file by
   event:schema, and the output names its own. A send or raise whose data
@@ -96,14 +93,11 @@
   outside the session that does not is refused, so no cond rechecks a
   payload.
 
-  Bindings: the decision and processing namespace packages and the memory
-  ability's sql service package (a run grants it its directory: scx run's
+  Bindings: the memory ability's sql service package (a run grants it its directory: scx run's
   dir option).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
-       xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
        version="1.0" datamodel="ecmascript" name="persona" initial="recalling">
   <datamodel>
     <!-- How heavy an action bot.ability.persona.revise is (decision D206),
@@ -122,9 +116,12 @@
     <!-- Whether entering knowing tells the owner (on waking and after a
          revision, never after a revision that failed). -->
     <data id="telling" expr="false"/>
-    <!-- The offers. -->
-    <data id="offered" expr="[]"/>
-    <data id="offers_over" expr="false"/>
+    <!-- What it offers its parent (decision D242), which reads it from its
+         live session with <decision:offers>: the revision, of
+         revise_effort; and whether it has told its parent it is ready
+         (once). -->
+    <data id="offerable" expr="({'bot.ability.persona.revise': {effort: revise_effort}})"/>
+    <data id="ready" expr="false"/>
     <!-- Memory: the database file (null: no memory) and its self-fact
          statements. The SQL runs on both engines (SQLite and Postgres). A
          memory id is the next row count as 32 zero-padded digits (neither
@@ -229,9 +226,9 @@
   </state>
 
   <state id="knowing">
-    <!-- Tell the owner (on waking and after a revision), then the offers,
-         read on entry: the choices are knowing's own transitions. One
-         block: an output refused (traits out of bounds) offers nothing. -->
+    <!-- Tell the owner (on waking and after a revision), then, the first
+         time, that it is ready. One block: an output refused (traits out
+         of bounds) is never ready. -->
     <onentry>
       <if cond="telling">
         <send event="bot.ability.persona.output" target="#_parent" event:schema="../schemas/bot.ability.persona.output.json">
@@ -240,16 +237,10 @@
         </send>
         <assign location="telling" expr="false"/>
       </if>
-      <decision:choice location="offered" events="bot.ability.persona.revise" effort="revise_effort"/>
-      <processing:model_facing_schema location="offered" bound="32768" overlocation="offers_over"/>
-      <if cond="offers_over">
-        <log label="persona.offers.dropped" expr="'the offers are over 32768 bytes'"/>
+      <if cond="!ready">
+        <send event="bot.ability.ready" target="#_parent"/>
+        <assign location="ready" expr="true"/>
       </if>
-      <log label="persona.offers" expr="offered"/>
-      <send event="bot.ability.offers" target="#_parent">
-        <param name="ability" expr="'persona'"/>
-        <param name="choices" expr="offered"/>
-      </send>
     </onentry>
     <transition event="bot.ability.persona.revise" event:schema="../schemas/bot.ability.persona.revise.json" target="revising">
       <assign location="revision" expr="_event.data"/>

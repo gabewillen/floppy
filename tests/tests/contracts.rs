@@ -167,7 +167,7 @@ const ABILITY_EVENTS: [&str; 107] = [
     "bot.ability.learning.lesson",
     "bot.ability.learning.output",
     "bot.ability.routines.reconcile",
-    "bot.ability.offers",
+    "bot.ability.ready",
     // Phase 3: the memory service's committed transaction, described where
     // the abilities take it.
     "bot.ability.memory.output",
@@ -358,6 +358,8 @@ fn admits(schema: &scxml_event_schema::CompiledSchema, value: &Json) -> bool {
     let data = match value {
         Json::Object(_) => scxml_types::DataValue::canonical_json_object(&text),
         Json::Array(_) => scxml_types::DataValue::canonical_json_array(&text),
+        // An event with no data (a bare `<send>`, bot.ability.ready).
+        Json::Null => return schema.admits(&scxml_types::DataValue::Null),
         _ => return false,
     }
     .expect("canonical JSON is data");
@@ -555,9 +557,9 @@ fn every_event_name_is_a_listed_name_or_a_marked_floppy_name() {
         BTreeSet::from([
             "bot.ability.learning.lesson".to_owned(),
             "bot.ability.migration.output".to_owned(),
-            "bot.ability.offers".to_owned()
+            "bot.ability.ready".to_owned()
         ]),
-        "the floppy-only events: phase 4's offers, the migration ability's output and the learning's lesson"
+        "the floppy-only events: an ability's readiness, the migration ability's output and the learning's lesson"
     );
     for event in schemas.keys() {
         assert!(

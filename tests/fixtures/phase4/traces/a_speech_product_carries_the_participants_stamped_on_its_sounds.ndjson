@@ -1,2 +1,2 @@
-{"label":"harness.ready","session":"session","text":"{\"ability\":\"listening\",\"choices\":[]}","type":"log"}
+{"label":"harness.ready","session":"session","text":"listening","type":"log"}
 {"label":"harness.speech","session":"session","text":"{\"channels\":1,\"content\":\"what is the weather\",\"content_type\":\"text/plain\",\"media_type\":\"audio/pcm\",\"parent\":{\"data\":{\"audio\":\"media/weather.wav\",\"channels\":1,\"media_type\":\"audio/wav\",\"participants\":[{\"ref\":\"person-42\",\"role\":\"source\"}],\"sample_rate_hz\":16000},\"event\":\"environment.sound\"},\"participants\":[{\"ref\":\"person-42\",\"role\":\"source\"},{\"ref\":\"floppy\",\"role\":\"target\"}],\"sample_rate_hz\":16000,\"source_ids\":[],\"voice_detection\":{\"segments\":[]}}","type":"log"}

@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- cognition-5: a handed-back failure that fails again is not handed back: the cognition is idle again. -->
-<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision" version="1.0" datamodel="ecmascript" initial="harness">
+<datamodel>
+  <data id="offers" expr="null"/>
+</datamodel>
 <state id="harness" initial="boot">
   <invoke id="cognition" type="scxml" src="../../../cognition.scx">
     <param name="child_operation_timeout_ms" expr="300000"/>
@@ -10,7 +13,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'cognition' &amp;&amp; _event.data.choices.length === 2 &amp;&amp; _event.data.choices[0].event === &quot;bot.ability.cognition.ignore&quot; &amp;&amp; _event.data.choices[1].event === &quot;bot.ability.learning.input&quot; &amp;&amp; _event.data.choices[0].schema.title === undefined" target="step1"/>
+    <transition event="bot.ability.ready" target="step1"/>
   </state>
   <state id="step1">
     <onentry>
@@ -19,7 +22,11 @@
     <transition event="bot.ability.failed" cond="_event.data.turn === 2" target="step2"/>
   </state>
   <state id="step2">
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'cognition' &amp;&amp; _event.data.choices.length === 2 &amp;&amp; _event.data.choices[0].event === &quot;bot.ability.cognition.ignore&quot; &amp;&amp; _event.data.choices[1].event === &quot;bot.ability.learning.input&quot; &amp;&amp; _event.data.choices[0].schema.title === undefined" target="step3"/>
+    <onentry>
+      <decision:offers location="offers" target="'#_cognition'"/>
+    </onentry>
+    <transition cond="offers.length === 1 &amp;&amp; offers[0].event === &quot;bot.ability.cognition.ignore&quot; &amp;&amp; offers[0].effort === undefined &amp;&amp; offers[0].schema.type === 'object'" target="step3"/>
+    <transition target="fail"><log label="unexpected" expr="'offers ' + JSON.stringify(offers)"/></transition>
   </state>
   <state id="step3">
     <transition target="pass"/>

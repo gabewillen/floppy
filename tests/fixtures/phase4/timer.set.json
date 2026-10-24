@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "description": "Start the timer.",
+  "properties": {
+    "minutes": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "required": [
+    "minutes"
+  ],
+  "additionalProperties": false
+}

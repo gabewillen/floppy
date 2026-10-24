@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- persona-7: a persona given no traits offers nothing and ends. -->
+<!-- persona-7: a persona given no traits is never ready and ends. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="persona" type="scxml" src="../../../persona.scx"/>

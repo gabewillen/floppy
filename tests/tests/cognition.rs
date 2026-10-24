@@ -15,7 +15,7 @@
 //!
 //! The stages log what they do (`autonomy`, `intuition`, `reasoning`,
 //! `memory`), the cognition its cascade (`cognition.stage`,
-//! `cognition.tuner`, `cognition.cancelled`, `cognition.offers`,
+//! `cognition.tuner`, `cognition.cancelled`,
 //! `reflection`), and the body each event it emits.
 //!
 //! Every test ends by comparing its whole run, and every request the fake
@@ -753,14 +753,17 @@ fn the_decision_layer_handles_an_ignore_without_reasoning() {
         strings(&["turn 1"])
     );
     assert_eq!(mock.received("/chat/completions").len(), 1);
-    // The cognition offers ignore and a lesson from each idle entry (the
-    // activation's and the turn's end).
+    // The body read the cognition's two offers, ignore and a lesson, from
+    // its live session (decision D242).
     let mut all = records;
     all.extend(finished.records);
+    let choices = texts(&all, "floppy.choices");
+    assert!(!choices.is_empty(), "{all:?}");
     assert!(
-        texts(&all, "cognition.offers")
+        choices
             .iter()
-            .all(|t| support::choice_names(t) == format!("{IGNORE} {LEARN}")),
+            .all(|t| support::choice_names(t).contains(&format!("{IGNORE}@"))
+                && support::choice_names(t).contains(&format!("{LEARN}@"))),
         "{all:?}"
     );
 }
@@ -1676,11 +1679,7 @@ fn intuition_answers_in_words_without_reasoning() {
     assert_eq!(requests[0].body["model"], INTUITION_MODEL);
     assert_eq!(requests[0].body["reasoning_effort"], "none");
     assert!(offers_handoff(&requests[0]));
-    assert!(
-        !texts(&records, "cognition.offers")
-            .concat()
-            .contains(HANDOFF)
-    );
+    assert!(!texts(&records, "floppy.choices").concat().contains(HANDOFF));
     assert_eq!(texts(&records, "floppy.output").len(), 1);
     close(run, &mock, "intuition_answers_in_words_without_reasoning");
 }

@@ -46,8 +46,8 @@ const P=[
   <param name="threshold" expr="threshold"/>
 </invoke>`},
  {id:'decision',kind:'namespace',prefix:'decision',uri:GH+'namespaces/decision',ver:'0.1.0',
-  sum:'The synchronous half of a decision: reads the choices a state offers and pins one property of them.',
-  elements:['choice','pin'],artifact:'floppy_decision.virtualized.wasm',wit:'stateforward:scxml/executable-content-extension 0.2.0',
+  sum:'The synchronous half of a decision: reads the choices a state offers, or a child\u2019s live session offers, and pins one property of them.',
+  elements:['choice','offers','pin'],artifact:'floppy_decision.virtualized.wasm',wit:'stateforward:scxml/executable-content-extension 0.2.0',
   used:['abilities/cognition','abilities/communication','abilities/identity','abilities/reflection','bots/builder','bots/floppy']},
  {id:'processing',kind:'namespace',prefix:'processing',uri:GH+'namespaces/processing',ver:'0.1.0',
   sum:'What a stage needs between the offered events and their dispatch: model-facing schemas, the turn\u2019s offered events tagged with their sessions, the dispatch tool, the selection confidence. Never sends.',
@@ -87,7 +87,8 @@ const P=[
   elements:['validate'],artifact:'embedded in scx',wit:'n/a',used:['bots/builder']},
 ];
 const EL=[
- ['decision','choice','location events',6,'Offers events as enabled transitions the turn can select.'],
+ ['decision','choice','location events',4,'Offers events as enabled transitions the turn can select.'],
+ ['decision','offers','location target undeclared?',1,'Reads what a child\u2019s live session offers: its enabled transitions its offerable data declares.'],
  ['decision','pin','location event property values',1,'Pins an event property to an enum of allowed values.'],
  ['processing','model_facing_schema','location bound? overlocation?',4,'The model-facing choices: no $schema, title or examples, and over the bound no descriptions.'],
  ['processing','collect_offered_events','location choices offers? devices? focus? bound? overlocation? sizelocation?',1,'The turn\u2019s choices, each tagged with its offering session\u2019s id.'],

@@ -941,6 +941,23 @@ pub fn environment_for(body: &Path, params: &[(&str, &str)]) -> String {
 /// `../schemas/<event>.json`), and returns the path of its copied document. The memory ability comes
 /// with the migration ability it invokes, the conversation with its
 /// turn detector, and seeing with its stage children.
+/// Lays out `tests/fixtures/phase4/cognition_double.scx` as `abilities`'
+/// cognition, with the schema of its huge offer beside it.
+pub fn copy_cognition_double(abilities: &Path) {
+    let cognition = abilities.join("cognition");
+    std::fs::create_dir_all(&cognition).expect("creatable");
+    for (from, to) in [
+        ("cognition_double.scx", "cognition.scx"),
+        ("cognition_huge.json", "cognition_huge.json"),
+    ] {
+        std::fs::copy(
+            workspace().join("tests/fixtures/phase4").join(from),
+            cognition.join(to),
+        )
+        .expect("the cognition double is copyable");
+    }
+}
+
 pub fn copy_ability(name: &str, abilities: &Path) -> PathBuf {
     copy_tree(
         &workspace().join("abilities/schemas"),

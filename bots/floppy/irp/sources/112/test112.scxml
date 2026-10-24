@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- floppy-2: an activation that times out (an expected ability never offers) fails it. -->
+<!-- floppy-2: an activation that times out (an expected ability is never ready) fails it. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="floppy" type="scxml" src="../../../floppy.scx">

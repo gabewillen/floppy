@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/stm/irp/sources">
   <assert id="stm-1" specnum="1" specid="#stm-1">
-    <![CDATA[With a database it opens it (migrating it to the head revision through the memory ability) and is ready: it sends `bot.ability.offers` `{ability: "stm", choices: []}` once; without one it is ready the same way, holds nothing (records and turns are dropped) and answers every read empty.]]>
+    <![CDATA[With a database it opens it (migrating it to the head revision through the memory ability) and is ready: it sends `bot.ability.ready` once (decision D242), with no data; without one it is ready the same way, holds nothing (records and turns are dropped) and answers every read empty.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>

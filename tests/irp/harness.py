@@ -25,6 +25,11 @@ step is one of
                                     any event the harness receives) and
                                     takes it when `cond` holds, assigning
                                     each (location, expr)
+  offers(cond, undeclared=None)     reads what the child offers from its
+                                    live session (<decision:offers
+                                    location="offers">, decision D242) and
+                                    goes on when `cond` holds of `offers`;
+                                    otherwise the case fails, logging them
   ignore(event)                     drops `event` wherever it arrives
 
 and the case passes when every expect was met in order. Any other event
@@ -80,6 +85,16 @@ def wait(delay):
 
 def expect(event, cond=None, assigns=()):
     return Expect(event, cond, assigns)
+
+
+class Offers:
+    def __init__(self, cond, undeclared=None):
+        self.cond, self.undeclared = cond, undeclared
+
+
+def offers(cond, undeclared=None):
+    """A step that reads the child's offers from its live session and requires `cond` of them."""
+    return Offers(cond, undeclared)
 
 
 def js(value):
@@ -139,14 +154,18 @@ class Suite:
     # ------------------------------------------------------------ writing
     def document(self, case):
         name = self.name
+        reads = any(isinstance(item, Offers) for step in case["steps"]
+                    for item in (step if isinstance(step, list) else [step]))
+        decision = ' xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"' if reads else ""
         lines = [
             '<?xml version="1.0" encoding="UTF-8"?>',
             f"<!-- {case['assertion']}: {escape(case['comment'])} -->",
-            '<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">',
+            f'<scxml xmlns="http://www.w3.org/2005/07/scxml"{decision} version="1.0" datamodel="ecmascript" initial="harness">',
         ]
-        if case["data"]:
+        data = list(case["data"]) + ([("offers", "null")] if reads else [])
+        if data:
             lines.append("<datamodel>")
-            for location, expr in case["data"]:
+            for location, expr in data:
                 lines.append(f"  <data id={quoteattr(location)} expr={quoteattr(expr)}/>")
             lines.append("</datamodel>")
         lines.append('<state id="harness" initial="boot">')
@@ -189,6 +208,17 @@ class Suite:
                 continue
             lines.append(f'  <state id="step{step}">')
             sends = flush_sends()
+            if isinstance(item, Offers):
+                undeclared = f" undeclared={quoteattr(item.undeclared)}" if item.undeclared else ""
+                lines += ["    <onentry>"] + sends + [
+                    f"      <decision:offers location=\"offers\" target=\"'#_{name}'\"{undeclared}/>",
+                    "    </onentry>",
+                    f"    <transition cond={quoteattr(item.cond)} target=\"step{step + 1}\"/>",
+                    '    <transition target="fail"><log label="unexpected" expr="\'offers \' + JSON.stringify(offers)"/></transition>',
+                    "  </state>",
+                ]
+                step += 1
+                continue
             if sends:
                 lines += ["    <onentry>"] + sends + ["    </onentry>"]
             cond = f" cond={quoteattr(item.cond)}" if item.cond else ""
@@ -312,7 +342,8 @@ class Suite:
 def load(kind, name):
     path = os.path.join(ROOT, kind, name, "irp", "cases.py")
     suite = Suite(kind, name)
-    runpy.run_path(path, init_globals=dict(suite=suite, send=send, expect=expect, wait=wait, js=js, wav=wav, pcm=pcm, png=png))
+    runpy.run_path(path, init_globals=dict(suite=suite, send=send, expect=expect, offers=offers, wait=wait, js=js, wav=wav,
+                                           pcm=pcm, png=png))
     return suite
 
 

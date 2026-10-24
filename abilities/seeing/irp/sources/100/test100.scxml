@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- seeing-1: the offer is look alone, compacted. -->
-<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<!-- seeing-1: the offer is look alone. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision" version="1.0" datamodel="ecmascript" initial="harness">
+<datamodel>
+  <data id="offers" expr="null"/>
+</datamodel>
 <state id="harness" initial="boot">
   <invoke id="seeing" type="scxml" src="../../../seeing.scx"/>
   <state id="boot">
@@ -8,9 +11,16 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.offers" cond="_event.data.ability === 'seeing' &amp;&amp; _event.data.choices.length === 1 &amp;&amp; _event.data.choices[0].event === 'bot.ability.seeing.look' &amp;&amp; _event.data.choices[0].target === undefined &amp;&amp; _event.data.choices[0].schema.title === undefined &amp;&amp; _event.data.choices[0].schema['$schema'] === undefined &amp;&amp; _event.data.choices[0].schema.examples === undefined &amp;&amp; _event.data.choices[0].schema.additionalProperties === false" target="step1"/>
+    <transition event="bot.ability.ready" target="step1"/>
   </state>
   <state id="step1">
+    <onentry>
+      <decision:offers location="offers" target="'#_seeing'"/>
+    </onentry>
+    <transition cond="offers.length === 1 &amp;&amp; offers[0].event === 'bot.ability.seeing.look' &amp;&amp; offers[0].effort === undefined &amp;&amp; offers[0].target === undefined &amp;&amp; offers[0].schema.additionalProperties === false" target="step2"/>
+    <transition target="fail"><log label="unexpected" expr="'offers ' + JSON.stringify(offers)"/></transition>
+  </state>
+  <state id="step2">
     <transition target="pass"/>
   </state>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>

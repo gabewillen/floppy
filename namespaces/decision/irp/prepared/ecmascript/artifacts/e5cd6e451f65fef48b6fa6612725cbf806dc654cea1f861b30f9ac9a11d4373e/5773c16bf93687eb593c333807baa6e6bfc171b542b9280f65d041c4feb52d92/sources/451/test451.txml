@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<!-- decision-6: undeclared="all" offers every event the walk finds, with the efforts of those declared, and a child that declares nothing offers nothing by default. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision">
+<datamodel>
+  <data id="declared" expr="null"/>
+  <data id="everything" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <send event="timeout" delay="5s"/>
+  </onentry>
+  <invoke id="child" type="http://www.w3.org/TR/scxml/">
+    <content>
+      <scxml version="1.0" initial="c0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event">
+        <state id="c0">
+          <onentry>
+            <send event="childReady" target="#_parent"/>
+          </onentry>
+          <transition event="tool.alpha" cond="true" event:schema='{"type": "object"}'/>
+          <transition event="tool.beta" event:schema='{"type": "object"}'/>
+          <transition event="tool.gamma.*" event:schema='{"type": "object"}'/>
+        </state>
+      </scxml>
+    </content>
+  </invoke>
+  <transition event="childReady">
+    <decision:offers location="declared" target="'#_child'" undeclared="none"/>
+    <decision:offers location="everything" target="'#_child'" undeclared="all"/>
+    <raise event="read"/>
+  </transition>
+  <transition event="read" cond="declared.length === 0 &amp;&amp; everything.length === 2 &amp;&amp; everything[0].event === 'tool.beta' &amp;&amp; everything[1].event === 'tool.gamma' &amp;&amp; !('effort' in everything[0])" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>
