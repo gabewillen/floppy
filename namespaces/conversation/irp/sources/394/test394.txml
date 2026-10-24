@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- conversation-11: people_to_merge takes the most alike pair at 0.85 or more, the newer into the older, with their weighted representative; with none alike enough it writes null. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation">
+<datamodel>
+  <data id="m" expr="null"/>
+  <data id="none" expr="'untouched'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:people_to_merge location="m" people="[['person-1', 'i8:fwA=', 3], ['person-2', 'i8:AH8=', 1], ['person-3', 'i8:fwY=', 1]]"/>
+    <conversation:people_to_merge location="none" people="[['person-1', 'i8:fwA=', 1], ['person-2', 'i8:AH8=', 1]]"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="m.into === 'person-1' &amp;&amp; m.from === 'person-3' &amp;&amp; m.weight === 4 &amp;&amp; m.centroid === 'i8:fwE=' &amp;&amp; none === null" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

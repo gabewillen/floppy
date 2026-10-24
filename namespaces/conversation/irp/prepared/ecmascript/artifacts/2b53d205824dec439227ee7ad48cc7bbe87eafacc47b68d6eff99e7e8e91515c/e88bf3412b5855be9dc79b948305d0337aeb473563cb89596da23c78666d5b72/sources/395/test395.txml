@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- conversation-11: merged_context_refs writes each relationship context reference that names the merged person with the reference its groups make once the person is the other. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation">
+<datamodel>
+  <data id="r" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <conversation:merged_context_refs location="r" refs="['{&quot;identity_groups&quot;:[[],[&quot;person-10&quot;,&quot;person-2&quot;]]}', '{&quot;identity_groups&quot;:[[],[&quot;person-3&quot;]]}', 'damaged']" from="'person-2'" into="'person-10'"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="r.length === 1 &amp;&amp; r[0][1] === '{&quot;identity_groups&quot;:[[],[&quot;person-10&quot;]]}'" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

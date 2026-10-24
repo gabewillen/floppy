@@ -278,6 +278,16 @@ def cmd_run(args):
 def cmd_grade(args):
     with open(os.path.join(args.dir, "plan.json"), encoding="utf-8") as handle:
         jobs = json.load(handle)["jobs"]
+    # A builder track's run: its table again, from the models it saved.
+    # Checked before anything is written: a run without them fails at once.
+    builder_json = os.path.join(args.dir, "builder.json")
+    models = None
+    if os.path.exists(builder_json):
+        with open(builder_json, encoding="utf-8") as handle:
+            models = json.load(handle).get("models")
+        if not models or not isinstance(models, dict):
+            sys.exit(f"{builder_json} names no column models (a run from before they were saved): "
+                     "it cannot be regraded")
     for job in jobs:
         # A run made on another machine: its out directories moved with it.
         job["out"] = os.path.join(args.dir, "jobs", job["id"])
@@ -287,6 +297,8 @@ def cmd_grade(args):
         json.dump({"summary": summary, "jobs": graded}, handle, indent=2)
     with open(os.path.join(args.dir, "report.md"), "w", encoding="utf-8") as handle:
         handle.write(report_markdown(f"Learning eval {os.path.basename(args.dir)}", summary, graded))
+    if models is not None:
+        write_builder(args.dir, [{"label": label, "builder": model} for label, model in models.items()], graded)
     print(json.dumps(summary, indent=2))
 
 
@@ -467,16 +479,23 @@ def builder_table(columns, graded):
     the attempts per accepted build; with each column's failure reasons."""
     lines = ["# Builder track", "",
              "Each column runs the bot's reflex and routine scenarios with its builder pinned to one model. A build is one "
-             "builder run reflection started (a create or change); attempts are its author attempts.", "",
+             "builder run reflection or the learning ability started (a create or change); attempts are its author attempts "
+             "(its budget of failures also counts a failed design). A revision its turn cut before any draft is counted "
+             "apart, not as a build.", "",
              "| Column | Builder model | Scenario | Builds | Accepted | Success | Attempts per accepted | Learned |",
              "| --- | --- | --- | --- | --- | --- | --- | --- |"]
     summary = {}
     for column in columns:
         rows = [g for g in graded if g["id"].startswith(column["label"] + "-")]
-        totals = {"builds": 0, "accepted": 0, "attempts": [], "reasons": {}, "learned": []}
+        totals = {"builds": 0, "accepted": 0, "attempts": [], "reasons": {}, "learned": [], "cut": 0}
         for scenario in sorted({g["scenario"] for g in rows}):
             runs = [g for g in rows if g["scenario"] == scenario]
-            built = [b for g in runs for b in g["builds"]]
+            # A revision its turn cut before the builder wrote a draft or
+            # failed once measures the turn, not the builder: counted apart.
+            # A log cut at the job's end before a draft lands here too.
+            started = [b for g in runs for b in g["builds"]]
+            built = [b for b in started if b["attempts"] or b["failures"] or b["reason"] != "unfinished"]
+            totals["cut"] += len(started) - len(built)
             accepted = [b for b in built if b["accepted"]]
             # Learned anywhere in the job, not only on the teaching turn: a
             # behavior reflection learns turns later still counts here.
@@ -501,15 +520,28 @@ def builder_table(columns, graded):
             "attempts_per_accepted": statistics.mean(totals["attempts"]) if totals["attempts"] else None,
             "learned": statistics.mean(totals["learned"]) if totals["learned"] else None,
             "failures": totals["reasons"],
+            "cut_before_draft": totals["cut"],
         }
-    lines += ["", "| Column | Builds | Success | Attempts per accepted | Learned | Failed builds by reason |", "| --- | --- | --- | --- | --- | --- |"]
+    lines += ["", "| Column | Builds | Success | Attempts per accepted | Learned | Failed builds by reason | Cut before a draft |",
+              "| --- | --- | --- | --- | --- | --- | --- |"]
     for label, s in summary.items():
         success = "n/a" if s["success"] is None else f"{s['success']:.2f}"
         attempts = "n/a" if s["attempts_per_accepted"] is None else f"{s['attempts_per_accepted']:.1f}"
         learned = "n/a" if s["learned"] is None else f"{s['learned']:.2f}"
         reasons = ", ".join(f"{k} {v}" for k, v in sorted(s["failures"].items())) or "none"
-        lines.append(f"| {label} | {s['builds']} | {success} | {attempts} | {learned} | {reasons} |")
+        lines.append(f"| {label} | {s['builds']} | {success} | {attempts} | {learned} | {reasons} | {s['cut_before_draft']} |")
     return "\n".join(lines) + "\n", summary
+
+
+def write_builder(out, columns, graded):
+    """builder.json and builder.md of a builder track's run."""
+    table, summary = builder_table(columns, graded)
+    with open(os.path.join(out, "builder.json"), "w", encoding="utf-8") as handle:
+        # The models are the run's inputs: a regrade reads them back.
+        models = {column["label"]: column["builder"] for column in columns}
+        json.dump({"columns": summary, "models": models, "jobs": graded}, handle, indent=2)
+    with open(os.path.join(out, "builder.md"), "w", encoding="utf-8") as handle:
+        handle.write(table)
 
 
 def cmd_builder(args):
@@ -530,11 +562,7 @@ def cmd_builder(args):
     if args.dry:
         return
     graded = grade_all(jobs, judge_env(args), args.judge_names, args.check_weight)
-    table, summary = builder_table(columns, graded)
-    with open(os.path.join(out, "builder.json"), "w", encoding="utf-8") as handle:
-        json.dump({"columns": summary, "jobs": graded}, handle, indent=2)
-    with open(os.path.join(out, "builder.md"), "w", encoding="utf-8") as handle:
-        handle.write(table)
+    write_builder(out, columns, graded)
     with open(os.path.join(out, "report.md"), "w", encoding="utf-8") as handle:
         handle.write(report_markdown(f"Builder track {os.path.basename(out)}", aggregate(graded), graded))
     print(os.path.join(out, "builder.md"))

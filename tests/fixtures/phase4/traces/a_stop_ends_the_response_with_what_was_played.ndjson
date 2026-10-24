@@ -5,7 +5,7 @@
 {"label":"speech.encode","parent":"session.communication.speaking.vocal","session":"session.communication.speaking.vocal.speech","text":"encode alpha bravo charlie delta echo foxtrot!! -> media/speaking-1.pcm","type":"log"}
 {"label":"floppy.say","parent":"session.communication","session":"session.communication.speaking","text":"alpha bravo charlie delta echo foxtrot!!","type":"log"}
 {"label":"harness.efference","session":"session","text":"4","type":"log"}
-{"label":"harness.sound","session":"session","text":"media/speaking-1.pcm","type":"log"}
+{"label":"harness.sound","session":"session","text":"media/speaking-1.0.pcm","type":"log"}
 {"label":"harness.efference","session":"session","text":"2","type":"log"}
 {"label":"communication.stop","parent":"session","session":"session.communication","text":"1","type":"log"}
 {"label":"harness.efference","session":"session","text":"0","type":"log"}

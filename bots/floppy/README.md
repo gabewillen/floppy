@@ -23,12 +23,14 @@ the turns, and the [communication](../../abilities/communication/communication.s
 which holds the [conversation](../../abilities/conversation/conversation.scx) (the
 current exchange of committed messages, one relationship per participant set; each input
 is one turn per source, assembled by a [turn detector](../../abilities/turn_detector/turn_detector.scx);
-it recalls and remembers a relationship's memories, and does not match an
-embedding source to an earlier participant's voice) and
+it recalls and remembers a relationship's memories, and matches each voice
+embedding to a person long-term memory holds, `person-<n>`, or makes a new
+one, so the bot knows a voice again across turns and restarts, decision D194) and
 [speaking](../../abilities/speaking/speaking.scx) (the words are encoded to speech
-by [vocal](../../abilities/vocal/vocal.scx) through the speech service, logged as
-`floppy.say`, played out as `environment.sound` after the efference copy to
-Listening, and recorded in the conversation), and the
+by [vocal](../../abilities/vocal/vocal.scx) through the speech service, which
+streams them in chunks, logged as `floppy.say`, played out chunk by chunk as
+it arrives, each chunk an `environment.sound`, after the efference copy to
+Listening, and recorded in the conversation; decision D203), and the
 [listening](../../abilities/listening/listening.scx), its input ability
 (phase 6: see Sound below). Each turn the body
 collects the choices (its own `bot.focus_device`, pinned to the turn's

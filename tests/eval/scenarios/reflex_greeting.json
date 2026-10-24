@@ -66,6 +66,14 @@
       "weight": 1
     },
     {
+      "check": "not_reflex",
+      "at": [
+        0,
+        3
+      ],
+      "weight": 1
+    },
+    {
       "check": "not_says",
       "at": [
         0,

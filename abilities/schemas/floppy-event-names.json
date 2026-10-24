@@ -289,6 +289,7 @@
  "bot.ability.vision.detection.output",
  "bot.ability.vocal.speech.encoding.apply.completed",
  "bot.ability.vocal.speech.encoding.apply.failed",
+ "bot.ability.vocal.speech.encoding.chunk",
  "bot.ability.vocal.speech.encoding.input",
  "bot.ability.vocal.speech.encoding.output",
  "bot.activate",

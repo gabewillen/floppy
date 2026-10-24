@@ -73,6 +73,61 @@ function hasAllTurns() {
   return turn_index >= turn_sources.length;
 }
 
+// identifying_from, identifying_memory, numbering_from, numbering_memory and
+// tagging_memory (decisions D194 and D205)
+
+// Nothing to identify: no memory, or no embedding among the input's
+// identities.
+function isUnidentified() {
+  return database === null || !input.source_ids.concat(input.target_ids).some(Array.isArray);
+}
+
+// Every person's representative voice (decision D205).
+function identifyStatements() {
+  return [{sql: voice_select, parameters: ['voice']}];
+}
+
+// The representatives memory holds, [person_ref, voice] each.
+function heardVoices(_event) {
+  return _event.data.results[0].rows.map(function (row) { return row.values; });
+}
+
+function hasNewPeople() {
+  return people !== null && people.people.length > 0;
+}
+
+// The new people's numbers, taken from the people sequence.
+function numberStatements() {
+  return [{sql: sequence_next, parameters: ['person', people.people.length]}];
+}
+
+// The last number taken before this input's.
+function numbersBefore(_event) {
+  return Number(_event.data.results[0].rows[0].values[0]) - people.people.length;
+}
+
+// The new people, then every voice heard, each for its person, then the
+// new people's representatives.
+function tagStatements() {
+  return people.people.map(personStatement).concat(people.voices.map(voiceStatement), people.representatives.map(representativeStatement));
+}
+
+function personStatement(person) {
+  return {sql: person_insert, parameters: [person]};
+}
+
+function voiceStatement(voice) {
+  return {sql: voice_insert, parameters: [voice[0], 'voice', voice[1]]};
+}
+
+function representativeStatement(representative) {
+  return {sql: representative_insert, parameters: [representative[0], 'voice', representative[1]]};
+}
+
+function identifyErrorMessage(_event) {
+  return 'Conversation could not identify the input\'s voices (' + _event.name + ')';
+}
+
 // recalling_from and remembering_from
 
 function isMemoryAbsent() {

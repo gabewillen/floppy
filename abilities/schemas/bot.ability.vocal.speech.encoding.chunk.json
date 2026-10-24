@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.vocal.speech.encoding.chunk",
+  "description": "One chunk of speech audio encoded by vocal's SpeechEncoding, returned as soon as it is encoded and before the encoding's output (decision D203): a reference to the chunk's audio, its number, and the sound fields its audio says, so playout can start on the first chunk.",
+  "properties": {
+    "audio": {
+      "description": "Reference (a URI reference) to this chunk's audio, a file of its own: the output reference with .<sequence> before its extension; floppy passes media by reference, never as bytes [floppy field].",
+      "examples": [
+        "media/speech-1.0.pcm"
+      ],
+      "format": "uri-reference",
+      "minLength": 1,
+      "title": "Audio",
+      "type": "string"
+    },
+    "sequence": {
+      "description": "The chunk's number, from 0, in the order the encoding returns its chunks; the chunks in order are the whole utterance, its pauses' silences included [floppy field].",
+      "examples": [
+        0,
+        3
+      ],
+      "minimum": 0,
+      "title": "Sequence",
+      "type": "integer"
+    },
+    "media_type": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional media type or codec label, such as audio/pcm or audio/opus.",
+      "examples": [
+        "audio/pcm",
+        "audio/opus"
+      ],
+      "title": "Media Type"
+    },
+    "sample_rate_hz": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional sample rate for raw or decoded audio, measured in hertz.",
+      "examples": [
+        48000
+      ],
+      "title": "Sample Rate Hz"
+    },
+    "channels": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional number of audio channels represented by the chunk.",
+      "examples": [
+        1,
+        2
+      ],
+      "title": "Channels"
+    },
+    "duration": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Seconds of sound in this chunk, measured from its audio rather than estimated; null when the form does not say [floppy field].",
+      "examples": [
+        0.5,
+        null
+      ],
+      "title": "Duration"
+    }
+  },
+  "required": [
+    "audio",
+    "sequence"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "audio": "media/speech-1.0.pcm",
+      "channels": 1,
+      "duration": 0.5,
+      "media_type": "audio/pcm",
+      "sample_rate_hz": 24000,
+      "sequence": 0
+    },
+    {
+      "audio": "media/speech-1.1.mp3",
+      "channels": null,
+      "duration": null,
+      "media_type": "audio/mpeg",
+      "sample_rate_hz": null,
+      "sequence": 1
+    }
+  ]
+}
