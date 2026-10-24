@@ -523,6 +523,21 @@ fn recalled_episodes_over_the_budget_are_trimmed_to_the_newest_not_failed() {
     }
 }
 
+/// A failed turn's recalled episode carries its outcome and failure, and a
+/// completed turn's carries neither (decision D139).
+#[test]
+fn a_recalled_failed_turns_episode_carries_its_outcome_and_failure() {
+    let episodes = [
+        json!({"stimulus_name": "done", "output": []}),
+        json!({"stimulus_name": "broke", "outcome": "failed", "failure": "Reasoning failed.", "output": []}),
+    ];
+    let rendered = prompt(&recalling("now", &episodes, &[]));
+    assert!(rendered.contains("<cognition:cognitive_episode stimulus_name=\"done\">"));
+    assert!(rendered.contains(
+        "<cognition:cognitive_episode stimulus_name=\"broke\" outcome=\"failed\" failure=\"Reasoning failed.\">"
+    ));
+}
+
 #[test]
 fn recent_turns_claim_the_budget_first_and_keep_the_newest_uncounted() {
     let mut input = recalling("now", &[], &[json!({"text": "d".repeat(50_000)})]);
