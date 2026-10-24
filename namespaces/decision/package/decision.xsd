@@ -20,11 +20,6 @@
                    session declares in its offerable data are offered (none,
                    the default) or every one (all). No other attribute, no
                    content.
-  decision:pin     location (required): the choice array whose event's
-                   schema property it pins. event, property (required):
-                   which. values (required): an expression of a JSON array,
-                   the property's enum; empty, the event is removed.
-                   Neither takes another attribute or content.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="https://github.com/stateforward/floppy/namespaces/decision"
@@ -47,14 +42,6 @@
           </xs:restriction>
         </xs:simpleType>
       </xs:attribute>
-    </xs:complexType>
-  </xs:element>
-  <xs:element name="pin">
-    <xs:complexType>
-      <xs:attribute name="location" type="xs:string" use="required"/>
-      <xs:attribute name="event" type="xs:string" use="required"/>
-      <xs:attribute name="property" type="xs:string" use="required"/>
-      <xs:attribute name="values" type="xs:string" use="required"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>
