@@ -840,12 +840,14 @@
         <param name="bounds" expr="bounds"/>
       </invoke>
       <transition event="bot.ability.learning.output" event:schema="../schemas/bot.ability.learning.output.json">
-        <send event="bot.ability.routines.reconcile" target="#_routines">
-          <content expr="({})"/>
-        </send>
+        <!-- The result first: with the routines stopped the reconcile's
+             send fails and ends the block. -->
         <send event="bot.ability.cognition.input" target="#_parent">
           <param name="stimulus" expr="lessonStimulus(_event)"/>
           <param name="participants" expr="_event.data.participants"/>
+        </send>
+        <send event="bot.ability.routines.reconcile" target="#_routines">
+          <content expr="({})"/>
         </send>
       </transition>
       <transition event="error.communication.learning" target="learning_stopped">

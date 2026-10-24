@@ -46,15 +46,25 @@ function isBehaviorHandled(event) {
   return event.data.turn === turn && event.data.handled === true && Array.isArray(event.data.selected) && event.data.selected.length > 0;
 }
 
-// Why the seed finished without handling the turn, as the candidates
-// runner logs a learned candidate's (decision D225).
+// Why the seed finished without handling the turn, the reason the
+// candidates runner logs for a learned candidate.
 function seedAdvanceLog(event) {
-  var d = event.data;
-  var why = d === null || typeof d !== 'object' ? 'no donedata object'
-    : d.turn !== turn ? 'donedata turn ' + JSON.stringify(d.turn) + ' is not the turn ' + turn
-    : d.handled !== true ? 'handled ' + JSON.stringify(d.handled)
-    : 'no selections';
-  return 'SpeechHeard (' + why + ')';
+  return 'SpeechHeard (' + unhandledReason(event.data) + ')';
+}
+
+// Why a donedata does not handle this turn: not an object, another turn,
+// not handled, or no selections (isBehaviorHandled's checks, in order).
+function unhandledReason(d) {
+  if (d === null || typeof d !== 'object') {
+    return 'no donedata object';
+  }
+  if (d.turn !== turn) {
+    return 'donedata turn ' + JSON.stringify(d.turn) + ' is not the turn ' + turn;
+  }
+  if (d.handled !== true) {
+    return 'handled ' + JSON.stringify(d.handled);
+  }
+  return 'no selections';
 }
 
 function seedSilentLog() {
