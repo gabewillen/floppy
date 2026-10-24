@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<!-- The consolidation document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/consolidation/irp/sources">
+  <assert id="consolidation-1" specnum="1" specid="#consolidation-1">
+    <![CDATA[With no `database` `<param>` (null) it logs `memory` `absent` and ends at once, its donedata `{folded: 0, merged: 0, steps: 0, failed: false, reason: "absent"}`.]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.scxml"/>
+    </test>
+  </assert>
+  <assert id="consolidation-2" specnum="2" specid="#consolidation-2">
+    <![CDATA[With a database it reads the people memory holds through the Memory ability (which brings the database to the head revision), folds the voices heard for each person since into their representative and merges two people whose representatives are at the conversation's threshold, one guarded transaction per step; with nothing to do it ends with `{folded: 0, merged: 0, steps: 0, failed: false, reason: null}`.]]>
+    <test id="110" conformance="mandatory" manual="false">
+      <start uri="110/test110.scxml"/>
+    </test>
+  </assert>
+  <assert id="consolidation-3" specnum="3" specid="#consolidation-3">
+    <![CDATA[A memory step that fails ends it at once with `failed: true` and the failure as its `reason`.]]>
+    <test id="120" conformance="mandatory" manual="false">
+      <start uri="120/test120.scxml"/>
+    </test>
+  </assert>
+</assertions>

@@ -12,7 +12,7 @@ through `scx run` with the real invoked services (a case's
 
 ## Statements
 
-- <a id="memory-1"></a>**memory-1**. Before the statements, it brings the database to the head of floppy's revisions (one revision, 0001, decision D193; in the engine's dialect) through the migration ability, so the statements see Alembic's `alembic_version` at `0001` and the tables, `bot_behavior` with its `lifetime` column and `bot_stm_turn`.
+- <a id="memory-1"></a>**memory-1**. Before the statements, it brings the database to the head of floppy's revisions (one revision, 0001, decision D193; in the engine's dialect) through the migration ability, so the statements see Alembic's `alembic_version` at `0001` and the tables, `bot_behavior` with its `lifetime` column, `bot_stm_turn`, the people `bot_person` and `bot_person_embedding` (decision D194), and each person's representative `bot_person_centroid` and the named sequences `bot_sequence` (decision D205).
 - <a id="memory-2"></a>**memory-2**. It runs the `statements` <param> (`[{sql, parameters?}]`) in order in one transaction and answers its parent `bot.ability.memory.output` `{results}`: one result per statement, in order, each `{rowcount, rows}` with every row `{columns, values}`; a statement's `parameters` bind its placeholders.
 - <a id="memory-3"></a>**memory-3**. A statement that fails (the engine refuses it, or its `rowcount` is not the one it expects) answers `bot.ability.failed` `{message, kind}`, the engine's message and kind `store_failed`, and no `bot.ability.memory.output`.
 - <a id="memory-4"></a>**memory-4**. A database the migration cannot bring to head answers `bot.ability.failed` `{message, kind}` with the migration's message and kind `unavailable`, and the statements never run.

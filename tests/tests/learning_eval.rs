@@ -18,12 +18,15 @@
 //! directory, so a later session is the bot restarted with what it
 //! learned. A session's steps are `{"say": text, "source"?, "timeout_s"?}`
 //! (one `bot.ability.communication.input`, waited on until its reflection
-//! settles or its turn fails) and `{"wait_s": seconds}` (the wall clock
+//! settles or its turn fails, and then, bounded again by its timeout, until
+//! each lesson the turn gave the learning ability is learned or fails and
+//! a turn settles for its result) and `{"wait_s": seconds}` (the wall clock
 //! passes with no input, for routines). A scenario's `bot_name`, when not
 //! null, is the name the identity starts with. Each job writes
 //! `<out>/session-<n>.json` (the records), `<out>/steps.json` (each step's
-//! range of records and wall-clock bounds) and `<out>/done.json`. Values of
-//! the env files are never printed.
+//! range of records, wall-clock bounds, whether its turn settled, the
+//! number of lessons closed during it and whether they settled) and
+//! `<out>/done.json`. Values of the env files are never printed.
 
 #![allow(
     missing_docs,
@@ -132,11 +135,77 @@ fn start(body: &Path, memory: &Path, job: &Json) -> Run {
     Run::start(&args, &[])
 }
 
-fn is_settled(record: &Json) -> bool {
+/// The labels that open a lesson the learning ability took (logged once
+/// per lesson, when it has recalled its memory) and that close one: it was
+/// learned or it failed. Each closed lesson's result comes back as a turn
+/// of its own, which settles like any turn.
+const LESSON_OPEN_LABELS: &[&str] = &["learning.recalled"];
+const LESSON_CLOSE_LABELS: &[&str] = &["learning.learned", "learning.failed"];
+
+fn is_log_of(record: &Json, labels: &[&str]) -> bool {
     record["type"] == "log"
         && record["label"]
             .as_str()
-            .is_some_and(|label| SETTLED.contains(&label))
+            .is_some_and(|label| labels.contains(&label))
+}
+
+fn is_settled(record: &Json) -> bool {
+    is_log_of(record, SETTLED)
+}
+
+/// The records of a run so far that open a lesson, close one, and settle a
+/// turn.
+#[derive(Clone, Copy)]
+struct Tally {
+    opened: usize,
+    closed: usize,
+    settled: usize,
+}
+
+impl Tally {
+    fn of(run: &Run) -> Self {
+        Self {
+            opened: run.count(|r| is_log_of(r, LESSON_OPEN_LABELS)),
+            closed: run.count(|r| is_log_of(r, LESSON_CLOSE_LABELS)),
+            settled: run.count(is_settled),
+        }
+    }
+}
+
+/// Waits, once a said step's own turn settled, until every lesson opened
+/// since `before` has closed and one more turn has settled for each closed
+/// lesson (the turn carrying its result), at most `limit`; whether they
+/// did, and how many lessons closed. A turn that settles in the meantime
+/// for another reason (a routine's tick) counts too, so this can end
+/// early, never late.
+fn lessons_settle(run: &Run, limit: Duration, before: Tally) -> (bool, usize) {
+    let deadline = Instant::now() + limit;
+    let mut waited = false;
+    loop {
+        let now = Tally::of(run);
+        let opened = now.opened.saturating_sub(before.opened);
+        let closed = now.closed.saturating_sub(before.closed);
+        // The step's own turn is the first settle.
+        let results = now.settled.saturating_sub(before.settled).saturating_sub(1);
+        if opened <= closed && results >= closed {
+            if waited {
+                wait(run, SAY_GRACE, |_| false);
+            }
+            return (true, closed);
+        }
+        let left = deadline.saturating_duration_since(Instant::now());
+        // Past the deadline, only the records already queued would end the
+        // wait: it ends here, not at the next one.
+        if left.is_zero() {
+            return (false, closed);
+        }
+        if !wait(run, left, |r| {
+            is_log_of(r, LESSON_CLOSE_LABELS) || is_settled(r)
+        }) {
+            return (false, closed);
+        }
+        waited = true;
+    }
 }
 
 /// Waits on `run` until `done` holds or `limit` passes; whether it held.
@@ -172,33 +241,47 @@ fn run_job(job: &Json, clock: Instant) {
         {
             let start_index = run.count(|_| true);
             let started_ms = millis(clock);
-            let (kind, completed) = if let Some(content) = spec["say"].as_str() {
-                let source = spec["source"].as_str().unwrap_or("gabe");
-                run.event(
-                    "bot.ability.communication.input",
-                    &json!({
-                        "source_ids": [source],
-                        "target_ids": ["floppy"],
-                        "content": content,
-                        "content_type": "text/plain"
-                    }),
-                );
-                let limit = spec["timeout_s"]
-                    .as_u64()
-                    .map_or(SAY_TIMEOUT, Duration::from_secs);
-                let settled = wait(&run, limit, is_settled);
-                // The reply is spoken after the turn's reflection may have
-                // settled; let it land in this step, not the next.
-                if settled {
-                    wait(&run, SAY_GRACE, |_| false);
-                }
-                ("say", settled)
-            } else {
-                let seconds = spec["wait_s"].as_u64().unwrap_or(0);
-                // Nothing ends a wait but its time.
-                wait(&run, Duration::from_secs(seconds), |_| false);
-                ("wait", true)
-            };
+            let (kind, completed, lessons, lessons_settled) =
+                if let Some(content) = spec["say"].as_str() {
+                    let source = spec["source"].as_str().unwrap_or("gabe");
+                    let before = Tally::of(&run);
+                    run.event(
+                        "bot.ability.communication.input",
+                        &json!({
+                            "source_ids": [source],
+                            "target_ids": ["floppy"],
+                            "content": content,
+                            "content_type": "text/plain"
+                        }),
+                    );
+                    let limit = spec["timeout_s"]
+                        .as_u64()
+                        .map_or(SAY_TIMEOUT, Duration::from_secs);
+                    let settled = wait(&run, limit, is_settled);
+                    if settled {
+                        // The reply is spoken after the turn's reflection may
+                        // have settled; let it land in this step, not the next.
+                        wait(&run, SAY_GRACE, |_| false);
+                        // A lesson the turn selected is learned after the turn:
+                        // the step is what was taught, up to its result, with a
+                        // bound of its own.
+                        let (learned, lessons) = lessons_settle(&run, limit, before);
+                        ("say", true, lessons, learned)
+                    } else {
+                        // A stuck turn may still have closed lessons: count
+                        // them, so it reads apart from one that taught nothing.
+                        let lessons = Tally::of(&run).closed.saturating_sub(before.closed);
+                        ("say", false, lessons, false)
+                    }
+                } else {
+                    let seconds = spec["wait_s"].as_u64().unwrap_or(0);
+                    let before = Tally::of(&run);
+                    // Nothing ends a wait but its time; the lessons a
+                    // routine's turns closed in it are counted, not awaited.
+                    wait(&run, Duration::from_secs(seconds), |_| false);
+                    let lessons = Tally::of(&run).closed.saturating_sub(before.closed);
+                    ("wait", true, lessons, true)
+                };
             steps.push(json!({
                 "session": session,
                 "step": step,
@@ -208,6 +291,8 @@ fn run_job(job: &Json, clock: Instant) {
                 "started_ms": started_ms,
                 "ended_ms": millis(clock),
                 "completed": completed,
+                "lessons": lessons,
+                "lessons_settled": lessons_settled,
             }));
             // A said step that never settled leaves the bot mid-turn: the
             // rest of the session would be scored on a stuck bot.

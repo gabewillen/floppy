@@ -6,11 +6,11 @@
   selected response to it. Cognition never selects it directly
   (bot.ability.speaking.input is not offered).
 
-    idle -bot.ability.speaking.input-> speaking { encoding -> playing
-      -> recording } -> idle
+    idle -bot.ability.speaking.input-> speaking { voicing { encoding
+      -> playing { sounding <-> starved } } -> recording } -> idle
     encoding, playing -bot.ability.speaking.stop-> recording
 
-  encoding invokes the vocal SpeechEncoding (abilities/vocal/vocal.scx, its
+  voicing invokes the vocal SpeechEncoding (abilities/vocal/vocal.scx, its
   child "vocal", which invokes the speech service) and, once vocal is ready (its
   first bot.ability.offers), sends it bot.ability.vocal.speech.encoding.input
   {parts}: the input's parts (1 to 64 parts {expression?, words?},
@@ -20,55 +20,71 @@
   expression that directs no cue, or blank words) is refused with
   bot.ability.failed. The audio is written to output_prefix + operation + "." + the
   media subtype (a path in the media directory the run grants the speech
-  service). Its bot.ability.vocal.speech.encoding.output is the encoded
-  speech: the audio reference with its media_type, sample_rate_hz and
-  channels (speaking's own, 24000 Hz mono audio/pcm, where the encoder
-  leaves one null), and its duration when the encoder measured one
-  (the speech service measures it for linear PCM). Synthesis is bounded
-  by encoding_timeout_ms, 30 s (decision D98: Gemini's synthesis is not
-  streamed and answers only once the whole clip exists, so a sentence can
-  take longer than 5 s; 30 s is the stage_timeout_ms of the
-  interpretation, reading and seeing); leaving encoding cancels vocal and
-  its request.
+  service). The encoding streams (decision D203): vocal sends each
+  bot.ability.vocal.speech.encoding.chunk {audio, sequence, media_type,
+  sample_rate_hz, channels, duration} as the speech service encodes it
+  (the audio a file of its own; media_type, sample_rate_hz and channels
+  speaking's own, 24000 Hz mono audio/pcm, where the encoder leaves one
+  null; duration when the encoder measured one, as the speech service
+  does for linear PCM), then the whole utterance's
+  bot.ability.vocal.speech.encoding.output. Vocal stays invoked while the
+  chunks play, so playout starts on the first chunk, and synthesis
+  (until the output) is bounded by encoding_timeout_ms, 30 s (decision
+  D98, 30 s being the stage_timeout_ms of the interpretation, reading and
+  seeing); leaving voicing cancels vocal and its request. An output with
+  no chunk before it has nothing to play and fails the utterance.
 
-  playing issues the efference copy first, on entry (the copy leaves
-  before the sound does): bot.ability.speaking.efference
-  {mouth, duration, media_type, sample_rate_hz, channels} to the parent,
-  which carries it to the bot's Listening; mouth is the <data> mouth,
-  "speaking", the sound's source (devices are out of scope). No copy is
-  sent when the encoded form gives no duration. Then the words are logged as
-  floppy.say and the audio is broadcast: environment.sound {audio,
+  playing begins on the first chunk and issues the efference copy first,
+  on entry (the copy leaves before the sound does):
+  bot.ability.speaking.efference {mouth, duration, media_type,
+  sample_rate_hz, channels} to the parent, which carries it to the bot's
+  Listening; mouth is the <data> mouth, "speaking", the sound's source
+  (devices are out of scope), and duration the measured audio received and
+  not yet played. No copy is sent when nothing received has a duration.
+  Then the words are logged as floppy.say, and each chunk in turn
+  (sounding) is broadcast as it starts: environment.sound {audio,
   media_type, sample_rate_hz, channels, source} to the parent, which the
   body puts into the environment. source is the mouth (a relayed SCXML event
   keeps only its data, so the source travels in the sound): it is how the listening's sensitivity
   tells the bot's own voice from a sound that only arrives while it speaks.
-  The parent then gets bot.ability.speaking.progress {spoken_seconds: 0},
-  a sign of life as the first audio starts.
+  With the first chunk's sound the parent gets
+  bot.ability.speaking.progress {spoken_seconds: 0}, a sign of life as the
+  first audio starts. Chunks that arrive while one sounds wait their turn.
 
   Playout lasts as long as the audio (decision D179): a mouth plays each
-  commanded piece (at most half of lookahead_ms, 1 s) in real time and
-  reports its mark, devices.audio.played {mark}; until the mouth (a device)
-  is ported, speaking times each report itself with a <send delay> of the
-  piece's length, one piece at a time, marks "u<operation>.<n>". Each
-  report is followed by an efference copy of the playout still to come (0
-  after the last piece, which closes the listening's window) and
-  bot.ability.speaking.progress {spoken_seconds} (the seconds reported
-  played), which re-arms the communication's response timer. Speech with
-  no measured duration has no pieces and counts as played at once.
+  commanded piece (at most half of lookahead_ms, 1 s, and never past the
+  end of its chunk) in real time and reports its mark, devices.audio.played
+  {mark}; until the mouth (a device) is ported, speaking times each report
+  itself with a <send delay> of the piece's length, one piece at a time,
+  marks "u<operation>.<n>". Each report is followed by an efference copy of
+  the audio received and still to play and bot.ability.speaking.progress
+  {spoken_seconds} (the seconds reported played), which re-arms the
+  communication's response timer. After a chunk's last piece the next
+  chunk sounds; when it was the utterance's last (the output has arrived)
+  the progress is followed by the copy {duration: 0}, which closes the
+  listening's window; and when the next has not arrived yet the progress
+  alone is sent and playing waits (starved) for it, its copy leaving
+  before its sound, or for the output, whose copy is {duration: 0}. A
+  chunk with no measured duration has no pieces and counts as played at
+  once. A vocal failure, the encoding timer or an error mid-stream sends
+  the copy {duration: 0} (the mouth stops) and answers bot.ability.failed.
 
   Stop: bot.ability.speaking.stop {} names no utterance: it stops the one
   in hand, since an SCXML <send> takes no id from an expression, so the
   communication cannot name its response's id on it (decision D179). In
   encoding it cancels vocal and its request; in playing it cancels the
-  next mark. Either way the efference copy {duration: 0} leaves at once
-  (nothing more is commanded, so the listening's window closes) and the
-  utterance is recorded with outcome "stopped". What was said is what the
-  reported marks cover: the words in proportion to the share of the audio
-  played, rounded down to whole words; a piece cut short counts as
-  unplayed (no mouth reports how much of it played).
-  The sound already in the environment stays there: the environment has
-  no flush, and the whole clip went into it at once. A stop in idle or in
-  recording has nothing to stop and is logged (speaking.stale).
+  next mark and, mid-stream, the encoding still under way (leaving
+  voicing cancels vocal). Either way the efference copy {duration: 0}
+  leaves at once (nothing more is commanded, so the listening's window
+  closes) and the utterance is recorded with outcome "stopped". What was
+  said is what the reported marks cover: the words in proportion to the
+  share of the audio played, rounded down to whole words, the audio being
+  what was received while the encoding still streamed (decision D203); a
+  piece cut short counts as unplayed (no mouth reports how much of it
+  played). The chunks already in the environment stay there (the
+  environment has no flush); the chunks not yet sounding never go in. A
+  stop in idle or in recording has nothing to stop and is logged
+  (speaking.stale).
 
   recording builds the outbound message with <conversation:message_for_turn>
   (direction outbound, content what was spoken, content_type text/plain,
@@ -144,11 +160,21 @@
     <data id="encoded" expr="null"/>
     <data id="message" expr="null"/>
     <data id="timer" expr="null"/>
-    <!-- The playout in hand: its length and what of it the mouth reported
-         played, in ms, how many pieces were commanded, the pending mark
-         (its send id), and how the utterance ends and what it said. -->
-    <data id="duration_ms" expr="0"/>
+    <!-- The playout in hand (decision D203): the chunks received and not
+         yet sounding, the chunk sounding, whether the whole utterance is
+         encoded, the measured audio received and what of it (and of the
+         chunk in hand) the mouth reported played, in ms, the piece being
+         reported, how many chunks sounded and pieces were commanded, the
+         pending mark (its send id), and how the utterance ends and what
+         it said. -->
+    <data id="chunks" expr="[]"/>
+    <data id="chunk" expr="null"/>
+    <data id="encoded_all" expr="false"/>
+    <data id="received_ms" expr="0"/>
     <data id="played_ms" expr="0"/>
+    <data id="chunk_played_ms" expr="0"/>
+    <data id="piece_ms" expr="0"/>
+    <data id="sounds" expr="0"/>
     <data id="commands" expr="0"/>
     <data id="mark" expr="null"/>
     <data id="outcome" expr="null"/>
@@ -198,11 +224,16 @@
 
   <!-- One utterance in hand, from its encoding to its record; other input
        is held throughout, and leaving releases it (decision D175). -->
-  <state id="speaking" initial="encoding">
+  <state id="speaking" initial="voicing">
     <onentry>
       <assign location="encoded" expr="null"/>
-      <assign location="duration_ms" expr="0"/>
+      <assign location="encoded_all" expr="false"/>
+      <assign location="chunks" expr="[]"/>
+      <assign location="chunk" expr="null"/>
+      <assign location="received_ms" expr="0"/>
       <assign location="played_ms" expr="0"/>
+      <assign location="chunk_played_ms" expr="0"/>
+      <assign location="sounds" expr="0"/>
       <assign location="commands" expr="0"/>
       <assign location="mark" expr="null"/>
       <assign location="outcome" expr="'completed'"/>
@@ -234,8 +265,9 @@
       </send>
     </transition>
 
-    <!-- Synthesis: no sound exists yet. -->
-    <state id="encoding">
+    <!-- The vocal encodes while the chunks it has sent play out: leaving
+         voicing cancels it, its request with it. -->
+    <state id="voicing" initial="encoding">
       <onentry>
         <assign location="operation" expr="nextOperation()"/>
         <send idlocation="timer" event="bot.ability.speaking.apply.failed" delayexpr="delay(encoding_timeout_ms)">
@@ -252,129 +284,243 @@
         <param name="voice" expr="voice"/>
         <param name="media_type" expr="media_type"/>
       </invoke>
-      <transition event="bot.ability.offers" event:schema="../schemas/bot.ability.offers.json">
-        <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal">
-          <param name="parts" expr="parts"/>
-        </send>
-      </transition>
-      <transition event="bot.ability.vocal.speech.encoding.output" event:schema="../schemas/bot.ability.vocal.speech.encoding.output.json" target="playing">
-        <assign location="encoded" expr="encodedSpeech(_event)"/>
-        <assign location="encoded.sample_rate_hz" expr="encodedSampleRate()"/>
-        <assign location="encoded.channels" expr="encodedChannels()"/>
-        <assign location="encoded.media_type" expr="encodedMediaType()"/>
-      </transition>
-      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="idle">
-        <assign location="message" expr="_event.data.message"/>
-        <send event="bot.ability.failed" target="#_parent">
-          <param name="message" expr="message"/>
-        </send>
-      </transition>
-      <transition event="bot.ability.speaking.apply.failed" event:schema="../schemas/bot.ability.speaking.apply.failed.json"
-                  cond="isTimer(_event)" target="idle">
-        <log label="speaking.timed_out" expr="encodingTimedOutLog()"/>
-        <send event="bot.ability.failed" target="#_parent">
-          <param name="message" expr="_event.data.message"/>
-        </send>
-      </transition>
-      <transition event="error.* done.invoke.vocal" target="idle">
-        <send event="bot.ability.failed" target="#_parent">
-          <param name="message" expr="encodingRunFailure(_event)"/>
-        </send>
-      </transition>
-      <!-- Stopped before any sound: nothing was said. -->
-      <transition event="bot.ability.speaking.stop" event:schema="../schemas/bot.ability.speaking.stop.json" target="recording">
-        <assign location="outcome" expr="'stopped'"/>
-        <assign location="spoken" expr="''"/>
-        <assign location="unspoken" expr="text"/>
-        <send event="bot.ability.speaking.efference" target="#_parent">
-          <content expr="efferenceCopy(0)"/>
-        </send>
-      </transition>
-    </state>
 
-    <!-- Playout: the copy leaves before the sound does, and lasts as long
-         as the audio, piece by piece. -->
-    <state id="playing">
-      <onentry>
-        <assign location="duration_ms" expr="durationMs()"/>
-        <if cond="hasDuration()">
+      <!-- Synthesis: no sound exists yet. -->
+      <state id="encoding">
+        <transition event="bot.ability.offers" event:schema="../schemas/bot.ability.offers.json">
+          <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal">
+            <param name="parts" expr="parts"/>
+          </send>
+        </transition>
+        <!-- The first chunk: the sound starts. -->
+        <transition event="bot.ability.vocal.speech.encoding.chunk" event:schema="../schemas/bot.ability.vocal.speech.encoding.chunk.json"
+                    target="playing">
+          <assign location="encoded" expr="chunkFormat(_event)"/>
+          <assign location="chunks" expr="queued(_event)"/>
+          <assign location="received_ms" expr="received_ms + chunkMs(_event)"/>
+        </transition>
+        <!-- An encoding that ends without a chunk has nothing to play. -->
+        <transition event="bot.ability.vocal.speech.encoding.output" event:schema="../schemas/bot.ability.vocal.speech.encoding.output.json" target="idle">
+          <send event="bot.ability.failed" target="#_parent">
+            <param name="message" expr="'Speech encoding answered no audio.'"/>
+          </send>
+        </transition>
+        <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="idle">
+          <assign location="message" expr="_event.data.message"/>
+          <send event="bot.ability.failed" target="#_parent">
+            <param name="message" expr="message"/>
+          </send>
+        </transition>
+        <transition event="bot.ability.speaking.apply.failed" event:schema="../schemas/bot.ability.speaking.apply.failed.json"
+                    cond="isTimer(_event)" target="idle">
+          <log label="speaking.timed_out" expr="encodingTimedOutLog()"/>
+          <send event="bot.ability.failed" target="#_parent">
+            <param name="message" expr="_event.data.message"/>
+          </send>
+        </transition>
+        <transition event="error.* done.invoke.vocal" target="idle">
+          <send event="bot.ability.failed" target="#_parent">
+            <param name="message" expr="encodingRunFailure(_event)"/>
+          </send>
+        </transition>
+        <!-- Stopped before any sound: nothing was said. -->
+        <transition event="bot.ability.speaking.stop" event:schema="../schemas/bot.ability.speaking.stop.json" target="recording">
+          <assign location="outcome" expr="'stopped'"/>
+          <assign location="spoken" expr="''"/>
+          <assign location="unspoken" expr="text"/>
           <send event="bot.ability.speaking.efference" target="#_parent">
-            <content expr="efferenceCopy(remainingSeconds())"/>
+            <content expr="efferenceCopy(0)"/>
           </send>
-        </if>
-        <log label="floppy.say" expr="text"/>
-        <send event="environment.sound" target="#_parent">
-          <param name="audio" expr="encoded.audio"/>
-          <param name="media_type" expr="encoded.media_type"/>
-          <param name="sample_rate_hz" expr="encoded.sample_rate_hz"/>
-          <param name="channels" expr="encoded.channels"/>
-          <param name="source" expr="mouth"/>
-        </send>
-        <send event="bot.ability.speaking.progress" target="#_parent">
-          <param name="spoken_seconds" expr="0"/>
-        </send>
-        <if cond="hasDuration()">
-          <send idlocation="mark" event="devices.audio.played" delayexpr="delay(nextPieceMs())">
-            <param name="mark" expr="markName()"/>
+        </transition>
+      </state>
+
+      <!-- Playout, chunk by chunk as they arrive: the copy leaves before
+           the sound does, and each chunk lasts as long as its audio, piece
+           by piece. -->
+      <state id="playing" initial="sounding">
+        <onentry>
+          <if cond="hasDuration()">
+            <send event="bot.ability.speaking.efference" target="#_parent">
+              <content expr="efferenceCopy(remainingSeconds())"/>
+            </send>
+          </if>
+          <log label="floppy.say" expr="text"/>
+        </onentry>
+        <!-- More of the utterance: queued behind the chunk in hand. -->
+        <transition event="bot.ability.vocal.speech.encoding.chunk" event:schema="../schemas/bot.ability.vocal.speech.encoding.chunk.json">
+          <assign location="chunks" expr="queued(_event)"/>
+          <assign location="received_ms" expr="received_ms + chunkMs(_event)"/>
+        </transition>
+        <!-- The whole utterance is encoded: no more chunks, and no more
+             encoding bound. -->
+        <transition event="bot.ability.vocal.speech.encoding.output" event:schema="../schemas/bot.ability.vocal.speech.encoding.output.json">
+          <assign location="encoded_all" expr="true"/>
+          <assign location="encoded" expr="encodedFormat(_event)"/>
+          <cancel sendidexpr="timer"/>
+        </transition>
+        <!-- The encoding failed or ran out of time mid-stream: the mouth
+             stops, so the copy says nothing is left. -->
+        <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="idle">
+          <send event="bot.ability.speaking.efference" target="#_parent">
+            <content expr="efferenceCopy(0)"/>
           </send>
-          <assign location="commands" expr="commands + 1"/>
-        <else/>
-          <raise event="bot.ability.speaking.apply.completed"/>
-        </if>
-      </onentry>
-      <onexit>
-        <if cond="hasMark()">
-          <cancel sendidexpr="mark"/>
-        </if>
-      </onexit>
-      <!-- The mouth reported a piece played: the copy of what is still
-           to come, the progress, and the next piece. -->
-      <transition event="devices.audio.played" event:schema="../schemas/devices.audio.played.json"
-                  cond="isLastMark(_event)" target="recording">
-        <assign location="played_ms" expr="duration_ms"/>
-        <assign location="spoken" expr="text"/>
-        <assign location="unspoken" expr="''"/>
-        <send event="bot.ability.speaking.efference" target="#_parent">
-          <content expr="efferenceCopy(0)"/>
-        </send>
-        <send event="bot.ability.speaking.progress" target="#_parent">
-          <param name="spoken_seconds" expr="played_ms / 1000"/>
-        </send>
-      </transition>
-      <transition event="devices.audio.played" event:schema="../schemas/devices.audio.played.json"
-                  cond="isMark(_event)" type="internal">
-        <assign location="played_ms" expr="played_ms + nextPieceMs()"/>
-        <send event="bot.ability.speaking.efference" target="#_parent">
-          <content expr="efferenceCopy(remainingSeconds())"/>
-        </send>
-        <send event="bot.ability.speaking.progress" target="#_parent">
-          <param name="spoken_seconds" expr="played_ms / 1000"/>
-        </send>
-        <send idlocation="mark" event="devices.audio.played" delayexpr="delay(nextPieceMs())">
-          <param name="mark" expr="markName()"/>
-        </send>
-        <assign location="commands" expr="commands + 1"/>
-      </transition>
-      <!-- No measured duration: it counts as played at once. -->
-      <transition event="bot.ability.speaking.apply.completed" target="recording">
-        <assign location="spoken" expr="text"/>
-        <assign location="unspoken" expr="''"/>
-      </transition>
-      <!-- Stopped: nothing more plays; what was said is what the reported
-           pieces cover. -->
-      <transition event="bot.ability.speaking.stop" event:schema="../schemas/bot.ability.speaking.stop.json" target="recording">
-        <assign location="outcome" expr="'stopped'"/>
-        <assign location="spoken" expr="spokenWords()"/>
-        <assign location="unspoken" expr="text.slice(spoken.length)"/>
-        <send event="bot.ability.speaking.efference" target="#_parent">
-          <content expr="efferenceCopy(0)"/>
-        </send>
-      </transition>
-      <transition event="error.*" target="idle">
-        <send event="bot.ability.failed" target="#_parent">
-          <param name="message" expr="playoutFailure(_event)"/>
-        </send>
-      </transition>
+          <send event="bot.ability.failed" target="#_parent">
+            <param name="message" expr="_event.data.message"/>
+          </send>
+        </transition>
+        <transition event="bot.ability.speaking.apply.failed" event:schema="../schemas/bot.ability.speaking.apply.failed.json"
+                    cond="isTimer(_event)" target="idle">
+          <log label="speaking.timed_out" expr="encodingTimedOutLog()"/>
+          <send event="bot.ability.speaking.efference" target="#_parent">
+            <content expr="efferenceCopy(0)"/>
+          </send>
+          <send event="bot.ability.failed" target="#_parent">
+            <param name="message" expr="_event.data.message"/>
+          </send>
+        </transition>
+        <transition event="error.* done.invoke.vocal" target="idle">
+          <send event="bot.ability.speaking.efference" target="#_parent">
+            <content expr="efferenceCopy(0)"/>
+          </send>
+          <send event="bot.ability.failed" target="#_parent">
+            <param name="message" expr="playoutFailure(_event)"/>
+          </send>
+        </transition>
+        <!-- Stopped: nothing more plays, and the encoding is cancelled;
+             what was said is what the reported pieces cover. -->
+        <transition event="bot.ability.speaking.stop" event:schema="../schemas/bot.ability.speaking.stop.json" target="recording">
+          <assign location="outcome" expr="'stopped'"/>
+          <assign location="spoken" expr="spokenWords()"/>
+          <assign location="unspoken" expr="text.slice(spoken.length)"/>
+          <send event="bot.ability.speaking.efference" target="#_parent">
+            <content expr="efferenceCopy(0)"/>
+          </send>
+        </transition>
+
+        <!-- One chunk in hand: its sound goes into the environment, and
+             the mouth plays it piece by piece. -->
+        <state id="sounding">
+          <onentry>
+            <assign location="chunk" expr="chunks[0]"/>
+            <assign location="chunks" expr="chunks.slice(1)"/>
+            <assign location="chunk_played_ms" expr="0"/>
+            <send event="environment.sound" target="#_parent">
+              <param name="audio" expr="chunk.audio"/>
+              <param name="media_type" expr="chunk.media_type"/>
+              <param name="sample_rate_hz" expr="chunk.sample_rate_hz"/>
+              <param name="channels" expr="chunk.channels"/>
+              <param name="source" expr="mouth"/>
+            </send>
+            <if cond="isFirstSound()">
+              <send event="bot.ability.speaking.progress" target="#_parent">
+                <param name="spoken_seconds" expr="0"/>
+              </send>
+            </if>
+            <assign location="sounds" expr="sounds + 1"/>
+            <if cond="chunkHasDuration()">
+              <send idlocation="mark" event="devices.audio.played" delayexpr="delay(nextPieceMs())">
+                <param name="mark" expr="markName()"/>
+              </send>
+              <assign location="commands" expr="commands + 1"/>
+            <else/>
+              <raise event="bot.ability.speaking.apply.completed"/>
+            </if>
+          </onentry>
+          <onexit>
+            <if cond="hasMark()">
+              <cancel sendidexpr="mark"/>
+            </if>
+          </onexit>
+          <!-- The mouth reported the chunk's last piece played: the next
+               chunk, the end of the utterance, or a wait for more. -->
+          <transition event="devices.audio.played" event:schema="../schemas/devices.audio.played.json"
+                      cond="endsChunkWithMore(_event)" target="sounding">
+            <assign location="played_ms" expr="played_ms + nextPieceMs()"/>
+            <send event="bot.ability.speaking.efference" target="#_parent">
+              <content expr="efferenceCopy(remainingSeconds())"/>
+            </send>
+            <send event="bot.ability.speaking.progress" target="#_parent">
+              <param name="spoken_seconds" expr="played_ms / 1000"/>
+            </send>
+          </transition>
+          <transition event="devices.audio.played" event:schema="../schemas/devices.audio.played.json"
+                      cond="endsUtterance(_event)" target="recording">
+            <assign location="played_ms" expr="played_ms + nextPieceMs()"/>
+            <assign location="spoken" expr="text"/>
+            <assign location="unspoken" expr="''"/>
+            <send event="bot.ability.speaking.progress" target="#_parent">
+              <param name="spoken_seconds" expr="played_ms / 1000"/>
+            </send>
+            <send event="bot.ability.speaking.efference" target="#_parent">
+              <content expr="efferenceCopy(0)"/>
+            </send>
+          </transition>
+          <transition event="devices.audio.played" event:schema="../schemas/devices.audio.played.json"
+                      cond="endsChunk(_event)" target="starved">
+            <assign location="played_ms" expr="played_ms + nextPieceMs()"/>
+            <send event="bot.ability.speaking.progress" target="#_parent">
+              <param name="spoken_seconds" expr="played_ms / 1000"/>
+            </send>
+          </transition>
+          <!-- A piece within the chunk: the copy of what is still to come,
+               the progress, and the next piece. -->
+          <transition event="devices.audio.played" event:schema="../schemas/devices.audio.played.json"
+                      cond="isMark(_event)" type="internal">
+            <assign location="piece_ms" expr="nextPieceMs()"/>
+            <assign location="played_ms" expr="played_ms + piece_ms"/>
+            <assign location="chunk_played_ms" expr="chunk_played_ms + piece_ms"/>
+            <send event="bot.ability.speaking.efference" target="#_parent">
+              <content expr="efferenceCopy(remainingSeconds())"/>
+            </send>
+            <send event="bot.ability.speaking.progress" target="#_parent">
+              <param name="spoken_seconds" expr="played_ms / 1000"/>
+            </send>
+            <send idlocation="mark" event="devices.audio.played" delayexpr="delay(nextPieceMs())">
+              <param name="mark" expr="markName()"/>
+            </send>
+            <assign location="commands" expr="commands + 1"/>
+          </transition>
+          <!-- A chunk with no measured duration counts as played at once. -->
+          <transition event="bot.ability.speaking.apply.completed" cond="hasQueued()" target="sounding"/>
+          <transition event="bot.ability.speaking.apply.completed" cond="encoded_all" target="recording">
+            <assign location="spoken" expr="text"/>
+            <assign location="unspoken" expr="''"/>
+            <if cond="hasDuration()">
+              <send event="bot.ability.speaking.efference" target="#_parent">
+                <content expr="efferenceCopy(0)"/>
+              </send>
+            </if>
+          </transition>
+          <transition event="bot.ability.speaking.apply.completed" target="starved"/>
+        </state>
+
+        <!-- Everything received has played: waiting for the next chunk or
+             the end of the encoding (still bounded by encoding_timeout_ms). -->
+        <state id="starved">
+          <transition event="bot.ability.vocal.speech.encoding.chunk" event:schema="../schemas/bot.ability.vocal.speech.encoding.chunk.json"
+                      target="sounding">
+            <assign location="chunks" expr="queued(_event)"/>
+            <assign location="received_ms" expr="received_ms + chunkMs(_event)"/>
+            <if cond="hasRemaining()">
+              <send event="bot.ability.speaking.efference" target="#_parent">
+                <content expr="efferenceCopy(remainingSeconds())"/>
+              </send>
+            </if>
+          </transition>
+          <transition event="bot.ability.vocal.speech.encoding.output" event:schema="../schemas/bot.ability.vocal.speech.encoding.output.json"
+                      target="recording">
+            <assign location="encoded_all" expr="true"/>
+            <assign location="encoded" expr="encodedFormat(_event)"/>
+            <assign location="spoken" expr="text"/>
+            <assign location="unspoken" expr="''"/>
+            <if cond="hasDuration()">
+              <send event="bot.ability.speaking.efference" target="#_parent">
+                <content expr="efferenceCopy(0)"/>
+              </send>
+            </if>
+          </transition>
+        </state>
+      </state>
     </state>
 
     <!-- The words go into the conversation's exchange. -->

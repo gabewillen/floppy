@@ -77,8 +77,9 @@ def efference(duration="0.1"):
                   " && _event.data.media_type === 'audio/pcm' && _event.data.sample_rate_hz === 24000 && _event.data.channels === 1")
 
 
-def sound(n, media="pcm", media_type="audio/pcm"):
-    return expect(SOUND, f"_event.data.audio === 'media/speaking-{n}.{media}' && _event.data.media_type === '{media_type}'"
+def sound(n, media="pcm", media_type="audio/pcm", chunk=0):
+    """Utterance `n`'s chunk `chunk` sounding (decision D203)."""
+    return expect(SOUND, f"_event.data.audio === 'media/speaking-{n}.{chunk}.{media}' && _event.data.media_type === '{media_type}'"
                   " && _event.data.sample_rate_hz === 24000 && _event.data.channels === 1 && _event.data.source === 'speaking'")
 
 
@@ -113,13 +114,17 @@ def seconds(ms):
 
 
 def playout(duration_ms):
-    """The playout after the sound: the first progress, then each piece's
-    report (at most half the 1 s lookahead): the copy of what is still to
-    come (0 after the last) and the progress."""
+    """The playout of one chunk after its sound: the first progress, then
+    each piece's report (at most half the 1 s lookahead): the copy of what
+    is still to come and the progress, and after the last the progress and
+    then the copy of nothing left."""
     steps, played = [progress("0")], 0
     while played < duration_ms:
         played += min(500, duration_ms - played)
-        steps += [efference(seconds(duration_ms - played)), progress(seconds(played))]
+        if played < duration_ms:
+            steps += [efference(seconds(duration_ms - played)), progress(seconds(played))]
+        else:
+            steps += [progress(seconds(played)), efference("0")]
     return steps
 
 
@@ -144,8 +149,9 @@ S.statement(7, "Encoding is bounded by `encoding_timeout_ms` (30 s by default, d
 S.statement(8, "Input for another utterance that arrives outside `idle` is held (`<event:defer/>`), up to `held_utterances_bound` (16, a `<param>`), and taken, in order, on the return to `idle`; past that bound it is refused with `bot.ability.failed` `{message: \"Speaking is holding too many utterances; this one is refused.\"}` (decision D175).")
 S.statement(9, "An utterance's id is its input's sendid (none when the sender names none). A finished utterance's id is kept among the last `finished_utterances_bound` (16) finished ids, and an input with a finished id, or another copy of the utterance in hand or of a held one, is dropped (logged `speaking.late`): nothing is said or answered for it, and a re-sent held id takes no second slot toward `held_utterances_bound` (the first copy is kept, decision D175).")
 
-S.statement(10, "Playout lasts as long as the measured audio: the mouth's report of each piece (at most half of `lookahead_ms`, 1000; `devices.audio.played` `{mark}`, which the speaking times with `<send delay>` until the mouth is ported) is followed by the efference copy of the playout still to come (`duration` 0 after the last piece) and `bot.ability.speaking.progress` `{spoken_seconds}` (the seconds reported played); after the last piece the utterance is recorded, `outcome` `completed`, everything spoken. Audio with no measured duration counts as played at once.")
-S.statement(11, "`bot.ability.speaking.stop` `{}` stops the utterance in hand: in encoding nothing is said; in playing what was said is the words the reported pieces cover, in proportion to the share of the audio played, rounded down to whole words. Either way the efference copy `{duration: 0}` leaves at once, the utterance is recorded with `outcome` `stopped` (appended to the conversation only when something was spoken), and the speaking is idle again. A stop with nothing in hand does nothing (logged `speaking.stale`).")
+S.statement(10, "Playout lasts as long as the measured audio: the mouth's report of each piece (at most half of `lookahead_ms`, 1000; `devices.audio.played` `{mark}`, which the speaking times with `<send delay>` until the mouth is ported) is followed by the efference copy of the playout still to come and `bot.ability.speaking.progress` `{spoken_seconds}` (the seconds reported played); after the last piece, the progress and then the copy `{duration: 0}`, and the utterance is recorded, `outcome` `completed`, everything spoken. Audio with no measured duration counts as played at once.")
+S.statement(11, "`bot.ability.speaking.stop` `{}` stops the utterance in hand: in encoding nothing is said; in playing what was said is the words the reported pieces cover, in proportion to the share of the audio played (of the audio received, while the encoding still streams), rounded down to whole words, and the encoding still under way is cancelled. Either way the efference copy `{duration: 0}` leaves at once, the utterance is recorded with `outcome` `stopped` (appended to the conversation only when something was spoken), and the speaking is idle again. A stop with nothing in hand does nothing (logged `speaking.stale`).")
+S.statement(12, "The encoding streams (decision D203): playout starts on vocal's first `bot.ability.vocal.speech.encoding.chunk`, before its output, with the copy of the audio received so far; each chunk is its own `environment.sound` (its audio the chunk's file) when its turn comes, in order, and is played piece by piece; chunks that arrive meanwhile wait their turn, and once the output has arrived and its last chunk played the copy is `{duration: 0}` and the utterance is recorded.")
 
 S.case(100, 1, "the speaking offers nothing on start.", [READY])
 S.case(101, 1, "the speaking offers again after an utterance.",
@@ -156,10 +162,11 @@ S.case(110, 2, "the text of record is the words exactly as written, nothing stri
 S.case(111, 2, "the speaking's provider, model, voice and media_type params reach the encoder: the OpenAI-compatible API writes media/speaking-1.mpeg.",
        [READY, say("hi"), sound(1, "mpeg", "audio/mpeg"), progress("0"), appended("hi", 1), output("hi", "audio/mpeg"), READY],
        params=OPENAI_MP3, backend=[MP3])
-S.case(112, 2, "a reply of several parts is one utterance, its text the parts' words joined as written; its pause reaches the encoder as silence (0.1 s, 0.4 s, 0.1 s).",
-       [READY, reply({"words": "Well,"}, {"expression": {"pause": "short", "emotion": "warm"}, "words": " hello there."})]
-       + spoken("Well, hello there.", 1, duration_ms=600),
-       params=PATIENT, backend=[PCM])
+S.case(112, 2, "a reply of several parts is one utterance, its text the parts' words joined as written; its pause reaches the encoder as silence, a chunk of its own (0.1 s, 0.4 s, 0.1 s).",
+       [READY, reply({"words": "Well,"}, {"expression": {"pause": "short", "emotion": "warm"}, "words": " hello there."}),
+        efference("0.1"), sound(1), sound(1, chunk=1), sound(1, chunk=2), efference("0"),
+        appended("Well, hello there.", 1), output("Well, hello there."), READY],
+       ignore=[EFFERENCE, PROGRESS], params=PATIENT, backend=[PCM])
 S.case(120, 3, "the efference copy, with the measured duration, leaves before the sound.",
        [READY, say("hi"), efference("0.1"), sound(1)],
        ignore=[APPEND, OUTPUT, PROGRESS, "bot.ability.offers"], params=PATIENT, backend=[PCM])
@@ -234,3 +241,17 @@ S.case(196, 11, "a stop after the first of four pieces says the first quarter of
 S.case(197, 11, "a stop with nothing in hand does nothing; the next utterance is spoken.",
        [READY, stop(), say("hi")] + spoken("hi", 1),
        params=PATIENT, backend=[PCM])
+
+# 12: streamed playout.
+# The OpenAI-compatible speech API's answer: 2 s of 24 kHz mono 16-bit PCM,
+# which the service cuts into four chunks of half a second.
+STREAMED_PCM = {"path": "/audio/speech", "status": 200, "body": "A" * 96000}
+OPENAI_PCM = [("encoding_timeout_ms", "600000"), ("provider", "null"), ("model", "'tts-1'"), ("voice", "'alloy'")]
+S.case(200, 12, "a streamed reply plays chunk by chunk: the first copy is its first chunk's, each chunk sounds in turn, and the copy of nothing left follows the last.",
+       [READY, say("one two three four"), efference("0.5"), sound(1), sound(1, chunk=1), sound(1, chunk=2), sound(1, chunk=3),
+        efference("0"), appended("one two three four", 1), output("one two three four"), READY],
+       ignore=[EFFERENCE, PROGRESS], params=OPENAI_PCM, backend=[STREAMED_PCM])
+S.case(201, 12, "the progress counts the seconds played across the chunks, up to the whole reply.",
+       [READY, say("one two three four"), progress("0"), progress("0.5"), progress("1"), progress("1.5"), progress("2"),
+        output("one two three four"), READY],
+       ignore=[EFFERENCE, SOUND, APPEND], params=OPENAI_PCM, backend=[STREAMED_PCM])

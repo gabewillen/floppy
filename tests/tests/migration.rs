@@ -121,7 +121,7 @@ fn upgrade_and_downgrade_walk_the_revisions_and_keep_alembic_version() {
         migrate(&directory, "'head'", SCHEMA),
         pairs(&[
             ("output", r#"{"from":null,"to":"0001"}"#),
-            ("inspect", r#"[[["0001"]],[[5]],[[1]]]"#),
+            ("inspect", r#"[[["0001"]],[[9]],[[1]]]"#),
         ])
     );
     // At head already: nothing is applied.
@@ -129,7 +129,7 @@ fn upgrade_and_downgrade_walk_the_revisions_and_keep_alembic_version() {
         migrate(&directory, "'head'", SCHEMA),
         pairs(&[
             ("output", r#"{"from":"0001","to":"0001"}"#),
-            ("inspect", r#"[[["0001"]],[[5]],[[1]]]"#),
+            ("inspect", r#"[[["0001"]],[[9]],[[1]]]"#),
         ])
     );
     // 0001's downgrade drops every table it created (decision D193).
@@ -144,7 +144,7 @@ fn upgrade_and_downgrade_walk_the_revisions_and_keep_alembic_version() {
         migrate(&directory, "'+1'", SCHEMA),
         pairs(&[
             ("output", r#"{"from":null,"to":"0001"}"#),
-            ("inspect", r#"[[["0001"]],[[5]],[[1]]]"#),
+            ("inspect", r#"[[["0001"]],[[9]],[[1]]]"#),
         ])
     );
     assert_eq!(
@@ -253,7 +253,7 @@ fn postgres_upgrade_and_downgrade_walk_the_revisions_and_keep_alembic_version() 
         migrate("'head'"),
         pairs(&[
             ("output", r#"{"from":null,"to":"0001"}"#),
-            ("inspect", r#"[[["0001"]],[[5]],[[1]]]"#),
+            ("inspect", r#"[[["0001"]],[[9]],[[1]]]"#),
         ])
     );
     assert_eq!(
@@ -267,7 +267,7 @@ fn postgres_upgrade_and_downgrade_walk_the_revisions_and_keep_alembic_version() 
         migrate("'+1'"),
         pairs(&[
             ("output", r#"{"from":null,"to":"0001"}"#),
-            ("inspect", r#"[[["0001"]],[[5]],[[1]]]"#),
+            ("inspect", r#"[[["0001"]],[[9]],[[1]]]"#),
         ])
     );
     assert_eq!(
