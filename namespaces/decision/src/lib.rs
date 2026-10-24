@@ -701,14 +701,47 @@ pub fn snapshot_choices<E>(
     document: &str,
     guard: &mut dyn FnMut(&str) -> Result<Option<bool>, E>,
 ) -> Result<Vec<Choice>, Failure<E>> {
-    let malformed = || Failure::Execution("the session snapshot is malformed");
     let document: Json = serde_json::from_str(document).map_err(|_| malformed())?;
-    let Some(transitions) = document.pointer("/snapshot/root/transitions") else {
+    // A document without its session object offers nothing, as one
+    // without the transitions section does.
+    let Some(root) = document.pointer("/snapshot/root") else {
+        return Ok(Vec::new());
+    };
+    selection_walk(root, &mut |cond| {
+        Ok(match guard(cond)? {
+            Some(true) => Guard::Enabled,
+            Some(false) => Guard::Disabled,
+            None => Guard::Unknown,
+        })
+    })
+}
+
+/// A malformed snapshot's failure.
+const fn malformed<E>() -> Failure<E> {
+    Failure::Execution("the session snapshot is malformed")
+}
+
+/// The choices of one session object of a `scxml.session-snapshot/v2`
+/// document (its `root`), by SCXML 3.13's selection walk: see the crate
+/// documentation ("The choices"). `guard` judges one transition's `cond`
+/// text; a transition without one is [`Guard::Enabled`]. A snapshot without
+/// its transitions section offers nothing.
+///
+/// # Errors
+///
+/// [`Failure::Execution`] with a static detail when the session object is
+/// malformed or a schema does not compile or match its digest;
+/// [`Failure::Host`] when `guard` fails non-recoverably.
+pub fn selection_walk<E>(
+    root: &Json,
+    guard: &mut dyn FnMut(&str) -> Result<Guard, E>,
+) -> Result<Vec<Choice>, Failure<E>> {
+    let Some(transitions) = root.get("transitions") else {
         return Ok(Vec::new());
     };
     let transitions = transitions.as_array().ok_or_else(malformed)?;
-    let atomic: Vec<&str> = document
-        .pointer("/snapshot/root/configuration/atomic")
+    let atomic: Vec<&str> = root
+        .pointer("/configuration/atomic")
         .and_then(Json::as_array)
         .ok_or_else(malformed)?
         .iter()
@@ -743,13 +776,7 @@ pub fn snapshot_choices<E>(
             transition.get("has_cond").and_then(Json::as_bool),
         ) {
             (None, Some(false) | None) => Guard::Enabled,
-            (Some(Json::String(cond)), Some(true) | None) => {
-                match guard(cond).map_err(Failure::Host)? {
-                    Some(true) => Guard::Enabled,
-                    Some(false) => Guard::Disabled,
-                    None => Guard::Unknown,
-                }
-            }
+            (Some(Json::String(cond)), Some(true) | None) => guard(cond).map_err(Failure::Host)?,
             _ => return Err(malformed()),
         };
         if state == Guard::Disabled {
