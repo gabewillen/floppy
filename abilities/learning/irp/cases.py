@@ -87,6 +87,7 @@ def not_learned(content="When you hear a knock, say hello."):
 
 LEARNED = expect(OUTPUT, "_event.data.learned === true && _event.data.behavior.name === 'GreetOnKnock'"
                          " && _event.data.behavior.description === 'Say hello when a knock sound arrives.'"
+                         " && _event.data.lesson === 'When you hear a knock, say hello.'"
                          " && _event.data.participants[0].id === 'gabe'")
 
 S.statement(1, "A `bot.ability.learning.lesson` `{turn, content, media_type, cognition_input, cognition_output, participants}` recalls the prior episodes and the inventory, asks the generate service (schema `dispatch`, its `events` at most one) to implement the lesson as a `bot.behavior.create` or `bot.behavior.change` this session offers, and invokes the revision ability with the teaching turn and the lesson as its instruction; a built behavior answers `bot.ability.learning.output` `{lesson, learned: true, behavior: {name, description}, participants}` (decision D149).")
