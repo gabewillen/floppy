@@ -119,7 +119,7 @@ the three that decide what floppy learns and whether it is built
 
 - `abilities/reflection/reflection.scx#select_instructions` (whether a turn
   selects a create, change or break at all),
-- `abilities/reflection/reflection.scx#change_instructions` (the spec the
+- `abilities/revision/revision.scx#change_instructions` (the spec the
   builder gets),
 - `bots/builder/builder.scx#author_system` (how the builder writes SCXML).
 

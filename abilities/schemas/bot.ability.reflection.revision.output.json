@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.reflection.revision.output",
+  "description": "Revision output after a create or change was built and stored ACTIVE: the applied behavior the turn's episode records. On failure the revision answers bot.ability.failed and this payload is not emitted.",
+  "additionalProperties": false,
+  "properties": {
+    "behavior": {
+      "additionalProperties": false,
+      "description": "The applied inventory event: its event, name, grounded triggers, description, reason and the stored program's path as source.",
+      "properties": {
+        "event": {
+          "enum": ["bot.behavior.create", "bot.behavior.change"],
+          "title": "Event",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "triggers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Triggers",
+          "type": "array"
+        },
+        "description": {
+          "title": "Description",
+          "type": ["string", "null"]
+        },
+        "reason": {
+          "title": "Reason",
+          "type": ["string", "null"]
+        },
+        "source": {
+          "minLength": 1,
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": ["name", "triggers", "source"],
+      "title": "Behavior",
+      "type": "object"
+    }
+  },
+  "required": [
+    "behavior"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "behavior": {
+        "event": "bot.behavior.create",
+        "name": "GreetOnKnock",
+        "triggers": ["environment.sound"],
+        "description": "Say hello when a knock sound arrives.",
+        "reason": "The user asked for it.",
+        "source": "GreetOnKnock/GreetOnKnock.scx"
+      }
+    }
+  ]
+}

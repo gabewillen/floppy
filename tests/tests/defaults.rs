@@ -152,8 +152,8 @@ fn every_model_data_is_the_default_model_and_the_name_appears_nowhere_else() {
         );
     }
     assert_eq!(
-        models, 9,
-        "builder, floppy, cognition, reasoning, reflection, reading, seeing, object detection and description"
+        models, 10,
+        "builder, floppy, cognition, reasoning, reflection, revision, reading, seeing, object detection and description"
     );
     assert!(
         read(Path::new("docs/defaults.md")).contains(&format!("`{}`", support::DEFAULT_MODEL)),

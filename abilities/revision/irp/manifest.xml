@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<!-- The revision document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/revision/irp/sources">
+  <assert id="revision-1" specnum="1" specid="#revision-1">
+    <![CDATA[A create (`create` true) stores a DRAFT stub for its name, invokes the builder bot with a `builder.request` built from the intent and the turn, and on the builder's `done` (`accepting`) replaces the row ACTIVE with the built documents' path (decision D121) and answers `bot.ability.reflection.revision.output` `{behavior}`, the applied behavior: the intent's event, name, grounded triggers, description, reason and that path as `source` (decision D148).]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.scxml"/>
+    </test>
+  </assert>
+  <assert id="revision-2" specnum="2" specid="#revision-2">
+    <![CDATA[A change of a name the inventory does not hold fails with `bot.ability.failed` `{message: "Revision selected unknown behavior: <name>."}`, asking no model.]]>
+    <test id="110" conformance="mandatory" manual="false">
+      <start uri="110/test110.scxml"/>
+    </test>
+  </assert>
+  <assert id="revision-3" specnum="3" specid="#revision-3">
+    <![CDATA[A builder that fails with the last draft it rejected (`abandoning`) keeps that draft's path in the row as DRAFT and fails with `Reflection change abandoned: attempts exhausted:` and the rendered diagnostics (decision D133); a builder that fails with no draft fails with `Reflection revision failed: <reason>: <first diagnostic>`.]]>
+    <test id="120" conformance="mandatory" manual="false">
+      <start uri="120/test120.scxml"/>
+    </test>
+    <test id="121" conformance="mandatory" manual="false">
+      <start uri="121/test121.scxml"/>
+    </test>
+  </assert>
+  <assert id="revision-4" specnum="4" specid="#revision-4">
+    <![CDATA[A memory transaction that fails (here the preparing one, on a database the run does not grant) fails with `Reflection revision failed: <detail>`.]]>
+    <test id="130" conformance="mandatory" manual="false">
+      <start uri="130/test130.scxml"/>
+    </test>
+  </assert>
+</assertions>
