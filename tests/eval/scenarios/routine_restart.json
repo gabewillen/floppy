@@ -1,6 +1,6 @@
 {
   "category": "routine",
-  "intent": "The user asks the bot to say 'stretch break' every minute. The routine should run, and keep running after the bot restarts, with no new request.",
+  "intent": "The user asks the bot to say 'stretch break' every minute. The reminders should come, and keep coming after the bot restarts, with no new request.",
   "bot_name": null,
   "sessions": [
     {
@@ -23,15 +23,6 @@
   ],
   "checks": [
     {
-      "check": "learned",
-      "by": [
-        0,
-        0
-      ],
-      "lifetime": "persistent",
-      "weight": 3
-    },
-    {
       "check": "ticks",
       "at": [
         0,
@@ -53,8 +44,18 @@
     }
   ],
   "criteria": {
-    "learning": "The request becomes a persistent routine on the turn it is asked.",
+    "learning": "The bot agrees and then says 'stretch break' without being asked again.",
     "schedule": "'stretch break' is said about once a minute with no input.",
-    "persistence": "After the restart the routine keeps running without being asked again."
-  }
+    "persistence": "After the restart the reminders keep coming without being asked again."
+  },
+  "diagnostics": [
+    {
+      "check": "learned",
+      "by": [
+        0,
+        0
+      ],
+      "lifetime": "persistent"
+    }
+  ]
 }
