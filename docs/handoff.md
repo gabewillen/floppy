@@ -7,10 +7,28 @@ history lives in [decisions.md](decisions.md) (numbered decisions),
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
-Last updated: 2026-10-23.
+Last updated: 2026-10-24.
 
 ## Current state (2026-10-09) — resume here
 
+- **Rest and consolidation (2026-10-24, D205, #49):** after
+  `rest_after_ms` (5 minutes) without input the cognition rests and
+  invokes `abilities/consolidation/consolidation.scx`, which folds the
+  voices heard into each person's compact representative
+  (`bot_person_centroid`) and merges two people at D90's threshold,
+  re-pointing everything keyed on the newer one. Each step is one guarded
+  transaction after a five-second pause, and input leaves rest at once,
+  cancelling the consolidation between two steps. Identification reads
+  one representative a person (about 100 people at 256 dimensions), and
+  new people are numbered from `bot_sequence`. Episodes from short-term
+  turns are a seam (reflection already records each turn's, D97).
+- **Voices are people in long-term memory (2026-10-23, D204, #49):** the
+  conversation identifies each voice embedding through the memory ability
+  before it finds the input's relationship: a voice memory holds is its
+  `person-<n>`, any other a new person, and every voice heard is stored
+  for its person (`bot_person`, `bot_person_embedding` in `0001`). The
+  person is the participant the rest of the bot sees, across restarts.
+  Faces and `voice_id` are what is left of #49 (rest is D205).
 - **The docs describe floppy on its own terms (2026-10-23, #19):** the
   plans that tracked floppy against another system are retired. What they
   left open is under [Open work](#open-work),
@@ -41,7 +59,7 @@ Last updated: 2026-10-23.
   detection and description are its per-view stage children over generate.
   The body invokes it always, and its `seeing_enabled` switch (off by
   default) decides whether it is expected, fed and offered; every bot run
-  now grants the vision service a media directory. Faces wait on decision 6.
+  now grants the vision service a media directory. Faces follow D194 (#49).
   `frame_diff` decodes as OpenCV 5.0.0 does (its own
   JPEG DC decoder, libpng's gray and gamma, `image-webp`, Exif
   orientation), checked against OpenCV fixtures in
@@ -192,7 +210,7 @@ Last updated: 2026-10-23.
   `<conversation:turn_participants>` (D119).
   `bot.ability.speaking.stop` came later (D179, 2026-10-22): the stop,
   progress and `spoken`/`unspoken`/`outcome` on unstreamed audio,
-  `voice_id` null until decision 6.
+  `voice_id` null until D194 is built (#49).
 - **The behavior and autonomy namespaces, and no bot namespace (2026-10-18,
   D116, the namespace plan's step 4, the last):**
   `namespaces/behavior` (`<behavior:instances_from_behavior_results>`,
@@ -277,7 +295,7 @@ Last updated: 2026-10-23.
   address; the cognition input's `environment` field is rendered by
   reasoning as its `<environment>` block. Every environment run
   passes `--fuel 9223372036854775807` until average usage is measured
-  (D111). scxml.rs is at `cf27c2e7` (D192's env masking only inside a record's JSON strings), on top of `5bc75e72` (D125's `..` in `event:schema`), on top of `cf8f293a` (D123's eventless-cond fix), on top of `f920cb47` (D122), on top of `c8bb69a8` (D121) and `b59f8111` (D104, D109, D110). Speech and voice
+  (D111). scxml.rs is at `cf27c2e7` (D217's env masking only inside a record's JSON strings), on top of `5bc75e72` (D125's `..` in `event:schema`), on top of `cf8f293a` (D123's eventless-cond fix), on top of `f920cb47` (D122), on top of `c8bb69a8` (D121) and `b59f8111` (D104, D109, D110). Speech and voice
   backends exist now, each through an env file in the session scratchpad
   (outside the repository) named in `FLOPPY_LIVE_ENV_FILE` with `.env`:
   `env.speech` (Gemini's OpenAI-compatible API, `FLOPPY_SPEECH_*`) and
@@ -848,9 +866,8 @@ The remaining phases run as one ultracode run with these grants:
 - **scxml.rs names approved:** the datamodel pass's names, with the example
   package renamed to `datamodels/example`; `deny.toml` allows ISC and
   CDLA-Permissive-2.0 (TLS stack).
-- **Live model while the Sparks are saturated:** CPA gateway via the
-  gitignored `.env.cpa`, model `gabe-codex-1/gpt-6-luna` (fallback
-  `gabe-xai/grok-4.6`).
+- **Live model:** the DGX Sparks only (direct vLLM); never hosted models
+  (user, 2026-10-24).
 - **Behaviors and routines (phase 5) use the builder:** a behavior or
   routine is an SCXML document `bots/builder` authors, validates, and
   hands back, and the bot then invokes it.
@@ -925,25 +942,35 @@ What is still to build, each item with its issue where one exists.
   catch a repeat.
 - **Interpretation reads `producing`** (#30, D177).
 - **Streaming speech** (S5 step B; step A, #18, is D179): streaming
-  encoding and per-chunk playout, drafts spoken while the reply is
-  generated with an `abandoned` outcome, and streaming decoding with an
-  end of turn. Today vocal encodes each stretch whole (D178) and speaking
-  paces its playout (D179). It waits on the maintainer: the chunk event's
-  name, whether to chunk a backend that answers one chunk per stretch,
-  how a draft is correlated with its final respond (an SCXML `<send>`
-  takes no id from an expression), who produces drafts, and the draft
-  timeout.
+  encoding and per-chunk playout are built (D202, D203, #55): the speech
+  service returns `bot.ability.vocal.speech.encoding.chunk`s as its
+  answers arrive and speaking plays each as it comes. Still open: drafts
+  spoken while the reply is generated with an `abandoned` outcome (they
+  wait until something produces them, D202; how a draft is correlated
+  with its final respond, since an SCXML `<send>` takes no id from an
+  expression, and the draft timeout), streaming decoding with an end of
+  turn, a live run against a streaming backend (none has been measured),
+  and a `spoken` that knows the reply's total length while it still
+  streams (D203 counts the share of the audio received).
 - **Voicing**: voice catalogs, voice design and the bot's own voice;
   `bot.ability.speaking.output`'s `voice_id` is null until then (D179).
 - **Graph memory and embeddings** ([plan](plans/graph-memory.md)):
   episodes as nodes with vectors, associative recall,
   `bot.ability.memory.recall`, an embedding ability for text and images
   over a remote embedder, and consolidation while the cognition rests.
-  It waits on decisions 3, 7 and, for persons, 6.
-- **Hearing identity**: participant refs through an identification
-  registry, overlap while speaking, tone, and enrolling the bot's own
-  voice. Today the hearing gives voice embeddings and each embedding
-  source is its own participant (D79). It waits on decision 6.
+  People are D194, their voices built by D204, and consolidation D195,
+  built by D205 (#49); the schema is one revision (D193). Matching reads
+  one compact representative per person (D205), which holds about 100
+  people at 256 dimensions (the memory ability's output event):
+  an embedding index is where that bound goes. Consolidation into
+  episodes and links waits on graph memory.
+- **Hearing identity**: overlap while speaking, tone, and enrolling the
+  bot's own voice. People in long-term memory (D194) are built for voices
+  by D204 (#49): the conversation matches each voice embedding to a
+  `person-<n>` memory holds (cosine 0.85, margin 0.05) or makes a new one,
+  and stores every voice heard for its person; at rest (D205) each
+  person's voices fold into their representative and duplicate people
+  merge. Still open on #49: faces (below) and `voice_id` (D179).
 - **Multimodal turns**: `<conversation:ingest_content>` takes no
   `image/*` content, so an image adds nothing to a turn and a turn of
   images alone fails as empty (`Turn closed with neither text, audio, nor
@@ -952,17 +979,18 @@ What is still to build, each item with its issue where one exists.
   attachments and how long it keeps them), a typed image value, image
   placeholders and content parts in a turn's content, and a typed
   `environment.visual` image.
-- **Faces** (D188): face detection and face identity in seeing wait on
-  decision 6; an embedding change measure and a cascade of measures wait
+- **Faces** (D188): face detection and face identity in seeing follow
+  D194's voices, built by D204 (#49; `bot_person_embedding`'s `kind`
+  `face` is the seam); an embedding change measure and a cascade of measures wait
   on embeddings.
 - **Effort ceilings**: each stage narrowing the turn's frame to its own
-  effort ceiling (decision 8).
-- **Sandbox, devices and transport** (decision 5): a sandbox ability over
+  effort ceiling (D196, #50).
+- **Sandbox, devices and transport** (D200, #53): a sandbox ability over
   a Docker or Podman host; computer, HID keyboard and pointer, audio
   microphone and speaker, and phone devices, with owner-command routing;
   transform codecs, transport peers, yamux over WebSocket and a LiveKit
   room. The tests use the lamp fixture.
-- **Example bots**: a building example (decision 4), and minimal,
+- **Example bots**: a building example (the name freed by D198), and minimal,
   listen-and-speak, phone and SMS chat bots, each after its abilities.
 - **Telemetry metrics**: no metrics are emitted. A voice embedding is
   never written to the records (`<biometric:VoiceEmbedding>`,
@@ -1003,18 +1031,7 @@ What is still to build, each item with its issue where one exists.
 
 ## Design decisions for the maintainer
 
-Numbered as decisions.md and the open work cite them.
-
-| # | Question |
-| --- | --- |
-| 2 | **Postgres:** keep `services/pgsql` and D69 to D72, or keep only SQLite (the user chose SQLite for now, 2026-10-10)? |
-| 3 | **Migrations:** accept D165 (a schema change is a new revision: `0003_stm_turns`, the graph tables `0004`), or rewrite `0001` in place, which breaks every existing database? |
-| 4 | **The name "builder":** a user-facing example bot that builds things would clash with `bots/builder`, the behavior author; one of them needs another name. |
-| 5 | **Devices and transport:** they are out of scope; the sandbox, the devices, the building example and the transport need them. |
-| 6 | **Participant identity:** keep D79 (each embedding source is its own participant), or identify participants through a registry with `voice:` and `face:` refs? Faces (D188), `voice_id` (D179) and hearing identity wait on it. |
-| 7 | **Rest and consolidation:** give the cognition a rest state in which memory consolidates? |
-| 8 | **Effort ceilings:** have each stage narrow the turn's frame to its own effort ceiling? |
-| 9 | **A container image** for `scx run`? floppy has no runtime of its own (D14). |
+All answered on 2026-10-23: decision 2 by D199, 3 by D193, 4 by D198, 5 by D200, 6 by D194, 7 by D195, 8 by D196, 9 by D197. D192, D201 and D202 were decided with them.
 
 ## Choices to review
 

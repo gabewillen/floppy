@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<!-- cognition-3: a stimulus with text data is the root element of its own block: its payload's type, its text, stamped with its event and source. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition">
+<datamodel>
+  <data id="p" expr="null"/>
+  <data id="f" expr="'unset'"/>
+  <data id="s" expr='{"event": "bot.input", "data": "hi", "source": "gabe"}'/>
+  <data id="expected" expr='"&lt;string stimulus:event=\"bot.input\" stimulus:source=\"gabe\"&gt;hi&lt;/string&gt;"'/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <cognition:model_facing_content location="p" failurelocation="f" stimulus="s"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="f === null &amp;&amp; p === expected" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

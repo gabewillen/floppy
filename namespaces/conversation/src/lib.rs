@@ -7,6 +7,10 @@
 //! | --- | --- |
 //! | `<conversation:message_for_turn>` | the committed message for a turn and its provenance |
 //! | `<conversation:relationship_for_input>` | the relationship an input belongs to (by identity collection score), or a new one with its context reference |
+//! | `<conversation:people_for_input>` | the input with each voice embedding replaced by its person (decision D194), the people created, the voices to store, and the new people's representative voices |
+//! | `<conversation:fold_voices>` | a person's representative voice with more voices folded in (decision D205) |
+//! | `<conversation:people_to_merge>` | the two people whose representatives are alike enough to merge first, and their merged representative (decision D205) |
+//! | `<conversation:merged_context_refs>` | the relationship context references that change when one person is merged into another (decision D205) |
 //! | `<conversation:participant_for_source>` | the relationship with the source as a participant |
 //! | `<conversation:fail_turn>` | the relationship without the failed source's participant |
 //! | `<conversation:detector_refs>` | every participant's `[session_ref, participant]` |
@@ -81,6 +85,53 @@
 //! its `session_ref` `relationship-` and that, its identities sorted, and
 //! its participants empty. `location` receives the
 //! relationships and `indexlocation` (required) the relationship's index.
+//!
+//! # `<conversation:people_for_input location="L" input="X" voices="V" after="N"/>`
+//!
+//! The people of the input `X` (an object with `source_ids` and
+//! `target_ids`), as long-term memory holds them (decisions D194 and
+//! D205). `voices` (required) evaluates to the representative voices
+//! memory holds, one per person, an array of `[person_ref, voice]` (a
+//! non-empty string and a representative's compact text,
+//! [`encode_voice`]; an entry of another shape is a damaged row and is
+//! skipped), and `after` (required) to a whole number, the last number of
+//! the people sequence the document holds. Each embedding of the input's
+//! `source_ids`, then of its `target_ids`, in order, is matched as
+//! [`person_for_voice`] matches it, against the representatives and the
+//! voices of the people created before it: a person scores the highest
+//! cosine of the voice with theirs, and the best at
+//! [`SIMILARITY_THRESHOLD`] or more is the voice's person unless another
+//! comes within [`SIMILARITY_MARGIN`]; a voice that is no one's is a new
+//! person, `person-<n>`, numbered on after `after`. `location` (required)
+//! receives `{input, people, voices, representatives}`: `input` the input
+//! with each embedding replaced by its person's ref and each list without
+//! repeats (the first kept), its other members as they are; `people` the
+//! refs of the people created, in order; `voices` `[person_ref,
+//! embedding]` for each embedding heard, the embedding as its JSON text,
+//! to store for that person; and `representatives` `[person_ref, voice]`,
+//! each new person's first voice as its representative's compact text
+//! (a voice without a norm has none).
+//!
+//! # `<conversation:fold_voices location="L" centroid="C" weight="W" voices="V"/>`
+//!
+//! A person's representative voice reinforced (decision D205):
+//! `centroid` (required) evaluates to its compact text, `weight` to the
+//! number of voices folded into it, and `voices` to an array of
+//! embeddings' JSON texts heard for the person since. `location`
+//! (required) receives [`fold_voices`]'s `{centroid, weight, folded}`.
+//!
+//! # `<conversation:people_to_merge location="L" people="P"/>`
+//!
+//! `people` (required) evaluates to the representatives memory holds,
+//! `[person_ref, voice, weight]` each, oldest person first. `location`
+//! (required) receives [`people_to_merge`]'s `{into, from, centroid,
+//! weight}`, or `null` when no two people are alike enough to be one.
+//!
+//! # `<conversation:merged_context_refs location="L" refs="R" from="F" into="I"/>`
+//!
+//! `refs` (required) evaluates to an array of stored context references,
+//! `from` and `into` to two person refs. `location` (required) receives
+//! [`merged_context_refs`]'s `[[old, new], ...]`.
 //!
 //! # `<conversation:participant_for_source location="L" source="S"/>` and `<conversation:fail_turn location="L" source="S"/>`
 //!
@@ -306,6 +357,10 @@ pub fn execute<H: ConversationHost>(
     match local_name {
         "message_for_turn" => message_for_turn(attributes, content, host),
         "relationship_for_input" => relationship_for_input(attributes, content, host),
+        "people_for_input" => people::people_for_input_element(attributes, content, host),
+        "fold_voices" => people::fold_voices_element(attributes, content, host),
+        "people_to_merge" => people::people_to_merge_element(attributes, content, host),
+        "merged_context_refs" => people::merged_context_refs_element(attributes, content, host),
         "participant_for_source" => participant_for_source(attributes, content, host, true),
         "fail_turn" => participant_for_source(attributes, content, host, false),
         "detector_refs" => detector_refs_element(attributes, content, host),
@@ -2534,6 +2589,13 @@ mod guest {
 
     export!(Component);
 }
+
+mod people;
+
+pub use people::{
+    PERSON_REF_PREFIX, VOICE_PREFIX, decode_voice, encode_voice, fold_voices, merged_context_refs,
+    people_for, people_to_merge, person_for_voice,
+};
 
 #[cfg(test)]
 mod tests;

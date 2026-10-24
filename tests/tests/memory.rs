@@ -126,7 +126,7 @@ fn a_fresh_database_is_migrated_to_the_head_schema() {
         [(
             "output".to_owned(),
             format!(
-                r#"{{"results":[{{"rowcount":1,"rows":[{{"columns":["group_concat(name)"],"values":["{columns}"]}}]}},{{"rowcount":1,"rows":[{{"columns":["name"],"values":["lifetime"]}}]}},{{"rowcount":1,"rows":[{{"columns":["version_num"],"values":["0003"]}}]}}]}}"#
+                r#"{{"results":[{{"rowcount":1,"rows":[{{"columns":["group_concat(name)"],"values":["{columns}"]}}]}},{{"rowcount":1,"rows":[{{"columns":["name"],"values":["lifetime"]}}]}},{{"rowcount":1,"rows":[{{"columns":["version_num"],"values":["0001"]}}]}}]}}"#
             )
         )],
         "{}",
@@ -151,7 +151,7 @@ fn a_fresh_database_is_migrated_to_the_head_schema() {
 
 #[test]
 fn the_head_schema_keeps_the_short_term_turns() {
-    // Decision D165: the short-term turns are revision 0003_stm_turns.
+    // Decision D193: the short-term turns are in the one revision, 0001.
     let directory = unique_scratch("memory");
     let finished = run(
         &directory,
@@ -171,13 +171,37 @@ fn the_head_schema_keeps_the_short_term_turns() {
 }
 
 #[test]
+fn the_head_schema_keeps_the_people() {
+    // Decision D194: people and the embeddings heard for them are in the
+    // one revision, 0001 (D193); so are (D205) each person's representative
+    // embedding of each kind and the named sequences people are numbered
+    // from.
+    let directory = unique_scratch("memory");
+    let finished = run(
+        &directory,
+        &harness(
+            None,
+            "[{sql: 'SELECT group_concat(name) FROM pragma_table_info(\\'bot_person\\')'}, {sql: 'SELECT group_concat(name) FROM pragma_table_info(\\'bot_person_embedding\\')'}, {sql: 'SELECT name FROM sqlite_master WHERE type = \\'index\\' AND tbl_name = \\'bot_person_embedding\\' AND sql IS NOT NULL'}, {sql: 'SELECT group_concat(name) FROM pragma_table_info(\\'bot_person_centroid\\')'}, {sql: 'SELECT name FROM sqlite_master WHERE type = \\'index\\' AND tbl_name = \\'bot_person_centroid\\' AND sql IS NOT NULL'}, {sql: 'SELECT group_concat(name) FROM pragma_table_info(\\'bot_sequence\\')'}]",
+        ),
+    );
+    assert_eq!(
+        logs(&finished.records),
+        output(
+            r#"[{"rowcount":1,"rows":[{"columns":["group_concat(name)"],"values":["person_id,created_at"]}]},{"rowcount":1,"rows":[{"columns":["group_concat(name)"],"values":["seq,person_id,kind,embedding,created_at"]}]},{"rowcount":1,"rows":[{"columns":["name"],"values":["bot_person_embedding_person_idx"]}]},{"rowcount":1,"rows":[{"columns":["group_concat(name)"],"values":["person_id,kind,centroid,weight,first_seq,through_seq,updated_at"]}]},{"rowcount":1,"rows":[{"columns":["name"],"values":["bot_person_centroid_kind_idx"]}]},{"rowcount":1,"rows":[{"columns":["group_concat(name)"],"values":["name,value"]}]}]"#
+        ),
+        "{}",
+        finished.stderr
+    );
+}
+
+#[test]
 fn a_database_newer_than_the_ability_is_refused_untouched() {
     let directory = unique_scratch("memory");
     let finished = run(
         &directory,
         &harness(
             Some(
-                "[{sql: 'CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)'}, {sql: 'INSERT INTO alembic_version VALUES (\\'0004\\')'}]",
+                "[{sql: 'CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)'}, {sql: 'INSERT INTO alembic_version VALUES (\\'0002\\')'}]",
             ),
             "[{sql: 'SELECT 1'}]",
         ),
@@ -185,7 +209,7 @@ fn a_database_newer_than_the_ability_is_refused_untouched() {
     assert_eq!(
         logs(&finished.records),
         support::labelled(&[
-            ("failed", "Migration could not plan from 0004 to head"),
+            ("failed", "Migration could not plan from 0002 to head"),
             ("kind", "unavailable"),
         ]),
         "{}",
@@ -327,7 +351,7 @@ fn postgres_a_fresh_database_is_migrated_to_the_head_schema() {
     assert_eq!(
         logs(&finished.records),
         output(&format!(
-            r#"[{{"rowcount":1,"rows":[{{"columns":["columns"],"values":["{columns}"]}}]}},{{"rowcount":1,"rows":[{{"columns":["column_name","data_type"],"values":["lifetime","text"]}}]}},{{"rowcount":1,"rows":[{{"columns":["version_num"],"values":["0003"]}}]}}]"#
+            r#"[{{"rowcount":1,"rows":[{{"columns":["columns"],"values":["{columns}"]}}]}},{{"rowcount":1,"rows":[{{"columns":["column_name","data_type"],"values":["lifetime","text"]}}]}},{{"rowcount":1,"rows":[{{"columns":["version_num"],"values":["0001"]}}]}}]"#
         )),
         "{}",
         finished.stderr
@@ -353,6 +377,33 @@ fn postgres_a_fresh_database_is_migrated_to_the_head_schema() {
     );
 }
 
+/// [`the_head_schema_keeps_the_people`] on the Postgres engine: the
+/// representatives' and the sequences' columns, their whole numbers
+/// BIGINT.
+#[test]
+#[ignore = "needs a PGlite server: FLOPPY_PGLITE_SERVER"]
+fn postgres_the_head_schema_keeps_the_people() {
+    let server = Pglite::start().expect("FLOPPY_PGLITE_SERVER is set");
+    let directory = unique_scratch("memory");
+    let finished = run(
+        &directory,
+        &harness_on(
+            &server.database(),
+            "pgsql",
+            None,
+            "[{sql: 'SELECT string_agg(column_name || \\' \\' || data_type, \\',\\' ORDER BY ordinal_position) AS columns FROM information_schema.columns WHERE table_name = ?1', parameters: ['bot_person_centroid']}, {sql: 'SELECT string_agg(column_name || \\' \\' || data_type, \\',\\' ORDER BY ordinal_position) AS columns FROM information_schema.columns WHERE table_name = ?1', parameters: ['bot_sequence']}, {sql: 'SELECT indexname FROM pg_indexes WHERE tablename = ?1 AND indexname NOT LIKE \\'%pkey\\'', parameters: ['bot_person_centroid']}]",
+        ),
+    );
+    assert_eq!(
+        logs(&finished.records),
+        output(
+            r#"[{"rowcount":1,"rows":[{"columns":["columns"],"values":["person_id text,kind text,centroid text,weight bigint,first_seq bigint,through_seq bigint,updated_at timestamp with time zone"]}]},{"rowcount":1,"rows":[{"columns":["columns"],"values":["name text,value bigint"]}]},{"rowcount":1,"rows":[{"columns":["indexname"],"values":["bot_person_centroid_kind_idx"]}]}]"#
+        ),
+        "{}",
+        finished.stderr
+    );
+}
+
 #[test]
 #[ignore = "needs a PGlite server: FLOPPY_PGLITE_SERVER"]
 fn postgres_a_database_newer_than_the_ability_is_refused_untouched() {
@@ -363,7 +414,7 @@ fn postgres_a_database_newer_than_the_ability_is_refused_untouched() {
             &server.database(),
             "pgsql",
             Some(
-                "[{sql: 'CREATE TABLE alembic_version (version_num VARCHAR(32) PRIMARY KEY)'}, {sql: 'INSERT INTO alembic_version VALUES (\\'0004\\')'}]",
+                "[{sql: 'CREATE TABLE alembic_version (version_num VARCHAR(32) PRIMARY KEY)'}, {sql: 'INSERT INTO alembic_version VALUES (\\'0002\\')'}]",
             ),
             "[{sql: 'SELECT 1'}]",
         ),
@@ -371,7 +422,7 @@ fn postgres_a_database_newer_than_the_ability_is_refused_untouched() {
     assert_eq!(
         logs(&finished.records),
         support::labelled(&[
-            ("failed", "Migration could not plan from 0004 to head"),
+            ("failed", "Migration could not plan from 0002 to head"),
             ("kind", "unavailable"),
         ]),
         "{}",

@@ -1,7 +1,7 @@
 {
   "revision": "0001",
   "down_revision": null,
-  "doc": "Initial memory schema in SQLite: the bot_memory, bot_behavior, bot_behavior_trigger and bot_stm_memory tables and their indexes.",
+  "doc": "The memory schema in SQLite, one revision (decision D193): the bot_memory, bot_behavior (with its lifetime: a turn behavior or a persistent routine), bot_behavior_trigger, bot_stm_memory and bot_stm_turn tables, the people long-term memory holds (bot_person; bot_person_embedding, the embeddings heard for each person, kind voice; decision D194; and bot_person_centroid, each person's one representative voice, which rest reinforces; decision D205), bot_sequence (the sequences ids are taken from, person for people; decision D205), and their indexes.",
   "upgrade": [
     {
       "sql": "CREATE TABLE bot_memory (memory_id TEXT NOT NULL, scope TEXT DEFAULT 'memory' NOT NULL, context_ref TEXT, subject_ref TEXT, kind TEXT, sensitivity TEXT, retention TEXT, content TEXT NOT NULL, content_format TEXT DEFAULT 'text/plain' NOT NULL, query_tags TEXT, metadata_json TEXT DEFAULT '{}' NOT NULL, created_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL, PRIMARY KEY (memory_id))"
@@ -16,7 +16,7 @@
       "sql": "CREATE INDEX bot_memory_scope_idx ON bot_memory (scope, created_at)"
     },
     {
-      "sql": "CREATE TABLE bot_behavior (name TEXT NOT NULL, source TEXT NOT NULL, description TEXT DEFAULT '' NOT NULL, examples_json TEXT DEFAULT '[]' NOT NULL, status TEXT DEFAULT 'ACTIVE' NOT NULL, status_reason TEXT DEFAULT '' NOT NULL, status_updated_at TEXT DEFAULT '' NOT NULL, used_count TEXT DEFAULT '0' NOT NULL, last_used_at TEXT DEFAULT '' NOT NULL, failed_count TEXT DEFAULT '0' NOT NULL, last_failed_at TEXT DEFAULT '' NOT NULL, created_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL, updated_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL, PRIMARY KEY (name))"
+      "sql": "CREATE TABLE bot_behavior (name TEXT NOT NULL, source TEXT NOT NULL, description TEXT DEFAULT '' NOT NULL, examples_json TEXT DEFAULT '[]' NOT NULL, status TEXT DEFAULT 'ACTIVE' NOT NULL, status_reason TEXT DEFAULT '' NOT NULL, status_updated_at TEXT DEFAULT '' NOT NULL, used_count TEXT DEFAULT '0' NOT NULL, last_used_at TEXT DEFAULT '' NOT NULL, failed_count TEXT DEFAULT '0' NOT NULL, last_failed_at TEXT DEFAULT '' NOT NULL, created_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL, updated_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL, lifetime TEXT DEFAULT 'turn' NOT NULL, PRIMARY KEY (name))"
     },
     {
       "sql": "CREATE TABLE bot_behavior_trigger (behavior_name TEXT NOT NULL, \"trigger\" TEXT NOT NULL, PRIMARY KEY (behavior_name, \"trigger\"), FOREIGN KEY(behavior_name) REFERENCES bot_behavior (name) ON DELETE CASCADE)"
@@ -32,9 +32,57 @@
     },
     {
       "sql": "CREATE INDEX bot_stm_memory_created_idx ON bot_stm_memory (created_at)"
+    },
+    {
+      "sql": "CREATE TABLE bot_stm_turn (seq INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, turn_id TEXT NOT NULL, at TEXT NOT NULL, direction TEXT NOT NULL, speakers_json TEXT DEFAULT '[]' NOT NULL, text TEXT NOT NULL, cut INTEGER DEFAULT '0' NOT NULL, conversation TEXT NOT NULL)"
+    },
+    {
+      "sql": "CREATE INDEX bot_stm_turn_at_idx ON bot_stm_turn (at)"
+    },
+    {
+      "sql": "CREATE TABLE bot_person (person_id TEXT NOT NULL, created_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL, PRIMARY KEY (person_id))"
+    },
+    {
+      "sql": "CREATE TABLE bot_person_embedding (seq INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, person_id TEXT NOT NULL, kind TEXT NOT NULL, embedding TEXT NOT NULL, created_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL, FOREIGN KEY(person_id) REFERENCES bot_person (person_id) ON DELETE CASCADE)"
+    },
+    {
+      "sql": "CREATE INDEX bot_person_embedding_person_idx ON bot_person_embedding (kind, person_id, seq)"
+    },
+    {
+      "sql": "CREATE TABLE bot_person_centroid (person_id TEXT NOT NULL, kind TEXT NOT NULL, centroid TEXT NOT NULL, weight INTEGER NOT NULL, first_seq INTEGER NOT NULL, through_seq INTEGER NOT NULL, updated_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL, PRIMARY KEY (person_id, kind), FOREIGN KEY(person_id) REFERENCES bot_person (person_id) ON DELETE CASCADE)"
+    },
+    {
+      "sql": "CREATE INDEX bot_person_centroid_kind_idx ON bot_person_centroid (kind, first_seq)"
+    },
+    {
+      "sql": "CREATE TABLE bot_sequence (name TEXT NOT NULL, value INTEGER NOT NULL, PRIMARY KEY (name))"
     }
   ],
   "downgrade": [
+    {
+      "sql": "DROP TABLE bot_sequence"
+    },
+    {
+      "sql": "DROP INDEX bot_person_centroid_kind_idx"
+    },
+    {
+      "sql": "DROP TABLE bot_person_centroid"
+    },
+    {
+      "sql": "DROP INDEX bot_person_embedding_person_idx"
+    },
+    {
+      "sql": "DROP TABLE bot_person_embedding"
+    },
+    {
+      "sql": "DROP TABLE bot_person"
+    },
+    {
+      "sql": "DROP INDEX bot_stm_turn_at_idx"
+    },
+    {
+      "sql": "DROP TABLE bot_stm_turn"
+    },
     {
       "sql": "DROP INDEX bot_stm_memory_created_idx"
     },

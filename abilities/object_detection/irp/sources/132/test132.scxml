@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- object_detection-4: numbers are JSON numbers: a boolean or a numeric string is refused, as confidence or in a box. -->
+<!-- object_detection-4: boxes reaching the image's right and bottom edges exactly are inside it. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="object_detection" type="scxml" src="../../../object_detection.scx">
@@ -11,7 +11,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.vision.detection.output" cond='JSON.stringify(_event.data) === "{\"objects\":[{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":1,\"label\":\"a\"},{\"box\":{\"height\":0.5,\"width\":0.5,\"x\":0,\"y\":0},\"confidence\":0.5,\"label\":\"f\"}]}"' target="step1"/>
+    <transition event="bot.ability.vision.detection.output" cond='JSON.stringify(_event.data) === "{\"objects\":[{\"box\":{\"height\":1,\"width\":1,\"x\":0,\"y\":0},\"confidence\":1,\"label\":\"a\"},{\"box\":{\"height\":0.5,\"width\":0.5,\"x\":0.5,\"y\":0.5},\"confidence\":0,\"label\":\"f\"}]}"' target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

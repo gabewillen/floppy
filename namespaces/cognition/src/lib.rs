@@ -75,10 +75,9 @@
 //!    recalled memory until associative memory exists (decision D97);
 //! 4. the stimulus (`stimulus`, optional: without it there is no stimulus
 //!    block, as in a situation render) as the root element of its own block,
-//!    tagged by the kind of its data (`dict` for an object, `list` for an
-//!    array, `str` for a string, `int` for a number written as an integer,
-//!    `float` for any other number, `bool`, or `none_type` for no data or a
-//!    `null` stimulus), a string as its text and anything else as its `content`
+//!    tagged by the JSON Schema type of its data (`object`, `array`, `string`,
+//!    `integer` for a number written as an integer, `number` for any other
+//!    number, `boolean`, or `null` for no data or a `null` stimulus), a string as its text and anything else as its `content`
 //!    field, stamped `stimulus:event`, then `stimulus:id`, `stimulus:source`
 //!    and `stimulus:target` when each is a non-empty string; a
 //!    `bot.ability.conversation.output`'s messages leave out `provenance`,
@@ -813,7 +812,7 @@ pub enum Stimulus<'a> {
     /// No stimulus block (the `stimulus` attribute left out): the content
     /// is the rest alone, as in a situation render.
     Absent,
-    /// A `null` stimulus: a `<none_type />` root.
+    /// A `null` stimulus: a `<null />` root.
     Null,
     /// A stimulus envelope `{event, data?, id?, source?, target?}`.
     Envelope(&'a Map<String, Json>),
@@ -1574,8 +1573,9 @@ fn fill_item(
 }
 
 /// The stimulus as the root element of its own block: tagged by the kind of its
-/// data (`dict`, `list`, `str`, `int`, `float`, `bool`, `none_type`), a string
-/// as its text and anything else filled as its `content` field, stamped
+/// data in JSON Schema's type names (`object`, `array`, `string`, `integer`,
+/// `number`, `boolean`, `null`), a string as its text and anything else filled
+/// as its `content` field, stamped
 /// `stimulus:event`, then `stimulus:id`, `:source` and `:target` when set. A
 /// conversation output's messages leave out `MESSAGE_EXCLUDED_FIELDS`.
 fn stimulus_element(
@@ -1590,13 +1590,13 @@ fn stimulus_element(
         _ => data.cloned(),
     };
     let tag = match &shown {
-        None | Some(Json::Null) => "none_type",
-        Some(Json::Bool(_)) => "bool",
-        Some(Json::Number(number)) if number.is_f64() => "float",
-        Some(Json::Number(_)) => "int",
-        Some(Json::String(_)) => "str",
-        Some(Json::Array(_)) => "list",
-        Some(Json::Object(_)) => "dict",
+        None | Some(Json::Null) => "null",
+        Some(Json::Bool(_)) => "boolean",
+        Some(Json::Number(number)) if number.is_f64() => "number",
+        Some(Json::Number(_)) => "integer",
+        Some(Json::String(_)) => "string",
+        Some(Json::Array(_)) => "array",
+        Some(Json::Object(_)) => "object",
     };
     let mut root = match &shown {
         Some(Json::String(text)) => budget.text_element(tag, text.clone())?,

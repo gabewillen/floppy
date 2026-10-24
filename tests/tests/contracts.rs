@@ -94,7 +94,7 @@ const BODY_EVENTS: [&str; 12] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 102] = [
+const ABILITY_EVENTS: [&str; 103] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -137,6 +137,8 @@ const ABILITY_EVENTS: [&str; 102] = [
     // times itself until the mouth (a device) is ported.
     "devices.audio.played",
     "bot.ability.vocal.speech.encoding.input",
+    // Each chunk of a streamed encoding, before its output (decision D203).
+    "bot.ability.vocal.speech.encoding.chunk",
     "bot.ability.vocal.speech.encoding.output",
     // Speaking's playout, which the body puts into the environment.
     "environment.sound",

@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<!-- cognition-3: the content is laid out stable first: the recent turns, the situation (what was already done), the stimulus, then the feedback; the system channel is the instructions then the self block. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition">
+<datamodel>
+  <data id="p" expr="null"/>
+  <data id="f" expr="'unset'"/>
+  <data id="sys" expr="'unset'"/>
+  <data id="s" expr='({event: "bot.input", data: "hi", source: "gabe"})'/>
+  <data id="me" expr='({name: "Floppy"})'/>
+  <data id="r" expr='[{at: "2026-07-07T12:00:01.5Z", direction: "heard", speakers: [{ref: "voice:1", role: "source"}], text: "hi"}]'/>
+  <data id="a" expr='[{target: "session.lamp", event: "bot.device.lamp.on", reason: "asked"}]'/>
+  <data id="expected" expr='["&lt;cognition:recalled&gt;", "  &lt;recent&gt;", "    &lt;memory:turn at=\"12:00:01Z\" direction=\"heard\" who=\"voice:1\"&gt;hi&lt;/memory:turn&gt;", "  &lt;/recent&gt;", "&lt;/cognition:recalled&gt;", "&lt;cognition:acted&gt;", "  &lt;percepts count=\"1\"&gt;", "    &lt;item&gt;0&lt;/item&gt;", "  &lt;/percepts&gt;", "  &lt;acts count=\"1\"&gt;", "    &lt;cognition:event target=\"session.lamp\" event=\"bot.device.lamp.on\" reason=\"asked\" /&gt;", "  &lt;/acts&gt;", "&lt;/cognition:acted&gt;", "&lt;string stimulus:event=\"bot.input\" stimulus:source=\"gabe\"&gt;hi&lt;/string&gt;", "fix it"].join("\n")'/>
+  <data id="expected_system" expr='"sys\n\n&lt;persona&gt;&lt;name taken_by=\"you\"&gt;Floppy&lt;/name&gt;&lt;/persona&gt;"'/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <cognition:model_facing_content location="p" failurelocation="f" systemlocation="sys" stimulus="s" self="me" recent="r" acted="a" feedback="'fix it'" instructions="'sys'"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="f === null &amp;&amp; p === expected &amp;&amp; sys === expected_system" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- memory-1: a fresh database is at 0003 with the tables before the statements run. -->
+<!-- memory-1: a fresh database is at 0001 with the tables before the statements run. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="memory" type="scxml" src="../../../memory.scx">
@@ -11,7 +11,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.memory.output" cond="_event.data.results.length === 3 &amp;&amp; _event.data.results[0].rows.length === 1 &amp;&amp; _event.data.results[0].rows[0].values[0] === '0003' &amp;&amp; _event.data.results[1].rows[0].values[0] === 5 &amp;&amp; _event.data.results[2].rows[0].values[0] === 1" target="step1"/>
+    <transition event="bot.ability.memory.output" cond="_event.data.results.length === 3 &amp;&amp; _event.data.results[0].rows.length === 1 &amp;&amp; _event.data.results[0].rows[0].values[0] === '0001' &amp;&amp; _event.data.results[1].rows[0].values[0] === 9 &amp;&amp; _event.data.results[2].rows[0].values[0] === 1" target="step1"/>
   </state>
   <state id="step1">
     <transition event="done.invoke.memory" target="step2"/>

@@ -15,6 +15,12 @@ def log(label, text):
     return {"type": "log", "label": label, "text": text}
 
 
+def said(words):
+    """A turn's floppy.output whose one selection is a reply of `words`."""
+    output = [{"event": "bot.ability.communication.respond", "data": {"parts": [{"words": words}]}}]
+    return log("floppy.output", json.dumps({"turn": 1, "output": output}))
+
+
 def write_job(directory, sessions, steps):
     for index, records in enumerate(sessions):
         with open(os.path.join(directory, f"session-{index}.json"), "w", encoding="utf-8") as handle:
@@ -50,13 +56,13 @@ class Scorer(unittest.TestCase):
         session0 = [
             log("reflection.inventory", 'PingPong ACTIVE turn [{"event":"bot.ability.cognition.input"}] (accept)'),
             log("cognition.stage", "reasoning handled"),
-            log("floppy.say", "pong"),
+            said("pong"),
             log("cognition.stage", "reasoning handled"),
-            log("floppy.say", "Four."),
+            said("Four."),
             log("cognition.stage", "autonomy handled"),
-            log("floppy.say", "pong"),
+            said("pong"),
         ]
-        session1 = [log("cognition.stage", "autonomy handled"), log("floppy.say", "Pong!")]
+        session1 = [log("cognition.stage", "autonomy handled"), said("Pong!")]
         with tempfile.TemporaryDirectory() as directory:
             write_job(directory, [session0, session1], [
                 step(0, 0, 0, 1), step(0, 1, 1, 3), step(0, 2, 3, 5), step(0, 3, 5, 7), step(1, 0, 0, 2)])
@@ -73,8 +79,8 @@ class Scorer(unittest.TestCase):
         scenario = self.scenarios["routine_reminder"]
         session = [
             log("reflection.inventory", "WaterReminder ACTIVE persistent [] (accept)"),
-            log("floppy.say", "Time to drink some water!"),
-            log("floppy.say", "Hello."),
+            said("Time to drink some water!"),
+            said("Hello."),
             log("reflection.inventory", "WaterReminder BROKEN (break)"),
         ]
         with tempfile.TemporaryDirectory() as directory:
@@ -86,16 +92,59 @@ class Scorer(unittest.TestCase):
         self.assertEqual(by["broken"], 1.0)
         self.assertEqual(by["no_ticks"], 1.0)
 
+    def test_a_break_by_the_learning_ability_is_broken(self):
+        scenario = self.scenarios["routine_reminder"]
+        session = [
+            log("reflection.inventory", "WaterReminder ACTIVE persistent [] (accept)"),
+            said("Time to drink some water!"),
+            said("Okay, I'll stop."),
+            log("learning.learned", "lesson of turn 6: WaterReminder ACTIVE persistent BROKEN"),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            write_job(directory, [session], [step(0, 0, 0, 1), step(0, 1, 1, 2, "wait"), step(0, 2, 2, 4), step(0, 3, 4, 4, "wait")])
+            _, results = score.score(scenario, score.load_job(directory))
+        by = {r["check"]: r["score"] for r in results}
+        self.assertEqual(by["broken"], 1.0)
+
     def test_a_name_is_adopted_recalled_and_heard(self):
         scenario = self.scenarios["name_adopt"]
         session0 = [log("identity.name", 'adopted "Juniper"'), log("identity.heard", "addressed as Juniper"),
-                    log("floppy.say", "I'm Juniper."), log("identity.heard", "not addressed")]
+                    said("I'm Juniper."), log("identity.heard", "not addressed")]
         session1 = [log("identity.name", 'recalled "Juniper"'), log("identity.heard", "addressed as Juniper"),
-                    log("floppy.say", "Yes!"), log("floppy.say", "My name is Juniper.")]
+                    said("Yes!"), said("My name is Juniper.")]
         with tempfile.TemporaryDirectory() as directory:
             write_job(directory, [session0, session1], [step(0, 0, 0, 1), step(0, 1, 1, 3), step(0, 2, 3, 4), step(1, 0, 0, 3), step(1, 1, 3, 4)])
             value, _ = score.score(scenario, score.load_job(directory))
         self.assertEqual(value, 1.0)
+
+    def test_a_reply_is_the_respond_the_turn_selected(self):
+        output = [
+            {"event": "bot.focus_device", "data": {"device": "lamp"}},
+            {"event": "bot.ability.communication.respond",
+             "data": {"parts": [{"words": "Time to "}, {"expression": {"pause": 0.2}}, {"words": "drink water!"}]}},
+        ]
+        records = [
+            log("floppy.output", json.dumps({"turn": 2, "output": output})),
+            log("floppy.output", json.dumps({"turn": 3, "output": []})),
+            # Spoken only with a speech service; the turn's output is what it said.
+            log("floppy.say", "spoken twice"),
+        ]
+        self.assertEqual(score.replies(records), ["Time to drink water!"])
+        scenario = {"sessions": [{"steps": [{"wait_s": 60}]}], "checks": []}
+        job = {"steps": [step(0, 0, 0, 3, "wait")], "sessions": [records], "done": True}
+        self.assertIn("floppy says: Time to drink water!", score.summary(scenario, job))
+        self.assertNotIn("spoken twice", score.summary(scenario, job))
+        # An output that is not a turn's says so, rather than looking silent.
+        job["sessions"][0].append(log("floppy.output", "not json"))
+        job["steps"][0]["end_index"] = 4
+        self.assertIn("floppy.output (unreadable): not json", score.summary(scenario, job))
+        value, why = score.check(job, {"check": "no_ticks", "at": [0, 0]})
+        self.assertEqual(value, 0.0, why)
+        # So does a reply whose words are not text; a reply of a sound alone is silent.
+        sound = {"event": "bot.ability.communication.respond", "data": {"parts": [{"expression": {"sound": "laugh"}}]}}
+        self.assertEqual(score._replies(json.dumps({"turn": 4, "output": [sound]})), [])
+        bad = {"event": "bot.ability.communication.respond", "data": {"parts": [{"words": ["Time", "to"]}]}}
+        self.assertIsNone(score._replies(json.dumps({"turn": 4, "output": [bad]})))
 
 
 class Builds(unittest.TestCase):
@@ -111,6 +160,55 @@ class Builds(unittest.TestCase):
         self.assertEqual([(b["accepted"], b["attempts"], b["reason"], b["cause"]) for b in found],
                          [(True, 2, "done", ""), (False, 2, "no-progress", "validate XML001"), (False, 1, "unfinished", "")])
 
+    def test_a_failure_before_the_first_draft_is_its_build_s(self):
+        session = [
+            log("design", "plan"), log("retry_gate", "failure 1 of 8: generate author-failed (transport)"),
+            log("author", "create draft, attempt 1"), log("retry_gate", "failure 2 of 8: validate XML001"),
+            log("author", "repair draft, attempt 2"), log("done", "built PingPong in 2 attempt(s)"),
+        ]
+        found = score.builds({"steps": [], "sessions": [session], "done": True})
+        self.assertEqual([(b["accepted"], b["attempts"], b["diagnostics"][0][:9]) for b in found], [(True, 2, "failure 1")])
+
+    def test_a_build_cut_in_its_design_is_its_own(self):
+        session = [
+            log("design", "plan"),
+            log("design", "plan"), log("author", "create draft, attempt 1"), log("retry_gate", "failure 1 of 8: validate XML001"),
+            log("triage", "redesign"), log("design", "plan"), log("author", "create draft, attempt 2"),
+            log("done", "built PingPong in 2 attempt(s)"),
+        ]
+        found = score.builds({"steps": [], "sessions": [session], "done": True})
+        self.assertEqual([(b["accepted"], b["attempts"], b["reason"]) for b in found],
+                         [(False, 0, "unfinished"), (True, 2, "done")])
+
+    def test_two_builders_at_once_are_two_builds(self):
+        def at(where, label, text):
+            return {**log(label, text), "session": where}
+        learning, reflection = "session.learning.builder", "session.reflection.builder"
+        session = [
+            at(learning, "author", "create draft, attempt 1"),
+            at(reflection, "author", "change draft, attempt 1"),
+            at(learning, "retry_gate", "failure 1 of 8: validate XML001"),
+            at(learning, "author", "repair draft, attempt 2"),
+            at(reflection, "done", "built PingPong in 1 attempt(s)"),
+            at(learning, "failed", "attempts-exhausted: simulate test-failed"),
+        ]
+        found = score.builds({"steps": [], "sessions": [session], "done": True})
+        self.assertEqual(sorted((b["accepted"], b["attempts"], b["reason"], len(b["diagnostics"])) for b in found),
+                         [(False, 2, "attempts-exhausted", 2), (True, 1, "done", 0)])
+
+
+    def test_a_build_cut_before_a_draft_is_apart_unless_it_failed(self):
+        def build(attempts, failures, reason):
+            return {"accepted": reason == "done", "attempts": attempts, "failures": failures, "reason": reason,
+                    "cause": "", "diagnostics": []}
+        graded = [{"id": "a-pingpong-r0", "scenario": "pingpong", "learned_any": True,
+                   "builds": [build(0, 0, "unfinished"), build(0, 1, "unfinished"), build(1, 0, "done")]}]
+        _, summary = runner.builder_table([{"label": "a", "builder": "m"}], graded)
+        self.assertEqual((summary["a"]["builds"], summary["a"]["cut_before_draft"], summary["a"]["builder"]), (2, 1, "m"))
+        with tempfile.TemporaryDirectory() as directory:
+            runner.write_builder(directory, [{"label": "a", "builder": "m"}], graded)
+            with open(os.path.join(directory, "builder.json"), encoding="utf-8") as handle:
+                self.assertEqual(json.load(handle)["models"], {"a": "m"})
 
 class Codec(unittest.TestCase):
     def test_every_prompt_round_trips(self):

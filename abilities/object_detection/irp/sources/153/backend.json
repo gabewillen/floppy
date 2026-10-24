@@ -12,7 +12,7 @@
             "finish_reason": "stop",
             "message": {
               "role": "assistant",
-              "content": "I see a cup on a table."
+              "content": "{\"objects\": [{\"label\": \"cup\", \"confidence\": 1.5, \"box\": {\"x\": 0, \"y\": 0, \"width\": 1, \"height\": 1}}]}"
             }
           }
         ]

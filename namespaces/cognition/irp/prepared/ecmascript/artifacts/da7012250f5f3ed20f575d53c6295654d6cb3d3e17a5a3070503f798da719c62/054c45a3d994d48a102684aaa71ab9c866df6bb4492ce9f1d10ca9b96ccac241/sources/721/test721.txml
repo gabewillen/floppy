@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!-- cognition-3: prior episodes and standing directives render as cognition:cognitive_episode and cognition:directive elements, each list with its count, in a cognition:recalled block before the stimulus. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition">
+<datamodel>
+  <data id="p" expr="null"/>
+  <data id="f" expr="'unset'"/>
+  <data id="s" expr='{"event": "bot.input", "data": "hi", "source": "gabe"}'/>
+  <data id="e" expr='[{"focus": "lamp", "focus_candidates": ["lamp"], "stimulus_name": "bot.input", "output": [{"event": "bot.say", "data": {"text": "hi"}, "target": "session"}]}]'/>
+  <data id="d" expr='[{"text": "Be brief."}]'/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <cognition:model_facing_content location="p" failurelocation="f" stimulus="s" prior_episodes="e" standing_directives="d"/>
+  </onentry>
+  <transition event="error.execution" conf:targetfail=""/>
+  <transition cond="f === null &amp;&amp; p.indexOf('&lt;cognition:recalled&gt;\n  &lt;prior_episodes') === 0 &amp;&amp; p.indexOf('&lt;/cognition:recalled&gt;\n&lt;string stimulus:event=&quot;bot.input&quot;') &gt; 0 &amp;&amp; p.indexOf('&lt;prior_episodes count=&quot;1&quot;&gt;\n    &lt;cognition:cognitive_episode focus=&quot;lamp&quot; stimulus_name=&quot;bot.input&quot;&gt;') &gt; 0 &amp;&amp; p.indexOf('&lt;cognition:event target=&quot;session&quot; event=&quot;bot.say&quot;&gt;\n          &lt;data&gt;\n            &lt;entry key=&quot;text&quot; value=&quot;hi&quot; /&gt;') &gt; 0 &amp;&amp; p.indexOf('&lt;standing_directives count=&quot;1&quot;&gt;\n    &lt;cognition:directive text=&quot;Be brief.&quot; kind=&quot;instruction&quot; /&gt;') &gt; 0" conf:targetpass=""/>
+  <transition conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

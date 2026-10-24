@@ -12,8 +12,7 @@
   Input: the <param>s image (a reference to the image, as
   environment.visual carries it) and media_type (the view's, or null),
   model (the vision model, as reading's), instructions (by default the
-  instructions <data> below), max_objects (32) and max_reply_bytes
-  (65536).
+  instructions <data> below) and max_objects (32).
 
   idle sends its input to itself as bot.ability.vision.detection.input
   {image, media_type} (the image by reference); the transition taking it
@@ -23,31 +22,35 @@
   applying invokes the generate service with one user message whose
   content is the instructions as a text part ({kind: "text", content})
   and the image's reference as an image part ({kind: "image", content}),
-  as reading builds them. Its text reply goes to replied.
+  as reading builds them, and the detections tool (decision D201: the
+  model answers by a tool call, never JSON text; the prompt holds no
+  JSON): the schema param is detectionsSchema() (an object whose objects
+  array lists {label, confidence, box}) and schemaname is detections, so
+  the service requires a call and returns only calls whose arguments the
+  schema admits (label a string of 1..100 characters; confidence a JSON
+  number in 0..1, or null, a boolean or a numeric string being refused
+  (D186); box {x, y in 0..1, width, height in (0, 1]}; no other keys,
+  none missing). Arguments it refuses fail the call (generate.failed
+  schema-mismatch or not-json). Its calls go to replied.
 
-  replied is the detector on the reply: a reply over max_reply_bytes
-  (UTF-8) fails; the reply is trimmed, and a reply fenced as markdown
-  (starting with three backticks) is read inside the fence (the text after
-  its first line, a closing fence removed, trimmed again); anything but a
-  JSON array fails ("the reply is not a JSON array of objects"). Each item
-  is validated on its own as a detected object (label a string of 1..100
-  characters; confidence a JSON number in 0..1, or null, a boolean or a
-  numeric string being refused (D186); box {x, y in 0..1, width, height in
-  (0, 1], x + width and y + height at most 1 + 1e-6}; no other keys, none
-  missing); an invalid item is skipped and the count logged
-  (object_detection.invalid). The first max_objects valid items, in reply
-  order, are kept and sorted stably by descending confidence, unrated
-  last. It sends them to itself as bot.ability.vision.detection.output
-  {objects}, and the transition taking it answers the parent with it.
+  replied is the detector on the calls: the objects of every call, in
+  order; an object whose box passes the image's edge (x + width or
+  y + height over 1 + 1e-6, which a JSON Schema cannot state) is skipped
+  and the count logged (object_detection.invalid). The first max_objects
+  of the rest, in reply order, are kept and sorted stably by descending
+  confidence, unrated last. It sends them to itself as
+  bot.ability.vision.detection.output {objects}, and the transition taking
+  it answers the parent with it.
 
-  Failures: the parent gets bot.ability.failed {message}: a reply the
-  detector refuses (the messages above), generate.failed ("Object
-  detection generator failed: <code>."), a result without text, an output
-  its schema refuses ("Object detection produced output that does not
-  match its output schema.", such as more than 32 objects), or a step that
-  cannot run ("ObjectDetection could not run (<error event>)": a malformed
-  input, or an image the generate service cannot read, which rejects its
-  start). Either answer ends the detection in applied.
+  Failures: the parent gets bot.ability.failed {message}: generate.failed
+  ("Object detection generator failed: <code>.", schema-mismatch and
+  not-json included), a result without the detections calls ("Object
+  detection generator produced no detections."), an output its schema
+  refuses ("Object detection produced output that does not match its
+  output schema.", such as more than 32 objects), or a step that cannot
+  run ("ObjectDetection could not run (<error event>)": a malformed input,
+  or an image the generate service cannot read, which rejects its start).
+  Either answer ends the detection in applied.
 
   Media by reference: the generate service reads the image from the media
   directory the run grants it as /media and sends it as a data: URL; this
@@ -56,7 +59,7 @@
 
   Logs: object_detection.invalid (the count of skipped items) and
   object_detection.failed (the failure message); never a label, a box or
-  the reply.
+  the model's arguments.
 
   Contracts: every event it takes, its own included, references its
   abilities/schemas/ file by event:schema. The generate service's events
@@ -77,11 +80,10 @@
     <data id="image" expr="null"/>
     <data id="media_type" expr="null"/>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
-    <data id="instructions" expr="'List the distinct objects you can see in this image. Answer with only a JSON array and no other text. Each item is {&quot;label&quot;: a short name for the object, &quot;confidence&quot;: how sure you are from 0 to 1, or null, &quot;box&quot;: {&quot;x&quot;: ..., &quot;y&quot;: ..., &quot;width&quot;: ..., &quot;height&quot;: ...}}, where the box is normalized to the image: 0 to 1, measured from the top-left corner. Answer [] when you see no objects.'"/>
+    <data id="instructions" expr="'List the distinct objects you can see in this image with the detections tool: for each one a short label, how sure you are from 0 to 1 (or null), and its box normalized to the image, 0 to 1 measured from the top-left corner. Report no objects when you see none.'"/>
     <data id="max_objects" expr="32"/>
-    <data id="max_reply_bytes" expr="65536"/>
-    <!-- The model's reply, and what the detector made of it. -->
-    <data id="reply" expr="null"/>
+    <!-- The model's detections calls, and what the detector made of them. -->
+    <data id="calls" expr="null"/>
     <data id="detected" expr="null"/>
   </datamodel>
   <script src="object_detection.js"/>
@@ -113,15 +115,17 @@
                   event:schema="../schemas/bot.ability.vision.detection.input.json" target="applying"/>
     </state>
 
-    <!-- The model looks at the referenced image. -->
+    <!-- The model looks at the referenced image and calls the detections tool. -->
     <state id="applying">
       <invoke id="detector" type="https://github.com/stateforward/floppy/services/generate"
               env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
         <param name="model" expr="model"/>
         <param name="messages" expr="detectionMessages()"/>
+        <param name="schema" expr="detectionsSchema()"/>
+        <param name="schemaname" expr="'detections'"/>
       </invoke>
-      <transition event="generate.result" cond="isGenerateTextResult(_event)" target="replied">
-        <assign location="reply" expr="_event.data.content"/>
+      <transition event="generate.result" cond="isDetectionsResult(_event)" target="replied">
+        <assign location="calls" expr="_event.data.tool_calls"/>
       </transition>
       <transition event="generate.failed">
         <send event="bot.ability.failed" target="#_internal">
@@ -130,27 +134,21 @@
       </transition>
       <transition event="done.invoke.detector">
         <send event="bot.ability.failed" target="#_internal">
-          <param name="message" expr="'Object detection generator produced non-text output.'"/>
+          <param name="message" expr="'Object detection generator produced no detections.'"/>
         </send>
       </transition>
     </state>
 
-    <!-- The detector on the reply: its valid objects, or a failure. -->
+    <!-- The detector on the calls: their objects inside the image. -->
     <state id="replied">
       <onentry>
-        <assign location="detected" expr="detectedReply()"/>
+        <assign location="detected" expr="detectedObjects()"/>
         <if cond="hasSkippedItems()">
           <log label="object_detection.invalid" expr="detected.skipped"/>
         </if>
-        <if cond="hasObjects()">
-          <send event="bot.ability.vision.detection.output" target="#_internal">
-            <param name="objects" expr="detected.objects"/>
-          </send>
-        <else/>
-          <send event="bot.ability.failed" target="#_internal">
-            <param name="message" expr="detected.message"/>
-          </send>
-        </if>
+        <send event="bot.ability.vision.detection.output" target="#_internal">
+          <param name="objects" expr="detected.objects"/>
+        </send>
       </onentry>
       <transition event="bot.ability.vision.detection.output"
                   event:schema="../schemas/bot.ability.vision.detection.output.json" target="applied">

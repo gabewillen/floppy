@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/memory/irp/sources">
   <assert id="memory-1" specnum="1" specid="#memory-1">
-    <![CDATA[Before the statements, it brings the database to the head of floppy's revisions (0001, 0002, then 0003, decision D165; in the engine's dialect) through the migration ability, so the statements see Alembic's `alembic_version` at `0003` and the tables, `bot_behavior` with its `lifetime` column and `bot_stm_turn`.]]>
+    <![CDATA[Before the statements, it brings the database to the head of floppy's revisions (one revision, 0001, decision D193; in the engine's dialect) through the migration ability, so the statements see Alembic's `alembic_version` at `0001` and the tables, `bot_behavior` with its `lifetime` column, `bot_stm_turn`, the people `bot_person` and `bot_person_embedding` (decision D194), and each person's representative `bot_person_centroid` and the named sequences `bot_sequence` (decision D205).]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>

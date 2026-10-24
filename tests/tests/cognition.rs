@@ -1221,7 +1221,7 @@ fn reasoning_selects_from_the_turns_choices() {
         "{prompt}"
     );
     assert!(
-        prompt.ends_with("</dict>") && prompt.contains("what is the capital of France?"),
+        prompt.ends_with("</object>") && prompt.contains("what is the capital of France?"),
         "{prompt}"
     );
     assert!(
@@ -1814,7 +1814,7 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
     assert_eq!(decisions.len(), 1);
     assert_eq!(
         decisions[0].body["state"],
-        json!({"turn": "<dict stimulus:event=\"bot.input\" stimulus:source=\"conversation\">\n  <content>\n    <entry key=\"parts\">\n      <value count=\"1\">\n        <item>\n          <entry key=\"words\" value=\"hi\" />\n        </item>\n      </value>\n    </entry>\n  </content>\n</dict>"})
+        json!({"turn": "<object stimulus:event=\"bot.input\" stimulus:source=\"conversation\">\n  <content>\n    <entry key=\"parts\">\n      <value count=\"1\">\n        <item>\n          <entry key=\"words\" value=\"hi\" />\n        </item>\n      </value>\n    </entry>\n  </content>\n</object>"})
     );
     assert_eq!(
         decisions[0].body["questions"][format!("{RESPOND}::parts")]["criteria"],
@@ -1831,7 +1831,7 @@ fn low_confidence_hands_out_the_environment_actions_before_reasoning() {
     // the turn's situation (`<cognition:acted>`), before the stimulus.
     assert_eq!(
         user,
-        "<cognition:acted>\n  <percepts count=\"1\">\n    <item>0</item>\n  </percepts>\n  <acts count=\"1\">\n    <cognition:event target=\"session\" event=\"bot.ability.communication.respond\">\n      <data>\n        <entry key=\"parts\">\n          <value count=\"1\">\n            <item>\n              <entry key=\"words\" value=\"hi\" />\n            </item>\n          </value>\n        </entry>\n      </data>\n    </cognition:event>\n  </acts>\n</cognition:acted>\n<dict stimulus:event=\"bot.input\" stimulus:source=\"conversation\">\n  <content>\n    <entry key=\"parts\">\n      <value count=\"1\">\n        <item>\n          <entry key=\"words\" value=\"hi\" />\n        </item>\n      </value>\n    </entry>\n  </content>\n</dict>"
+        "<cognition:acted>\n  <percepts count=\"1\">\n    <item>0</item>\n  </percepts>\n  <acts count=\"1\">\n    <cognition:event target=\"session\" event=\"bot.ability.communication.respond\">\n      <data>\n        <entry key=\"parts\">\n          <value count=\"1\">\n            <item>\n              <entry key=\"words\" value=\"hi\" />\n            </item>\n          </value>\n        </entry>\n      </data>\n    </cognition:event>\n  </acts>\n</cognition:acted>\n<object stimulus:event=\"bot.input\" stimulus:source=\"conversation\">\n  <content>\n    <entry key=\"parts\">\n      <value count=\"1\">\n        <item>\n          <entry key=\"words\" value=\"hi\" />\n        </item>\n      </value>\n    </entry>\n  </content>\n</object>"
     );
     close(
         run,
@@ -2768,4 +2768,164 @@ fn reasonings_prompt_carries_the_environment_block() {
         assert!(lines.contains(&element), "{element} in {block}");
     }
     assert!(!block.contains("<entry"), "{block}");
+}
+
+/// Starts the bot with the run arguments `args` before the body and
+/// `params` as its activation settings.
+fn start_with_activated(bot: &Bot, args: &[String], params: &[(&str, &str)]) -> Run {
+    let mut full = args.to_vec();
+    full.extend([
+        "--env-file".to_owned(),
+        bot.env.display().to_string(),
+        support::environment_for(&bot.body, params),
+    ]);
+    let run = Run::start(&full, &[]);
+    run.until(WAIT, label_is("bot.activated"));
+    run
+}
+
+/// After `rest_after_ms` without input the cognition rests and memory
+/// consolidates (decisions D195 and D205); the next input leaves rest at
+/// once and is a normal turn. Not pinned: when the rest falls on the wall
+/// clock depends on load.
+#[test]
+fn the_cognition_rests_after_a_stretch_without_input_and_wakes_for_the_next_turn() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Ignore, Generation::Fail, &[]);
+    let mut run = start_activated(
+        &bot,
+        &[("bounds", "({rest_after_ms: 500, reflex_timeout_ms: 30000})")],
+    );
+    let rested = run.until(WAIT, label_is("cognition.consolidated"));
+    assert_eq!(texts(&rested, "cognition.rest"), strings(&["resting"]));
+    // The body's fresh memory holds no one to consolidate.
+    assert_eq!(
+        json_text(&rested, "cognition.consolidated"),
+        json!({"folded": 0, "merged": 0, "steps": 0, "failed": false, "reason": null})
+    );
+    say(&mut run, "background noise");
+    let records = run.until(WAIT, label_is("bot.processing.completed"));
+    assert_eq!(texts(&records, "cognition.rest")[0], "awake");
+    assert_eq!(
+        json_text(&records, "floppy.output"),
+        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "target": COGNITION}]})
+    );
+    assert_eq!(
+        texts(&records, "cognition.stage"),
+        strings(&[
+            "autonomy unhandled (no-behaviors)",
+            "decision handled (none)"
+        ])
+    );
+    settle_reflection(&run);
+    drop(run.close(WAIT));
+}
+
+/// Input while memory consolidates leaves rest at once: the consolidation
+/// is cancelled (it never reports) and the turn runs as any other, and
+/// every representative it left is whole (each fold step one transaction:
+/// a representative's weight is one more than the voices folded into it).
+#[test]
+fn input_during_a_consolidation_cancels_it_and_is_a_normal_turn() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Ignore, Generation::Fail, &[]);
+    let grant = support::memory_grant();
+    // Twelve people, each first heard as their own axis and then forty
+    // times more: a consolidation of sixty fold steps.
+    let mut statements = Vec::new();
+    for index in 0..12 {
+        let person = format!("person-{}", index + 1);
+        let voice: Vec<f64> = (0..12)
+            .map(|axis| f64::from(u8::from(axis == index)))
+            .collect();
+        let voice = Json::from(voice).to_string();
+        statements.push(json!({"sql": "INSERT INTO bot_person (person_id) VALUES (?1)", "parameters": [person]}));
+        statements.push(json!({
+            "sql": "INSERT INTO bot_person_embedding (person_id, kind, embedding) VALUES (?1, 'voice', ?2)",
+            "parameters": [person, voice],
+        }));
+        statements.push(json!({
+            "sql": "INSERT INTO bot_person_centroid (person_id, kind, centroid, weight, first_seq, through_seq) SELECT ?1, 'voice', ?2, 1, MIN(seq), MIN(seq) FROM bot_person_embedding WHERE person_id = ?1",
+            "parameters": [person, format!("i8:{}", axis_base64(index))],
+        }));
+        statements.push(json!({
+            "sql": "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 40) INSERT INTO bot_person_embedding (person_id, kind, embedding) SELECT ?1, 'voice', ?2 FROM n",
+            "parameters": [person, voice],
+        }));
+    }
+    transact(&grant, DATABASE, &Json::Array(statements));
+    support::use_database(&bot.body, DATABASE);
+    let mut run = start_with_activated(
+        &bot,
+        &grant,
+        &[("bounds", "({rest_after_ms: 500, reflex_timeout_ms: 30000})")],
+    );
+    let resting = run.until(WAIT, |record| {
+        label_is("cognition.rest")(record) && record["text"] == "resting"
+    });
+    assert!(texts(&resting, "cognition.consolidated").is_empty());
+    // A step follows each five-second pause: input comes after the first.
+    std::thread::sleep(Duration::from_millis(9000));
+    run.event(
+        "bot.input",
+        &json!({"observation": {"event": "text", "data": "background noise"}}),
+    );
+    let records = run.until(WAIT, label_is("bot.processing.completed"));
+    assert_eq!(texts(&records, "cognition.rest")[0], "awake");
+    // The consolidation was cancelled before it reported.
+    let woke = records
+        .iter()
+        .position(|record| label_is("cognition.rest")(record))
+        .expect("awake");
+    assert!(
+        texts(&records[..woke], "cognition.consolidated").is_empty(),
+        "{records:?}"
+    );
+    assert_eq!(
+        json_text(&records, "floppy.output"),
+        json!({"turn": 1, "output": [{"event": IGNORE, "data": {}, "target": COGNITION}]})
+    );
+    settle_reflection(&run);
+    drop(run.close(WAIT));
+    let output = transact(
+        &grant,
+        DATABASE,
+        &json!([{"sql": "SELECT c.person_id, c.weight, (SELECT COUNT(*) FROM bot_person_embedding AS e WHERE e.person_id = c.person_id AND e.seq <= c.through_seq) FROM bot_person_centroid AS c ORDER BY c.person_id"}]),
+    );
+    let rows = output["results"][0]["rows"].as_array().expect("the rows");
+    assert_eq!(rows.len(), 12);
+    let mut folded = 0;
+    for row in rows {
+        let values = row["values"].as_array().expect("values");
+        let weight = values[1].as_i64().expect("a weight");
+        assert_eq!(weight, values[2].as_i64().expect("a count"), "{rows:?}");
+        folded += weight - 1;
+    }
+    assert!(folded > 0, "some steps committed: {rows:?}");
+    assert!(
+        folded < 12 * 40,
+        "the consolidation was cut short: {rows:?}"
+    );
+}
+
+/// The base64 of the signed bytes of `axis`'s unit vector at twelve
+/// dimensions (127 at `axis`, 0 elsewhere).
+fn axis_base64(axis: u8) -> String {
+    const BASE64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let bytes: Vec<u8> = (0..12)
+        .map(|index| if index == axis { 127 } else { 0 })
+        .collect();
+    let mut text = String::new();
+    for chunk in bytes.chunks(3) {
+        let [a, b, c] = [chunk[0], chunk[1], chunk[2]];
+        for sextet in [
+            a >> 2,
+            ((a & 3) << 4) | (b >> 4),
+            ((b & 15) << 2) | (c >> 6),
+            c & 63,
+        ] {
+            text.push(char::from(BASE64[usize::from(sextet)]));
+        }
+    }
+    text
 }

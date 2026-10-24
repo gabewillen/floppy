@@ -50,8 +50,21 @@ A scenario is `{category, intent, bot_name, sessions, checks, criteria}`.
 Each session is the bot started again on the same memory and behaviors
 directories (a restart with what it learned). A step is `{"say": text,
 "source"?: id, "timeout_s"?: n}`, one `bot.ability.communication.input`
-waited on until its reflection settles (or its turn fails) and then 15 s more, since its reply can be said after its reflection settles, or `{"wait_s":
-n}`, the wall clock passing with no input. `criteria` are what the judges
+waited on until its reflection settles (or its turn fails) and then 15 s
+more, since its reply can be said after its reflection settles. A lesson
+the turn gave the learning ability (`learning.recalled`) is learned after
+the turn, so the step then also waits, bounded by `timeout_s` again, until
+each lesson closes (`learning.learned` or `learning.failed`) and one more
+turn has settled for each (the turn carrying its result). A settle
+from another turn meanwhile (a routine's tick) also counts, so the wait
+can end early, never late. `steps.json` records, per step, whether its
+turn settled (`completed`), how many lessons closed during it
+(`lessons`, a count, not attributed to a lesson) and whether the lesson
+wait finished (`lessons_settled`); a step whose lessons did not finish
+still lets the session go on, and a turn that never settled has
+`lessons_settled` false. The other step is `{"wait_s": n}`,
+the wall clock passing with no input; its `lessons` counts the lessons
+closed in it, which it does not wait on (`lessons_settled` is true). `criteria` are what the judges
 score, 0 to 10 each.
 
 ### Checks
@@ -66,11 +79,19 @@ Each check reads a log label the bot already writes, at one step (`at:
 | `recalled_name` | `identity.name` is `recalled "<name>"` in that session (a restarted bot remembered it) |
 | `addressed`, `not_addressed` | `identity.heard` is (is not) `addressed as <name>` |
 | `learned` | `reflection.inventory` accepts a behavior: `<Name> ACTIVE <lifetime> ... (accept)`, `turn` for a reflex, `persistent` for a routine |
-| `broken` | `reflection.inventory` breaks one: `<Name> BROKEN (break)` |
+| `broken` | `reflection.inventory` breaks one: `<Name> BROKEN (break)`, or the learning ability does: `learning.learned` `lesson of turn N: <Name> … BROKEN` |
 | `reflex`, `not_reflex` | `cognition.stage` is (is not) `autonomy handled`: a learned behavior, not reasoning, handled the real input |
-| `says`, `not_says` | a `floppy.say` matches (none matches) the pattern, case-insensitive |
-| `ticks` | at least `min` `floppy.say` matching the pattern during a wait (no input, so each is a routine's turn); partial credit below `min` |
-| `no_ticks` | no `floppy.say` during a wait |
+| `says`, `not_says` | a reply matches (none matches) the pattern, case-insensitive |
+| `ticks` | at least `min` replies matching the pattern during a wait (no input, so each is a routine's turn); partial credit below `min` |
+| `no_ticks` | no reply during a wait |
+
+A reply is a `bot.ability.communication.respond` the turn selected, read
+from `floppy.output` (its parts' words, joined). That is what floppy chose
+to say, with or without a speech service: `floppy.say` is logged only once
+speech encoded the words, and an eval column runs floppy on Sparks alone,
+with no hosted speech (decision D216). A turn output the eval cannot read
+fails `not_says` and `no_ticks` rather than passing them. The judges read
+each reply as `floppy says: …`.
 
 `reflex` is the check that exposes the gap: the conversation's history
 reaches reasoning (decision D99), so reasoning can answer "ping" with
@@ -149,9 +170,15 @@ model), so the bot reasons and reflects on its own model (`bot`, else
 served by the column's `FLOPPY_BASE_URL` (its `env` files, else
 `FLOPPY_LIVE_ENV_FILE`).
 
-`score.builds` reads each build from the builder's own logs (`author`
-attempt 1 starts one; `done` "built X in N attempt(s)" or `failed`
-"<reason>: ..." ends it; a build its turn cancelled stays `unfinished`),
+`score.builds` reads each build from the builder's own logs, followed by
+each record's `session` since reflection's and the learning ability's
+builders can run at once (`author`
+attempt 1, or a `design` that follows neither `triage` nor `retry_gate`, starts one, and any
+other builder line with no build open opens one; `done` "built X in N attempt(s)" or `failed`
+"<reason>: ..." ends it; a build its turn cancelled stays `unfinished`, and
+one cut before any draft or failure (or whose log ended there, at the job's end) is counted apart as "cut before a draft", since it
+measures the turn, not the builder; the 8-failure budget also counts a
+failed design, so a build can exhaust it in fewer than 8 attempts),
 and `builder.md` gives, per column and scenario, the builds, the accepted
 ones, the success rate, the attempts per accepted build and whether the
 scenario's behavior was learned anywhere in the job, then per column the
@@ -162,35 +189,40 @@ gateway with the decision server on the lab:
 
 ```sh
 python3 tests/eval/eval.py builder --judges none --repeats 2 \
-  --column "luna=gabe-codex-1/gpt-6-luna;env=.env.cpa-lab" \
-  --column "lite=gemini-3.1-flash-lite;env=.env.cpa-lab;bot=gabe-codex-1/gpt-6-luna" \
-  --column "qwen27=cerebras/qwen-3.8-27b;env=.env.cpa-lab;bot=gabe-codex-1/gpt-6-luna" \
-  --column "gemma=gemma-4-26b-a4b;env=.env.lab:.env.speech;bot=gemma-4-26b-a4b"
+  --column "sparks=sparks/qwen3.8-flash-next;env=.env.cpa-lab;bot=sparks/qwen3.8-flash-next"
 ```
+
+Sparks is the bar (the maintainer, 2026-10-24: "try it on sparks if that
+model can do it i'm fine with that being the bar"; the builder must work on
+a small model, taking more attempts if it must). Everything inside floppy's
+framework runs on it, the bot and the builder, with no hosted speech; hosted
+models only judge or play the person ("i'm fine with using that as a judge /
+person just not within the framework"; decision D216).
 
 ## Running it
 
 The bot's backends are the live tests' (`FLOPPY_LIVE_ENV_FILE`,
-`FLOPPY_LIVE_MODEL`; floppy_live's module comment). On the maintainer's lab
-(docs/live-proof.md 2026-10-21: `gemma-4-26b-a4b` on the
-vLLM at `192.168.2.2:8100`, the systemone decision server at
-`192.168.2.2:8102`, reachable from the maintainer's network only), with
-`env.lab` and `env.speech` as there:
+`FLOPPY_LIVE_MODEL`; floppy_live's module comment). On Sparks through the
+CPA gateway, with the systemone decision server on the maintainer's lab
+(`192.168.2.2:8102`, docs/live-proof.md 2026-10-21, reachable from the
+maintainer's network only), `.env.cpa-lab` as in the builder example above. The judges' hosted models
+take their keys from `--judge-env-file` (see Grading); nothing else in a
+run uses a hosted model:
 
 ```sh
-export FLOPPY_LIVE_ENV_FILE=env.lab:env.speech FLOPPY_LIVE_MODEL=gemma-4-26b-a4b
+export FLOPPY_LIVE_ENV_FILE=.env.cpa-lab FLOPPY_LIVE_MODEL=sparks/qwen3.8-flash-next
 python3 tests/eval/eval.py run --judge-env-file .env           # the suite once
 python3 tests/eval/eval.py run --scenario reflex --repeats 3   # one category
 python3 tests/eval/eval.py climb --judge-env-file .env --generations 6 --budget-hours 8
-python3 tests/eval/eval.py grade target/floppy-eval/run-<time>  # grade again
+python3 tests/eval/eval.py grade target/floppy-eval/run-<time>  # grade again (a builder run: its table too)
 python3 -m unittest discover -s tests/eval                     # offline tests
 ```
 
-`--parallel` (4) bot runs share the lab at a time (its four L4s serve the
-vLLM). A scenario takes 5 to 15 minutes (a said step waits for its
-reflection and any builder revision, at most `timeout_s`, 15 minutes by
-default; a wait step its seconds), so the suite takes about half an hour
-at four at a time and a climb generation of two candidates about an hour.
+`--parallel` (4) bot runs at a time. A scenario takes 5 to
+15 minutes (a said step waits for its reflection and any builder revision,
+at most `timeout_s`, 15 minutes by default; a wait step its seconds), so
+the suite takes about half an hour at four at a time and a climb
+generation of two candidates about an hour (estimates).
 
 Every run writes, under `target/floppy-eval/<run>/`: `plan.json`,
 `driver.log` (the driver's output; no value is printed), per job
