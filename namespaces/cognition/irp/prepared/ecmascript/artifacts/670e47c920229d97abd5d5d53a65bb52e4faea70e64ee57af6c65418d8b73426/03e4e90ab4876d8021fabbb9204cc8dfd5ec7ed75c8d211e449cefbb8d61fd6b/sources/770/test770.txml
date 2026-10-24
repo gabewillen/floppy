@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- cognition-6: model_facing_data writes an object as the root's fields: a scalar an attribute, an array an element of items, and a string over one line holding markup a CDATA section. -->
+<!-- cognition-8: model_facing_data writes an object as the root's fields: a scalar an attribute, an array an element of items, and a string over one line holding markup a CDATA section. -->
 <scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition">
 <datamodel>
   <data id="l" expr="null"/>
