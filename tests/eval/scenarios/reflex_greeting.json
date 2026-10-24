@@ -68,8 +68,9 @@
   ],
   "criteria": {
     "learning": "After the one instruction, the bot answers 'good morning' with 'Good morning, sunshine!'.",
-    "firing": "'good morning' and a natural variation from another person get 'Good morning, sunshine!', and 'good morning' still does after the restart.",
-    "precision": "'good night' does not get the morning greeting."
+    "firing": "'good morning' and a natural variation from another person get 'Good morning, sunshine!'.",
+    "precision": "'good night' does not get the morning greeting.",
+    "persistence": "After the restart 'good morning' still gets 'Good morning, sunshine!'."
   },
   "diagnostics": [
     {

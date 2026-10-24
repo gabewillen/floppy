@@ -248,6 +248,8 @@ def diagnostics(scenario, job):
     for spec in scenario.get("diagnostics", []):
         if spec["check"] in BLACK_BOX:
             raise ValueError(f"{spec['check']} reads only what floppy said: it is a check, not a diagnostic")
+        if spec["check"] not in DIAGNOSTIC:
+            raise ValueError("unknown diagnostic: " + spec["check"])
     return _results(job, scenario.get("diagnostics", []))
 
 
@@ -281,6 +283,9 @@ def summary(scenario, job, limit=600):
     for session, spec in enumerate(scenario["sessions"]):
         for index, _ in enumerate(spec["steps"]):
             if (session, index) not in ran:
+                if session > 0 and session not in restarted:
+                    restarted.add(session)
+                    lines.append("(floppy is restarted)")
                 lines.append(f"[session {session} step {index}] never ran")
     return "\n".join(lines)
 

@@ -55,8 +55,9 @@
   ],
   "criteria": {
     "learning": "After the one instruction, the bot answers a mention of bananas with 'yellow alert'.",
-    "firing": "Sentences mentioning bananas get 'yellow alert', also after the restart.",
-    "precision": "The unrelated request gets a normal answer."
+    "firing": "A sentence mentioning bananas gets just 'yellow alert'.",
+    "precision": "The unrelated request gets a normal answer.",
+    "persistence": "After the restart a sentence mentioning bananas still gets just 'yellow alert'."
   },
   "diagnostics": [
     {

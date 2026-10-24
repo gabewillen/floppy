@@ -245,7 +245,7 @@ def report_markdown(title, summary, graded):
             lines.append(f"- {mark} `{r['check']}` at {r['where']}: {r['why'][:240]}")
         for r in g["diagnostics"]:
             mark = "yes" if r["score"] >= 1 else "no"
-            lines.append(f"- inside: {mark} `{r['check']}` at {r['where']}: {r['why'][:240]}")
+            lines.append(f"- inside (not scored): {mark} `{r['check']}` at {r['where']}: {r['why'][:240]}")
         for grade in g["grades"]:
             if "error" in grade:
                 lines.append(f"- judge {grade['judge']}: {grade['error']}")

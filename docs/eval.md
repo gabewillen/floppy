@@ -96,15 +96,17 @@ scenarios in `tests/eval/scenarios/` to it).
 
 A scenario's `diagnostics` read floppy's own logs. They say how it got
 there and are reported in `report.md` beside the grade, in the "Inside
-floppy" table and in each job's "- inside:" lines,
+floppy" table and in each job's "- inside (not scored):" lines,
 and the hill climb's proposer reads the failed ones, but they are never
 scored: `score.score` raises `ValueError` on a scenario that lists one
 under `checks`, and `score.diagnostics` raises on a black-box check listed
-under `diagnostics`, and both refuse an unknown kind (`unknown check: <kind>`),
+under `diagnostics`; `score.score` refuses an unknown kind
+(`unknown check: <kind>`) and `score.diagnostics` an unknown diagnostic
+(`unknown diagnostic: <kind>`),
 so a misfiled or misspelled spec is an error, never a silent change. A
 full grade is therefore not proof that floppy learned anything: reasoning
 that recites the lesson passes every check. Whether a behavior was accepted
-is the `learned` diagnostic, which those "- inside:" lines show and the
+is the `learned` diagnostic, which those "- inside (not scored):" lines show and the
 builder track tallies as its own "Learned" rate, a separate number that no
 grade or suite score includes:
 
@@ -123,8 +125,12 @@ to say, with or without a speech service: `floppy.say` is logged only once
 speech encoded the words, and an eval column runs floppy on Sparks alone,
 with no hosted speech (decision D216). A turn output the eval cannot read
 fails `not_says` and `no_ticks` rather than passing them. The judges read
-each reply as `floppy says: …`, each restart as `(floppy is restarted)`,
-and nothing else: no log of floppy's.
+each reply as `floppy says: …`, each restart as `(floppy is restarted)`
+(also before a restarted session none of whose steps ran), a reply the
+eval cannot read as `(a reply of floppy's could not be read)`, and a step
+that did not settle with a note that whether floppy replied after it is
+unknown; the judge prompt counts both markers as unknown, neither silence
+nor a reply. Nothing else: no log of floppy's.
 
 Within a session the conversation's history reaches reasoning (decision
 D99), so reasoning can answer "ping" with "pong" from the instruction
@@ -151,7 +157,9 @@ Keys come from the calling environment or the `--judge-env-file` files
 and are never printed or written. A key left unset sends no credential,
 for a network that injects it (a cloud session's proxy). The judges read
 only the conversation `score.summary` builds: what each person said, the time
-passing, each restart and what floppy said.
+passing, each restart, what floppy said, each step that never ran, and a
+marker where the eval could not read a reply of floppy's or a step did not
+settle.
 
 ## Hill climbing
 

@@ -64,6 +64,18 @@ class Scorer(unittest.TestCase):
         scenario["checks"], scenario["diagnostics"] = [], [{"check": "says", "at": [0, 0], "pattern": "pong"}]
         with self.assertRaisesRegex(ValueError, "it is a check, not a diagnostic"):
             score.diagnostics(scenario, {"steps": [], "sessions": [], "done": False})
+        scenario["diagnostics"] = [{"check": "learnedd", "by": [0, 0]}]
+        with self.assertRaisesRegex(ValueError, "unknown diagnostic: learnedd"):
+            score.diagnostics(scenario, {"steps": [], "sessions": [], "done": False})
+
+    def test_a_restart_is_shown_when_the_restarted_session_never_ran(self):
+        scenario = {"sessions": [{"steps": [{"say": "ping"}]}, {"steps": [{"say": "ping"}]}]}
+        transcript = score.summary(scenario, {"steps": [], "sessions": [], "done": False})
+        self.assertEqual(transcript.splitlines(), [
+            "[session 0 step 0] never ran",
+            "(floppy is restarted)",
+            "[session 1 step 0] never ran",
+        ])
 
     def test_a_probe_after_a_restart_carries_the_largest_weight(self):
         for name, scenario in self.scenarios.items():
