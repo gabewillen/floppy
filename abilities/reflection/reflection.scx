@@ -403,7 +403,7 @@
     </transition>
     <!-- The answer of this hop's call (gen_id: a late answer from an
          earlier hop's cancelled call is not this one). -->
-    <transition event="generate.result" cond="isGenerate(_event) &amp;&amp; isOverSelection(_event)">
+    <transition event="generate.result" cond="isOverSelection(_event)">
       <assign location="gen_failure" expr="'schema-mismatch'"/>
       <assign location="gen_rejection" expr="overSelectionRejection()"/>
     </transition>
