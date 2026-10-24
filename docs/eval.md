@@ -69,7 +69,7 @@ score, 0 to 10 each.
 
 ### Checks and diagnostics
 
-The grade is black box (decision D217): a scenario's `checks` score only
+The grade is black box (decision D241): a scenario's `checks` score only
 what floppy said back to what it was told, and the judges read only the
 conversation. A check looks at one step (`at: [session, step]`) or up to
 the end of one (`by`), and scores 0 to 1 with a `weight`:

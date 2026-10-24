@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- cognition-7: a ceiling that is not a whole number raises error.execution and assigns nothing. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition">
+<datamodel>
+  <data id="c" expr='[{event: "light", schema: {}}]'/>
+  <data id="o" expr="'untouched'"/>
+  <data id="h" expr="'untouched'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <cognition:within_ceiling location="o" heldlocation="h" choices="c" ceiling="1.5"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="error.execution" cond="o === 'untouched' &amp;&amp; h === 'untouched'" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

@@ -110,4 +110,16 @@
       <start uri="210/test210.scxml"/>
     </test>
   </assert>
+  <assert id="cognition-14" specnum="14" specid="#cognition-14">
+    <![CDATA[Each tier is offered only the turn's choices within its effort ceiling (decisions D196 and D206): a choice's `effort` (0 without one) at most the decision layer's `decision_effort_ceiling` (0) or intuition's `intuition_effort_ceiling` (1), each the `bounds`' member of that name when it is a number, and every choice for reasoning, whose ceiling is the whole frame. What is over a tier's ceiling is not among its choices, so the tier cannot select it and only hands it on.]]>
+    <test id="230" conformance="mandatory" manual="false">
+      <start uri="230/test230.scxml"/>
+    </test>
+    <test id="231" conformance="mandatory" manual="false">
+      <start uri="231/test231.scxml"/>
+    </test>
+    <test id="232" conformance="mandatory" manual="false">
+      <start uri="232/test232.scxml"/>
+    </test>
+  </assert>
 </assertions>

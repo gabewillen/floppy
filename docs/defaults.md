@@ -78,6 +78,10 @@ Gemini API, so `FLOPPY_SPEECH_BASE_URL` is its version root,
 | `abilities/cognition/cognition.scx` | `child_operation_timeout_ms` | `30000` | each cascade stage without progress: autonomy's and the decision layer's from their start, reasoning's once its reply streams (the first progress arms it, each later one re-arms it); live streamed replies had at most 6.2 s between chunks (decision D101; the bot's `bounds` param's `child_operation_timeout_ms` overrides it) |
 | `abilities/cognition/cognition.scx` | `child_operation_ceiling_ms` | `240000` | each cascade stage in all, the backstop and the only bound of a reasoning reply that is not streamed, inside the body's `processing_timeout_ms` with the stages before reasoning (decision D101; the bot's `bounds` param's `child_operation_ceiling_ms` overrides it) |
 | `abilities/cognition/cognition.scx` | `rest_after_ms` | `300000` | idle with no input before the cognition rests and memory consolidates: the short-term register's recency window, 5 minutes, after which no exchange is recent (decisions D195 and D205; the bot's `bounds` param's `rest_after_ms` overrides it) |
+| `abilities/cognition/cognition.scx` | `decision_effort_ceiling` | `0` | the heaviest action the decision layer is offered: an action whose effort is over it is held, rendered in its state's `<held>` block, and only a pass hands it on (decision D206; the bot's `bounds` param's `decision_effort_ceiling` overrides it) |
+| `abilities/cognition/cognition.scx` | `intuition_effort_ceiling` | `1` | the heaviest action the intuition tier is offered, the rest held as above and handed on by the deliberative handoff; reasoning's ceiling is the whole frame (decision D206; the bot's `bounds` param's `intuition_effort_ceiling` overrides it) |
+| `abilities/identity/identity.scx` | `adopt_effort` | `1` | the effort of `bot.ability.identity.adopt`: taking a name is never a reflex, so the decision layer holds it (decision D206) |
+| `abilities/persona/persona.scx` | `revise_effort` | `2` | the effort of `bot.ability.persona.revise`: rewriting who the bot is is reasoning's alone (decision D206) |
 | `abilities/consolidation/consolidation.scx` | `step_timeout_ms` | `30000` | each consolidation step's memory transaction (a read or a guarded write); one that does not answer in time ends the rest's consolidation, and the next rest begins again |
 | `abilities/consolidation/consolidation.scx` | `step_pause_ms` | `5000` | the pause before each consolidation step, longer than a step takes even on a loaded machine, so the run takes input between two steps and input that leaves rest cancels the consolidation there (the bot's `bounds` param's `consolidation_pause_ms` overrides it) |
 | `abilities/consolidation/consolidation.scx` | `max_steps` | `256` | the writes one rest's consolidation makes at most |
@@ -126,6 +130,11 @@ and `child_operation_ceiling_ms`. A step that runs out of time or fails fails
 only its turn, which is handed back to the cognition as a
 `bot.ability.cognition.step.timed_out` or `bot.ability.cognition.step.failed`
 stimulus.
+
+An action's effort is what its offering ability declares
+(`<decision:choice effort>`); one that declares none weighs 0, within every
+ceiling, as the cognition's ignore and every other offer today do but
+`bot.ability.identity.adopt` and `bot.ability.persona.revise` (decision D206).
 
 The bot's `bounds` param may also give reasoning's model context,
 `max_context_tokens` (none by default: nothing is fitted), and the tokens

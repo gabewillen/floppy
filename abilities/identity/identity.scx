@@ -64,7 +64,8 @@
 
   Adoption: bot.ability.identity.adopt {name, reason?} is offered (as the
   model-callable act of taking a name) on every entry into knowing,
-  through <decision:choice events="bot.ability.identity.adopt">, made
+  through <decision:choice events="bot.ability.identity.adopt"
+  effort="adopt_effort"> (its effort, 1 by default, decision D206), made
   model-facing by <processing:model_facing_schema> ($schema, title and
   examples dropped), in
   bot.ability.offers {ability: "identity", choices}, from knowing's
@@ -111,6 +112,12 @@
        xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
        version="1.0" datamodel="ecmascript" name="identity" initial="recalling">
   <datamodel>
+    <!-- How heavy an action bot.ability.identity.adopt is (decision D206),
+         which the cognition holds against each tier's effort ceiling.
+         Taking a name is never a reflex: the decision layer (ceiling 0)
+         holds it, and intuition (ceiling 1) and reasoning may take it. An
+         invoker's <param> sets it. -->
+    <data id="adopt_effort" expr="1"/>
     <data id="name" expr="null"/>
     <data id="addressed" expr="false"/>
     <!-- The sound in hand while classifying. -->
@@ -239,7 +246,7 @@
     <!-- The offers, read on entry: the choices are knowing's own
          transitions, since no child is entered yet. -->
     <onentry>
-      <decision:choice location="offered" events="bot.ability.identity.adopt"/>
+      <decision:choice location="offered" events="bot.ability.identity.adopt" effort="adopt_effort"/>
       <processing:model_facing_schema location="offered" bound="32768" overlocation="offers_over"/>
       <if cond="offers_over">
         <log label="identity.offers.dropped" expr="'the offers are over 32768 bytes'"/>

@@ -2,7 +2,7 @@
 scenario check reads the records tests/tests/learning_eval.rs wrote for one
 job and scores 0 to 1.
 
-The grade is black box (decision D217): a scenario's `checks` read only
+The grade is black box (decision D241): a scenario's `checks` read only
 what floppy said back, and the judges read only the conversation, never
 how floppy got there. Its `diagnostics` read floppy's own logs and are
 reported beside the grade, never scored.

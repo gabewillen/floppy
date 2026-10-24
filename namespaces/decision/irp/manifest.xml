@@ -50,4 +50,13 @@
       <start uri="490/test490.txml"/>
     </test>
   </assert>
+  <assert id="decision-6" specnum="6" specid="#decision-6">
+    <![CDATA[An effort, an expression of a whole number from 0 to 1000, is written as the effort of every choice <decision:choice> writes; a choice written without one carries none, and an effort that is not such a number raises error.execution and assigns nothing.]]>
+    <test id="440" conformance="mandatory" manual="false">
+      <start uri="440/test440.txml"/>
+    </test>
+    <test id="441" conformance="mandatory" manual="false">
+      <start uri="441/test441.txml"/>
+    </test>
+  </assert>
 </assertions>

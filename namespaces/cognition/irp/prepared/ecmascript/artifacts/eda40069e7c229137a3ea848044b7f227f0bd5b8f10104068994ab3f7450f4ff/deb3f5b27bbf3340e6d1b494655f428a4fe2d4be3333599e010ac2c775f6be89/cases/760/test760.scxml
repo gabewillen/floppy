@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?><!-- cognition-7: within the ceiling the choices are offered in order without their effort; the rest are held once per event; without a ceiling every choice is offered. --><scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition" xmlns:conf="http://www.w3.org/2005/scxml-conformance" initial="s0" version="1.0" datamodel="ecmascript">
+<datamodel>
+  <data id="c" expr="[{event: &#34;light&#34;, schema: {}}, {event: &#34;heavy&#34;, schema: {}, effort: 2, description: &#34;Heavy.&#34;}, {event: &#34;middle&#34;, schema: {}, effort: 1}, {event: &#34;heavy&#34;, schema: {}, target: &#34;x&#34;, effort: 3}]"/>
+  <data id="o" expr="null"/>
+  <data id="h" expr="null"/>
+  <data id="all" expr="null"/>
+  <data id="none" expr="null"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <cognition:within_ceiling location="o" heldlocation="h" choices="c" ceiling="1"/>
+    <cognition:within_ceiling location="all" heldlocation="none" choices="c" ceiling="null"/>
+    <raise event="executed"/>
+  </onentry>
+  <transition event="executed" cond="JSON.stringify(o) === '[{&#34;event&#34;:&#34;light&#34;,&#34;schema&#34;:{}},{&#34;event&#34;:&#34;middle&#34;,&#34;schema&#34;:{}}]' &amp;&amp; JSON.stringify(h) === '[{&#34;description&#34;:&#34;Heavy.&#34;,&#34;event&#34;:&#34;heavy&#34;}]' &amp;&amp; all.length === 4 &amp;&amp; JSON.stringify(all).indexOf('effort') === -1 &amp;&amp; none.length === 0" target="pass"/>
+  <transition event="*" target="fail"/>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

@@ -14,7 +14,7 @@ through the data model; it never sends, and it does no I/O.
 
 | Element | Reads | Writes |
 | --- | --- | --- |
-| `<decision:choice location events?>` | the offered events of the active state | the choices `[{event, schema, description?}]` (`location`) |
+| `<decision:choice location events? effort?>` | the offered events of the active state, and what they cost (`effort`, decision D206) | the choices `[{event, schema, description?, effort?}]` (`location`) |
 | `<decision:pin location event property values>` | the values to ground a property in (for example `bot.focus_device`'s `device` in the focus candidates) | the choices with the property's `enum` pinned (`location`) |
 
 The exact semantics and failures are in [`src/lib.rs`](src/lib.rs); the
@@ -35,3 +35,4 @@ through the pipeline of scxml.rs's namespace suites.
 - <a id="decision-3"></a>**decision-3**. A transition whose cond is exactly true is offered; one whose cond is false is not.
 - <a id="decision-4"></a>**decision-4**. `<decision:pin>` sets the values as the enum of the named property of every entry for the event, removes those entries when the values are empty, and raises `error.execution`, assigning nothing, for an entry whose schema has no such property.
 - <a id="decision-5"></a>**decision-5**. A location that does not hold what the element reads raises `error.execution` and assigns nothing.
+- <a id="decision-6"></a>**decision-6**. An `effort`, an expression of a whole number from 0 to 1000, is written as the `effort` of every choice `<decision:choice>` writes; a choice written without one carries none, and an `effort` that is not such a number raises `error.execution` and assigns nothing.
