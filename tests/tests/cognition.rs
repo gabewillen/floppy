@@ -928,8 +928,9 @@ fn close_as(run: Run, mock: &Mock, test: Option<&str>) {
 }
 
 /// Reasoning names the bot's active learned behaviors in its self block,
-/// so the bot knows what it has learned (decision D154): a draft is not
-/// one of them.
+/// so the bot knows what it has learned (decision D154), in name order,
+/// each description escaped: a draft is not one of them, and each row's
+/// `lifetime` is the `'turn'` [`inventory`] writes.
 #[test]
 fn reasoning_is_told_the_bots_learned_behaviors() {
     let mock = Mock::start();
@@ -959,7 +960,21 @@ fn reasoning_is_told_the_bots_learned_behaviors() {
                 status: "DRAFT",
                 source: silent,
             },
+            Learned {
+                name: "Answerer",
+                trigger: "environment.sound",
+                status: "ACTIVE",
+                source: silent,
+            },
         ],
+    );
+    transact(
+        &grant,
+        DATABASE,
+        &json!([{
+            "sql": "UPDATE bot_behavior SET description = ? WHERE name = ?",
+            "parameters": ["Answers <knocks> & rings.", "Answerer"],
+        }]),
     );
     support::use_database(&bot.body, DATABASE);
     let mut run = start_with(&bot, &grant);
@@ -972,7 +987,7 @@ fn reasoning_is_told_the_bots_learned_behaviors() {
         .expect("the system message")
         .to_owned();
     assert!(
-        system.contains(r#"<behaviors learned_by="you"><behavior name="Greeter" lifetime="turn"></behavior></behaviors>"#),
+        system.contains(r#"<behaviors learned_by="you"><behavior name="Answerer" lifetime="turn">Answers &lt;knocks&gt; &amp; rings.</behavior><behavior name="Greeter" lifetime="turn"></behavior></behaviors>"#),
         "{system}"
     );
     assert!(!system.contains("Unbuilt"), "{system}");
