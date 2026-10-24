@@ -458,12 +458,11 @@ fn every_episode_inlines_the_same_outcome_and_failure() {
             let Some(properties) = node.get("properties").and_then(Json::as_object) else {
                 return;
             };
-            if properties.contains_key("output") {
-                if let (Some(outcome), Some(failure)) =
+            if properties.contains_key("output")
+                && let (Some(outcome), Some(failure)) =
                     (properties.get("outcome"), properties.get("failure"))
-                {
-                    episodes.push((event.clone(), outcome.clone(), failure.clone()));
-                }
+            {
+                episodes.push((event.clone(), outcome.clone(), failure.clone()));
             }
         });
     }
