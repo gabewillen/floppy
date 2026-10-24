@@ -363,6 +363,10 @@
     <data id="choices" expr="[]"/>
     <data id="choices_over" expr="false"/>
     <data id="choices_size" expr="0"/>
+    <!-- This turn's reads of what each ability offers (<decision:offers>,
+         decision D230): ability to its compacted choices. -->
+    <data id="read_offers" expr="({})"/>
+    <data id="offers_over" expr="false"/>
     <data id="selections" expr="[]"/>
     <data id="s" expr="null"/>
     <data id="degraded_reason" expr="null"/>
@@ -745,6 +749,90 @@
             <assign location="firmware_snapshot" expr="null"/>
             <if cond="hasFirmware()">
               <device:snapshot location="firmware_snapshot" target="firmwareTarget()"/>
+            </if>
+          </onentry>
+          <!-- What each ability offers, read from its live session
+               (decision D230), each in its own block so a read that fails
+               leaves the others (SCXML 4.9). Compacted as the abilities
+               compact their pushed offers; any difference from the pushed
+               offers is logged while both are read. -->
+          <onentry>
+            <assign location="read_offers" expr="({})"/>
+          </onentry>
+          <onentry>
+            <assign location="read_offers.cognition" expr="[]"/>
+            <decision:offers location="read_offers.cognition" target="'#_cognition'"/>
+            <processing:model_facing_schema location="read_offers.cognition" bound="32768" overlocation="offers_over"/>
+            <if cond="offers_over">
+              <log label="floppy.offers.dropped" expr="'cognition'"/>
+            </if>
+            <log label="floppy.offers.cognition" expr="read_offers.cognition"/>
+            <if cond="offersDiffer('cognition')">
+              <log label="floppy.offers.differ" expr="'cognition'"/>
+            </if>
+          </onentry>
+          <onentry>
+            <assign location="read_offers.communication" expr="[]"/>
+            <decision:offers location="read_offers.communication" target="'#_communication'"/>
+            <processing:model_facing_schema location="read_offers.communication" bound="32768" overlocation="offers_over"/>
+            <if cond="offers_over">
+              <log label="floppy.offers.dropped" expr="'communication'"/>
+            </if>
+            <log label="floppy.offers.communication" expr="read_offers.communication"/>
+            <if cond="offersDiffer('communication')">
+              <log label="floppy.offers.differ" expr="'communication'"/>
+            </if>
+          </onentry>
+          <onentry>
+            <assign location="read_offers.identity" expr="[]"/>
+            <decision:offers location="read_offers.identity" target="'#_identity'"/>
+            <processing:model_facing_schema location="read_offers.identity" bound="32768" overlocation="offers_over"/>
+            <if cond="offers_over">
+              <log label="floppy.offers.dropped" expr="'identity'"/>
+            </if>
+            <log label="floppy.offers.identity" expr="read_offers.identity"/>
+            <if cond="offersDiffer('identity')">
+              <log label="floppy.offers.differ" expr="'identity'"/>
+            </if>
+          </onentry>
+          <onentry>
+            <assign location="read_offers.persona" expr="[]"/>
+            <decision:offers location="read_offers.persona" target="'#_persona'"/>
+            <processing:model_facing_schema location="read_offers.persona" bound="32768" overlocation="offers_over"/>
+            <if cond="offers_over">
+              <log label="floppy.offers.dropped" expr="'persona'"/>
+            </if>
+            <log label="floppy.offers.persona" expr="read_offers.persona"/>
+            <if cond="offersDiffer('persona')">
+              <log label="floppy.offers.differ" expr="'persona'"/>
+            </if>
+          </onentry>
+          <onentry>
+            <if cond="seeing_enabled">
+              <assign location="read_offers.seeing" expr="[]"/>
+              <decision:offers location="read_offers.seeing" target="'#_seeing'"/>
+              <processing:model_facing_schema location="read_offers.seeing" bound="32768" overlocation="offers_over"/>
+              <if cond="offers_over">
+                <log label="floppy.offers.dropped" expr="'seeing'"/>
+              </if>
+              <log label="floppy.offers.seeing" expr="read_offers.seeing"/>
+              <if cond="offersDiffer('seeing')">
+                <log label="floppy.offers.differ" expr="'seeing'"/>
+              </if>
+            </if>
+          </onentry>
+          <onentry>
+            <if cond="hasFirmware()">
+              <assign location="read_offers.firmware" expr="[]"/>
+              <decision:offers location="read_offers.firmware" target="firmwareTarget()" undeclared="all"/>
+              <processing:model_facing_schema location="read_offers.firmware" bound="32768" overlocation="offers_over"/>
+              <if cond="offers_over">
+                <log label="floppy.offers.dropped" expr="'firmware'"/>
+              </if>
+              <log label="floppy.offers.firmware" expr="read_offers.firmware"/>
+              <if cond="offersDiffer('firmware')">
+                <log label="floppy.offers.differ" expr="'firmware'"/>
+              </if>
             </if>
           </onentry>
           <onentry>

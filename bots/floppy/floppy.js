@@ -85,6 +85,13 @@ function turnOffers() {
   return turn;
 }
 
+// Whether what an ability offers, read from its live session this turn,
+// differs from its latest pushed offers (decision D230, while both are
+// read): the reads are canonical, so equal offers stringify alike.
+function offersDiffer(ability) {
+  return JSON.stringify(read_offers[ability]) !== JSON.stringify(offers[ability] === undefined ? [] : offers[ability]);
+}
+
 // activating
 
 function everyAbilityReady() {
