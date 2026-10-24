@@ -231,17 +231,21 @@ S.case(190, 10, "a failed turn and a cancelled one each answer the output asking
        [send(INPUT, outcome_turn(1, "failed", "Cognition reasoning timed out after 30 seconds.")), expect(OUTPUT),
         send(INPUT, outcome_turn(2, "cancelled")), expect(OUTPUT),
         send(INPUT, turn(3)), expect(OUTPUT)],
-       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select()], clock="wall")
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select()], clock="wall",
+       logs={"reflection": ["turn 1: failed", "turn 2: cancelled", "turn 3: 2 episodes, 0 behaviors"], "reflection.selected": ["none"]})
 
 S.case(191, 12, "a taught turn answers the output asking no model; the next turn selects.",
        [send(INPUT, taught_turn(1)), expect(OUTPUT), send(INPUT, turn(2)), expect(OUTPUT)],
-       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select()], clock="wall")
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select()], clock="wall",
+       logs={"reflection": ["turn 1: taught", "turn 2: 1 episodes, 0 behaviors"], "reflection.selected": ["none"]})
 S.case(192, 13, "a routine's tick turn answers the output asking no model; the next turn selects.",
        [send(INPUT, tick_turn(1)), expect(OUTPUT), send(INPUT, turn(2)), expect(OUTPUT)],
-       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select()], clock="wall")
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select()], clock="wall",
+       logs={"reflection": ["turn 1: bot.behavior.tick", "turn 2: 1 episodes, 0 behaviors"], "reflection.selected": ["none"]})
 S.case(193, 13, "a lesson's output turn answers the output asking no model; the next turn selects.",
        [send(INPUT, lesson_turn(1)), expect(OUTPUT), send(INPUT, turn(2)), expect(OUTPUT)],
-       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select()], clock="wall")
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select()], clock="wall",
+       logs={"reflection": ["turn 1: bot.ability.learning.output", "turn 2: 1 episodes, 0 behaviors"], "reflection.selected": ["none"]})
 S.case(200, 11, "a selected persona revision is sent to the invoker, then the output answers.",
        [send(INPUT, persona_turn(1)),
         expect(PERSONA_REVISE, "_event.data.text === 'I am a warm greeter.'"), expect(OUTPUT)],

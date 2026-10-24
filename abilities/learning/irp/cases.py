@@ -111,7 +111,8 @@ S.case(112, 2, "a reply that selects nothing is not learned.",
        logs={"learning.failed": ["Learning select returned an empty selection."]})
 S.case(113, 2, "a build that never validates is not learned, and why is only logged.",
        [send(LESSON, lesson(1)), not_learned()],
-       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE), PLAN] + [draft(REJECTED)] * 8, clock="wall")
+       params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(CREATE), PLAN] + [draft(REJECTED)] * 8, clock="wall",
+       logs={"learning.failed": ["Reflection change abandoned: attempts exhausted:\nbehavior validation failed:\n  error[SCXML005] validate: transition target `nowhere` does not exist Help: declare the target state or correct the target identifier"]})
 
 S.case(120, 3, "a second lesson sent while the first is in hand runs after it.",
        [send(LESSON, lesson(1)), send(LESSON, lesson(2, content="When you hear a knock, say hi.")),
