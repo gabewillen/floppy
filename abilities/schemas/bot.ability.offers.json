@@ -24,6 +24,12 @@
           },
           "description": {
             "type": "string"
+          },
+          "effort": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000,
+            "description": "How heavy an action the event is, as its offering ability declares it (<decision:choice effort>, decision D206); 0 when absent. A tier is offered only the choices within its effort ceiling [floppy field]."
           }
         },
         "required": [

@@ -29,7 +29,7 @@ handoff's [open work](handoff.md#open-work).
 | Event data contracts | JSON Schema files referenced by `event:schema` on the transitions that take the event; scxml.rs checks them where the event is created (`<send>`, `<raise>`, a send between sessions) and on host input (decision D41) |
 | Payload checks | `event:schema` only; a `cond` correlates (which child, which turn, which timer) and never checks a payload's shape (decision D42) |
 | Synchronous helpers (attention bias, envelopes, choice assembly and compaction, routing, confidence tuner, message commit) | floppy namespace elements that write to a `location` (`namespaces/conversation`, `namespaces/decision`, `namespaces/processing`, `namespaces/intuition`, `namespaces/cognition`, `namespaces/identity`, `namespaces/memory`, `namespaces/behavior`, `namespaces/autonomy`; decisions D40, D113, D114, D115, D116) |
-| Model-facing event choices and payload filling | `<decision:choice>` (the `decision` namespace) writes the enabled transitions with their `event:schema`, read through `session-snapshot-host`, as canonical choices; the `decision` service, invoked with it, asks a backend, fills the offered events' data to their schemas and validates it; its kinds are OpenAI Decisions API's question types (D120): `choice` emits the chosen event (or, over `labels`, `decision.classified`), `predicate` (which intuition uses, with the stimulus as a param and the deliberative handoff never offered) emits `decision.selected` with every groundable event and its own confidence, and `score` emits `decision.ranked` |
+| Model-facing event choices and payload filling | `<decision:choice>` (the `decision` namespace) writes the enabled transitions with their `event:schema`, read through `session-snapshot-host`, as canonical choices, each with the effort its document declares (D206); the `decision` service, invoked with it, asks a backend, fills the offered events' data to their schemas and validates it; its kinds are OpenAI Decisions API's question types (D120): `choice` emits the chosen event (or, over `labels`, `decision.classified`), `predicate` (which intuition uses, with the stimulus as a param and the deliberative handoff never offered) emits `decision.selected` with every groundable event and its own confidence, and `score` emits `decision.ranked` |
 | Event names `bot.*`, `bot.ability.*`, `phone.*` | Kept byte for byte: never renamed or re-cased |
 | Telemetry (`telemetry`) | scxml.rs's OpenTelemetry facade (guests through the telemetry WIT; the native runtime, `scx`, through scxml.rs's own) |
 
@@ -189,6 +189,14 @@ D33 to D43.
   event's fields and takes its result as `done.invoke.<stage>`
   `<donedata>`; leaving the stage cancels it. State a stage keeps across turns (the intuition's
   `confidence_tuner`) is passed in by `<param>` and returned in `<donedata>`.
+- **Effort ceilings.** Each tier is offered only the choices within its
+  effort ceiling (D196, built by D206): an offerer declares an action's
+  effort on its `<decision:choice effort>` (0 without one), the cognition
+  frames each stage's choices with `<cognition:within_ceiling>` against the
+  tier's ceiling (`decision_effort_ceiling` 0, `intuition_effort_ceiling` 1,
+  which the bounds override; reasoning's is the whole frame), and the
+  heavier actions are the stage's `held` `<param>`, rendered as the
+  `<held>` block of its model-facing content, so it can only hand them on.
 - **Partial selections.** A stage that leaves the turn unhandled may still
   act: on `low_confidence` or `deliberative_input` intuition sends the
   environment actions itself before the turn escalates, never the ignore

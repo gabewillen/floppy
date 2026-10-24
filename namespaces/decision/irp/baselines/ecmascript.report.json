@@ -6,9 +6,9 @@
     "kind": "namespace-irp",
     "source": "namespaces/decision/irp/manifest.xml",
     "revision": "0.1.0",
-    "corpus_digest": "3d57615f8280ba36ab4fb8912df25be4087ec3a17a6d6f0a4310dd2faa62e511",
-    "source_digest": "14b65f6f327c33e6738fcddfd799658524387508543098b9623ca9f8693235fb",
-    "manifest_digest": "5813315a2666062dfbde00f50052bc0030b32b1c5f02cad7bf45d9c13909ef34",
+    "corpus_digest": "6a627bf030bded3605b2657bf6cb04f06e8df4b07f19c8528608e12fb04030fd",
+    "source_digest": "80a58cc12279da6a71bf857656d74bb6e1b9ba91ff806798b7245610c62f05a9",
+    "manifest_digest": "6e7338861e89574a5f6882ff0da95fce8a0eaab93ddd63b2fdeba23274c10d85",
     "template_digests": {
       "ecmascript": "f93de8fb0a72e53419997075d053f75d49152a973c28b45e3ad576745fb372aa"
     },
@@ -53,9 +53,9 @@
     {
       "namespace_uri": "https://github.com/stateforward/floppy/namespaces/decision",
       "package_version": "0.1.0",
-      "manifest_sha256": "81409a9f0d738ff824ee554918b887220a4bb70161d63d7dfa48df96edf96bef",
-      "schema_sha256": "9b38f912258ec12453bccbd08234783fac967c7cfb5d17d3a51b8030a907fe5e",
-      "component_sha256": "f4520ae032c7c66401c4f37d00e9da82ac11441bcd079f52882d924078a79c5b"
+      "manifest_sha256": "5baf49273a9cdb903b235e87fb38b33adfd864c57789d53c5b149285d2f035c1",
+      "schema_sha256": "4fbc448a67810f9e755de0bb209a3688ff9703ae29782e999cb52364864f63f8",
+      "component_sha256": "c66833f44e02dea8f035f159b9d08d7ec7d2980289abcc0ea736b13f0e56a50b"
     }
   ],
   "ir_version": 5,
@@ -68,11 +68,11 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "890d41e06709db9b65a9d3ae251db577f9036cfcfe75f43b2ba1db945a3311b1",
+  "identity_digest": "ad07f78b08760ce5a576a00d0a160c11c4035c206b5d6b64788db8243bc3fc4e",
   "summary": {
-    "total_selected": 11,
-    "applicable_selected": 11,
-    "passed": 11,
+    "total_selected": 13,
+    "applicable_selected": 13,
+    "passed": 13,
     "failed": 0,
     "unsupported": 0,
     "invalid": 0,
@@ -82,8 +82,8 @@
     "not_passing": 0,
     "passed_under_erratum": 0,
     "mandatory": {
-      "applicable_selected": 11,
-      "passed": 11,
+      "applicable_selected": 13,
+      "passed": 13,
       "failed": 0,
       "unsupported": 0,
       "invalid": 0,
@@ -165,12 +165,24 @@
         "not_applicable": 0,
         "not_passing": 0,
         "passed_under_erratum": 0
+      },
+      "#decision-6": {
+        "applicable_selected": 2,
+        "passed": 2,
+        "failed": 0,
+        "unsupported": 0,
+        "invalid": 0,
+        "harness_error": 0,
+        "skipped": 0,
+        "not_applicable": 0,
+        "not_passing": 0,
+        "passed_under_erratum": 0
       }
     },
     "by_datamodel": {
       "ecmascript": {
-        "applicable_selected": 11,
-        "passed": 11,
+        "applicable_selected": 13,
+        "passed": 13,
         "failed": 0,
         "unsupported": 0,
         "invalid": 0,
@@ -446,6 +458,61 @@
       "terminal_status": "finished",
       "commands": 2,
       "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "440",
+      "assertion_id": "decision-6",
+      "spec_num": "6",
+      "spec_id": "#decision-6",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 2,
+      "fuel_consumed": 2,
+      "oracle": "outcome-log"
+    },
+    {
+      "id": "441",
+      "assertion_id": "decision-6",
+      "spec_num": "6",
+      "spec_id": "#decision-6",
+      "datamodel": "ecmascript",
+      "conformance": "mandatory",
+      "manual": false,
+      "stage": "complete",
+      "disposition": "passed",
+      "diagnostics": [
+        {
+          "code": "LINT010",
+          "severity": "note",
+          "message": "expressions of this `ecmascript` machine were not syntax-checked"
+        },
+        {
+          "code": "LINT007",
+          "severity": "warning",
+          "message": "transition on `tool.alpha` in `s0` can never be selected"
+        }
+      ],
+      "configuration": [
+        "pass"
+      ],
+      "terminal_status": "finished",
+      "commands": 3,
+      "fuel_consumed": 3,
       "oracle": "outcome-log"
     },
     {

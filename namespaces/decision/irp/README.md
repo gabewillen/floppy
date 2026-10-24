@@ -4,8 +4,8 @@ The implementation report plan of the `decision` namespace, in the format of the
 [W3C SCXML IRP](../../../scxml.rs/tests/conformance/w3c-irp/README.md) and of
 scxml.rs's own namespace suites
 ([scxml.rs/docs/conformance.md](../../../scxml.rs/docs/conformance.md#namespace-suites)):
-5 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
-("Statements"), tested by 11 mandatory documents. It runs through exactly
+6 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
+("Statements"), tested by 13 mandatory documents. It runs through exactly
 the pipeline the W3C IRP runs through (the canonical compiler, the shipped
 Wasm components under the Wasmtime session host, the same oracles and report
 envelope), with the namespace's own extension package and component bound,
@@ -35,12 +35,12 @@ SAXON='java -jar /opt/saxon/saxon-he-12.8.jar' sh scripts/namespace-irp.sh prepa
 sh scripts/namespace-irp.sh baselines decision
 ```
 
-The current baseline (manifest SHA-256 `5813315a2666062dfbde00f50052bc0030b32b1c5f02cad7bf45d9c13909ef34`,
+The current baseline (manifest SHA-256 `6e7338861e89574a5f6882ff0da95fce8a0eaab93ddd63b2fdeba23274c10d85`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
-measured on macOS arm64 after its processing elements moved to the
-processing namespace; regenerate it on Linux x86_64, the host
+measured on Linux x86_64 after `<decision:choice>` gained `effort`, decision
+D206; regenerate it on Linux x86_64, the host
 `tests/tests/namespace_irp.rs` compares fuel on) measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 11 / 11 | 0 | `3d57615f8280ba36ab4fb8912df25be4087ec3a17a6d6f0a4310dd2faa62e511` | `54261be5ace9ff64d20cda2b2ebbaf05023895ecaf83bf3746943b269a5f319e` |
+| ECMAScript | 13 / 13 | 0 | `6a627bf030bded3605b2657bf6cb04f06e8df4b07f19c8528608e12fb04030fd` | `8a1371ef4b839deb733c16a457c9484ac72968d45145120ab8b81b2f77586f66` |

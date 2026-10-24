@@ -1028,7 +1028,13 @@ fn ability_choices() -> [Json; 2] {
             "session.floppy.communication",
             "bot.ability.communication.respond",
         ),
-        offered_choice("session.floppy.identity", "bot.ability.identity.adopt"),
+        // The identity declares adopt's effort (decision D206), which the
+        // body passes on with the offer.
+        {
+            let mut adopt = offered_choice("session.floppy.identity", "bot.ability.identity.adopt");
+            adopt["effort"] = json!(1);
+            adopt
+        },
     ]
 }
 

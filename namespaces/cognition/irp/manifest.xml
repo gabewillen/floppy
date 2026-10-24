@@ -3,7 +3,7 @@
      numbered statement of namespaces/cognition/README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/namespaces/cognition/irp/sources">
   <assert id="cognition-1" specnum="1" specid="#cognition-1">
-    <![CDATA[Each element (attention_bias_for_turn, model_facing_content) takes exactly its declared attributes, the required ones present and none empty, and no content, and the namespace has no other element: a malformed element raises error.execution and assigns nothing (its schema, package/cognition.xsd, rejects it before any run under scx validate).]]>
+    <![CDATA[Each element (attention_bias_for_turn, model_facing_content, within_ceiling) takes exactly its declared attributes, the required ones present and none empty, and no content, and the namespace has no other element: a malformed element raises error.execution and assigns nothing (its schema, package/cognition.xsd, rejects it before any run under scx validate).]]>
     <test id="700" conformance="mandatory" manual="false">
       <start uri="700/test700.txml"/>
     </test>
@@ -78,6 +78,21 @@
     </test>
     <test id="742" conformance="mandatory" manual="false">
       <start uri="742/test742.txml"/>
+    </test>
+  </assert>
+  <assert id="cognition-6" specnum="6" specid="#cognition-6">
+    <![CDATA[The actions held from a tier (held, an array of {event, description?}) render after the acted fact in the situation as a held element with their count and one event element each, named by its event and holding its description; nothing renders when none is held, and a held that is neither an array nor null raises error.execution and assigns nothing.]]>
+    <test id="750" conformance="mandatory" manual="false">
+      <start uri="750/test750.txml"/>
+    </test>
+  </assert>
+  <assert id="cognition-7" specnum="7" specid="#cognition-7">
+    <![CDATA[<cognition:within_ceiling> writes to location the choices whose effort (0 when a choice declares none) is at most the ceiling, in order and without their effort, and to heldlocation, first, one {event, description?} per event only choices over the ceiling offer; without a ceiling, or with null, every choice is offered and nothing is held, and a ceiling that is not a whole number raises error.execution and assigns nothing.]]>
+    <test id="760" conformance="mandatory" manual="false">
+      <start uri="760/test760.txml"/>
+    </test>
+    <test id="761" conformance="mandatory" manual="false">
+      <start uri="761/test761.txml"/>
     </test>
   </assert>
 </assertions>
