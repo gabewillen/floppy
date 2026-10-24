@@ -4,5 +4,8 @@
   ],
   "learning.selected": [
     "bot.behavior.create"
+  ],
+  "learning.learned": [
+    "lesson of turn 1: GreetOnKnock ../../behaviors/GreetOnKnock.scx"
   ]
 }
