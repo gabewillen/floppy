@@ -11,6 +11,13 @@ Last updated: 2026-10-23.
 
 ## Current state (2026-10-09) — resume here
 
+- **Voices are people in long-term memory (2026-10-23, D204, #49):** the
+  conversation identifies each voice embedding through the memory ability
+  before it finds the input's relationship: a voice memory holds is its
+  `person-<n>`, any other a new person, and every voice heard is stored
+  for its person (`bot_person`, `bot_person_embedding` in `0001`). The
+  person is the participant the rest of the bot sees, across restarts.
+  Faces, `voice_id` and rest are the next parts of #49.
 - **The docs describe floppy on its own terms (2026-10-23, #19):** the
   plans that tracked floppy against another system are retired. What they
   left open is under [Open work](#open-work),
@@ -941,11 +948,18 @@ What is still to build, each item with its issue where one exists.
   episodes as nodes with vectors, associative recall,
   `bot.ability.memory.recall`, an embedding ability for text and images
   over a remote embedder, and consolidation while the cognition rests.
-  Persons are D194 and consolidation D195 (#49); the schema is one revision (D193).
-- **Hearing identity**: participant refs through an identification
-  registry, overlap while speaking, tone, and enrolling the bot's own
-  voice. Today the hearing gives voice embeddings and each embedding
-  source is its own participant (D79); people in long-term memory are D194 (#49).
+  People are D194, their voices built by D204, and consolidation D195
+  (#49); the schema is one revision (D193). Matching reads one voice per
+  person through the sql service, whose result bound (88 KiB on wasm)
+  holds about a dozen people at 256 dimensions: an embedding index is
+  where that bound goes (D204).
+- **Hearing identity**: overlap while speaking, tone, and enrolling the
+  bot's own voice. People in long-term memory (D194) are built for voices
+  by D204 (#49): the conversation matches each voice embedding to a
+  `person-<n>` memory holds (cosine 0.85, margin 0.05) or makes a new one,
+  and stores every voice heard for its person. Still open on #49: faces
+  (below), `voice_id` (D179), and rest's consolidation (D195), which
+  reinforces the stored tags and merges people.
 - **Multimodal turns**: `<conversation:ingest_content>` takes no
   `image/*` content, so an image adds nothing to a turn and a turn of
   images alone fails as empty (`Turn closed with neither text, audio, nor
@@ -955,7 +969,8 @@ What is still to build, each item with its issue where one exists.
   placeholders and content parts in a turn's content, and a typed
   `environment.visual` image.
 - **Faces** (D188): face detection and face identity in seeing follow
-  D194's voices (#49); an embedding change measure and a cascade of measures wait
+  D194's voices, built by D204 (#49; `bot_person_embedding`'s `kind`
+  `face` is the seam); an embedding change measure and a cascade of measures wait
   on embeddings.
 - **Effort ceilings**: each stage narrowing the turn's frame to its own
   effort ceiling (D196, #50).
