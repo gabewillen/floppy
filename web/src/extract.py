@@ -68,7 +68,7 @@ NS=[('event',SX+'event/package/event.xsd','https://github.com/stateforward/scxml
     ('env',SX+'env/package/env.xsd','https://github.com/stateforward/scxml.rs/namespaces/env'),
     ('datamodel',SX+'datamodel/package/datamodel.xsd','https://github.com/stateforward/scxml.rs/namespaces/datamodel'),
     ('scx',SX+'scx/package/scx.xsd','https://github.com/stateforward/scxml.rs/namespaces/scx')]+[
-    (p,FL+p+'/package/'+p+'.xsd','https://github.com/stateforward/floppy/namespaces/'+p) for p in ['decision','bot','conversation','migration']]
+    (p,FL+p+'/package/'+p+'.xsd','https://github.com/stateforward/floppy/namespaces/'+p) for p in sorted(os.listdir(FL)) if os.path.isfile(FL+p+'/package/'+p+'.xsd')]
 for p,path,uri in NS:
     r=ET.parse(path).getroot();ns={'uri':uri,'elements':{}}
     tops={c.get('name') for c in r if c.tag==XS+'element'}
