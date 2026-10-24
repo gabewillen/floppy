@@ -81,9 +81,15 @@ Each check reads a log label the bot already writes, at one step (`at:
 | `learned` | `reflection.inventory` accepts a behavior: `<Name> ACTIVE <lifetime> ... (accept)`, `turn` for a reflex, `persistent` for a routine |
 | `broken` | `reflection.inventory` breaks one: `<Name> BROKEN (break)`, or the learning ability does: `learning.learned` `lesson of turn N: <Name> … BROKEN` |
 | `reflex`, `not_reflex` | `cognition.stage` is (is not) `autonomy handled`: a learned behavior, not reasoning, handled the real input |
-| `says`, `not_says` | a `floppy.say` matches (none matches) the pattern, case-insensitive |
-| `ticks` | at least `min` `floppy.say` matching the pattern during a wait (no input, so each is a routine's turn); partial credit below `min` |
-| `no_ticks` | no `floppy.say` during a wait |
+| `says`, `not_says` | a reply matches (none matches) the pattern, case-insensitive |
+| `ticks` | at least `min` replies matching the pattern during a wait (no input, so each is a routine's turn); partial credit below `min` |
+| `no_ticks` | no reply during a wait |
+
+A reply is a `bot.ability.communication.respond` the turn selected, read
+from `floppy.output` (its parts' words, joined). That is what floppy chose
+to say, with or without a speech service: `floppy.say` is logged only once
+speech encoded the words, and an eval column runs floppy on Sparks alone,
+with no hosted speech. The judges read each reply as `floppy says: …`.
 
 `reflex` is the check that exposes the gap: the conversation's history
 reaches reasoning (decision D99), so reasoning can answer "ping" with
@@ -181,11 +187,12 @@ gateway with the decision server on the lab:
 
 ```sh
 python3 tests/eval/eval.py builder --judges none --repeats 2 \
-  --column "luna=gabe-codex-1/gpt-6-luna;env=.env.cpa-lab" \
-  --column "lite=gemini-3.1-flash-lite;env=.env.cpa-lab;bot=gabe-codex-1/gpt-6-luna" \
-  --column "qwen27=cerebras/qwen-3.8-27b;env=.env.cpa-lab;bot=gabe-codex-1/gpt-6-luna" \
-  --column "gemma=gemma-4-26b-a4b;env=.env.lab:.env.speech;bot=gemma-4-26b-a4b"
+  --column "sparks=sparks/qwen3.8-flash-next;env=.env.cpa-lab;bot=sparks/qwen3.8-flash-next"
 ```
+
+Sparks is the bar (the builder must work on a small model, taking more
+attempts if it must), and everything inside floppy's framework runs on it:
+the bot, the builder and no hosted speech. Hosted models only judge.
 
 ## Running it
 
@@ -194,10 +201,10 @@ The bot's backends are the live tests' (`FLOPPY_LIVE_ENV_FILE`,
 (docs/live-proof.md 2026-10-21: `gemma-4-26b-a4b` on the
 vLLM at `192.168.2.2:8100`, the systemone decision server at
 `192.168.2.2:8102`, reachable from the maintainer's network only), with
-`env.lab` and `env.speech` as there:
+`env.lab` as there:
 
 ```sh
-export FLOPPY_LIVE_ENV_FILE=env.lab:env.speech FLOPPY_LIVE_MODEL=gemma-4-26b-a4b
+export FLOPPY_LIVE_ENV_FILE=env.lab FLOPPY_LIVE_MODEL=gemma-4-26b-a4b
 python3 tests/eval/eval.py run --judge-env-file .env           # the suite once
 python3 tests/eval/eval.py run --scenario reflex --repeats 3   # one category
 python3 tests/eval/eval.py climb --judge-env-file .env --generations 6 --budget-hours 8

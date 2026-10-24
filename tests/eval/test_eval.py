@@ -15,6 +15,12 @@ def log(label, text):
     return {"type": "log", "label": label, "text": text}
 
 
+def said(words):
+    """A turn's floppy.output whose one selection is a reply of `words`."""
+    output = [{"event": "bot.ability.communication.respond", "data": {"parts": [{"words": words}]}}]
+    return log("floppy.output", json.dumps({"turn": 1, "output": output}))
+
+
 def write_job(directory, sessions, steps):
     for index, records in enumerate(sessions):
         with open(os.path.join(directory, f"session-{index}.json"), "w", encoding="utf-8") as handle:
@@ -50,13 +56,13 @@ class Scorer(unittest.TestCase):
         session0 = [
             log("reflection.inventory", 'PingPong ACTIVE turn [{"event":"bot.ability.cognition.input"}] (accept)'),
             log("cognition.stage", "reasoning handled"),
-            log("floppy.say", "pong"),
+            said("pong"),
             log("cognition.stage", "reasoning handled"),
-            log("floppy.say", "Four."),
+            said("Four."),
             log("cognition.stage", "autonomy handled"),
-            log("floppy.say", "pong"),
+            said("pong"),
         ]
-        session1 = [log("cognition.stage", "autonomy handled"), log("floppy.say", "Pong!")]
+        session1 = [log("cognition.stage", "autonomy handled"), said("Pong!")]
         with tempfile.TemporaryDirectory() as directory:
             write_job(directory, [session0, session1], [
                 step(0, 0, 0, 1), step(0, 1, 1, 3), step(0, 2, 3, 5), step(0, 3, 5, 7), step(1, 0, 0, 2)])
@@ -73,8 +79,8 @@ class Scorer(unittest.TestCase):
         scenario = self.scenarios["routine_reminder"]
         session = [
             log("reflection.inventory", "WaterReminder ACTIVE persistent [] (accept)"),
-            log("floppy.say", "Time to drink some water!"),
-            log("floppy.say", "Hello."),
+            said("Time to drink some water!"),
+            said("Hello."),
             log("reflection.inventory", "WaterReminder BROKEN (break)"),
         ]
         with tempfile.TemporaryDirectory() as directory:
@@ -90,8 +96,8 @@ class Scorer(unittest.TestCase):
         scenario = self.scenarios["routine_reminder"]
         session = [
             log("reflection.inventory", "WaterReminder ACTIVE persistent [] (accept)"),
-            log("floppy.say", "Time to drink some water!"),
-            log("floppy.say", "Okay, I'll stop."),
+            said("Time to drink some water!"),
+            said("Okay, I'll stop."),
             log("learning.learned", "lesson of turn 6: WaterReminder ACTIVE persistent BROKEN"),
         ]
         with tempfile.TemporaryDirectory() as directory:
@@ -103,13 +109,31 @@ class Scorer(unittest.TestCase):
     def test_a_name_is_adopted_recalled_and_heard(self):
         scenario = self.scenarios["name_adopt"]
         session0 = [log("identity.name", 'adopted "Juniper"'), log("identity.heard", "addressed as Juniper"),
-                    log("floppy.say", "I'm Juniper."), log("identity.heard", "not addressed")]
+                    said("I'm Juniper."), log("identity.heard", "not addressed")]
         session1 = [log("identity.name", 'recalled "Juniper"'), log("identity.heard", "addressed as Juniper"),
-                    log("floppy.say", "Yes!"), log("floppy.say", "My name is Juniper.")]
+                    said("Yes!"), said("My name is Juniper.")]
         with tempfile.TemporaryDirectory() as directory:
             write_job(directory, [session0, session1], [step(0, 0, 0, 1), step(0, 1, 1, 3), step(0, 2, 3, 4), step(1, 0, 0, 3), step(1, 1, 3, 4)])
             value, _ = score.score(scenario, score.load_job(directory))
         self.assertEqual(value, 1.0)
+
+    def test_a_reply_is_the_respond_the_turn_selected(self):
+        output = [
+            {"event": "bot.focus_device", "data": {"device": "lamp"}},
+            {"event": "bot.ability.communication.respond",
+             "data": {"parts": [{"words": "Time to "}, {"expression": {"pause": 0.2}}, {"words": "drink water!"}]}},
+        ]
+        records = [
+            log("floppy.output", json.dumps({"turn": 2, "output": output})),
+            log("floppy.output", json.dumps({"turn": 3, "output": []})),
+            # Spoken only with a speech service; the turn's output is what it said.
+            log("floppy.say", "spoken twice"),
+        ]
+        self.assertEqual(score.replies(records), ["Time to drink water!"])
+        scenario = {"sessions": [{"steps": [{"wait_s": 60}]}], "checks": []}
+        job = {"steps": [step(0, 0, 0, 3, "wait")], "sessions": [records], "done": True}
+        self.assertIn("floppy says: Time to drink water!", score.summary(scenario, job))
+        self.assertNotIn("spoken twice", score.summary(scenario, job))
 
 
 class Builds(unittest.TestCase):

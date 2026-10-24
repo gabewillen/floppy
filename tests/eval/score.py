@@ -21,12 +21,16 @@ bot already writes:
   reflex         cognition.stage `autonomy handled`: a learned behavior,
                  not reasoning, handled the real input
   not_reflex     no cognition.stage `autonomy handled`
-  says           a floppy.say matches `pattern` (case-insensitive regex)
-  not_says       the step completed and no floppy.say matches `pattern`
-  ticks          at least `min` floppy.say matching `pattern` in a wait
+  says           a reply matches `pattern` (case-insensitive regex)
+  not_says       the step completed and no reply matches `pattern`
+  ticks          at least `min` replies matching `pattern` in a wait
                  step (with no input, so each is a routine's turn); scores
                  the fraction of `min` reached
-  no_ticks       no floppy.say in a wait step
+  no_ticks       no reply in a wait step
+
+A reply is a bot.ability.communication.respond the turn selected, from
+floppy.output (its parts' words, joined): what floppy chose to say, with or
+without a speech service (floppy.say is logged only once speech encoded it).
 """
 
 import json
@@ -48,8 +52,9 @@ SUMMARY_LABELS = (
     "autonomy.candidate",
     "routines",
     "bot.ability.routines.reconciled",
-    "floppy.say",
 )
+
+RESPOND = "bot.ability.communication.respond"
 
 
 def load_job(out):
@@ -110,6 +115,28 @@ def _texts(records, label):
     return [text for name, text in logs(records) if name == label]
 
 
+def _replies(text):
+    """The words of each reply one floppy.output text selected."""
+    try:
+        output = json.loads(text).get("output")
+    except (ValueError, AttributeError):
+        return []
+    out = []
+    for selection in output if isinstance(output, list) else []:
+        if not isinstance(selection, dict) or selection.get("event") != RESPOND:
+            continue
+        parts = (selection.get("data") or {}).get("parts")
+        words = "".join(p["words"] for p in parts or [] if isinstance(p, dict) and isinstance(p.get("words"), str))
+        if words.strip():
+            out.append(words)
+    return out
+
+
+def replies(records):
+    """The words of each reply the records' turns selected (floppy.output)."""
+    return [words for text in _texts(records, "floppy.output") for words in _replies(text)]
+
+
 def _matches(pattern, text):
     return re.search(pattern, text.strip(), re.IGNORECASE | re.MULTILINE) is not None
 
@@ -156,7 +183,7 @@ def check(job, spec):
         broken = [t for t in texts if " BROKEN" in t]
         return float(bool(broken)), (broken[0] if broken else "nothing was broken")
     stages = _texts(records, "cognition.stage")
-    says = _texts(records, "floppy.say")
+    says = replies(records)
     if kind == "reflex":
         ok = "autonomy handled" in stages
         return float(ok), f"stages {stages}"
@@ -211,7 +238,10 @@ def summary(scenario, job, limit=600):
             lines.append("  (the step did not settle within its bound)")
         records = job["sessions"][step["session"]][step["start_index"] : step["end_index"]]
         for label, text in logs(records):
-            if label in SUMMARY_LABELS or "failed" in label or "degraded" in label:
+            if label == "floppy.output":
+                for words in _replies(text):
+                    lines.append(f"  floppy says: {words[:limit]}")
+            elif label in SUMMARY_LABELS or "failed" in label or "degraded" in label:
                 lines.append(f"  {label}: {text[:limit]}")
     ran = {(s["session"], s["step"]) for s in job["steps"]}
     for session, spec in enumerate(scenario["sessions"]):
