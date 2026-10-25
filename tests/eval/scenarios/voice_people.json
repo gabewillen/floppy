@@ -1,0 +1,100 @@
+{
+  "category": "voice",
+  "features": [
+    "voices",
+    "people"
+  ],
+  "intent": "Two people with different voices introduce themselves out loud on the same microphone, then each asks floppy their own name. floppy should tell them apart by voice.",
+  "bot_name": null,
+  "edits": [
+    {
+      "path": "abilities/interpretation/interpretation.scx",
+      "old": "<data id=\"diarizer\" expr=\"false\"/>",
+      "new": "<data id=\"diarizer\" expr=\"true\"/>"
+    }
+  ],
+  "sessions": [
+    {
+      "steps": [
+        {
+          "hear": "Hi floppy, I'm Gabe.",
+          "source": "microphone",
+          "who": "Gabe",
+          "voice": "canvas"
+        },
+        {
+          "hear": "Hello floppy, my name is Ana.",
+          "source": "microphone",
+          "who": "Ana",
+          "voice": "storyteller"
+        },
+        {
+          "hear": "Floppy, what's my name?",
+          "source": "microphone",
+          "who": "Gabe",
+          "voice": "canvas"
+        },
+        {
+          "hear": "And what's my name, floppy?",
+          "source": "microphone",
+          "who": "Ana",
+          "voice": "storyteller"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        0,
+        2
+      ],
+      "pattern": "\\bgabe\\b",
+      "weight": 2
+    },
+    {
+      "check": "not_says",
+      "at": [
+        0,
+        2
+      ],
+      "pattern": "\\bana\\b",
+      "weight": 1
+    },
+    {
+      "check": "says",
+      "at": [
+        0,
+        3
+      ],
+      "pattern": "\\bana\\b",
+      "weight": 2
+    },
+    {
+      "check": "not_says",
+      "at": [
+        0,
+        3
+      ],
+      "pattern": "\\bgabe\\b",
+      "weight": 1
+    }
+  ],
+  "criteria": {
+    "apart": "floppy tells Gabe's and Ana's voices apart and gives each their own name."
+  },
+  "diagnostics": [
+    {
+      "check": "not_logged",
+      "by": [
+        0,
+        3
+      ],
+      "label": "listening.degraded",
+      "features": [
+        "voices"
+      ]
+    }
+  ]
+}

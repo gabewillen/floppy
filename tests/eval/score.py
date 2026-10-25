@@ -1,5 +1,5 @@
-"""The deterministic half of the learning eval's grade (docs/eval.md): each
-scenario check reads the records tests/tests/learning_eval.rs wrote for one
+"""The deterministic half of floppy's eval grade (docs/eval.md): each
+scenario check reads the records tests/tests/floppy_eval.rs wrote for one
 job and scores 0 to 1.
 
 The grade is black box (decision D241): a scenario's `checks` read only
@@ -19,6 +19,9 @@ Checks, on floppy's replies:
                  step (with no input, so each is a routine's turn); scores
                  the fraction of `min` reached
   no_ticks       no reply in a wait step
+  speaks         what floppy said aloud (its sounds in the room,
+                 transcribed by tests/eval/sound.py) matches `pattern`
+  replies_at_most  at most `max` replies (default 1)
 
 A reply is a bot.ability.communication.respond the turn selected, from
 floppy.output (its parts' words, joined): what floppy chose to say, with or
@@ -40,6 +43,9 @@ Diagnostics, on the log labels the bot writes:
   reflex         cognition.stage `autonomy handled`: a learned behavior,
                  not reasoning, handled the real input
   not_reflex     no cognition.stage `autonomy handled`
+  logged         a log record labelled `label` (whose text matches
+                 `pattern`, when given)
+  not_logged     no such log record
 """
 
 import json
@@ -47,9 +53,9 @@ import os
 import re
 
 # The checks a grade scores: each reads only what floppy said.
-BLACK_BOX = ("says", "not_says", "ticks", "no_ticks")
+BLACK_BOX = ("says", "not_says", "ticks", "no_ticks", "speaks", "replies_at_most")
 # The diagnostics: each reads floppy's own logs, so it is reported, never scored.
-DIAGNOSTIC = ("adopted_name", "recalled_name", "addressed", "not_addressed", "learned", "broken", "reflex", "not_reflex")
+DIAGNOSTIC = ("adopted_name", "recalled_name", "addressed", "not_addressed", "learned", "broken", "reflex", "not_reflex", "logged", "not_logged")
 
 RESPOND = "bot.ability.communication.respond"
 
@@ -58,7 +64,7 @@ def load_job(out):
     """The records of one job's out directory: {"steps": [...],
     "sessions": [[record, ...], ...], "done": bool}."""
     steps_path = os.path.join(out, "steps.json")
-    job = {"steps": [], "sessions": [], "done": os.path.exists(os.path.join(out, "done.json"))}
+    job = {"steps": [], "sessions": [], "heard": {}, "done": os.path.exists(os.path.join(out, "done.json"))}
     if os.path.exists(steps_path):
         with open(steps_path, encoding="utf-8") as handle:
             job["steps"] = json.load(handle)
@@ -67,6 +73,10 @@ def load_job(out):
         with open(os.path.join(out, f"session-{index}.json"), encoding="utf-8") as handle:
             job["sessions"].append(json.load(handle))
         index += 1
+    heard = os.path.join(out, "heard.json")
+    if os.path.exists(heard):
+        with open(heard, encoding="utf-8") as handle:
+            job["heard"] = json.load(handle)
     return job
 
 
@@ -147,6 +157,86 @@ def _unreadable(records):
     return sum(_replies(text) is None for text in _texts(records, "floppy.output"))
 
 
+def _decoded(text):
+    try:
+        value = json.loads(text)
+    except (TypeError, ValueError):
+        return None
+    return value.get("data", value) if isinstance(value, dict) else None
+
+
+def people(scenario):
+    """Every source a step of the scenario speaks or shows from: the room's
+    sounds from anyone else are floppy's."""
+    sources = {"gabe"}
+    for session in scenario["sessions"]:
+        for step in session["steps"]:
+            if "source" in step:
+                sources.add(step["source"])
+    return sources
+
+
+def sounds(records, others):
+    """The data of each sound in the room (the room's environment.sound
+    log) whose source is none of `others`: the sounds floppy made."""
+    out = []
+    for text in _texts(records, "environment.sound"):
+        data = _decoded(text)
+        if isinstance(data, dict) and data.get("audio") and data.get("source") not in others:
+            out.append(data)
+    return out
+
+
+_CHUNK = re.compile(r"^(.*?speaking-\d+)\.\d+\.pcm$")
+
+
+def utterance(data):
+    """Which utterance of floppy's a sound is a chunk of: speaking streams
+    utterance N as `speaking-N.<i>.pcm`; any other sound is its own."""
+    ref = str(data.get("audio", ""))
+    match = _CHUNK.match(ref)
+    return match.group(1) if match else ref
+
+
+def utterances(records, others):
+    """floppy's sounds in the records, grouped by utterance, in the order
+    each began: [(utterance, [data, ...]), ...]."""
+    groups = {}
+    for data in sounds(records, others):
+        groups.setdefault(utterance(data), []).append(data)
+    return list(groups.items())
+
+
+def group_key(session, group):
+    """The key of a group's transcript in heard.json: its session (each
+    session has its own media directory, and a restarted floppy numbers its
+    utterances from 1 again) and its references joined with "|"."""
+    return f"{session}#" + "|".join(str(data.get("audio", "")) for data in group)
+
+
+def spoken(job, records, others, session=0):
+    """What floppy said aloud in the records: the transcripts of the
+    utterances it began in them, each heard whole (its chunks after the
+    records' end too, as a person hears a reply that runs past the next
+    question), joined in order."""
+    if session >= len(job["sessions"]):
+        return ""
+    whole = dict(utterances(job["sessions"][session], others))
+    # Begun in the records: its first chunk is in them.
+    here = {str(data.get("audio", "")) for data in sounds(records, others)}
+    begun = [u for u, _ in utterances(records, others) if str(whole.get(u, [{}])[0].get("audio", "")) in here]
+    heard = job.get("heard", {})
+    parts = [heard.get(group_key(session, whole.get(u, [])), "").strip() for u in begun]
+    return " ".join(p for p in parts if p)
+
+
+def sound_groups(scenario, job):
+    """[(session, group)] for each utterance floppy made, for transcription."""
+    others = people(scenario)
+    return [(session, group) for session, records in enumerate(job["sessions"])
+            for _, group in utterances(records, others)]
+
+
 def _matches(pattern, text):
     return re.search(pattern, text.strip(), re.IGNORECASE | re.MULTILINE) is not None
 
@@ -203,6 +293,22 @@ def check(job, spec):
     if kind == "says":
         ok = any(_matches(spec["pattern"], t) for t in says)
         return float(ok), f"said {[s[:120] for s in says]}"
+    if kind == "speaks":
+        aloud = spoken(job, records, job.get("people", {"gabe"}), where[0])
+        if not aloud:
+            made = len(sounds(records, job.get("people", {"gabe"})))
+            return 0.0, f"heard nothing floppy said aloud ({made} sound(s) of floppy's)"
+        return float(_matches(spec["pattern"], aloud)), f"heard {aloud[:200]!r}"
+    if kind == "replies_at_most":
+        most = int(spec.get("max", 1))
+        return float(len(says) <= most), f"{len(says)} replies {[s[:80] for s in says]}"
+    if kind in ("logged", "not_logged"):
+        label = spec["label"]
+        texts = _texts(records, label)
+        hits = [t for t in texts if "pattern" not in spec or _matches(spec["pattern"], t)]
+        ok = bool(hits) if kind == "logged" else not hits
+        shown = (hits or texts)[:2]
+        return float(ok), f"{len(hits)} of {len(texts)} {label} record(s) {[t[:120] for t in shown]}"
     if kind in ("not_says", "no_ticks") and _unreadable(records):
         return 0.0, f"{_unreadable(records)} turn output(s) could not be read"
     if kind == "not_says":
@@ -224,13 +330,14 @@ def _results(job, specs):
     for spec in specs:
         value, why = check(job, spec)
         results.append({"check": spec["check"], "where": spec.get("at") or spec.get("by"), "score": value,
-                        "weight": float(spec.get("weight", 1)), "why": why})
+                        "weight": float(spec.get("weight", 1)), "why": why, "features": spec.get("features", [])})
     return results
 
 
 def score(scenario, job):
     """The checks' weighted score (0..1) and each check's result. Every
     check is black box; a scenario that scores floppy's logs is refused."""
+    job["people"] = people(scenario)
     for spec in scenario["checks"]:
         if spec["check"] in DIAGNOSTIC:
             raise ValueError(f"{spec['check']} reads floppy's logs: it is a diagnostic, not a check")
@@ -245,6 +352,7 @@ def score(scenario, job):
 def diagnostics(scenario, job):
     """Each diagnostic's result: what floppy's logs say happened inside it.
     Reported, never scored; a black-box check listed here is refused."""
+    job["people"] = people(scenario)
     for spec in scenario.get("diagnostics", []):
         if spec["check"] in BLACK_BOX:
             raise ValueError(f"{spec['check']} reads only what floppy said: it is a check, not a diagnostic")
@@ -268,9 +376,17 @@ def summary(scenario, job, limit=600):
         head = f"[session {step['session']} step {step['step']}]"
         if step["kind"] == "say":
             lines.append(f"{head} {spec.get('source', 'gabe')} says: {spec['say']!r}")
+        elif step["kind"] == "hear":
+            # `who` names the person when the source is a shared microphone.
+            lines.append(f"{head} {spec.get('who', spec.get('source', 'gabe'))} says out loud: {spec['hear']!r}")
+        elif step["kind"] == "show":
+            lines.append(f"{head} {spec.get('source', 'camera')} shows floppy an image: {spec.get('describe', 'an image')}")
         else:
             lines.append(f"{head} {spec['wait_s']} s pass with no input")
         records = job["sessions"][step["session"]][step["start_index"] : step["end_index"]]
+        aloud = spoken(job, records, people(scenario), step["session"])
+        if aloud:
+            lines.append(f"  floppy is heard saying out loud: {aloud[:limit]}")
         for text in _texts(records, "floppy.output"):
             said = _replies(text)
             if said is None:
@@ -374,6 +490,22 @@ def _closed(build):
     """A build without its bookkeeping (`last`, its previous builder line)."""
     build.pop("last", None)
     return build
+
+
+def infra_error(scenario, job):
+    """Why the job measured the rig rather than floppy, or None: the driver
+    crashed before it finished, no step ran, or floppy never activated in a
+    session (a backend or the room down before any input). Such a job is
+    reported apart and kept out of every score (docs/eval.md); a step
+    that never settled is floppy's (a stuck turn) and stays scored."""
+    if not job["done"]:
+        return "the driver did not finish the job"
+    if not job["steps"]:
+        return "no step ran"
+    for index, records in enumerate(job["sessions"]):
+        if not any(label == "bot.activated" for label, _ in logs(records)):
+            return f"floppy never activated in session {index}"
+    return None
 
 
 def complete(scenario, job):

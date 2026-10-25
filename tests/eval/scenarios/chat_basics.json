@@ -1,0 +1,151 @@
+{
+  "category": "conversation",
+  "features": [
+    "conversation",
+    "cognition",
+    "decisions",
+    "offers",
+    "prompts",
+    "room"
+  ],
+  "intent": "A person asks floppy a fact, a follow-up that only makes sense with the first question, and what they asked about. floppy should answer each correctly and briefly, follow the exchange, and recall what was asked.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "say": "Hi floppy! What's the capital of France?"
+        },
+        {
+          "say": "And what about Japan?"
+        },
+        {
+          "say": "Which two countries did I just ask you about?"
+        },
+        {
+          "say": "What's seven times six?"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        0,
+        0
+      ],
+      "pattern": "\\bparis\\b",
+      "weight": 1
+    },
+    {
+      "check": "says",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "\\btokyo\\b",
+      "weight": 2,
+      "features": [
+        "conversation",
+        "prompts"
+      ]
+    },
+    {
+      "check": "says",
+      "at": [
+        0,
+        2
+      ],
+      "pattern": "france[\\s\\S]*japan|japan[\\s\\S]*france",
+      "weight": 2,
+      "features": [
+        "conversation"
+      ]
+    },
+    {
+      "check": "says",
+      "at": [
+        0,
+        3
+      ],
+      "pattern": "\\b42\\b|forty[- ]two",
+      "weight": 1
+    },
+    {
+      "check": "replies_at_most",
+      "at": [
+        0,
+        0
+      ],
+      "max": 1,
+      "weight": 0.5,
+      "features": [
+        "decisions",
+        "offers"
+      ]
+    },
+    {
+      "check": "replies_at_most",
+      "at": [
+        0,
+        1
+      ],
+      "max": 1,
+      "weight": 0.5,
+      "features": [
+        "decisions",
+        "offers"
+      ]
+    }
+  ],
+  "criteria": {
+    "correct": "Each answer is right: Paris, Tokyo, France and Japan, 42.",
+    "context": "The follow-up 'And what about Japan?' is understood as asking for Japan's capital.",
+    "concise": "Answers are short and natural for a companion robot, one reply per question."
+  },
+  "criteria_features": {
+    "conversation": [
+      "context",
+      "correct"
+    ],
+    "prompts": [
+      "concise",
+      "correct"
+    ],
+    "decisions": [
+      "concise"
+    ],
+    "offers": [
+      "concise"
+    ],
+    "cognition": [
+      "correct",
+      "context"
+    ]
+  },
+  "diagnostics": [
+    {
+      "check": "logged",
+      "by": [
+        0,
+        3
+      ],
+      "label": "cognition.stage",
+      "features": [
+        "cognition"
+      ]
+    },
+    {
+      "check": "not_logged",
+      "by": [
+        0,
+        3
+      ],
+      "label": "floppy.offers.dropped",
+      "features": [
+        "offers"
+      ]
+    }
+  ]
+}

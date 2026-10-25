@@ -1,0 +1,65 @@
+{
+  "category": "memory",
+  "features": [
+    "memory",
+    "conversation"
+  ],
+  "intent": "A person tells floppy two facts about themselves, then floppy is restarted and asked about them. floppy should remember both after the restart.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "say": "My dog's name is Rufus, and my favorite color is green."
+        }
+      ]
+    },
+    {
+      "steps": [
+        {
+          "say": "What's my dog's name?"
+        },
+        {
+          "say": "And what's my favorite color?"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        1,
+        0
+      ],
+      "pattern": "\\brufus\\b",
+      "weight": 3
+    },
+    {
+      "check": "says",
+      "at": [
+        1,
+        1
+      ],
+      "pattern": "\\bgreen\\b",
+      "weight": 3
+    }
+  ],
+  "criteria": {
+    "recall": "After the restart floppy says the dog is Rufus and the color is green.",
+    "honesty": "floppy does not invent facts it was not told."
+  },
+  "diagnostics": [
+    {
+      "check": "logged",
+      "by": [
+        0,
+        0
+      ],
+      "label": "reflection.stored",
+      "features": [
+        "memory"
+      ]
+    }
+  ]
+}

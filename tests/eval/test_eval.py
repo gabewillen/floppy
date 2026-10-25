@@ -1,4 +1,4 @@
-"""Offline tests of the learning eval's scorer and prompt codec:
+"""Offline tests of the eval's scorer, feature grade and prompt codec:
 `python3 -m unittest discover -s tests/eval`. They make no model call."""
 
 import json
@@ -7,8 +7,11 @@ import tempfile
 import unittest
 
 import eval as runner
+import features
 import prompts
+import questions
 import score
+import sound
 
 
 def log(label, text):
@@ -278,3 +281,161 @@ class Codec(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Features(unittest.TestCase):
+    def test_floppy_s_sounds_are_heard_and_its_replies_counted(self):
+        scenario = {"sessions": [{"steps": [{"hear": "what's the capital of France?"}]}],
+                    "checks": [{"check": "speaks", "at": [0, 0], "pattern": "paris"},
+                               {"check": "replies_at_most", "at": [0, 0], "max": 1}]}
+        records = [
+            log("environment.sound", json.dumps({"audio": "media/step-0-0.pcm", "source": "gabe"})),
+            said("Paris."),
+            log("environment.sound", json.dumps({"audio": "media/say-1.pcm", "source": "floppy"})),
+            log("environment.sound", json.dumps({"audio": "media/say-2.pcm", "source": "floppy"})),
+        ]
+        job = {"steps": [step(0, 0, 0, 4, kind="hear")], "sessions": [records], "done": True,
+               "heard": {"0#media/say-1.pcm": "The capital", "0#media/say-2.pcm": "is Paris."}}
+        value, results = score.score(scenario, job)
+        self.assertEqual(value, 1.0)
+        self.assertIn("The capital is Paris.", results[0]["why"])
+        job["heard"] = {}
+        value, results = score.score(scenario, job)
+        self.assertEqual(results[0]["score"], 0.0)
+        self.assertIn("2 sound(s) of floppy's", results[0]["why"])
+        self.assertEqual([g for _, g in score.sound_groups(scenario, job)], [[json.loads(records[2]["text"])], [json.loads(records[3]["text"])]])
+        transcript = score.summary(scenario, dict(job, heard={"0#media/say-1.pcm": "Paris."}))
+        self.assertIn("gabe says out loud: \"what's the capital of France?\"", transcript)
+        self.assertIn("floppy is heard saying out loud: Paris.", transcript)
+
+    def test_an_utterance_is_heard_whole_in_the_step_it_began_and_by_session(self):
+        scenario = {"sessions": [{"steps": [{"hear": "a"}, {"hear": "b"}]}, {"steps": [{"say": "c"}]}],
+                    "checks": [{"check": "speaks", "at": [0, 0], "pattern": "^one two$"},
+                               {"check": "speaks", "at": [0, 1], "pattern": "^three$"},
+                               {"check": "speaks", "at": [1, 0], "pattern": "^four$"}]}
+        def chunk(name):
+            return log("environment.sound", json.dumps({"audio": f"media/{name}", "source": "speaking"}))
+        first = [chunk("speaking-1.0.pcm"), chunk("speaking-1.1.pcm"), chunk("speaking-2.0.pcm")]
+        job = {"steps": [step(0, 0, 0, 1, kind="hear"), step(0, 1, 1, 3, kind="hear"), step(1, 0, 0, 1)],
+               "sessions": [first, [chunk("speaking-1.0.pcm")]], "done": True}
+        groups = score.sound_groups(scenario, job)
+        self.assertEqual([(s, [d["audio"] for d in g]) for s, g in groups],
+                         [(0, ["media/speaking-1.0.pcm", "media/speaking-1.1.pcm"]), (0, ["media/speaking-2.0.pcm"]),
+                          (1, ["media/speaking-1.0.pcm"])])
+        # A restarted floppy's first utterance has the first session's name.
+        job["heard"] = {score.group_key(s, g): words for (s, g), words in zip(groups, ["one two", "three", "four"])}
+        value, results = score.score(scenario, job)
+        self.assertEqual([r["score"] for r in results], [1.0, 1.0, 1.0])
+
+    def test_logged_diagnostics_read_a_label_and_its_pattern(self):
+        scenario = {"sessions": [{"steps": [{"say": "hi"}]}], "checks": [],
+                    "diagnostics": [{"check": "logged", "at": [0, 0], "label": "cognition.stage", "pattern": "reasoning"},
+                                    {"check": "not_logged", "at": [0, 0], "label": "listening.degraded"},
+                                    {"check": "logged", "at": [0, 0], "label": "cognition.rest"}]}
+        job = {"steps": [step(0, 0, 0, 1)], "sessions": [[log("cognition.stage", "reasoning answered")]], "done": True}
+        self.assertEqual([r["score"] for r in score.diagnostics(scenario, job)], [1.0, 1.0, 0.0])
+
+    def test_every_feature_a_scenario_names_is_defined(self):
+        spec = features.load()
+        features.check_names(runner.load_scenarios(), spec)
+        with self.assertRaisesRegex(ValueError, "unknown feature heering"):
+            features.check_names({"x": {"features": ["heering"], "checks": [], "criteria": {}}}, spec)
+        # Every feature has a live scenario, or a status saying why it has none.
+        named = {f for s in runner.load_scenarios().values() for f in s.get("features", [])}
+        for feature in spec["features"]:
+            self.assertTrue(feature["name"] in named or feature.get("status"), feature["name"])
+
+    def test_a_feature_is_scored_on_its_own_checks_and_criteria(self):
+        spec = {"grades": {"A": 0.9, "B": 0.8, "C": 0.7, "D": 0.6},
+                "features": [{"name": "hearing", "title": "Hearing", "what": "", "evidence": [{"label": "floppy.say"}]},
+                             {"name": "speaking", "title": "Speaking", "what": ""},
+                             {"name": "seeing", "title": "Seeing", "what": "", "status": "not wired"}]}
+        scenario = {"features": ["hearing", "speaking"], "criteria": {"heard": "", "spoken": ""},
+                    "criteria_features": {"speaking": ["spoken"]}}
+        graded = [{"scenario": "voice", "diagnostics": [], "seen": {"floppy.say": True},
+                   "results": [{"score": 1.0, "weight": 1, "features": ["hearing"]},
+                               {"score": 0.0, "weight": 1, "features": ["speaking"]}],
+                   "grades": [{"overall": 0.5, "criteria": {"heard": 1.0, "spoken": 0.0}}]}]
+        rows = {r["name"]: r for r in features.grade(spec, {"voice": scenario}, graded, 0.6)}
+        self.assertAlmostEqual(rows["hearing"]["live"], 0.6 * 1.0 + 0.4 * 0.5)
+        self.assertEqual(rows["hearing"]["letter"], "B")
+        self.assertAlmostEqual(rows["speaking"]["live"], 0.0)
+        self.assertEqual(rows["speaking"]["letter"], "F")
+        self.assertIsNone(rows["seeing"]["live"])
+        self.assertEqual(rows["hearing"]["evidence"], {"floppy.say": 1})
+        summary = {"jobs": 1, "unfinished": 0, "errors": [{"id": "x-r0", "error": "no step ran"}]}
+        text = features.markdown("t", list(rows.values()), summary)
+        self.assertIn("| Seeing | – | n/a | n/a | not wired |", text)
+        self.assertIn("- x-r0: no step ran", text)
+        # A job that measured the rig is kept out of the feature's score.
+        errored = dict(graded[0], error="floppy never activated in session 0")
+        rows = {r["name"]: r for r in features.grade(spec, {"voice": scenario}, [errored], 0.6)}
+        self.assertIsNone(rows["hearing"]["live"])
+
+    def test_a_job_that_never_reached_floppy_is_an_infra_error(self):
+        scenario = {"sessions": [{"steps": [{"say": "hi"}]}]}
+        job = {"steps": [step(0, 0, 0, 1)], "sessions": [[log("bot.activated", "{}")]], "done": True}
+        self.assertIsNone(score.infra_error(scenario, job))
+        self.assertEqual(score.infra_error(scenario, dict(job, done=False)), "the driver did not finish the job")
+        self.assertEqual(score.infra_error(scenario, dict(job, sessions=[[said("hi")]])), "floppy never activated in session 0")
+        self.assertAlmostEqual(features.interval([1.0, 0.0]), 1.96 * 0.7071067811865476 / 2 ** 0.5)
+        self.assertIsNone(features.interval([1.0]))
+
+    def test_a_streamed_wav_is_read_past_its_header(self):
+        wav = sound.wav_of_pcm(b"\x01\x00" * 10)
+        self.assertEqual(sound.pcm_of_wav(wav), b"\x01\x00" * 10)
+        self.assertEqual(features.parse_test_output("test result: ok. 3 passed; 1 failed; 2 ignored; 0 measured"), (3, 1, 2))
+
+
+class Questions(unittest.TestCase):
+    def test_every_question_names_real_scenarios(self):
+        spec = questions.load()
+        questions.check_names(runner.load_scenarios(), spec)
+        with self.assertRaisesRegex(ValueError, "unknown scenario recal_restart"):
+            questions.check_names({}, {"questions": [{"name": "q", "scenarios": ["recal_restart"]}]})
+
+    def test_a_question_is_answered_from_its_scenarios_with_evidence(self):
+        records = [log("conversation.memories", "recalled 0, remembered 1"),
+                   log("conversation.memories", "recalled 0, remembered 1"),
+                   log("conversation.memories", "recalled 2,\n remembered 1"), said("Rufus"),
+                   log("floppy.output", json.dumps({"turn": 2, "output": [{"event": "bot.ability.cognition.ignore", "data": {}}]}))]
+        self.assertEqual(questions.inside(records, ["conversation.memories", "stm.failed"]),
+                         {"conversation.memories": [3, ["recalled 0, remembered 1", "recalled 2, remembered 1"]]})
+        self.assertEqual(questions.selected(records),
+                         {"bot.ability.communication.respond": 1, "bot.ability.cognition.ignore": 1})
+        spec = {"answers": {"yes": 0.8, "partly": 0.5},
+                "questions": [{"name": "remembers", "question": "What does floppy remember?",
+                               "scenarios": ["a", "b"], "inside": ["conversation.memories"], "decisions": True},
+                              {"name": "sees", "question": "Does it see?", "scenarios": ["c"]}]}
+        graded = [{"id": "a-r0", "scenario": "a", "score": 1.0, "transcript": "gabe says: hi", "grades": [],
+                   "inside": {"conversation.memories": [1, ["recalled 1"]]}, "selected": {"x": 2}},
+                  {"id": "a-r1", "scenario": "a", "score": 0.5},
+                  {"id": "b-r0", "scenario": "b", "score": 0.0, "error": "floppy never activated in session 0"}]
+        rows = questions.answer_all(spec, graded)
+        # b's only job measured the rig: a alone answers, by its repeats' mean.
+        self.assertEqual((rows[0]["score"], rows[0]["answer"], rows[0]["scenarios"]), (0.75, "partly", {"a": 0.75}))
+        self.assertEqual((rows[1]["score"], rows[1]["answer"]), (None, "not run"))
+        text = questions.markdown("t", rows)
+        self.assertIn("| What does floppy remember? | partly | 0.75 | a 0.75 |", text)
+        self.assertIn("    gabe says: hi", text)
+        self.assertIn("inside (not scored): `conversation.memories` x1: `recalled 1`", text)
+        self.assertIn("`x` 2", text)
+        self.assertIn("### b-r0: not scored (floppy never activated in session 0)", text)
+
+
+class Climb(unittest.TestCase):
+    def test_the_split_is_seeded_stratified_and_disjoint(self):
+        scenarios = runner.load_scenarios(["name", "reflex", "routine"])
+        train, test = runner.split_scenarios(scenarios, 0.34, 7)
+        self.assertEqual(sorted(train + test), sorted(scenarios))
+        self.assertFalse(set(train) & set(test))
+        # One held out from each category of two or more.
+        self.assertEqual(sorted(scenarios[n]["category"] for n in test), ["name", "reflex", "routine"])
+        self.assertEqual((train, test), runner.split_scenarios(scenarios, 0.34, 7))
+
+    def test_known_negatives_say_nothing_or_nothing_useful(self):
+        scenario = runner.load_scenarios(["reflex_pingpong"])["reflex_pingpong"]
+        nulls = runner.null_transcripts(scenario)
+        self.assertNotIn("floppy says", nulls["silent"])
+        self.assertEqual(nulls["unknown"].count("floppy says: I don't know."), 5)
+        self.assertIn("(floppy is restarted)", nulls["silent"])

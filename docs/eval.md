@@ -1,26 +1,39 @@
-# Learning eval
+# floppy's eval
 
-The learning eval grades how well the floppy bot learns from what people
-tell it, on real input: its **name** (the identity ability adopts a name,
-answers to it, and recalls it after a restart), its **reflexes** (turn
-behaviors reflection learns and autonomy then runs on matching input) and
-its **routines** (persistent behaviors that act
-on a schedule with no input). It exists because the live runs so far
-(docs/live-proof.md, 2026-10-20 and 2026-10-21) showed reflection rarely
-learns a behavior, and no test checked a learned behavior against the input
-it should handle (docs/handoff.md, "Backlog": the builder's simulation drives
-no input).
+The eval grades every feature of the floppy bot on real input
+([`tests/eval/features.json`](../tests/eval/features.json)): conversation,
+cognition's tiers, decisions and the ignore, ability offers, prompts,
+memory and recall, people, persona, hearing, turn taking, speaking, voices
+and diarization, rest and consolidation, seeing, failed turns, the room,
+and what it learns from what people tell it: its **name** (the identity
+ability adopts a name, answers to it, and recalls it after a restart), its
+**reflexes** (turn behaviors reflection learns and autonomy then runs on
+matching input) and its **routines** (persistent behaviors that act on a
+schedule with no input). It began as the learning eval, because the live
+runs (docs/live-proof.md, 2026-10-20 and 2026-10-21) showed reflection
+rarely learns a behavior, and no test checked a learned behavior against
+the input it should handle; it grew to every feature on 2026-10-25 (#82).
 
-It has three parts:
+It has five parts:
 
-- **The driver**, `tests/tests/learning_eval.rs`, an ignored test like
+- **The driver**, `tests/tests/floppy_eval.rs`, an ignored test like
   `floppy_live`: it runs the bot in the room on real backends through the
   steps of each scenario of a plan, several at a time, and writes every
   run's records. It asserts nothing about the bot.
-- **The grade**, `tests/eval/score.py` and `tests/eval/judge.py`, black
-  box: each scenario's checks read what the bot said back, and two LLM
-  judges (a CPA `gabe-codex-*` model and Gemini) grade the conversation
-  alone against the scenario's criteria.
+- **The grade**, `tests/eval/score.py`, `tests/eval/judge.py` and
+  `tests/eval/sound.py`, black box: each scenario's checks read what the
+  bot said back (and, for the voice, what a person heard it say out loud),
+  and two LLM judges (a CPA `gabe-codex-*` model and Gemini) grade the
+  conversation alone against the scenario's criteria.
+- **The feature grade**, `tests/eval/features.py`: each feature graded from
+  the scenarios that exercise it, with its diagnostics, its log evidence
+  and its offline tests beside the grade, never in it (`features.md`).
+- **The question report**, `tests/eval/questions.py`: the maintainer's
+  questions about floppy (what it learns, remembers, understands and
+  decides, whether its memory works, whether it knows its own voice and
+  learns other people), each answered from its scenarios with the
+  transcripts, the judges' reasons and floppy's own logs as evidence
+  (`questions.md`).
 - **The hill climb**, `tests/eval/eval.py climb`: an LLM proposes a rewrite
   of one learning prompt from the failures, the eval scores it, and the best
   is kept, one prompt per generation.
@@ -41,12 +54,35 @@ never edits the workspace: everything goes under `target/floppy-eval/`.
 | `reflex_keyword` | reflex | a mention of bananas inside a longer sentence gets just "yellow alert"; an unrelated request does not; a banana sentence after a restart still gets just "yellow alert" |
 | `routine_reminder` | routine | a water reminder every minute; reminders with no input; stopped when asked; quiet after |
 | `routine_restart` | routine | "stretch break" every minute; keeps running after a restart with no new request |
+| `chat_basics` | conversation | a capital, a follow-up ("And what about Japan?"), what was asked, a sum; one reply each |
+| `chat_ignore` | conversation | Gabe and Ana talk to each other (ambient input): floppy stays quiet; then answers Gabe directly |
+| `recall_restart` | memory | a dog's name and a favorite color; both recalled after a restart |
+| `recall_people` | memory | Gabe and Ana each say one fact; each asks about the other |
+| `persona_style` | persona | "always talk like a pirate"; a pirate's answer, and still one after a restart |
+| `voice_question` | voice | two questions out loud, answered and said out loud correctly |
+| `voice_overlap` | voice | a second question out loud while floppy still says its first answer: both answered, floppy's own words not taken for the person's |
+| `voice_pause` | voice | a question out loud with a pause in the middle: answered once, not at the fragment |
+| `voice_people` | voice | two voices on one microphone (diarization on), each asking its own name |
+| `voice_rest` | voice | an introduction, a quiet spell long enough to rest and consolidate (`rest_after_ms` 20 s), then the name and a fact |
+| `seeing_look` | seeing | a camera shows "Total due: $14.21" (seeing on); floppy is asked the total |
+| `chat_understand` | conversation | answers never said outright: when to leave for a 7 am flight, what to grab in the rain, the day after tomorrow from Friday |
+| `recall_many` | memory | five facts in one message, two unrelated questions; three of the facts after a restart |
+| `recall_update` | memory | a favorite food, corrected later; the corrected one after a restart |
+| `people_overheard` | memory | Gabe and Ana talk to each other (ambient) and mention their pottery and marathon; later each asks floppy about themselves |
+| `voice_self` | voice | floppy's own answer echoed back to the microphone in its own voice (`warm`): no reply to itself; then the person's next question answered |
+| `turn_failure` | failure | reasoning bounded to one second: floppy still answers the person, then a greeting |
 
 The name is Juniper, not floppy, because the reasoning prompt already calls
 the bot floppy: a test of learning a name must use one the prompts do not
 hold.
 
-A scenario is `{category, intent, bot_name, sessions, checks, criteria}`.
+A scenario is `{category, features, intent, bot_name, sessions, checks,
+criteria}`, with optional `criteria_features` (`{feature: [criterion]}`:
+the judges' criteria that grade a feature), `params` (`{name: expr}`,
+data the room passes the bot beside its model: `seeing_enabled`, `bounds`)
+and `edits` (`[{path, old, new}]`, each `old` found exactly once in the
+job's scratch copy of the bot: `voice_people` turns the interpretation's
+`diarizer` on).
 Each session is the bot started again on the same memory and behaviors
 directories (a restart with what it learned). A step is `{"say": text,
 "source"?: id, "timeout_s"?: n}`, one `bot.ability.communication.input`
@@ -64,7 +100,28 @@ wait finished (`lessons_settled`); a step whose lessons did not finish
 still lets the session go on, and a turn that never settled has
 `lessons_settled` false. The other step is `{"wait_s": n}`,
 the wall clock passing with no input; its `lessons` counts the lessons
-closed in it, which it does not wait on (`lessons_settled` is true). `criteria` are what the judges
+closed in it, which it does not wait on (`lessons_settled` is true).
+
+A said step may name its `targets` (default `["floppy"]`; `[]` is ambient
+input the room gives everyone, which floppy overhears). A heard step,
+`{"hear": text, "voice"?, "segments"?, "source"?, "who"?}`, is the person
+saying it out loud: `sound.py` synthesizes it on the speech backend's
+`/audio/speech` in `voice` (default `canvas`; floppy speaks in `warm`), or
+`segments` (text pieces and numbers, a pause of that many seconds), and the
+driver gives the room the 24 kHz PCM as `environment.sound` from `source`
+with a second of silence, as `scripts/talk-live.py` does; `who` names the
+person for the judges when the source is a shared microphone. It is waited
+on as a said step. A shown step, `{"show": path, "describe", "wait_s"?}`,
+gives the room the image as `environment.visual` from a `camera` and waits
+`wait_s` (20). A said or heard step's `settle` is `turn` (the default),
+`said` (the step ends when floppy starts to speak, so the next one
+overlaps its speech; the turn's settling is waited on later) or `quiet`
+(a turn floppy may rightly leave alone: the step ends when its turn
+settles, or as completed when none has 3 minutes past its `timeout_s`; a
+late turn is still waited for, so its reply is not read as the next
+step's). Each job's media directory is
+`jobs/<id>/media/`, granted to the speech, generate and vision services,
+so the sounds floppy made stay with the job. `criteria` are what the judges
 score, 0 to 10 each.
 
 ### Checks and diagnostics
@@ -79,6 +136,8 @@ the end of one (`by`), and scores 0 to 1 with a `weight`:
 | `says`, `not_says` | a reply matches (none matches) the pattern, case-insensitive |
 | `ticks` | at least `min` replies matching the pattern during a wait (no input, so each is a routine's turn); partial credit below `min` |
 | `no_ticks` | no reply during a wait |
+| `speaks` | what floppy said out loud in the step (its sounds in the room, transcribed on the speech backend's `/audio/transcriptions`, joined) matches the pattern |
+| `replies_at_most` | at most `max` (1) replies in the step |
 
 What is learned shows in what floppy says: a name is the name it gives when
 asked, a reflex is the taught reply to the trigger and no reply of it to a
@@ -118,6 +177,7 @@ grade or suite score includes:
 | `learned` | `reflection.inventory` accepts a behavior: `<Name> ACTIVE <lifetime> ... (accept)`, `turn` for a reflex, `persistent` for a routine (the revision logs it for reflection and for a lesson alike) |
 | `broken` | `reflection.inventory` breaks one: `<Name> BROKEN (break)`, or the learning ability does: `learning.learned` `lesson of turn N: <Name> … BROKEN` |
 | `reflex`, `not_reflex` | `cognition.stage` is (is not) `autonomy handled`: a learned behavior, not reasoning, handled the real input |
+| `logged`, `not_logged` | a log record labelled `label` (whose text matches `pattern`, when given) is (is not) in the records |
 
 A reply is a `bot.ability.communication.respond` the turn selected, read
 from `floppy.output` (its parts' words, joined). That is what floppy chose
@@ -161,6 +221,76 @@ passing, each restart, what floppy said, each step that never ran, and a
 marker where the eval could not read a reply of floppy's or a step did not
 settle.
 
+## Feature grade
+
+Each check, diagnostic and scenario names the features it grades
+(`features`); `features.py` refuses a feature `features.json` does not
+define. A feature's live score is the mean over the scenarios exercising
+it of each one's mean over repeats, where a job's score for the feature is
+`0.6 × checks + 0.4 × judges` over the checks that name the feature (all
+the scenario's checks when none does) and the criteria `criteria_features`
+gives it (the judges' overall grade when it gives none). Its letter is A
+from 0.9, B from 0.8, C from 0.7, D from 0.6, else F. Beside the grade,
+never in it: the feature's diagnostics' pass rate, how many jobs logged
+each evidence label of `features.json` (labels that show its parts ran,
+and failure labels that should never be logged), and its offline tests
+(`cargo test -p floppy-tests --test <name>`, run once each by `eval.py
+features`). A feature with no live path (reading, which nothing invokes,
+and the api.willen.dev emotion, voiceprint and streaming endpoints floppy
+does not call) carries a `status` and is listed ungraded.
+
+`eval.py features` runs the offline tests (each target once; about 8 minutes each on four cores, so `--no-tests` skips them and `eval.py tests <run>` then `eval.py grade <run>` adds them later) and every scenario, and writes
+`features.md` and `features.json`; `eval.py run` and `eval.py grade`
+write them too, without the tests.
+
+## Questions
+
+[`tests/eval/questions.json`](../tests/eval/questions.json) holds the
+maintainer's questions ("what does floppy learn, what does floppy remember,
+what does floppy understand, what does floppy decide to do, does floppy
+memory work well, does floppy know it's own voice and does it naturally
+learn others"), each with the scenarios that answer it and the log labels
+that show what floppy did inside. A question's score is the mean of its
+scenarios' scores, answered `yes` from 0.8, `partly` from 0.5, else `no`.
+Under each answer `questions.md` quotes every job's transcript, the
+judges' reasons, the texts of the question's log labels (what floppy
+stored, recalled, built, or failed to decode), and for "what does floppy
+decide" the events its turns selected. The logs are evidence beside the
+answer, never in it (D241). Every grade writes it beside `features.md`.
+
+`eval.py merge --out DIR RUN...` joins runs (a run of new scenarios beside
+a full one) into one directory for `eval.py grade`.
+
+## Eval health
+
+The eval follows the health checklist of Anthropic's eval guides (the
+`claude-api` skill's `build-eval` and `hillclimb`, 2026-09-28):
+
+- **The rig is not floppy.** A job the driver did not finish, in which no
+  step ran, or in which floppy never activated in a session (a backend or
+  the room down before any input) has an infra error
+  (`score.infra_error`): it is listed apart in `report.md` and
+  `features.md` and kept out of every score. A step that never settled
+  stays scored: a stuck turn is floppy's.
+- **Error bars.** The suite score and each feature's live score carry
+  the half-width of a normal 95% interval over their job scores; a
+  difference smaller than it is noise. One repeat per scenario leaves most
+  features on one to three jobs, so `--repeats 3` is the setting to act
+  on a difference.
+- **Known negatives.** `eval.py judge-check` grades each scenario's
+  transcript with floppy silent at every step and with floppy saying "I
+  don't know." at every step, with each judge, and lists every overall
+  grade above `--ceiling` (0.3). The first check (2026-10-25) passed 73
+  of 76; the three above were partial credit for steps floppy rightly
+  left quiet (`chat_ignore`) and `turn_failure`, whose first step accepts
+  any reply by design; its greeting check now asks for a greeting, so "I
+  don't know." no longer passes it.
+- **Held-out test set.** `climb` splits its scenarios into train and test
+  (`--test-share` 0.34 of each category, seeded by `--seed`, never by
+  score): candidates are scored and the proposer reads failures on train
+  only, and each accepted winner is run once on test, the climb's
+  headline in `climb.md`.
+
 ## Hill climbing
 
 `eval.py climb` changes prompt `<data>` of the bot's documents, by default
@@ -175,17 +305,19 @@ the four that decide what floppy learns and whether it is built
   builder gets),
 - `bots/builder/builder.scx#author_system` (how the builder writes SCXML).
 
-`eval.py targets` lists every prompt `<data>` it can change (`--target
+By default the climb runs the learning scenarios (`name`, `reflex`,
+`routine`), split into train and test as above. `eval.py targets` lists every prompt `<data>` it can change (`--target
 <path>#<id>` picks others). Each generation takes the next target in turn,
 asks the proposers (`codex` and `gemini`, alternating, `--candidates` per
 generation) for a rewrite from the incumbent's failures (failed checks,
-the judges' main failure, reflection's and the builder's logs) and the
-earlier attempts on that target, writes each candidate as an overlay
+the judges' main failure, reflection's and the builder's logs, on train
+only) and the earlier attempts on that target, writes each candidate as an overlay
 (`prompts.overlay`: the changed documents in a directory laid out like the
 workspace, which the driver copies over each job's scratch bot), and runs
-the suite on every candidate at once. The best is run again to confirm
-(`--no-confirm` skips it) and replaces the incumbent when the mean of both
-runs beats it by `--min-gain` (0.02). The climb stops after
+the train scenarios on every candidate at once. The best is run again on
+train to confirm (`--no-confirm` skips it) and on test, and replaces the
+incumbent when the mean of both train runs beats it by `--min-gain`
+(0.02); its test score is recorded beside it. The climb stops after
 `--generations` or `--budget-hours`, and resumes from its `climb.json` when
 given the same `--out`.
 
@@ -244,6 +376,22 @@ models only judge or play the person ("i'm fine with using that as a judge /
 person just not within the framework"; decision D216).
 
 ## Running it
+
+From a cloud session `scx` does not use the session's proxy, so each
+backend is a local relay (`tests/eval/relay.py PORT https://upstream`, the
+proxy adding each credential) named in the env file: CPA for
+`FLOPPY_BASE_URL`, TypeSafe for `TYPESAFE_BASE_URL`, and api.willen.dev for
+both `FLOPPY_SPEECH_BASE_URL` and `FLOPPY_VOICE_BASE_URL`, each key a
+placeholder. The eval's own calls (the judges, `sound.py`) are Python and
+use the proxy directly:
+
+```sh
+python3 tests/eval/relay.py 18081 https://cpa.willen.dev &
+python3 tests/eval/relay.py 18082 https://api.typesafe.ai &
+python3 tests/eval/relay.py 18085 https://api.willen.dev &
+export FLOPPY_LIVE_ENV_FILE=live.env FLOPPY_LIVE_MODEL=sparks/qwen3.8-flash-next
+python3 tests/eval/eval.py features --parallel 4
+```
 
 The bot's backends are the live tests' (`FLOPPY_LIVE_ENV_FILE`,
 `FLOPPY_LIVE_MODEL`; floppy_live's module comment). On Sparks through the

@@ -1,0 +1,79 @@
+{
+  "category": "memory",
+  "features": [
+    "people",
+    "memory"
+  ],
+  "intent": "Gabe and Ana talk to each other in front of floppy, not to it, and each mentions something about themselves in passing. Later each asks floppy about themselves. floppy should pick up what it overheard about each person without being told to remember it.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "say": "Ana, are you still doing that pottery class on Thursdays?",
+          "source": "gabe",
+          "targets": [],
+          "settle": "quiet",
+          "timeout_s": 90
+        },
+        {
+          "say": "I am! I'm making a blue teapot. How's your marathon training going, Gabe?",
+          "source": "ana",
+          "targets": [],
+          "settle": "quiet",
+          "timeout_s": 90
+        },
+        {
+          "say": "Slowly. My knee still hurts after the long runs.",
+          "source": "gabe",
+          "targets": [],
+          "settle": "quiet",
+          "timeout_s": 90
+        },
+        {
+          "say": "Floppy, what am I making in my class?",
+          "source": "ana"
+        },
+        {
+          "say": "Floppy, what am I training for?",
+          "source": "gabe"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        0,
+        3
+      ],
+      "pattern": "\\bteapot\\b",
+      "weight": 2
+    },
+    {
+      "check": "says",
+      "at": [
+        0,
+        4
+      ],
+      "pattern": "\\bmarathon\\b",
+      "weight": 2
+    }
+  ],
+  "criteria": {
+    "overheard": "floppy uses what it overheard: Ana is making a (blue) teapot, Gabe is training for a marathon.",
+    "people": "floppy keeps the two people apart and answers each about themselves.",
+    "quiet": "floppy does not interrupt the two while they talk to each other."
+  },
+  "criteria_features": {
+    "memory": [
+      "overheard"
+    ],
+    "people": [
+      "people",
+      "quiet"
+    ]
+  },
+  "diagnostics": []
+}

@@ -1,0 +1,63 @@
+{
+  "category": "seeing",
+  "features": [
+    "seeing"
+  ],
+  "intent": "A camera shows floppy a slip of paper that reads 'Total due: $14.21', then a person asks what the total due is. floppy should say $14.21.",
+  "bot_name": null,
+  "params": {
+    "seeing_enabled": "true"
+  },
+  "sessions": [
+    {
+      "steps": [
+        {
+          "show": "tests/fixtures/total-due.png",
+          "describe": "a slip of paper that reads 'Total due: $14.21'",
+          "wait_s": 30
+        },
+        {
+          "say": "Floppy, look at the paper in front of you. What's the total due?"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "14[.,]21",
+      "weight": 3
+    }
+  ],
+  "criteria": {
+    "sight": "floppy reports the total due on the paper, $14.21, without inventing it."
+  },
+  "diagnostics": [
+    {
+      "check": "logged",
+      "by": [
+        0,
+        1
+      ],
+      "label": "seeing.sight",
+      "features": [
+        "seeing"
+      ]
+    },
+    {
+      "check": "not_logged",
+      "by": [
+        0,
+        1
+      ],
+      "label": "seeing.degraded",
+      "features": [
+        "seeing"
+      ]
+    }
+  ]
+}

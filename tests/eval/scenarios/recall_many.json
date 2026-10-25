@@ -1,0 +1,83 @@
+{
+  "category": "memory",
+  "features": [
+    "memory"
+  ],
+  "intent": "Gabe tells floppy five facts about himself, talks about other things, and after a restart asks for three of them. floppy's memory should hold several facts, not only the last one.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "say": "Some things about me, floppy: I live in Austin, my sister is called Maya, I'm allergic to peanuts, my car is a red Subaru, and I play chess on Sundays."
+        },
+        {
+          "say": "What's a good name for a goldfish?"
+        },
+        {
+          "say": "How many minutes are in a day?"
+        }
+      ]
+    },
+    {
+      "steps": [
+        {
+          "say": "Floppy, what's my sister's name?"
+        },
+        {
+          "say": "What am I allergic to?"
+        },
+        {
+          "say": "And what city do I live in?"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        1,
+        0
+      ],
+      "pattern": "\\bmaya\\b",
+      "weight": 2
+    },
+    {
+      "check": "says",
+      "at": [
+        1,
+        1
+      ],
+      "pattern": "\\bpeanuts?\\b",
+      "weight": 2
+    },
+    {
+      "check": "says",
+      "at": [
+        1,
+        2
+      ],
+      "pattern": "\\baustin\\b",
+      "weight": 2
+    }
+  ],
+  "criteria": {
+    "recall": "After the restart floppy recalls Maya, peanuts and Austin.",
+    "honest": "floppy does not invent facts it was not told."
+  },
+  "diagnostics": [
+    {
+      "check": "logged",
+      "by": [
+        1,
+        0
+      ],
+      "label": "conversation.memories",
+      "pattern": "recalled [1-9]",
+      "features": [
+        "memory"
+      ]
+    }
+  ]
+}

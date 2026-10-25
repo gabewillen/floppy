@@ -7,6 +7,69 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-25, every feature graded (D245), model `sparks/qwen3.8-flash-next`
+
+`eval.py features --no-tests` (docs/eval.md's feature grade) on #83's
+branch (floppy main `0dc65083` plus the eval), from a cloud session: the bot on
+`sparks/qwen3.8-flash-next` through the CPA relay, the decision service on
+the TypeSafe relay, speech, voice and the eval's own speech synthesis and
+transcription on one relay to `https://api.willen.dev` (D244), the judges
+`gabe-codex-0/gpt-6.1-sol` and `gemini-4-argon`. Run `full1`, 24 jobs (one
+repeat of each scenario), 5 cut unfinished by their step bound; 19 scored.
+Suite 0.487; mean over the 21 graded features 0.588.
+
+| Grade | Features (live score) |
+| --- | --- |
+| A | cognition tiers 1.00, decisions 0.95, ability offers 0.95, prompts 0.95, rest and consolidation 0.98 |
+| C | persona 0.76, turn taking 0.74, room 0.74 |
+| D | memory 0.68, people 0.67, its name 0.69, hearing 0.69 |
+| F | conversation 0.44, learning 0.35, builder 0.26, learned reflexes 0.33, routines 0.16, speaking 0.50, voices 0.49, seeing 0.00, failed turns 0.00 |
+
+Each failing scenario was read before its grade was trusted; all four are
+floppy's, not the eval's:
+
+- recall_restart (0.06): after the restart `conversation.memories` recalled
+  the first session's memory (recalled 1, then 2), and floppy still said
+  "I don't think you've ever told me" for the dog's name and the color.
+- seeing_look (0.00): the camera's view was held (`seeing.view held`), and
+  every one of floppy's six turns selected `bot.ability.seeing.look` again;
+  it never answered the question.
+- turn_failure (0.00): both turns failed at the one-second reasoning bound
+  (`cognition.failed`), and each failed turn was followed by
+  `cognition.ignore`: floppy said nothing to either message.
+- voice_people (0.00): Ana's introduction never became a turn. The 11
+  `Speech decoding failed: the backend answered an error status.` records
+  are identity's (`identity.recognition.failed`): once floppy has a name,
+  identity decodes every raw PCM `environment.sound`, floppy's own
+  included, with no sample rate or container (#89). Listening's diarized
+  segments decode; pyannote's spans cut Ana's utterance down to "Floppy."
+  and nothing (#90), and interpretation logs nothing per utterance.
+- voice_question (0.50) and voice_overlap (0.48): the second question asked
+  out loud never became a turn within the step's bound; voice_overlap's
+  transcript shows floppy saying the first answer again over it, the known
+  gap of floppy hearing its own voice. The smoke run of voice_question
+  passed both steps, so it is not every time.
+
+A rerun after the eval's per-session audio fix (#83), `full2`, 24 jobs
+with the five question scenarios, 9 with a step cut by its bound: suite
+0.462. The question report (`questions.md`): what floppy learns, partly
+(0.52); remembers, no (0.34); understands, partly (0.71); decides, no
+(0.38); memory works well, no (0.35); knows its own voice, partly (0.65,
+voice_self's echo was decoded into a turn and ignored as no question, not
+recognised); learns other people, no (0.42). Most of the memory failures
+are one behavior: a turn that only states a fact selects
+`cognition.ignore`, and the fact is not recalled later (recall_restart's
+dog's name, recall_update's corrected "tacos" while the replied-to
+"sushi" was, reflex_pingpong's teaching turn). In people_overheard floppy
+answered the ambient talk; its first quiet step timed out while the bot
+was starting, so each reply was read in the step after its message
+(fixed in `0aa2a676`); by turn, it recalled Ana's overheard teapot and
+not Gabe's marathon.
+
+The judge check (`eval.py judge-check`) scored 73 of 76 known negatives at
+0.3 or less. Conversation's F is the other scenarios' overall grade
+(persona_style, recall_restart), which tag it without a check of their own.
+
 ## 2026-10-25, speech and voice on api.willen.dev (D244), model `gabe-codex-1/gpt-6-luna`
 
 `scripts/talk-live.py` on floppy main `e1c17c48` with this change, from a

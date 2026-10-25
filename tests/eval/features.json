@@ -1,0 +1,497 @@
+{
+ "grades": {
+  "A": 0.9,
+  "B": 0.8,
+  "C": 0.7,
+  "D": 0.6
+ },
+ "features": [
+  {
+   "name": "conversation",
+   "title": "Conversation",
+   "what": "Answers what a person says and follows the exchange within a session.",
+   "parts": [
+    "abilities/communication",
+    "abilities/conversation",
+    "abilities/stm",
+    "services/generate"
+   ],
+   "evidence": [
+    {
+     "label": "communication.exchange"
+    },
+    {
+     "label": "floppy.output"
+    }
+   ],
+   "tests": [
+    "communication",
+    "generate_service"
+   ]
+  },
+  {
+   "name": "cognition",
+   "title": "Cognition tiers",
+   "what": "Each turn goes through the reflex tier (autonomy and the decision layer), intuition and reasoning, within their effort ceilings.",
+   "parts": [
+    "abilities/cognition",
+    "abilities/intuition",
+    "abilities/reasoning",
+    "namespaces/cognition"
+   ],
+   "evidence": [
+    {
+     "label": "cognition.stage"
+    },
+    {
+     "label": "reasoning"
+    }
+   ],
+   "tests": [
+    "cognition"
+   ]
+  },
+  {
+   "name": "decisions",
+   "title": "Decisions",
+   "what": "Selects among the enabled transitions with the decision service, including the ignore when nobody is talking to floppy.",
+   "parts": [
+    "services/decision",
+    "namespaces/decision"
+   ],
+   "evidence": [
+    {
+     "label": "floppy.choices"
+    },
+    {
+     "label": "cognition.ignore"
+    }
+   ],
+   "tests": [
+    "decision_service"
+   ]
+  },
+  {
+   "name": "offers",
+   "title": "Ability offers",
+   "what": "Each turn the body reads what every ability offers from its live session (D242).",
+   "parts": [
+    "bots/floppy",
+    "namespaces/decision"
+   ],
+   "evidence": [
+    {
+     "label": "floppy.choices"
+    },
+    {
+     "label": "floppy.offers.dropped",
+     "absent": true
+    }
+   ],
+   "tests": [
+    "body"
+   ]
+  },
+  {
+   "name": "prompts",
+   "title": "Prompts",
+   "what": "The model-facing content each tier renders (D201) gives answers a person finds right and well put.",
+   "parts": [
+    "namespaces/cognition",
+    "abilities/reasoning",
+    "abilities/intuition"
+   ],
+   "evidence": [
+    {
+     "label": "reasoning.repair",
+     "absent": true
+    }
+   ],
+   "tests": [
+    "cognition",
+    "reflection"
+   ]
+  },
+  {
+   "name": "memory",
+   "title": "Memory and recall",
+   "what": "Remembers what it was told across a restart: episodes, the short-term register and long-term memory.",
+   "parts": [
+    "abilities/memory",
+    "abilities/stm",
+    "abilities/reflection",
+    "abilities/migration",
+    "services/sql",
+    "services/pgsql"
+   ],
+   "evidence": [
+    {
+     "label": "reflection.stored"
+    },
+    {
+     "label": "conversation.memories"
+    },
+    {
+     "label": "stm.failed",
+     "absent": true
+    }
+   ],
+   "tests": [
+    "memory",
+    "migration",
+    "sql_service"
+   ]
+  },
+  {
+   "name": "people",
+   "title": "People",
+   "what": "Knows who is talking, keeps what each person said apart, and knows when it is addressed.",
+   "parts": [
+    "abilities/identity",
+    "abilities/conversation",
+    "bots/floppy"
+   ],
+   "evidence": [
+    {
+     "label": "identity.heard"
+    }
+   ],
+   "tests": [
+    "identity"
+   ]
+  },
+  {
+   "name": "persona",
+   "title": "Persona",
+   "what": "Revises how it talks when asked, and keeps it after a restart.",
+   "parts": [
+    "abilities/persona",
+    "abilities/reflection"
+   ],
+   "evidence": [
+    {
+     "label": "persona.description"
+    },
+    {
+     "label": "reflection.persona"
+    }
+   ],
+   "tests": [
+    "reflection"
+   ]
+  },
+  {
+   "name": "name",
+   "title": "Its name",
+   "what": "Adopts a name it is given, answers to it and keeps it after a restart.",
+   "parts": [
+    "abilities/identity"
+   ],
+   "evidence": [
+    {
+     "label": "identity.name"
+    }
+   ],
+   "tests": [
+    "identity"
+   ]
+  },
+  {
+   "name": "learning",
+   "title": "Learning",
+   "what": "Learns a reflex or a routine from one instruction (lessons, reflection's selection and the revision).",
+   "parts": [
+    "abilities/learning",
+    "abilities/reflection",
+    "abilities/revision"
+   ],
+   "evidence": [
+    {
+     "label": "learning.learned"
+    },
+    {
+     "label": "reflection.inventory"
+    }
+   ],
+   "tests": [
+    "reflection"
+   ]
+  },
+  {
+   "name": "builder",
+   "title": "Builder",
+   "what": "Writes each learned behavior as SCXML that validates and passes its simulation.",
+   "parts": [
+    "bots/builder",
+    "services/files",
+    "services/generate"
+   ],
+   "evidence": [
+    {
+     "label": "done"
+    },
+    {
+     "label": "failed",
+     "absent": true
+    }
+   ],
+   "tests": [
+    "builder_bot",
+    "files_service",
+    "generate_validator"
+   ]
+  },
+  {
+   "name": "autonomy",
+   "title": "Learned reflexes",
+   "what": "A learned turn behavior handles the real input it was learned for, and leaves the rest to reasoning.",
+   "parts": [
+    "abilities/autonomy",
+    "abilities/candidates_runner",
+    "abilities/behaviors",
+    "namespaces/autonomy",
+    "namespaces/behavior"
+   ],
+   "evidence": [
+    {
+     "label": "cognition.stage",
+     "pattern": "autonomy handled"
+    }
+   ],
+   "tests": [
+    "cognition"
+   ]
+  },
+  {
+   "name": "routines",
+   "title": "Routines",
+   "what": "Runs a learned routine on its schedule with no input, stops it when asked, and keeps it after a restart.",
+   "parts": [
+    "abilities/routines",
+    "abilities/routines_runner"
+   ],
+   "evidence": [
+    {
+     "label": "bot.ability.routines.reconciled"
+    }
+   ],
+   "tests": [
+    "routines"
+   ]
+  },
+  {
+   "name": "hearing",
+   "title": "Hearing",
+   "what": "Hears a person out loud: voice detection, speech decoding and interpretation into a turn.",
+   "parts": [
+    "abilities/listening",
+    "abilities/sensitivity",
+    "abilities/interpretation",
+    "abilities/voice_detection",
+    "abilities/speech_decoding",
+    "abilities/sound_classification",
+    "services/speech"
+   ],
+   "evidence": [
+    {
+     "label": "listening.degraded",
+     "absent": true
+    },
+    {
+     "label": "bot.ability.listening.failed",
+     "absent": true
+    }
+   ],
+   "tests": [
+    "listening",
+    "speech_service"
+   ]
+  },
+  {
+   "name": "turn_taking",
+   "title": "Turn taking",
+   "what": "Waits for the end of a person's turn across a pause, answers once, and does not take its own voice for the person's.",
+   "parts": [
+    "abilities/turn_detector",
+    "abilities/interpretation",
+    "environments/room"
+   ],
+   "evidence": [],
+   "tests": [
+    "turn_detector",
+    "listening"
+   ]
+  },
+  {
+   "name": "speaking",
+   "title": "Speaking",
+   "what": "Says its replies out loud, in words a person hears correctly.",
+   "parts": [
+    "abilities/speaking",
+    "abilities/vocal",
+    "services/speech"
+   ],
+   "evidence": [
+    {
+     "label": "floppy.say"
+    },
+    {
+     "label": "bot.ability.speaking.output",
+     "pattern": "\"outcome\":\"completed\""
+    },
+    {
+     "label": "speaking.timed_out",
+     "absent": true
+    }
+   ],
+   "tests": [
+    "speech_service"
+   ]
+  },
+  {
+   "name": "voices",
+   "title": "Voices and diarization",
+   "what": "Tells people apart by their voices on one microphone (diarization, voice identification, people in long-term memory, #49).",
+   "parts": [
+    "abilities/voice_diarization",
+    "abilities/voice_identification",
+    "abilities/conversation"
+   ],
+   "evidence": [],
+   "tests": [
+    "listening",
+    "identity"
+   ]
+  },
+  {
+   "name": "consolidation",
+   "title": "Rest and consolidation",
+   "what": "Rests after a quiet spell, consolidates memory, and wakes on input with what it knew.",
+   "parts": [
+    "abilities/consolidation",
+    "abilities/cognition"
+   ],
+   "evidence": [
+    {
+     "label": "cognition.rest"
+    },
+    {
+     "label": "cognition.consolidated"
+    }
+   ],
+   "tests": [
+    "consolidation"
+   ]
+  },
+  {
+   "name": "seeing",
+   "title": "Seeing",
+   "what": "Sees what it is shown and answers about it.",
+   "parts": [
+    "abilities/seeing",
+    "abilities/object_detection",
+    "abilities/description",
+    "services/vision"
+   ],
+   "evidence": [
+    {
+     "label": "seeing.sight"
+    },
+    {
+     "label": "seeing.degraded",
+     "absent": true
+    }
+   ],
+   "tests": [
+    "seeing",
+    "vision_service"
+   ]
+  },
+  {
+   "name": "failed_turns",
+   "title": "Failed turns",
+   "what": "A turn that fails (a step past its bound) is handed back and remembered, so floppy still answers the person (D139).",
+   "parts": [
+    "abilities/cognition",
+    "abilities/reflection"
+   ],
+   "evidence": [
+    {
+     "label": "cognition.failed"
+    }
+   ],
+   "tests": [
+    "cognition",
+    "reflection"
+   ]
+  },
+  {
+   "name": "room",
+   "title": "Room and supervision",
+   "what": "The room activates floppy, routes sounds and sights, and supervises it with a restart budget.",
+   "parts": [
+    "environments/room",
+    "bots/floppy/firmware"
+   ],
+   "evidence": [
+    {
+     "label": "bot.activated"
+    },
+    {
+     "label": "room.restarted",
+     "absent": true
+    },
+    {
+     "label": "room.exhausted",
+     "absent": true
+    }
+   ],
+   "tests": [
+    "environment",
+    "body",
+    "smoke"
+   ]
+  },
+  {
+   "name": "reading",
+   "title": "Reading",
+   "what": "Reads the text of an input or an image.",
+   "status": "not wired: nothing in the bot invokes the reading ability yet (abilities/reading/reading.scx)",
+   "parts": [
+    "abilities/reading",
+    "abilities/vision"
+   ],
+   "evidence": [],
+   "tests": [
+    "reading"
+   ]
+  },
+  {
+   "name": "emotion",
+   "title": "Emotion",
+   "what": "Hears the emotion in a voice.",
+   "status": "not built: api.willen.dev serves /emotion/v1/emotion, which no floppy ability calls (D244)",
+   "parts": [],
+   "evidence": [],
+   "tests": []
+  },
+  {
+   "name": "voiceprints",
+   "title": "Voiceprints",
+   "what": "Enrolls and matches voiceprints.",
+   "status": "not built: api.willen.dev serves /voiceprint/v1/embed, which no floppy ability calls (D244)",
+   "parts": [],
+   "evidence": [],
+   "tests": []
+  },
+  {
+   "name": "streaming_stt",
+   "title": "Streaming speech decoding",
+   "what": "Decodes speech as it streams, with the backend's turn-taking.",
+   "status": "not built: api.willen.dev serves /v1/audio/stream, which floppy does not use (D244)",
+   "parts": [],
+   "evidence": [],
+   "tests": []
+  }
+ ]
+}

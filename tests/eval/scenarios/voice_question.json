@@ -1,0 +1,109 @@
+{
+  "category": "voice",
+  "features": [
+    "hearing",
+    "speaking",
+    "conversation",
+    "room"
+  ],
+  "intent": "A person talks to floppy out loud and floppy answers out loud. floppy should hear each question, answer it correctly, and say the answer so a person hears it.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "hear": "Hey Floppy, what's the capital of France?"
+        },
+        {
+          "hear": "Thanks! How many legs does a spider have?"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        0,
+        0
+      ],
+      "pattern": "\\bparis\\b",
+      "weight": 1,
+      "features": [
+        "hearing"
+      ]
+    },
+    {
+      "check": "speaks",
+      "at": [
+        0,
+        0
+      ],
+      "pattern": "\\bparis\\b",
+      "weight": 1,
+      "features": [
+        "speaking"
+      ]
+    },
+    {
+      "check": "says",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "\\b8\\b|\\beight\\b",
+      "weight": 1,
+      "features": [
+        "hearing"
+      ]
+    },
+    {
+      "check": "speaks",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "\\b8\\b|\\beight\\b",
+      "weight": 1,
+      "features": [
+        "speaking"
+      ]
+    }
+  ],
+  "criteria": {
+    "heard": "floppy understood each spoken question.",
+    "spoken": "floppy's spoken answers are heard correctly: Paris, then eight."
+  },
+  "criteria_features": {
+    "hearing": [
+      "heard"
+    ],
+    "speaking": [
+      "spoken"
+    ]
+  },
+  "diagnostics": [
+    {
+      "check": "logged",
+      "by": [
+        0,
+        1
+      ],
+      "label": "floppy.say",
+      "features": [
+        "speaking"
+      ]
+    },
+    {
+      "check": "not_logged",
+      "by": [
+        0,
+        1
+      ],
+      "label": "listening.degraded",
+      "features": [
+        "hearing"
+      ]
+    }
+  ]
+}

@@ -1,5 +1,10 @@
 {
   "category": "routine",
+  "features": [
+    "learning",
+    "builder",
+    "routines"
+  ],
   "intent": "The user asks for a reminder to drink water every minute. The bot should remind on its own with no input while the clock runs, stop when asked, and stay quiet afterwards.",
   "bot_name": null,
   "sessions": [

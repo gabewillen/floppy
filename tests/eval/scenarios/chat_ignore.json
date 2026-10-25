@@ -1,0 +1,100 @@
+{
+  "category": "conversation",
+  "features": [
+    "decisions",
+    "people",
+    "offers"
+  ],
+  "intent": "Two people talk to each other in front of floppy, not to it; floppy should stay quiet. Then one of them asks floppy something directly, and floppy should answer.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "say": "Ana, could you pass me the salt?",
+          "source": "gabe",
+          "targets": [],
+          "settle": "quiet",
+          "timeout_s": 120
+        },
+        {
+          "say": "Sure, here you go Gabe.",
+          "source": "ana",
+          "targets": [],
+          "settle": "quiet",
+          "timeout_s": 120
+        },
+        {
+          "say": "Floppy, what's three plus five?",
+          "source": "gabe"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "not_says",
+      "at": [
+        0,
+        0
+      ],
+      "pattern": "\\S",
+      "weight": 1,
+      "features": [
+        "decisions",
+        "people"
+      ]
+    },
+    {
+      "check": "not_says",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "\\S",
+      "weight": 1,
+      "features": [
+        "decisions",
+        "people"
+      ]
+    },
+    {
+      "check": "says",
+      "at": [
+        0,
+        2
+      ],
+      "pattern": "\\b8\\b|\\beight\\b",
+      "weight": 2
+    }
+  ],
+  "criteria": {
+    "quiet": "floppy says nothing while Gabe and Ana talk to each other.",
+    "responsive": "floppy answers 8 when Gabe asks it directly."
+  },
+  "criteria_features": {
+    "decisions": [
+      "quiet",
+      "responsive"
+    ],
+    "people": [
+      "quiet"
+    ],
+    "offers": [
+      "responsive"
+    ]
+  },
+  "diagnostics": [
+    {
+      "check": "logged",
+      "by": [
+        0,
+        1
+      ],
+      "label": "cognition.ignore",
+      "features": [
+        "decisions"
+      ]
+    }
+  ]
+}

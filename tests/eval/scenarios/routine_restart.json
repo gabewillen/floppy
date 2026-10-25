@@ -1,5 +1,10 @@
 {
   "category": "routine",
+  "features": [
+    "learning",
+    "builder",
+    "routines"
+  ],
   "intent": "The user asks the bot to say 'stretch break' every minute. The reminders should come, and keep coming after the bot restarts, with no new request.",
   "bot_name": null,
   "sessions": [

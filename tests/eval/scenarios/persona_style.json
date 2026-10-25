@@ -1,0 +1,99 @@
+{
+  "category": "persona",
+  "features": [
+    "persona",
+    "learning"
+  ],
+  "intent": "A person asks floppy to always talk like a pirate. floppy should answer the next question correctly in a pirate's voice, and still talk like a pirate after a restart.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "say": "From now on, please always talk like a pirate."
+        },
+        {
+          "say": "What's the capital of Italy?"
+        }
+      ]
+    },
+    {
+      "steps": [
+        {
+          "say": "What's the capital of Spain?"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "\\brome\\b",
+      "weight": 1,
+      "features": [
+        "conversation"
+      ]
+    },
+    {
+      "check": "says",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "\\b(arr+|ahoy|matey|ye|aye|me hearty|landlubber|avast)\\b",
+      "weight": 1
+    },
+    {
+      "check": "says",
+      "at": [
+        1,
+        0
+      ],
+      "pattern": "\\bmadrid\\b",
+      "weight": 1,
+      "features": [
+        "conversation"
+      ]
+    },
+    {
+      "check": "says",
+      "at": [
+        1,
+        0
+      ],
+      "pattern": "\\b(arr+|ahoy|matey|ye|aye|me hearty|landlubber|avast)\\b",
+      "weight": 3
+    }
+  ],
+  "criteria": {
+    "style": "Replies after the request sound like a pirate.",
+    "correct": "Rome and Madrid are given.",
+    "persistence": "The pirate voice is still there after the restart."
+  },
+  "criteria_features": {
+    "persona": [
+      "style",
+      "persistence"
+    ],
+    "learning": [
+      "persistence"
+    ]
+  },
+  "diagnostics": [
+    {
+      "check": "logged",
+      "by": [
+        1,
+        0
+      ],
+      "label": "persona.description",
+      "features": [
+        "persona"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "category": "voice",
+  "features": [
+    "turn_taking",
+    "hearing"
+  ],
+  "intent": "A person asks a second question out loud while floppy is still saying its first answer. floppy should answer both questions and not take its own words for the person's.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "hear": "Floppy, what's the capital of France?",
+          "settle": "said"
+        },
+        {
+          "hear": "And what's the capital of Japan?"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "by": [
+        0,
+        1
+      ],
+      "pattern": "\\bparis\\b",
+      "weight": 1
+    },
+    {
+      "check": "says",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "\\btokyo\\b",
+      "weight": 3
+    },
+    {
+      "check": "replies_at_most",
+      "at": [
+        0,
+        1
+      ],
+      "max": 2,
+      "weight": 1
+    }
+  ],
+  "criteria": {
+    "both": "Both questions are answered: Paris and Tokyo.",
+    "self": "floppy does not answer its own words or repeat itself."
+  },
+  "diagnostics": []
+}

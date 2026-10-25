@@ -1,12 +1,17 @@
-"""floppy's learning eval: grades how well the floppy bot learns its name,
-its reflexes (turn behaviors) and its routines from what people tell it, on
-real input, and hill-climbs the prompts that decide what it learns.
+"""floppy's eval: grades every feature of the floppy bot on real input
+(tests/eval/features.json: conversation, memory, people, persona, hearing,
+turn taking, speaking, voices, seeing, failed turns, its name, reflexes and
+routines, ...), and hill-climbs the prompts that decide what it learns.
 docs/eval.md is the guide; this is the runner.
 
 Usage: python3 tests/eval/eval.py COMMAND [options]
 
   run      run scenarios (tests/eval/scenarios/*.json) through the bot,
-           score them and have the judges grade them
+           score them, have the judges grade them, and grade each feature
+  features `run` over every scenario, with each feature's offline tests
+           (`cargo test --test <name>`) run first: the full feature grade
+  tests    each feature's offline tests alone, into a run directory
+           (`grade` it again to see them in its features.md)
   grade    score and judge a run directory again (a run made elsewhere)
   climb    hill-climb prompt <data> (prompts.DEFAULT_IDS, or --target):
            an LLM proposes a rewrite from the failures, the eval scores it,
@@ -18,12 +23,16 @@ Usage: python3 tests/eval/eval.py COMMAND [options]
            --column, each with the builder pinned to one model (the bot
            keeps its own), reporting each model's build success rate and
            attempts per accepted build
+  judge-check  grade each scenario's known-negative transcripts (floppy
+           silent, or "I don't know." at every step) with each judge: a
+           judge that passes them is too lenient to steer a climb
   targets  list every prompt <data> the climb can change
 
-The bot runs through tests/tests/learning_eval.rs (`cargo test`), which
+The bot runs through tests/tests/floppy_eval.rs (`cargo test`), which
 needs FLOPPY_LIVE_ENV_FILE (the bot's backends, as for floppy_live) and
-FLOPPY_LIVE_MODEL. The judges read their keys from the environment or from
---judge-env-file; nothing here prints a key. Everything is written under
+FLOPPY_LIVE_MODEL. The judges, and the speech backend that speaks for the
+people and hears floppy (tests/eval/sound.py), read their keys from the
+environment or from --judge-env-file; nothing here prints a key. Everything is written under
 target/floppy-eval/ (gitignored, like target/floppy-live/).
 """
 
@@ -34,14 +43,18 @@ import glob
 import json
 import os
 import shutil
+import random
 import statistics
 import subprocess
 import sys
 import time
 
+import features
 import judge as judges
 import prompts
+import questions
 import score
+import sound
 
 ROOT = prompts.ROOT
 SCENARIOS = os.path.join(ROOT, "tests", "eval", "scenarios")
@@ -89,6 +102,7 @@ def load_scenarios(names=None, directory=SCENARIOS):
             found[name] = scenario
     if names and not found:
         raise SystemExit(f"no scenario matches {names}")
+    features.check_names(found, FEATURES)
     return found
 
 
@@ -99,6 +113,14 @@ def judge_env(args):
     return env
 
 
+FEATURES = features.load()
+QUESTIONS = questions.load()
+
+# The variables the judges and the speech backend read (judge_env), set
+# once by main: drive and grade_job are called from every command.
+ENV = {}
+
+
 # Running the bot
 
 
@@ -106,6 +128,12 @@ def drive(jobs, out, parallel, dry=False):
     """Runs `jobs` ([{id, scenario, overlay, out}]) through the driver test
     and waits for it; the driver's output goes to `<out>/driver.log`."""
     os.makedirs(out, exist_ok=True)
+    backend = sound.Backend(ENV)
+    cache = os.path.join(OUT, "voices")
+    for job in jobs:
+        # A heard step's utterance is synthesized before the bot runs, and
+        # a shown step's image is named by its absolute path.
+        job["scenario"] = sound.prepare(job["scenario"], job["out"], None if dry else backend, cache)
     plan = os.path.join(out, "plan.json")
     with open(plan, "w", encoding="utf-8") as handle:
         # The driver pops jobs from the end, so reversed runs them in order.
@@ -113,8 +141,8 @@ def drive(jobs, out, parallel, dry=False):
     if dry:
         return 0
     command = [
-        os.environ.get("CARGO", "cargo"), "test", "-p", "floppy-tests", "--locked", "--test", "learning_eval",
-        "--", "--ignored", "--nocapture", "--exact", "learning_eval",
+        os.environ.get("CARGO", "cargo"), "test", "-p", "floppy-tests", "--locked", "--test", "floppy_eval",
+        "--", "--ignored", "--nocapture", "--exact", "floppy_eval",
     ]
     env = dict(os.environ, FLOPPY_EVAL_PLAN=plan)
     if "FLOPPY_LIVE_ENV_FILE" not in env:
@@ -144,8 +172,13 @@ def grade_job(job, env, judge_names, check_weight):
     """The job's checks, the judges' grades, and its combined score."""
     scenario = job["scenario"]
     records = score.load_job(job["out"])
+    # What floppy said aloud, transcribed once (kept in heard.json).
+    groups = score.sound_groups(scenario, records)
+    if groups:
+        records["heard"] = sound.transcripts(job["out"], groups, sound.Backend(env))
     checks, results = score.score(scenario, records)
     transcript = score.summary(scenario, records)
+    all_records = [r for session in records["sessions"] for r in session]
     grades = []
     if judge_names:
         for backend in judges.backends(env, judge_names):
@@ -171,6 +204,12 @@ def grade_job(job, env, judge_names, check_weight):
         "builds": score.builds(records),
         "complete": score.complete(scenario, records),
         "learned_any": score.learned_any(scenario, records),
+        "seen": features.seen(records, FEATURES),
+        "error": score.infra_error(scenario, records),
+        # The question report's evidence (questions.py).
+        "transcript": transcript,
+        "inside": questions.inside(all_records, questions.labels(QUESTIONS)),
+        "selected": questions.selected(all_records),
     }
     # A job that crashed before writing anything has no directory yet.
     os.makedirs(job["out"], exist_ok=True)
@@ -188,7 +227,11 @@ def grade_all(jobs, env, judge_names, check_weight):
 
 def aggregate(graded):
     """The suite score (the mean over scenarios of each one's mean over its
-    repeats), per category, per check kind and per judge criterion."""
+    repeats), per category, per check kind and per judge criterion, with
+    its 95% interval. A job with an infra error (score.infra_error) is
+    counted apart and kept out of every number."""
+    errors = [g for g in graded if g.get("error")]
+    graded = [g for g in graded if not g.get("error")]
     by_scenario = {}
     for g in graded:
         by_scenario.setdefault(g["scenario"], []).append(g)
@@ -220,14 +263,19 @@ def aggregate(graded):
         "diagnostics": {k: statistics.mean(v) for k, v in sorted(diagnostics.items())},
         "criteria": {k: statistics.mean(v) for k, v in sorted(criteria.items())},
         "judge_disagreement": statistics.mean(agreement) if agreement else None,
+        "interval": features.interval([g["score"] for g in graded]),
         "jobs": len(graded),
-        # A job is unfinished when it crashed or any step never settled or ran.
+        "errors": [{"id": g["id"], "error": g["error"]} for g in errors],
+        # A scored job is unfinished when any of its steps never settled or ran.
         "unfinished": sum(1 for g in graded if not (g["done"] and g.get("complete", True))),
     }
 
 
 def report_markdown(title, summary, graded):
-    lines = [f"# {title}", "", f"Suite score: **{summary['score']:.3f}** over {summary['jobs']} jobs ({summary['unfinished']} unfinished)."]
+    interval = "" if summary.get("interval") is None else f" ± {summary['interval']:.3f} (95%)"
+    lines = [f"# {title}", "", f"Suite score: **{summary['score']:.3f}**{interval} over {summary['jobs']} jobs ({summary['unfinished']} unfinished)."]
+    for e in summary.get("errors", []):
+        lines.append(f"- not scored, infra error: {e['id']}: {e['error']}")
     if summary["judge_disagreement"] is not None:
         lines.append(f"Mean judge disagreement (|codex - gemini| overall): {summary['judge_disagreement']:.2f}.")
     lines += ["", "| Category | Score |", "| --- | --- |"]
@@ -242,6 +290,9 @@ def report_markdown(title, summary, graded):
         lines += [f"| {k} | {v:.2f} |" for k, v in summary["diagnostics"].items()]
     lines += ["", "## Jobs", ""]
     for g in sorted(graded, key=lambda x: x["id"]):
+        if g.get("error"):
+            lines += [f"### {g['id']}: not scored ({g['error']})", ""]
+            continue
         judged = "n/a" if g["judged"] is None else f"{g['judged']:.2f}"
         lines.append(f"### {g['id']}: {g['score']:.3f} (checks {g['checks']:.2f}, judges {judged})")
         lines.append("")
@@ -260,6 +311,23 @@ def report_markdown(title, summary, graded):
     return "\n".join(lines) + "\n"
 
 
+def write_features(out, scenarios, graded, check_weight, tests=None):
+    """features.json and features.md of a run: each feature's grade."""
+    rows = features.grade(FEATURES, scenarios, graded, check_weight, tests)
+    summary = aggregate(graded)
+    with open(os.path.join(out, "features.json"), "w", encoding="utf-8") as handle:
+        json.dump({"features": rows, "tests": tests}, handle, indent=2)
+    with open(os.path.join(out, "features.md"), "w", encoding="utf-8") as handle:
+        handle.write(features.markdown(f"floppy feature grade {os.path.basename(out)}", rows, summary))
+    answered = questions.answer_all(QUESTIONS, graded)
+    with open(os.path.join(out, "questions.json"), "w", encoding="utf-8") as handle:
+        json.dump([{k: v for k, v in r.items() if k != "jobs"} | {"jobs": [g["id"] for g in r["jobs"]]}
+                   for r in answered], handle, indent=2)
+    with open(os.path.join(out, "questions.md"), "w", encoding="utf-8") as handle:
+        handle.write(questions.markdown(f"What floppy does: {os.path.basename(out)}", answered))
+    return rows
+
+
 def evaluate(scenarios, args, out, overlay=None, prefix=""):
     jobs = make_jobs(scenarios, args.repeats, out, overlay, prefix)
     if getattr(args, "dry", False):
@@ -271,7 +339,8 @@ def evaluate(scenarios, args, out, overlay=None, prefix=""):
     with open(os.path.join(out, "report.json"), "w", encoding="utf-8") as handle:
         json.dump({"summary": summary, "jobs": graded}, handle, indent=2)
     with open(os.path.join(out, "report.md"), "w", encoding="utf-8") as handle:
-        handle.write(report_markdown(f"Learning eval {os.path.basename(out)}", summary, graded))
+        handle.write(report_markdown(f"floppy eval {os.path.basename(out)}", summary, graded))
+    write_features(out, scenarios, graded, args.check_weight, getattr(args, "tests_results", None))
     log(f"{os.path.relpath(out, ROOT)}: score {summary['score']:.3f} {summary['categories']}")
     return summary, graded
 
@@ -307,10 +376,79 @@ def cmd_grade(args):
     with open(os.path.join(args.dir, "report.json"), "w", encoding="utf-8") as handle:
         json.dump({"summary": summary, "jobs": graded}, handle, indent=2)
     with open(os.path.join(args.dir, "report.md"), "w", encoding="utf-8") as handle:
-        handle.write(report_markdown(f"Learning eval {os.path.basename(args.dir)}", summary, graded))
+        handle.write(report_markdown(f"floppy eval {os.path.basename(args.dir)}", summary, graded))
+    tests = None
+    if os.path.exists(os.path.join(args.dir, "tests.json")):
+        with open(os.path.join(args.dir, "tests.json"), encoding="utf-8") as handle:
+            tests = json.load(handle)
+    write_features(args.dir, {j["scenario"]["name"]: j["scenario"] for j in jobs}, graded, args.check_weight, tests)
     if models is not None:
         write_builder(args.dir, [{"label": label, "builder": model} for label, model in models.items()], graded)
     print(json.dumps(summary, indent=2))
+
+
+def cmd_merge(args):
+    """One run directory from several (a later run of new scenarios beside
+    a full one): every job of each, copied, under one plan; `eval.py grade`
+    then grades it whole. A job id in two runs keeps the later run's."""
+    jobs = {}
+    for directory in args.dirs:
+        with open(os.path.join(directory, "plan.json"), encoding="utf-8") as handle:
+            for job in json.load(handle)["jobs"]:
+                job["from"] = os.path.join(directory, "jobs", job["id"])
+                jobs[job["id"]] = job
+    os.makedirs(os.path.join(args.out, "jobs"), exist_ok=True)
+    for job in jobs.values():
+        target = os.path.join(args.out, "jobs", job["id"])
+        if os.path.exists(target):
+            shutil.rmtree(target)
+        shutil.copytree(job.pop("from"), target)
+        job["out"] = target
+    with open(os.path.join(args.out, "plan.json"), "w", encoding="utf-8") as handle:
+        json.dump({"jobs": list(jobs.values())}, handle, indent=2)
+    if os.path.exists(os.path.join(args.dirs[0], "tests.json")):
+        shutil.copy(os.path.join(args.dirs[0], "tests.json"), os.path.join(args.out, "tests.json"))
+    print(os.path.join(args.out, "plan.json"))
+
+
+def offline_tests(out, names):
+    """Runs each offline test target once (`cargo test -p floppy-tests
+    --test <name>`), each output in `<out>/tests/<name>.log`; returns
+    {name: {passed, failed, ignored, status}}, also written to tests.json."""
+    os.makedirs(os.path.join(out, "tests"), exist_ok=True)
+    results = {}
+    for name in sorted(names):
+        log(f"offline tests: {name}")
+        path = os.path.join(out, "tests", f"{name}.log")
+        with open(path, "w", encoding="utf-8") as handle:
+            status = subprocess.call(
+                [os.environ.get("CARGO", "cargo"), "test", "-p", "floppy-tests", "--locked", "--test", name],
+                cwd=ROOT, stdout=handle, stderr=subprocess.STDOUT)
+        with open(path, encoding="utf-8") as handle:
+            passed, failed, ignored = features.parse_test_output(handle.read())
+        results[name] = {"passed": passed, "failed": failed, "ignored": ignored, "status": status}
+    with open(os.path.join(out, "tests.json"), "w", encoding="utf-8") as handle:
+        json.dump(results, handle, indent=2)
+    return results
+
+
+def cmd_tests(args):
+    """The offline tests of every feature into a run directory, whose
+    features.md then shows them (`eval.py grade` regrades it)."""
+    os.makedirs(args.dir, exist_ok=True)
+    offline_tests(args.dir, {t for f in FEATURES["features"] for t in f.get("tests", [])})
+    print(os.path.join(args.dir, "tests.json"))
+
+
+def cmd_features(args):
+    scenarios = load_scenarios(args.scenario, args.scenarios_dir)
+    out = args.out or os.path.join(OUT, "features-" + now())
+    os.makedirs(out, exist_ok=True)
+    if args.tests:
+        names = {t for f in FEATURES["features"] for t in f.get("tests", [])}
+        args.tests_results = offline_tests(out, names)
+    evaluate(scenarios, args, out, overlay=os.path.abspath(args.overlay) if args.overlay else None)
+    print(os.path.join(out, "features.md"))
 
 
 def failure_evidence(graded, limit=120):
@@ -318,6 +456,8 @@ def failure_evidence(graded, limit=120):
     the judges' main failure, and reflection's and the builder's logs."""
     lines = []
     for g in sorted(graded, key=lambda x: x["score"]):
+        if g.get("error"):
+            continue
         if g["score"] >= 0.999 and all(r["score"] >= 1 for r in g["diagnostics"]):
             continue
         lines.append(f"== {g['id']} (score {g['score']:.2f}, {g['category']})")
@@ -328,8 +468,38 @@ def failure_evidence(graded, limit=120):
     return lines[:limit]
 
 
+def split_scenarios(scenarios, share, seed):
+    """(train, test) names: within each category, a seeded shuffle puts
+    `share` of its scenarios (rounded, at least one when it has two or
+    more) in the held-out test set. Drawn at random, never by score, so
+    train and test are the same population."""
+    rng = random.Random(seed)
+    train, test = [], []
+    by_category = {}
+    for name in sorted(scenarios):
+        by_category.setdefault(scenarios[name]["category"], []).append(name)
+    for category in sorted(by_category):
+        names = by_category[category]
+        rng.shuffle(names)
+        count = max(1, round(share * len(names))) if len(names) >= 2 and share > 0 else 0
+        test += names[:count]
+        train += names[count:]
+    return sorted(train), sorted(test)
+
+
+def subset_score(graded, names):
+    rows = [g for g in graded if g["scenario"] in names]
+    return aggregate(rows)["score"] if rows else None
+
+
+def fmt(value):
+    return "n/a" if value is None else f"{value:.3f}"
+
+
 def cmd_climb(args):
-    scenarios = load_scenarios(args.scenario, args.scenarios_dir)
+    # The climb tunes the learning prompts: by default it runs the learning
+    # scenarios, not every feature's.
+    scenarios = load_scenarios(args.scenario or ["name", "reflex", "routine"], args.scenarios_dir)
     targets = args.target or prompts.default_targets()
     for target in targets:
         prompts.read(target)
@@ -346,13 +516,21 @@ def cmd_climb(args):
             state = json.load(handle)
         log(f"resuming at generation {state['generation']}, incumbent {state['score']:.3f}")
     else:
+        train, test = split_scenarios(scenarios, args.test_share, args.seed)
+        log(f"train {train}; held-out test {test}")
         log("evaluating the incumbent (the workspace's prompts)")
-        summary, graded = evaluate(scenarios, args, os.path.join(out, "gen-0-baseline"))
-        state = {"generation": 0, "prompts": {}, "score": summary["score"], "baseline": summary["score"], "graded": graded, "history": [], "targets": targets}
+        _, graded = evaluate(scenarios, args, os.path.join(out, "gen-0-baseline"))
+        score_train, score_test = subset_score(graded, train), subset_score(graded, test)
+        state = {"generation": 0, "prompts": {}, "split": {"train": train, "test": test},
+                 "score": score_train, "baseline": score_train, "test": score_test, "baseline_test": score_test,
+                 "graded": [g for g in graded if g["scenario"] in train], "history": [], "targets": targets}
     def save():
         with open(state_path, "w", encoding="utf-8") as handle:
             json.dump(state, handle, indent=2)
     save()
+    # Candidates are scored on train only; the proposer reads train
+    # failures only; the held-out test set is run once per accepted winner.
+    train_set = {k: v for k, v in scenarios.items() if k in state["split"]["train"]}
     while state["generation"] < args.generations and time.time() < deadline:
         generation = state["generation"] + 1
         target = targets[(generation - 1) % len(targets)]
@@ -381,7 +559,7 @@ def cmd_climb(args):
             diff = prompts.overlay(chosen, overlay)
             with open(os.path.join(gen_dir, f"cand-{cand['index']}", "prompts.patch"), "w", encoding="utf-8") as handle:
                 handle.write(diff)
-            cand_jobs = make_jobs(scenarios, args.repeats, gen_dir, overlay, prefix=f"c{cand['index']}-")
+            cand_jobs = make_jobs(train_set, args.repeats, gen_dir, overlay, prefix=f"c{cand['index']}-")
             jobs.extend(cand_jobs)
             results.append((cand, chosen, cand_jobs))
         drive(jobs, gen_dir, args.parallel)
@@ -400,26 +578,34 @@ def cmd_climb(args):
             handle.write(report_markdown(f"Climb generation {generation} ({target})", aggregate(graded_all), graded_all))
         cand, chosen, graded = best
         accepted = cand["score"] > state["score"] + args.min_gain
-        if accepted and args.confirm:
-            # One lucky run is not a climb: run the winner again and keep
-            # the mean of both.
+        if accepted:
+            # One lucky run is not a climb: run the winner again on train
+            # (unless --no-confirm) and keep the mean of both, and run it on
+            # the held-out test set, the climb's headline.
             confirm_dir = os.path.join(gen_dir, "confirm")
             overlay = os.path.join(gen_dir, f"cand-{cand['index']}", "overlay")
-            summary, confirm_graded = evaluate(scenarios, args, confirm_dir, overlay)
-            cand["confirmed"] = summary["score"]
-            mean = (cand["score"] + summary["score"]) / 2
-            log(f"  confirmation {summary['score']:.3f}, mean {mean:.3f}")
-            accepted = mean > state["score"] + args.min_gain
-            cand["score"] = mean
-            graded = graded + confirm_graded
+            names = state["split"]["test"] + (state["split"]["train"] if args.confirm else [])
+            _, confirm_graded = evaluate({k: v for k, v in scenarios.items() if k in names}, args, confirm_dir, overlay)
+            cand["test"] = subset_score(confirm_graded, state["split"]["test"])
+            if args.confirm:
+                confirmed = subset_score(confirm_graded, state["split"]["train"])
+                cand["confirmed"] = confirmed
+                mean = (cand["score"] + confirmed) / 2
+                log(f"  confirmation {confirmed:.3f}, mean {mean:.3f}")
+                accepted = mean > state["score"] + args.min_gain
+                cand["score"] = mean
+                graded = graded + [g for g in confirm_graded if g["scenario"] in state["split"]["train"]]
+            log(f"  held-out test {cand['test']} (incumbent {state['test']})")
         state["history"].append({
             "generation": generation, "target": target, "proposer": cand["proposer"], "model": cand["model"],
-            "score": cand["score"], "incumbent": state["score"], "accepted": accepted, "rationale": cand["rationale"],
+            "score": cand["score"], "incumbent": state["score"], "test": cand.get("test"), "incumbent_test": state["test"],
+            "accepted": accepted, "rationale": cand["rationale"],
             "candidates": [{k: c.get(k) for k in ("index", "proposer", "score", "rationale")} for c, _, _ in results],
         })
         if accepted:
             log(f"  accepted: {state['score']:.3f} -> {cand['score']:.3f}")
             state["prompts"], state["score"], state["graded"] = chosen, cand["score"], graded
+            state["test"] = cand.get("test")
         else:
             log("  kept the incumbent")
         state["generation"] = generation
@@ -431,11 +617,16 @@ def cmd_climb(args):
         handle.write(diff)
     lines = [
         "# Learning eval hill climb", "",
-        f"Baseline {state['baseline']:.3f}, best {state['score']:.3f}, after {state['generation']} generations.", "",
-        "| Gen | Target | Proposer | Score | Incumbent | Accepted | Rationale |", "| --- | --- | --- | --- | --- | --- | --- |",
+        f"Held-out test (the headline): baseline {fmt(state.get('baseline_test'))}, best {fmt(state.get('test'))}. "
+        f"Train: baseline {state['baseline']:.3f}, best {state['score']:.3f}, after {state['generation']} generations. "
+        f"Train {state['split']['train']}; test {state['split']['test']}. A train gain the test score does not "
+        "show is the climb fitting its own scenarios.", "",
+        "| Gen | Target | Proposer | Train | Incumbent | Test | Incumbent test | Accepted | Rationale |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for h in state["history"]:
-        lines.append(f"| {h['generation']} | `{h['target']}` | {h['proposer']} | {h['score']:.3f} | {h['incumbent']:.3f} | {'yes' if h['accepted'] else 'no'} | {h['rationale'][:200]} |")
+        lines.append(f"| {h['generation']} | `{h['target']}` | {h['proposer']} | {h['score']:.3f} | {h['incumbent']:.3f} | "
+                     f"{fmt(h.get('test'))} | {fmt(h.get('incumbent_test'))} | {'yes' if h['accepted'] else 'no'} | {h['rationale'][:200]} |")
     lines += ["", "The best prompts are `best.patch` (apply with `git apply`) and `best/overlay/` (pass to `eval.py run --overlay`)."]
     with open(os.path.join(out, "climb.md"), "w", encoding="utf-8") as handle:
         handle.write("\n".join(lines) + "\n")
@@ -614,6 +805,69 @@ def cmd_expand(args):
     print(out)
 
 
+def null_transcripts(scenario):
+    """Transcripts a judge must fail: floppy silent at every step, and
+    floppy answering every step with "I don't know." (the eval-audit's
+    known negatives)."""
+    lines_silent, lines_unknown = [], []
+    for index, session in enumerate(scenario["sessions"]):
+        if index > 0:
+            for lines in (lines_silent, lines_unknown):
+                lines.append("(floppy is restarted)")
+        for number, step in enumerate(session["steps"]):
+            head = f"[session {index} step {number}]"
+            who = step.get("who", step.get("source", "gabe"))
+            if "say" in step:
+                said = f"{head} {who} says: {step['say']!r}"
+            elif "hear" in step:
+                said = f"{head} {who} says out loud: {step['hear']!r}"
+            elif "show" in step:
+                said = f"{head} {step.get('source', 'camera')} shows floppy an image: {step.get('describe', 'an image')}"
+            else:
+                said = f"{head} {step['wait_s']} s pass with no input"
+            lines_silent.append(said)
+            lines_unknown.append(said)
+            if "say" in step or "hear" in step:
+                lines_unknown.append("  floppy says: I don't know.")
+    return {"silent": "\n".join(lines_silent), "unknown": "\n".join(lines_unknown)}
+
+
+def cmd_judge_check(args):
+    """Each judge on each scenario's known-negative transcripts: every
+    overall grade must be at most --ceiling, or the judge is too lenient
+    to steer a climb. Writes judge-check.json and judge-check.md."""
+    scenarios = load_scenarios(args.scenario, args.scenarios_dir)
+    out = args.out or os.path.join(OUT, "judge-check-" + now())
+    os.makedirs(out, exist_ok=True)
+    backends = judges.backends(judge_env(args), args.judge_names)
+    tasks = [(name, kind, text, backend) for name, scenario in scenarios.items()
+             for kind, text in null_transcripts(scenario).items() for backend in backends]
+
+    def grade(task):
+        name, kind, text, backend = task
+        # A step where floppy rightly stays quiet passes silent: such a
+        # scenario's silent transcript is not a known negative overall.
+        try:
+            result = judges.judge(backend, scenarios[name], text)
+        except RuntimeError as error:
+            return {"scenario": name, "kind": kind, "judge": backend.name, "error": str(error)}
+        return {"scenario": name, "kind": kind, "judge": backend.name, "overall": result["overall"], "why": result["explanation"]}
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        rows = list(pool.map(grade, tasks))
+    lenient = [r for r in rows if r.get("overall", 0) > args.ceiling]
+    with open(os.path.join(out, "judge-check.json"), "w", encoding="utf-8") as handle:
+        json.dump({"ceiling": args.ceiling, "rows": rows}, handle, indent=2)
+    lines = ["# Judge check", "", f"{len(rows)} known-negative transcripts graded; {len(lenient)} scored above "
+             f"{args.ceiling} overall.", "", "| Scenario | Transcript | Judge | Overall | Why |", "| --- | --- | --- | --- | --- |"]
+    for r in sorted(rows, key=lambda r: (-r.get("overall", 0), r["scenario"])):
+        overall = f"{r['overall']:.1f}" if "overall" in r else r.get("error", "")
+        lines.append(f"| {r['scenario']} | {r['kind']} | {r['judge']} | {overall} | {r.get('why', '')[:160]} |")
+    with open(os.path.join(out, "judge-check.md"), "w", encoding="utf-8") as handle:
+        handle.write("\n".join(lines) + "\n")
+    print(os.path.join(out, "judge-check.md"))
+
+
 def cmd_targets(_args):
     defaults = prompts.default_targets()
     for target in prompts.discover():
@@ -640,6 +894,19 @@ def main(argv=None):
     p.add_argument("--overlay", help="a directory laid out like the workspace, copied over each run's bot")
     p.add_argument("--dry", action="store_true", help="write the plan only")
     p.set_defaults(func=cmd_run)
+    p = sub.add_parser("features")
+    common(p)
+    p.add_argument("--overlay", help="a directory laid out like the workspace, copied over each run's bot")
+    p.add_argument("--no-tests", dest="tests", action="store_false", help="skip the offline tests")
+    p.add_argument("--dry", action="store_true", help="write the plan only")
+    p.set_defaults(func=cmd_features)
+    p = sub.add_parser("tests")
+    p.add_argument("dir")
+    p.set_defaults(func=cmd_tests)
+    p = sub.add_parser("merge")
+    p.add_argument("--out", required=True)
+    p.add_argument("dirs", nargs="+")
+    p.set_defaults(func=cmd_merge)
     p = sub.add_parser("grade")
     common(p, run=False)
     p.add_argument("dir")
@@ -651,6 +918,8 @@ def main(argv=None):
     p.add_argument("--candidates", type=int, default=2, help="proposals per generation (alternating proposers)")
     p.add_argument("--proposers", default="codex,gemini")
     p.add_argument("--min-gain", type=float, default=0.02)
+    p.add_argument("--test-share", type=float, default=0.34, help="share of each category's scenarios held out as the test set")
+    p.add_argument("--seed", type=int, default=7, help="the seed of the train/test split")
     p.add_argument("--no-confirm", dest="confirm", action="store_false")
     p.add_argument("--budget-hours", type=float, default=10.0)
     p.set_defaults(func=cmd_climb)
@@ -666,12 +935,18 @@ def main(argv=None):
     p.add_argument("--overlay", help="an overlay every column starts from")
     p.add_argument("--dry", action="store_true", help="write the plan only")
     p.set_defaults(func=cmd_builder)
+    p = sub.add_parser("judge-check")
+    common(p, run=False)
+    p.add_argument("--ceiling", type=float, default=0.3, help="the highest overall grade a known negative may get")
+    p.set_defaults(func=cmd_judge_check)
     p = sub.add_parser("targets")
     p.set_defaults(func=cmd_targets)
 
     args = parser.parse_args(argv)
     # The driver runs with its crate (tests/) as its directory, so every
     # path it is given is absolute.
+    if getattr(args, "dirs", None):
+        args.dirs = [os.path.abspath(d) for d in args.dirs]
     for name in ("out", "dir", "overlay", "scenarios_dir"):
         if getattr(args, name, None):
             setattr(args, name, os.path.abspath(getattr(args, name)))
@@ -681,6 +956,8 @@ def main(argv=None):
             args.judge_names = None
     if hasattr(args, "proposers"):
         args.proposer_names = [n for n in args.proposers.split(",") if n]
+    if hasattr(args, "judge_env_file"):
+        ENV.update(judge_env(args))
     args.func(args)
 
 
