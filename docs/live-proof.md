@@ -7,6 +7,45 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-25, GPT-Live as the person talking to floppy, model `gabe-codex-1/gpt-6-luna`
+
+`scripts/talk-live.py` on floppy main `3bc0f496`, from a cloud session, with
+the same relays as the run below (CPA, TypeSafe, the Gemini speech stand-in
+at `FLOPPY_SPEECH_BASE_URL`, Silero VAD at `FLOPPY_VOICE_BASE_URL`). The
+person was OpenAI's `gpt-live-1` (voice `marin`, client delegation, never
+delegating), reached directly on `wss://api.openai.com/v1/live/sessions`
+with `OPENAI_API_KEY` from the session's environment; its 24 kHz PCM went
+to the room as `environment.sound` from `gabe`, and floppy's sounds were
+streamed back to it in real time. `--minutes 6`.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| first run, no nudge | one exchange | "Hey Floppy, what's the capital of France?" was heard, floppy said "Paris." 9.6 s after the question ended, GPT-Live heard "Paris" and said "Right, Paris. Exactly. Thanks, Floppy."; then both sides waited for the other for five minutes |
+| with `--nudge-s 30` | 15 utterances, every question answered aloud | eleven questions (nine capitals, floppy's name, "what we just talked about"), each answered by `floppy.say` and heard back by GPT-Live; floppy's spoken answer began 7 to 20 s after each question ended; "I don't have a name yet—you can give me one if you'd like."; the recap listed all seven capitals so far and the name exchange. GPT-Live's closing remarks drew "You're welcome!" twice; the conversation went quiet three times and the harness nudged GPT-Live on |
+
+## 2026-10-25, the live voice path (D240) from a cloud session, model `gabe-codex-1/gpt-6-luna`
+
+Every live test on floppy main `3bc0f496` (after #71 and #78, before the
+learning stack), from a cloud session with no lab access. scx ignores the
+session's proxy, so each backend was a local relay: CPA for chat
+(`FLOPPY_BASE_URL`; `gpt-6-luna` without an account prefix was refused,
+its token invalidated), TypeSafe for decisions (`TYPESAFE_BASE_URL`), and,
+standing in for the lab's speech gateway, a local OpenAI-compatible
+`/v1/audio/transcriptions` and `/v1/audio/speech` answered by Gemini
+(`gemini-3.8-flash`, `gemini-3.8-flash-tts`, 24 kHz PCM) at
+`FLOPPY_SPEECH_BASE_URL`; voice detection was `scripts/vad-server.py`
+(Silero VAD v5) at `FLOPPY_VOICE_BASE_URL`. `cargo test -p floppy-tests
+--test floppy_live -- --ignored --test-threads 1`.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_listening` | pass (458 s with the build) | the spoken question was detected, decoded ("Hey Floppy, what is the capital of France?"), answered and spoken: `floppy.say` "The capital of France is Paris.", `bot.ability.speaking.output` `completed`, no listening or processing failure |
+| `floppy_live` `live_chat` | fail, then pass (56 s) | answered and spoken ("Hi Gabe! Hello!"); the test still expected `communication.product` to log the message's sequence (`0`), but since S1 to S4 it logs the message's `provenance.turn_ref` (`input-1:turn:gabe`). The test now checks one product of the input's turn |
+| `floppy_live` `live_cascade` | pass | |
+| `floppy_live` `live_choices` | pass | |
+| `floppy_live` `live_identity` | pass | |
+| `floppy_live` `live_conversation` | pass | turn 1 answered and stored; turn 2 ("Whenever I say 'ping', reply 'pong'") created `PingPongExact` ACTIVE, but the decision layer chose the ignore, so nothing was said; turn 3 ("ping") matched `PingPongExact`, which left the turn unhandled, and the decision layer chose the ignore again, so no "pong" was said and reflection changed the behavior; turn 4 "Your favorite color is green." The test checks neither turn 2's nor turn 3's reply |
+
 ## 2026-10-24, the builder track on the Sparks (D133 to D138), model `sparks/qwen3.8-flash-next`
 
 `eval.py builder --judges none --repeats 2 --column
