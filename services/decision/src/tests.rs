@@ -148,7 +148,7 @@ fn every_failure_code_and_abstain_reason_satisfy_the_builder_event_schemas() {
     ));
     for data in [
         r#"{"reason":"no-candidates"}"#,
-        r#"{"confidence":0.25,"reason":"declined"}"#,
+        r#"{"confidence":0.25,"hand_to":"reasoning","reason":"declined"}"#,
     ] {
         assert!(
             abstain.admits(&scxml_types::DataValue::JsonObject(data.into())),
@@ -184,7 +184,7 @@ fn choice_asks_the_selection_and_the_grounded_members_in_one_batch() {
         .collect();
     assert_eq!(
         selection,
-        ["order.ship", "order.cancel", "order.hold", ABSTAIN_LABEL]
+        ["order.ship", "order.cancel", "order.hold", "__reasoning__"]
     );
     // An event's wording: the description's first line, else the event
     // name; the pass criterion has its own wording.
@@ -199,7 +199,7 @@ fn choice_asks_the_selection_and_the_grounded_members_in_one_batch() {
             "Ship the order.",
             "Cancel the order",
             "order.hold",
-            "None of these: leave the turn unhandled."
+            "None of these fits: it needs thought, so think it through first, with reasoning."
         ]
     );
     assert_eq!(
@@ -234,38 +234,23 @@ fn choice_asks_the_selection_and_the_grounded_members_in_one_batch() {
 }
 
 #[test]
-fn choice_returns_the_chosen_event_with_grounded_data_validated_against_its_schema() {
-    let returned = choice().decide(
-        &TypeSafe,
-        &ok(&json!({
-            "selection": {"order.ship": 0.7, "order.cancel": 0.1, "order.hold": 0.1, "__unhandled__": 0.1},
-            "order.ship::sku": {"A-1": 1.0},
-            "order.ship::carrier": {"ups": 0.2, "fedex": 0.8},
-            "order.cancel::reason": {"customer": 0.5, "stock": 0.5},
-        })),
-    );
-    assert_eq!(
-        returned,
-        Returned {
-            name: "order.ship".into(),
-            data: r#"{"carrier":"fedex","sku":"A-1"}"#.into()
-        }
-    );
-}
-
-#[test]
 fn choice_breaks_ties_by_label_bytes() {
     let returned = choice().decide(
         &TypeSafe,
         &ok(&json!({
-            "selection": {"order.ship": 0.4, "order.cancel": 0.4, "order.hold": 0.1, "__unhandled__": 0.1},
+            "selection": {"order.ship": 0.4, "order.cancel": 0.4, "order.hold": 0.1, "__reasoning__": 0.1},
             "order.ship::sku": {"A-1": 1.0},
             "order.ship::carrier": {"ups": 0.5, "fedex": 0.5},
             "order.cancel::reason": {"customer": 0.5, "stock": 0.5},
         })),
     );
-    assert_eq!(returned.name, "order.cancel");
-    assert_eq!(returned.data, r#"{"reason":"customer"}"#);
+    assert_eq!(returned.name, SELECTED_EVENT);
+    assert_eq!(
+        returned.data,
+        canonical_json(&json!({"selections": [
+            {"event": "order.cancel", "data": {"reason": "customer"}, "confidence": 0.4},
+        ]}))
+    );
 }
 
 #[test]
@@ -273,14 +258,17 @@ fn choice_abstains_when_declined_or_with_nothing_to_offer() {
     let declined = choice().decide(
         &TypeSafe,
         &ok(&json!({
-            "selection": {"__unhandled__": 0.9, "order.ship": 0.1},
+            "selection": {"__reasoning__": 0.9, "order.ship": 0.1},
             "order.ship::sku": {"A-1": 1.0},
             "order.ship::carrier": {"ups": 1.0},
             "order.cancel::reason": {"stock": 1.0},
         })),
     );
     assert_eq!(declined.name, ABSTAIN_EVENT);
-    assert_eq!(declined.data, r#"{"confidence":0.9,"reason":"declined"}"#);
+    assert_eq!(
+        declined.data,
+        r#"{"confidence":0.9,"hand_to":"reasoning","reason":"declined"}"#
+    );
     // A choices whose every event lacks a grounded required member offers
     // nothing: it abstains without a request.
     let ungroundable = Data::JsonArray(canonical_json(&json!([
@@ -305,19 +293,11 @@ fn choice_abstains_when_declined_or_with_nothing_to_offer() {
     }
 }
 
-fn predicate() -> Prepared {
-    prepared(&[
-        ("kind", Data::String("predicate".into())),
-        ("choices", order_choices()),
-        ("state", order_state()),
-    ])
-}
-
 #[test]
-fn predicate_returns_only_the_chosen_event_with_its_probability() {
-    let prepared = predicate();
-    // The same batch as choice, with the predicate's selection instructions
-    // and a pass to reasoning in place of the choice's pass criterion.
+fn choice_returns_only_the_chosen_event_with_its_probability() {
+    let prepared = choice();
+    // Without hand_ons, the one pass criterion is reasoning's, after the
+    // selection's default instructions.
     assert_eq!(prepared.batch().questions.len(), 4);
     assert!(
         prepared.batch().questions[0]
@@ -358,7 +338,7 @@ fn predicate_returns_only_the_chosen_event_with_its_probability() {
         ]}))
     );
     // The pass criterion winning hands the turn to its tier.
-    let declined = predicate().decide(
+    let declined = choice().decide(
         &TypeSafe,
         &ok(&json!({
             "selection": {"__reasoning__": 0.7, "order.ship": 0.3},
@@ -373,7 +353,7 @@ fn predicate_returns_only_the_chosen_event_with_its_probability() {
         r#"{"confidence":0.7,"hand_to":"reasoning","reason":"declined"}"#
     );
     // The chosen event's filled data failing its schema fails the answer.
-    let mismatched = prepared_predicate_with_evidence(r#"{"carrier":"dhl","sku":"A-1"}"#).decide(
+    let mismatched = prepared_with_evidence(r#"{"carrier":"dhl","sku":"A-1"}"#).decide(
         &TypeSafe,
         &ok(&json!({
             "selection": {"order.ship": 1.0},
@@ -384,7 +364,7 @@ fn predicate_returns_only_the_chosen_event_with_its_probability() {
     );
     assert_eq!(mismatched, Returned::failed(FailureCode::SchemaMismatch));
     // Another event's data is not checked: only the chosen one is returned.
-    let held = prepared_predicate_with_evidence(r#"{"carrier":"dhl","sku":"A-1"}"#).decide(
+    let held = prepared_with_evidence(r#"{"carrier":"dhl","sku":"A-1"}"#).decide(
         &TypeSafe,
         &ok(&json!({
             "selection": {"order.hold": 1.0},
@@ -402,9 +382,8 @@ fn predicate_returns_only_the_chosen_event_with_its_probability() {
 }
 
 #[test]
-fn a_predicate_passes_to_each_tier_its_hand_ons_name() {
+fn a_choice_passes_to_each_tier_its_hand_ons_name() {
     let both = prepared(&[
-        ("kind", Data::String("predicate".into())),
         ("choices", order_choices()),
         ("state", order_state()),
         (
@@ -453,7 +432,6 @@ fn a_predicate_passes_to_each_tier_its_hand_ons_name() {
     }
     // A tier the request does not name is not offered.
     let intuition_only = prepared(&[
-        ("kind", Data::String("predicate".into())),
         ("choices", order_choices()),
         ("state", order_state()),
         ("hand_ons", Data::JsonArray(r#"["intuition"]"#.into())),
@@ -482,11 +460,7 @@ fn a_selection_carries_its_only_offerer_as_target() {
         {"event": "order.cancel", "schema": cancel_schema(), "target": "session.floppy.returns"},
         {"event": "order.hold", "schema": {"type": "object"}},
     ])));
-    let asked = prepared(&[
-        ("kind", Data::String("predicate".into())),
-        ("choices", tagged),
-        ("state", order_state()),
-    ]);
+    let asked = prepared(&[("choices", tagged), ("state", order_state())]);
     let answer = |chosen: &str| {
         let mut selection = json!({"order.ship": 0.1, "order.cancel": 0.1, "order.hold": 0.1, "__reasoning__": 0.1});
         selection[chosen] = json!(0.7);
@@ -514,9 +488,8 @@ fn a_selection_carries_its_only_offerer_as_target() {
     );
 }
 
-fn prepared_predicate_with_evidence(evidence: &str) -> Prepared {
+fn prepared_with_evidence(evidence: &str) -> Prepared {
     prepared(&[
-        ("kind", Data::String("predicate".into())),
         ("choices", order_choices()),
         ("state", order_state()),
         ("data", Data::JsonObject(evidence.into())),
@@ -541,7 +514,6 @@ fn members_ground_from_non_null_evidence_then_enum_never_const() {
         }},
     ])));
     let asked = prepared(&[
-        ("kind", Data::String("predicate".into())),
         ("choices", choices.clone()),
         ("state", Data::JsonObject(r#"{"turn":{}}"#.into())),
         ("data", Data::JsonObject(r#"{"mode":null}"#.into())),
@@ -566,7 +538,6 @@ fn members_ground_from_non_null_evidence_then_enum_never_const() {
     );
     // With evidence, its value comes first.
     let evidenced = prepared(&[
-        ("kind", Data::String("predicate".into())),
         ("choices", choices),
         ("state", Data::JsonObject(r#"{"turn":{}}"#.into())),
         ("data", Data::JsonObject(r#"{"mode":"dim"}"#.into())),
@@ -586,7 +557,6 @@ fn a_stimulus_grounds_the_data_and_the_state_is_the_model_facing_turn() {
     // document's, as given.
     let turn = Data::JsonObject(r#"{"turn":"<bot.input>ship it</bot.input>"}"#.into());
     let asked = prepared(&[
-        ("kind", Data::String("predicate".into())),
         ("choices", order_choices()),
         ("state", turn.clone()),
         (
@@ -637,15 +607,6 @@ fn a_stimulus_grounds_the_data_and_the_state_is_the_model_facing_turn() {
             ],
             "a stimulus with data",
         ),
-        (
-            vec![
-                ("kind", Data::String("score".into())),
-                ("state", turn.clone()),
-                ("candidates", Data::JsonArray(r#"["a"]"#.into())),
-                ("stimulus", Data::Null),
-            ],
-            "a score with a stimulus",
-        ),
     ] {
         assert!(
             parse_parameters(parameters.iter().map(|(name, value)| (*name, value))).is_err(),
@@ -661,11 +622,7 @@ fn the_deliberative_handoff_is_never_offered() {
         {"event": DELIBERATIVE_HANDOFF_EVENT, "schema": {"type": "object"}},
         {"event": "order.hold", "schema": {"type": "object"}},
     ])));
-    let asked = prepared(&[
-        ("kind", Data::String("predicate".into())),
-        ("choices", choices),
-        ("state", order_state()),
-    ]);
+    let asked = prepared(&[("choices", choices), ("state", order_state())]);
     let selection: Vec<&str> = asked.batch().questions[0]
         .criteria
         .iter()
@@ -755,48 +712,6 @@ fn a_failed_request_or_a_malformed_answer_returns_its_failure_code() {
 }
 
 #[test]
-fn score_sorts_by_score_then_label_and_keeps_every_candidate() {
-    let prepared = prepared(&[
-        ("kind", Data::String("score".into())),
-        ("state", Data::String("pick".into())),
-        (
-            "candidates",
-            Data::JsonArray(r#"["b","a",{"id":3}]"#.into()),
-        ),
-    ]);
-    let returned = prepared.decide(
-        &TypeSafe,
-        &ok(&json!({"score": {"a": 0.4, "b": 0.4, "{\"id\":3}": 0.2}})),
-    );
-    assert_eq!(returned.name, RANKED_EVENT);
-    assert_eq!(
-        returned.data,
-        r#"{"ranking":[{"candidate":"a","score":0.4},{"candidate":"b","score":0.4},{"candidate":{"id":3},"score":0.2}]}"#
-    );
-}
-
-#[test]
-fn a_choice_over_labels_takes_them_in_every_form() {
-    for labels in [
-        Data::String("calm  angry".into()),
-        Data::JsonArray(r#"["calm","angry"]"#.into()),
-        Data::JsonObject(r#"{"angry":"upset","calm":null}"#.into()),
-    ] {
-        let prepared = prepared(&[
-            ("kind", Data::String("choice".into())),
-            ("state", Data::String("I am fine".into())),
-            ("labels", labels.clone()),
-        ]);
-        let returned = prepared.decide(
-            &TypeSafe,
-            &ok(&json!({"choice": {"calm": 0.75, "angry": 0.25}})),
-        );
-        assert_eq!(returned.name, CLASSIFIED_EVENT, "{labels:?}");
-        assert_eq!(returned.data, r#"{"labels":{"angry":0.25,"calm":0.75}}"#);
-    }
-}
-
-#[test]
 fn a_turns_assembled_choices_are_one_candidate_per_event() {
     // A document's choices, untagged and tagged with their target, as
     // `<processing:collect_offered_events>` writes them.
@@ -851,7 +766,7 @@ fn malformed_parameters_reject_the_start() {
     let choices = ("choices", order_choices());
     for (parameters, why) in [
         (vec![choices.clone()], "no state"),
-        (vec![state.clone()], "a choice without choices or labels"),
+        (vec![state.clone()], "no choices"),
         (
             vec![state.clone(), choices.clone(), ("choices", order_choices())],
             "a repeated parameter",
@@ -860,13 +775,24 @@ fn malformed_parameters_reject_the_start() {
             vec![
                 state.clone(),
                 choices.clone(),
-                ("labels", Data::String("a".into())),
+                ("kind", Data::String("choice".into())),
             ],
-            "a choice with both choices and labels",
+            "a kind, which the service no longer takes",
         ),
         (
-            vec![state.clone(), ("kind", Data::String("pick".into()))],
-            "an unknown kind",
+            vec![
+                state.clone(),
+                choices.clone(),
+                ("labels", Data::String("a".into())),
+            ],
+            "labels, which the service no longer takes",
+        ),
+        (
+            vec![
+                state.clone(),
+                ("candidates", Data::JsonArray(r#"["a"]"#.into())),
+            ],
+            "candidates, which the service no longer takes",
         ),
         (
             vec![("state", Data::Bool(true)), choices.clone()],
@@ -906,10 +832,10 @@ fn malformed_parameters_reject_the_start() {
                 state.clone(),
                 (
                     "choices",
-                    Data::JsonArray(r#"[{"event":"__unhandled__","schema":{}}]"#.into()),
+                    Data::JsonArray(r#"[{"event":"__intuition__","schema":{}}]"#.into()),
                 ),
             ],
-            "a choice naming the pass criterion",
+            "a choice naming a pass criterion",
         ),
         (
             vec![
@@ -920,7 +846,7 @@ fn malformed_parameters_reject_the_start() {
                     Data::Number(scxml_types::FiniteNumber::new(1.5).expect("finite")),
                 ),
             ],
-            "a threshold, which neither choice nor predicate takes",
+            "a threshold, which a choice does not take",
         ),
         (
             vec![
@@ -939,43 +865,15 @@ fn malformed_parameters_reject_the_start() {
 }
 
 #[test]
-fn malformed_score_label_or_common_parameters_reject_the_start() {
-    let state = ("state", order_state());
-    let choices = ("choices", order_choices());
-    for (parameters, why) in [
-        (
-            vec![
-                state.clone(),
-                ("kind", Data::String("score".into())),
-                ("candidates", Data::JsonArray(r#"["a","a"]"#.into())),
-            ],
-            "duplicate candidates",
-        ),
-        (
-            vec![
-                state.clone(),
-                ("kind", Data::String("score".into())),
-                ("candidates", Data::JsonArray("[]".into())),
-            ],
-            "no candidates",
-        ),
-        (
-            vec![
-                state.clone(),
-                ("labels", Data::JsonArray(r#"["a",1]"#.into())),
-            ],
-            "a non-string label",
-        ),
-        (
-            vec![state, choices, ("model", Data::String(" ".into()))],
-            "an empty model",
-        ),
-    ] {
-        assert!(
-            parse_parameters(parameters.iter().map(|(name, value)| (*name, value))).is_err(),
-            "{why}"
-        );
-    }
+fn an_empty_model_rejects_the_start() {
+    assert!(
+        parse_parameters([
+            ("state", &order_state()),
+            ("choices", &order_choices()),
+            ("model", &Data::String(" ".into())),
+        ])
+        .is_err()
+    );
 }
 
 #[test]
@@ -1021,8 +919,13 @@ fn another_backend_plugs_in_behind_the_trait() {
             body: Vec::new(),
         }),
     );
-    assert_eq!(returned.name, "order.ship");
-    assert_eq!(returned.data, r#"{"carrier":"ups","sku":"A-1"}"#);
+    assert_eq!(returned.name, SELECTED_EVENT);
+    assert_eq!(
+        returned.data,
+        canonical_json(&json!({"selections": [
+            {"event": "order.ship", "data": {"carrier": "ups", "sku": "A-1"}, "confidence": 1.0},
+        ]}))
+    );
 }
 
 #[test]
@@ -1082,12 +985,11 @@ fn a_keyless_request_sends_no_authorization() {
     assert_eq!(names, ["content-type", "accept"]);
 }
 
-/// A predicate whose selection instructions are `instructions`, fitted to
+/// A choice whose selection instructions are `instructions`, fitted to
 /// `max_context_tokens` at `bytes_per_token`.
 fn fitted(instructions: &str, max_context_tokens: f64, bytes_per_token: f64) -> Prepared {
     let number = |value: f64| Data::Number(scxml_types::FiniteNumber::new(value).expect("finite"));
     prepared(&[
-        ("kind", Data::String("predicate".into())),
         ("choices", order_choices()),
         ("state", order_state()),
         ("instructions", Data::String(instructions.into())),
@@ -1102,7 +1004,6 @@ fn a_request_over_its_context_keeps_the_leading_whole_lines_that_fit() {
     // The body's size with only the first line, and with every line.
     let size = |instructions: &str| {
         let mut whole = prepared(&[
-            ("kind", Data::String("predicate".into())),
             ("choices", order_choices()),
             ("state", order_state()),
             ("instructions", Data::String(instructions.into())),
@@ -1217,15 +1118,6 @@ fn malformed_tier_parameters_reject_the_start() {
             vec![
                 state.clone(),
                 choices.clone(),
-                ("hand_ons", Data::JsonArray(r#"["reasoning"]"#.into())),
-            ],
-            "hand_ons on a choice",
-        ),
-        (
-            vec![
-                state.clone(),
-                choices.clone(),
-                ("kind", Data::String("predicate".into())),
                 ("hand_ons", Data::JsonArray("[]".into())),
             ],
             "no tier",
@@ -1234,7 +1126,6 @@ fn malformed_tier_parameters_reject_the_start() {
             vec![
                 state.clone(),
                 choices.clone(),
-                ("kind", Data::String("predicate".into())),
                 (
                     "hand_ons",
                     Data::JsonArray(r#"["reasoning","reasoning"]"#.into()),
@@ -1246,7 +1137,6 @@ fn malformed_tier_parameters_reject_the_start() {
             vec![
                 state.clone(),
                 choices.clone(),
-                ("kind", Data::String("predicate".into())),
                 ("hand_ons", Data::JsonArray(r#"["reflex"]"#.into())),
             ],
             "an unknown tier",
@@ -1307,18 +1197,6 @@ fn malformed_context_fit_parameters_reject_the_start() {
                 ),
             ],
             "no bytes a token",
-        ),
-        (
-            vec![
-                ("state", Data::String("pick".into())),
-                ("kind", Data::String("score".into())),
-                ("candidates", Data::JsonArray(r#"["a"]"#.into())),
-                (
-                    "max_context_tokens",
-                    Data::Number(scxml_types::FiniteNumber::new(100.0).expect("finite")),
-                ),
-            ],
-            "a context fit on a score",
         ),
     ] {
         assert!(

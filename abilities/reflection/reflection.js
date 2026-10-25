@@ -29,9 +29,9 @@ function recalledEpisodes(_event) {
   return _event.data.results[0].rows.map(function (r) { return JSON.parse(r.values[0]); });
 }
 
-// The recalled inventory's names, which a change or a break may name.
-function behaviorNames() {
-  return behaviors.map(function (b) { return b.name; });
+// Whether the recalled inventory holds a behavior a change or a break may name.
+function hasBehaviors() {
+  return behaviors.length > 0;
 }
 
 function recalledLog() {

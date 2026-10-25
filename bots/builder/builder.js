@@ -594,6 +594,11 @@ function isDecisionEvent(_event) {
   return decision_id !== null && _event.invokeid === decision_id;
 }
 
+// The data a selection is sent with: its data object, else {}.
+function selectionData(s) {
+  return s.data !== null && typeof s.data === 'object' && !Array.isArray(s.data) ? s.data : ({});
+}
+
 // done
 
 function doneLog() {

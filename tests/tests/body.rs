@@ -983,9 +983,9 @@ fn compacted(schema: &Json) -> Json {
     }
 }
 
-/// The body's `bot.focus_device` choice for a turn whose focus candidates
-/// are `candidates`.
-fn focus_choice(candidates: &[&str]) -> Json {
+/// The body's `bot.focus_device` choice, compacted and tagged: its schema
+/// as written (the turn's candidates are the body's guard, not an enum).
+fn focus_choice() -> Json {
     let schema: Json = serde_json::from_str(
         &std::fs::read_to_string(workspace().join("bots/floppy/schemas/bot.focus_device.json"))
             .expect("the schema is readable"),
@@ -996,8 +996,7 @@ fn focus_choice(candidates: &[&str]) -> Json {
         .and_then(|text| text.lines().next())
         .expect("a description")
         .to_owned();
-    let mut schema = compacted(&schema);
-    schema["properties"]["device"]["enum"] = json!(candidates);
+    let schema = compacted(&schema);
     json!({"event": "bot.focus_device", "schema": schema, "description": description, "target": BODY})
 }
 
@@ -1082,14 +1081,13 @@ fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
     activated(&mut run);
     // Unfocused, the input names the lamp: the body turns to it
     // (decision D155), its only candidate. The body offers
-    // bot.focus_device pinned to it, then the double's offer, compacted
-    // and tagged.
+    // bot.focus_device, then the double's offer, compacted and tagged.
     run.event("bot.input", &device_input("focus", "lamp", "lamp"));
     let mut records = run.until(WAIT, label_is("floppy.focus"));
     // The environment logs the turn's outcome after the body's step.
     records.extend(run.until(WAIT, label_is("bot.processing.completed")));
     let [respond, adopt] = ability_choices();
-    let choices = json!([focus_choice(&["lamp"]), ignore_choice(), respond, adopt]);
+    let choices = json!([focus_choice(), ignore_choice(), respond, adopt]);
     assert_eq!(last_json(&records, "double.choices"), choices);
     assert_eq!(last_json(&records, "floppy.choices"), choices);
     // The reflex, then the double's selection.
@@ -1098,14 +1096,14 @@ fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
         pairs(&[("floppy.focus", "lamp"), ("floppy.focus", "lamp")])
     );
     // Focused on the lamp, an input for the lamp again: the same choices
-    // (nothing clears the focus). A focus on the fan, outside the turn's candidates (which
-    // the generate service's pinned enum would refuse), is not taken: the
-    // body takes a focus only on one of the turn's candidates.
+    // (nothing clears the focus). A focus on the fan, outside the turn's
+    // candidates, is not taken: the body's guard takes a focus only on one
+    // of the turn's candidates.
     run.event("bot.input", &device_input("focus", "fan", "lamp"));
     let records = run.until(WAIT, label_is("bot.processing.completed"));
     assert_eq!(
         last_json(&records, "double.choices"),
-        json!([focus_choice(&["lamp"]), ignore_choice(), respond, adopt])
+        json!([focus_choice(), ignore_choice(), respond, adopt])
     );
     assert_eq!(
         only(&records, &["bot.processing.failed", "floppy.focus"]),
@@ -1114,10 +1112,7 @@ fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
     // Still focused on the lamp: the next turn's candidates include it.
     run.event("bot.input", &device_input("focus", "fan", "fan"));
     let records = run.until(WAIT, label_is("floppy.focus"));
-    assert_eq!(
-        last_json(&records, "double.choices")[0],
-        focus_choice(&["lamp", "fan"])
-    );
+    assert_eq!(last_json(&records, "double.choices")[0], focus_choice());
     assert_eq!(
         only(&records, &["floppy.focus"]),
         pairs(&[("floppy.focus", "fan")])

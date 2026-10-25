@@ -4,8 +4,8 @@ The implementation report plan of the `decision` namespace, in the format of the
 [W3C SCXML IRP](../../../scxml.rs/tests/conformance/w3c-irp/README.md) and of
 scxml.rs's own namespace suites
 ([scxml.rs/docs/conformance.md](../../../scxml.rs/docs/conformance.md#namespace-suites)):
-8 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
-("Statements"), tested by 18 mandatory documents. It runs through exactly
+6 assertions, one per numbered statement of [`../README.md`](../README.md#statements)
+("Statements"), tested by 13 mandatory documents. It runs through exactly
 the pipeline the W3C IRP runs through (the canonical compiler, the shipped
 Wasm components under the Wasmtime session host, the same oracles and report
 envelope), with the namespace's own extension package and component bound,
@@ -35,12 +35,11 @@ SAXON='java -jar /opt/saxon/saxon-he-12.8.jar' sh scripts/namespace-irp.sh prepa
 sh scripts/namespace-irp.sh baselines decision
 ```
 
-The current baseline (manifest SHA-256 `a77e0a30a8fe7b46069b3bafe26d30601e591706d4ba85ab6af1b0c29264392b`,
+The current baseline (manifest SHA-256 `c33aeb2391b064f3ed79b412a865a00f7f7334b8e200b354f1f662d75659ea70`,
 component runner `scxml-conformance/wasm` `0.2.0`, Machine IR schema `5`,
-measured on Linux x86_64 after `<decision:offers>` was added and `<decision:choice>`'s
-`effort` removed, decision D242; regenerate it on Linux x86_64, the host
+measured on Linux x86_64 after `<decision:pin>` was removed, decision D243; regenerate it on Linux x86_64, the host
 `tests/tests/namespace_irp.rs` compares fuel on) measures:
 
 | Data model | Passed / Applicable | Not Passing | Corpus digest | Report SHA-256 |
 | --- | ---: | ---: | --- | --- |
-| ECMAScript | 16 / 16 | 0 | `8e0a0ecf5d6ac3dcbe782db779889274de492cd527ea111fa5e2f74ea0bdfc5e` | `8261ef97e84f288ff87cae2c12b511168821b6bee9a722f7d65282566a65f720` |
+| ECMAScript | 13 / 13 | 0 | `7d3c6d59f2a122e0ef9fc55f62a6acda4ff6c83e4af34037d33c744739e83423` | `7326addfaff4935e3ec061b2fc3abf7f8a1328aeca6ed3de1a48e5717f2edeb1` |

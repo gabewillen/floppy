@@ -41,10 +41,10 @@
   transitions for the three inventory events are the enabled transitions
   <decision:choice> reads, which <processing:collect_offered_events> tags
   with this session's id (the session that offers them, so a selection is
-  sent here); <decision:pin> pins a change's and a break's name to the
-  recalled inventory's names and drops both when it is empty (decision
-  D100: offered with any name, a model broke behaviors that did not
-  exist), and <processing:send max="1"> builds the dispatch tool with at
+  sent here); a change and a break are enabled only while the recalled
+  inventory holds a behavior (hasBehaviors(), decision D100: offered on an
+  empty inventory, a model broke behaviors that did not exist), and
+  <processing:send max="1"> builds the dispatch tool with at
   most one event, which the generate service offers as its one tool, from
   {cognition_input, cognition_output, prior_episodes, behaviors}, and
   refuses as schema-mismatch a reply that selects more. The events of
@@ -332,10 +332,6 @@
     <onentry>
       <decision:choice location="choices" events="bot.behavior.create bot.behavior.change bot.behavior.break"/>
       <processing:collect_offered_events location="choices" choices="choices"/>
-      <!-- A change or a break names a behavior the inventory holds; with
-           none, neither is offered (decision D100). -->
-      <decision:pin location="choices" event="bot.behavior.change" property="name" values="behaviorNames()"/>
-      <decision:pin location="choices" event="bot.behavior.break" property="name" values="behaviorNames()"/>
       <processing:send location="schema" choices="choices" max="1"/>
       <assign location="selected" expr="null"/>
       <assign location="gen_failure" expr="null"/>
@@ -388,11 +384,14 @@
       <assign location="create_intent" expr="_event.data"/>
       <assign location="intent" expr="_event.data"/>
     </transition>
-    <transition event="bot.behavior.change" event:schema="../schemas/bot.behavior.change.json" target="revising">
+    <!-- A change or a break names a behavior the inventory holds: with
+         none, neither is enabled, so neither is offered (decision D100);
+         a name the inventory does not hold fails after the call. -->
+    <transition event="bot.behavior.change" event:schema="../schemas/bot.behavior.change.json" cond="hasBehaviors()" target="revising">
       <assign location="create_intent" expr="null"/>
       <assign location="intent" expr="_event.data"/>
     </transition>
-    <transition event="bot.behavior.break" event:schema="../schemas/bot.behavior.break.json" target="breaking">
+    <transition event="bot.behavior.break" event:schema="../schemas/bot.behavior.break.json" cond="hasBehaviors()" target="breaking">
       <assign location="behavior" expr="_event.data"/>
     </transition>
 

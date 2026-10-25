@@ -9,7 +9,7 @@
 
     deciding (an invoked decision service) -> done
 
-  Processor (the decision service's kind predicate): the turn's choices,
+  Processor (the decision service's choice): the turn's choices,
   the <param> choices (the
   body's assembled snapshot choices: its own enabled event:schema
   transitions and what each ability offers that turn, tagged with the offering
@@ -148,7 +148,6 @@
     </onexit>
     <invoke id="decision" type="https://github.com/stateforward/floppy/services/decision"
             env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL">
-      <param name="kind" expr="'predicate'"/>
       <param name="choices" expr="choices"/>
       <param name="state" expr="decisionState()"/>
       <param name="stimulus" expr="stimulus"/>

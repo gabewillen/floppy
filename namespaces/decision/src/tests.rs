@@ -686,146 +686,16 @@ fn a_malformed_events_attribute_raises_error_execution() {
     );
 }
 
-/// The value last assigned to `location`.
-fn assigned(host: &FakeHost, location: &str) -> Data {
-    host.assigned
-        .iter()
-        .rev()
-        .find(|(at, _)| at == location)
-        .map_or_else(
-            || panic!("nothing was assigned to {location}"),
-            |(_, value)| value.clone(),
-        )
-}
-
-/// A host whose locations hold `values` (each canonical JSON).
-fn with_values(values: &[(&str, Json)]) -> FakeHost {
+/// The namespace has no `pin`: a property's values are a transition's
+/// guard, not an enum written into the choices.
+#[test]
+fn pin_is_not_an_element_of_the_namespace() {
     let mut host = FakeHost::default();
-    for (location, value) in values {
-        let text = canonical_json(value);
-        let data = match value {
-            Json::Object(_) => Data::JsonObject(text),
-            Json::String(text) => Data::String(text.clone()),
-            _ => Data::JsonArray(text),
-        };
-        host.values.insert((*location).into(), data);
-    }
-    host
-}
-
-/// The canonical JSON (array or object) last assigned to `location`.
-fn assigned_any(host: &FakeHost, location: &str) -> Json {
-    match assigned(host, location) {
-        Data::JsonArray(text) | Data::JsonObject(text) => {
-            serde_json::from_str(&text).expect("canonical JSON")
-        }
-        other => panic!("expected JSON, got {other:?}"),
-    }
-}
-
-fn focus_choice() -> Json {
-    json!({
-        "event": "bot.focus_device",
-        "description": "Focus a device.",
-        "schema": {"type": "object", "properties": {"device": {"type": "string"}}, "required": ["device"]},
-    })
-}
-
-fn deactivate_choice() -> Json {
-    json!({"event": "bot.deactivate", "schema": {"type": "object"}})
-}
-
-fn pin_attributes(values: &str) -> Vec<Attribute> {
-    vec![
-        location("own"),
-        attr("event", "bot.focus_device"),
-        attr("property", "device"),
-        attr("values", values),
-    ]
-}
-
-#[test]
-fn pin_sets_the_property_enum_of_the_named_event_only() {
-    let mut host = with_values(&[
-        ("own", json!([focus_choice(), deactivate_choice()])),
-        ("candidates", json!(["lamp", "fan"])),
-    ]);
     assert_eq!(
-        execute("pin", &pin_attributes("candidates"), &[], &mut host),
-        Ok(Executed::Handled)
+        execute("pin", &[location("choices")], &[], &mut host),
+        Ok(Executed::NotHandled)
     );
-    let mut pinned = focus_choice();
-    pinned["schema"]["properties"]["device"]["enum"] = json!(["lamp", "fan"]);
-    assert_eq!(
-        assigned_any(&host, "own"),
-        json!([pinned, deactivate_choice()])
-    );
-    assert!(
-        matches!(assigned(&host, "own"), Data::JsonArray(text) if scxml_event_schema::is_canonical_json(&text))
-    );
-}
-
-#[test]
-fn pin_with_no_values_removes_the_event() {
-    let mut host = with_values(&[
-        ("own", json!([focus_choice(), deactivate_choice()])),
-        ("candidates", json!([])),
-    ]);
-    assert_eq!(
-        execute("pin", &pin_attributes("candidates"), &[], &mut host),
-        Ok(Executed::Handled)
-    );
-    assert_eq!(assigned_any(&host, "own"), json!([deactivate_choice()]));
-}
-
-#[test]
-fn malformed_pins_raise_error_execution_and_assign_nothing() {
-    let cases: Vec<(Vec<Attribute>, Json, Json, &str)> = vec![
-        (
-            pin_attributes("candidates")[..3].to_vec(),
-            json!([focus_choice()]),
-            json!(["lamp"]),
-            "decision:pin requires a non-empty values",
-        ),
-        (
-            [pin_attributes("candidates"), vec![attr("bound", "1")]].concat(),
-            json!([focus_choice()]),
-            json!(["lamp"]),
-            "decision:pin takes only the location, event, property and values attributes",
-        ),
-        (
-            pin_attributes("candidates"),
-            json!([focus_choice()]),
-            json!({"lamp": true}),
-            "decision:pin values is not an array",
-        ),
-        (
-            pin_attributes("candidates"),
-            json!([focus_choice()]),
-            json!("lamp"),
-            "decision:pin values is not an array",
-        ),
-        (
-            pin_attributes("candidates"),
-            json!([{"event": "bot.focus_device", "schema": {"type": "object"}}]),
-            json!(["lamp"]),
-            "decision:pin found no such property in the event's schema",
-        ),
-        (
-            pin_attributes("candidates"),
-            json!([{"event": "bot.focus_device"}]),
-            json!(["lamp"]),
-            "decision:pin found a malformed choice",
-        ),
-    ];
-    for (attributes, own, candidates, detail) in cases {
-        let mut host = with_values(&[("own", own), ("candidates", candidates)]);
-        assert_eq!(
-            execution(execute("pin", &attributes, &[], &mut host)),
-            detail
-        );
-        assert!(host.assigned.is_empty(), "{detail}");
-    }
+    assert!(host.assigned.is_empty(), "nothing is assigned");
 }
 
 /// An effort is declared only by a session `<decision:offers>` reads
@@ -846,24 +716,6 @@ fn an_effort_attribute_is_refused() {
         "decision:choice takes only the location and events attributes"
     );
     assert!(host.assigned.is_empty(), "nothing is assigned");
-}
-
-#[test]
-fn a_pin_keeps_a_declared_effort_and_refuses_a_malformed_one() {
-    let choices =
-        json!([{"event": "e", "schema": {"type": "object", "properties": {"p": {}}}, "effort": 3}]);
-    let pinned: Json = serde_json::from_str(
-        &pin_choices(&choices, "e", "p", &[json!("a")]).expect("an effort is a choice member"),
-    )
-    .expect("canonical JSON");
-    assert_eq!(pinned[0]["effort"], json!(3));
-    for effort in [json!(-1), json!(1.5), json!(1001), json!("1")] {
-        let choices = json!([{"event": "e", "schema": {}, "effort": effort}]);
-        assert_eq!(
-            pin_choices(&choices, "e", "p", &[]),
-            Err("decision:pin found a malformed choice")
-        );
-    }
 }
 
 /// A child's snapshot with `offerable` (its JSON text) in its data model.
