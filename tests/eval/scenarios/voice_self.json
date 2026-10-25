@@ -1,0 +1,77 @@
+{
+  "category": "voice",
+  "features": [
+    "hearing",
+    "voices"
+  ],
+  "intent": "floppy answers a question out loud; then its own answer comes back to the microphone, in its own voice, the way a room's speaker echoes into a microphone. floppy should know its own voice and not answer itself, and still answer the person's next question.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "hear": "Floppy, what's the capital of France?"
+        },
+        {
+          "hear": "The capital of France is Paris. Anything else you'd like to know?",
+          "source": "microphone",
+          "who": "floppy's own voice (an echo)",
+          "voice": "warm",
+          "settle": "quiet",
+          "timeout_s": 60
+        },
+        {
+          "hear": "Yes, what's the capital of Japan?"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        0,
+        0
+      ],
+      "pattern": "\\bparis\\b",
+      "weight": 1
+    },
+    {
+      "check": "not_says",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "\\S",
+      "weight": 3,
+      "features": [
+        "voices"
+      ]
+    },
+    {
+      "check": "says",
+      "at": [
+        0,
+        2
+      ],
+      "pattern": "\\btokyo\\b",
+      "weight": 2,
+      "features": [
+        "hearing"
+      ]
+    }
+  ],
+  "criteria": {
+    "own_voice": "floppy does not reply to the echo of its own answer: it knows that voice is its own.",
+    "answers": "floppy answers both of the person's questions: Paris, then Tokyo."
+  },
+  "criteria_features": {
+    "voices": [
+      "own_voice"
+    ],
+    "hearing": [
+      "answers"
+    ]
+  },
+  "diagnostics": []
+}

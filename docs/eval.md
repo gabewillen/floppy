@@ -14,7 +14,7 @@ runs (docs/live-proof.md, 2026-10-20 and 2026-10-21) showed reflection
 rarely learns a behavior, and no test checked a learned behavior against
 the input it should handle; it grew to every feature on 2026-10-25 (#82).
 
-It has four parts:
+It has five parts:
 
 - **The driver**, `tests/tests/floppy_eval.rs`, an ignored test like
   `floppy_live`: it runs the bot in the room on real backends through the
@@ -28,6 +28,12 @@ It has four parts:
 - **The feature grade**, `tests/eval/features.py`: each feature graded from
   the scenarios that exercise it, with its diagnostics, its log evidence
   and its offline tests beside the grade, never in it (`features.md`).
+- **The question report**, `tests/eval/questions.py`: the maintainer's
+  questions about floppy (what it learns, remembers, understands and
+  decides, whether its memory works, whether it knows its own voice and
+  learns other people), each answered from its scenarios with the
+  transcripts, the judges' reasons and floppy's own logs as evidence
+  (`questions.md`).
 - **The hill climb**, `tests/eval/eval.py climb`: an LLM proposes a rewrite
   of one learning prompt from the failures, the eval scores it, and the best
   is kept, one prompt per generation.
@@ -59,6 +65,11 @@ never edits the workspace: everything goes under `target/floppy-eval/`.
 | `voice_people` | voice | two voices on one microphone (diarization on), each asking its own name |
 | `voice_rest` | voice | an introduction, a quiet spell long enough to rest and consolidate (`rest_after_ms` 20 s), then the name and a fact |
 | `seeing_look` | seeing | a camera shows "Total due: $14.21" (seeing on); floppy is asked the total |
+| `chat_understand` | conversation | answers never said outright: when to leave for a 7 am flight, what to grab in the rain, the day after tomorrow from Friday |
+| `recall_many` | memory | five facts in one message, two unrelated questions; three of the facts after a restart |
+| `recall_update` | memory | a favorite food, corrected later; the corrected one after a restart |
+| `people_overheard` | memory | Gabe and Ana talk to each other (ambient) and mention their pottery and marathon; later each asks floppy about themselves |
+| `voice_self` | voice | floppy's own answer echoed back to the microphone in its own voice (`warm`): no reply to itself; then the person's next question answered |
 | `turn_failure` | failure | reasoning bounded to one second: floppy still answers the person, then a greeting |
 
 The name is Juniper, not floppy, because the reasoning prompt already calls
@@ -229,6 +240,24 @@ does not call) carries a `status` and is listed ungraded.
 `eval.py features` runs the offline tests (each target once; about 8 minutes each on four cores, so `--no-tests` skips them and `eval.py tests <run>` then `eval.py grade <run>` adds them later) and every scenario, and writes
 `features.md` and `features.json`; `eval.py run` and `eval.py grade`
 write them too, without the tests.
+
+## Questions
+
+[`tests/eval/questions.json`](../tests/eval/questions.json) holds the
+maintainer's questions ("what does floppy learn, what does floppy remember,
+what does floppy understand, what does floppy decide to do, does floppy
+memory work well, does floppy know it's own voice and does it naturally
+learn others"), each with the scenarios that answer it and the log labels
+that show what floppy did inside. A question's score is the mean of its
+scenarios' scores, answered `yes` from 0.8, `partly` from 0.5, else `no`.
+Under each answer `questions.md` quotes every job's transcript, the
+judges' reasons, the texts of the question's log labels (what floppy
+stored, recalled, built, or failed to decode), and for "what does floppy
+decide" the events its turns selected. The logs are evidence beside the
+answer, never in it (D241). Every grade writes it beside `features.md`.
+
+`eval.py merge --out DIR RUN...` joins runs (a run of new scenarios beside
+a full one) into one directory for `eval.py grade`.
 
 ## Eval health
 

@@ -1,0 +1,57 @@
+{
+  "category": "conversation",
+  "features": [
+    "conversation"
+  ],
+  "intent": "Questions whose answer is never said: floppy has to understand what the person means and work it out.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "say": "My flight leaves at 7 in the morning, the airport is an hour away, and I want to be there two hours early. When should I leave home?"
+        },
+        {
+          "say": "It's pouring outside and I'm about to walk to work. Anything I should grab?"
+        },
+        {
+          "say": "My sister's birthday is the day after tomorrow. If today is Friday, what day is her birthday?"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        0,
+        0
+      ],
+      "pattern": "\\b(4|four)\\b",
+      "weight": 2
+    },
+    {
+      "check": "says",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "\\b(umbrella|rain ?coat|raincoat|jacket|boots)\\b",
+      "weight": 1
+    },
+    {
+      "check": "says",
+      "at": [
+        0,
+        2
+      ],
+      "pattern": "\\bsunday\\b",
+      "weight": 2
+    }
+  ],
+  "criteria": {
+    "understands": "floppy works out what was meant: leave at 4 am, take an umbrella or rain gear, Sunday.",
+    "concise": "floppy answers directly, without asking for what was already said."
+  },
+  "diagnostics": []
+}

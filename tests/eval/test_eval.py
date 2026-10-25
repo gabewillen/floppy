@@ -9,6 +9,7 @@ import unittest
 import eval as runner
 import features
 import prompts
+import questions
 import score
 import sound
 
@@ -365,6 +366,42 @@ class Features(unittest.TestCase):
         wav = sound.wav_of_pcm(b"\x01\x00" * 10)
         self.assertEqual(sound.pcm_of_wav(wav), b"\x01\x00" * 10)
         self.assertEqual(features.parse_test_output("test result: ok. 3 passed; 1 failed; 2 ignored; 0 measured"), (3, 1, 2))
+
+
+class Questions(unittest.TestCase):
+    def test_every_question_names_real_scenarios(self):
+        spec = questions.load()
+        questions.check_names(runner.load_scenarios(), spec)
+        with self.assertRaisesRegex(ValueError, "unknown scenario recal_restart"):
+            questions.check_names({}, {"questions": [{"name": "q", "scenarios": ["recal_restart"]}]})
+
+    def test_a_question_is_answered_from_its_scenarios_with_evidence(self):
+        records = [log("conversation.memories", "recalled 0, remembered 1"),
+                   log("conversation.memories", "recalled 0, remembered 1"),
+                   log("conversation.memories", "recalled 2,\n remembered 1"), said("Rufus"),
+                   log("floppy.output", json.dumps({"turn": 2, "output": [{"event": "bot.ability.cognition.ignore", "data": {}}]}))]
+        self.assertEqual(questions.inside(records, ["conversation.memories", "stm.failed"]),
+                         {"conversation.memories": [3, ["recalled 0, remembered 1", "recalled 2, remembered 1"]]})
+        self.assertEqual(questions.selected(records),
+                         {"bot.ability.communication.respond": 1, "bot.ability.cognition.ignore": 1})
+        spec = {"answers": {"yes": 0.8, "partly": 0.5},
+                "questions": [{"name": "remembers", "question": "What does floppy remember?",
+                               "scenarios": ["a", "b"], "inside": ["conversation.memories"], "decisions": True},
+                              {"name": "sees", "question": "Does it see?", "scenarios": ["c"]}]}
+        graded = [{"id": "a-r0", "scenario": "a", "score": 1.0, "transcript": "gabe says: hi", "grades": [],
+                   "inside": {"conversation.memories": [1, ["recalled 1"]]}, "selected": {"x": 2}},
+                  {"id": "a-r1", "scenario": "a", "score": 0.5},
+                  {"id": "b-r0", "scenario": "b", "score": 0.0, "error": "floppy never activated in session 0"}]
+        rows = questions.answer_all(spec, graded)
+        # b's only job measured the rig: a alone answers, by its repeats' mean.
+        self.assertEqual((rows[0]["score"], rows[0]["answer"], rows[0]["scenarios"]), (0.75, "partly", {"a": 0.75}))
+        self.assertEqual((rows[1]["score"], rows[1]["answer"]), (None, "not run"))
+        text = questions.markdown("t", rows)
+        self.assertIn("| What does floppy remember? | partly | 0.75 | a 0.75 |", text)
+        self.assertIn("    gabe says: hi", text)
+        self.assertIn("inside (not scored): `conversation.memories` x1: `recalled 1`", text)
+        self.assertIn("`x` 2", text)
+        self.assertIn("### b-r0: not scored (floppy never activated in session 0)", text)
 
 
 class Climb(unittest.TestCase):

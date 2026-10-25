@@ -1,0 +1,54 @@
+{
+  "category": "memory",
+  "features": [
+    "memory"
+  ],
+  "intent": "Gabe tells floppy a fact, later corrects it, and after a restart asks for it. floppy should remember the correction, not the first version.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "say": "Floppy, my favorite food is sushi."
+        },
+        {
+          "say": "What's the tallest mountain in the world?"
+        },
+        {
+          "say": "Actually, I've changed my mind: my favorite food is tacos now, not sushi."
+        }
+      ]
+    },
+    {
+      "steps": [
+        {
+          "say": "Floppy, what's my favorite food?"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        1,
+        0
+      ],
+      "pattern": "\\btacos?\\b",
+      "weight": 3
+    },
+    {
+      "check": "not_says",
+      "at": [
+        1,
+        0
+      ],
+      "pattern": "\\bsushi\\b(?!.*\\btacos?\\b)",
+      "weight": 1
+    }
+  ],
+  "criteria": {
+    "updated": "After the restart floppy says Gabe's favorite food is tacos, the corrected fact."
+  },
+  "diagnostics": []
+}

@@ -52,6 +52,7 @@ import time
 import features
 import judge as judges
 import prompts
+import questions
 import score
 import sound
 
@@ -113,6 +114,7 @@ def judge_env(args):
 
 
 FEATURES = features.load()
+QUESTIONS = questions.load()
 
 # The variables the judges and the speech backend read (judge_env), set
 # once by main: drive and grade_job are called from every command.
@@ -176,6 +178,7 @@ def grade_job(job, env, judge_names, check_weight):
         records["heard"] = sound.transcripts(job["out"], groups, sound.Backend(env))
     checks, results = score.score(scenario, records)
     transcript = score.summary(scenario, records)
+    all_records = [r for session in records["sessions"] for r in session]
     grades = []
     if judge_names:
         for backend in judges.backends(env, judge_names):
@@ -203,6 +206,10 @@ def grade_job(job, env, judge_names, check_weight):
         "learned_any": score.learned_any(scenario, records),
         "seen": features.seen(records, FEATURES),
         "error": score.infra_error(scenario, records),
+        # The question report's evidence (questions.py).
+        "transcript": transcript,
+        "inside": questions.inside(all_records, questions.labels(QUESTIONS)),
+        "selected": questions.selected(all_records),
     }
     # A job that crashed before writing anything has no directory yet.
     os.makedirs(job["out"], exist_ok=True)
@@ -312,6 +319,12 @@ def write_features(out, scenarios, graded, check_weight, tests=None):
         json.dump({"features": rows, "tests": tests}, handle, indent=2)
     with open(os.path.join(out, "features.md"), "w", encoding="utf-8") as handle:
         handle.write(features.markdown(f"floppy feature grade {os.path.basename(out)}", rows, summary))
+    answered = questions.answer_all(QUESTIONS, graded)
+    with open(os.path.join(out, "questions.json"), "w", encoding="utf-8") as handle:
+        json.dump([{k: v for k, v in r.items() if k != "jobs"} | {"jobs": [g["id"] for g in r["jobs"]]}
+                   for r in answered], handle, indent=2)
+    with open(os.path.join(out, "questions.md"), "w", encoding="utf-8") as handle:
+        handle.write(questions.markdown(f"What floppy does: {os.path.basename(out)}", answered))
     return rows
 
 
@@ -372,6 +385,30 @@ def cmd_grade(args):
     if models is not None:
         write_builder(args.dir, [{"label": label, "builder": model} for label, model in models.items()], graded)
     print(json.dumps(summary, indent=2))
+
+
+def cmd_merge(args):
+    """One run directory from several (a later run of new scenarios beside
+    a full one): every job of each, copied, under one plan; `eval.py grade`
+    then grades it whole. A job id in two runs keeps the later run's."""
+    jobs = {}
+    for directory in args.dirs:
+        with open(os.path.join(directory, "plan.json"), encoding="utf-8") as handle:
+            for job in json.load(handle)["jobs"]:
+                job["from"] = os.path.join(directory, "jobs", job["id"])
+                jobs[job["id"]] = job
+    os.makedirs(os.path.join(args.out, "jobs"), exist_ok=True)
+    for job in jobs.values():
+        target = os.path.join(args.out, "jobs", job["id"])
+        if os.path.exists(target):
+            shutil.rmtree(target)
+        shutil.copytree(job.pop("from"), target)
+        job["out"] = target
+    with open(os.path.join(args.out, "plan.json"), "w", encoding="utf-8") as handle:
+        json.dump({"jobs": list(jobs.values())}, handle, indent=2)
+    if os.path.exists(os.path.join(args.dirs[0], "tests.json")):
+        shutil.copy(os.path.join(args.dirs[0], "tests.json"), os.path.join(args.out, "tests.json"))
+    print(os.path.join(args.out, "plan.json"))
 
 
 def offline_tests(out, names):
@@ -866,6 +903,10 @@ def main(argv=None):
     p = sub.add_parser("tests")
     p.add_argument("dir")
     p.set_defaults(func=cmd_tests)
+    p = sub.add_parser("merge")
+    p.add_argument("--out", required=True)
+    p.add_argument("dirs", nargs="+")
+    p.set_defaults(func=cmd_merge)
     p = sub.add_parser("grade")
     common(p, run=False)
     p.add_argument("dir")
@@ -904,6 +945,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     # The driver runs with its crate (tests/) as its directory, so every
     # path it is given is absolute.
+    if getattr(args, "dirs", None):
+        args.dirs = [os.path.abspath(d) for d in args.dirs]
     for name in ("out", "dir", "overlay", "scenarios_dir"):
         if getattr(args, name, None):
             setattr(args, name, os.path.abspath(getattr(args, name)))
