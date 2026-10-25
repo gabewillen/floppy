@@ -599,6 +599,9 @@
         <assign location="child_done" expr="false"/>
         <assign location="sim_error" expr="null"/>
         <assign location="sim_sends" expr="[]"/>
+        <!-- The test event being sent (sim.drive's item): null until the
+             draft has started, so an error tells its start from a send. -->
+        <assign location="step" expr="null"/>
         <assign location="ticks" expr="[]"/>
         <assign location="sim_run_seq" expr="increment(sim_run_seq)"/>
         <!-- Processed after the invocation starts (external queue). A run
