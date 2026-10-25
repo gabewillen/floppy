@@ -116,8 +116,10 @@ gives the room the image as `environment.visual` from a `camera` and waits
 `wait_s` (20). A said or heard step's `settle` is `turn` (the default),
 `said` (the step ends when floppy starts to speak, so the next one
 overlaps its speech; the turn's settling is waited on later) or `quiet`
-(a turn floppy may rightly leave alone: the step ends at its `timeout_s`
-as completed even if no turn settled). Each job's media directory is
+(a turn floppy may rightly leave alone: the step ends when its turn
+settles, or as completed when none has 3 minutes past its `timeout_s`; a
+late turn is still waited for, so its reply is not read as the next
+step's). Each job's media directory is
 `jobs/<id>/media/`, granted to the speech, generate and vision services,
 so the sounds floppy made stay with the job. `criteria` are what the judges
 score, 0 to 10 each.

@@ -47,8 +47,9 @@
 //! settling), and the next step's wait counts the settling it still owes,
 //! so a person can speak again while floppy's reflection runs, or
 //! `"quiet"`: as `"turn"`, but a turn that has not settled by the step's
-//! timeout ends the step as completed (input floppy may rightly leave
-//! alone, such as people talking to each other). A
+//! timeout and a further [`QUIET_GRACE`] ends the step as completed (input
+//! floppy may rightly leave alone, such as people talking to each other);
+//! a late turn, ignored or answered, still settles in its own step. A
 //! scenario's `bot_name`, when not null, is the name the identity starts
 //! with. Each job writes `<out>/session-<n>.json` (the records),
 //! `<out>/steps.json` (each step's range of records, wall-clock bounds,
@@ -78,6 +79,12 @@ const SAY_TIMEOUT: Duration = Duration::from_mins(15);
 /// How long a settled said step keeps collecting records: the turn's
 /// reply can be said after its reflection settled.
 const SAY_GRACE: Duration = Duration::from_secs(15);
+
+/// How much longer a `"quiet"` step waits for its turn past its timeout:
+/// floppy takes up and settles every input, ignored or answered, so a turn
+/// that is only slow (a bot still starting) settles in its own step, not
+/// the next, whose reply it would otherwise be read as.
+const QUIET_GRACE: Duration = Duration::from_mins(3);
 
 /// The message of [`Run::until`]'s panic on its limit, which [`wait`]
 /// expects for every wait step.
@@ -376,8 +383,10 @@ fn converse(run: &mut Run, spec: &Json, media: &Path, name: &str, target: &mut u
             lessons_settled: true,
         };
     }
-    let settled = settles_to(run, limit, *target);
-    if !settled && spec["settle"].as_str() == Some("quiet") {
+    let quiet = spec["settle"].as_str() == Some("quiet");
+    let settled =
+        settles_to(run, limit, *target) || (quiet && settles_to(run, QUIET_GRACE, *target));
+    if !settled && quiet {
         // Input floppy may rightly leave alone need not settle a turn: the
         // step ends at its bound, and owes nothing.
         *target -= 1;
