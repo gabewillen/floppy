@@ -11,6 +11,13 @@ Last updated: 2026-10-24.
 
 ## Current state (2026-10-09) — resume here
 
+- **Speech on api.willen.dev (2026-10-25, D244):** both speech variables
+  name `https://api.willen.dev/v1` (its openapi.json is the contract), with
+  the documents' models unchanged; the GPT-Live harness ran on it with
+  VAD, STT, TTS and diarization ([live-proof.md](live-proof.md)). A
+  diarized end up to 0.1 s past the utterance is now cut to it. Its
+  emotion, voiceprint and streaming STT (`/v1/audio/stream`, with
+  turn-taking) have no floppy ability yet.
 - **The decision element trimmed (2026-10-24, D243):** `<decision:pin>`
   is gone (the body's `isFocusCandidate` guard and reflection's
   `hasBehaviors()` cond do its work, as mosfet.py's guards do), and the

@@ -70,9 +70,9 @@ under `scx run`, gives each utterance the microphone hears to the room as
 `environment.sound`, and plays each sound floppy makes on the speaker
 (muting the microphone while it does). A typed line is sent as text, and
 `--say FILE` sends a recorded utterance instead. The env file names the
-lab's speech gateway for both speech variables
-(`FLOPPY_SPEECH_BASE_URL=http://192.168.2.2:8090/v1`, and the same for
-`FLOPPY_VOICE_BASE_URL`):
+lab's shared model API for both speech variables
+(`FLOPPY_SPEECH_BASE_URL=https://api.willen.dev/v1`, and the same for
+`FLOPPY_VOICE_BASE_URL`, each key one of its bearer keys; decision D244):
 
 ```console
 python3 scripts/talk.py --env-file .env --scx scx
