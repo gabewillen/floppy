@@ -165,9 +165,9 @@ def grade_job(job, env, judge_names, check_weight):
     scenario = job["scenario"]
     records = score.load_job(job["out"])
     # What floppy said aloud, transcribed once (kept in heard.json).
-    made = score.sounds([r for session in records["sessions"] for r in session], score.people(scenario))
-    if made:
-        records["heard"] = sound.transcripts(job["out"], made, sound.Backend(env))
+    groups = score.sound_groups(scenario, records)
+    if groups:
+        records["heard"] = sound.transcripts(job["out"], groups, sound.Backend(env))
     checks, results = score.score(scenario, records)
     transcript = score.summary(scenario, records)
     grades = []

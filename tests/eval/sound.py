@@ -164,11 +164,13 @@ def read_sound(media, data):
     return raw[: len(raw) - len(raw) % 2]
 
 
-def transcripts(job_out, sounds, backend):
-    """{audio: words} for each of floppy's sounds `sounds` (the data of its
-    environment.sound records), transcribed once and kept in
-    `<job_out>/heard.json`; a sound that cannot be read or transcribed is
-    left out."""
+def transcripts(job_out, groups, backend):
+    """{key: words} for each group of floppy's sounds (the data of its
+    environment.sound records in one step, in order), the group's audio
+    joined and transcribed once, keyed by its references joined with "|"
+    (a reply streamed in chunks is heard whole, as a person hears it), and
+    kept in `<job_out>/heard.json`; a group none of whose sounds can be
+    read, or that cannot be transcribed, is left out."""
     path = os.path.join(job_out, "heard.json")
     heard = {}
     if os.path.exists(path):
@@ -176,15 +178,15 @@ def transcripts(job_out, sounds, backend):
             heard = json.load(handle)
     media = os.path.join(job_out, "media")
     changed = False
-    for data in sounds:
-        ref = data.get("audio")
-        if not ref or ref in heard:
+    for group in groups:
+        key = group_key(group)
+        if not key or key in heard or backend is None:
             continue
-        pcm = read_sound(media, data)
-        if pcm is None or backend is None:
+        pcm = b"".join(p for p in (read_sound(media, data) for data in group) if p)
+        if not pcm:
             continue
         try:
-            heard[ref] = backend.transcribe(pcm)
+            heard[key] = backend.transcribe(pcm)
         except RuntimeError:
             continue
         changed = True
@@ -192,3 +194,7 @@ def transcripts(job_out, sounds, backend):
         with open(path, "w", encoding="utf-8") as handle:
             json.dump(heard, handle, indent=2)
     return heard
+
+
+def group_key(group):
+    return "|".join(str(data.get("audio", "")) for data in group)

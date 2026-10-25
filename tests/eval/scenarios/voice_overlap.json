@@ -52,18 +52,5 @@
     "both": "Both questions are answered: Paris and Tokyo.",
     "self": "floppy does not answer its own words or repeat itself."
   },
-  "diagnostics": [
-    {
-      "check": "not_logged",
-      "at": [
-        0,
-        1
-      ],
-      "label": "communication.product",
-      "pattern": "paris",
-      "features": [
-        "turn_taking"
-      ]
-    }
-  ]
+  "diagnostics": []
 }

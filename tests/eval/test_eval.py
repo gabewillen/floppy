@@ -294,7 +294,7 @@ class Features(unittest.TestCase):
             log("environment.sound", json.dumps({"audio": "media/say-2.pcm", "source": "floppy"})),
         ]
         job = {"steps": [step(0, 0, 0, 4, kind="hear")], "sessions": [records], "done": True,
-               "heard": {"media/say-1.pcm": "The capital", "media/say-2.pcm": "is Paris."}}
+               "heard": {"media/say-1.pcm|media/say-2.pcm": "The capital is Paris."}}
         value, results = score.score(scenario, job)
         self.assertEqual(value, 1.0)
         self.assertIn("The capital is Paris.", results[0]["why"])
@@ -302,7 +302,8 @@ class Features(unittest.TestCase):
         value, results = score.score(scenario, job)
         self.assertEqual(results[0]["score"], 0.0)
         self.assertIn("2 sound(s) of floppy's", results[0]["why"])
-        transcript = score.summary(scenario, dict(job, heard={"media/say-1.pcm": "Paris."}))
+        self.assertEqual(len(score.sound_groups(scenario, job)[0]), 2)
+        transcript = score.summary(scenario, dict(job, heard={"media/say-1.pcm|media/say-2.pcm": "Paris."}))
         self.assertIn("gabe says out loud: \"what's the capital of France?\"", transcript)
         self.assertIn("floppy is heard saying out loud: Paris.", transcript)
 

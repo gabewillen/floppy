@@ -106,7 +106,9 @@ fn layout(overlay: Option<&Path>, scenario: &Json) -> PathBuf {
     }
     for edit in scenario["edits"].as_array().cloned().unwrap_or_default() {
         let path = dir.join(edit["path"].as_str().expect("an edit names its path"));
-        let old = edit["old"].as_str().expect("an edit names the text it replaces");
+        let old = edit["old"]
+            .as_str()
+            .expect("an edit names the text it replaces");
         let new = edit["new"].as_str().expect("an edit names its new text");
         let text = std::fs::read_to_string(&path).expect("an edited file is readable");
         assert_eq!(
@@ -172,7 +174,8 @@ fn start(body: &Path, memory: &Path, media: &Path, job: &Json) -> Run {
         .and_then(Path::parent)
         .and_then(Path::parent)
         .expect("the body is <layout>/bots/floppy/floppy.scx");
-    let room = support::environment_with_devices(layout, &["floppy"], &[], &[("floppy", &[])], &params);
+    let room =
+        support::environment_with_devices(layout, &["floppy"], &[], &[("floppy", &[])], &params);
     args.push("--dir".to_owned());
     args.push(format!(
         "{}={}::/memory",
@@ -312,7 +315,10 @@ fn give(run: &mut Run, spec: &Json, media: &Path, name: &str) -> &'static str {
     if let Some(content) = spec["say"].as_str() {
         // An empty `targets` is ambient input: the room gives it to every
         // participant, and floppy overhears it.
-        let targets = spec["targets"].as_array().cloned().unwrap_or_else(|| vec![json!("floppy")]);
+        let targets = spec["targets"]
+            .as_array()
+            .cloned()
+            .unwrap_or_else(|| vec![json!("floppy")]);
         run.event(
             "bot.ability.communication.input",
             &json!({
@@ -324,7 +330,9 @@ fn give(run: &mut Run, spec: &Json, media: &Path, name: &str) -> &'static str {
         );
         return "say";
     }
-    let audio = spec["audio"].as_str().expect("a heard step names its audio");
+    let audio = spec["audio"]
+        .as_str()
+        .expect("a heard step names its audio");
     let file = format!("{name}.pcm");
     std::fs::copy(audio, media.join(&file)).expect("a heard step's audio is copyable");
     let silence = media.join("silence.pcm");

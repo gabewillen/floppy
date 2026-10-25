@@ -188,11 +188,24 @@ def sounds(records, others):
 
 
 def spoken(job, records, others):
-    """What floppy said aloud in the records: the transcripts of its sounds,
-    in order, joined (a reply streamed in chunks reads as one)."""
-    heard = job.get("heard", {})
-    words = [heard.get(data["audio"], "") for data in sounds(records, others)]
-    return " ".join(w for w in words if w).strip()
+    """What floppy said aloud in the records: the transcript of its sounds
+    in them, joined in order and heard as one (tests/eval/sound.py keys it
+    by their references joined with "|")."""
+    key = "|".join(str(data.get("audio", "")) for data in sounds(records, others))
+    return job.get("heard", {}).get(key, "").strip() if key else ""
+
+
+def sound_groups(scenario, job):
+    """floppy's sounds in each step of the job, for transcription."""
+    others = people(scenario)
+    groups = []
+    for step in job["steps"]:
+        if step["session"] < len(job["sessions"]):
+            records = job["sessions"][step["session"]][step["start_index"] : step["end_index"]]
+            group = sounds(records, others)
+            if group:
+                groups.append(group)
+    return groups
 
 
 def _matches(pattern, text):
