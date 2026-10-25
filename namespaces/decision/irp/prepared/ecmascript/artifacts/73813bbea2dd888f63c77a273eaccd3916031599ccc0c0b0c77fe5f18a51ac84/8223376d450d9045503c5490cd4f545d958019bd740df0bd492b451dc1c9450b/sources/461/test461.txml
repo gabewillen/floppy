@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<!-- decision-6: a child that has finished is no running session: reading it assigns nothing and raises nothing. -->
+<scxml initial="s0" version="1.0" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision">
+<datamodel>
+  <data id="offers" expr="'untouched'"/>
+</datamodel>
+<state id="s0">
+  <onentry>
+    <send event="timeout" delay="5s"/>
+  </onentry>
+  <invoke id="child" type="http://www.w3.org/TR/scxml/">
+    <content>
+      <scxml version="1.0" initial="done" conf:datamodel="" xmlns="http://www.w3.org/2005/07/scxml" xmlns:conf="http://www.w3.org/2005/scxml-conformance">
+        <final id="done"/>
+      </scxml>
+    </content>
+  </invoke>
+  <transition event="done.invoke">
+    <decision:offers location="offers" target="'#_child'"/>
+    <raise event="read"/>
+  </transition>
+  <transition event="read" cond="offers === 'untouched'" conf:targetpass=""/>
+  <transition event="*" conf:targetfail=""/>
+</state>
+<conf:pass/>
+<conf:fail/>
+</scxml>

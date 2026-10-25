@@ -29,7 +29,7 @@ handoff's [open work](handoff.md#open-work).
 | Event data contracts | JSON Schema files referenced by `event:schema` on the transitions that take the event; scxml.rs checks them where the event is created (`<send>`, `<raise>`, a send between sessions) and on host input (decision D41) |
 | Payload checks | `event:schema` only; a `cond` correlates (which child, which turn, which timer) and never checks a payload's shape (decision D42) |
 | Synchronous helpers (attention bias, envelopes, choice assembly and compaction, routing, confidence tuner, message commit) | floppy namespace elements that write to a `location` (`namespaces/conversation`, `namespaces/decision`, `namespaces/processing`, `namespaces/intuition`, `namespaces/cognition`, `namespaces/identity`, `namespaces/memory`, `namespaces/behavior`, `namespaces/autonomy`; decisions D40, D113, D114, D115, D116) |
-| Model-facing event choices and payload filling | `<decision:choice>` (the `decision` namespace) writes the enabled transitions with their `event:schema`, read through `session-snapshot-host`, as canonical choices, each with the effort its document declares (D206); the `decision` service, invoked with it, asks a backend, fills the offered events' data to their schemas and validates it; its kinds are OpenAI Decisions API's question types (D120): `choice` emits the chosen event (or, over `labels`, `decision.classified`), `predicate` (which intuition uses, with the stimulus as a param and the deliberative handoff never offered) emits `decision.selected` with every groundable event and its own confidence, and `score` emits `decision.ranked` |
+| Model-facing event choices and payload filling | `<decision:choice>` (the `decision` namespace) writes the enabled transitions with their `event:schema`, read through `session-snapshot-host`, as canonical choices (`<decision:offers>` reads another session's, with the effort its `offerable` data declares, D206, D242); the `decision` service, invoked with it, asks TypeSafe `system_one` `choice` questions (D243), fills the offered events' data to their schemas and validates it, and emits `decision.selected` with the one chosen event and its confidence, or `decision.abstain` with the tier a pass hands the turn to (the deliberative handoff is never offered) |
 | Event names `bot.*`, `bot.ability.*`, `phone.*` | Kept byte for byte: never renamed or re-cased |
 | Telemetry (`telemetry`) | scxml.rs's OpenTelemetry facade (guests through the telemetry WIT; the native runtime, `scx`, through scxml.rs's own) |
 
@@ -175,7 +175,7 @@ D33 to D43.
   turn when over 32 KiB (decisions D113, D242).
 - **Choices as data.** On each `processing` entry the body collects the
   turn's choices with `<processing:collect_offered_events>` (its own
-  `bot.focus_device`, pinned to the turn's focus candidates (there is no
+  `bot.focus_device`, which its guard takes only for one of the turn's focus candidates (there is no
   `bot.clear_focus`: focus stays on a device until the bot focuses
   another, D155), plus what each ability offers and the focused
   device's events, each tagged with its offerer's session id as
@@ -244,10 +244,9 @@ D33 to D43.
 | Attaching the abilities, the processing operation | the body's `<invoke>`s in `live`, its readiness bookkeeping and its delayed `<send>`/`<cancel>` | composition inside the body |
 | The turn's attention bias (the interrupt and the target device) | `<cognition:attention_bias_for_turn>` (D114) | `namespaces/cognition` element |
 | stimulus envelope | assigned member by member with `<assign>` before its `<send>` (was `<bot:stimulus>`, D116) | plain SCXML |
-| Removing the ignore, checking the focus | the ignore sent to the cognition, the focus device's pinned enum and the body's guards (D113) | plain SCXML |
+| Removing the ignore, checking the focus | the ignore sent to the cognition and the body's guards (D113, D243) | plain SCXML |
 | The model-facing event schema and the 32 KiB bound | `<processing:model_facing_schema>` | `namespaces/processing` element |
 | Collecting the turn's offered events | `<processing:collect_offered_events>` | `namespaces/processing` element |
-| focus pinning | `<decision:pin>` | `namespaces/decision` element |
 | Sending selections to their targets | each stage's `<foreach>`/`<send targetexpr="'#_scxml_' + s.target">`, every choice tagged with its offerer's session id (D113) | plain SCXML |
 | The dispatch tool's schema | `<processing:send>` | `namespaces/processing` element |
 | A selection's confidence | `<processing:selection_confidence>` | `namespaces/processing` element |

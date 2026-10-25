@@ -178,9 +178,7 @@
   choices with <decision:choice location="body_choices"
   events="bot.focus_device"> (the transition on active: bot.focus_device
   when the turn has focus candidates; nothing clears the focus, so it
-  stays on a device until the bot focuses another, decision D155),
-  <decision:pin> pins bot.focus_device's device to an
-  enum of the turn's focus_candidates, and
+  stays on a device until the bot focuses another, decision D155), and
   <processing:collect_offered_events> tags every choice with the session id
   of the session that offers it (the target a stage sends it to): the
   body's own with its _sessionid, what each ability offers (but the
@@ -202,11 +200,11 @@
   session its target names (#_scxml_ + target, decision D104):
   a selection of the body's own bot.focus_device reaches the body during
   the turn and is taken by active's transition while the body offers it
-  (focusDeviceEnabled()). The schemas the generate
-  service and the decision service check a selection against (the focus
-  device's enum pinned to the turn's candidates, each target an enum of
-  the offering sessions) refuse what the attention policy does not
-  allow before anything is sent. On the turn's output the body logs
+  (focusDeviceEnabled()), which focuses its device only when it is one of
+  the turn's focus candidates (isFocusCandidate(_event)). The schemas the
+  generate service checks a selection against (each target an enum of the
+  offering sessions) refuse a target no session offers before anything is
+  sent. On the turn's output the body logs
   bot.processing.completed and sends itself the selections that name no
   target: the trusted SpeechHeard seed's bot.ability.communication.input
   (a declared event of the bot), which it
@@ -825,7 +823,6 @@
           </onentry>
           <onentry>
             <decision:choice location="body_choices" events="bot.focus_device"/>
-            <decision:pin location="body_choices" event="bot.focus_device" property="device" values="focus_candidates"/>
             <!-- bound: 32 KiB, the failure message below names it. -->
             <processing:collect_offered_events location="choices" choices="body_choices" offers="turnOffers()"
                                                devices="device_snapshots" focus="focused_device"

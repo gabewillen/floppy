@@ -1,10 +1,10 @@
-//! The `decision` extension namespace: `<decision:choice>`,
-//! `<decision:offers>` and `<decision:pin>` as a
+//! The `decision` extension namespace: `<decision:choice>` and
+//! `<decision:offers>` as a
 //! `stateforward:scxml/executable-content-extension` Wasm component.
 //!
 //! Executable content is synchronous and quick, so this namespace holds only
 //! the half of a decision that is: reading the choices (the choices of a
-//! `TypeSafe` `Choice` question) and grounding one property of them. What
+//! `TypeSafe` `Choice` question), its own or another session's. What
 //! becomes of the choices (their model-facing schemas, the turn's offered events, the
 //! dispatch tool, the selection confidence) is the `processing` namespace
 //! (`namespaces/processing`). Asking a backend to
@@ -112,17 +112,6 @@
 //! The choices' schemas are the contracts of the events the decision service
 //! may return: it validates the chosen event's data against them before it
 //! returns it (the document declares its events, not the service package).
-//!
-//! # `<decision:pin location="L" event="E" property="P" values="X"/>`
-//!
-//! Pins one property of one event's schema in the choice array at
-//! `location` (as the floppy bot (`bots/floppy`) grounds `bot.focus_device`'s `device` in the
-//! turn's focus candidates): `values`, an expression that evaluates to a JSON
-//! array, becomes the `enum` of `schema.properties.<P>` of every entry whose
-//! event is `E`; when the array is empty those entries are removed instead
-//! (nothing could fill them). The result is canonical JSON. Every attribute
-//! is required. An entry for `E` whose schema has no object
-//! `properties.<P>` is `error.execution`.
 //!
 //! # Failures
 //!
@@ -372,7 +361,6 @@ pub fn execute<H: ChoiceHost>(
     match local_name {
         "choice" => choice(attributes, content, host),
         "offers" => offers(attributes, content, host),
-        "pin" => pin(attributes, content, host),
         _ => Ok(Executed::NotHandled),
     }
 }
@@ -430,24 +418,6 @@ fn no_content<E>(content: &[Content], detail: &'static str) -> Result<(), Failur
     Ok(())
 }
 
-/// Evaluates `expression` as JSON (an array or an object), else `malformed`.
-fn read_json<H: ChoiceHost>(
-    host: &mut H,
-    expression: &str,
-    malformed: &'static str,
-) -> Result<Json, Failure<H::Error>> {
-    match host
-        .read(expression)
-        .map_err(Failure::Host)?
-        .map_err(|()| Failure::Execution(malformed))?
-    {
-        Data::JsonArray(text) | Data::JsonObject(text) => {
-            serde_json::from_str(&text).map_err(|_| Failure::Execution(malformed))
-        }
-        _ => Err(Failure::Execution(malformed)),
-    }
-}
-
 /// Assigns `value` to `location`, else `failed`.
 fn assign_to<H: ChoiceHost>(
     host: &mut H,
@@ -458,122 +428,6 @@ fn assign_to<H: ChoiceHost>(
     host.assign(location, value)
         .map_err(Failure::Host)?
         .map_err(|()| Failure::Execution(failed))
-}
-
-/// Executes `<decision:pin>`.
-fn pin<H: ChoiceHost>(
-    attributes: &[Attribute],
-    content: &[Content],
-    host: &mut H,
-) -> Result<Executed, Failure<H::Error>> {
-    let [location, event, property, values] = attribute_values(
-        attributes,
-        ["location", "event", "property", "values"],
-        "decision:pin takes only the location, event, property and values attributes",
-        "decision:pin repeats an attribute",
-    )?;
-    let location = required(location, "decision:pin requires a non-empty location")?;
-    let event = required(event, "decision:pin requires a non-empty event")?;
-    let property = required(property, "decision:pin requires a non-empty property")?;
-    let values = required(values, "decision:pin requires a non-empty values")?;
-    no_content(content, "decision:pin holds no content")?;
-    let choices = read_json(
-        host,
-        location,
-        "decision:pin location does not hold choices",
-    )?;
-    let Json::Array(values) = read_json(host, values, "decision:pin values is not an array")?
-    else {
-        return Err(Failure::Execution("decision:pin values is not an array"));
-    };
-    let pinned = pin_choices(&choices, event, property, &values).map_err(Failure::Execution)?;
-    assign_to(
-        host,
-        location,
-        &Data::JsonArray(pinned),
-        "decision:pin could not assign the choices",
-    )?;
-    Ok(Executed::Handled)
-}
-
-/// `choices` with every `event` entry's `schema.properties.<property>.enum`
-/// set to `values`, or without the `event` entries when `values` is empty,
-/// as canonical JSON: see the crate documentation (`<decision:pin>`).
-///
-/// # Errors
-///
-/// A static detail when `choices` is not an array of choice entries or an
-/// `event` entry's schema has no object `properties.<property>`.
-pub fn pin_choices(
-    choices: &Json,
-    event: &str,
-    property: &str,
-    values: &[Json],
-) -> Result<String, &'static str> {
-    let entries = checked_entries(choices, PIN_ENTRIES)?;
-    let mut pinned = Vec::with_capacity(entries.len());
-    for entry in entries {
-        if entry.get("event").and_then(Json::as_str) != Some(event) {
-            pinned.push(entry.clone());
-            continue;
-        }
-        if values.is_empty() {
-            continue;
-        }
-        let mut entry = entry.clone();
-        let slot = entry
-            .pointer_mut("/schema/properties")
-            .and_then(Json::as_object_mut)
-            .and_then(|properties| properties.get_mut(property))
-            .and_then(Json::as_object_mut)
-            .ok_or("decision:pin found no such property in the event's schema")?;
-        slot.insert("enum".into(), Json::Array(values.to_vec()));
-        pinned.push(entry);
-    }
-    Ok(canonical_json(&Json::Array(pinned)))
-}
-
-/// `<decision:pin>`'s choice-entry failures (see `checked_entries`).
-const PIN_ENTRIES: [&str; 3] = [
-    "decision:pin location does not hold choices",
-    "decision:pin found a choice that is not an object",
-    "decision:pin found a malformed choice",
-];
-
-/// The entries of `choices`, each checked to be a choice entry: an object
-/// with a non-empty string `event`, a `schema`, optionally a string
-/// `description`, a non-empty string `target` and an `effort` (a whole
-/// number from 0 to [`MAX_EFFORT`]), and nothing else;
-/// `details` are the failures: not an array, an entry not an object, a
-/// malformed entry.
-fn checked_entries<'a>(
-    choices: &'a Json,
-    [not_choices, not_object, malformed]: [&'static str; 3],
-) -> Result<&'a [Json], &'static str> {
-    let entries = choices.as_array().ok_or(not_choices)?;
-    for entry in entries {
-        let entry = entry.as_object().ok_or(not_object)?;
-        let text = |key: &str| {
-            entry.get(key).map(|value| {
-                value
-                    .as_str()
-                    .filter(|text| key == "description" || !text.is_empty())
-            })
-        };
-        if entry.keys().any(|key| {
-            !["event", "schema", "description", "target", "effort"].contains(&key.as_str())
-        }) || entry
-            .get("effort")
-            .is_some_and(|effort| effort_of(effort).is_none())
-            || text("event").flatten().is_none()
-            || !entry.contains_key("schema")
-            || matches!(text("description"), Some(None))
-            || matches!(text("target"), Some(None))
-        {
-            return Err(malformed);
-        }
-    }
-    Ok(entries)
 }
 
 /// A declared effort: a whole number from 0 to [`MAX_EFFORT`], else `None`.
@@ -1069,8 +923,7 @@ mod guest {
             match data_model_host::evaluate(location) {
                 Ok(DataValue::JsonArray(text)) => Ok(Ok(Data::JsonArray(text))),
                 Ok(DataValue::JsonObject(text)) => Ok(Ok(Data::JsonObject(text))),
-                // A string is `<decision:offers>`' target; `<decision:pin>`
-                // refuses one where it reads an array, and `<decision:choice>`
+                // A string is `<decision:offers>`' target; `<decision:choice>`
                 // reads nothing.
                 Ok(DataValue::Text(text)) => Ok(Ok(Data::String(text))),
                 Ok(DataValue::Number(value)) => Ok(scxml_types::FiniteNumber::new(value)

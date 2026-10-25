@@ -52,10 +52,10 @@
   transitions for the three inventory events are the enabled transitions
   <decision:choice> reads, which <processing:collect_offered_events> tags
   with this session's id (the session that offers them, so a selection is
-  sent here); <decision:pin> pins a change's and a break's name to the
-  recalled inventory's names and drops both when it is empty (decision
-  D100: offered with any name, a model broke behaviors that did not
-  exist), and <processing:send max="1"> builds the dispatch tool with at
+  sent here); a change and a break are enabled only while the recalled
+  inventory holds a behavior (hasBehaviors(), decision D100: offered on an
+  empty inventory, a model broke behaviors that did not exist), and
+  <processing:send max="1"> builds the dispatch tool with at
   most one event, which the generate service offers as its one tool, from
   {cognition_input, cognition_output, prior_episodes, behaviors}, and
   refuses as schema-mismatch a reply that selects more. With a persona
@@ -326,11 +326,6 @@
     <onentry>
       <decision:choice location="choices" events="bot.behavior.create bot.behavior.change bot.behavior.break bot.ability.persona.revise"/>
       <processing:collect_offered_events location="choices" choices="choices"/>
-      <!-- A change or a break names a behavior the inventory holds; with
-           none, neither is offered (decision D100). A change never names
-           one that declined this turn (decision D230). -->
-      <decision:pin location="choices" event="bot.behavior.change" property="name" values="changeableNames()"/>
-      <decision:pin location="choices" event="bot.behavior.break" property="name" values="behaviorNames()"/>
       <!-- At most one inventory event, and with a persona at most one
            revision beside it (decision D145): more is refused below. -->
       <if cond="hasPersona()">
@@ -371,6 +366,12 @@
       <assign location="gen_failure" expr="'schema-mismatch'"/>
       <assign location="gen_rejection" expr="overSelectionRejection()"/>
     </transition>
+    <!-- A change never names a behavior that declined this turn (decision
+         D230): it is refused, for the model to repair. -->
+    <transition event="generate.result" cond="isDeclinedChange(_event)">
+      <assign location="gen_failure" expr="'schema-mismatch'"/>
+      <assign location="gen_rejection" expr="declinedChangeRejection()"/>
+    </transition>
     <!-- A revision goes first, so it is taken here before an inventory
          event leaves processing. -->
     <transition event="generate.result" cond="isGenerate(_event)">
@@ -396,11 +397,16 @@
       <assign location="create_intent" expr="_event.data"/>
       <assign location="intent" expr="_event.data"/>
     </transition>
-    <transition event="bot.behavior.change" event:schema="../schemas/bot.behavior.change.json" target="revising">
+    <!-- A change or a break names a behavior the inventory holds: with
+         none, neither is enabled, so neither is offered (decision D100);
+         a name the inventory does not hold fails after the call. A change
+         is enabled only while a behavior that did not decline this turn
+         is left (decision D230). -->
+    <transition event="bot.behavior.change" event:schema="../schemas/bot.behavior.change.json" cond="hasChangeable()" target="revising">
       <assign location="create_intent" expr="null"/>
       <assign location="intent" expr="_event.data"/>
     </transition>
-    <transition event="bot.behavior.break" event:schema="../schemas/bot.behavior.break.json" target="breaking">
+    <transition event="bot.behavior.break" event:schema="../schemas/bot.behavior.break.json" cond="hasBehaviors()" target="breaking">
       <assign location="behavior" expr="_event.data"/>
     </transition>
 

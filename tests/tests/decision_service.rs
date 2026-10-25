@@ -4,8 +4,9 @@
 //! `decision` service, invoked with those choices, asks a deterministic fake
 //! `TypeSafe` `system_one` backend on 127.0.0.1 (nothing reaches the
 //! network) off the session thread, fills the chosen event's data from
-//! grounded options, validates it against the choices' schema, and returns it;
-//! the machine's transition fires with that data. Both packages resolve from
+//! grounded options, validates it against the choices' schema, and returns it
+//! as its selection; the machine sends itself the selection, and its
+//! transition fires with that data. Both packages resolve from
 //! their repository URIs. The key and base URL reach the run only through an
 //! `--env-file`, and only the `<invoke>` whose `env` attributes name them
 //! receives them; the component holds slot references and the host
@@ -55,9 +56,8 @@ struct Received {
 }
 
 /// The mock's answer to one `system_one` request: the selection gives the
-/// event `target` names (`/ship`, `/cancel`, `/hold`, `/abstain` for a
-/// choice's pass criterion, `/reasoning` for a predicate's pass to
-/// reasoning) 0.8 and shares 0.2 among the rest; every other question
+/// event `target` names (`/ship`, `/cancel`, `/hold`, `/reasoning` for the
+/// pass to reasoning) 0.8 and shares 0.2 among the rest; every other question
 /// gives its first label (in the body's canonical order) 1.0. `/stray`
 /// answers a label the selection does not offer.
 fn answer(target: &str, body: &[u8]) -> Option<String> {
@@ -65,10 +65,8 @@ fn answer(target: &str, body: &[u8]) -> Option<String> {
         "/ship/v1/systemone" => "order.ship",
         "/cancel/v1/systemone" => "order.cancel",
         "/hold/v1/systemone" => "order.hold",
-        "/abstain/v1/systemone" => "__unhandled__",
         "/reasoning/v1/systemone" => "__reasoning__",
         "/stray/v1/systemone" => "order.refund",
-        "/labels/v1/systemone" => "complaint",
         _ => return None,
     };
     let request: Json = serde_json::from_slice(body).ok()?;
@@ -225,9 +223,10 @@ const HOLD_SCHEMA: &str =
     r#"{"description":"Put the order on hold.","type":"object","additionalProperties":false}"#;
 
 /// An order machine: `<decision:choice>` on entry to `deciding` and the
-/// decision service invoked there with `params` (besides the choices), whose
-/// three `event:schema` transitions log `_event.data` and finish in their
-/// own final state; `decision.abstain`, `decision.failed`, and
+/// decision service invoked there with `params` (besides the choices); it
+/// sends itself the service's selection, and its three `event:schema`
+/// transitions log `_event.data` and finish in their own final state;
+/// `decision.abstain`, `decision.failed`, and
 /// `error.execution` (no schema, so never offered) finish in `abstained`
 /// and `failed`.
 fn document(params: &str) -> String {
@@ -237,12 +236,12 @@ fn document(params: &str) -> String {
 /// [`document`] with `choices_attributes` added to its `<decision:choice>`.
 fn filtered_document(choices_attributes: &str, params: &str) -> String {
     format!(
-        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml"
+        r##"<scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:decision="{NAMESPACE_URI}"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" initial="deciding">
-  <datamodel><data id="order" expr="({{sku: 'A-1', qty: 2}})"/><data id="choices" expr="[]"/></datamodel>
+  <datamodel><data id="order" expr="({{sku: 'A-1', qty: 2}})"/><data id="choices" expr="[]"/><data id="selection" expr="null"/></datamodel>
   <state id="deciding">
     <onentry>
       <decision:choice location="choices"{choices_attributes}/>
@@ -251,6 +250,11 @@ fn filtered_document(choices_attributes: &str, params: &str) -> String {
       <param name="choices" expr="choices"/>
       {params}
     </invoke>
+    <transition event="decision.selected">
+      <foreach array="_event.data.selections" item="selection">
+        <send eventexpr="selection.event" target="#_internal"><content expr="selection.data"/></send>
+      </foreach>
+    </transition>
     <transition event="order.ship" event:schema='{SHIP_SCHEMA}' target="shipped">
       <log label="data" expr="JSON.stringify(_event.data)"/>
     </transition>
@@ -273,7 +277,7 @@ fn filtered_document(choices_attributes: &str, params: &str) -> String {
   <final id="held"><onentry><log label="final" expr="'held'"/></onentry></final>
   <final id="abstained"><onentry><log label="final" expr="'abstained'"/></onentry></final>
   <final id="failed"><onentry><log label="final" expr="'failed'"/></onentry></final>
-</scxml>"#,
+</scxml>"##,
         service = service_uri("decision")
     )
 }
@@ -294,7 +298,7 @@ fn run(route: &str, test: &str, env: &[&str]) -> (Vec<Json>, Mock) {
 
 const BOTH: [&str; 2] = ["TYPESAFE_API_KEY", "TYPESAFE_BASE_URL"];
 
-/// The selection criteria (the choices' events plus abstain) the backend
+/// The selection criteria (the choices' events plus the pass) the backend
 /// received for one run of the order machine whose `<decision:choice>`
 /// carries `choices_attributes`, and the run's log records.
 fn received_choices(
@@ -328,7 +332,7 @@ fn the_events_filter_narrows_the_choices_the_backend_receives() {
             "order.ship": "Ship the order to the customer.",
             "order.cancel": "Cancel the order.",
             "order.hold": "Put the order on hold.",
-            "__unhandled__": "None of these: leave the turn unhandled.",
+            "__reasoning__": "None of these fits: it needs thought, so think it through first, with reasoning.",
         }),
         "without events every schema transition is offered"
     );
@@ -349,7 +353,7 @@ fn the_events_filter_narrows_the_choices_the_backend_receives() {
         json!({
             "order.cancel": "Cancel the order.",
             "order.hold": "Put the order on hold.",
-            "__unhandled__": "None of these: leave the turn unhandled.",
+            "__reasoning__": "None of these fits: it needs thought, so think it through first, with reasoning.",
         }),
         "the filter keeps only the events its descriptors match"
     );
@@ -368,7 +372,7 @@ fn a_choices_filtered_to_leave_out_the_chosen_event_never_fires_it() {
         filtered,
         json!({
             "order.cancel": "Cancel the order.",
-            "__unhandled__": "None of these: leave the turn unhandled.",
+            "__reasoning__": "None of these fits: it needs thought, so think it through first, with reasoning.",
         })
     );
     assert_eq!(
@@ -409,9 +413,9 @@ fn choice_fires_the_chosen_schema_transition_with_schema_valid_data() {
             "order.ship": "Ship the order to the customer.",
             "order.cancel": "Cancel the order.",
             "order.hold": "Put the order on hold.",
-            "__unhandled__": "None of these: leave the turn unhandled.",
+            "__reasoning__": "None of these fits: it needs thought, so think it through first, with reasoning.",
         }),
-        "exactly the three event:schema transitions are offered, plus abstain"
+        "exactly the three event:schema transitions are offered, plus the pass to reasoning"
     );
     assert_eq!(
         body["questions"]["order.ship::sku"]["criteria"],
@@ -449,37 +453,43 @@ fn choice_fires_another_transition_when_the_backend_prefers_it() {
     );
 }
 
-/// A predicate order machine: the decision service's events and its done
-/// data are logged, and the machine ends when the service does.
-fn predicate_document(params: &str) -> String {
+/// An order machine that logs the decision service's events and its done
+/// data instead of taking the selection, and ends when the service does.
+fn logging_document(params: &str) -> String {
     document(&format!(
-        r#"<param name="kind" expr="'predicate'"/>
-      <param name="state" expr="order"/>
+        r#"<param name="state" expr="order"/>
       {params}"#
     ))
     .replace(
-        r#"<transition event="decision.abstain" target="abstained">"#,
+        r##"<transition event="decision.selected">
+      <foreach array="_event.data.selections" item="selection">
+        <send eventexpr="selection.event" target="#_internal"><content expr="selection.data"/></send>
+      </foreach>
+    </transition>"##,
         r#"<transition event="decision.selected">
       <log label="data" expr="JSON.stringify(_event.data)"/>
-    </transition>
-    <transition event="done.invoke.decide" target="abstained">
+    </transition>"#,
+    )
+    .replace(
+        r#"<transition event="decision.abstain" target="abstained">"#,
+        r#"<transition event="done.invoke.decide" target="abstained">
       <log label="done" expr="JSON.stringify(_event.data)"/>
     </transition>
     <transition event="decision.abstain">"#,
     )
 }
 
-/// `predicate` (decision D150): only the chosen event
-/// comes back in `decision.selected`, with its data and its probability in
-/// the selection (D-R-28), and nothing is fired; the service's done data
-/// reports the request's bytes and the backend's usage.
+/// Only the chosen event (decisions D150, D243) comes back in
+/// `decision.selected`, with its data and its probability in the
+/// selection; the service's done data reports the request's bytes and the
+/// backend's usage.
 #[test]
-fn predicate_returns_only_the_chosen_event_with_its_probability() {
+fn choice_returns_only_the_chosen_event_with_its_probability() {
     let mock = Mock::start();
-    let env_path = env_file("predicate", &format!("{}/ship", mock.origin), &BOTH);
+    let env_path = env_file("selected", &format!("{}/ship", mock.origin), &BOTH);
     let finished = open(
         &args(&env_path),
-        &predicate_document(""),
+        &logging_document(""),
         &[],
         Duration::from_secs(60),
     );
@@ -511,7 +521,7 @@ fn predicate_returns_only_the_chosen_event_with_its_probability() {
     assert_eq!(
         body["questions"]["selection"]["criteria"]["__reasoning__"],
         json!("None of these fits: it needs thought, so think it through first, with reasoning."),
-        "a predicate passes to reasoning by default"
+        "a choice passes to reasoning by default"
     );
     let done: Json = serde_json::from_str(done_text).expect("JSON");
     assert_eq!(
@@ -523,14 +533,14 @@ fn predicate_returns_only_the_chosen_event_with_its_probability() {
     );
 }
 
-/// A predicate's pass names the tier it hands the turn to.
+/// A pass names the tier it hands the turn to.
 #[test]
-fn a_predicate_pass_hands_the_turn_to_its_tier() {
+fn a_pass_hands_the_turn_to_its_tier() {
     let mock = Mock::start();
     let env_path = env_file("reasoning", &format!("{}/reasoning", mock.origin), &BOTH);
     let finished = open(
         &args(&env_path),
-        &predicate_document(r#"<param name="hand_ons" expr="['intuition', 'reasoning']"/>"#),
+        &logging_document(r#"<param name="hand_ons" expr="['intuition', 'reasoning']"/>"#),
         &[],
         Duration::from_secs(60),
     );
@@ -553,11 +563,14 @@ fn a_predicate_pass_hands_the_turn_to_its_tier() {
 
 #[test]
 fn choice_returns_decision_abstain_when_none_fits() {
-    let (records, _mock) = run("abstain", "abstain", &BOTH);
+    let (records, _mock) = run("reasoning", "abstain", &BOTH);
     assert_eq!(
         logs(&records),
         labelled(&[
-            ("data", r#"{"confidence":0.8,"reason":"declined"}"#),
+            (
+                "data",
+                r#"{"confidence":0.8,"hand_to":"reasoning","reason":"declined"}"#,
+            ),
             ("final", "abstained"),
         ]),
         "{records:?}"
@@ -603,39 +616,6 @@ fn without_a_key_or_a_base_url_nothing_is_sent() {
         "{records:?}"
     );
     assert!(mock.received().is_empty(), "no request");
-}
-
-#[test]
-fn a_choice_over_labels_returns_every_labels_probability() {
-    let mock = Mock::start();
-    let env_path = env_file("labels", &format!("{}/labels", mock.origin), &BOTH);
-    let args = args(&env_path);
-    let document = format!(
-        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml"
-       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
-       version="1.0" datamodel="ecmascript" initial="classifying">
-  <state id="classifying">
-    <invoke id="classify" type="{service}" env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL">
-      <param name="kind" expr="'choice'"/>
-      <param name="state" expr="'The order arrived damaged.'"/>
-      <param name="labels" expr="['complaint', 'praise']"/>
-    </invoke>
-    <transition event="decision.classified" target="done">
-      <log label="labels" expr="JSON.stringify(_event.data.labels)"/>
-    </transition>
-    <transition event="decision.failed" target="done"><log label="code" expr="_event.data.code"/></transition>
-  </state>
-  <final id="done"/>
-</scxml>"#,
-        service = service_uri("decision")
-    );
-    let records = open(&args, &document, &[], Duration::from_secs(60)).records;
-    assert_eq!(
-        logs(&records),
-        labelled(&[("labels", r#"{"complaint":1,"praise":0}"#)]),
-        "{records:?}"
-    );
-    assert_eq!(mock.received().len(), 1);
 }
 
 /// One real `system_one` decision through an env file

@@ -33,8 +33,8 @@ it arrives, each chunk an `environment.sound`, after the efference copy to
 Listening, and recorded in the conversation; decision D203), and the
 [listening](../../abilities/listening/listening.scx), its input ability
 (phase 6: see Sound below). Each turn the body
-collects the choices (its own `bot.focus_device`, pinned to the turn's
-focus candidates, plus
+collects the choices (its own `bot.focus_device`, which it takes only for
+one of the turn's focus candidates, plus
 what each ability offers, read from its live session that turn
 (`<decision:offers>`, decision D242), and the focused device's
 events, each tagged with the session id of its offerer as `target`, made

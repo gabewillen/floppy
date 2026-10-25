@@ -54,6 +54,12 @@ def lesson_turn(n):
     return js(data)
 
 
+def declined_turn(n, names):
+    data = json.loads(turn(n))
+    data["declined"] = names
+    return js(data)
+
+
 def persona_turn(n):
     data = json.loads(turn(n))
     data["self"] = {"traits": ["friendly"], "description": "I like company."}
@@ -123,7 +129,14 @@ BEHAVIOR = """<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datam
 REJECTED = BEHAVIOR.replace('target="answered"', 'target="nowhere"')
 # A turn behavior whose test waits 10 s for it (it never finishes).
 WAITING = BEHAVIOR.replace('<transition target="answered"/>', "")
-PLAN = chat('{"name":"GreetOnKnock","summary":"Answer a knock with a greeting.","states":[{"id":"answering","kind":"atomic","parent":"","purpose":"Decide the answer."},{"id":"answered","kind":"final","parent":"","purpose":"Carry the answer."}],"events":[],"transitions":[{"source":"answering","event":"","target":"answered","description":"Answer at once."}]}')
+PLAN_TEXT = '{"name":"GreetOnKnock","summary":"Answer a knock with a greeting.","states":[{"id":"answering","kind":"atomic","parent":"","purpose":"Decide the answer."},{"id":"answered","kind":"final","parent":"","purpose":"Carry the answer."}],"events":[],"transitions":[{"source":"answering","event":"","target":"answered","description":"Answer at once."}]}'
+PLAN = chat(PLAN_TEXT)
+
+
+# A second behavior, so a change is offered while GreetOnKnock declines.
+WAVE = {**CREATE, "data": {**CREATE["data"], "name": "WaveOnKnock", "description": "Wave when a knock sound arrives."}}
+WAVE_BEHAVIOR = BEHAVIOR.replace('name="GreetOnKnock"', 'name="WaveOnKnock"')
+WAVE_PLAN = chat(PLAN_TEXT.replace("GreetOnKnock", "WaveOnKnock"))
 
 
 def draft(scxml, settle=2000, done=True):
@@ -143,7 +156,7 @@ S.statement(1, "Without a database (the `<param>` `database` null, its default) 
 S.statement(2, "With a database, `recalling` reads the prior episodes and the behavior inventory in one memory transaction and `processing` asks the generate service (schema `dispatch`, its `events` at most one) to select at most one of `bot.behavior.create`, `bot.behavior.change` or `bot.behavior.break`, each offered by the reflection's own session (a change's and a break's `name` pinned to the inventory's names, and neither offered when the inventory is empty; decision D100); the selection is sent to the reflection's own session, and an empty selection goes to `storing`, which stores the turn's episode and answers `bot.ability.reflection.output`.")
 S.statement(3, "A select call the generate service refuses (`not-json`, or `schema-mismatch` such as more than one selected event, which the dispatch tool does not admit) is asked again with the repair feedback (`selection_feedback`) carrying its rejection, at most twice (decision D130); the same rejection as the one being repaired, or a third rejection, fails the select with `bot.ability.failed` `{message: \"Selection rejected: <message>\"}`; any other failed select call fails it with `Reflection select failed (<code>)`; a select call whose streamed reply makes no progress for `select_timeout_ms` (its first `generate.progress` arms it, each later one re-arms it) or that runs `select_ceiling_ms` in all fails it with `Reflection child cancellation timed out.` (decision D101).")
 S.statement(4, "A selected `bot.behavior.break` (`breaking`) marks the named behavior BROKEN with its trimmed reason and keeps the row, then stores the episode and answers `bot.ability.reflection.output`; a break of a name the inventory does not hold is not offered, so a model that selects one is refused twice and fails the select with `Selection rejected: <message>`.")
-S.statement(5, "A selected `bot.behavior.create` is revised by the revision ability, which `revising` invokes (decision D148): the revision stores a DRAFT stub for a new name, invokes the builder bot with a `builder.request`, and on the builder's `done` (`accepting`) replaces the row ACTIVE with the built document's path (its three documents the builder wrote, decision D121), and the reflection then stores the episode and answers `bot.ability.reflection.output`; a `bot.behavior.change` of a stored name reads its documents back (`reading`) and revises it the same way, and a change of a name the inventory does not hold is not offered, so a model that selects one is refused twice and fails the select with `Selection rejected: <message>`.")
+S.statement(5, "A selected `bot.behavior.create` is revised by the revision ability, which `revising` invokes (decision D148): the revision stores a DRAFT stub for a new name, invokes the builder bot with a `builder.request`, and on the builder's `done` (`accepting`) replaces the row ACTIVE with the built document's path (its three documents the builder wrote, decision D121), and the reflection then stores the episode and answers `bot.ability.reflection.output`; a `bot.behavior.change` of a stored name reads its documents back (`reading`) and revises it the same way, and a change of a name the inventory does not hold is not offered, so a model that selects one is refused twice and fails the select with `Selection rejected: <message>`; a change is enabled only while a behavior that did not decline this turn (`declined`) is left, and a reply that changes one that did is refused as `declined-change`, repaired as any rejection (decision D230).")
 S.statement(6, "A builder that fails with the last draft it rejected (`abandoning`) keeps that draft's path in the row as DRAFT and fails the turn with `Reflection change abandoned: attempts exhausted:` and the rendered diagnostics (decision D133); a builder that fails with no draft fails the turn with `Reflection revision failed: <reason>: <first diagnostic>`, the create's DRAFT stub kept.")
 S.statement(7, "`revising` is bounded by `revising_timeout_ms` without progress while a builder generation streams (the revision passes the builder `progress_target` the reflection's own session, `'#_scxml_' + _sessionid` (decision D148), and the builder passes on each `generate.progress` of its streamed generations, which arms it, and sends `builder.progress` as it enters a stage, which disarms it) and by `revising_ceiling_ms` in all (the `<param>` `bounds` overriding either, decision D101): when one passes, the revision is cancelled and the turn fails with `Reflection child cancellation timed out.`.")
 S.statement(8, "A memory transaction that fails (here the recall, on a database the run does not grant) fails the turn with `Reflection memory recall failed: <detail>`; after any failure the turn's episode is stored with no behavior (unless storing it is what failed; decision D97) and the reflection is idle again and takes the next input.")
@@ -198,6 +211,14 @@ S.case(141, 5, "a change of a created behavior is built and stored.",
 S.case(142, 5, "a change of a behavior the inventory does not hold is not offered: selecting one fails the select.",
        [send(INPUT, turn(1)), failed_prefix("Selection rejected: ")],
        params=[DB, SLOW_SELECT, SLOW_REVISING], backend=[select(change("Nobody"))], clock="wall")
+S.case(143, 5, "a change of a behavior that declined the turn is refused, and refused again fails the select.",
+       [send(INPUT, turn(1)), expect(OUTPUT), send(INPUT, turn(2)), expect(OUTPUT),
+        send(INPUT, declined_turn(3, ["GreetOnKnock"])),
+        failed("Selection rejected: bot.behavior.change may not name GreetOnKnock: it rightly declined this turn")],
+       params=[DB, SLOW_SELECT, SLOW_REVISING],
+       backend=[select(CREATE), PLAN, draft(BEHAVIOR), select(WAVE), WAVE_PLAN, draft(WAVE_BEHAVIOR),
+                select(change("GreetOnKnock")), select(change("GreetOnKnock"))],
+       clock="wall")
 
 S.case(150, 6, "a build that never validates in its 8 attempts abandons the change with the rendered diagnostics, and its draft row stays (a break of it answers).",
        [send(INPUT, turn(1)),

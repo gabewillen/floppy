@@ -42,9 +42,9 @@ function recallFailedMessage(detail) {
 
 // selecting
 
-// The recalled inventory's names, which a change may name.
-function behaviorNames() {
-  return behaviors.map(function (b) { return b.name; });
+// Whether the recalled inventory holds a behavior a change or a break may name.
+function hasBehaviors() {
+  return behaviors.length > 0;
 }
 
 // The lesson, the turn it was taught on, the prior episodes and the

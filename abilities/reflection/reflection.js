@@ -53,15 +53,15 @@ function recalledEpisodes(_event) {
   return _event.data.results[0].rows.map(function (r) { return JSON.parse(r.values[0]); });
 }
 
-// The recalled inventory's names, which a change or a break may name.
-function behaviorNames() {
-  return behaviors.map(function (b) { return b.name; });
+// Whether the recalled inventory holds a behavior a change or a break may name.
+function hasBehaviors() {
+  return behaviors.length > 0;
 }
 
-// The behaviors a change may name: not one that declined this turn,
-// which rightly did not answer it (decision D230).
-function changeableNames() {
-  return behaviorNames().filter(function (n) { return declined.indexOf(n) < 0; });
+// Whether the inventory holds a behavior a change may name: not one that
+// declined this turn, which rightly did not answer it (decision D230).
+function hasChangeable() {
+  return behaviors.some(function (b) { return declined.indexOf(b.name) < 0; });
 }
 
 function recalledLog() {
@@ -155,6 +155,20 @@ function isOverSelection(_event) {
   var selections = replySelections(_event);
   var revisions = selections.filter(isRevision).length;
   return revisions > 1 || selections.length - revisions > 1;
+}
+
+// Whether the reply changes a behavior that declined this turn (decision D230).
+function isDeclinedChange(_event) {
+  if (!isGenerate(_event)) {
+    return false;
+  }
+  return replySelections(_event).some(function (s) {
+    return s.event === 'bot.behavior.change' && s.data !== undefined && s.data !== null && declined.indexOf(s.data.name) >= 0;
+  });
+}
+
+function declinedChangeRejection() {
+  return ({key: 'declined-change', message: 'bot.behavior.change may not name ' + declined.join(', ') + ': it rightly declined this turn'});
 }
 
 function overSelectionRejection() {

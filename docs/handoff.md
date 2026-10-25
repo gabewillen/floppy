@@ -11,6 +11,17 @@ Last updated: 2026-10-24.
 
 ## Current state (2026-10-09) — resume here
 
+- **The decision element trimmed (2026-10-24, D243):** `<decision:pin>`
+  is gone (the body's `isFocusCandidate` guard and reflection's
+  `hasBehaviors()` cond do its work, as mosfet.py's guards do), and the
+  decision service asks only TypeSafe `system_one` `choice` questions:
+  `kind` is no longer a param, `predicate` is folded into `choice`
+  (`decision.selected`, one pass criterion per tier of `hand_ons`), and
+  `score` and `choice` over labels are removed. The builder's triage sends
+  itself the selection. The learning stack dropped its pins when it took
+  the trim: learning's change and break take `hasBehaviors()`, and
+  reflection's change takes `hasChangeable()` and refuses a change of a
+  behavior that declined the turn as `declined-change` (D230).
 - **Offers through snapshots (2026-10-24, D242, #73):** abilities no
   longer send `bot.ability.offers`. Each sends a bare `bot.ability.ready`
   once, and each turn the body reads what each ability offers from its
@@ -291,7 +302,7 @@ Last updated: 2026-10-24.
   (`<cognition:attention_bias_for_turn>`,
   `<cognition:model_facing_content failurelocation?>`) replaces
   `<bot:attention>` and reasoning's prompt JavaScript, rendering the same
-  bytes. `<decision:pin>` stays (Q11); `autonomy` is a later step. Next in
+  bytes. `<decision:pin>` stayed (Q11) until D243 removed it; `autonomy` is a later step. Next in
   Q10's order: `identity`, `conversation` and `memory`. Open: the
   [choices to review](#choices-to-review); the four namespace IRP baselines touched were
   measured on macOS arm64.
@@ -464,8 +475,8 @@ Last updated: 2026-10-24.
 
 ## Intuition contract and reasoning prompt (2026-10-10)
 
-- **Intuition** uses the decision service's kind `predicate` (`select`
-  until D120; D150): `decision.selected
+- **Intuition** uses the decision service's `choice` (`select` until
+  D120, `predicate` until D243; D150): `decision.selected
   {selections: [{event, data, confidence, target?}]}`, only the chosen event
   with its probability. Intuition observes that confidence (0-100) with
   `<intuition:observe>` first, then `<intuition:escalate>` compares it with
@@ -478,8 +489,8 @@ Last updated: 2026-10-24.
   and data grounds from the `stimulus` param's non-null value then the enum
   (no `const`). With `max_context_tokens` the request is fitted to the
   model's context, and intuition learns and returns `bytes_per_token` from
-  the service's done data. `choice` (`choose` until D120, the builder's
-  triage) keeps its pass criterion `__unhandled__`; it lost its `threshold`
+  the service's done data. The builder's triage asks the same `choice`
+  and sends itself the selection (D243); the service lost its `threshold`
   (and `below-threshold`).
 - **Reasoning** sends its input as budgeted XML
   (`<cognition:model_facing_content>`, D114; it was `promptProjection()`
@@ -1080,7 +1091,7 @@ review. Q9 (a document with no functions drops its `.js`, amending D65)
 was taken on the recommendation and is not exercised: every document
 still has functions. Two names are open: `<processing:model_facing_schema>`
 (or `<processing:schema>`) and `<conversation:message_for_turn>`;
-`<decision:pin>` keeps its name until the maintainer names it (Q11).
+Q11 is closed: D243 removed `<decision:pin>`.
 
 **D206, effort ceilings:**
 
@@ -1203,7 +1214,8 @@ still has functions. Two names are open: `<processing:model_facing_schema>`
 8. Element outputs are canonical JSON, so behaviors in reflection's
    select prompt and the turn contract's `INPUT` render with sorted keys.
 
-**D120, the decision service's kinds:**
+**D120, the decision service's kinds** (superseded by D243: one kind,
+`choice`):
 
 1. `predicate` is one kind, not one predicate per choice, so each
    event's confidence is still its share of one `selection` question and
