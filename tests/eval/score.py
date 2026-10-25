@@ -463,6 +463,22 @@ def _closed(build):
     return build
 
 
+def infra_error(scenario, job):
+    """Why the job measured the rig rather than floppy, or None: the driver
+    crashed before it finished, no step ran, or floppy never activated in a
+    session (a backend or the room down before any input). Such a job is
+    reported apart and kept out of every score (docs/eval.md); a step
+    that never settled is floppy's (a stuck turn) and stays scored."""
+    if not job["done"]:
+        return "the driver did not finish the job"
+    if not job["steps"]:
+        return "no step ran"
+    for index, records in enumerate(job["sessions"]):
+        if not any(label == "bot.activated" for label, _ in logs(records)):
+            return f"floppy never activated in session {index}"
+    return None
+
+
 def complete(scenario, job):
     """Whether every step of the scenario ran and settled."""
     wanted = sum(len(session["steps"]) for session in scenario["sessions"])

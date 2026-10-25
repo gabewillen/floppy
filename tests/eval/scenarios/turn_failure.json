@@ -36,13 +36,13 @@
         0,
         1
       ],
-      "pattern": "\\S",
+      "pattern": "\\b(hi|hello|hey|howdy|good (morning|afternoon|evening))\\b",
       "weight": 1
     }
   ],
   "criteria": {
     "not_silent": "floppy replies to the bicycle question, even if only to say it could not answer.",
-    "recovers": "floppy greets the person back afterwards."
+    "recovers": "floppy greets the person back afterwards (a greeting, not a non-answer)."
   },
   "diagnostics": [
     {

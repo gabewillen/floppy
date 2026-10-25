@@ -230,6 +230,36 @@ does not call) carries a `status` and is listed ungraded.
 `features.md` and `features.json`; `eval.py run` and `eval.py grade`
 write them too, without the tests.
 
+## Eval health
+
+The eval follows the health checklist of Anthropic's eval guides (the
+`claude-api` skill's `build-eval` and `hillclimb`, 2026-09-28):
+
+- **The rig is not floppy.** A job the driver did not finish, in which no
+  step ran, or in which floppy never activated in a session (a backend or
+  the room down before any input) has an infra error
+  (`score.infra_error`): it is listed apart in `report.md` and
+  `features.md` and kept out of every score. A step that never settled
+  stays scored: a stuck turn is floppy's.
+- **Error bars.** The suite score and each feature's live score carry
+  the half-width of a normal 95% interval over their job scores; a
+  difference smaller than it is noise. One repeat per scenario leaves most
+  features on one to three jobs, so `--repeats 3` is the setting to act
+  on a difference.
+- **Known negatives.** `eval.py judge-check` grades each scenario's
+  transcript with floppy silent at every step and with floppy saying "I
+  don't know." at every step, with each judge, and lists every overall
+  grade above `--ceiling` (0.3). The first check (2026-10-25) passed 73
+  of 76; the three above were partial credit for steps floppy rightly
+  left quiet (`chat_ignore`) and `turn_failure`, whose first step accepts
+  any reply by design; its greeting check now asks for a greeting, so "I
+  don't know." no longer passes it.
+- **Held-out test set.** `climb` splits its scenarios into train and test
+  (`--test-share` 0.34 of each category, seeded by `--seed`, never by
+  score): candidates are scored and the proposer reads failures on train
+  only, and each accepted winner is run once on test, the climb's
+  headline in `climb.md`.
+
 ## Hill climbing
 
 `eval.py climb` changes prompt `<data>` of the bot's documents, by default
@@ -244,17 +274,19 @@ the four that decide what floppy learns and whether it is built
   builder gets),
 - `bots/builder/builder.scx#author_system` (how the builder writes SCXML).
 
-`eval.py targets` lists every prompt `<data>` it can change (`--target
+By default the climb runs the learning scenarios (`name`, `reflex`,
+`routine`), split into train and test as above. `eval.py targets` lists every prompt `<data>` it can change (`--target
 <path>#<id>` picks others). Each generation takes the next target in turn,
 asks the proposers (`codex` and `gemini`, alternating, `--candidates` per
 generation) for a rewrite from the incumbent's failures (failed checks,
-the judges' main failure, reflection's and the builder's logs) and the
-earlier attempts on that target, writes each candidate as an overlay
+the judges' main failure, reflection's and the builder's logs, on train
+only) and the earlier attempts on that target, writes each candidate as an overlay
 (`prompts.overlay`: the changed documents in a directory laid out like the
 workspace, which the driver copies over each job's scratch bot), and runs
-the suite on every candidate at once. The best is run again to confirm
-(`--no-confirm` skips it) and replaces the incumbent when the mean of both
-runs beats it by `--min-gain` (0.02). The climb stops after
+the train scenarios on every candidate at once. The best is run again on
+train to confirm (`--no-confirm` skips it) and on test, and replaces the
+incumbent when the mean of both train runs beats it by `--min-gain`
+(0.02); its test score is recorded beside it. The climb stops after
 `--generations` or `--budget-hours`, and resumes from its `climb.json` when
 given the same `--out`.
 

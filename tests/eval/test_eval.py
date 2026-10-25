@@ -343,9 +343,43 @@ class Features(unittest.TestCase):
         self.assertEqual(rows["speaking"]["letter"], "F")
         self.assertIsNone(rows["seeing"]["live"])
         self.assertEqual(rows["hearing"]["evidence"], {"floppy.say": 1})
-        self.assertIn("| Seeing | – | n/a | not wired |", features.markdown("t", list(rows.values()), 1, 0))
+        summary = {"jobs": 1, "unfinished": 0, "errors": [{"id": "x-r0", "error": "no step ran"}]}
+        text = features.markdown("t", list(rows.values()), summary)
+        self.assertIn("| Seeing | – | n/a | n/a | not wired |", text)
+        self.assertIn("- x-r0: no step ran", text)
+        # A job that measured the rig is kept out of the feature's score.
+        errored = dict(graded[0], error="floppy never activated in session 0")
+        rows = {r["name"]: r for r in features.grade(spec, {"voice": scenario}, [errored], 0.6)}
+        self.assertIsNone(rows["hearing"]["live"])
+
+    def test_a_job_that_never_reached_floppy_is_an_infra_error(self):
+        scenario = {"sessions": [{"steps": [{"say": "hi"}]}]}
+        job = {"steps": [step(0, 0, 0, 1)], "sessions": [[log("bot.activated", "{}")]], "done": True}
+        self.assertIsNone(score.infra_error(scenario, job))
+        self.assertEqual(score.infra_error(scenario, dict(job, done=False)), "the driver did not finish the job")
+        self.assertEqual(score.infra_error(scenario, dict(job, sessions=[[said("hi")]])), "floppy never activated in session 0")
+        self.assertAlmostEqual(features.interval([1.0, 0.0]), 1.96 * 0.7071067811865476 / 2 ** 0.5)
+        self.assertIsNone(features.interval([1.0]))
 
     def test_a_streamed_wav_is_read_past_its_header(self):
         wav = sound.wav_of_pcm(b"\x01\x00" * 10)
         self.assertEqual(sound.pcm_of_wav(wav), b"\x01\x00" * 10)
         self.assertEqual(features.parse_test_output("test result: ok. 3 passed; 1 failed; 2 ignored; 0 measured"), (3, 1, 2))
+
+
+class Climb(unittest.TestCase):
+    def test_the_split_is_seeded_stratified_and_disjoint(self):
+        scenarios = runner.load_scenarios(["name", "reflex", "routine"])
+        train, test = runner.split_scenarios(scenarios, 0.34, 7)
+        self.assertEqual(sorted(train + test), sorted(scenarios))
+        self.assertFalse(set(train) & set(test))
+        # One held out from each category of two or more.
+        self.assertEqual(sorted(scenarios[n]["category"] for n in test), ["name", "reflex", "routine"])
+        self.assertEqual((train, test), runner.split_scenarios(scenarios, 0.34, 7))
+
+    def test_known_negatives_say_nothing_or_nothing_useful(self):
+        scenario = runner.load_scenarios(["reflex_pingpong"])["reflex_pingpong"]
+        nulls = runner.null_transcripts(scenario)
+        self.assertNotIn("floppy says", nulls["silent"])
+        self.assertEqual(nulls["unknown"].count("floppy says: I don't know."), 5)
+        self.assertIn("(floppy is restarted)", nulls["silent"])

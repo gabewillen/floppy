@@ -99,6 +99,14 @@ def job_score(feature, scenario, graded, check_weight):
     return check_weight * checks + (1 - check_weight) * statistics.mean(judged)
 
 
+def interval(values):
+    """The half-width of the normal 95% interval of the mean of `values`
+    (the job scores behind a number), or None with fewer than two."""
+    if len(values) < 2:
+        return None
+    return 1.96 * statistics.stdev(values) / len(values) ** 0.5
+
+
 def letter(value, grades):
     if value is None:
         return "–"
@@ -117,7 +125,8 @@ def grade(spec, scenarios, graded, check_weight, tests=None):
         scores, used, inside = [], set(), []
         for g in graded:
             scenario = scenarios.get(g["scenario"])
-            if scenario is None:
+            # A job with an infra error measured the rig, not floppy.
+            if scenario is None or g.get("error"):
                 continue
             value = job_score(feature, scenario, g, check_weight)
             if value is not None:
@@ -144,6 +153,7 @@ def grade(spec, scenarios, graded, check_weight, tests=None):
             "what": feature["what"],
             "status": feature.get("status"),
             "live": live,
+            "interval": interval([value for _, value in scores]),
             "letter": letter(live, spec["grades"]),
             "scenarios": dict(sorted(means.items())),
             "jobs": len(scores),
@@ -168,23 +178,31 @@ def _tests_cell(tests):
     return ", ".join(cells)
 
 
-def markdown(title, rows, jobs, unfinished):
+def markdown(title, rows, summary):
     graded_rows = [r for r in rows if r["live"] is not None]
     overall = statistics.mean(r["live"] for r in graded_rows) if graded_rows else None
     lines = [f"# {title}", ""]
     if overall is not None:
-        lines.append(f"Mean over the {len(graded_rows)} graded features: **{overall:.3f}**, from {jobs} jobs "
-                     f"({unfinished} unfinished). {len(rows) - len(graded_rows)} features have no live grade.")
+        lines.append(f"Mean over the {len(graded_rows)} graded features: **{overall:.3f}**, from {summary['jobs']} scored "
+                     f"jobs ({summary['unfinished']} unfinished). {len(rows) - len(graded_rows)} features have no live grade.")
+    errors = summary.get("errors", [])
+    if errors:
+        lines += ["", f"{len(errors)} job(s) measured the rig, not floppy, and are not scored:"]
+        lines += [f"- {e['id']}: {e['error']}" for e in errors]
+    lines += ["", "± is the half-width of the 95% interval over the feature's job scores (n/a with one job): a "
+              "difference between two runs smaller than it is noise. With one repeat per scenario most features "
+              "rest on one to three jobs; run `--repeats 3` before acting on a difference."]
     lines += ["", "A feature's live score is black box: floppy's replies, what it said out loud, and the judges' grade "
               "of the conversation. Diagnostics, evidence and offline tests read floppy's insides and are reported "
               "beside it, never in it.", "",
-              "| Feature | Grade | Live | Scenarios | Inside (diagnostics) | Offline tests |",
-              "| --- | --- | --- | --- | --- | --- |"]
+              "| Feature | Grade | Live | ± | Scenarios | Inside (diagnostics) | Offline tests |",
+              "| --- | --- | --- | --- | --- | --- | --- |"]
     for r in rows:
         live = "n/a" if r["live"] is None else f"{r['live']:.2f}"
+        spread = "n/a" if r.get("interval") is None else f"{r['interval']:.2f}"
         scenarios = ", ".join(f"{k} {v:.2f}" for k, v in r["scenarios"].items()) or (r["status"] or "no scenario")
         inside = "–" if r["diagnostics"] is None else f"{r['diagnostics']:.2f}"
-        lines.append(f"| {r['title']} | {r['letter']} | {live} | {scenarios} | {inside} | {_tests_cell(r['tests'])} |")
+        lines.append(f"| {r['title']} | {r['letter']} | {live} | {spread} | {scenarios} | {inside} | {_tests_cell(r['tests'])} |")
     lines += ["", "## Evidence", "",
               "How many of the run's jobs logged each label that shows a feature's parts ran, and each label that "
               "should never be logged (a failure or a degraded part).", "",

@@ -23,6 +23,9 @@ Usage: python3 tests/eval/eval.py COMMAND [options]
            --column, each with the builder pinned to one model (the bot
            keeps its own), reporting each model's build success rate and
            attempts per accepted build
+  judge-check  grade each scenario's known-negative transcripts (floppy
+           silent, or "I don't know." at every step) with each judge: a
+           judge that passes them is too lenient to steer a climb
   targets  list every prompt <data> the climb can change
 
 The bot runs through tests/tests/floppy_eval.rs (`cargo test`), which
@@ -40,6 +43,7 @@ import glob
 import json
 import os
 import shutil
+import random
 import statistics
 import subprocess
 import sys
@@ -198,6 +202,7 @@ def grade_job(job, env, judge_names, check_weight):
         "complete": score.complete(scenario, records),
         "learned_any": score.learned_any(scenario, records),
         "seen": features.seen(records, FEATURES),
+        "error": score.infra_error(scenario, records),
     }
     # A job that crashed before writing anything has no directory yet.
     os.makedirs(job["out"], exist_ok=True)
@@ -215,7 +220,11 @@ def grade_all(jobs, env, judge_names, check_weight):
 
 def aggregate(graded):
     """The suite score (the mean over scenarios of each one's mean over its
-    repeats), per category, per check kind and per judge criterion."""
+    repeats), per category, per check kind and per judge criterion, with
+    its 95% interval. A job with an infra error (score.infra_error) is
+    counted apart and kept out of every number."""
+    errors = [g for g in graded if g.get("error")]
+    graded = [g for g in graded if not g.get("error")]
     by_scenario = {}
     for g in graded:
         by_scenario.setdefault(g["scenario"], []).append(g)
@@ -247,14 +256,19 @@ def aggregate(graded):
         "diagnostics": {k: statistics.mean(v) for k, v in sorted(diagnostics.items())},
         "criteria": {k: statistics.mean(v) for k, v in sorted(criteria.items())},
         "judge_disagreement": statistics.mean(agreement) if agreement else None,
+        "interval": features.interval([g["score"] for g in graded]),
         "jobs": len(graded),
-        # A job is unfinished when it crashed or any step never settled or ran.
+        "errors": [{"id": g["id"], "error": g["error"]} for g in errors],
+        # A scored job is unfinished when any of its steps never settled or ran.
         "unfinished": sum(1 for g in graded if not (g["done"] and g.get("complete", True))),
     }
 
 
 def report_markdown(title, summary, graded):
-    lines = [f"# {title}", "", f"Suite score: **{summary['score']:.3f}** over {summary['jobs']} jobs ({summary['unfinished']} unfinished)."]
+    interval = "" if summary.get("interval") is None else f" ± {summary['interval']:.3f} (95%)"
+    lines = [f"# {title}", "", f"Suite score: **{summary['score']:.3f}**{interval} over {summary['jobs']} jobs ({summary['unfinished']} unfinished)."]
+    for e in summary.get("errors", []):
+        lines.append(f"- not scored, infra error: {e['id']}: {e['error']}")
     if summary["judge_disagreement"] is not None:
         lines.append(f"Mean judge disagreement (|codex - gemini| overall): {summary['judge_disagreement']:.2f}.")
     lines += ["", "| Category | Score |", "| --- | --- |"]
@@ -269,6 +283,9 @@ def report_markdown(title, summary, graded):
         lines += [f"| {k} | {v:.2f} |" for k, v in summary["diagnostics"].items()]
     lines += ["", "## Jobs", ""]
     for g in sorted(graded, key=lambda x: x["id"]):
+        if g.get("error"):
+            lines += [f"### {g['id']}: not scored ({g['error']})", ""]
+            continue
         judged = "n/a" if g["judged"] is None else f"{g['judged']:.2f}"
         lines.append(f"### {g['id']}: {g['score']:.3f} (checks {g['checks']:.2f}, judges {judged})")
         lines.append("")
@@ -294,7 +311,7 @@ def write_features(out, scenarios, graded, check_weight, tests=None):
     with open(os.path.join(out, "features.json"), "w", encoding="utf-8") as handle:
         json.dump({"features": rows, "tests": tests}, handle, indent=2)
     with open(os.path.join(out, "features.md"), "w", encoding="utf-8") as handle:
-        handle.write(features.markdown(f"floppy feature grade {os.path.basename(out)}", rows, summary["jobs"], summary["unfinished"]))
+        handle.write(features.markdown(f"floppy feature grade {os.path.basename(out)}", rows, summary))
     return rows
 
 
@@ -402,6 +419,8 @@ def failure_evidence(graded, limit=120):
     the judges' main failure, and reflection's and the builder's logs."""
     lines = []
     for g in sorted(graded, key=lambda x: x["score"]):
+        if g.get("error"):
+            continue
         if g["score"] >= 0.999 and all(r["score"] >= 1 for r in g["diagnostics"]):
             continue
         lines.append(f"== {g['id']} (score {g['score']:.2f}, {g['category']})")
@@ -412,8 +431,38 @@ def failure_evidence(graded, limit=120):
     return lines[:limit]
 
 
+def split_scenarios(scenarios, share, seed):
+    """(train, test) names: within each category, a seeded shuffle puts
+    `share` of its scenarios (rounded, at least one when it has two or
+    more) in the held-out test set. Drawn at random, never by score, so
+    train and test are the same population."""
+    rng = random.Random(seed)
+    train, test = [], []
+    by_category = {}
+    for name in sorted(scenarios):
+        by_category.setdefault(scenarios[name]["category"], []).append(name)
+    for category in sorted(by_category):
+        names = by_category[category]
+        rng.shuffle(names)
+        count = max(1, round(share * len(names))) if len(names) >= 2 and share > 0 else 0
+        test += names[:count]
+        train += names[count:]
+    return sorted(train), sorted(test)
+
+
+def subset_score(graded, names):
+    rows = [g for g in graded if g["scenario"] in names]
+    return aggregate(rows)["score"] if rows else None
+
+
+def fmt(value):
+    return "n/a" if value is None else f"{value:.3f}"
+
+
 def cmd_climb(args):
-    scenarios = load_scenarios(args.scenario, args.scenarios_dir)
+    # The climb tunes the learning prompts: by default it runs the learning
+    # scenarios, not every feature's.
+    scenarios = load_scenarios(args.scenario or ["name", "reflex", "routine"], args.scenarios_dir)
     targets = args.target or prompts.default_targets()
     for target in targets:
         prompts.read(target)
@@ -430,13 +479,21 @@ def cmd_climb(args):
             state = json.load(handle)
         log(f"resuming at generation {state['generation']}, incumbent {state['score']:.3f}")
     else:
+        train, test = split_scenarios(scenarios, args.test_share, args.seed)
+        log(f"train {train}; held-out test {test}")
         log("evaluating the incumbent (the workspace's prompts)")
-        summary, graded = evaluate(scenarios, args, os.path.join(out, "gen-0-baseline"))
-        state = {"generation": 0, "prompts": {}, "score": summary["score"], "baseline": summary["score"], "graded": graded, "history": [], "targets": targets}
+        _, graded = evaluate(scenarios, args, os.path.join(out, "gen-0-baseline"))
+        score_train, score_test = subset_score(graded, train), subset_score(graded, test)
+        state = {"generation": 0, "prompts": {}, "split": {"train": train, "test": test},
+                 "score": score_train, "baseline": score_train, "test": score_test, "baseline_test": score_test,
+                 "graded": [g for g in graded if g["scenario"] in train], "history": [], "targets": targets}
     def save():
         with open(state_path, "w", encoding="utf-8") as handle:
             json.dump(state, handle, indent=2)
     save()
+    # Candidates are scored on train only; the proposer reads train
+    # failures only; the held-out test set is run once per accepted winner.
+    train_set = {k: v for k, v in scenarios.items() if k in state["split"]["train"]}
     while state["generation"] < args.generations and time.time() < deadline:
         generation = state["generation"] + 1
         target = targets[(generation - 1) % len(targets)]
@@ -465,7 +522,7 @@ def cmd_climb(args):
             diff = prompts.overlay(chosen, overlay)
             with open(os.path.join(gen_dir, f"cand-{cand['index']}", "prompts.patch"), "w", encoding="utf-8") as handle:
                 handle.write(diff)
-            cand_jobs = make_jobs(scenarios, args.repeats, gen_dir, overlay, prefix=f"c{cand['index']}-")
+            cand_jobs = make_jobs(train_set, args.repeats, gen_dir, overlay, prefix=f"c{cand['index']}-")
             jobs.extend(cand_jobs)
             results.append((cand, chosen, cand_jobs))
         drive(jobs, gen_dir, args.parallel)
@@ -484,26 +541,34 @@ def cmd_climb(args):
             handle.write(report_markdown(f"Climb generation {generation} ({target})", aggregate(graded_all), graded_all))
         cand, chosen, graded = best
         accepted = cand["score"] > state["score"] + args.min_gain
-        if accepted and args.confirm:
-            # One lucky run is not a climb: run the winner again and keep
-            # the mean of both.
+        if accepted:
+            # One lucky run is not a climb: run the winner again on train
+            # (unless --no-confirm) and keep the mean of both, and run it on
+            # the held-out test set, the climb's headline.
             confirm_dir = os.path.join(gen_dir, "confirm")
             overlay = os.path.join(gen_dir, f"cand-{cand['index']}", "overlay")
-            summary, confirm_graded = evaluate(scenarios, args, confirm_dir, overlay)
-            cand["confirmed"] = summary["score"]
-            mean = (cand["score"] + summary["score"]) / 2
-            log(f"  confirmation {summary['score']:.3f}, mean {mean:.3f}")
-            accepted = mean > state["score"] + args.min_gain
-            cand["score"] = mean
-            graded = graded + confirm_graded
+            names = state["split"]["test"] + (state["split"]["train"] if args.confirm else [])
+            _, confirm_graded = evaluate({k: v for k, v in scenarios.items() if k in names}, args, confirm_dir, overlay)
+            cand["test"] = subset_score(confirm_graded, state["split"]["test"])
+            if args.confirm:
+                confirmed = subset_score(confirm_graded, state["split"]["train"])
+                cand["confirmed"] = confirmed
+                mean = (cand["score"] + confirmed) / 2
+                log(f"  confirmation {confirmed:.3f}, mean {mean:.3f}")
+                accepted = mean > state["score"] + args.min_gain
+                cand["score"] = mean
+                graded = graded + [g for g in confirm_graded if g["scenario"] in state["split"]["train"]]
+            log(f"  held-out test {cand['test']} (incumbent {state['test']})")
         state["history"].append({
             "generation": generation, "target": target, "proposer": cand["proposer"], "model": cand["model"],
-            "score": cand["score"], "incumbent": state["score"], "accepted": accepted, "rationale": cand["rationale"],
+            "score": cand["score"], "incumbent": state["score"], "test": cand.get("test"), "incumbent_test": state["test"],
+            "accepted": accepted, "rationale": cand["rationale"],
             "candidates": [{k: c.get(k) for k in ("index", "proposer", "score", "rationale")} for c, _, _ in results],
         })
         if accepted:
             log(f"  accepted: {state['score']:.3f} -> {cand['score']:.3f}")
             state["prompts"], state["score"], state["graded"] = chosen, cand["score"], graded
+            state["test"] = cand.get("test")
         else:
             log("  kept the incumbent")
         state["generation"] = generation
@@ -515,11 +580,16 @@ def cmd_climb(args):
         handle.write(diff)
     lines = [
         "# Learning eval hill climb", "",
-        f"Baseline {state['baseline']:.3f}, best {state['score']:.3f}, after {state['generation']} generations.", "",
-        "| Gen | Target | Proposer | Score | Incumbent | Accepted | Rationale |", "| --- | --- | --- | --- | --- | --- | --- |",
+        f"Held-out test (the headline): baseline {fmt(state.get('baseline_test'))}, best {fmt(state.get('test'))}. "
+        f"Train: baseline {state['baseline']:.3f}, best {state['score']:.3f}, after {state['generation']} generations. "
+        f"Train {state['split']['train']}; test {state['split']['test']}. A train gain the test score does not "
+        "show is the climb fitting its own scenarios.", "",
+        "| Gen | Target | Proposer | Train | Incumbent | Test | Incumbent test | Accepted | Rationale |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for h in state["history"]:
-        lines.append(f"| {h['generation']} | `{h['target']}` | {h['proposer']} | {h['score']:.3f} | {h['incumbent']:.3f} | {'yes' if h['accepted'] else 'no'} | {h['rationale'][:200]} |")
+        lines.append(f"| {h['generation']} | `{h['target']}` | {h['proposer']} | {h['score']:.3f} | {h['incumbent']:.3f} | "
+                     f"{fmt(h.get('test'))} | {fmt(h.get('incumbent_test'))} | {'yes' if h['accepted'] else 'no'} | {h['rationale'][:200]} |")
     lines += ["", "The best prompts are `best.patch` (apply with `git apply`) and `best/overlay/` (pass to `eval.py run --overlay`)."]
     with open(os.path.join(out, "climb.md"), "w", encoding="utf-8") as handle:
         handle.write("\n".join(lines) + "\n")
@@ -698,6 +768,69 @@ def cmd_expand(args):
     print(out)
 
 
+def null_transcripts(scenario):
+    """Transcripts a judge must fail: floppy silent at every step, and
+    floppy answering every step with "I don't know." (the eval-audit's
+    known negatives)."""
+    lines_silent, lines_unknown = [], []
+    for index, session in enumerate(scenario["sessions"]):
+        if index > 0:
+            for lines in (lines_silent, lines_unknown):
+                lines.append("(floppy is restarted)")
+        for number, step in enumerate(session["steps"]):
+            head = f"[session {index} step {number}]"
+            who = step.get("who", step.get("source", "gabe"))
+            if "say" in step:
+                said = f"{head} {who} says: {step['say']!r}"
+            elif "hear" in step:
+                said = f"{head} {who} says out loud: {step['hear']!r}"
+            elif "show" in step:
+                said = f"{head} {step.get('source', 'camera')} shows floppy an image: {step.get('describe', 'an image')}"
+            else:
+                said = f"{head} {step['wait_s']} s pass with no input"
+            lines_silent.append(said)
+            lines_unknown.append(said)
+            if "say" in step or "hear" in step:
+                lines_unknown.append("  floppy says: I don't know.")
+    return {"silent": "\n".join(lines_silent), "unknown": "\n".join(lines_unknown)}
+
+
+def cmd_judge_check(args):
+    """Each judge on each scenario's known-negative transcripts: every
+    overall grade must be at most --ceiling, or the judge is too lenient
+    to steer a climb. Writes judge-check.json and judge-check.md."""
+    scenarios = load_scenarios(args.scenario, args.scenarios_dir)
+    out = args.out or os.path.join(OUT, "judge-check-" + now())
+    os.makedirs(out, exist_ok=True)
+    backends = judges.backends(judge_env(args), args.judge_names)
+    tasks = [(name, kind, text, backend) for name, scenario in scenarios.items()
+             for kind, text in null_transcripts(scenario).items() for backend in backends]
+
+    def grade(task):
+        name, kind, text, backend = task
+        # A step where floppy rightly stays quiet passes silent: such a
+        # scenario's silent transcript is not a known negative overall.
+        try:
+            result = judges.judge(backend, scenarios[name], text)
+        except RuntimeError as error:
+            return {"scenario": name, "kind": kind, "judge": backend.name, "error": str(error)}
+        return {"scenario": name, "kind": kind, "judge": backend.name, "overall": result["overall"], "why": result["explanation"]}
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+        rows = list(pool.map(grade, tasks))
+    lenient = [r for r in rows if r.get("overall", 0) > args.ceiling]
+    with open(os.path.join(out, "judge-check.json"), "w", encoding="utf-8") as handle:
+        json.dump({"ceiling": args.ceiling, "rows": rows}, handle, indent=2)
+    lines = ["# Judge check", "", f"{len(rows)} known-negative transcripts graded; {len(lenient)} scored above "
+             f"{args.ceiling} overall.", "", "| Scenario | Transcript | Judge | Overall | Why |", "| --- | --- | --- | --- | --- |"]
+    for r in sorted(rows, key=lambda r: (-r.get("overall", 0), r["scenario"])):
+        overall = f"{r['overall']:.1f}" if "overall" in r else r.get("error", "")
+        lines.append(f"| {r['scenario']} | {r['kind']} | {r['judge']} | {overall} | {r.get('why', '')[:160]} |")
+    with open(os.path.join(out, "judge-check.md"), "w", encoding="utf-8") as handle:
+        handle.write("\n".join(lines) + "\n")
+    print(os.path.join(out, "judge-check.md"))
+
+
 def cmd_targets(_args):
     defaults = prompts.default_targets()
     for target in prompts.discover():
@@ -744,6 +877,8 @@ def main(argv=None):
     p.add_argument("--candidates", type=int, default=2, help="proposals per generation (alternating proposers)")
     p.add_argument("--proposers", default="codex,gemini")
     p.add_argument("--min-gain", type=float, default=0.02)
+    p.add_argument("--test-share", type=float, default=0.34, help="share of each category's scenarios held out as the test set")
+    p.add_argument("--seed", type=int, default=7, help="the seed of the train/test split")
     p.add_argument("--no-confirm", dest="confirm", action="store_false")
     p.add_argument("--budget-hours", type=float, default=10.0)
     p.set_defaults(func=cmd_climb)
@@ -759,6 +894,10 @@ def main(argv=None):
     p.add_argument("--overlay", help="an overlay every column starts from")
     p.add_argument("--dry", action="store_true", help="write the plan only")
     p.set_defaults(func=cmd_builder)
+    p = sub.add_parser("judge-check")
+    common(p, run=False)
+    p.add_argument("--ceiling", type=float, default=0.3, help="the highest overall grade a known negative may get")
+    p.set_defaults(func=cmd_judge_check)
     p = sub.add_parser("targets")
     p.set_defaults(func=cmd_targets)
 
