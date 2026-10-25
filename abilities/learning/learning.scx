@@ -12,6 +12,7 @@
     idle -bot.ability.learning.lesson-> recalling -> selecting -> revising
       -> reporting (bot.ability.learning.output, learned) -> idle
     selecting -bot.behavior.break-> breaking -> reporting
+    selecting -error.communication-> selecting, once (the call made again)
     any failure -> failing (bot.ability.learning.output, not learned) -> idle
     a lesson outside idle waits in deferred and runs from idle, in order
 
@@ -91,6 +92,9 @@
     <data id="gen_id" expr="null"/>
     <data id="answered" expr="false"/>
     <data id="gen_failure" expr="null"/>
+    <!-- The select call's attempts: a call the service could not answer
+         (error.communication) is made again once (#93). -->
+    <data id="select_attempt" expr="0"/>
     <data id="call" expr="null"/>
     <data id="s" expr="null"/>
     <data id="hop_timer" expr="null"/>
@@ -125,12 +129,14 @@
       <assign location="deferred" expr="deferred.slice(1)"/>
       <assign location="behavior" expr="null"/>
       <assign location="failure" expr="null"/>
+      <assign location="select_attempt" expr="0"/>
     </transition>
     <transition event="bot.ability.learning.lesson" event:schema="../schemas/bot.ability.learning.lesson.json"
                 target="recalling">
       <assign location="lesson" expr="_event.data"/>
       <assign location="behavior" expr="null"/>
       <assign location="failure" expr="null"/>
+      <assign location="select_attempt" expr="0"/>
     </transition>
   </state>
 
@@ -244,6 +250,9 @@
     <transition event="bot.ability.learning.select.hop.timed_out" cond="isSelectHopTimeout(_event)" target="failing">
       <assign location="failure" expr="'Learning select timed out.'"/>
     </transition>
+    <transition event="error.communication" cond="canRetrySelect()" target="selecting">
+      <assign location="select_attempt" expr="select_attempt + 1"/>
+    </transition>
     <transition event="error.*" target="failing">
       <assign location="failure" expr="selectFailedMessage(_event.name)"/>
     </transition>
@@ -300,6 +309,12 @@
     </transition>
     <transition event="error.*" target="failing">
       <assign location="failure" expr="revisionFailedMessage(_event.name)"/>
+    </transition>
+    <!-- The revision answers before it ends (its answer is queued first):
+         one that ended with none, whose answer could not be sent, fails
+         the revision at once instead of at the ceiling. -->
+    <transition event="done.invoke.revision" target="failing">
+      <assign location="failure" expr="'Learning revision ended without an answer.'"/>
     </transition>
   </state>
 
