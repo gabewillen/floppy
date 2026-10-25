@@ -249,8 +249,12 @@ S.case(221, 13, "a routine's tick turn that selects a lesson outputs it but send
         output(1, f"_event.data.output.length === 1 && _event.data.output[0].event === {js(LEARN)}"), OFFERED],
        params=[SLOW], backend=[DECIDE_ABSTAIN, REASONED_LEARN], clock="logical",
        logs={"cognition.lesson": ["turn 1", "bounded"]})
+S.case(223, 13, "a lesson offer taken during a turn is only logged and the turn is answered.",
+       [READY, send(INPUT, turn(1)), send(LEARN, js({"content": "say hi back"})), output(1, IGNORED)],
+       params=[SLOW], backend=[DECIDE_IGNORE], clock="logical", logs={"cognition.lesson": ["turn 1"]})
 S.case(222, 13, "a lesson offer taken in idle is only logged: the next event answered is the cancel's.",
-       [READY, send(LEARN, js({"content": "say hi back"})), send(CANCEL, js({"turn": 3})), expect(CANCELLED, "_event.data.turn === 3")])
+       [READY, send(LEARN, js({"content": "say hi back"})), send(CANCEL, js({"turn": 3})), expect(CANCELLED, "_event.data.turn === 3")],
+       logs={"cognition.lesson": ["idle"]})
 
 S.statement(12, "With no input for `rest_after_ms` (the `<param>`, else the `bounds`' `rest_after_ms`; 5 minutes by default) `idle` rests (decisions D195 and D205): it logs `cognition.rest` `resting` and invokes the consolidation with its database (with none there is nothing to consolidate, logged `cognition.consolidated`), and stays at rest until input, which leaves rest at once (`cognition.rest` `awake`, cancelling a consolidation in progress) and is taken as a normal turn.")
 
