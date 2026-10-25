@@ -1,5 +1,9 @@
 {
   "category": "name",
+  "features": [
+    "name",
+    "memory"
+  ],
   "intent": "The user names the bot Juniper, then renames it Biscuit. The bot should end up called Biscuit, answer to Biscuit, and still say it is Biscuit after a restart.",
   "bot_name": null,
   "sessions": [

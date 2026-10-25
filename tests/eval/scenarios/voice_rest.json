@@ -1,0 +1,97 @@
+{
+  "category": "voice",
+  "features": [
+    "consolidation",
+    "voices",
+    "memory"
+  ],
+  "intent": "A person introduces themselves out loud, floppy is left alone long enough to rest, then the person asks their name. floppy should still know them after resting.",
+  "bot_name": null,
+  "params": {
+    "bounds": "({rest_after_ms: 20000})"
+  },
+  "sessions": [
+    {
+      "steps": [
+        {
+          "hear": "Hi floppy, I'm Gabe, and my favorite fruit is mango.",
+          "source": "microphone",
+          "who": "Gabe"
+        },
+        {
+          "wait_s": 75
+        },
+        {
+          "hear": "Floppy, what's my name and my favorite fruit?",
+          "source": "microphone",
+          "who": "Gabe"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        0,
+        2
+      ],
+      "pattern": "\\bgabe\\b",
+      "weight": 1,
+      "features": [
+        "voices"
+      ]
+    },
+    {
+      "check": "says",
+      "at": [
+        0,
+        2
+      ],
+      "pattern": "\\bmango\\b",
+      "weight": 1,
+      "features": [
+        "memory"
+      ]
+    },
+    {
+      "check": "no_ticks",
+      "at": [
+        0,
+        1
+      ],
+      "weight": 0.5,
+      "features": [
+        "consolidation"
+      ]
+    }
+  ],
+  "criteria": {
+    "after_rest": "After the quiet spell floppy knows it is Gabe and that his favorite fruit is mango.",
+    "quiet": "floppy says nothing during the quiet spell."
+  },
+  "diagnostics": [
+    {
+      "check": "logged",
+      "at": [
+        0,
+        1
+      ],
+      "label": "cognition.rest",
+      "features": [
+        "consolidation"
+      ]
+    },
+    {
+      "check": "logged",
+      "by": [
+        0,
+        2
+      ],
+      "label": "cognition.consolidated",
+      "features": [
+        "consolidation"
+      ]
+    }
+  ]
+}

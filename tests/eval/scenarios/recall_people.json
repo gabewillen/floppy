@@ -1,0 +1,64 @@
+{
+  "category": "memory",
+  "features": [
+    "people",
+    "memory"
+  ],
+  "intent": "Two people introduce themselves to floppy with one fact each, then each asks about the other. floppy should keep the people and their facts apart.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "say": "Hi floppy, I'm Gabe. I love hiking in the mountains.",
+          "source": "gabe"
+        },
+        {
+          "say": "Hello floppy, I'm Ana, and I play the cello.",
+          "source": "ana"
+        },
+        {
+          "say": "Floppy, what instrument does Ana play?",
+          "source": "gabe"
+        },
+        {
+          "say": "Floppy, what does Gabe love to do?",
+          "source": "ana"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        0,
+        2
+      ],
+      "pattern": "\\bcello\\b",
+      "weight": 2
+    },
+    {
+      "check": "says",
+      "at": [
+        0,
+        3
+      ],
+      "pattern": "\\bhik(e|ing)\\b",
+      "weight": 2
+    }
+  ],
+  "criteria": {
+    "people": "floppy keeps Gabe and Ana apart and answers about the right person.",
+    "recall": "It says Ana plays the cello and Gabe loves hiking."
+  },
+  "criteria_features": {
+    "people": [
+      "people"
+    ],
+    "memory": [
+      "recall"
+    ]
+  },
+  "diagnostics": []
+}

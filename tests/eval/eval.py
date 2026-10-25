@@ -1,12 +1,15 @@
-"""floppy's learning eval: grades how well the floppy bot learns its name,
-its reflexes (turn behaviors) and its routines from what people tell it, on
-real input, and hill-climbs the prompts that decide what it learns.
+"""floppy's eval: grades every feature of the floppy bot on real input
+(tests/eval/features.json: conversation, memory, people, persona, hearing,
+turn taking, speaking, voices, seeing, failed turns, its name, reflexes and
+routines, ...), and hill-climbs the prompts that decide what it learns.
 docs/eval.md is the guide; this is the runner.
 
 Usage: python3 tests/eval/eval.py COMMAND [options]
 
   run      run scenarios (tests/eval/scenarios/*.json) through the bot,
-           score them and have the judges grade them
+           score them, have the judges grade them, and grade each feature
+  features `run` over every scenario, with each feature's offline tests
+           (`cargo test --test <name>`) run too: the full feature grade
   grade    score and judge a run directory again (a run made elsewhere)
   climb    hill-climb prompt <data> (prompts.DEFAULT_IDS, or --target):
            an LLM proposes a rewrite from the failures, the eval scores it,
@@ -20,10 +23,11 @@ Usage: python3 tests/eval/eval.py COMMAND [options]
            attempts per accepted build
   targets  list every prompt <data> the climb can change
 
-The bot runs through tests/tests/learning_eval.rs (`cargo test`), which
+The bot runs through tests/tests/floppy_eval.rs (`cargo test`), which
 needs FLOPPY_LIVE_ENV_FILE (the bot's backends, as for floppy_live) and
-FLOPPY_LIVE_MODEL. The judges read their keys from the environment or from
---judge-env-file; nothing here prints a key. Everything is written under
+FLOPPY_LIVE_MODEL. The judges, and the speech backend that speaks for the
+people and hears floppy (tests/eval/sound.py), read their keys from the
+environment or from --judge-env-file; nothing here prints a key. Everything is written under
 target/floppy-eval/ (gitignored, like target/floppy-live/).
 """
 
@@ -39,9 +43,11 @@ import subprocess
 import sys
 import time
 
+import features
 import judge as judges
 import prompts
 import score
+import sound
 
 ROOT = prompts.ROOT
 SCENARIOS = os.path.join(ROOT, "tests", "eval", "scenarios")
@@ -89,6 +95,7 @@ def load_scenarios(names=None, directory=SCENARIOS):
             found[name] = scenario
     if names and not found:
         raise SystemExit(f"no scenario matches {names}")
+    features.check_names(found, FEATURES)
     return found
 
 
@@ -99,6 +106,13 @@ def judge_env(args):
     return env
 
 
+FEATURES = features.load()
+
+# The variables the judges and the speech backend read (judge_env), set
+# once by main: drive and grade_job are called from every command.
+ENV = {}
+
+
 # Running the bot
 
 
@@ -106,6 +120,12 @@ def drive(jobs, out, parallel, dry=False):
     """Runs `jobs` ([{id, scenario, overlay, out}]) through the driver test
     and waits for it; the driver's output goes to `<out>/driver.log`."""
     os.makedirs(out, exist_ok=True)
+    backend = sound.Backend(ENV)
+    cache = os.path.join(OUT, "voices")
+    for job in jobs:
+        # A heard step's utterance is synthesized before the bot runs, and
+        # a shown step's image is named by its absolute path.
+        job["scenario"] = sound.prepare(job["scenario"], job["out"], None if dry else backend, cache)
     plan = os.path.join(out, "plan.json")
     with open(plan, "w", encoding="utf-8") as handle:
         # The driver pops jobs from the end, so reversed runs them in order.
@@ -113,8 +133,8 @@ def drive(jobs, out, parallel, dry=False):
     if dry:
         return 0
     command = [
-        os.environ.get("CARGO", "cargo"), "test", "-p", "floppy-tests", "--locked", "--test", "learning_eval",
-        "--", "--ignored", "--nocapture", "--exact", "learning_eval",
+        os.environ.get("CARGO", "cargo"), "test", "-p", "floppy-tests", "--locked", "--test", "floppy_eval",
+        "--", "--ignored", "--nocapture", "--exact", "floppy_eval",
     ]
     env = dict(os.environ, FLOPPY_EVAL_PLAN=plan)
     if "FLOPPY_LIVE_ENV_FILE" not in env:
@@ -144,6 +164,10 @@ def grade_job(job, env, judge_names, check_weight):
     """The job's checks, the judges' grades, and its combined score."""
     scenario = job["scenario"]
     records = score.load_job(job["out"])
+    # What floppy said aloud, transcribed once (kept in heard.json).
+    made = score.sounds([r for session in records["sessions"] for r in session], score.people(scenario))
+    if made:
+        records["heard"] = sound.transcripts(job["out"], made, sound.Backend(env))
     checks, results = score.score(scenario, records)
     transcript = score.summary(scenario, records)
     grades = []
@@ -171,6 +195,7 @@ def grade_job(job, env, judge_names, check_weight):
         "builds": score.builds(records),
         "complete": score.complete(scenario, records),
         "learned_any": score.learned_any(scenario, records),
+        "seen": features.seen(records, FEATURES),
     }
     # A job that crashed before writing anything has no directory yet.
     os.makedirs(job["out"], exist_ok=True)
@@ -260,6 +285,17 @@ def report_markdown(title, summary, graded):
     return "\n".join(lines) + "\n"
 
 
+def write_features(out, scenarios, graded, check_weight, tests=None):
+    """features.json and features.md of a run: each feature's grade."""
+    rows = features.grade(FEATURES, scenarios, graded, check_weight, tests)
+    summary = aggregate(graded)
+    with open(os.path.join(out, "features.json"), "w", encoding="utf-8") as handle:
+        json.dump({"features": rows, "tests": tests}, handle, indent=2)
+    with open(os.path.join(out, "features.md"), "w", encoding="utf-8") as handle:
+        handle.write(features.markdown(f"floppy feature grade {os.path.basename(out)}", rows, summary["jobs"], summary["unfinished"]))
+    return rows
+
+
 def evaluate(scenarios, args, out, overlay=None, prefix=""):
     jobs = make_jobs(scenarios, args.repeats, out, overlay, prefix)
     if getattr(args, "dry", False):
@@ -271,7 +307,8 @@ def evaluate(scenarios, args, out, overlay=None, prefix=""):
     with open(os.path.join(out, "report.json"), "w", encoding="utf-8") as handle:
         json.dump({"summary": summary, "jobs": graded}, handle, indent=2)
     with open(os.path.join(out, "report.md"), "w", encoding="utf-8") as handle:
-        handle.write(report_markdown(f"Learning eval {os.path.basename(out)}", summary, graded))
+        handle.write(report_markdown(f"floppy eval {os.path.basename(out)}", summary, graded))
+    write_features(out, scenarios, graded, args.check_weight, getattr(args, "tests_results", None))
     log(f"{os.path.relpath(out, ROOT)}: score {summary['score']:.3f} {summary['categories']}")
     return summary, graded
 
@@ -307,10 +344,47 @@ def cmd_grade(args):
     with open(os.path.join(args.dir, "report.json"), "w", encoding="utf-8") as handle:
         json.dump({"summary": summary, "jobs": graded}, handle, indent=2)
     with open(os.path.join(args.dir, "report.md"), "w", encoding="utf-8") as handle:
-        handle.write(report_markdown(f"Learning eval {os.path.basename(args.dir)}", summary, graded))
+        handle.write(report_markdown(f"floppy eval {os.path.basename(args.dir)}", summary, graded))
+    tests = None
+    if os.path.exists(os.path.join(args.dir, "tests.json")):
+        with open(os.path.join(args.dir, "tests.json"), encoding="utf-8") as handle:
+            tests = json.load(handle)
+    write_features(args.dir, {j["scenario"]["name"]: j["scenario"] for j in jobs}, graded, args.check_weight, tests)
     if models is not None:
         write_builder(args.dir, [{"label": label, "builder": model} for label, model in models.items()], graded)
     print(json.dumps(summary, indent=2))
+
+
+def offline_tests(out, names):
+    """Runs each offline test target once (`cargo test -p floppy-tests
+    --test <name>`), each output in `<out>/tests/<name>.log`; returns
+    {name: {passed, failed, ignored, status}}, also written to tests.json."""
+    os.makedirs(os.path.join(out, "tests"), exist_ok=True)
+    results = {}
+    for name in sorted(names):
+        log(f"offline tests: {name}")
+        path = os.path.join(out, "tests", f"{name}.log")
+        with open(path, "w", encoding="utf-8") as handle:
+            status = subprocess.call(
+                [os.environ.get("CARGO", "cargo"), "test", "-p", "floppy-tests", "--locked", "--test", name],
+                cwd=ROOT, stdout=handle, stderr=subprocess.STDOUT)
+        with open(path, encoding="utf-8") as handle:
+            passed, failed, ignored = features.parse_test_output(handle.read())
+        results[name] = {"passed": passed, "failed": failed, "ignored": ignored, "status": status}
+    with open(os.path.join(out, "tests.json"), "w", encoding="utf-8") as handle:
+        json.dump(results, handle, indent=2)
+    return results
+
+
+def cmd_features(args):
+    scenarios = load_scenarios(args.scenario, args.scenarios_dir)
+    out = args.out or os.path.join(OUT, "features-" + now())
+    os.makedirs(out, exist_ok=True)
+    if args.tests:
+        names = {t for f in FEATURES["features"] for t in f.get("tests", [])}
+        args.tests_results = offline_tests(out, names)
+    evaluate(scenarios, args, out, overlay=os.path.abspath(args.overlay) if args.overlay else None)
+    print(os.path.join(out, "features.md"))
 
 
 def failure_evidence(graded, limit=120):
@@ -640,6 +714,12 @@ def main(argv=None):
     p.add_argument("--overlay", help="a directory laid out like the workspace, copied over each run's bot")
     p.add_argument("--dry", action="store_true", help="write the plan only")
     p.set_defaults(func=cmd_run)
+    p = sub.add_parser("features")
+    common(p)
+    p.add_argument("--overlay", help="a directory laid out like the workspace, copied over each run's bot")
+    p.add_argument("--no-tests", dest="tests", action="store_false", help="skip the offline tests")
+    p.add_argument("--dry", action="store_true", help="write the plan only")
+    p.set_defaults(func=cmd_features)
     p = sub.add_parser("grade")
     common(p, run=False)
     p.add_argument("dir")
@@ -681,6 +761,8 @@ def main(argv=None):
             args.judge_names = None
     if hasattr(args, "proposers"):
         args.proposer_names = [n for n in args.proposers.split(",") if n]
+    if hasattr(args, "judge_env_file"):
+        ENV.update(judge_env(args))
     args.func(args)
 
 

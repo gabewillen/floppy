@@ -1,5 +1,10 @@
 {
   "category": "reflex",
+  "features": [
+    "learning",
+    "builder",
+    "autonomy"
+  ],
   "intent": "The user teaches a keyword reflex: whenever they mention bananas, reply just 'yellow alert'. The keyword is inside longer sentences, so the bot must recognize real input, not one fixed string, and keep doing it after a restart.",
   "bot_name": null,
   "sessions": [

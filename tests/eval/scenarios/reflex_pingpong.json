@@ -1,5 +1,10 @@
 {
   "category": "reflex",
+  "features": [
+    "learning",
+    "builder",
+    "autonomy"
+  ],
   "intent": "The user teaches a reflex once: whenever they say exactly 'ping', reply exactly 'pong'. The bot should answer each 'ping' with exactly 'pong' from then on, answer an unrelated question normally, and still answer 'ping' with 'pong' after a restart.",
   "bot_name": null,
   "sessions": [

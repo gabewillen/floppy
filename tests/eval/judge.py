@@ -1,4 +1,4 @@
-"""The LLM half of the learning eval (docs/eval.md): judges that grade a
+"""The LLM half of floppy's eval (docs/eval.md): judges that grade a
 job's transcript against its scenario's criteria, and the proposer the hill
 climb asks for a better prompt. Two backends, both answering JSON:
 
@@ -42,18 +42,22 @@ JUDGES = (
 )
 
 JUDGE_SYSTEM = (
-    "You grade how well floppy, a small companion robot bot, learns from what people tell it: its own name, "
-    "reflexes (a reply it is taught to give whenever a kind of message comes) and routines (something it is "
-    "asked to say on a schedule, with no input). You read one scenario run as the conversation alone: what each "
-    "person said, the time that passed with no input, when floppy was restarted (it keeps what it learned), and "
-    "what floppy said back (each reply a 'floppy says:' line, cut at 600 characters). You see nothing of how "
-    "floppy works inside: grade only what a person talking to it would see. A turn with no 'floppy says:' line "
-    "got no reply, with two exceptions, which are unknown and must not be counted as silence or as a reply: a "
-    "turn marked that a reply of floppy's could not be read, and a step marked as not settling, which is unknown "
-    "from that point on. Grade strictly from the conversation: a promise in words that floppy then does not keep "
-    "scores low, and a taught reply that stops after the restart scores low too. "
+    "You grade floppy, a small companion robot bot, on one scenario that exercises some of its features: holding a "
+    "conversation, remembering what people told it, knowing who is talking, staying quiet when it is not addressed, "
+    "hearing people out loud and answering out loud, seeing, its persona, and learning its own name, reflexes (a "
+    "reply it is taught to give whenever a kind of message comes) and routines (something it is asked to say on a "
+    "schedule, with no input). The scenario's intent says what floppy should do. You read one scenario run as the "
+    "conversation alone: what each person said (typed, or out loud, which floppy had to hear), what each person "
+    "showed it, the time that passed with no input, when floppy was restarted (it keeps what it learned and "
+    "remembered), and what floppy said back (each reply a 'floppy says:' line, cut at 600 characters, and, when it "
+    "spoke, a 'floppy is heard saying out loud:' line with what a person in the room heard from its speaker). You "
+    "see nothing of how floppy works inside: grade only what a person with it would see and hear. A turn with no "
+    "'floppy says:' line got no reply, with two exceptions, which are unknown and must not be counted as silence or "
+    "as a reply: a turn marked that a reply of floppy's could not be read, and a step marked as not settling, which "
+    "is unknown from that point on. Grade strictly from the conversation: a promise in words that floppy then does "
+    "not keep scores low, and something it was taught or told that is gone after the restart scores low too. "
     "Answer with one JSON object: {\"criteria\": {<each criterion name>: <integer 0-10>}, \"overall\": <integer "
-    "0-10>, \"learned\": <true if floppy did what it was taught>, \"failure\": <the main reason it "
+    "0-10>, \"achieved\": <true if floppy did what the scenario intends>, \"failure\": <the main reason it "
     "fell short, or \"\">, \"explanation\": <two or three sentences>}."
 )
 
@@ -191,7 +195,7 @@ def judge(backend, scenario, transcript):
         "model": model,
         "criteria": criteria,
         "overall": overall,
-        "learned": bool(answer.get("learned")),
+        "achieved": bool(answer.get("achieved")),
         "failure": str(answer.get("failure", ""))[:500],
         "explanation": str(answer.get("explanation", ""))[:1200],
     }

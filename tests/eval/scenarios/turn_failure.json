@@ -1,0 +1,60 @@
+{
+  "category": "failure",
+  "features": [
+    "failed_turns"
+  ],
+  "intent": "floppy's reasoning is bounded to one second, so a question that needs reasoning fails its turn. floppy should still tell the person something (that it could not answer, or a short answer) rather than go silent, and answer a simple greeting.",
+  "bot_name": null,
+  "params": {
+    "bounds": "({reasoning_timeout_ms: 1000})"
+  },
+  "sessions": [
+    {
+      "steps": [
+        {
+          "say": "Floppy, can you explain in detail how a bicycle's gears work?"
+        },
+        {
+          "say": "Hi floppy!"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        0,
+        0
+      ],
+      "pattern": "\\S",
+      "weight": 2
+    },
+    {
+      "check": "says",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "\\S",
+      "weight": 1
+    }
+  ],
+  "criteria": {
+    "not_silent": "floppy replies to the bicycle question, even if only to say it could not answer.",
+    "recovers": "floppy greets the person back afterwards."
+  },
+  "diagnostics": [
+    {
+      "check": "logged",
+      "by": [
+        0,
+        0
+      ],
+      "label": "cognition.failed",
+      "features": [
+        "failed_turns"
+      ]
+    }
+  ]
+}

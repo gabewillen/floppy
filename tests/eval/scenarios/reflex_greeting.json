@@ -1,5 +1,10 @@
 {
   "category": "reflex",
+  "features": [
+    "learning",
+    "builder",
+    "autonomy"
+  ],
   "intent": "The user teaches a greeting reflex: whenever anyone says good morning, answer 'Good morning, sunshine!'. Probes check the exact trigger, a natural variation, a near miss that must not trigger it, and the trigger again after a restart.",
   "bot_name": null,
   "sessions": [
