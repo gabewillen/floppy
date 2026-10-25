@@ -7,6 +7,51 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-25, every feature graded (D245), model `sparks/qwen3.8-flash-next`
+
+`eval.py features --no-tests` (docs/eval.md's feature grade) on #83's
+branch (floppy main `0dc65083` plus the eval), from a cloud session: the bot on
+`sparks/qwen3.8-flash-next` through the CPA relay, the decision service on
+the TypeSafe relay, speech, voice and the eval's own speech synthesis and
+transcription on one relay to `https://api.willen.dev` (D244), the judges
+`gabe-codex-0/gpt-6.1-sol` and `gemini-4-argon`. Run `full1`, 24 jobs (one
+repeat of each scenario), 5 cut unfinished by their step bound; 19 scored.
+Suite 0.487; mean over the 21 graded features 0.588.
+
+| Grade | Features (live score) |
+| --- | --- |
+| A | cognition tiers 1.00, decisions 0.95, ability offers 0.95, prompts 0.95, rest and consolidation 0.98 |
+| C | persona 0.76, turn taking 0.74, room 0.74 |
+| D | memory 0.68, people 0.67, its name 0.69, hearing 0.69 |
+| F | conversation 0.44, learning 0.35, builder 0.26, learned reflexes 0.33, routines 0.16, speaking 0.50, voices 0.49, seeing 0.00, failed turns 0.00 |
+
+Each failing scenario was read before its grade was trusted; all four are
+floppy's, not the eval's:
+
+- recall_restart (0.06): after the restart `conversation.memories` recalled
+  the first session's memory (recalled 1, then 2), and floppy still said
+  "I don't think you've ever told me" for the dog's name and the color.
+- seeing_look (0.00): the camera's view was held (`seeing.view held`), and
+  every one of floppy's six turns selected `bot.ability.seeing.look` again;
+  it never answered the question.
+- turn_failure (0.00): both turns failed at the one-second reasoning bound
+  (`cognition.failed`), and each failed turn was followed by
+  `cognition.ignore`: floppy said nothing to either message.
+- voice_people (0.00): with the diarizer on, all 11 decodes of a diarized
+  segment failed `Speech decoding failed: the backend answered an error
+  status.`, while the eval's own transcription of the same segment
+  (`floppy-diarized-2-0`, sent as a 24 kHz WAV) read "Hi Floppy, I'm Gabe.".
+  That segment is 80594 bytes, an odd length for 16-bit PCM.
+- voice_question (0.50) and voice_overlap (0.48): the second question asked
+  out loud never became a turn within the step's bound; voice_overlap's
+  transcript shows floppy saying the first answer again over it, the known
+  gap of floppy hearing its own voice. The smoke run of voice_question
+  passed both steps, so it is not every time.
+
+The judge check (`eval.py judge-check`) scored 73 of 76 known negatives at
+0.3 or less. Conversation's F is the other scenarios' overall grade
+(persona_style, recall_restart), which tag it without a check of their own.
+
 ## 2026-10-25, speech and voice on api.willen.dev (D244), model `gabe-codex-1/gpt-6-luna`
 
 `scripts/talk-live.py` on floppy main `e1c17c48` with this change, from a
