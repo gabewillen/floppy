@@ -61,7 +61,10 @@ are one behavior: a turn that only states a fact selects
 `cognition.ignore`, and the fact is not recalled later (recall_restart's
 dog's name, recall_update's corrected "tacos" while the replied-to
 "sushi" was, reflex_pingpong's teaching turn). In people_overheard floppy
-answered the ambient talk and ran one turn behind.
+answered the ambient talk; its first quiet step timed out while the bot
+was starting, so each reply was read in the step after its message
+(fixed in `0aa2a676`); by turn, it recalled Ana's overheard teapot and
+not Gabe's marathon.
 
 The judge check (`eval.py judge-check`) scored 73 of 76 known negatives at
 0.3 or less. Conversation's F is the other scenarios' overall grade
