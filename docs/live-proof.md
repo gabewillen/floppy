@@ -50,6 +50,19 @@ floppy's, not the eval's:
   gap of floppy hearing its own voice. The smoke run of voice_question
   passed both steps, so it is not every time.
 
+A rerun after the eval's per-session audio fix (#83), `full2`, 24 jobs
+with the five question scenarios, 9 with a step cut by its bound: suite
+0.462. The question report (`questions.md`): what floppy learns, partly
+(0.52); remembers, no (0.34); understands, partly (0.71); decides, no
+(0.38); memory works well, no (0.35); knows its own voice, partly (0.65,
+voice_self's echo was decoded into a turn and ignored as no question, not
+recognised); learns other people, no (0.42). Most of the memory failures
+are one behavior: a turn that only states a fact selects
+`cognition.ignore`, and the fact is not recalled later (recall_restart's
+dog's name, recall_update's corrected "tacos" while the replied-to
+"sushi" was, reflex_pingpong's teaching turn). In people_overheard floppy
+answered the ambient talk and ran one turn behind.
+
 The judge check (`eval.py judge-check`) scored 73 of 76 known negatives at
 0.3 or less. Conversation's F is the other scenarios' overall grade
 (persona_style, recall_restart), which tag it without a check of their own.
