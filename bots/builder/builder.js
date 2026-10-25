@@ -602,7 +602,31 @@ function applyError() {
 // sim_results with the current test's result: expect_events in order
 // (other outputs may come between), and expect_done.
 function nextSimResults() {
-  return sim_results.concat([(function (t) { var next = 0; observed.forEach(function (name) { if (next < t.expect_events.length && name === t.expect_events[next]) { next += 1; } }); return {name: t.name, invokeid: candidate_id, passed: sim_error === null && next === t.expect_events.length && child_done === t.expect_done && apply.length === 0, observed: observed, expected: t.expect_events, done: child_done, expect_done: t.expect_done, error: sim_error, apply: apply}; })(currentTest())]);
+  return sim_results.concat([(function (t) { var next = 0; observed.forEach(function (name) { if (next < t.expect_events.length && name === t.expect_events[next]) { next += 1; } }); return {name: t.name, invokeid: candidate_id, passed: sim_error === null && next === t.expect_events.length && child_done === t.expect_done && apply.length === 0, observed: observed, expected: t.expect_events, done: child_done, expect_done: t.expect_done, error: simErrorText(t), apply: apply}; })(currentTest())]);
+}
+
+// The run's error, without the candidate's generated invoke id, and where
+// the builder's error.execution came from: scxml.rs gives a platform error
+// no data, so the draft's own message never reaches the builder (#93).
+// Before any test event (step null) it is the draft's start, which
+// scxml.rs ends with error.execution when it cannot finish its first
+// macrostep; during sim.drive it is the send of step, whose data the
+// draft's event:schema refused.
+function simErrorText(t) {
+  if (sim_error === null) {
+    return null;
+  }
+  var error = withoutInvokeId(sim_error, candidate_id);
+  if (error !== 'error.execution' || t.apply === true) {
+    return error;
+  }
+  if (step === null) {
+    return error + ' (the draft ended while starting, before any test event: a cond of an eventless transition in its first macrostep threw on every evaluation, or it raised or transitioned without end)';
+  }
+  if (sim_sends.length < t.events.length) {
+    return error + ' (the builder\'s send of the test event ' + step.name + ' raised it: the data the test gives it does not match the draft\'s schema for it, ' + fileName() + '.json#/$defs/' + step.name + ', so it was never sent)';
+  }
+  return error;
 }
 
 // Whether the current test is a routine's forced tick, whose ticks
