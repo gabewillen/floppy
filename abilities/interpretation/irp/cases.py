@@ -23,7 +23,7 @@ READY = expect("bot.ability.ready")
 
 
 def config(**overrides):
-    stages = {"stage_timeout_ms": "600000", "diarizer": "false", "voice_classifier": "false"}
+    stages = {"stage_timeout_ms": "600000", "diarizer": "false", "voice_classifier": "false", "affect_classifier": "false"}
     stages.update(overrides)
     return list(stages.items())
 
@@ -259,3 +259,27 @@ S.case(232, 14, "another voice is a source id even once the bot's own voice is k
 S.case(233, 14, "without voice identification the copy is ignored.",
        [READY, enroll()] + utterance() + [words("hello")],
        params=PATIENT, backend=[VOICED, SILENT, decoded("hello")])
+
+
+S.statement(15, "With an affect classifier (`affect_classifier`, a document default), decoded speech carries the tone of its longest voice (mosfet.py's `SpeechData.affect`), heard through `abilities/voice_affect/voice_affect.scx` alongside decoding: the utterance, or with diarization its diarized segments; the product's `affect` is `{label, scores, valence, confidence}`. A tone not heard (a failure, a voice under 0.3 s, no answer within 3 s) leaves the product without `affect`, and the words still flow.")
+
+AFFECTS = config(affect_classifier="true")
+AFFECT_VOICES = config(diarizer="true", voice_classifier="true", affect_classifier="true")
+SAD = {"path": "/emotion?sample_rate=16000", "status": 200,
+       "body": {"label": "sad", "scores": {"sad": 0.8, "neutral": 0.2}, "valence": -0.7, "confidence": 0.8, "snr_db": 30.0}}
+TONE = (" && _event.data.affect.label === 'sad' && _event.data.affect.valence === -0.7 && _event.data.affect.confidence === 0.8"
+        " && _event.data.affect.scores.sad === 0.8 && !('snr_db' in _event.data.affect)")
+UNTONED = " && !('affect' in _event.data)"
+
+S.case(240, 15, "decoded speech carries the tone it was said in.",
+       [READY] + utterance() + [words("hello", extra=TONE)],
+       params=AFFECTS, backend=[VOICED, SILENT, decoded("hello"), SAD])
+S.case(241, 15, "a tone not heard leaves decoded speech without one; its words still flow.",
+       [READY] + utterance() + [words("hello", extra=UNTONED)],
+       params=AFFECTS, backend=[VOICED, SILENT, decoded("hello"), dict(SAD, status=503, body={"error": "busy"})])
+S.case(242, 15, "a diarized voice under 0.3 s has no tone.",
+       [READY] + utterance() + [expect(SPEECH, "_event.data.content === 'hello'" + UNTONED)],
+       params=AFFECT_VOICES, backend=[VOICED, SILENT, DIARIZED, decoded("hello"), EMBEDDED, SAD])
+S.case(243, 15, "without an affect classifier nothing is asked.",
+       [READY] + utterance() + [words("hello", extra=UNTONED)],
+       params=PATIENT, backend=[VOICED, SILENT, decoded("hello"), SAD])
