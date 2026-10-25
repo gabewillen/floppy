@@ -301,6 +301,12 @@
     <transition event="error.*" target="failing">
       <assign location="failure" expr="revisionFailedMessage(_event.name)"/>
     </transition>
+    <!-- The revision answers before it ends (its answer is queued first):
+         one that ended with none, whose answer could not be sent, fails
+         the revision at once instead of at the ceiling. -->
+    <transition event="done.invoke.revision" target="failing">
+      <assign location="failure" expr="'Learning revision ended without an answer.'"/>
+    </transition>
   </state>
 
   <!-- A lesson to stop a behavior (decision D220): its row is BROKEN,

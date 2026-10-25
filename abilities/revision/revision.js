@@ -269,9 +269,12 @@ function acceptedTriggers() {
   return triggers.length > 0 ? triggers : existing_behavior.triggers;
 }
 
-// The applied inventory event's behavior.
+// The applied inventory event's behavior, its event the one the intent
+// came as: the intent's own event field is optional (its schema defaults
+// it), and an undefined one fails the output's schema, so the answer was
+// never sent and the invoker waited out its ceiling.
 function appliedBehavior() {
-  return ({event: intent.event, name: intent.name, triggers: triggers, description: intent.description || existing_behavior.description || null});
+  return ({event: intent_event, name: intent.name, triggers: triggers, description: intent.description || existing_behavior.description || null});
 }
 
 function appliedBehaviorWithSource() {
