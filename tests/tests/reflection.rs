@@ -610,8 +610,8 @@ fn an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it_on(databas
     );
 }
 
-/// The inventory events the select call offers, each with the `enum` its
-/// `name` is pinned to (`null`: any name).
+/// The inventory events the select call offers, each with the `enum` of
+/// its `name`, if any (`null`: any name).
 fn offered_names(body: &Json) -> Json {
     let schema = &body["tools"][0]["function"]["parameters"];
     schema["properties"]["events"]["items"]["anyOf"]
@@ -673,14 +673,14 @@ fn a_break_marks_the_behavior_broken_and_keeps_it_on(database: &str) {
     let prompt: Json = serde_json::from_str(&mock.requests("dispatch")[0].message("user"))
         .expect("the select prompt is JSON");
     assert_eq!(prompt["behaviors"][0]["name"], "GreetOnKnock");
-    // A change or a break names a behavior the inventory holds (decision
-    // D100).
+    // A change and a break are offered while the inventory holds a
+    // behavior (decisions D100, D243); a name is not an enum of it.
     assert_eq!(
         offered_names(&mock.requests("dispatch")[0].body),
         json!({
             "bot.behavior.create": null,
-            "bot.behavior.change": ["GreetOnKnock"],
-            "bot.behavior.break": ["GreetOnKnock"],
+            "bot.behavior.change": null,
+            "bot.behavior.break": null,
         })
     );
     assert_eq!(prompt["behaviors"][0]["used_count"], 1);
