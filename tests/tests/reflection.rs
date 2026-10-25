@@ -147,6 +147,21 @@ fn create_selection() -> Json {
     }])
 }
 
+/// The create a live model sends: only the fields it must, with no
+/// `event` discriminator (the schema defaults it) and no `source`.
+fn bare_create_selection() -> Json {
+    json!([{
+        "event": "bot.behavior.create",
+        "data": {
+            "name": "GreetOnKnock",
+            "triggers": ["phone.incoming_call", "environment.sound"],
+            "description": "Say hello when a knock sound arrives.",
+            "reason": "Same knock and greeting pattern across recent episodes.",
+        },
+        "reason": "a repeated pattern",
+    }])
+}
+
 fn change_selection() -> Json {
     json!([{
         "event": "bot.behavior.change",
@@ -226,6 +241,7 @@ fn selection(route: &str) -> Option<Json> {
         "none" => Some(json!([])),
         "create" | "buildfail" | "genfail" | "slowbuild" | "stallbuild" | "slowplain"
         | "livebound" | "livehardcoded" => Some(create_selection()),
+        "createbare" => Some(bare_create_selection()),
         "break" => Some(break_selection("GreetOnKnock")),
         "change" | "changefail" => Some(change_selection()),
         "breakunknown" => Some(break_selection("Nobody")),
@@ -941,6 +957,30 @@ fn a_create_is_built_and_stored_active_with_grounded_triggers() {
 fn postgres_a_create_is_built_and_stored_active_with_grounded_triggers() {
     let server = support::Pglite::start().expect("FLOPPY_PGLITE_SERVER is set");
     a_create_is_built_and_stored_active_with_grounded_triggers_on(&server.database());
+}
+
+/// A create whose data has no `event` (a live model leaves the defaulted
+/// discriminator out) is stored and reported like any other: the applied
+/// behavior names its event from the inventory event it came as, so the
+/// revision's answer passes its schema and the turn settles.
+#[test]
+fn a_create_without_its_event_field_is_built_stored_and_reported() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "createbare", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let records = reflect(&mut run, 1);
+    drop(run.close(WAIT));
+    assert_eq!(
+        texts(&records, "harness.output"),
+        ["answered"],
+        "{records:?}"
+    );
+    assert_eq!(
+        texts(&records, "reflection.inventory"),
+        [r#"GreetOnKnock ACTIVE turn ["environment.sound"] (accept)"#]
+    );
+    let behavior = &json_log(&records, "episodes")[0]["content"]["behavior"];
+    assert_eq!(behavior["event"], "bot.behavior.create", "{behavior}");
 }
 
 fn a_create_is_built_and_stored_active_with_grounded_triggers_on(database: &str) {
