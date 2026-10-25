@@ -155,6 +155,23 @@
   participants} (the product's envelope with source "conversation";
   participants the turn's); every other commit sends the product itself.
 
+  Short-term memory (as mosfet.py's Conversation and Listening write
+  it): every committed message with words is also written to the body's
+  short-term register as a turn, bot.ability.memory.stm.turn {id,
+  direction, speakers, text, cut, conversation} sent to the parent (the
+  communication passes it to the body, which passes it to the register;
+  a one-way message, so the commit never waits on it). An inbound text
+  commit is a heard turn (speakers its turn's source participants), and
+  speech reaches the conversation as its decoded words, so what the bot
+  heard is written here whether it was typed or said; an outbound one is a
+  said turn (speakers the participants its producer stamped, the bot's own
+  voice). id is the message's provenance id, else its turn_ref, else the
+  committing event's name; conversation is this session's id; the words
+  are cut by <memory:cut_at_word>. A message whose content is not a
+  string of a text/* type, or only white space, writes nothing. The
+  register's turns are the body's, so a later turn in any relationship
+  reads what was heard and said in every one.
+
   Readiness: the session's start sends bot.ability.ready to the parent
   (decision D242); it offers nothing (its input is not a tool event).
 
@@ -206,8 +223,10 @@
     <data id="input" expr="null"/>
     <!-- The participants the turn's cognition handoff stamps. -->
     <data id="turn_participants" expr="[]"/>
-    <!-- The message in hand. -->
+    <!-- The message in hand, and its words as <memory:cut_at_word>
+         bounds them for the short-term register. -->
     <data id="message" expr="null"/>
+    <data id="words" expr="null"/>
     <!-- Memory: the database file (null: no memory) and its statements.
          The SQL runs on both
          engines (SQLite and Postgres). A memory id is the next row count
@@ -566,6 +585,13 @@
             <assign location="exchange_parent" expr="parent"/>
             <log label="conversation" expr="inboundCommitLog()"/>
             <if cond="isTextMessage()">
+              <!-- What the bot heard, remembered past this exchange. -->
+              <if cond="hasWords()">
+                <memory:cut_at_word location="words" words="message.content"/>
+                <send event="bot.ability.memory.stm.turn" target="#_parent">
+                  <content expr="heardTurn()"/>
+                </send>
+              </if>
               <assign location="product" expr="({})"/>
               <assign location="product.event" expr="'bot.ability.conversation.output'"/>
               <assign location="product.data" expr="({})"/>
@@ -599,6 +625,13 @@
                                        provenance="_event.data.message.provenance"/>
         <assign location="exchange" expr="exchangeWithMessage()"/>
         <log label="conversation" expr="outboundCommitLog()"/>
+        <!-- What the bot said, remembered past this exchange. -->
+        <if cond="isTextMessage() &amp;&amp; hasWords()">
+          <memory:cut_at_word location="words" words="message.content"/>
+          <send event="bot.ability.memory.stm.turn" target="#_parent">
+            <content expr="saidTurn()"/>
+          </send>
+        </if>
       </if>
       <send event="bot.ability.conversation.output" target="#_parent">
         <param name="parent" expr="exchange_parent"/>

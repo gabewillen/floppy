@@ -539,6 +539,23 @@ fn a_recalled_failed_turns_episode_carries_its_outcome_and_failure() {
     ));
 }
 
+/// A recalled episode says the words its stimulus carried, in order, and
+/// one that carried none says nothing of them.
+#[test]
+fn a_recalled_episode_carries_the_words_its_stimulus_carried() {
+    let episodes = [
+        json!({"stimulus_name": "said", "heard": ["My dog is Rufus.", "And <green> & blue."], "output": []}),
+        json!({"stimulus_name": "quiet", "heard": [], "output": []}),
+    ];
+    let rendered = prompt(&recalling("now", &episodes, &[]));
+    assert!(rendered.contains(
+        "<cognition:cognitive_episode stimulus_name=\"said\">\n      <focus_candidates count=\"0\" />\n      <heard count=\"2\">\n        <item>My dog is Rufus.</item>\n        <item>And &lt;green&gt; &amp; blue.</item>\n      </heard>"
+    ));
+    assert!(rendered.contains(
+        "<cognition:cognitive_episode stimulus_name=\"quiet\">\n      <focus_candidates count=\"0\" />\n      <output"
+    ));
+}
+
 #[test]
 fn recent_turns_claim_the_budget_first_and_keep_the_newest_uncounted() {
     let mut input = recalling("now", &[], &[json!({"text": "d".repeat(50_000)})]);

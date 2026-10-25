@@ -66,8 +66,9 @@
   bot.behavior.tick (its routines).
 
   Short-term memory: the body relays a child's bot.ability.memory.stm.turn
-  to the register (no child writes turns yet; the listening's heard
-  speech and the conversation's said messages will). Each turn starts in
+  to the register: the communication's, from its conversation, one for
+  each message the conversation commits with words (heard, typed or
+  decoded from speech, and said). Each turn starts in
   processing's reading_turns: it reads the register's recent turns
   (bot.ability.memory.stm.recent_turns {}) and relays the answer,
   bot.ability.memory.stm.recent_turns.output, to the cognition ahead of
