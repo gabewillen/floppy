@@ -120,16 +120,19 @@ function hasCounterexample() {
 // check, decision D131): this turn, its behavior_input as autonomy builds it, and the
 // sessions its output names (a learned behavior names its targets, D104).
 function liveTurn() {
-  var live = {turn: turn, input: behavior_input, targets: outputTargets(), choices: turn_choices, handled: instruction === null || probing};
+  var live = {turn: turn, input: behavior_input, targets: turnTargets(), choices: turn_choices, handled: instruction === null || probing};
   if (hasCounterexample()) {
     live.decline = withMessage(intent.counterexample);
   }
   return live;
 }
 
-// The distinct targets of this turn's cognition_output, at most 32.
-function outputTargets() {
-  return cognition_output.map(function (s) { return s.target; }).filter(function (t, i, a) { return typeof t === 'string' && t.length > 0 && a.indexOf(t) === i; }).slice(0, 32);
+// The distinct targets of this turn's cognition_output and of the choices
+// it was offered, at most 32: a behavior may answer with any offered
+// choice, not only with what the bot happened to select on this turn (an
+// ignored turn names only the cognition, #91).
+function turnTargets() {
+  return cognition_output.concat(turn_choices).map(function (s) { return s.target; }).filter(function (t, i, a) { return typeof t === 'string' && t.length > 0 && a.indexOf(t) === i; }).slice(0, 32);
 }
 
 function builderConstraints() {
@@ -141,7 +144,7 @@ function builderConstraints() {
 // turn's output names, and this turn's input (behavior_input, as autonomy
 // builds it, in model-facing XML: decision D201).
 function turnContract() {
-  var contract = turn_contract.replace(/TRIGGERS|TARGETS|INPUT/g, function (m) { return m === 'INPUT' ? turn_input : namesText(m === 'TARGETS' ? outputTargets() : triggers); });
+  var contract = turn_contract.replace(/TRIGGERS|TARGETS|INPUT/g, function (m) { return m === 'INPUT' ? turn_input : namesText(m === 'TARGETS' ? turnTargets() : triggers); });
   return instruction === null ? contract : contract + ' ' + (probing ? probe_contract : lesson_contract);
 }
 
