@@ -295,7 +295,7 @@ class Features(unittest.TestCase):
             log("environment.sound", json.dumps({"audio": "media/say-2.pcm", "source": "floppy"})),
         ]
         job = {"steps": [step(0, 0, 0, 4, kind="hear")], "sessions": [records], "done": True,
-               "heard": {"media/say-1.pcm|media/say-2.pcm": "The capital is Paris."}}
+               "heard": {"0#media/say-1.pcm": "The capital", "0#media/say-2.pcm": "is Paris."}}
         value, results = score.score(scenario, job)
         self.assertEqual(value, 1.0)
         self.assertIn("The capital is Paris.", results[0]["why"])
@@ -303,10 +303,29 @@ class Features(unittest.TestCase):
         value, results = score.score(scenario, job)
         self.assertEqual(results[0]["score"], 0.0)
         self.assertIn("2 sound(s) of floppy's", results[0]["why"])
-        self.assertEqual(len(score.sound_groups(scenario, job)[0]), 2)
-        transcript = score.summary(scenario, dict(job, heard={"media/say-1.pcm|media/say-2.pcm": "Paris."}))
+        self.assertEqual([g for _, g in score.sound_groups(scenario, job)], [[json.loads(records[2]["text"])], [json.loads(records[3]["text"])]])
+        transcript = score.summary(scenario, dict(job, heard={"0#media/say-1.pcm": "Paris."}))
         self.assertIn("gabe says out loud: \"what's the capital of France?\"", transcript)
         self.assertIn("floppy is heard saying out loud: Paris.", transcript)
+
+    def test_an_utterance_is_heard_whole_in_the_step_it_began_and_by_session(self):
+        scenario = {"sessions": [{"steps": [{"hear": "a"}, {"hear": "b"}]}, {"steps": [{"say": "c"}]}],
+                    "checks": [{"check": "speaks", "at": [0, 0], "pattern": "^one two$"},
+                               {"check": "speaks", "at": [0, 1], "pattern": "^three$"},
+                               {"check": "speaks", "at": [1, 0], "pattern": "^four$"}]}
+        def chunk(name):
+            return log("environment.sound", json.dumps({"audio": f"media/{name}", "source": "speaking"}))
+        first = [chunk("speaking-1.0.pcm"), chunk("speaking-1.1.pcm"), chunk("speaking-2.0.pcm")]
+        job = {"steps": [step(0, 0, 0, 1, kind="hear"), step(0, 1, 1, 3, kind="hear"), step(1, 0, 0, 1)],
+               "sessions": [first, [chunk("speaking-1.0.pcm")]], "done": True}
+        groups = score.sound_groups(scenario, job)
+        self.assertEqual([(s, [d["audio"] for d in g]) for s, g in groups],
+                         [(0, ["media/speaking-1.0.pcm", "media/speaking-1.1.pcm"]), (0, ["media/speaking-2.0.pcm"]),
+                          (1, ["media/speaking-1.0.pcm"])])
+        # A restarted floppy's first utterance has the first session's name.
+        job["heard"] = {score.group_key(s, g): words for (s, g), words in zip(groups, ["one two", "three", "four"])}
+        value, results = score.score(scenario, job)
+        self.assertEqual([r["score"] for r in results], [1.0, 1.0, 1.0])
 
     def test_logged_diagnostics_read_a_label_and_its_pattern(self):
         scenario = {"sessions": [{"steps": [{"say": "hi"}]}], "checks": [],

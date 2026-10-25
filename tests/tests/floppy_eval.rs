@@ -17,8 +17,9 @@
 //! (`[{path, old, new}]`, each `old` found exactly once in the layout's
 //! `path`), and runs the scenario's sessions one after another on one
 //! memory directory, one behaviors directory and one media directory
-//! (`<out>/media`, granted to the speech, generate and vision services), so
-//! a later session is the bot restarted with what it learned. The room
+//! (`<out>/media`, granted to the speech, generate and vision services,
+//! and moved to `<out>/media-<session>` when the session ends), so a later
+//! session is the bot restarted with what it learned. The room
 //! passes the bot the scenario's `params` (`{name: expr}`) beside its
 //! model. A session's steps are:
 //!
@@ -523,6 +524,11 @@ fn run_job(job: &Json, clock: Instant) {
             serde_json::to_string_pretty(&finished.all).expect("JSON"),
         )
         .expect("the records are writable");
+        // A restarted floppy numbers its utterances from 1 again: each
+        // session's sounds are kept apart for the grade to hear.
+        std::fs::rename(&media, out.join(format!("media-{session}")))
+            .expect("the session's media directory is movable");
+        std::fs::create_dir_all(&media).expect("the media directory is creatable");
     }
     std::fs::write(
         out.join("steps.json"),

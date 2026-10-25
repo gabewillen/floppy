@@ -24,6 +24,7 @@ import wave
 
 import judge
 import prompts
+import score
 
 RATE = 24000
 BASE_URL = "https://api.willen.dev/v1"
@@ -176,12 +177,12 @@ def transcripts(job_out, groups, backend):
     if os.path.exists(path):
         with open(path, encoding="utf-8") as handle:
             heard = json.load(handle)
-    media = os.path.join(job_out, "media")
     changed = False
-    for group in groups:
-        key = group_key(group)
-        if not key or key in heard or backend is None:
+    for session, group in groups:
+        key = score.group_key(session, group)
+        if not group or key in heard or backend is None:
             continue
+        media = media_dir(job_out, session)
         pcm = b"".join(p for p in (read_sound(media, data) for data in group) if p)
         if not pcm:
             continue
@@ -196,5 +197,8 @@ def transcripts(job_out, groups, backend):
     return heard
 
 
-def group_key(group):
-    return "|".join(str(data.get("audio", "")) for data in group)
+def media_dir(job_out, session):
+    """A session's media directory: the driver moves each session's to
+    `media-<session>` when it ends (a run from before that has one `media`)."""
+    path = os.path.join(job_out, f"media-{session}")
+    return path if os.path.isdir(path) else os.path.join(job_out, "media")

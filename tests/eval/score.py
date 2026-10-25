@@ -187,25 +187,54 @@ def sounds(records, others):
     return out
 
 
-def spoken(job, records, others):
-    """What floppy said aloud in the records: the transcript of its sounds
-    in them, joined in order and heard as one (tests/eval/sound.py keys it
-    by their references joined with "|")."""
-    key = "|".join(str(data.get("audio", "")) for data in sounds(records, others))
-    return job.get("heard", {}).get(key, "").strip() if key else ""
+_CHUNK = re.compile(r"^(.*?speaking-\d+)\.\d+\.pcm$")
+
+
+def utterance(data):
+    """Which utterance of floppy's a sound is a chunk of: speaking streams
+    utterance N as `speaking-N.<i>.pcm`; any other sound is its own."""
+    ref = str(data.get("audio", ""))
+    match = _CHUNK.match(ref)
+    return match.group(1) if match else ref
+
+
+def utterances(records, others):
+    """floppy's sounds in the records, grouped by utterance, in the order
+    each began: [(utterance, [data, ...]), ...]."""
+    groups = {}
+    for data in sounds(records, others):
+        groups.setdefault(utterance(data), []).append(data)
+    return list(groups.items())
+
+
+def group_key(session, group):
+    """The key of a group's transcript in heard.json: its session (each
+    session has its own media directory, and a restarted floppy numbers its
+    utterances from 1 again) and its references joined with "|"."""
+    return f"{session}#" + "|".join(str(data.get("audio", "")) for data in group)
+
+
+def spoken(job, records, others, session=0):
+    """What floppy said aloud in the records: the transcripts of the
+    utterances it began in them, each heard whole (its chunks after the
+    records' end too, as a person hears a reply that runs past the next
+    question), joined in order."""
+    if session >= len(job["sessions"]):
+        return ""
+    whole = dict(utterances(job["sessions"][session], others))
+    # Begun in the records: its first chunk is in them.
+    here = {str(data.get("audio", "")) for data in sounds(records, others)}
+    begun = [u for u, _ in utterances(records, others) if str(whole.get(u, [{}])[0].get("audio", "")) in here]
+    heard = job.get("heard", {})
+    parts = [heard.get(group_key(session, whole.get(u, [])), "").strip() for u in begun]
+    return " ".join(p for p in parts if p)
 
 
 def sound_groups(scenario, job):
-    """floppy's sounds in each step of the job, for transcription."""
+    """[(session, group)] for each utterance floppy made, for transcription."""
     others = people(scenario)
-    groups = []
-    for step in job["steps"]:
-        if step["session"] < len(job["sessions"]):
-            records = job["sessions"][step["session"]][step["start_index"] : step["end_index"]]
-            group = sounds(records, others)
-            if group:
-                groups.append(group)
-    return groups
+    return [(session, group) for session, records in enumerate(job["sessions"])
+            for _, group in utterances(records, others)]
 
 
 def _matches(pattern, text):
@@ -265,7 +294,7 @@ def check(job, spec):
         ok = any(_matches(spec["pattern"], t) for t in says)
         return float(ok), f"said {[s[:120] for s in says]}"
     if kind == "speaks":
-        aloud = spoken(job, records, job.get("people", {"gabe"}))
+        aloud = spoken(job, records, job.get("people", {"gabe"}), where[0])
         if not aloud:
             made = len(sounds(records, job.get("people", {"gabe"})))
             return 0.0, f"heard nothing floppy said aloud ({made} sound(s) of floppy's)"
@@ -355,7 +384,7 @@ def summary(scenario, job, limit=600):
         else:
             lines.append(f"{head} {spec['wait_s']} s pass with no input")
         records = job["sessions"][step["session"]][step["start_index"] : step["end_index"]]
-        aloud = spoken(job, records, people(scenario))
+        aloud = spoken(job, records, people(scenario), step["session"])
         if aloud:
             lines.append(f"  floppy is heard saying out loud: {aloud[:limit]}")
         for text in _texts(records, "floppy.output"):
