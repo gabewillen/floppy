@@ -1,4 +1,4 @@
-"""Offline tests of the learning eval's scorer and prompt codec:
+"""Offline tests of the eval's scorer, feature grade and prompt codec:
 `python3 -m unittest discover -s tests/eval`. They make no model call."""
 
 import json
@@ -7,8 +7,10 @@ import tempfile
 import unittest
 
 import eval as runner
+import features
 import prompts
 import score
+import sound
 
 
 def log(label, text):
@@ -278,3 +280,71 @@ class Codec(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Features(unittest.TestCase):
+    def test_floppy_s_sounds_are_heard_and_its_replies_counted(self):
+        scenario = {"sessions": [{"steps": [{"hear": "what's the capital of France?"}]}],
+                    "checks": [{"check": "speaks", "at": [0, 0], "pattern": "paris"},
+                               {"check": "replies_at_most", "at": [0, 0], "max": 1}]}
+        records = [
+            log("environment.sound", json.dumps({"audio": "media/step-0-0.pcm", "source": "gabe"})),
+            said("Paris."),
+            log("environment.sound", json.dumps({"audio": "media/say-1.pcm", "source": "floppy"})),
+            log("environment.sound", json.dumps({"audio": "media/say-2.pcm", "source": "floppy"})),
+        ]
+        job = {"steps": [step(0, 0, 0, 4, kind="hear")], "sessions": [records], "done": True,
+               "heard": {"media/say-1.pcm": "The capital", "media/say-2.pcm": "is Paris."}}
+        value, results = score.score(scenario, job)
+        self.assertEqual(value, 1.0)
+        self.assertIn("The capital is Paris.", results[0]["why"])
+        job["heard"] = {}
+        value, results = score.score(scenario, job)
+        self.assertEqual(results[0]["score"], 0.0)
+        self.assertIn("2 sound(s) of floppy's", results[0]["why"])
+        transcript = score.summary(scenario, dict(job, heard={"media/say-1.pcm": "Paris."}))
+        self.assertIn("gabe says out loud: \"what's the capital of France?\"", transcript)
+        self.assertIn("floppy is heard saying out loud: Paris.", transcript)
+
+    def test_logged_diagnostics_read_a_label_and_its_pattern(self):
+        scenario = {"sessions": [{"steps": [{"say": "hi"}]}], "checks": [],
+                    "diagnostics": [{"check": "logged", "at": [0, 0], "label": "cognition.stage", "pattern": "reasoning"},
+                                    {"check": "not_logged", "at": [0, 0], "label": "listening.degraded"},
+                                    {"check": "logged", "at": [0, 0], "label": "cognition.rest"}]}
+        job = {"steps": [step(0, 0, 0, 1)], "sessions": [[log("cognition.stage", "reasoning answered")]], "done": True}
+        self.assertEqual([r["score"] for r in score.diagnostics(scenario, job)], [1.0, 1.0, 0.0])
+
+    def test_every_feature_a_scenario_names_is_defined(self):
+        spec = features.load()
+        features.check_names(runner.load_scenarios(), spec)
+        with self.assertRaisesRegex(ValueError, "unknown feature heering"):
+            features.check_names({"x": {"features": ["heering"], "checks": [], "criteria": {}}}, spec)
+        # Every feature has a live scenario, or a status saying why it has none.
+        named = {f for s in runner.load_scenarios().values() for f in s.get("features", [])}
+        for feature in spec["features"]:
+            self.assertTrue(feature["name"] in named or feature.get("status"), feature["name"])
+
+    def test_a_feature_is_scored_on_its_own_checks_and_criteria(self):
+        spec = {"grades": {"A": 0.9, "B": 0.8, "C": 0.7, "D": 0.6},
+                "features": [{"name": "hearing", "title": "Hearing", "what": "", "evidence": [{"label": "floppy.say"}]},
+                             {"name": "speaking", "title": "Speaking", "what": ""},
+                             {"name": "seeing", "title": "Seeing", "what": "", "status": "not wired"}]}
+        scenario = {"features": ["hearing", "speaking"], "criteria": {"heard": "", "spoken": ""},
+                    "criteria_features": {"speaking": ["spoken"]}}
+        graded = [{"scenario": "voice", "diagnostics": [], "seen": {"floppy.say": True},
+                   "results": [{"score": 1.0, "weight": 1, "features": ["hearing"]},
+                               {"score": 0.0, "weight": 1, "features": ["speaking"]}],
+                   "grades": [{"overall": 0.5, "criteria": {"heard": 1.0, "spoken": 0.0}}]}]
+        rows = {r["name"]: r for r in features.grade(spec, {"voice": scenario}, graded, 0.6)}
+        self.assertAlmostEqual(rows["hearing"]["live"], 0.6 * 1.0 + 0.4 * 0.5)
+        self.assertEqual(rows["hearing"]["letter"], "B")
+        self.assertAlmostEqual(rows["speaking"]["live"], 0.0)
+        self.assertEqual(rows["speaking"]["letter"], "F")
+        self.assertIsNone(rows["seeing"]["live"])
+        self.assertEqual(rows["hearing"]["evidence"], {"floppy.say": 1})
+        self.assertIn("| Seeing | – | n/a | not wired |", features.markdown("t", list(rows.values()), 1, 0))
+
+    def test_a_streamed_wav_is_read_past_its_header(self):
+        wav = sound.wav_of_pcm(b"\x01\x00" * 10)
+        self.assertEqual(sound.pcm_of_wav(wav), b"\x01\x00" * 10)
+        self.assertEqual(features.parse_test_output("test result: ok. 3 passed; 1 failed; 2 ignored; 0 measured"), (3, 1, 2))
