@@ -1,49 +1,133 @@
 {
   "about": "The questions the maintainer wants floppy's eval to answer. Each names the scenarios whose transcripts answer it and the log labels whose texts show what floppy did inside. A question's answer is its scenarios' black-box scores (D241); the inside lines are evidence beside it, never in it.",
-  "answers": {"yes": 0.8, "partly": 0.5},
+  "answers": {
+    "yes": 0.8,
+    "partly": 0.5
+  },
   "questions": [
     {
       "name": "learns",
       "question": "What does floppy learn?",
-      "scenarios": ["name_adopt", "name_rename", "persona_style", "reflex_greeting", "reflex_keyword", "reflex_pingpong", "routine_reminder", "routine_restart"],
-      "inside": ["reflection.revision", "reflection.inventory", "learning.failed", "identity.name", "persona.description"]
+      "scenarios": [
+        "name_adopt",
+        "name_rename",
+        "persona_style",
+        "reflex_greeting",
+        "reflex_keyword",
+        "reflex_pingpong",
+        "routine_reminder",
+        "routine_restart"
+      ],
+      "inside": [
+        "reflection.revision",
+        "reflection.inventory",
+        "learning.failed",
+        "identity.name",
+        "persona.description"
+      ]
     },
     {
       "name": "remembers",
       "question": "What does floppy remember?",
-      "scenarios": ["recall_restart", "recall_many", "recall_update", "recall_people", "people_overheard", "voice_rest", "chat_basics"],
-      "inside": ["conversation.memories", "stm.failed"]
+      "scenarios": [
+        "recall_restart",
+        "recall_many",
+        "recall_update",
+        "recall_people",
+        "people_overheard",
+        "voice_rest",
+        "chat_basics"
+      ],
+      "inside": [
+        "conversation.memories",
+        "stm.failed",
+        "conversation",
+        "cognition.ignore"
+      ]
     },
     {
       "name": "understands",
       "question": "What does floppy understand?",
-      "scenarios": ["chat_basics", "chat_understand", "voice_question", "voice_pause", "seeing_look"],
-      "inside": ["seeing.sight", "seeing.view", "listening.degraded"]
+      "scenarios": [
+        "chat_basics",
+        "chat_understand",
+        "voice_question",
+        "voice_pause",
+        "seeing_look"
+      ],
+      "inside": [
+        "seeing.sight",
+        "seeing.view",
+        "listening.degraded"
+      ]
     },
     {
       "name": "decides",
       "question": "What does floppy decide to do?",
-      "scenarios": ["chat_ignore", "chat_basics", "turn_failure", "seeing_look", "voice_overlap"],
-      "inside": ["cognition.stage", "cognition.ignore", "cognition.failed"],
+      "scenarios": [
+        "chat_ignore",
+        "chat_basics",
+        "turn_failure",
+        "seeing_look",
+        "voice_overlap"
+      ],
+      "inside": [
+        "cognition.stage",
+        "cognition.ignore",
+        "cognition.failed"
+      ],
       "decisions": true
     },
     {
       "name": "memory_works",
       "question": "Does floppy's memory work well?",
-      "scenarios": ["recall_restart", "recall_many", "recall_update", "recall_people", "people_overheard", "voice_rest", "name_adopt"],
-      "inside": ["conversation.memories", "stm.failed", "cognition.consolidated"]
+      "scenarios": [
+        "recall_restart",
+        "recall_many",
+        "recall_update",
+        "recall_people",
+        "people_overheard",
+        "voice_rest",
+        "name_adopt"
+      ],
+      "inside": [
+        "conversation.memories",
+        "stm.failed",
+        "cognition.consolidated",
+        "conversation",
+        "cognition.ignore"
+      ]
     },
     {
       "name": "own_voice",
       "question": "Does floppy know its own voice?",
-      "scenarios": ["voice_self", "voice_overlap", "voice_question"],
-      "inside": ["identity.recognition.failed", "listening.degraded"]
+      "scenarios": [
+        "voice_self",
+        "voice_overlap",
+        "voice_question"
+      ],
+      "inside": [
+        "identity.recognition.failed",
+        "listening.degraded",
+        "intuition",
+        "cognition.ignore"
+      ]
     },
     {
       "name": "learns_others",
       "question": "Does floppy naturally learn other people?",
-      "scenarios": ["people_overheard", "recall_people", "voice_people", "chat_ignore"],
-      "inside": ["identity.heard", "conversation", "identity.recognition.failed"]
+      "scenarios": [
+        "people_overheard",
+        "recall_people",
+        "voice_people",
+        "chat_ignore"
+      ],
+      "inside": [
+        "identity.heard",
+        "conversation",
+        "identity.recognition.failed",
+        "conversation.memories"
+      ]
     }
   ]
 }
