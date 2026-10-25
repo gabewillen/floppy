@@ -48,7 +48,7 @@ echo '{"name":"builder.request","data":{"spec":"a traffic light with a pedestria
     bots/builder/builder.scx
 ```
 
-The floppy bot in its environment, the room, which activates it; say hello:
+The floppy bot in its environment, the environment, which activates it; say hello:
 
 ```console
 printf '%s\n' \
@@ -60,13 +60,13 @@ printf '%s\n' \
     --dir "https://github.com/stateforward/floppy/services/speech=$PWD/media::/media" \
     --dir "https://github.com/stateforward/floppy/services/vision=$PWD/media::/media" \
     --dir "https://github.com/stateforward/floppy/services/files=$PWD/behaviors::/behaviors" \
-    --fuel 9223372036854775807 environments/room/room.scx
+    --fuel 9223372036854775807 environments/environment/environment.scx
 ```
 
 Talk to the floppy bot out loud from a Mac with
 [`scripts/talk.py`](../scripts/talk.py) (decision D240), run in a terminal
-that has microphone access, with ffmpeg installed: it runs the room above
-under `scx run`, gives each utterance the microphone hears to the room as
+that has microphone access, with ffmpeg installed: it runs the environment above
+under `scx run`, gives each utterance the microphone hears to the environment as
 `environment.sound`, and plays each sound floppy makes on the speaker
 (muting the microphone while it does). A typed line is sent as text, and
 `--say FILE` sends a recorded utterance instead. The env file names the
@@ -80,9 +80,9 @@ python3 scripts/talk.py --env-file .env --scx scx
 
 To let a simulated person talk to floppy instead,
 [`scripts/talk-live.py`](../scripts/talk-live.py) puts OpenAI's GPT-Live
-(`gpt-live-1`, on its Live sessions WebSocket) in the room in place of the
+(`gpt-live-1`, on its Live sessions WebSocket) in the environment in place of the
 microphone and speaker: GPT-Live's voice is cut into utterances and given
-to the room as `environment.sound`, each sound floppy makes is streamed back
+to the environment as `environment.sound`, each sound floppy makes is streamed back
 to it, and both sides' words are kept in a transcript
 (`media/talk-live/transcript.txt`). It needs `OPENAI_API_KEY` in its own
 environment (not the env file) and the `websockets` package; `--persona`

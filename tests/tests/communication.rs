@@ -264,7 +264,7 @@ fn until_silent_copy(run: &Run, records: &mut Vec<Json>) {
     }
 }
 
-/// Starts the room with the laid-out body as its bot, which activates on
+/// Starts the environment with the laid-out body as its bot, which activates on
 /// joining.
 fn started(body: &Path) -> Run {
     let run = Run::start(&[support::environment_for(body, &[])], &[]);

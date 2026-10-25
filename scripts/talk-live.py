@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Let GPT-Live talk to floppy: a voice model is the person in the room.
+"""Let GPT-Live talk to floppy: a voice model is the person in the environment.
 
-Runs the room (environments/room/room.scx) the way scripts/talk.py does,
+Runs the environment (environments/environment/environment.scx) the way scripts/talk.py does,
 with a GPT-Live session (OpenAI's Live sessions API, `gpt-live-1`, over
 its primary WebSocket) in place of the microphone and speaker:
 
 * GPT-Live's voice (24 kHz mono 16-bit PCM, streamed continuously) is cut
   into utterances by talk.py's loudness cutter, and each is given to the
-  room as `environment.sound` from `--name`, with a second of silence
+  environment as `environment.sound` from `--name`, with a second of silence
   after it, as talk.py gives the microphone's;
 * each sound floppy's mouth makes is streamed back to GPT-Live as its
   input audio, paced in real time, with silence between, so GPT-Live
@@ -53,7 +53,7 @@ CHUNK_BYTES = int(RATE * CHUNK_S) * 2
 
 PERSONA = (
     "You are Gabe, a person at home talking out loud to Floppy, a small robot "
-    "in the room with you. Talk like a person: one or two short sentences a "
+    "here with you. Talk like a person: one or two short sentences a "
     "turn, then stop and listen for Floppy's answer. Floppy can take ten "
     "seconds or more to answer, so wait for it. Keep the conversation going: "
     "after Floppy answers, react briefly and ask it something new, such as "
@@ -118,7 +118,7 @@ class Captions:
             self.text = ""
 
 
-async def converse(args: argparse.Namespace, media: Path, room: talk.Room, transcript: Transcript,
+async def converse(args: argparse.Namespace, media: Path, environment: talk.Environment, transcript: Transcript,
                    heard: list[int]) -> None:
     loop = asyncio.get_running_loop()
     ready = asyncio.Event()
@@ -134,18 +134,18 @@ async def converse(args: argparse.Namespace, media: Path, room: talk.Room, trans
         last_sound[0] = time.monotonic()
         name = f"live-{os.getpid()}-{count}.pcm"
         (media / name).write_bytes(pcm)
-        transcript.line(args.name, f"(sound {len(pcm) / 2 / RATE:.1f} s to the room)")
+        transcript.line(args.name, f"(sound {len(pcm) / 2 / RATE:.1f} s to the environment)")
         silence = media / "silence.pcm"
         if not silence.exists():
             silence.write_bytes(bytes(2 * RATE))
         for audio in (f"media/{name}", "media/silence.pcm"):
-            room.send("environment.sound", {
+            environment.send("environment.sound", {
                 "audio": audio, "media_type": "audio/pcm",
                 "sample_rate_hz": RATE, "channels": 1, "source": args.name,
             })
 
     def watch() -> None:
-        for record in room.records():
+        for record in environment.records():
             if args.verbose:
                 print(json.dumps(record), flush=True)
             if record.get("type") != "log":
@@ -153,7 +153,7 @@ async def converse(args: argparse.Namespace, media: Path, room: talk.Room, trans
             label, text = record.get("label"), record.get("text")
             if label == "bot.activated":
                 loop.call_soon_threadsafe(ready.set)
-                transcript.line("room", "floppy is here")
+                transcript.line("environment", "floppy is here")
             elif label == "floppy.say":
                 transcript.line("floppy", str(talk.decoded(text)))
             elif label == "environment.sound":
@@ -162,20 +162,20 @@ async def converse(args: argparse.Namespace, media: Path, room: talk.Room, trans
                 if isinstance(data, dict) and data.get("audio") and data.get("source") != args.name:
                     pcm = read_sound(media, data)
                     if pcm is None:
-                        transcript.line("room", f"skipped a sound GPT-Live cannot take: {data}")
+                        transcript.line("environment", f"skipped a sound GPT-Live cannot take: {data}")
                     else:
                         loop.call_soon_threadsafe(outgoing.extend, pcm)
                         last_sound[0] = time.monotonic() + len(pcm) / 2 / RATE
-            elif label and (label.endswith(".failed") or label == "room.exhausted"):
+            elif label and (label.endswith(".failed") or label == "runtime.supervisor.exhausted"):
                 transcript.line(label, str(talk.decoded(text)))
         loop.call_soon_threadsafe(ended.set)
 
     threading.Thread(target=watch, daemon=True).start()
-    transcript.line("room", "starting the room")
+    transcript.line("environment", "starting the environment")
     done = asyncio.create_task(ended.wait())
     await asyncio.wait([asyncio.create_task(ready.wait()), done], return_when=asyncio.FIRST_COMPLETED)
     if ended.is_set():
-        sys.exit(f"the room ended before floppy activated (exit {room.process.wait()}); rerun with --verbose")
+        sys.exit(f"the environment ended before floppy activated (exit {environment.process.wait()}); rerun with --verbose")
 
     cafile = os.environ.get("SSL_CERT_FILE")
     context = ssl.create_default_context(cafile=cafile) if cafile else ssl.create_default_context()
@@ -277,7 +277,7 @@ def main() -> None:
     parser.add_argument("--floppy-model", help="floppy's model (default: the bot's own, docs/defaults.md)")
     parser.add_argument("--persona", default=PERSONA, help="GPT-Live's instructions: who it is")
     parser.add_argument("--opening", default=OPENING, help="what GPT-Live says first")
-    parser.add_argument("--name", default="gabe", help="who GPT-Live is in the room (the sounds' source)")
+    parser.add_argument("--name", default="gabe", help="who GPT-Live is in the environment (the sounds' source)")
     parser.add_argument("--minutes", type=float, default=3.0, help="how long the conversation runs")
     parser.add_argument("--nudge-s", type=float, default=30.0, help="nudge GPT-Live on after this long quiet (0: never)")
     parser.add_argument("--transcript", type=Path, help="default: media/talk-live/transcript.txt")
@@ -291,34 +291,34 @@ def main() -> None:
     media = talk.ROOT / "media" / "talk-live"
     media.mkdir(parents=True, exist_ok=True)
     transcript = Transcript(args.transcript or media / "transcript.txt")
-    # floppy's model, when given, as the param the room passes the bot (the
-    # live tests' `model`): a copy of the room beside it, so its relative
+    # floppy's model, when given, as the param the environment passes the bot (the
+    # live tests' `model`): a copy of the environment beside it, so its relative
     # sources resolve, removed when the run ends.
     document = None
     if args.floppy_model:
-        source = talk.ROOT / "environments/room/room.scx"
+        source = talk.ROOT / "environments/environment/environment.scx"
         placed = """<param name="placed_on" expr="placedOn('floppy')"/>"""
         text = source.read_text()
         if placed not in text:
-            sys.exit("environments/room/room.scx no longer passes the bot placed_on; update talk-live.py")
-        document = source.with_name(f"room.talk-live-{os.getpid()}.scx")
+            sys.exit("environments/environment/environment.scx no longer passes the bot placed_on; update talk-live.py")
+        document = source.with_name(f"environment.talk-live-{os.getpid()}.scx")
         document.write_text(text.replace(
             placed, placed + f"""\n          <param name="model" expr="'{args.floppy_model}'"/>""", 1))
-    room = talk.Room(args, media, document)
+    environment = talk.Environment(args, media, document)
     heard = [0]
     try:
-        asyncio.run(converse(args, media, room, transcript, heard))
+        asyncio.run(converse(args, media, environment, transcript, heard))
     except KeyboardInterrupt:
         pass
     finally:
-        room.send("bot.deactivate", {})
+        environment.send("bot.deactivate", {})
         try:
-            room.process.wait(timeout=10)
+            environment.process.wait(timeout=10)
         except Exception:  # noqa: BLE001
-            room.process.terminate()
+            environment.process.terminate()
         if document is not None:
             document.unlink(missing_ok=True)
-    transcript.line("room", f"done: {heard[0]} utterances from {args.name}")
+    transcript.line("environment", f"done: {heard[0]} utterances from {args.name}")
 
 
 if __name__ == "__main__":

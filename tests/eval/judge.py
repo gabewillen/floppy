@@ -50,7 +50,7 @@ JUDGE_SYSTEM = (
     "conversation alone: what each person said (typed, or out loud, which floppy had to hear), what each person "
     "showed it, the time that passed with no input, when floppy was restarted (it keeps what it learned and "
     "remembered), and what floppy said back (each reply a 'floppy says:' line, cut at 600 characters, and, when it "
-    "spoke, a 'floppy is heard saying out loud:' line with what a person in the room heard from its speaker). You "
+    "spoke, a 'floppy is heard saying out loud:' line with what a person in the environment heard from its speaker). You "
     "see nothing of how floppy works inside: grade only what a person with it would see and hear. A turn with no "
     "'floppy says:' line got no reply, with two exceptions, which are unknown and must not be counted as silence or "
     "as a reply: a turn marked that a reply of floppy's could not be read, and a step marked as not settling, which "

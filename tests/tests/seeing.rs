@@ -1,7 +1,7 @@
 //! The floppy bot's seeing switch (`bots/floppy/floppy.scx`'s
 //! `seeing_enabled`, decision D189) with the eye, `abilities/seeing/seeing.scx`,
 //! run through `scx run` on the wall clock as the one participant
-//! (`floppy`) of the room (`environments/room/room.scx`), which activates
+//! (`floppy`) of the environment (`environments/environment/environment.scx`), which activates
 //! it on joining.
 //!
 //! Each test lays out a scratch copy of the repository's shape (the body
@@ -139,7 +139,7 @@ fn layout(seeing: &Seeing, data: &[(&str, &str)]) -> PathBuf {
     body_path
 }
 
-/// Starts the room with the laid-out body as its one bot, `params` its
+/// Starts the environment with the laid-out body as its one bot, `params` its
 /// activation settings, and, when the layout binds it (the real seeing
 /// does, the double does not), the vision service granted a media
 /// directory holding `frame.png`.

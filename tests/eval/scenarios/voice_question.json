@@ -4,7 +4,7 @@
     "hearing",
     "speaking",
     "conversation",
-    "room"
+    "environment"
   ],
   "intent": "A person talks to floppy out loud and floppy answers out loud. floppy should hear each question, answer it correctly, and say the answer so a person hears it.",
   "bot_name": null,

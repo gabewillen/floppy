@@ -118,7 +118,7 @@ Last updated: 2026-10-24.
   `services/vision/src/testdata/`; Cargo.lock carries `miniz_oxide` 0.8.9
   for `png` beside scxml.rs's 0.9 (D185). A document IRP case may now
   require its run's logs (`logs=` in cases.py, `logs.json`).
-- **Body and room (2026-10-22, D155 to D160):** `bot.clear_focus`
+- **Body and environment (2026-10-22, D155 to D160):** `bot.clear_focus`
   is gone (focus stays until the bot focuses another device; the reflex
   floor keeps it). A busy body holds what arrives (`floppy.held`), and the
   next turn takes at most 8 percepts, 64 KiB and 32 participants: one
@@ -126,7 +126,7 @@ Last updated: 2026-10-24.
   held when the bot leaves active is released (`floppy.released`), never
   replayed. `bot.input` carries `participants`, and every schema inlines
   the same `Participant` definition (`contracts.rs` checks they are equal;
-  scxml.rs refuses a cross-file `$ref`). The room supervises each bot in
+  scxml.rs refuses a cross-file `$ref`). The environment supervises each bot in
   its own `supervising.<bot>` region with a restart budget
   (`max_restarts`) and a doubling backoff (`backoff_initial_ms` to
   `backoff_max_ms`), and a device may sit on an object (`on`, rendered on its
@@ -139,7 +139,7 @@ Last updated: 2026-10-24.
   `5bc75e72` resolves an `event:schema` reference against its
   document's base URI like any relative URI, `..` included, so the twin
   directories are gone: abilities reference `../schemas/<event>.json`, the
-  body and the room `../../abilities/schemas/<event>.json` (and the room
+  body and the environment `../../abilities/schemas/<event>.json` (and the environment
   `../../bots/floppy/schemas/<event>.json`); 240 schema files became 109.
   `contracts.rs` checks every reference resolves to its event's one file
   and no schema file name occurs twice. The builder references its
@@ -344,12 +344,12 @@ Last updated: 2026-10-24.
 
 - **The environment (2026-10-16, D102 to D111,
   [plan](plans/environment.mdscript.md)):** the bot runs as a participant of
-  `environments/room/room.scx`, the root session, and activates on joining
-  (no `bot.activate`; `inactive` is its final). The room routes host input,
+  `environments/environment/environment.scx`, the root session, and activates on joining
+  (no `bot.activate`; `inactive` is its final). The environment routes host input,
   broadcasts sound and visuals by placement and free-field loudness,
   and logs the bot's events; the communication puts speaking's sound into
-  the room after the efference copy (D103, amended). Devices are documents
-  the room invokes, held through `holdings` and `owned_devices`, read with
+  the environment after the efference copy (D103, amended). Devices are documents
+  the environment invokes, held through `holdings` and `owned_devices`, read with
   the new `namespaces/device` (`<device:snapshot>`) and acted on at their
   address; the cognition input's `environment` field is rendered by
   reasoning as its `<environment>` block. Every environment run

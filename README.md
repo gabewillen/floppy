@@ -46,7 +46,7 @@ lists every variable, model and timeout.
 | --- | --- |
 | [`bots/`](bots/) | the [builder](bots/builder/README.md), which writes and tests new SCXML machines, and [floppy](bots/floppy/README.md), the companion bot |
 | [`abilities/`](abilities/) | the abilities and stages bots invoke (memory, cognition, communication, listening, seeing, ...) |
-| [`environments/`](environments/) | the sessions a bot runs in, such as the [room](environments/room/README.md) |
+| [`environments/`](environments/) | the sessions a bot runs in, such as the [environment](environments/environment/README.md) |
 | [`namespaces/`](namespaces/) | extension namespaces, synchronous executable content as Wasm components: [autonomy](namespaces/autonomy/README.md), [behavior](namespaces/behavior/README.md), [cognition](namespaces/cognition/README.md), [conversation](namespaces/conversation/README.md), [decision](namespaces/decision/README.md), [device](namespaces/device/README.md), [identity](namespaces/identity/README.md), [intuition](namespaces/intuition/README.md), [memory](namespaces/memory/README.md), [migration](namespaces/migration/README.md), [processing](namespaces/processing/README.md) |
 | [`services/`](services/) | invoked services, Wasm components that do the I/O: [generate](services/generate/README.md), decision, [files](services/files/README.md), [sql](services/sql/README.md), [pgsql](services/pgsql/README.md), [speech](services/speech/README.md), [vision](services/vision/README.md) |
 | [`tests/`](tests/) | integration tests that run everything through `scx run` |

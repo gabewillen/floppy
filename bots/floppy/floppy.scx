@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   The floppy bot: the body, a participant its environment invokes
-  (environments/room/room.scx, decision D102). It owns the bot
+  (environments/environment/environment.scx, decision D102). It owns the bot
   lifecycle and processing turns; its abilities are invoked children
   (decision D6: the invoke lifecycle is their attach and detach).
 
@@ -237,7 +237,7 @@
   correlate (the turn, the run) and read the focus.
 
   Running: scx run with an env file and an environment that invokes this
-  document (environments/room/room.scx), then bot.input on standard input,
+  document (environments/environment/environment.scx), then bot.input on standard input,
   which the environment gives every bot. The cognition's stages need TYPESAFE_API_KEY (intuition's decision
   service) and FLOPPY_BASE_URL (reasoning's generate service, no default
   backend; FLOPPY_API_KEY for a keyed backend); without them a turn fails.

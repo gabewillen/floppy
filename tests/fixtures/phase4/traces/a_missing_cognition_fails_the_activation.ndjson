@@ -1,20 +1,20 @@
 {"label":"floppy.diagnostic","parent":"session","session":"session.floppy","text":"error.execution while activating","type":"log"}
 {"label":"bot.activating.failed","session":"session","text":"{}","type":"log"}
 {"label":"done.invoke","session":"session","text":"{\"invokeid\":\"floppy\"}","type":"log"}
-{"label":"room.restarted","session":"session","text":"{\"participant\":\"floppy\",\"attempt\":1,\"delay_ms\":1000}","type":"log"}
+{"label":"environment.restarted","session":"session","text":"{\"participant\":\"floppy\",\"attempt\":1,\"delay_ms\":1000}","type":"log"}
 {"label":"floppy.diagnostic","parent":"session","session":"session.floppy","text":"error.execution while activating","type":"log"}
 {"label":"bot.activating.failed","session":"session","text":"{}","type":"log"}
 {"label":"done.invoke","session":"session","text":"{\"invokeid\":\"floppy\"}","type":"log"}
-{"label":"room.restarted","session":"session","text":"{\"participant\":\"floppy\",\"attempt\":2,\"delay_ms\":2000}","type":"log"}
+{"label":"environment.restarted","session":"session","text":"{\"participant\":\"floppy\",\"attempt\":2,\"delay_ms\":2000}","type":"log"}
 {"label":"floppy.diagnostic","parent":"session","session":"session.floppy","text":"error.execution while activating","type":"log"}
 {"label":"bot.activating.failed","session":"session","text":"{}","type":"log"}
 {"label":"done.invoke","session":"session","text":"{\"invokeid\":\"floppy\"}","type":"log"}
-{"label":"room.restarted","session":"session","text":"{\"participant\":\"floppy\",\"attempt\":3,\"delay_ms\":4000}","type":"log"}
+{"label":"environment.restarted","session":"session","text":"{\"participant\":\"floppy\",\"attempt\":3,\"delay_ms\":4000}","type":"log"}
 {"label":"floppy.diagnostic","parent":"session","session":"session.floppy","text":"error.execution while activating","type":"log"}
 {"label":"bot.activating.failed","session":"session","text":"{}","type":"log"}
 {"label":"done.invoke","session":"session","text":"{\"invokeid\":\"floppy\"}","type":"log"}
-{"label":"room.restarted","session":"session","text":"{\"participant\":\"floppy\",\"attempt\":4,\"delay_ms\":8000}","type":"log"}
+{"label":"environment.restarted","session":"session","text":"{\"participant\":\"floppy\",\"attempt\":4,\"delay_ms\":8000}","type":"log"}
 {"label":"floppy.diagnostic","parent":"session","session":"session.floppy","text":"error.execution while activating","type":"log"}
 {"label":"bot.activating.failed","session":"session","text":"{}","type":"log"}
 {"label":"done.invoke","session":"session","text":"{\"invokeid\":\"floppy\"}","type":"log"}
-{"label":"room.exhausted","session":"session","text":"{\"participant\":\"floppy\",\"attempts\":5}","type":"log"}
+{"label":"runtime.supervisor.exhausted","session":"session","text":"{\"participant\":\"floppy\",\"attempts\":5}","type":"log"}

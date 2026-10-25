@@ -197,7 +197,7 @@ text.
   `delay` or `delayexpr` replaced by a `delay` of 1500 ms, from
   `<behavior:lifetime_errors ticklocation>`), and is sent nothing, so its
   own schedule send must arm and fire (decision D153: a schedule that
-  never arms in the room fails here, not only live), and within 2 s (the
+  never arms in the environment fails here, not only live), and within 2 s (the
   verify timeout) the child must send `bot.behavior.tick` whose data carries
   `name`, `trigger` (`every` or `at`), `scheduled_at` and `fired_at`, and
   whose `output` is a non-empty list of selections (objects with an
