@@ -91,7 +91,11 @@ Each session is the bot started again on the same memory and behaviors
 directories (a restart with what it learned). A step is `{"say": text,
 "source"?: id, "timeout_s"?: n}`, one `bot.ability.communication.input`
 waited on until its reflection settles (or its turn fails) and then 15 s
-more, since its reply can be said after its reflection settles. A lesson
+more, since its reply can be said after its reflection settles. A turn
+that relays what floppy perceived back to it as
+`bot.ability.communication.input` (a heard voice becomes speech from
+someone) owes the turn that answers it: the step waits for that turn to
+end too, and for its settling at most 60 s more. A lesson
 the turn gave the learning ability (`learning.recalled`) is learned after
 the turn, so the step then also waits, bounded by `timeout_s` again, until
 each lesson closes (`learning.learned` or `learning.failed`) and one more

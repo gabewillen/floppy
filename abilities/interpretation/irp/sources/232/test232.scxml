@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- interpretation-14: another voice is a source id even once the bot's own voice is known. -->
+<!-- interpretation-14: a copy with too little voice teaches nothing: the bot's voice stays a source id. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="interpretation" type="scxml" src="../../../interpretation.scx">
@@ -17,18 +17,13 @@
   </state>
   <state id="step1">
     <onentry>
-      <send event="bot.ability.listening.enroll" target="#_interpretation"><content expr='{"voice_id": null, "segment": {"audio": "media/voiced.pcm", "media_type": "audio/pcm", "sample_rate_hz": 16000, "channels": 1, "start_seconds": 0.0, "end_seconds": 0.1}}'/></send>
-    </onentry>
-    <transition event="bot.ability.listening.enrolled" target="step2"/>
-  </state>
-  <state id="step2">
-    <onentry>
+      <send event="bot.ability.speaking.efference" target="#_interpretation"><content expr='{"mouth": "speaking", "duration": 0, "audio": "media/said.pcm", "media_type": "audio/pcm", "sample_rate_hz": 16000, "channels": 1}'/></send>
       <send event="bot.ability.listening.sensitivity.output" target="#_interpretation"><content expr='{"sound": {"audio": "media/voiced.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}, "parent": {"event": "environment.sound", "data": {"audio": "media/voiced.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}}, "perceived_level_db": null}'/></send>
       <send event="bot.ability.listening.sensitivity.output" target="#_interpretation"><content expr='{"sound": {"audio": "media/silence.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}, "parent": {"event": "environment.sound", "data": {"audio": "media/silence.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}}, "perceived_level_db": null}'/></send>
     </onentry>
-    <transition event="bot.ability.listening.speech.output" cond="_event.data.content === &quot;hello&quot; &amp;&amp; _event.data.content_type === 'text/plain' &amp;&amp; JSON.stringify(_event.data.source_ids) === &quot;[[0.25,0.5]]&quot; &amp;&amp; !('voice_embedding' in _event.data) &amp;&amp; !(_event.data.participants.some(function (p) { return p.ref === 'self' &amp;&amp; p.role === 'source' &amp;&amp; p.own === true; }))" target="step3"/>
+    <transition event="bot.ability.listening.speech.output" cond="_event.data.content === &quot;hello&quot; &amp;&amp; _event.data.content_type === 'text/plain' &amp;&amp; JSON.stringify(_event.data.source_ids) === &quot;[[0.5,-0.25]]&quot; &amp;&amp; !('voice_embedding' in _event.data)" target="step2"/>
   </state>
-  <state id="step3">
+  <state id="step2">
     <transition target="pass"/>
   </state>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>

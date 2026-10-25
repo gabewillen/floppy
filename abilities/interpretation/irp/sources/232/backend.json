@@ -2,15 +2,15 @@
   "clock": "wall",
   "answers": [
     {
-      "path": "/voice/embed",
+      "path": "/vad",
       "status": 200,
       "body": {
-        "embedding": [
-          0.5,
-          -0.25
-        ],
-        "dim": 2,
-        "model": "voice-detect-wespeaker-resnet34"
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 0.1
+          }
+        ]
       }
     },
     {
@@ -62,8 +62,8 @@
       "status": 200,
       "body": {
         "embedding": [
-          0.25,
-          0.5
+          0.5,
+          -0.25
         ],
         "dim": 2,
         "model": "voice-detect-wespeaker-resnet34"

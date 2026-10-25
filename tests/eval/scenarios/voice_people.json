@@ -52,7 +52,7 @@
         0,
         2
       ],
-      "pattern": "\\bana\\b",
+      "pattern": "\\bann?a\\b",
       "weight": 1
     },
     {
@@ -61,7 +61,7 @@
         0,
         3
       ],
-      "pattern": "\\bana\\b",
+      "pattern": "\\bann?a\\b",
       "weight": 2
     },
     {

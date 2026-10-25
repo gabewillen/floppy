@@ -1155,11 +1155,47 @@ pub fn indexed(output: &Media, index: usize) -> Media {
 /// were given (decision D244).
 pub const DIARIZATION_END_SLACK_SECONDS: f64 = 0.1;
 
-/// What a settled voice diarization becomes: each segment's PCM written to
-/// `<output>-<index>`, then [`DIARIZATION_OUTPUT_EVENT`] (at least one
-/// segment, ascending by start), or [`super::FAILED_EVENT`] (a span outside
-/// the utterance fails it; an end at most
-/// [`DIARIZATION_END_SLACK_SECONDS`] past it is the utterance's end).
+/// A diarized turn's `(start, end, confidence)`.
+type Span = (f64, f64, Option<f64>);
+
+/// One voice of a diarization: its group, start, end, confidence and
+/// joined PCM.
+type Voice = (Option<String>, f64, f64, Option<f64>, Vec<u8>);
+
+/// The diarizer's grouping of an answer's `segments`: each segment's
+/// `speaker` (else `label`), `None` for a segment with neither. Only which
+/// segments share one is kept; the labels themselves never leave.
+fn answered_groups(body: &[u8]) -> Vec<Option<String>> {
+    let answer: Json = serde_json::from_slice(body).unwrap_or(Json::Null);
+    answer
+        .get("segments")
+        .and_then(Json::as_array)
+        .map(|segments| {
+            segments
+                .iter()
+                .map(|segment| {
+                    ["speaker", "label"]
+                        .iter()
+                        .find_map(|name| match segment.get(*name) {
+                            Some(Json::String(label)) if !label.is_empty() => Some(label.clone()),
+                            _ => None,
+                        })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// What a settled voice diarization becomes: one segment per voice heard,
+/// its PCM written to `<output>-<index>`, then [`DIARIZATION_OUTPUT_EVENT`]
+/// (at least one segment, ascending by start), or [`super::FAILED_EVENT`]
+/// (a span outside the utterance fails it; an end at most
+/// [`DIARIZATION_END_SLACK_SECONDS`] past it is the utterance's end). The
+/// turns the diarizer gives one speaker are one voice: their PCM is joined,
+/// in order, into one segment from the first turn's start to the last
+/// one's end, its confidence the lowest of theirs (none when any has none),
+/// so the voice is identified from all of it; a turn with no speaker is a
+/// voice of its own.
 #[must_use]
 pub fn diarization_outcome(
     direction: &'static str,
@@ -1170,15 +1206,22 @@ pub fn diarization_outcome(
 ) -> Returned {
     let (pcm, rate, channels) = utterance;
     let total = duration(pcm.len(), rate, channels);
-    let spans = match answered_body(answered).and_then(|body| answered_spans(&body)) {
-        Ok(spans) if !spans.is_empty() => spans,
+    let (spans, groups) = match answered_body(answered)
+        .and_then(|body| answered_spans(&body).map(|spans| (spans, answered_groups(&body))))
+    {
+        Ok((spans, groups)) if !spans.is_empty() => (spans, groups),
         Ok(_) => return Returned::failed_named(direction, FailureCode::Malformed),
         Err(code) => return Returned::failed_named(direction, code),
     };
-    let mut spans = spans;
-    spans.sort_by(|left, right| left.0.total_cmp(&right.0));
-    let mut segments = Vec::with_capacity(spans.len());
-    for (index, (start, end, confidence)) in spans.into_iter().enumerate() {
+    let mut turns: Vec<(Span, Option<String>)> = spans
+        .into_iter()
+        .zip(groups.into_iter().chain(std::iter::repeat(None)))
+        .collect();
+    turns.sort_by(|left, right| left.0.0.total_cmp(&right.0.0));
+    // Each voice: its group, span, confidence and joined PCM, in order of
+    // its first turn.
+    let mut voices: Vec<Voice> = Vec::new();
+    for ((start, end, confidence), group) in turns {
         let end = if end > total && end <= total + DIARIZATION_END_SLACK_SECONDS {
             total
         } else {
@@ -1190,8 +1233,23 @@ pub fn diarization_outcome(
         let Some(clip) = clip_pcm(pcm, rate, channels, start, end) else {
             return Returned::failed_named(direction, FailureCode::Malformed);
         };
+        let same = group.as_ref().and_then(|group| {
+            voices
+                .iter_mut()
+                .find(|voice| voice.0.as_ref() == Some(group))
+        });
+        if let Some(voice) = same {
+            voice.2 = voice.2.max(end);
+            voice.3 = voice.3.zip(confidence).map(|(left, right)| left.min(right));
+            voice.4.extend_from_slice(clip);
+        } else {
+            voices.push((group, start, end, confidence, clip.to_vec()));
+        }
+    }
+    let mut segments = Vec::with_capacity(voices.len());
+    for (index, (_, start, end, confidence, clip)) in voices.into_iter().enumerate() {
         let file = indexed(output, index);
-        if write(&file.path, clip).is_err() {
+        if write(&file.path, &clip).is_err() {
             return Returned::failed_named(direction, FailureCode::Unwritable);
         }
         segments.push(json!({

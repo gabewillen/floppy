@@ -106,10 +106,6 @@
   environment whose id the body passes it (decision D103, amended
   2026-10-15: the copy reaches the listening first), and the sound comes
   back to the body as any sound there does (the bot hears itself).
-  Speaking's copy of the bot's own voice, bot.ability.listening.enroll,
-  goes the same way to each Listening ability, and a Listening's
-  bot.ability.listening.enrolled (the bot's own voice id it learned) goes
-  to the communication, for speaking.
 
   Environment: environment.sound and environment.visual from the
   environment, while active, are first recorded in the short-term
@@ -665,21 +661,6 @@
               <content expr="_event.data"/>
             </send>
           </foreach>
-        </transition>
-        <!-- Speaking's copy of the bot's own voice goes to Listening, as
-             the efference copy does, and what Listening learned from it
-             back to the communication, for speaking. -->
-        <transition event="bot.ability.listening.enroll" event:schema="../../abilities/schemas/bot.ability.listening.enroll.json">
-          <foreach array="listening_abilities" item="ability">
-            <send event="bot.ability.listening.enroll" targetexpr="abilityTarget(ability)">
-              <content expr="_event.data"/>
-            </send>
-          </foreach>
-        </transition>
-        <transition event="bot.ability.listening.enrolled" event:schema="../../abilities/schemas/bot.ability.listening.enrolled.json">
-          <send event="bot.ability.listening.enrolled" target="#_communication">
-            <content expr="_event.data"/>
-          </send>
         </transition>
         <!-- What the communication said, and its failures. -->
         <transition event="bot.ability.speaking.output" event:schema="../../abilities/schemas/bot.ability.speaking.output.json">

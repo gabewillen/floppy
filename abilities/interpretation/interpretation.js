@@ -476,27 +476,51 @@ function otherVoices() {
   return others;
 }
 
-// The participants stamped on the sound, and the bot's own voice when it
-// was heard.
-function decodedParticipants() {
-  var participants = active_participants.slice();
-  if (heardVoices().some(isOwnVoice) && participants.length < 32
-      && !participants.some(function (p) { return p.ref === voice_id && p.role === 'source'; })) {
-    participants.push({ref: voice_id, role: 'source', own: true});
-  }
-  return participants;
+// DetectingOwnVoice, IdentifyingOwnVoice
+
+// Speaking's copy of a completed utterance, with the PCM it commanded,
+// while the bot's own voice is unknown and voices are identified.
+function learnsOwnVoice(_event) {
+  return voice_classifier && own_voice === null && typeof _event.data.audio === 'string'
+    && _event.data.media_type === 'audio/pcm' && typeof _event.data.sample_rate_hz === 'number';
 }
 
-// Enrolling
+// The copy's directory, where the clip of its voice is written.
+function ownMediaDir() {
+  return utterance.audio.slice(0, utterance.audio.lastIndexOf('/') + 1);
+}
 
-function hasOwnEmbedding(_event) {
+function ownVoiceUnidentified(_event) {
+  var message = Object(_event.data).message;
+  return 'no embedding for the bot\'s own voice' + (typeof message === 'string' ? ': ' + message : '');
+}
+
+function ownUtterance(_event) {
+  return ({audio: _event.data.audio, media_type: 'audio/pcm', sample_rate_hz: _event.data.sample_rate_hz,
+    channels: typeof _event.data.channels === 'number' ? _event.data.channels : 1});
+}
+
+// At least min_voice_seconds from the copy's first voice to its last.
+function isOwnVoiceLongEnough(_event) {
+  return isApplyData(_event) && _event.data.voice_detection.segments.length > 0
+    && spanEnd(_event.data.voice_detection.segments) - _event.data.voice_detection.segments[0].start_seconds >= min_voice_seconds;
+}
+
+function spanEnd(segments) {
+  return segments.reduce(function (end, segment) { return Math.max(end, segment.end_seconds); }, 0);
+}
+
+function ownVoiceStart() {
+  return utterance.voice_detection.segments[0].start_seconds;
+}
+
+function ownVoiceEnd() {
+  return spanEnd(utterance.voice_detection.segments);
+}
+
+function hasOneEmbedding(_event) {
   return hasEmbeddings(_event) && _event.data.embeddings.length === 1 && _event.data.embeddings[0] !== null
     && Array.isArray(_event.data.embeddings[0].embedding);
-}
-
-// The copy's voice id, else the bot's own subject in memory.
-function ownVoiceId() {
-  return typeof copy.voice_id === 'string' ? copy.voice_id : 'self';
 }
 
 function isSegmented() {
