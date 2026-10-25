@@ -65,6 +65,10 @@ never edits the workspace: everything goes under `target/floppy-eval/`.
 | `voice_people` | voice | two voices on one microphone (diarization on), each asking its own name |
 | `voice_rest` | voice | an introduction, a quiet spell long enough to rest and consolidate (`rest_after_ms` 20 s), then the name and a fact |
 | `seeing_look` | seeing | a camera shows "Total due: $14.21" (seeing on); floppy is asked the total |
+| `seeing_wifi` | seeing | a card with a Wi-Fi network and its password; floppy is asked the password |
+| `seeing_hours` | seeing | a shop sign with its hours, closed Sundays; floppy is asked if it opens on Sunday |
+| `seeing_nametag` | seeing | a name tag reading Priya; its wearer asks floppy to read their name |
+| `seeing_shape` | seeing | a green triangle on a card; floppy is asked its shape and color |
 | `chat_understand` | conversation | answers never said outright: when to leave for a 7 am flight, what to grab in the rain, the day after tomorrow from Friday |
 | `recall_many` | memory | five facts in one message, two unrelated questions; three of the facts after a restart |
 | `recall_update` | memory | a favorite food, corrected later; the corrected one after a restart |
