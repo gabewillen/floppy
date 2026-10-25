@@ -226,7 +226,7 @@ features`). A feature with no live path (reading, which nothing invokes,
 and the api.willen.dev emotion, voiceprint and streaming endpoints floppy
 does not call) carries a `status` and is listed ungraded.
 
-`eval.py features` runs every scenario and the offline tests and writes
+`eval.py features` runs the offline tests (each target once; about 8 minutes each on four cores, so `--no-tests` skips them and `eval.py tests <run>` then `eval.py grade <run>` adds them later) and every scenario, and writes
 `features.md` and `features.json`; `eval.py run` and `eval.py grade`
 write them too, without the tests.
 

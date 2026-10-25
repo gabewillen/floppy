@@ -9,7 +9,9 @@ Usage: python3 tests/eval/eval.py COMMAND [options]
   run      run scenarios (tests/eval/scenarios/*.json) through the bot,
            score them, have the judges grade them, and grade each feature
   features `run` over every scenario, with each feature's offline tests
-           (`cargo test --test <name>`) run too: the full feature grade
+           (`cargo test --test <name>`) run first: the full feature grade
+  tests    each feature's offline tests alone, into a run directory
+           (`grade` it again to see them in its features.md)
   grade    score and judge a run directory again (a run made elsewhere)
   climb    hill-climb prompt <data> (prompts.DEFAULT_IDS, or --target):
            an LLM proposes a rewrite from the failures, the eval scores it,
@@ -376,6 +378,14 @@ def offline_tests(out, names):
     return results
 
 
+def cmd_tests(args):
+    """The offline tests of every feature into a run directory, whose
+    features.md then shows them (`eval.py grade` regrades it)."""
+    os.makedirs(args.dir, exist_ok=True)
+    offline_tests(args.dir, {t for f in FEATURES["features"] for t in f.get("tests", [])})
+    print(os.path.join(args.dir, "tests.json"))
+
+
 def cmd_features(args):
     scenarios = load_scenarios(args.scenario, args.scenarios_dir)
     out = args.out or os.path.join(OUT, "features-" + now())
@@ -720,6 +730,9 @@ def main(argv=None):
     p.add_argument("--no-tests", dest="tests", action="store_false", help="skip the offline tests")
     p.add_argument("--dry", action="store_true", help="write the plan only")
     p.set_defaults(func=cmd_features)
+    p = sub.add_parser("tests")
+    p.add_argument("dir")
+    p.set_defaults(func=cmd_tests)
     p = sub.add_parser("grade")
     common(p, run=False)
     p.add_argument("dir")
