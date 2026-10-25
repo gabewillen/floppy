@@ -78,6 +78,21 @@ lab's speech gateway for both speech variables
 python3 scripts/talk.py --env-file .env --scx scx
 ```
 
+To let a simulated person talk to floppy instead,
+[`scripts/talk-live.py`](../scripts/talk-live.py) puts OpenAI's GPT-Live
+(`gpt-live-1`, on its Live sessions WebSocket) in the room in place of the
+microphone and speaker: GPT-Live's voice is cut into utterances and given
+to the room as `environment.sound`, each sound floppy makes is streamed back
+to it, and both sides' words are kept in a transcript
+(`media/talk-live/transcript.txt`). It needs `OPENAI_API_KEY` in its own
+environment (not the env file) and the `websockets` package; `--persona`
+and `--opening` set who GPT-Live is and what it says first,
+`--floppy-model` floppy's model, and `--minutes` how long it runs:
+
+```console
+python3 scripts/talk-live.py --env-file .env --scx scx --minutes 5
+```
+
 A bot against floppy's latest GitHub release (once one is published:
 [release.md](release.md)) drops `--offline --cache-dir`:
 

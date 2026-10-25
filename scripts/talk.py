@@ -162,7 +162,7 @@ class Speaker:
 class Room:
     """`scx run` of the room, fed on standard input, read on standard output."""
 
-    def __init__(self, args: argparse.Namespace, media: Path):
+    def __init__(self, args: argparse.Namespace, media: Path, document: Path | None = None):
         grants = []
         for service in ("generate", "speech", "vision"):
             grants += ["--dir", f"{SERVICES}/{service}={media}::/media"]
@@ -179,7 +179,7 @@ class Room:
             *grants,
             "--dir", f"{SERVICES}/files={behaviors}::/behaviors",
             "--fuel", "9223372036854775807",
-            str(ROOT / "environments/room/room.scx"),
+            str(document or ROOT / "environments/room/room.scx"),
         ]
         self.process = subprocess.Popen(
             command, cwd=ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1
