@@ -612,9 +612,7 @@ fn a_turns_episode_keeps_the_words_its_stimulus_carried() {
     let mock = Mock::start();
     let (harness, env) = layout(&mock, "none", "[]", SQLITE);
     let mut run = start(&harness, &env);
-    let message = |content: &str, content_type: &str| {
-        json!({"direction": "inbound", "content": content, "content_type": content_type, "participants": [{"ref": "gabe", "role": "source"}]})
-    };
+    let message = |content: &str, content_type: &str| json!({"direction": "inbound", "content": content, "content_type": content_type, "participants": [{"ref": "gabe", "role": "source"}]});
     let mut turn = input(1);
     turn["cognition_input"]["stimulus"] = json!({
         "event": "bot.perceived",
@@ -630,7 +628,8 @@ fn a_turns_episode_keeps_the_words_its_stimulus_carried() {
             ]}}},
         ]},
     });
-    turn["cognition_output"] = json!([{"event": "bot.ability.cognition.ignore", "data": {}, "target": "cognition"}]);
+    turn["cognition_output"] =
+        json!([{"event": "bot.ability.cognition.ignore", "data": {}, "target": "cognition"}]);
     let records = reflect_on(&mut run, &turn);
     drop(run.close(WAIT));
     let episodes = json_log(&records, "episodes");
