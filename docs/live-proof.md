@@ -37,11 +37,13 @@ floppy's, not the eval's:
 - turn_failure (0.00): both turns failed at the one-second reasoning bound
   (`cognition.failed`), and each failed turn was followed by
   `cognition.ignore`: floppy said nothing to either message.
-- voice_people (0.00): with the diarizer on, all 11 decodes of a diarized
-  segment failed `Speech decoding failed: the backend answered an error
-  status.`, while the eval's own transcription of the same segment
-  (`floppy-diarized-2-0`, sent as a 24 kHz WAV) read "Hi Floppy, I'm Gabe.".
-  That segment is 80594 bytes, an odd length for 16-bit PCM.
+- voice_people (0.00): Ana's introduction never became a turn. The 11
+  `Speech decoding failed: the backend answered an error status.` records
+  are identity's (`identity.recognition.failed`): once floppy has a name,
+  identity decodes every raw PCM `environment.sound`, floppy's own
+  included, with no sample rate or container (#89). Listening's diarized
+  segments decode; pyannote's spans cut Ana's utterance down to "Floppy."
+  and nothing (#90), and interpretation logs nothing per utterance.
 - voice_question (0.50) and voice_overlap (0.48): the second question asked
   out loud never became a turn within the step's bound; voice_overlap's
   transcript shows floppy saying the first answer again over it, the known
