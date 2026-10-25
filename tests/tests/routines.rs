@@ -193,16 +193,13 @@ fn a_failed_inventory_load_keeps_the_running_set() {
     finished.close(WAIT);
 }
 
-/// The text of reflection's `next_after` on one line, as the persistent
+/// The text of the revision's `next_after` on one line, as the persistent
 /// routine contract gives it for a routine's `<data id="next_after">`.
 fn next_after() -> String {
-    let script = std::fs::read_to_string(workspace().join("abilities/reflection/reflection.js"))
-        .expect("reflection.js is readable");
+    let script = std::fs::read_to_string(workspace().join("abilities/revision/revision.js"))
+        .expect("revision.js is readable");
     let marker = "var next_after = ";
-    let start = script
-        .find(marker)
-        .expect("reflection.js defines next_after")
-        + marker.len();
+    let start = script.find(marker).expect("revision.js defines next_after") + marker.len();
     let end = start + script[start..].find("\n};").expect("next_after ends") + 2;
     script[start..end]
         .split_whitespace()

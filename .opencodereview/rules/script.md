@@ -22,7 +22,7 @@ Boa. Review it against these rules and cite the rule.
   data model holds IEEE doubles and canonical JSON sorts object keys, so do not
   rely on key insertion order or big-integer precision (D88, D141).
 - **Time.** Boa has no `Intl` or `Temporal`: time-zone logic uses POSIX TZ
-  rules as `next_after` in `abilities/reflection/reflection.js` does (D83). Use
+  rules as `next_after` in `abilities/revision/revision.js` does (D83). Use
   `Date.now()` and UTC (`toISOString`, `Date.UTC`). Database timestamps come
   from SQL in UTC (D63, D69); do not hand-format a timestamp to look like a
   Python serializer's output when the schema only needs a valid date-time.

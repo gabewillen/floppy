@@ -82,7 +82,7 @@
       <assign location="answer" expr="_event.data.selected"/>
     </transition>
     <transition event="done.invoke.candidate" target="advancing">
-      <log label="autonomy.candidate.advance" expr="candidateName()"/>
+      <log label="autonomy.candidate.advance" expr="candidateAdvanceLog(_event)"/>
     </transition>
     <transition event="bot.ability.autonomy.candidate.silent" target="advancing">
       <log label="autonomy.candidate.silent" expr="candidateSilentLog()"/>

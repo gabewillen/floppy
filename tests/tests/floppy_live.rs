@@ -106,6 +106,7 @@ fn scratch_bot() -> PathBuf {
         "bots/floppy/firmware",
         "bots/builder",
         "bots/builder/schemas",
+        "bots/builder/xsd",
     ] {
         copy_dir(&workspace().join(sub), &dir.join(sub));
     }
@@ -208,7 +209,7 @@ fn live_choices() {
     let mut all = records;
     all.extend(finished.records);
     keep("live_choices", &all);
-    let choices = "bot.focus_device@session.floppy bot.ability.cognition.ignore@session.floppy.cognition bot.ability.communication.respond@session.floppy.communication bot.ability.identity.adopt@session.floppy.identity";
+    let choices = "bot.focus_device@session.floppy bot.ability.cognition.ignore@session.floppy.cognition bot.ability.learning.input@session.floppy.cognition bot.ability.communication.respond@session.floppy.communication bot.ability.identity.adopt@session.floppy.identity";
     let names = |lines: Vec<String>| -> Vec<String> {
         lines
             .iter()
@@ -310,6 +311,7 @@ fn with_name(name: &str) -> PathBuf {
         "bots/floppy/firmware",
         "bots/builder",
         "bots/builder/schemas",
+        "bots/builder/xsd",
     ] {
         copy_dir(&workspace().join(sub), &dir.join(sub));
     }

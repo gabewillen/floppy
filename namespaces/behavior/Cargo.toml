@@ -16,8 +16,10 @@ crate-type = ["cdylib", "rlib"]
 # The SCXML a lifetime check reads, with the XML parser scxml.rs's syntax
 # crate uses (the same pin; no I/O).
 quick-xml.workspace = true
-# The rows, statements and diagnostics as JSON (no schema code, so no
-# randomness).
+# The live-turn check's schema check of each selection against the
+# turn's choice (`CompiledSchema`; boon, nothing ever loaded).
+scxml-event-schema.workspace = true
+# The rows, statements and diagnostics as JSON.
 scxml-types.workspace = true
 serde_json.workspace = true
 wit-bindgen.workspace = true

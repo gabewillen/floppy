@@ -95,7 +95,9 @@
   the body always has a persona) and its database to the persona. The
   persona's offer (bot.ability.persona.revise) is its readiness but is
   kept out of the turn's choices (turnOffers()): only reflection,
-  composed with the same persona, may select a revision.
+  composed with the same persona, may select a revision. The cognition
+  sends a revision reflection selects (decision D145) up to the body,
+  which passes it to the persona.
 
   Speaking: the communication relays speaking's efference copy,
   bot.ability.speaking.efference (sent on to each Listening ability in
@@ -451,6 +453,13 @@
          the cognition. -->
     <transition event="bot.ability.persona.output" event:schema="../../abilities/schemas/bot.ability.persona.output.json">
       <send event="bot.ability.persona.output" target="#_cognition">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <!-- A revision the cognition's reflection selected (decision D145)
+         goes to the persona, which takes it only while it knows. -->
+    <transition event="bot.ability.persona.revise" event:schema="../../abilities/schemas/bot.ability.persona.revise.json">
+      <send event="bot.ability.persona.revise" target="#_persona">
         <content expr="_event.data"/>
       </send>
     </transition>

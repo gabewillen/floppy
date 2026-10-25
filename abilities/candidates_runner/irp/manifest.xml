@@ -63,12 +63,15 @@
     </test>
   </assert>
   <assert id="candidates_runner-7" specnum="7" specid="#candidates_runner-7">
-    <![CDATA[A handled candidate a selection of which cannot be sent (a send that raises `error.*`) has its failure persisted, and the runner ends with `{tried: [name], handled: false, selected: null, rejection}`, rejection `Autonomy behavior dispatch failed: <error>`; the rest do not run.]]>
+    <![CDATA[A handled candidate a selection of which cannot be sent (a send that raises `error.*`) has its failure persisted, and the runner ends with `{tried: [name], handled: false, selected: null, rejection}`, rejection `Autonomy behavior dispatch failed: <error> (selected <event> to <target>, ...)` (each selection, `with no target` for one without; decision D221); the rest do not run.]]>
     <test id="160" conformance="mandatory" manual="false">
       <start uri="160/test160.scxml"/>
     </test>
     <test id="161" conformance="mandatory" manual="false">
       <start uri="161/test161.scxml"/>
+    </test>
+    <test id="162" conformance="mandatory" manual="false">
+      <start uri="162/test162.scxml"/>
     </test>
   </assert>
   <assert id="candidates_runner-8" specnum="8" specid="#candidates_runner-8">

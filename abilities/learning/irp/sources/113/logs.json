@@ -1,0 +1,5 @@
+{
+  "learning.failed": [
+    "lesson of turn 1: Reflection change abandoned: attempts exhausted:\nbehavior validation failed:\n  error[SCXML005] validate: transition target `nowhere` does not exist Help: declare the target state or correct the target identifier"
+  ]
+}

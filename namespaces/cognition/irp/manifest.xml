@@ -3,7 +3,7 @@
      numbered statement of namespaces/cognition/README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/namespaces/cognition/irp/sources">
   <assert id="cognition-1" specnum="1" specid="#cognition-1">
-    <![CDATA[Each element (attention_bias_for_turn, model_facing_content, within_ceiling) takes exactly its declared attributes, the required ones present and none empty, and no content, and the namespace has no other element: a malformed element raises error.execution and assigns nothing (its schema, package/cognition.xsd, rejects it before any run under scx validate).]]>
+    <![CDATA[Each element (attention_bias_for_turn, model_facing_content, within_ceiling, model_facing_data) takes exactly its declared attributes, the required ones present and none empty, and no content, and the namespace has no other element: a malformed element raises error.execution and assigns nothing (its schema, package/cognition.xsd, rejects it before any run under scx validate).]]>
     <test id="700" conformance="mandatory" manual="false">
       <start uri="700/test700.txml"/>
     </test>
@@ -93,6 +93,15 @@
     </test>
     <test id="761" conformance="mandatory" manual="false">
       <start uri="761/test761.txml"/>
+    </test>
+  </assert>
+  <assert id="cognition-8" specnum="8" specid="#cognition-8">
+    <![CDATA[<cognition:model_facing_data> writes its data as model-facing XML under the root element its root attribute names (an XML name, not an expression), never JSON text: an object's members as the root's fields in key order (a single-line scalar an attribute, an array an element of items with its count, an object an element of its own fields, a string over one line an element holding its text, as one CDATA section when it holds markup, and null and empty collections left out), any other value as the root's content field; a root that is not an XML name raises error.execution and assigns nothing.]]>
+    <test id="770" conformance="mandatory" manual="false">
+      <start uri="770/test770.txml"/>
+    </test>
+    <test id="771" conformance="mandatory" manual="false">
+      <start uri="771/test771.txml"/>
     </test>
   </assert>
 </assertions>

@@ -10,6 +10,7 @@ FAILED = "bot.ability.failed"
 CANCEL = "bot.ability.cognition.cancel"
 CANCELLED = "bot.ability.cognition.cancelled"
 IGNORE = "bot.ability.cognition.ignore"
+LEARN = "bot.ability.learning.input"
 FAILED_STEP = "bot.ability.cognition.step.failed"
 TIMED_OUT_STEP = "bot.ability.cognition.step.timed_out"
 RESPOND = "bot.ability.communication.respond"
@@ -23,9 +24,11 @@ SLOW = ("child_operation_timeout_ms", "300000")
 DB = ("database", "'/memory/floppy.sqlite'")
 
 READY = expect("bot.ability.ready")
-# What its parent reads from its live session (decision D242): the ignore alone, of no effort.
-OFFERED = offers(f"offers.length === 1 && offers[0].event === {js(IGNORE)} && offers[0].effort === undefined"
-                 " && offers[0].schema.type === 'object'")
+# What its parent reads from its live session (decision D242): the ignore and
+# the lesson, of no effort.
+OFFERED = offers("offers.length === 2"
+                 f" && offers.map(function (o) {{ return o.event; }}).sort().join(' ') === {js(IGNORE + ' ' + LEARN)}"
+                 " && offers.every(function (o) { return o.effort === undefined && o.schema.type === 'object'; })")
 
 
 def offered(event):
@@ -45,15 +48,15 @@ RESPOND_PARTS = {"type": "object", "properties": {"parts": {
                  "required": ["parts"], "additionalProperties": False}
 
 
-def turn(n, data=None, choices=(IGNORE,), efforts=None):
-    # Tagged with their offering sessions' ids: the cognition's own ignore,
+def turn(n, data=None, choices=(IGNORE,), event="bot.input", source="conversation", efforts=None):
+    # Tagged with their offering sessions' ids: the cognition's own ignore and lesson,
     # and respond offered by the harness (the run's root, "session"); an
     # event in efforts carries that effort (decision D206).
-    targets = {IGNORE: "session.cognition", RESPOND: "session"}
-    schemas = {IGNORE: offered(IGNORE), RESPOND: RESPOND_PARTS}
+    targets = {IGNORE: "session.cognition", LEARN: "session.cognition", RESPOND: "session"}
+    schemas = {IGNORE: offered(IGNORE), LEARN: offered(LEARN), RESPOND: RESPOND_PARTS}
     efforts = efforts or {}
     return js({"turn": n,
-               "stimulus": {"event": "bot.input", "data": data or {"text": "hello"}, "source": "conversation"},
+               "stimulus": {"event": event, "data": data or {"text": "hello"}, "source": source},
                "focus": None, "focus_candidates": [],
                "choices": [dict({"event": e, "schema": schemas[e], "target": targets[e]},
                                 **({"effort": efforts[e]} if e in efforts else {})) for e in choices]})
@@ -90,6 +93,7 @@ DECIDE_LOW = decided({RESPOND: 0.34, IGNORE: 0.33, "__reasoning__": 0.33}, RESPO
 REASONED_IGNORE = chat([{"event": IGNORE, "data": {}, "reason": "nothing to say", "target": "session.cognition"}])
 REASONED_REPEAT = chat([{"event": RESPOND, "data": HI, "reason": "answer", "target": "session"}])
 SAID_HI = expect(RESPOND, "_event.data.parts.length === 1 && _event.data.parts[0].words === 'hi'")
+REASONED_LEARN = chat([{"event": LEARN, "data": {"content": "say hi back"}, "reason": "a lesson", "target": "session.cognition"}])
 OFF_CHOICE = chat([{"event": "bot.focus_device", "data": {"device": "lamp"}, "reason": "look"}])
 
 
@@ -113,7 +117,7 @@ REASONED = (f"_event.data.output.length === 1 && _event.data.output[0].event ===
             " && _event.data.output[0].reason === 'nothing to say' && _event.data.output[0].target === 'session.cognition'")
 
 
-S.statement(1, "On start it sends `bot.ability.ready` to its parent, once (never on a later return to `idle`) and with no data (decision D242). What it offers in `idle`, read from its live session (`<decision:offers>`), is its one choice `bot.ability.cognition.ignore`, of no effort, with its schema as written (its parent makes it model-facing).")
+S.statement(1, "On start it sends `bot.ability.ready` to its parent, once (never on a later return to `idle`) and with no data (decision D242). What it offers in `idle`, read from its live session (`<decision:offers>`), is its two choices, `bot.ability.cognition.ignore` and `bot.ability.learning.input`, of no effort, with their schemas as written (its parent makes it model-facing).")
 S.statement(2, "A `bot.ability.cognition.input` `{turn, stimulus, focus?, focus_candidates?, choices?}` runs one turn of the cascade: autonomy (without a database it leaves the turn unhandled), then the decision layer, whose confident decision handles the turn: `bot.ability.cognition.output` `{turn, output}`, the output the decision layer's selections, which it has sent to their targets.")
 S.statement(3, "When the decision layer leaves the turn unhandled (its decision abstains), reasoning (the generate service, schema `dispatch`) handles it, and the output is reasoning's selections; with a database (the `<param>` `database`) autonomy and reasoning use the memory and the turn is answered the same way.")
 S.statement(4, "A decision layer that escalates for low confidence sends its environment actions (its selections) before the turn goes on to reasoning; the output is those actions (the turn's acted) followed by reasoning's selections, which reasoning sends after them, a repeat of an environment action included.")
@@ -123,6 +127,7 @@ S.statement(7, "`bot.ability.cognition.cancel` `{turn}` for the turn in hand can
 S.statement(8, "`bot.ability.cognition.ignore` (its offer) is taken in `idle` and while processing, and only logged: it sends nothing and does not end a turn.")
 S.statement(11, "Until it is told the bot's name (`bot.ability.identity.named`), every return to `idle` sends `bot.ability.identity.ask` `{}` to its parent, the first after the one `bot.ability.ready` it sends on start; once told, it asks no more.")
 S.statement(10, "With an `intuition_model` (the `<param>`; none by default composes no intuition tier, decision D144), a turn the decision layer leaves unhandled goes to the intuition tier first, offered the deliberative handoff `bot.ability.reasoning.input` as the cognition's own: its selections handle the turn, or, when they hold the handoff, the others are sent first and the turn goes on to reasoning, whose output follows them. An intuition that fails hands the same turn on to reasoning (`cognition.cascaded`).")
+S.statement(13, "A turn whose selections hold `bot.ability.learning.input` (taken in `idle` and while processing, and only logged) sends the lesson to its learning child after the turn's output; the lesson's result `bot.ability.learning.output` comes back to its parent as a `bot.ability.cognition.input` whose stimulus is that result (decision D149), a lesson the learning cannot learn (without a database) included, with `learned` false. A turn whose stimulus is a routine's `bot.behavior.tick` outputs its lesson but sends none, logging `cognition.lesson` `bounded` (decision D220).")
 S.statement(9, "The events it takes are checked against `abilities/schemas/` where they are created: a `bot.ability.cognition.input` without a stimulus is refused at its sender (`error.execution` there) and starts no turn.")
 
 ASK = "bot.ability.identity.ask"
@@ -232,6 +237,24 @@ _case(200, 11, "the cognition asks the identity for the bot's name once ready, a
        send(NAMED, js({"name": "Pip"})), send(INPUT, turn(2)), output(2, IGNORED), OFFERED,
        send(CANCEL, js({"turn": 3})), expect(CANCELLED, "_event.data.turn === 3")],
       params=[SLOW], backend=[DECIDE_IGNORE, DECIDE_IGNORE], clock="logical")
+
+S.case(220, 13, "a turn that selects a lesson outputs it, and the lesson's result (without a database, not learned) is handed back as a stimulus.",
+       [READY, send(INPUT, turn(1, choices=(IGNORE, LEARN))),
+        output(1, f"_event.data.output.length === 1 && _event.data.output[0].event === {js(LEARN)}"),
+        expect(INPUT, f"_event.data.stimulus.event === 'bot.ability.learning.output' && _event.data.stimulus.data.learned === false"
+                      " && _event.data.stimulus.data.lesson === 'say hi back' && _event.data.stimulus.data.behavior === null")],
+       params=[SLOW], backend=[DECIDE_ABSTAIN, REASONED_LEARN], clock="logical")
+S.case(221, 13, "a routine's tick turn that selects a lesson outputs it but sends no lesson.",
+       [READY, send(INPUT, turn(1, data={"name": "WaterReminder"}, choices=(IGNORE, LEARN), event="bot.behavior.tick", source="routines")),
+        output(1, f"_event.data.output.length === 1 && _event.data.output[0].event === {js(LEARN)}"), OFFERED],
+       params=[SLOW], backend=[DECIDE_ABSTAIN, REASONED_LEARN], clock="logical",
+       logs={"cognition.lesson": ["turn 1", "bounded"]})
+S.case(223, 13, "a lesson offer taken during a turn is only logged and the turn is answered.",
+       [READY, send(INPUT, turn(1)), send(LEARN, js({"content": "say hi back"})), output(1, IGNORED)],
+       params=[SLOW], backend=[DECIDE_IGNORE], clock="logical", logs={"cognition.lesson": ["turn 1"]})
+S.case(222, 13, "a lesson offer taken in idle is only logged: the next event answered is the cancel's.",
+       [READY, send(LEARN, js({"content": "say hi back"})), send(CANCEL, js({"turn": 3})), expect(CANCELLED, "_event.data.turn === 3")],
+       logs={"cognition.lesson": ["idle"]})
 
 S.statement(12, "With no input for `rest_after_ms` (the `<param>`, else the `bounds`' `rest_after_ms`; 5 minutes by default) `idle` rests (decisions D195 and D205): it logs `cognition.rest` `resting` and invokes the consolidation with its database (with none there is nothing to consolidate, logged `cognition.consolidated`), and stays at rest until input, which leaves rest at once (`cognition.rest` `awake`, cancelling a consolidation in progress) and is taken as a normal turn.")
 

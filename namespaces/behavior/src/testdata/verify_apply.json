@@ -776,5 +776,209 @@
    "communication"
   ],
   "turn": 3
+ },
+ {
+  "choices": [
+   {
+    "event": "bot.ability.communication.respond",
+    "schema": {
+     "additionalProperties": false,
+     "properties": {
+      "parts": {
+       "minItems": 1,
+       "type": "array"
+      }
+     },
+     "required": [
+      "parts"
+     ],
+     "type": "object"
+    },
+    "target": "communication"
+   },
+   {
+    "event": "bot.ability.cognition.ignore",
+    "schema": {
+     "type": "object"
+    },
+    "target": "cognition"
+   }
+  ],
+  "done": {
+   "handled": true,
+   "selected": [
+    {
+     "data": {
+      "parts": [
+       {
+        "words": "pong"
+       }
+      ]
+     },
+     "event": "bot.ability.communication.respond",
+     "target": "communication"
+    }
+   ],
+   "turn": 3
+  },
+  "error": null,
+  "input": {
+   "text": "ping"
+  },
+  "messages": [],
+  "name": "a_selection_its_choice_admits",
+  "targets": [
+   "communication",
+   "cognition"
+  ],
+  "turn": 3
+ },
+ {
+  "choices": [
+   {
+    "event": "bot.ability.communication.respond",
+    "schema": {
+     "additionalProperties": false,
+     "properties": {
+      "parts": {
+       "minItems": 1,
+       "type": "array"
+      }
+     },
+     "required": [
+      "parts"
+     ],
+     "type": "object"
+    },
+    "target": "communication"
+   },
+   {
+    "event": "bot.ability.cognition.ignore",
+    "schema": {
+     "type": "object"
+    },
+    "target": "cognition"
+   }
+  ],
+  "done": {
+   "handled": true,
+   "selected": [
+    {
+     "data": {
+      "content": "pong",
+      "media_type": "text/plain"
+     },
+     "event": "bot.ability.communication.respond",
+     "target": "communication"
+    }
+   ],
+   "turn": 3
+  },
+  "error": null,
+  "input": {
+   "text": "ping"
+  },
+  "messages": [
+   "selected[0] (bot.ability.communication.respond) carries data its target \"communication\" refuses: the data must match the schema of bot.ability.communication.respond in context's turn_choices (an object whose members are among parts, parts required)."
+  ],
+  "name": "a_selection_whose_data_its_choice_refuses",
+  "targets": [
+   "communication",
+   "cognition"
+  ],
+  "turn": 3
+ },
+ {
+  "choices": [
+   {
+    "event": "bot.ability.communication.respond",
+    "schema": {
+     "additionalProperties": false,
+     "properties": {
+      "parts": {
+       "minItems": 1,
+       "type": "array"
+      }
+     },
+     "required": [
+      "parts"
+     ],
+     "type": "object"
+    },
+    "target": "communication"
+   },
+   {
+    "event": "bot.ability.cognition.ignore",
+    "schema": {
+     "type": "object"
+    },
+    "target": "cognition"
+   }
+  ],
+  "done": {
+   "handled": true,
+   "selected": [
+    {
+     "data": {},
+     "event": "bot.ability.cognition.respond",
+     "target": "cognition"
+    }
+   ],
+   "turn": 3
+  },
+  "error": null,
+  "input": {
+   "text": "ping"
+  },
+  "messages": [
+   "selected[0] (bot.ability.cognition.respond) is not an event the target \"cognition\" takes on this turn: it takes bot.ability.cognition.ignore, as context's turn_choices lists them."
+  ],
+  "name": "a_selection_the_target_does_not_take",
+  "targets": [
+   "communication",
+   "cognition"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "handled": false,
+   "selected": [],
+   "turn": 3
+  },
+  "error": null,
+  "handled": false,
+  "input": {
+   "text": "when I say ping say pong"
+  },
+  "messages": [],
+  "name": "an_unhandled_run_on_a_teaching_turn",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
+ },
+ {
+  "done": {
+   "handled": true,
+   "selected": [
+    {
+     "data": {},
+     "event": "bot.ability.communication.respond"
+    }
+   ],
+   "turn": 3
+  },
+  "error": null,
+  "handled": false,
+  "input": {},
+  "messages": [
+   "selected[0] (bot.ability.communication.respond) names no target: name the session that receives its event, one of [\"communication\"]."
+  ],
+  "name": "a_handled_run_on_a_teaching_turn_is_still_checked",
+  "targets": [
+   "communication"
+  ],
+  "turn": 3
  }
 ]

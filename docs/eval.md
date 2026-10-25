@@ -115,7 +115,7 @@ grade or suite score includes:
 | `adopted_name` | `identity.name` is `adopted "<name>"` |
 | `recalled_name` | `identity.name` is `recalled "<name>"` in that session (a restarted bot remembered it) |
 | `addressed`, `not_addressed` | `identity.heard` is (is not) `addressed as <name>` |
-| `learned` | `reflection.inventory` accepts a behavior: `<Name> ACTIVE <lifetime> ... (accept)`, `turn` for a reflex, `persistent` for a routine |
+| `learned` | `reflection.inventory` accepts a behavior: `<Name> ACTIVE <lifetime> ... (accept)`, `turn` for a reflex, `persistent` for a routine (the revision logs it for reflection and for a lesson alike) |
 | `broken` | `reflection.inventory` breaks one: `<Name> BROKEN (break)`, or the learning ability does: `learning.learned` `lesson of turn N: <Name> … BROKEN` |
 | `reflex`, `not_reflex` | `cognition.stage` is (is not) `autonomy handled`: a learned behavior, not reasoning, handled the real input |
 
@@ -164,12 +164,14 @@ settle.
 ## Hill climbing
 
 `eval.py climb` changes prompt `<data>` of the bot's documents, by default
-the three that decide what floppy learns and whether it is built
+the four that decide what floppy learns and whether it is built
 (`prompts.DEFAULT_IDS`, each found in whichever document declares it, so a prompt that moves to another document stays a target):
 
 - `abilities/reflection/reflection.scx#select_instructions` (whether a turn
   selects a create, change or break at all),
-- `abilities/reflection/reflection.scx#change_instructions` (the spec the
+- `abilities/learning/learning.scx#learn_instructions` (which create or
+  change a lesson someone taught becomes, decision D149),
+- `abilities/revision/revision.scx#change_instructions` (the spec the
   builder gets),
 - `bots/builder/builder.scx#author_system` (how the builder writes SCXML).
 
@@ -224,7 +226,7 @@ failed design, so a build can exhaust it in fewer than 8 attempts),
 and `builder.md` gives, per column and scenario, the builds, the accepted
 ones, the success rate, the attempts per accepted build and whether the
 scenario's behavior was learned anywhere in the job, then per column the
-failed builds by reason and first diagnostic (`no-progress (author-failed
+failed builds by reason and first diagnostic (`attempts-exhausted (author-failed
 schema-mismatch)`, `attempts-exhausted ...`, `unfinished`). A job counts
 as unfinished in `report.md` when any step never ran or never settled. For example, on the CPA
 gateway with the decision server on the lab:

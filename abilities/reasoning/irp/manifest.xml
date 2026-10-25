@@ -57,7 +57,7 @@
     </test>
   </assert>
   <assert id="reasoning-6" specnum="6" specid="#reasoning-6">
-    <![CDATA[Each selection is sent, in order, to the session its target names (`#_scxml_` + target) before the turn ends, its data `{}` when it has none (decision D113); a send that fails fails the turn with reason `the reasoning could not run (<error>)`.]]>
+    <![CDATA[Each selection is sent, in order, to the session its target names (`#_scxml_` + target) before the turn ends; a selection without its data is refused by the dispatch tool, whose every branch requires it (decision D231, where D113 sent it with `{}`); a send that fails fails the turn with reason `the reasoning could not run (<error>)`.]]>
     <test id="150" conformance="mandatory" manual="false">
       <start uri="150/test150.scxml"/>
     </test>
@@ -69,7 +69,7 @@
     </test>
   </assert>
   <assert id="reasoning-7" specnum="7" specid="#reasoning-7">
-    <![CDATA[With a database it recalls prior episodes and standing directives before the model call and writes nothing (reflection stores the turn's episode, decision D97), and the turn is handled as without one; a memory that fails fails the turn with reason `Reasoning memory recall failed: ...` without a model call.]]>
+    <![CDATA[With a database it recalls prior episodes, standing directives and the bot's active learned behaviors (named in the system channel's self block, decision D154) before the model call and writes nothing (reflection stores the turn's episode, decision D97), and the turn is handled as without one; a memory that fails fails the turn with reason `Reasoning memory recall failed: ...` without a model call.]]>
     <test id="160" conformance="mandatory" manual="false">
       <start uri="160/test160.scxml"/>
     </test>

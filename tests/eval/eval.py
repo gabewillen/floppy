@@ -53,9 +53,14 @@ USAGE = {
         "reflection's select call after every turn: it chooses at most one of bot.behavior.create, change or break "
         "(or nothing) from the turn, prior episodes and the behavior inventory. If it selects nothing, nothing is learned."
     ),
+    "learn_instructions": (
+        "the learning's select call for a lesson someone taught the bot: it chooses exactly one of bot.behavior.create "
+        "or change from the lesson, the turn it was taught on, prior episodes and the behavior inventory. If it selects "
+        "nothing, the lesson is not learned."
+    ),
     "change_instructions": (
-        "the spec reflection gives the builder bot for a create or change: the builder writes the behavior's SCXML "
-        "from it, validates it and simulates it; a draft that fails repeatedly is abandoned (no-progress)."
+        "the spec the revision gives the builder bot for a create or change (reflection's, or a lesson's with the "
+        "lesson as its instruction): the builder writes the behavior's SCXML from it, validates it and simulates it; a draft that fails repeatedly is given up after max_attempts (attempts-exhausted)."
     ),
     "author_system": (
         "the builder's author stage system prompt: it writes one complete SCXML document from the plan and spec; "

@@ -1,7 +1,7 @@
 {"label":"autonomy.candidate","parent":"session","session":"session.autonomy","text":"SpeechHeard","type":"log"}
 {"label":"harness.output","session":"session","text":"{\"candidates\":[\"SpeechHeard\"],\"handled\":true,\"reason\":\"behavior\",\"selected\":[{\"data\":{\"channels\":1,\"content\":\"what is the weather like?\",\"content_type\":\"text/plain\",\"sample_rate_hz\":48000,\"source_ids\":[\"caller\"],\"target_ids\":[]},\"event\":\"bot.ability.communication.input\",\"reason\":\"seeded speech admit via communication\"}],\"turn\":1}","type":"log"}
 {"label":"autonomy.candidate","parent":"session","session":"session.autonomy","text":"SpeechHeard","type":"log"}
-{"label":"autonomy.candidate.advance","parent":"session","session":"session.autonomy","text":"SpeechHeard","type":"log"}
+{"label":"autonomy.candidate.advance","parent":"session","session":"session.autonomy","text":"SpeechHeard (handled false)","type":"log"}
 {"label":"autonomy","parent":"session","session":"session.autonomy","text":"turn 2: no memory","type":"log"}
 {"label":"harness.output","session":"session","text":"{\"candidates\":[\"SpeechHeard\"],\"handled\":false,\"reason\":\"unhandled\",\"turn\":2}","type":"log"}
 {"label":"autonomy","parent":"session","session":"session.autonomy","text":"turn 3: no memory","type":"log"}

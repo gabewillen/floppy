@@ -18,8 +18,10 @@ Last updated: 2026-10-24.
   `kind` is no longer a param, `predicate` is folded into `choice`
   (`decision.selected`, one pass criterion per tier of `hand_ons`), and
   `score` and `choice` over labels are removed. The builder's triage sends
-  itself the selection. Open learning-stack branches that still add a
-  `<decision:pin>` must drop it when they merge.
+  itself the selection. The learning stack dropped its pins when it took
+  the trim: learning's change and break take `hasBehaviors()`, and
+  reflection's change takes `hasChangeable()` and refuses a change of a
+  behavior that declined the turn as `declined-change` (D230).
 - **Offers through snapshots (2026-10-24, D242, #73):** abilities no
   longer send `bot.ability.offers`. Each sends a bare `bot.ability.ready`
   once, and each turn the body reads what each ability offers from its
@@ -45,6 +47,15 @@ Last updated: 2026-10-24.
   of its model-facing content (the decision layer's state, intuition's
   prompt), so it can only hand it on. The efforts and ceilings are the
   maintainer's to tune; no live run has measured them.
+- **The bot learns what it is taught (2026-10-23, D148, D149, D151):**
+  the cognition always offers `bot.ability.learning.input` beside its
+  ignore, so any tier can select a lesson, and after the turn's output
+  its long-lived child `learning` (`abilities/learning/learning.scx`)
+  selects a create or change and invokes the Revision document
+  (`abilities/revision/revision.scx`, reflection's revision moved into
+  its own ability) with the lesson as the builder's instruction.
+  Reflection only remembers a taught turn and a turn the bot's own
+  routine or lesson caused.
 - **Rest and consolidation (2026-10-24, D205, #49):** after
   `rest_after_ms` (5 minutes) without input the cognition rests and
   invokes `abilities/consolidation/consolidation.scx`, which folds the
@@ -129,7 +140,14 @@ Last updated: 2026-10-24.
   out in a scratch directory must copy `abilities/schemas/` (and, for the
   body's events, `bots/floppy/schemas/`) beside them, as
   `support::copy_ability` and `support::environment_with_devices` do.
-- **The same failure more than once ends the build (2026-10-20, D124):**
+- **A build retries to its cap (2026-10-23, D133):** the maintainer chose
+  "Retry to a cap" over D124's end at the first repeat. `max_attempts`
+  defaults to 8 and is the only end of a failing build
+  (`attempts-exhausted`); a diagnostic an earlier failure had goes to the
+  next author call as `repeated`. The D124 entry below keeps its
+  fingerprint rules.
+- **The same failure more than once ends the build (2026-10-20, D124,
+  amended by D133):**
   the maintainer's rule, "if it gets the same failure more than once it
   should end". `retry_gate` ends with `no-progress` as soon as any
   diagnostic of a failure is one an earlier failure of the same build had,
@@ -966,9 +984,9 @@ What is still to build, each item with its issue where one exists.
   end-to-end test of a learned behavior on a later real turn, examples
   and byte budgets for reflection's select and builder prompts, and a
   builder that works with small models (#14); reflection selecting
-  `bot.ability.persona.revise`, the Revision document and the Learning
-  ability (#16). A change does not yet keep the behavior's own triggers
-  as evidence: `evidenceStimulusNames()` in
+  `bot.ability.persona.revise` (#16). The Revision document (D148) and
+  the Learning ability (D149) are in review. A change does not yet keep
+  the behavior's own triggers as evidence: `evidenceStimulusNames()` in
   `abilities/reflection/reflection.js` reads the turn's stimulus and the
   prior episodes, not `existing_behavior.triggers` (#14, L6).
 - **Communication's rings** (#29, D175): the response and utterance

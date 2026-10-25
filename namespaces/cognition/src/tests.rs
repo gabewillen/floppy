@@ -524,6 +524,21 @@ fn recalled_episodes_over_the_budget_are_trimmed_to_the_newest_not_failed() {
     }
 }
 
+/// A failed turn's recalled episode carries its outcome and failure, and a
+/// completed turn's carries neither (decision D139).
+#[test]
+fn a_recalled_failed_turns_episode_carries_its_outcome_and_failure() {
+    let episodes = [
+        json!({"stimulus_name": "done", "output": []}),
+        json!({"stimulus_name": "broke", "outcome": "failed", "failure": "Reasoning failed.", "output": []}),
+    ];
+    let rendered = prompt(&recalling("now", &episodes, &[]));
+    assert!(rendered.contains("<cognition:cognitive_episode stimulus_name=\"done\">"));
+    assert!(rendered.contains(
+        "<cognition:cognitive_episode stimulus_name=\"broke\" outcome=\"failed\" failure=\"Reasoning failed.\">"
+    ));
+}
+
 #[test]
 fn recent_turns_claim_the_budget_first_and_keep_the_newest_uncounted() {
     let mut input = recalling("now", &[], &[json!({"text": "d".repeat(50_000)})]);
@@ -1013,6 +1028,92 @@ fn the_firmware_renders_as_a_device_does_before_the_owned_devices() {
     assert!(firmware < devices, "{prompt}");
     assert!(prompt.contains("<minutes>0</minutes>"), "{prompt}");
     assert!(!prompt.contains("<firmware>"), "{prompt}");
+}
+
+const DATA: &str = "model_facing_data";
+
+/// What `<cognition:model_facing_data root="input" data="data">` assigns to
+/// `prompt` for `data`.
+fn model_facing(value: &Json) -> Result<String, Failure<&'static str>> {
+    let mut host = FakeHost {
+        values: BTreeMap::from([("data".to_owned(), data(value))]),
+        ..FakeHost::default()
+    };
+    let attributes = [
+        attr("location", "prompt"),
+        attr("root", "input"),
+        attr("data", "data"),
+    ];
+    execute(DATA, &attributes, &[], &mut host)?;
+    match host.assigned.as_slice() {
+        [(location, Data::String(text))] if location == "prompt" => Ok(text.clone()),
+        assigned => panic!("one string assigned to prompt: {assigned:?}"),
+    }
+}
+
+#[test]
+fn model_facing_data_renders_an_object_as_its_fields() {
+    let prompt = model_facing(&json!({
+        "task": "design",
+        "attempt": 2,
+        "previous_plan": null,
+        "names": ["a", "b"],
+        "diagnostics": [{"code": "e1", "message": "it failed"}],
+        "a key": "x",
+    }))
+    .expect("rendered");
+    assert_eq!(
+        prompt,
+        "<input attempt=\"2\" task=\"design\">\n  <entry key=\"a key\" value=\"x\" />\n  \
+         <diagnostics count=\"1\">\n    <item code=\"e1\" message=\"it failed\" />\n  \
+         </diagnostics>\n  <names count=\"2\">\n    <item>a</item>\n    <item>b</item>\n  \
+         </names>\n</input>"
+    );
+}
+
+#[test]
+fn model_facing_data_holds_a_document_as_it_is_written() {
+    let document = "<scxml version=\"1.0\">\n  <final id=\"done\"/>\n</scxml>";
+    let prompt = model_facing(&json!({"previous_scxml": document, "spec": "line one\nline two"}))
+        .expect("rendered");
+    assert_eq!(
+        prompt,
+        format!(
+            "<input>\n  <previous_scxml><![CDATA[{document}]]></previous_scxml>\n  \
+             <spec>line one\nline two</spec>\n</input>"
+        )
+    );
+    let closing = model_facing(&json!({"text": "a ]]> b\n<c/>"})).expect("rendered");
+    assert!(
+        closing.contains("<![CDATA[a ]]]]><![CDATA[> b\n<c/>]]>"),
+        "{closing}"
+    );
+}
+
+#[test]
+fn model_facing_data_holds_any_other_value_as_its_content() {
+    assert_eq!(
+        model_facing(&json!("hello")).expect("rendered"),
+        "<input content=\"hello\" />"
+    );
+    assert_eq!(model_facing(&Json::Null).expect("rendered"), "<input />");
+}
+
+#[test]
+fn model_facing_data_rejects_a_root_that_is_not_a_name() {
+    let mut host = FakeHost::default();
+    let attributes = [
+        attr("location", "prompt"),
+        attr("root", "not a name"),
+        attr("data", "data"),
+    ];
+    assert_eq!(
+        execute(DATA, &attributes, &[], &mut host),
+        Err(Failure::Execution(
+            "cognition:model_facing_data root is not an XML name"
+        ))
+    );
+    assert!(host.assigned.is_empty());
 }
 
 #[test]

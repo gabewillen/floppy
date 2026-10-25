@@ -24,7 +24,8 @@
 //!     lifetimelocation="lifetime" scheduleslocation="schedules"/>
 //! <behavior:verify_tick location="apply" ticks="ticks"/>
 //! <behavior:verify_apply location="apply" done="child_data" turn="testTurn()"
-//!     input="testInput()" targets="testTargets()" error="applyError()"/>
+//!     input="testInput()" targets="testTargets()" error="applyError()"
+//!     choices="testChoices()"/>
 //! ```
 //!
 //! Every attribute but the locations is an expression of the document's
@@ -73,10 +74,19 @@
 //! nothing is checked. `location` (required) receives at most 20
 //! diagnostics `{kind: "lifetime", code: "E0009", message}`: a schedule
 //! whose literal delay is shorter than `min_every`, a turn behavior's
-//! `after` whose literal delay is longer than `turn_after_bound`, and a
-//! persistent routine with no schedule. `lifetimelocation` (optional)
-//! receives the lifetime, and `scheduleslocation` (optional) the events of
-//! the schedules in document order, each once. A text that does not parse
+//! `after` whose literal delay is longer than `turn_after_bound`, a
+//! schedule with a literal `target` (a schedule is a delayed send to the
+//! routine itself, which a send with no target reaches; any target, such
+//! as an invented `#_self`, sends it elsewhere and the routine never fires,
+//! decision D147), a schedule whose send carries an `event:schema` (which
+//! checks the data the schedule sends; a send whose data does not match
+//! fails and the routine never arms, decision D152), and a persistent
+//! routine with no schedule. `lifetimelocation` (optional)
+//! receives the lifetime, `scheduleslocation` (optional) the events of
+//! the schedules in document order, each once, and `ticklocation`
+//! (optional) the forced tick's copy of the document (decision D153): its
+//! text with each schedule's `delay` or `delayexpr` replaced by a `delay` of
+//! 1500ms, or `null` for a text that does not parse. A text that does not parse
 //! as XML has no sends: its lifetime is `turn`, and it has no diagnostics
 //! and no schedules.
 //!
@@ -90,7 +100,7 @@
 //! and `fired_at` and its `output` selects at least one event whose data
 //! holds the tick's own values for any of those fields.
 //!
-//! # `<behavior:verify_apply location="L" done="D" turn="T" input="I" targets="G" error="E"?/>`
+//! # `<behavior:verify_apply location="L" done="D" turn="T" input="I" targets="G" error="E"? choices="C"? handled="H"?/>`
 //!
 //! The live-turn check of a turn behavior (decision D131: one run, then its
 //! selections' data checked against the live values): the
@@ -110,7 +120,17 @@
 //! sends each selection to its target, so an empty `targets` refuses every
 //! selection) and data whose members agree with the string, number and
 //! boolean members of `input` of the same names (compared as JSON
-//! values); else why, an error or no donedata first.
+//! values); else why, an error or no donedata first. `choices` (optional)
+//! evaluates to the turn's choices, `[{event, target, schema}]`, or `null`:
+//! with any, a selection whose event is not one its target takes on that
+//! turn, or whose data its choice's schema does not admit, is a message too
+//! (decision D221), since the candidates runner's send of it is checked
+//! against the receiving transition and fails with `error.execution`.
+//! `handled` (optional, default `true`) evaluates to whether the run must
+//! handle the turn: `false` for a turn that taught the behavior, whose
+//! message is the lesson rather than an instance of what it answers
+//! (decision D222), where an unhandled run writes nothing and a handled
+//! one is checked as above.
 //!
 //! # Failures
 //!
@@ -149,6 +169,8 @@ use quick_xml::XmlVersion;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::name::ResolveResult;
 use quick_xml::reader::NsReader;
+use quick_xml::writer::Writer;
+use scxml_event_schema::{CompiledSchema, canonical_json};
 use scxml_types::DataValue as Data;
 use serde_json::{Map, Value as Json};
 
@@ -164,6 +186,8 @@ pub const NAMESPACE_URI: &str = "https://github.com/stateforward/floppy/namespac
 /// The SCXML namespace, whose `<send>` and `<transition>` the lifetime
 /// check reads.
 const SCXML_NAMESPACE: &str = "http://www.w3.org/2005/07/scxml";
+/// The event namespace, whose `schema` attribute checks an event's data.
+const EVENT_NAMESPACE: &str = "https://github.com/stateforward/scxml.rs/namespaces/event";
 
 /// The event a persistent routine sends on every tick.
 const TICK_EVENT: &str = "bot.behavior.tick";
@@ -189,6 +213,11 @@ const LIFETIME_HELP: &str = " Help: A turn behavior lives for one turn and is si
 
 /// The most diagnostics the lifetime check writes.
 const MAX_LIFETIME_ERRORS: usize = 20;
+/// The delay of each schedule in the forced tick's copy of a routine
+/// (decision D153): the routine's own send fires its first tick within
+/// the tick's 2 s settle, and its next schedule is past it, so it ticks
+/// once.
+const FORCED_TICK_DELAY: &str = "1500ms";
 
 /// One attribute of an element.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -815,6 +844,7 @@ fn lifetime_element<H: BehaviorHost>(
         turn_after_bound,
         lifetime_location,
         schedules_location,
+        tick_location,
     ] = attribute_values(
         attributes,
         [
@@ -824,9 +854,10 @@ fn lifetime_element<H: BehaviorHost>(
             "turn_after_bound",
             "lifetimelocation",
             "scheduleslocation",
+            "ticklocation",
         ],
         [
-            "behavior:lifetime_errors takes only the location, scxml, min_every, turn_after_bound, lifetimelocation and scheduleslocation attributes",
+            "behavior:lifetime_errors takes only the location, scxml, min_every, turn_after_bound, lifetimelocation, scheduleslocation and ticklocation attributes",
             "behavior:lifetime_errors repeats an attribute",
             "behavior:lifetime_errors has an empty attribute",
         ],
@@ -891,7 +922,68 @@ fn lifetime_element<H: BehaviorHost>(
             "behavior:lifetime_errors could not assign the schedules",
         )?;
     }
+    if let Some(tick_location) = tick_location {
+        assign_to(
+            host,
+            tick_location,
+            &forced_tick_copy(&text).map_or(Json::Null, Json::String),
+            "behavior:lifetime_errors could not assign the forced tick's copy",
+        )?;
+    }
     Ok(Executed::Handled)
+}
+
+/// The forced tick's copy of a routine (decision D153): `text` with each
+/// schedule's `delay` or `delayexpr` replaced by a `delay` of
+/// [`FORCED_TICK_DELAY`], every other byte as written, so the routine's own
+/// send must arm and fire its first tick; `None` when `text` does not parse
+/// as XML.
+#[must_use]
+pub fn forced_tick_copy(text: &str) -> Option<String> {
+    let ticking = read_sends(text)?.ticking;
+    let mut reader = NsReader::from_str(text);
+    reader.config_mut().check_end_names = true;
+    let mut writer = Writer::new(Vec::new());
+    loop {
+        let (namespace, event) = reader.read_resolved_event().ok()?;
+        let scxml = matches!(namespace, ResolveResult::Bound(ns) if ns.as_ref() == SCXML_NAMESPACE.as_bytes());
+        let event = match event {
+            Event::Start(start) if scxml => Event::Start(scheduled_sooner(start, &ticking)?),
+            Event::Empty(start) if scxml => Event::Empty(scheduled_sooner(start, &ticking)?),
+            Event::Eof => break,
+            event => event,
+        };
+        writer.write_event(event).ok()?;
+    }
+    String::from_utf8(writer.into_inner()).ok()
+}
+
+/// `start` with a [`FORCED_TICK_DELAY`] delay in place of its own when it
+/// is a schedule: a delayed `<send>` of an event a ticking transition takes.
+fn scheduled_sooner<'a>(
+    start: BytesStart<'a>,
+    ticking: &BTreeSet<String>,
+) -> Option<BytesStart<'a>> {
+    if start.local_name().as_ref() != b"send" {
+        return Some(start);
+    }
+    let event = attribute(&start, "event").ok()?;
+    let delayed = attribute(&start, "delay").ok()?.is_some()
+        || attribute(&start, "delayexpr").ok()?.is_some();
+    if !delayed || !event.is_some_and(|event| ticking.contains(&event)) {
+        return Some(start);
+    }
+    let mut sooner = BytesStart::new(String::from_utf8(start.name().as_ref().to_vec()).ok()?);
+    for attribute in start.attributes() {
+        let attribute = attribute.ok()?;
+        let key = attribute.key;
+        if key.prefix().is_none() && matches!(key.local_name().as_ref(), b"delay" | b"delayexpr") {
+            continue;
+        }
+        sooner.push_attribute(attribute);
+    }
+    sooner.push_attribute(("delay", FORCED_TICK_DELAY));
+    Some(sooner)
 }
 
 /// What the lifetime check finds in one document.
@@ -911,6 +1003,10 @@ struct DelayedSend {
     event: Option<String>,
     /// Its literal `delay` in milliseconds, when it has one that parses.
     delay: Option<f64>,
+    /// Its literal `target`, when it has one.
+    target: Option<String>,
+    /// Whether it carries an `event:schema`.
+    schema: bool,
 }
 
 /// The sends of a document as the lifetime check reads them.
@@ -961,13 +1057,15 @@ fn read_sends(text: &str) -> Option<Sends> {
         let scxml = matches!(namespace, ResolveResult::Bound(ns) if ns.as_ref() == SCXML_NAMESPACE.as_bytes());
         match event {
             Event::Start(start) => {
-                let element = start_element(scxml, &start, &mut sends, &mut open)?;
+                let schema = has_event_schema(&reader, &start)?;
+                let element = start_element(scxml, schema, &start, &mut sends, &mut open)?;
                 open.push(element);
             }
             // An empty element is never open: an empty transition sends
             // nothing.
             Event::Empty(start) => {
-                start_element(scxml, &start, &mut sends, &mut open)?;
+                let schema = has_event_schema(&reader, &start)?;
+                start_element(scxml, schema, &start, &mut sends, &mut open)?;
             }
             Event::End(_) => {
                 if let Some(Open::Transition {
@@ -985,11 +1083,26 @@ fn read_sends(text: &str) -> Option<Sends> {
     Some(sends)
 }
 
+/// Whether `start` carries the `schema` attribute of the event namespace.
+fn has_event_schema(reader: &NsReader<&[u8]>, start: &BytesStart<'_>) -> Option<bool> {
+    for attribute in start.attributes() {
+        let attribute = attribute.ok()?;
+        let (namespace, local) = reader.resolver().resolve_attribute(attribute.key);
+        if local.as_ref() == b"schema"
+            && matches!(namespace, ResolveResult::Bound(ns) if ns.as_ref() == EVENT_NAMESPACE.as_bytes())
+        {
+            return Some(true);
+        }
+    }
+    Some(false)
+}
+
 /// Reads one start tag: a `<send>` is recorded (and marks the open
 /// transitions when it sends `bot.behavior.tick`); a `<transition>` opens
 /// with its event descriptors.
 fn start_element(
     scxml: bool,
+    schema: bool,
     start: &BytesStart<'_>,
     sends: &mut Sends,
     open: &mut [Open],
@@ -1014,6 +1127,8 @@ fn start_element(
                 sends.delayed.push(DelayedSend {
                     event,
                     delay: delay.as_deref().and_then(delay_ms),
+                    target: attribute(start, "target").ok()?,
+                    schema,
                 });
             }
             Some(Open::Other)
@@ -1101,6 +1216,31 @@ pub fn lifetime_errors(
             )
         })
         .collect();
+    // A schedule's literal target: the routine's own events go to its
+    // external queue, which a send with no target reaches (decision D147).
+    let misdirected: Vec<(String, String)> = sends
+        .delayed
+        .iter()
+        .filter_map(|send| {
+            let event = send.event.as_ref()?;
+            let target = send.target.as_ref()?;
+            sends
+                .ticking
+                .contains(event)
+                .then(|| (event.clone(), target.clone()))
+        })
+        .collect();
+    // A schedule's event:schema: it checks the data the schedule sends,
+    // which a schedule needs none of, and a send whose data does not match
+    // fails, so the routine never arms (decision D152).
+    let checked: Vec<String> = sends
+        .delayed
+        .iter()
+        .filter_map(|send| {
+            let event = send.event.as_ref()?;
+            (send.schema && sends.ticking.contains(event)).then(|| event.clone())
+        })
+        .collect();
     let mut schedules: Vec<String> = Vec::new();
     for (event, _, schedule) in &delayed {
         if *schedule && !schedules.contains(event) {
@@ -1128,9 +1268,19 @@ pub fn lifetime_errors(
                 )));
             }
         }
+        for (event, target) in &misdirected {
+            errors.push(lifetime_error(format!(
+                "the {event} schedule is sent to {target}, so it never reaches the routine and never fires: a schedule is a delayed send to the routine itself, with no target.{LIFETIME_HELP}"
+            )));
+        }
+        for event in &checked {
+            errors.push(lifetime_error(format!(
+                "the {event} schedule's send carries event:schema, which checks the data it sends: a send whose data does not match fails, so the routine never arms. A schedule is the routine's own event and needs no schema: remove event:schema from its send (a transition that takes it may keep one).{LIFETIME_HELP}"
+            )));
+        }
         if lifetime == "persistent" && !delayed.iter().any(|(_, _, schedule)| *schedule) {
             errors.push(lifetime_error(format!(
-                "a persistent routine must schedule at least one transition with every or at: a delayed send of an event whose transition sends bot.behavior.tick.{LIFETIME_HELP}"
+                "a persistent routine must schedule at least one transition with every or at: a delayed send of an event whose transition sends bot.behavior.tick. It is a persistent routine because it sends bot.behavior.tick; a turn behavior never sends bot.behavior.tick: it answers its one turn by its donedata.{LIFETIME_HELP}"
             )));
         }
         errors.truncate(MAX_LIFETIME_ERRORS);
@@ -1278,8 +1428,59 @@ const NOT_THE_CONTRACT: &str = "turn behavior donedata must be the object {turn,
 /// `<behavior:verify_apply>`'s targets that are not strings.
 const NOT_STRINGS: &str = "behavior:verify_apply targets is not an array of strings";
 
+/// `<behavior:verify_apply>`'s choices that are not objects.
+const NOT_CHOICES: &str = "behavior:verify_apply choices is not an array of objects or null";
+
+/// `<behavior:verify_apply>`'s handled that is not a boolean.
+const NOT_A_BOOLEAN: &str = "behavior:verify_apply handled is not a boolean";
+
 /// `<behavior:verify_apply>`'s error that is not a name.
 const NOT_AN_ERROR: &str = "behavior:verify_apply error is not a string or null";
+
+/// `<behavior:verify_apply>`'s error: its message, or none.
+fn apply_error<H: BehaviorHost>(
+    host: &mut H,
+    error: Option<&str>,
+) -> Result<Option<String>, Failure<H::Error>> {
+    let Some(error) = error else {
+        return Ok(None);
+    };
+    match evaluate(host, error, NOT_AN_ERROR, NOT_AN_ERROR)? {
+        Json::Null => Ok(None),
+        Json::String(error) => Ok(Some(error)),
+        _ => Err(Failure::Execution(NOT_AN_ERROR)),
+    }
+}
+
+/// `<behavior:verify_apply>`'s choices: the turn's, or none.
+fn apply_choices<H: BehaviorHost>(
+    host: &mut H,
+    choices: Option<&str>,
+) -> Result<Vec<Json>, Failure<H::Error>> {
+    let Some(choices) = choices else {
+        return Ok(Vec::new());
+    };
+    match evaluate(host, choices, NOT_CHOICES, NOT_CHOICES)? {
+        Json::Null => Ok(Vec::new()),
+        Json::Array(choices) if choices.iter().all(Json::is_object) => Ok(choices),
+        _ => Err(Failure::Execution(NOT_CHOICES)),
+    }
+}
+
+/// `<behavior:verify_apply>`'s handled: whether the run must handle the
+/// turn (default true).
+fn apply_handled<H: BehaviorHost>(
+    host: &mut H,
+    handled: Option<&str>,
+) -> Result<bool, Failure<H::Error>> {
+    let Some(handled) = handled else {
+        return Ok(true);
+    };
+    match evaluate(host, handled, NOT_A_BOOLEAN, NOT_A_BOOLEAN)? {
+        Json::Bool(required) => Ok(required),
+        _ => Err(Failure::Execution(NOT_A_BOOLEAN)),
+    }
+}
 
 /// Executes `<behavior:verify_apply>`.
 fn verify_apply_element<H: BehaviorHost>(
@@ -1287,11 +1488,22 @@ fn verify_apply_element<H: BehaviorHost>(
     content: &[Content],
     host: &mut H,
 ) -> Result<Executed, Failure<H::Error>> {
-    let [location, done, turn, input, targets, error] = attribute_values(
+    let [
+        location,
+        done,
+        turn,
+        input,
+        targets,
+        error,
+        choices,
+        handled,
+    ] = attribute_values(
         attributes,
-        ["location", "done", "turn", "input", "targets", "error"],
         [
-            "behavior:verify_apply takes only the location, done, turn, input, targets and error attributes",
+            "location", "done", "turn", "input", "targets", "error", "choices", "handled",
+        ],
+        [
+            "behavior:verify_apply takes only the location, done, turn, input, targets, error, choices and handled attributes",
             "behavior:verify_apply repeats an attribute",
             "behavior:verify_apply has an empty attribute",
         ],
@@ -1344,19 +1556,22 @@ fn verify_apply_element<H: BehaviorHost>(
             _ => Err(Failure::Execution(NOT_STRINGS)),
         })
         .collect::<Result<Vec<String>, _>>()?;
-    let error = match error {
-        None => None,
-        Some(error) => match evaluate(host, error, NOT_AN_ERROR, NOT_AN_ERROR)? {
-            Json::Null => None,
-            Json::String(error) => Some(error),
-            _ => return Err(Failure::Execution(NOT_AN_ERROR)),
-        },
-    };
+    let error = apply_error(host, error)?;
+    let choices = apply_choices(host, choices)?;
+    let required = apply_handled(host, handled)?;
     let done = (!done.is_null()).then_some(done);
-    let messages = verify_apply(done.as_ref(), &turn, &input, &targets, error.as_deref())
-        .into_iter()
-        .map(Json::String)
-        .collect();
+    let messages = verify_apply(
+        done.as_ref(),
+        &turn,
+        &input,
+        &targets,
+        &choices,
+        required,
+        error.as_deref(),
+    )
+    .into_iter()
+    .map(Json::String)
+    .collect();
     assign_to(
         host,
         location,
@@ -1375,6 +1590,8 @@ pub fn verify_apply(
     turn: &Json,
     input: &Map<String, Json>,
     targets: &[String],
+    choices: &[Json],
+    handled_required: bool,
     error: Option<&str>,
 ) -> Vec<String> {
     if let Some(error) = error {
@@ -1396,6 +1613,9 @@ pub fn verify_apply(
             js_stringify(done_turn),
             js_stringify(turn)
         )];
+    }
+    if !*handled && !handled_required {
+        return Vec::new();
     }
     if !*handled || selected.is_empty() {
         return vec![NO_SELECTION.into()];
@@ -1422,6 +1642,8 @@ pub fn verify_apply(
                         "selected[{index}] ({event}) names the target {}, which is not one of this turn's targets {offered}: name the session exactly as this turn's cognition_output names it.",
                         js_string(target)
                     ));
+                } else if let Some(error) = choice_error(index, event, target, selection, choices) {
+                    errors.push(error);
                 }
             }
             _ => errors.push(format!(
@@ -1436,6 +1658,81 @@ pub fn verify_apply(
     ));
     errors.truncate(MAX_APPLY_ERRORS);
     errors
+}
+
+/// Why the target would refuse a selection (decision D221): the candidates
+/// runner's send to it is checked against the receiving transition's
+/// schema, so data the turn's choice of that event and target does not
+/// admit fails the dispatch with `error.execution`. `None` without choices,
+/// or when the choice admits the data.
+fn choice_error(
+    index: usize,
+    event: &str,
+    target: &str,
+    selection: &Json,
+    choices: &[Json],
+) -> Option<String> {
+    if choices.is_empty() {
+        return None;
+    }
+    // A choice with no target is the body's own, whatever session id the
+    // selection names it by.
+    let choice = choices.iter().find(|choice| {
+        choice.get("event").and_then(Json::as_str) == Some(event)
+            && choice
+                .get("target")
+                .and_then(Json::as_str)
+                .is_none_or(|offered| offered == target)
+    });
+    let Some(choice) = choice else {
+        let offered: Vec<&str> = choices
+            .iter()
+            .filter(|choice| choice.get("target").and_then(Json::as_str) == Some(target))
+            .filter_map(|choice| choice.get("event").and_then(Json::as_str))
+            .collect();
+        return Some(format!(
+            "selected[{index}] ({event}) is not an event the target {} takes on this turn: it takes {}, as context's turn_choices lists them.",
+            js_string(target),
+            if offered.is_empty() {
+                "none".to_owned()
+            } else {
+                offered.join(", ")
+            }
+        ));
+    };
+    let schema = choice.get("schema")?;
+    let compiled = CompiledSchema::new(&canonical_json(schema)).ok()?;
+    let data = data_of(selection.get("data").unwrap_or(&Json::Null))?;
+    (!compiled.admits(&data)).then(|| {
+        format!(
+            "selected[{index}] ({event}) carries data its target {} refuses: the data must match the schema of {event} in context's turn_choices{}.",
+            js_string(target),
+            schema_outline(schema)
+        )
+    })
+}
+
+/// A schema's top-level outline for a message: the members its data may
+/// hold and the ones it must.
+fn schema_outline(schema: &Json) -> String {
+    let Some(properties) = schema.get("properties").and_then(Json::as_object) else {
+        return String::new();
+    };
+    let names: Vec<&str> = properties.keys().map(String::as_str).collect();
+    let required: Vec<&str> = schema
+        .get("required")
+        .and_then(Json::as_array)
+        .map(|required| required.iter().filter_map(Json::as_str).collect())
+        .unwrap_or_default();
+    let required = if required.is_empty() {
+        String::new()
+    } else {
+        format!(", {} required", required.join(", "))
+    };
+    format!(
+        " (an object whose members are among {}{required})",
+        names.join(", ")
+    )
 }
 
 /// The live values of a data object (decision D131): its string,

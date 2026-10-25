@@ -7,19 +7,24 @@
     "spec": {"type": "string", "minLength": 1},
     "name": {"type": "string", "minLength": 1},
     "constraints": {"type": "array", "items": {"type": "string"}, "maxItems": 32},
+    "context": {"type": "object", "description": "Data the specification refers to, which the design and author prompts carry beside it as model-facing XML (decision D201) [floppy field]."},
     "max_attempts": {"type": "integer", "minimum": 1, "maximum": 8},
     "model": {"type": "string", "minLength": 1},
     "generate_timeout_ms": {"type": "integer", "minimum": 1, "maximum": 3600000},
     "generate_ceiling_ms": {"type": "integer", "minimum": 1, "maximum": 3600000},
     "min_every_ms": {"type": "integer", "minimum": 1, "maximum": 86400000},
     "turn_after_bound_ms": {"type": "integer", "minimum": 1, "maximum": 86400000},
+    "document_max_completion_tokens": {"type": "integer", "minimum": 1024, "maximum": 65536, "description": "The author call's first token bound (default 16384); a truncated author generation doubles it for the next, up to 65536 (decision D135) [floppy field]."},
     "apply": {
       "type": "object",
-      "description": "The live turn a turn behavior is run on before it is built (the input of the live-turn check, decision D131): the turn, the behavior input as autonomy builds it, and the sessions that turn's output names [floppy field].",
+      "description": "The live turn a turn behavior is run on before it is built (the input of the live-turn check, decision D131): the turn, the behavior input as autonomy builds it, the sessions that turn's output names, and the turn's choices (decision D221) [floppy field].",
       "properties": {
         "turn": {"type": "integer", "minimum": 1},
         "input": {"type": "object"},
-        "targets": {"type": "array", "items": {"type": "string", "minLength": 1}, "maxItems": 32}
+        "targets": {"type": "array", "items": {"type": "string", "minLength": 1}, "maxItems": 32},
+        "choices": {"type": "array", "items": {"type": "object", "properties": {"event": {"type": "string", "minLength": 1}, "schema": {}, "target": {"type": "string", "minLength": 1}}, "required": ["event", "schema"]}, "description": "The live turn's choices: each selection must be an event its target takes on that turn, with data its schema admits, as the dispatch is checked (decision D221)."},
+        "handled": {"type": "boolean", "description": "Whether the run must handle the live turn (default true); false for a turn that taught the behavior, whose message is the lesson (decision D222)."},
+        "decline": {"type": "object", "description": "A second input of the same turn the behavior must decline (handled false with no selections): a lesson's counterexample, beside a live input that is the lesson's example (decision D229)."}
       },
       "required": ["turn", "input", "targets"],
       "additionalProperties": false

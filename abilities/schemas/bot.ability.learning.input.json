@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.learning.input",
+  "additionalProperties": false,
+  "description": "Learn a lesson someone is teaching the bot: a rule for how to answer something from now on (when I say ping, say pong), or something to do on a schedule or repeatedly (remind me to drink water every hour). The bot practices it after this turn and is told how it went; select it when someone asks the bot to learn, remember to do, or keep doing something, and say what you will try. The data for this event must contain exactly content (and optionally media_type); reason belongs on the selection envelope itself, never inside data.",
+  "properties": {
+    "content": {
+      "description": "The lesson in the teacher's own words, as one self-contained instruction: what should happen, when, and in reply to what.",
+      "examples": [
+        "Whenever I say exactly 'ping', reply with exactly 'pong'."
+      ],
+      "minLength": 1,
+      "title": "Content",
+      "type": "string"
+    },
+    "media_type": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The media type of content; null or text/plain for text.",
+      "examples": [
+        "text/plain"
+      ],
+      "title": "Media Type"
+    }
+  },
+  "required": [
+    "content"
+  ],
+  "type": "object"
+}

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- revision-1: a create is built and stored, and the applied behavior names the built documents. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="revision" type="scxml" src="../../../revision.scx">
+    <param name="database" expr="'/memory/floppy.sqlite'"/>
+    <param name="intent" expr='({"event": "bot.behavior.create", "name": "GreetOnKnock", "triggers": ["environment.sound"], "description": "Say hello when a knock sound arrives.", "reason": "The user asked for it.", "source": null})'/>
+    <param name="intent_event" expr="'bot.behavior.create'"/>
+    <param name="create" expr="true"/>
+    <param name="turn" expr="1"/>
+    <param name="cognition_input" expr='{"stimulus": {"event": "environment.sound", "data": {"label": "knock"}}, "focus": "door", "focus_candidates": ["door"]}'/>
+    <param name="cognition_output" expr='[{"event": "bot.ability.communication.respond", "data": {"parts": [{"words": "Hello!"}]}, "reason": "a knock", "target": "communication"}]'/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.reflection.revision.output" cond="_event.data.behavior.name === 'GreetOnKnock' &amp;&amp; _event.data.behavior.event === 'bot.behavior.create' &amp;&amp; _event.data.behavior.triggers.length === 1 &amp;&amp; _event.data.behavior.triggers[0] === 'environment.sound' &amp;&amp; _event.data.behavior.description === 'Say hello when a knock sound arrives.' &amp;&amp; _event.data.behavior.reason === 'The user asked for it.' &amp;&amp; /\.scx$/.test(_event.data.behavior.source)" target="step1"/>
+  </state>
+  <state id="step1">
+    <transition target="pass"/>
+  </state>
+  <transition event="builder.progress"/>
+  <transition event="generate.progress"/>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

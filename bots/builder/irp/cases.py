@@ -47,7 +47,7 @@ PINGER = """<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="https://
 INVALID = PINGER.replace('target="done"', 'target="nowhere"')
 # SCXML013 (a machine-applicable fix): a comma-separated descriptor list.
 FIXABLE = PINGER.replace('event="ping" event:schema="pinger.json#/$defs/ping"', 'event="ping,poke"')
-PING_TEST = {"name": "a ping is answered", "events": [{"name": "ping", "data": "{}", "delay_ms": 0}],
+PING_TEST = {"name": "a ping is answered", "events": [{"name": "ping", "data": {}, "delay_ms": 0}],
              "settle_ms": 1000, "expect_events": ["pong"], "expect_done": True}
 
 
@@ -84,7 +84,7 @@ CHIME = "[{event: 'bot.speaking.say', data: {parts: [{words: 'Hourly chime.'}]}}
 
 # A turn behavior that declares the params turn and input and decides at
 # once, selecting `data` for the session communication.
-def greeter(data):
+def greeter(data, handled="true"):
     return f"""<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="greeter" initial="deciding">
   <datamodel>
     <data id="turn" expr="0"/>
@@ -95,7 +95,7 @@ def greeter(data):
   </state>
   <final id="decided">
     <donedata>
-      <content expr="({{turn: turn, handled: true, selected: [{{event: 'bot.ability.communication.respond', target: 'communication', data: {data}}}]}})"/>
+      <content expr="({{turn: turn, handled: {handled}, selected: [{{event: 'bot.ability.communication.respond', target: 'communication', data: {data}}}]}})"/>
     </donedata>
   </final>
 </scxml>"""
@@ -104,6 +104,12 @@ def greeter(data):
 DECIDES = [{"name": "decides", "events": [], "settle_ms": 500, "expect_events": [], "expect_done": True}]
 # The live turn (decision D131): a knock at the door on turn 2.
 LIVE = {"turn_after_bound_ms": 1000, "apply": {"turn": 2, "input": {"label": "knock", "focus": "door"}, "targets": ["communication"]}}
+# A live turn that taught the behavior (decision D222): the run may leave it unhandled.
+LIVE_TAUGHT = {"turn_after_bound_ms": 1000, "apply": dict(LIVE["apply"], handled=False)}
+# The live turn with its choices: communication takes respond only with parts.
+PARTS_ONLY = {"type": "object", "properties": {"parts": {"type": "array"}}, "required": ["parts"], "additionalProperties": False}
+LIVE_CHOICES = {"turn_after_bound_ms": 1000, "apply": dict(LIVE["apply"], choices=[
+    {"event": "bot.ability.communication.respond", "target": "communication", "schema": PARTS_ONLY}])}
 WAITS = [{"name": "waits", "events": [], "settle_ms": 500, "expect_events": [], "expect_done": False}]
 BOUNDS = {"min_every_ms": 60000, "turn_after_bound_ms": 1000}
 
@@ -127,16 +133,16 @@ def built(extra=""):
                         " && _event.data.report.simulation.every(function (r) { return r.passed; })" + (f" && {extra}" if extra else ""))
 
 
-S.statement(1, "It waits in `intake` for `builder.request` `{spec, name?, constraints?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?}`; data its schema refuses is refused at the sender (its send raises `error.execution` there) and the builder keeps waiting; a request whose spec is only whitespace ends in the final state `failed` with `{reason: \"invalid-request\", diagnostics: [{kind: \"request\", code: \"invalid-request\"}]}`, which the invoker receives as `done.invoke.<id>`.")
+S.statement(1, "It waits in `intake` for `builder.request` `{spec, name?, constraints?, context?, max_attempts?, model?, generate_timeout_ms?, generate_ceiling_ms?, min_every_ms?, turn_after_bound_ms?, apply?, document_max_completion_tokens?}`; data its schema refuses is refused at the sender (its send raises `error.execution` there) and the builder keeps waiting; a request whose spec is only whitespace ends in the final state `failed` with `{reason: \"invalid-request\", diagnostics: [{kind: \"request\", code: \"invalid-request\"}]}`, which the invoker receives as `done.invoke.<id>`.")
 S.statement(2, "A request is planned (`design`, schema `topology_plan`), authored (`author`, schema `scxml_draft`: its `scxml`, `schemas` and `script`), written as `<name>.scx`, `<name>.json` and `<name>.js` through the files service (`writing`; the request's `name`, else the plan's; decision D121), validated (`validate`) and simulated (`simulate`, each test script driving the draft as an invoked child by `srcexpr` on its path); a draft that validates and passes every test ends in the final state `done` with `{scxml, schemas, script, path, tests, report: {attempts, failures, fixes_applied, warnings, plan, decisions, history, simulation}}`, `path` `../../behaviors/<name>.scx`.")
 S.statement(3, "A draft whose validator errors all have machine-applicable fixes is fixed (`apply_fixes`, at most 2 passes per draft) and validated again, without a new attempt: `report.fixes_applied` counts it.")
 S.statement(4, "Every failure goes through `retry_gate`, then `triage`, which asks the decision service to choose among its enabled transitions: `triage.repair` authors the draft again from the same plan (`report.decisions` `[\"triage.repair\"]`), `triage.redesign` plans again, `triage.abandon` ends in `failed` `{reason: \"abandoned\"}`. When the decision is unavailable it falls back (`fallback`): repair when there is a plan, else redesign.")
-S.statement(5, "A failure with any diagnostic an earlier failure of the build had, consecutive or not (decision D124), ends in `failed` `{reason: \"no-progress\"}` with those diagnostics and, when a check rejected a draft, its `scxml`; at the request's `max_attempts` failures it ends in `failed` `{reason: \"attempts-exhausted\"}`.")
+S.statement(5, "A failure with a diagnostic an earlier failure of the build had does not end the build (decision D133); at `max_attempts` failures, 8 unless the request sets it, it ends in `failed` `{reason: \"attempts-exhausted\"}` with the last diagnostics and, when a check rejected a draft, its `scxml`.")
 S.statement(6, "Each check has its own diagnostics: a validator error (`kind` `validate`, its code), a draft that cannot be written (`draft` `write-failed`), test scripts out of bounds (`draft` `tests-out-of-bounds`, one to eight), and a test whose outputs or done differ from its expectations (`simulate` `test-failed`).")
 S.statement(7, "A generation that fails (`generate.failed`) is a `generate` diagnostic `<stage>-failed`; one that runs `generate_ceiling_ms` in all, or, once its reply streams, makes no progress for `generate_timeout_ms` (the first `generate.progress` arms it, each later one re-arms it), is cancelled, a `timeout` diagnostic `<stage>-timeout` (decision D101).")
 S.statement(8, "With the request's lifetime bounds (`min_every_ms`, `turn_after_bound_ms`), a draft that sends `bot.behavior.tick` (a persistent routine) whose schedule is shorter than `min_every_ms` is a `lifetime` diagnostic `E0009`; a routine within the bounds also gets a forced first tick, whose output must select at least one event (else an `apply` diagnostic `E0008`).")
 
-S.statement(9, "With the request's `apply` `{turn, input, targets}`, a draft that sends no `bot.behavior.tick` also runs once with the params `turn` and `input` (the simulation result `live turn`) and must end within min(`turn_after_bound_ms`, 2000) ms in a top-level final state whose donedata is `{turn, handled: true, selected}` with the live turn and selections naming targets among `targets` with data agreeing with `input`, else an `apply` diagnostic `E0008` (`<behavior:verify_apply>`, decision D131).")
+S.statement(9, "With the request's `apply` `{turn, input, targets, choices?, handled?}`, a draft that sends no `bot.behavior.tick` also runs once with the params `turn` and `input` (the simulation result `live turn`) and must end within min(`turn_after_bound_ms`, 2000) ms in a top-level final state whose donedata is `{turn, handled: true, selected}` (or, with `handled` false, a turn that taught the behavior, `handled` false) with the live turn and selections naming targets among `targets` with data agreeing with `input` and, with `choices`, each an event its target takes with data its schema admits, else an `apply` diagnostic `E0008` (`<behavior:verify_apply>`, decisions D131, D221 and D222).")
 
 S.case(100, 1, "a request refused by its schema raises error.execution at the sender; the builder keeps waiting and answers a whitespace spec invalid-request.",
        [send(REQUEST, js({"spec": "x", "colour": "blue"})), expect("error.execution"),
@@ -182,9 +188,9 @@ S.case(134, 4, "the decision unavailable and no plan yet (the plan generation fa
               " && JSON.stringify(_event.data.report.decisions) === '[\"fallback:unavailable\"]' && _event.data.report.plan.name === 'pinger'")],
        backend=[chat(status=500), PLAN, draft(PINGER)], clock="wall")
 
-S.case(140, 5, "the same validator error twice is no progress: failed with the rejected draft.",
+S.case(140, 5, "the same validator error every time goes on to the default cap of 8: attempts-exhausted with the rejected draft.",
        [send(REQUEST, request()),
-        failed("no-progress", diagnostic("validate", "SCXML005") + " && _event.data.scxml.indexOf('nowhere') >= 0 && _event.data.history.length === 2")],
+        failed("attempts-exhausted", diagnostic("validate", "SCXML005") + " && _event.data.scxml.indexOf('nowhere') >= 0 && _event.data.history.length === 8")],
        backend=[PLAN, draft(INVALID)], clock="wall")
 S.case(141, 5, "max_attempts 1 ends at the first failure: attempts-exhausted.",
        [send(REQUEST, request(max_attempts=1)),
@@ -204,9 +210,9 @@ S.case(152, 6, "a test whose expected outputs never come is a simulate test-fail
         failed("attempts-exhausted", diagnostic("simulate", "test-failed") + " && _event.data.scxml.indexOf('pinger') >= 0")],
        backend=[PLAN, draft(PINGER, tests=[dict(PING_TEST, expect_events=["pang"])])], clock="wall")
 
-S.case(160, 7, "a design generation that fails is a generate design-failed diagnostic; twice is no progress, with no draft.",
-       [send(REQUEST, request()),
-        failed("no-progress", diagnostic("generate", "design-failed") + " && _event.data.scxml === undefined")],
+S.case(160, 7, "a design generation that fails is a generate design-failed diagnostic; at max_attempts 2, with no draft.",
+       [send(REQUEST, request(max_attempts=2)),
+        failed("attempts-exhausted", diagnostic("generate", "design-failed") + " && _event.data.scxml === undefined && _event.data.history.length === 2")],
        backend=[chat(status=500)], clock="wall")
 S.case(161, 7, "an author generation that fails is a generate author-failed diagnostic.",
        [send(REQUEST, request(max_attempts=1)),
@@ -247,3 +253,12 @@ S.case(181, 9, "with a live turn, a turn behavior whose selection hardcodes an i
         failed("attempts-exhausted", "_event.data.diagnostics.length === 1 && _event.data.diagnostics[0].kind === 'apply' && _event.data.diagnostics[0].code === 'E0008'"
                                      " && _event.data.diagnostics[0].message === 'selection data[\"label\"]=\"doorbell\" does not match live event value \"knock\"; read identifiers from input at runtime.'")],
        backend=[PLAN, draft(greeter("{text: 'Who is there?', label: 'doorbell'}"), tests=DECIDES, schemas=NO_SCHEMAS)], clock="wall")
+S.case(182, 9, "with a live turn and its choices, a turn behavior whose selection's data its target's schema refuses is an apply E0008 diagnostic.",
+       [send(REQUEST, request(max_attempts=1, **LIVE_CHOICES)),
+        failed("attempts-exhausted", "_event.data.diagnostics.length === 1 && _event.data.diagnostics[0].kind === 'apply' && _event.data.diagnostics[0].code === 'E0008'"
+                                     " && _event.data.diagnostics[0].message.indexOf('refuses') > 0")],
+       backend=[PLAN, draft(greeter("{text: 'Who is there?', label: input === null ? 'none' : input.label}"), tests=DECIDES, schemas=NO_SCHEMAS)], clock="wall")
+S.case(183, 9, "with a live turn that taught the behavior, a turn behavior that leaves it unhandled is built.",
+       [send(REQUEST, request(**LIVE_TAUGHT)),
+        expect(DONE, "_event.data.report.simulation[1].name === 'live turn' && _event.data.report.simulation[1].passed === true")],
+       backend=[PLAN, draft(greeter("{text: 'Who is there?', label: input === null ? 'none' : input.label}", handled="false"), tests=DECIDES, schemas=NO_SCHEMAS)], clock="wall")

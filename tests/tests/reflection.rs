@@ -36,6 +36,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde_json::{Map, Value as Json, json};
+use support::model_facing::{read, rendered};
 use support::{Run, logs, unique_scratch, workspace};
 
 /// Bounded wait for any one expected record (scx startup and a builder run
@@ -166,6 +167,15 @@ fn break_selection(name: &str) -> Json {
     }])
 }
 
+/// A persona revision (decision D145).
+fn revise_selection(text: &str) -> Json {
+    json!([{
+        "event": "bot.ability.persona.revise",
+        "data": {"text": text, "reason": "I noticed I like greeting people."},
+        "reason": "I see myself differently",
+    }])
+}
+
 /// Arguments the generate service refuses as not-json.
 const NOT_JSON: &str = r#"{"events": ["#;
 
@@ -217,11 +227,20 @@ fn selection(route: &str) -> Option<Json> {
         "create" | "buildfail" | "genfail" | "slowbuild" | "stallbuild" | "slowplain"
         | "livebound" | "livehardcoded" => Some(create_selection()),
         "break" => Some(break_selection("GreetOnKnock")),
-        "change" => Some(change_selection()),
+        "change" | "changefail" => Some(change_selection()),
         "breakunknown" => Some(break_selection("Nobody")),
         "two" => Some(json!([
             break_selection("GreetOnKnock")[0].clone(),
             create_selection()[0].clone()
+        ])),
+        "revise" => Some(revise_selection("I am a warm greeter.")),
+        "revisecreate" => Some(json!([
+            create_selection()[0].clone(),
+            revise_selection("I am a warm greeter.")[0].clone()
+        ])),
+        "tworevise" => Some(json!([
+            revise_selection("I am a warm greeter.")[0].clone(),
+            revise_selection("I am a quiet greeter.")[0].clone()
         ])),
         _ => None,
     }
@@ -238,7 +257,9 @@ fn answer(target: &str, body: &Json, attempt: usize) -> Option<String> {
     match schema {
         "dispatch" => dispatch_reply(route, attempt, body).map(|args| completion(&args)),
         "topology_plan" => Some(completion(PLAN)),
-        "scxml_draft" if route == "buildfail" => Some(completion(&draft(&rejected_behavior()))),
+        "scxml_draft" if route == "buildfail" || route == "changefail" => {
+            Some(completion(&draft(&rejected_behavior())))
+        }
         "scxml_draft" if route == "genfail" => None,
         "scxml_draft" if route == "livebound" => {
             Some(completion(&scripted_draft(GROUNDED, GROUNDED_SCRIPT)))
@@ -396,17 +417,6 @@ impl Mock {
     }
 }
 
-fn copy_dir(from: &Path, to: &Path) {
-    std::fs::create_dir_all(to).expect("the directory is creatable");
-    for entry in std::fs::read_dir(from).expect("the directory is readable") {
-        let path = entry.expect("a directory entry").path();
-        if path.is_file() {
-            std::fs::copy(&path, to.join(path.file_name().expect("a file name")))
-                .expect("the file is copyable");
-        }
-    }
-}
-
 /// The harness's SQLite database, in the directory each run is granted.
 const SQLITE: &str = "/memory/floppy.sqlite";
 
@@ -428,11 +438,7 @@ fn layout_bounded(
 ) -> (PathBuf, PathBuf) {
     let dir = unique_scratch("reflection");
     support::copy_tree(&workspace().join("abilities"), &dir.join("abilities"));
-    copy_dir(&workspace().join("bots/builder"), &dir.join("bots/builder"));
-    copy_dir(
-        &workspace().join("bots/builder/schemas"),
-        &dir.join("bots/builder/schemas"),
-    );
+    support::copy_tree(&workspace().join("bots/builder"), &dir.join("bots/builder"));
     let harness = std::fs::read_to_string(
         workspace().join("tests/fixtures/phase5/reflection_harness.scx"),
     )
@@ -497,10 +503,36 @@ fn input(turn: u64) -> Json {
 /// Sends one turn and returns its answer's records through the logged
 /// inventory and episodes.
 fn reflect(run: &mut Run, turn: u64) -> Vec<Json> {
-    run.event("bot.ability.reflection.input", &input(turn));
+    reflect_on(run, &input(turn))
+}
+
+/// [`reflect`] with the reflection input `input`.
+fn reflect_on(run: &mut Run, input: &Json) -> Vec<Json> {
+    run.event("bot.ability.reflection.input", input);
     run.until(WAIT, |record| {
         record["type"] == "log" && record["label"] == "episodes"
     })
+}
+
+/// [`input`] with `fields` added: a failed or cancelled turn's outcome
+/// (decision D139) or what the bot knows of itself (decision D145).
+fn input_with(turn: u64, fields: &Json) -> Json {
+    let mut input = input(turn);
+    input
+        .as_object_mut()
+        .expect("the input is an object")
+        .extend(
+            fields
+                .as_object()
+                .expect("the fields are an object")
+                .clone(),
+        );
+    input
+}
+
+/// A bot with a persona: its owner's traits and the description it wrote.
+fn persona_self() -> Json {
+    json!({"self": {"traits": ["friendly"], "description": "I like company."}})
 }
 
 fn texts(records: &[Json], label: &str) -> Vec<String> {
@@ -595,13 +627,17 @@ fn an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it_on(databas
             .message("system")
             .starts_with("Select at most one offered behavior inventory event"),
     );
-    let prompt = |index: usize| -> Json {
-        serde_json::from_str(&selects[index].message("user")).expect("the select prompt is JSON")
-    };
-    assert_eq!(prompt(0)["prior_episodes"], json!([]));
-    assert_eq!(prompt(0)["behaviors"], json!([]));
-    assert_eq!(prompt(0)["cognition_input"], input(1)["cognition_input"]);
-    assert_eq!(prompt(1)["prior_episodes"], json!([episode]));
+    let prompt = |index: usize| -> Json { read(&selects[index].message("user")) };
+    assert_eq!(prompt(0)["prior_episodes"], Json::Null);
+    assert_eq!(prompt(0)["behaviors"], Json::Null);
+    assert_eq!(
+        prompt(0)["cognition_input"],
+        rendered("cognition_input", &input(1)["cognition_input"])
+    );
+    assert_eq!(
+        prompt(1)["prior_episodes"],
+        rendered("prior_episodes", &json!([episode]))
+    );
     // With an empty inventory only a create is offered: nothing could be
     // changed or broken (decision D100).
     assert_eq!(
@@ -670,8 +706,7 @@ fn a_break_marks_the_behavior_broken_and_keeps_it_on(database: &str) {
         break_selection("GreetOnKnock")[0]["data"]
     );
     // The select step saw the inventory with its usage.
-    let prompt: Json = serde_json::from_str(&mock.requests("dispatch")[0].message("user"))
-        .expect("the select prompt is JSON");
+    let prompt = read(&mock.requests("dispatch")[0].message("user"));
     assert_eq!(prompt["behaviors"][0]["name"], "GreetOnKnock");
     // A change and a break are offered while the inventory holds a
     // behavior (decisions D100, D243); a name is not an enum of it.
@@ -683,7 +718,7 @@ fn a_break_marks_the_behavior_broken_and_keeps_it_on(database: &str) {
             "bot.behavior.break": null,
         })
     );
-    assert_eq!(prompt["behaviors"][0]["used_count"], 1);
+    assert_eq!(prompt["behaviors"][0]["used_count"], "1");
     assert_eq!(
         prompt["behaviors"][0]["triggers"],
         json!(["environment.sound"])
@@ -783,7 +818,7 @@ fn a_refused_selection_is_asked_again_with_its_diagnostic_and_learns() {
     assert_eq!(selects.len(), 2);
     assert_eq!(selects[1].message("system"), selects[0].message("system"));
     let first = selects[0].message("user");
-    serde_json::from_str::<Json>(&first).expect("the first select prompt is JSON");
+    assert!(first.ends_with("</reflection_input>"), "{first}");
     let repair = selects[1].message("user");
     assert!(
         repair.starts_with(&format!(
@@ -883,8 +918,9 @@ fn each_turn_starts_its_select_unrepaired() {
     assert_eq!(texts(&second, "harness.output"), ["answered"], "{second:?}");
     let selects = mock.requests("dispatch");
     assert_eq!(selects.len(), 4);
-    serde_json::from_str::<Json>(&selects[2].message("user"))
-        .expect("the second turn's first select prompt is plain JSON");
+    // The second turn's first select prompt is its input alone.
+    let unrepaired = selects[2].message("user");
+    assert!(unrepaired.ends_with("</reflection_input>"), "{unrepaired}");
     let rejected = texts(&second, "reflection.rejected");
     assert_eq!(rejected.len(), 1, "{rejected:?}");
     assert!(
@@ -955,19 +991,17 @@ fn a_create_is_built_and_stored_active_with_grounded_triggers_on(database: &str)
     // turn behavior contract.
     let drafts = mock.requests("scxml_draft");
     assert_eq!(drafts.len(), 1);
-    let spec: Json =
-        serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
-    let spec = spec["spec"].as_str().expect("the spec").to_owned();
+    let prompt = read(&drafts[0].message("user"));
+    let spec = prompt["spec"].as_str().expect("the spec");
     assert!(
         spec.starts_with("Author or revise the SCXML program"),
         "{spec}"
     );
-    assert!(spec.contains(r#""status":"DRAFT""#), "{spec}");
-    assert!(spec.contains(r#""name":"GreetOnKnock""#), "{spec}");
+    let context = &prompt["context"];
+    assert_eq!(context["existing_behavior"]["status"], "DRAFT", "{prompt}");
+    assert_eq!(context["intent"]["name"], "GreetOnKnock", "{prompt}");
     // The persistent routine contract carries the at schedule's
     // next_after for the routine's data model.
-    let prompt: Json =
-        serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
     assert!(
         prompt["constraints"][1]
             .as_str()
@@ -998,20 +1032,20 @@ fn the_builder_is_told_the_triggers_and_the_input_the_behavior_runs_with() {
     );
     let drafts = mock.requests("scxml_draft");
     assert_eq!(drafts.len(), 1);
-    let prompt: Json =
-        serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
+    let prompt = read(&drafts[0].message("user"));
     let contract = prompt["constraints"][0]
         .as_str()
         .expect("the turn behavior contract")
         .to_owned();
     assert!(contract.starts_with("Write a turn behavior"), "{contract}");
     assert!(
-        contract.contains(r#"its triggers ["environment.sound"]"#),
+        contract.contains("its triggers (environment.sound)"),
         "{contract}"
     );
     assert!(
         contract.contains(
-            r#"for this turn input is {"focus":"door","focus_candidates":["door"],"label":"knock"}"#
+            "for this turn input is <input focus=\"door\" label=\"knock\">\n  \
+             <focus_candidates count=\"1\">\n    <item>door</item>\n  </focus_candidates>\n</input>"
         ),
         "{contract}"
     );
@@ -1066,13 +1100,12 @@ fn a_create_passes_only_when_its_draft_selects_on_the_live_input() {
     );
     let drafts = mock.requests("scxml_draft");
     assert_eq!(drafts.len(), 1);
-    let prompt: Json =
-        serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
+    let prompt = read(&drafts[0].message("user"));
     let contract = prompt["constraints"][0]
         .as_str()
         .expect("the turn behavior contract");
     assert!(
-        contract.contains(r#"whose targets are among ["communication"]"#),
+        contract.contains("whose targets are among (communication)"),
         "{contract}"
     );
     assert!(
@@ -1095,7 +1128,7 @@ fn a_create_whose_draft_hardcodes_an_input_value_is_abandoned() {
     assert_eq!(failed.len(), 1, "{records:?}");
     assert!(
         failed[0].starts_with(
-            "Reflection change abandoned: same diagnostic message after fix:\nbehavior validation failed:\n  error[E0008] apply: selection data[\"label\"]=\"doorbell\" does not match live event value \"knock\"; read identifiers from input at runtime."
+            "Reflection change abandoned: attempts exhausted:\nbehavior validation failed:\n  error[E0008] apply: selection data[\"label\"]=\"doorbell\" does not match live event value \"knock\"; read identifiers from input at runtime."
         ),
         "{failed:?}"
     );
@@ -1231,7 +1264,7 @@ fn a_failed_build_leaves_a_validation_draft_on(database: &str) {
     assert_eq!(failed.len(), 1, "{records:?}");
     assert!(
         failed[0].starts_with(
-            "Reflection change abandoned: same diagnostic message after fix:\nbehavior validation failed:\n  error[SCXML005] validate: "
+            "Reflection change abandoned: attempts exhausted:\nbehavior validation failed:\n  error[SCXML005] validate: "
         ),
         "{failed:?}"
     );
@@ -1282,12 +1315,8 @@ fn a_change_reads_the_stored_documents_back_for_the_builder() {
     );
     let drafts = mock.requests("scxml_draft");
     assert_eq!(drafts.len(), 1, "{records:?}");
-    let prompt: Json =
-        serde_json::from_str(&drafts[0].message("user")).expect("the builder's prompt is JSON");
-    let spec = prompt["spec"].as_str().expect("the spec");
-    let write: Json = serde_json::from_str(spec.rsplit("\n\n").next().expect("the input"))
-        .expect("the change write input is JSON");
-    let existing = &write["existing_behavior"];
+    let prompt = read(&drafts[0].message("user"));
+    let existing = &prompt["context"]["existing_behavior"];
     assert_eq!(existing["source"], GREET_PATH, "{existing}");
     assert_eq!(existing["scxml"], old.as_str(), "{existing}");
     assert_eq!(
@@ -1307,6 +1336,51 @@ fn a_change_reads_the_stored_documents_back_for_the_builder() {
         BEHAVIOR,
         "the revision is written over the stored chart"
     );
+}
+
+/// A failed change of an ACTIVE behavior keeps it (decision D224): the
+/// stored documents the builder's rejected drafts were written over are
+/// written back, the row stays ACTIVE on its path, and the turn fails
+/// with the abandon message.
+#[test]
+fn a_failed_change_of_an_active_behavior_keeps_it() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "changefail", SEED_STORED, SQLITE);
+    let stored_dir = behaviors(&harness);
+    std::fs::create_dir_all(&stored_dir).expect("the behaviors directory is creatable");
+    let old = BEHAVIOR.replace("Hello!", "Hi!");
+    let schemas = r#"{"$defs": {"knock": {"type": "object"}}}"#;
+    std::fs::write(stored_dir.join("GreetOnKnock.scx"), &old).expect("writable");
+    std::fs::write(stored_dir.join("GreetOnKnock.json"), schemas).expect("writable");
+    std::fs::write(stored_dir.join("GreetOnKnock.js"), "// stored\n").expect("writable");
+    let mut run = start(&harness, &env);
+    let records = reflect(&mut run, 1);
+    drop(run.close(WAIT));
+    let failed = texts(&records, "harness.failed");
+    assert_eq!(failed.len(), 1, "{records:?}");
+    assert!(
+        failed[0].starts_with("Reflection change abandoned: attempts exhausted:"),
+        "{failed:?}"
+    );
+    assert!(
+        texts(&records, "reflection.inventory")
+            .contains(&"GreetOnKnock ACTIVE kept (change abandoned)".to_owned()),
+        "{records:?}"
+    );
+    let row = &json_log(&records, "inventory")[0];
+    assert_eq!(row["status"], "ACTIVE", "{row}");
+    assert_eq!(row["source"], GREET_PATH, "{row}");
+    for (file, text) in [
+        ("GreetOnKnock.scx", old.as_str()),
+        ("GreetOnKnock.json", schemas),
+        ("GreetOnKnock.js", "// stored\n"),
+    ] {
+        assert_eq!(
+            std::fs::read_to_string(stored_dir.join(file)).expect("readable"),
+            text,
+            "{file} is the working program's again"
+        );
+    }
 }
 
 /// A change call that fails without a draft to check (every generation
@@ -1334,8 +1408,9 @@ fn a_failed_change_call_drafts_nothing_on(database: &str) {
     let failed = texts(&records, "harness.failed");
     assert_eq!(failed.len(), 1, "{records:?}");
     assert!(
-        failed[0]
-            .starts_with("Reflection revision failed: no-progress: the author generation failed"),
+        failed[0].starts_with(
+            "Reflection revision failed: attempts-exhausted: the author generation failed"
+        ),
         "{failed:?}"
     );
     assert!(
@@ -1353,4 +1428,137 @@ fn a_failed_change_call_drafts_nothing_on(database: &str) {
         }])
     );
     assert_eq!(json_log(&records, "episodes"), stored(&unapplied_episode()));
+}
+
+/// A failed turn and a cancelled one are remembered with their outcome and
+/// nothing is selected for them; the next turn's select recalls both
+/// (decision D139).
+#[test]
+fn failed_and_cancelled_turns_are_remembered_without_a_select() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "none", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let failure = "Cognition reasoning timed out after 30 seconds.";
+    let failed = reflect_on(
+        &mut run,
+        &input_with(
+            1,
+            &json!({"cognition_output": [], "outcome": "failed", "failure": failure}),
+        ),
+    );
+    assert_eq!(texts(&failed, "harness.output"), ["answered"], "{failed:?}");
+    assert_eq!(texts(&failed, "reflection"), ["turn 1: failed"]);
+    let mut failed_episode = unapplied_episode();
+    failed_episode["output"] = json!([]);
+    failed_episode["outcome"] = json!("failed");
+    failed_episode["failure"] = json!(failure);
+    assert_eq!(json_log(&failed, "episodes"), stored(&failed_episode));
+    let cancelled = reflect_on(
+        &mut run,
+        &input_with(2, &json!({"cognition_output": [], "outcome": "cancelled"})),
+    );
+    assert_eq!(texts(&cancelled, "reflection"), ["turn 2: cancelled"]);
+    let mut cancelled_episode = failed_episode.clone();
+    cancelled_episode["outcome"] = json!("cancelled");
+    cancelled_episode["failure"] = Json::Null;
+    assert_eq!(
+        json_log(&cancelled, "episodes")[1]["content"],
+        cancelled_episode
+    );
+    assert!(mock.requests("dispatch").is_empty());
+    let completed = reflect(&mut run, 3);
+    drop(run.close(WAIT));
+    assert_eq!(texts(&completed, "reflection.selected"), ["none"]);
+    let selects = mock.requests("dispatch");
+    assert_eq!(selects.len(), 1);
+    let prompt = read(&selects[0].message("user"));
+    assert_eq!(
+        prompt["prior_episodes"],
+        rendered(
+            "prior_episodes",
+            &json!([failed_episode, cancelled_episode])
+        )
+    );
+    assert_eq!(
+        json_log(&completed, "episodes")[2]["content"],
+        unapplied_episode()
+    );
+}
+
+/// With a persona, reflection offers its revision beside the inventory
+/// events, shows the model the bot's self, and sends a selected revision
+/// up for the persona (decision D145).
+#[test]
+fn a_selected_persona_revision_is_sent_up() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "revise", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let records = reflect_on(&mut run, &input_with(1, &persona_self()));
+    drop(run.close(WAIT));
+    assert_eq!(
+        texts(&records, "harness.output"),
+        ["answered"],
+        "{records:?}"
+    );
+    assert_eq!(
+        texts(&records, "harness.revise"),
+        [revise_selection("I am a warm greeter.")[0]["data"].to_string()]
+    );
+    assert_eq!(json_log(&records, "episodes"), stored(&unapplied_episode()));
+    let selects = mock.requests("dispatch");
+    assert_eq!(selects.len(), 1);
+    assert_eq!(
+        offered_names(&selects[0].body),
+        json!({"bot.behavior.create": null, "bot.ability.persona.revise": null})
+    );
+    assert_eq!(
+        selects[0].body["tools"][0]["function"]["parameters"]["properties"]["events"]["maxItems"],
+        2
+    );
+    let prompt = read(&selects[0].message("user"));
+    assert_eq!(prompt["self"], rendered("self", &persona_self()["self"]));
+}
+
+/// A revision selected after a create is still sent up, and the create is
+/// built (decision D145).
+#[test]
+fn a_revision_beside_a_create_is_sent_up_and_the_create_built() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "revisecreate", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let records = reflect_on(&mut run, &input_with(1, &persona_self()));
+    drop(run.close(WAIT));
+    assert_eq!(
+        texts(&records, "harness.output"),
+        ["answered"],
+        "{records:?}"
+    );
+    assert_eq!(texts(&records, "harness.revise").len(), 1, "{records:?}");
+    assert_eq!(
+        texts(&records, "reflection.inventory"),
+        [r#"GreetOnKnock ACTIVE turn ["environment.sound"] (accept)"#]
+    );
+}
+
+/// Two revisions are an over-selection, refused as the model's to repair:
+/// the same refusal again fails the turn (decisions D130, D145).
+#[test]
+fn two_persona_revisions_are_refused() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "tworevise", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let records = reflect_on(&mut run, &input_with(1, &persona_self()));
+    drop(run.close(WAIT));
+    assert!(texts(&records, "harness.revise").is_empty(), "{records:?}");
+    assert_eq!(
+        texts(&records, "reflection.rejected"),
+        ["attempt 0: over-selection", "attempt 1: over-selection"]
+    );
+    assert_eq!(
+        texts(&records, "harness.failed"),
+        [
+            "Selection rejected: select at most one of bot.behavior.create, bot.behavior.change or bot.behavior.break, and at most one bot.ability.persona.revise"
+        ]
+    );
+    assert_eq!(mock.requests("dispatch").len(), 2);
 }

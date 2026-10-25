@@ -14,7 +14,7 @@
   {
     "events": [
       {
-        "data": "{}",
+        "data": {},
         "delay_ms": 1000,
         "name": "ped_button.press"
       }
@@ -34,7 +34,7 @@
   {
     "events": [
       {
-        "data": "{}",
+        "data": {},
         "delay_ms": 5000,
         "name": "ped_button.press"
       }
@@ -54,7 +54,7 @@
   {
     "events": [
       {
-        "data": "{}",
+        "data": {},
         "delay_ms": 3500,
         "name": "ped_button.press"
       }
@@ -74,12 +74,12 @@
   {
     "events": [
       {
-        "data": "{}",
+        "data": {},
         "delay_ms": 7000,
         "name": "ped_button.press"
       },
       {
-        "data": "{}",
+        "data": {},
         "delay_ms": 9500,
         "name": "ped_button.press"
       }

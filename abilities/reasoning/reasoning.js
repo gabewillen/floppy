@@ -39,6 +39,29 @@ function directiveSelectStatements() {
   return statements.concat([{sql: episode_select, parameters: ['standing_directive', context_ref]}]);
 }
 
+// The active learned behaviors appended (decision D154).
+function behaviorSelectStatements() {
+  return statements.concat([{sql: behavior_select, parameters: []}]);
+}
+
+function recalledBehaviors(_event) {
+  return _event.data.results[2].rows.map(function (r) { return {name: r.values[0], lifetime: r.values[1], description: r.values[2]}; });
+}
+
+// The bot's self with the behaviors it has learned, which the self block
+// names (decision D154).
+function knownSelf() {
+  if (behaviors.length === 0) {
+    return self;
+  }
+  var known = {};
+  for (var key in Object(self)) {
+    known[key] = self[key];
+  }
+  known.behaviors = behaviors;
+  return known;
+}
+
 function recallFailedResult(detail) {
   return ({turn: turn, handled: false, failed: true, reason: 'Reasoning memory recall failed: ' + detail});
 }

@@ -152,8 +152,8 @@ fn every_model_data_is_the_default_model_and_the_name_appears_nowhere_else() {
         );
     }
     assert_eq!(
-        models, 9,
-        "builder, floppy, cognition, reasoning, reflection, reading, seeing, object detection and description"
+        models, 11,
+        "builder, floppy, cognition, reasoning, reflection, revision, learning, reading, seeing, object detection and description"
     );
     assert!(
         read(Path::new("docs/defaults.md")).contains(&format!("`{}`", support::DEFAULT_MODEL)),
@@ -240,10 +240,10 @@ fn millis(path: &str, id: &str) -> u64 {
 }
 
 /// The time bounds the bot's `bounds` param may set with a `<data>` default
-/// (decision D101): the cognition's stage bounds and reflection's revising
-/// bounds, each a `<data>` of its document that the document's script reads
+/// (decision D101): the cognition's stage bounds and reflection's and the
+/// learning's revising bounds, each a `<data>` of its document that the document's script reads
 /// from `bounds` first.
-const ACTIVATION_BOUNDS: [(&str, &str); 4] = [
+const ACTIVATION_BOUNDS: [(&str, &str); 6] = [
     (
         "abilities/cognition/cognition.scx",
         "child_operation_timeout_ms",
@@ -254,6 +254,8 @@ const ACTIVATION_BOUNDS: [(&str, &str); 4] = [
     ),
     ("abilities/reflection/reflection.scx", "revising_timeout_ms"),
     ("abilities/reflection/reflection.scx", "revising_ceiling_ms"),
+    ("abilities/learning/learning.scx", "revising_timeout_ms"),
+    ("abilities/learning/learning.scx", "revising_ceiling_ms"),
 ];
 
 /// The members of the bot's `bounds` param with no `<data>` default: a
@@ -329,6 +331,16 @@ fn every_inactivity_bound_has_a_backstop_and_the_stages_nest_in_the_turn() {
             "revising_ceiling_ms",
         ),
         (
+            "abilities/learning/learning.scx",
+            "select_timeout_ms",
+            "select_ceiling_ms",
+        ),
+        (
+            "abilities/learning/learning.scx",
+            "revising_timeout_ms",
+            "revising_ceiling_ms",
+        ),
+        (
             "bots/builder/builder.scx",
             "generate_timeout_ms",
             "generate_ceiling_ms",
@@ -376,6 +388,7 @@ fn the_runs_stream_setting_alone_decides_whether_a_call_streams() {
     for document in [
         "abilities/reasoning/reasoning.scx",
         "abilities/reflection/reflection.scx",
+        "abilities/learning/learning.scx",
         "bots/builder/builder.scx",
     ] {
         let text = read(Path::new(document));

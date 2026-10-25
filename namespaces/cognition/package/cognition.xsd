@@ -33,6 +33,11 @@
                    the tier, {event, description?} once per event.
                    choices (required), ceiling (optional; null or none is
                    the whole frame): expressions.
+  cognition:model_facing_data
+                   location (required): receives the data as model-facing
+                   XML.
+                   root (required): the root element's name, an XML name.
+                   data (required): an expression.
                    None takes another attribute or content.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
@@ -73,6 +78,13 @@
       <xs:attribute name="heldlocation" type="xs:string" use="optional"/>
       <xs:attribute name="choices" type="xs:string" use="required"/>
       <xs:attribute name="ceiling" type="xs:string" use="optional"/>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="model_facing_data">
+    <xs:complexType>
+      <xs:attribute name="location" type="xs:string" use="required"/>
+      <xs:attribute name="root" type="xs:NCName" use="required"/>
+      <xs:attribute name="data" type="xs:string" use="required"/>
     </xs:complexType>
   </xs:element>
 </xs:schema>

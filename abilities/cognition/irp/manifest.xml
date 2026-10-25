@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/cognition/irp/sources">
   <assert id="cognition-1" specnum="1" specid="#cognition-1">
-    <![CDATA[On start it sends `bot.ability.ready` to its parent, once (never on a later return to `idle`) and with no data (decision D242). What it offers in `idle`, read from its live session (`<decision:offers>`), is its one choice `bot.ability.cognition.ignore`, of no effort, with its schema as written (its parent makes it model-facing).]]>
+    <![CDATA[On start it sends `bot.ability.ready` to its parent, once (never on a later return to `idle`) and with no data (decision D242). What it offers in `idle`, read from its live session (`<decision:offers>`), is its two choices, `bot.ability.cognition.ignore` and `bot.ability.learning.input`, of no effort, with their schemas as written (its parent makes it model-facing).]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -96,6 +96,21 @@
     </test>
     <test id="192" conformance="mandatory" manual="false">
       <start uri="192/test192.scxml"/>
+    </test>
+  </assert>
+  <assert id="cognition-13" specnum="13" specid="#cognition-13">
+    <![CDATA[A turn whose selections hold `bot.ability.learning.input` (taken in `idle` and while processing, and only logged) sends the lesson to its learning child after the turn's output; the lesson's result `bot.ability.learning.output` comes back to its parent as a `bot.ability.cognition.input` whose stimulus is that result (decision D149), a lesson the learning cannot learn (without a database) included, with `learned` false. A turn whose stimulus is a routine's `bot.behavior.tick` outputs its lesson but sends none, logging `cognition.lesson` `bounded` (decision D220).]]>
+    <test id="220" conformance="mandatory" manual="false">
+      <start uri="220/test220.scxml"/>
+    </test>
+    <test id="221" conformance="mandatory" manual="false">
+      <start uri="221/test221.scxml"/>
+    </test>
+    <test id="223" conformance="mandatory" manual="false">
+      <start uri="223/test223.scxml"/>
+    </test>
+    <test id="222" conformance="mandatory" manual="false">
+      <start uri="222/test222.scxml"/>
     </test>
   </assert>
   <assert id="cognition-9" specnum="9" specid="#cognition-9">

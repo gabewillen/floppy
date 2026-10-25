@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- reflection-13: a lesson's output turn answers the output asking no model; the next turn selects. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="reflection" type="scxml" src="../../../reflection.scx">
+    <param name="database" expr="'/memory/floppy.sqlite'"/>
+    <param name="select_timeout_ms" expr="300000"/>
+    <param name="revising_timeout_ms" expr="300000"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <onentry>
+      <send event="bot.ability.reflection.input" target="#_reflection"><content expr="{&quot;turn&quot;: 1, &quot;cognition_input&quot;: {&quot;stimulus&quot;: {&quot;event&quot;: &quot;bot.ability.learning.output&quot;, &quot;data&quot;: {&quot;lesson&quot;: &quot;Whenever I say exactly 'ping', reply with exactly 'pong'.&quot;, &quot;learned&quot;: true, &quot;behavior&quot;: {&quot;name&quot;: &quot;PingPong&quot;, &quot;description&quot;: &quot;Reply pong to ping.&quot;}}}, &quot;focus&quot;: &quot;door&quot;, &quot;focus_candidates&quot;: [&quot;door&quot;]}, &quot;cognition_output&quot;: [{&quot;event&quot;: &quot;bot.ability.communication.respond&quot;, &quot;data&quot;: {&quot;parts&quot;: [{&quot;words&quot;: &quot;Hello!&quot;}]}, &quot;reason&quot;: &quot;a knock&quot;, &quot;target&quot;: &quot;communication&quot;}]}"/></send>
+    </onentry>
+    <transition event="bot.ability.reflection.output" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.reflection.input" target="#_reflection"><content expr='{"turn": 2, "cognition_input": {"stimulus": {"event": "environment.sound", "data": {"label": "knock"}}, "focus": "door", "focus_candidates": ["door"]}, "cognition_output": [{"event": "bot.ability.communication.respond", "data": {"parts": [{"words": "Hello!"}]}, "reason": "a knock", "target": "communication"}]}'/></send>
+    </onentry>
+    <transition event="bot.ability.reflection.output" target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

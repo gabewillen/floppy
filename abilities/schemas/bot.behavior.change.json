@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "bot.behavior.change",
   "additionalProperties": false,
-  "description": "Change an existing executable behavior. Select may omit source (intent only); the change write step must author full revised Starlark HSM source from the behavior Starlark API, the existing behavior, and the observed pattern. Changing a persistent routine (for example its schedule) restarts it with the revised source; the lifetime global may also turn a behavior into a routine or back.",
+  "description": "Change an existing behavior. Select names it and says what changes (intent only); the builder then revises its SCXML program from the intent, the existing program and this turn. Changing a persistent routine (for example its schedule) restarts it with the revised program, and a change may also turn a behavior into a routine or back.",
   "properties": {
     "event": {
       "const": "bot.behavior.change",
@@ -19,7 +19,7 @@
     },
     "triggers": {
       "default": [],
-      "description": "Replacement external event names that may propose this behavior to fast intuition. Installed on the inventory instance alongside the revised Starlark program.",
+      "description": "Replacement stimulus event names whose turns this behavior answers (a turn behavior); a routine needs none.",
       "examples": [
         [
           "environment.sound",
@@ -66,6 +66,40 @@
       ],
       "title": "Reason"
     },
+    "example": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "For a turn behavior: one message the behavior must answer, written as the user would say it (for 'when I say ping, say pong': ping). The behavior is run on it before it is accepted and must handle it. Null for a routine.",
+      "examples": [
+        "ping"
+      ],
+      "title": "Example"
+    },
+    "counterexample": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "For a turn behavior: one message close to the example that the behavior must not answer, because the lesson does not describe it (for 'when I say ping, say pong': pin). The behavior is run on it before it is accepted and must decline it. Null for a routine.",
+      "examples": [
+        "pin"
+      ],
+      "title": "Counterexample"
+    },
     "source": {
       "anyOf": [
         {
@@ -77,7 +111,7 @@
         }
       ],
       "default": null,
-      "description": "Revised Starlark HSM behavior source. Required on the change write step. Must remain a valid executable behavior declaration whose model name matches this behavior name. Author revisions from the Starlark behavior API and existing_behavior.source — do not paste unrelated canned source. Keep lifetime = \"persistent\" and its hsm.every / hsm.at schedules for a routine.",
+      "description": "Leave null: the builder writes the revised program.",
       "title": "Source"
     }
   },

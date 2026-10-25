@@ -135,7 +135,14 @@
 
   Reflection: a reflection region invokes abilities/reflection/reflection.scx
   as the long-lived child "reflection", beside the turns, and each output is followed by bot.ability.reflection.input
-  {turn, cognition_input, cognition_output} to it; its
+  {turn, cognition_input, cognition_output, self, choices, declined} to it (choices
+  the turn's, which a learned behavior's live-turn check holds its
+  selections to, decision D221, and declined the learned behaviors
+  autonomy ran that declined the turn, decision D230), and each failed or
+  cancelled turn by one with outcome failed (and the failure) or cancelled
+  and no output, which reflection only remembers (decision D139); a
+  bot.ability.persona.revise reflection selects goes to the body, for the
+  persona (decision D145); its
   bot.ability.reflection.output settles the turn, and its
   bot.ability.failed {message} is logged. The reflection takes the
   database path and the model by <param>; with no database (null) it
@@ -150,10 +157,29 @@
   handed to the body as bot.ability.cognition.input {stimulus} (the tick's
   envelope, source "routines"), which the body grants a turn. With no database it runs no routine.
 
+  Learning (decision D149): bot.ability.learning.input, a lesson as its
+  teacher put it, is this ability's offer too (its transitions, in idle
+  and processing, only log). After the output of a turn that selected
+  one, completing sends the long-lived child "learning"
+  (abilities/learning/learning.scx, the learning region, with the
+  database, the model and the bounds as <param>s)
+  bot.ability.learning.lesson {turn, content, media_type,
+  cognition_input, cognition_output, participants}: the lesson with the
+  turn it was taught on. Its bot.ability.learning.output {lesson,
+  lesson_turn, learned, behavior, participants} is handed to the body as
+  bot.ability.cognition.input {stimulus: {event:
+  "bot.ability.learning.output", data: {lesson, lesson_turn, learned,
+  behavior}, source: "learning"}, participants}, a turn the bot tells its
+  teacher in. Bounded: a turn that perceives a lesson's result or a routine's
+  tick sends no lesson of its own (decision D220). Each lesson's result
+  reconciles the routines at once, so a routine learned, changed or
+  broken starts or stops without waiting for the next reflection.
+
   Readiness: the start sends bot.ability.ready to the parent, once
   (decision D242). What it offers, the parent reads from its live session
   with <decision:offers>: the events its offerable <data> declares,
-  bot.ability.cognition.ignore (of no effort), while a transition without
+  bot.ability.cognition.ignore and
+  bot.ability.learning.input (both of no effort), while a transition without
   a cond takes them. The stages are per-turn children that offer nothing.
 
   Choices: each turn's input carries the body's collected choices (its own
@@ -251,6 +277,9 @@
     <data id="focus_candidates" expr="[]"/>
     <data id="participants" expr="[]"/>
     <data id="choices" expr="[]"/>
+    <!-- The learned behaviors autonomy ran this turn that declined it,
+         for reflection (decision D230). -->
+    <data id="declined" expr="[]"/>
     <!-- Each tier's effort ceiling (decision D206): the decision layer and
          intuition are offered only the choices whose effort (0 when its
          offerer declares none) is at most theirs, and the heavier ones are
@@ -296,7 +325,7 @@
     <data id="tick" expr="null"/>
     <!-- What it offers its parent (decision D242), which reads it from its
          live session with <decision:offers>: the ignore, of no effort. -->
-    <data id="offerable" expr="({'bot.ability.cognition.ignore': {}})"/>
+    <data id="offerable" expr="({'bot.ability.cognition.ignore': {}, 'bot.ability.learning.input': {}})"/>
     <!-- The deliberative handoff, offered to the intuition tier only. -->
     <data id="handoff" expr="[]"/>
     <!-- What the bot knows of itself: its name, as the identity tells it
@@ -358,6 +387,7 @@
       <assign location="participants" expr="inputParticipants(_event)"/>
       <assign location="choices" expr="inputChoices(_event)"/>
       <assign location="environment" expr="inputEnvironment(_event)"/>
+      <assign location="declined" expr="[]"/>
     </transition>
     <!-- Nothing in flight: acknowledge at once. -->
     <transition event="bot.ability.cognition.cancel" event:schema="../schemas/bot.ability.cognition.cancel.json">
@@ -367,6 +397,9 @@
     </transition>
     <transition event="bot.ability.cognition.ignore" event:schema="../schemas/bot.ability.cognition.ignore.json">
       <log label="cognition.ignore" expr="'idle'"/>
+    </transition>
+    <transition event="bot.ability.learning.input" event:schema="../schemas/bot.ability.learning.input.json">
+      <log label="cognition.lesson" expr="'idle'"/>
     </transition>
     <!-- The deliberative handoff is this ability's call surface: the
          intuition tier never sends it. -->
@@ -422,6 +455,10 @@
     <transition event="bot.ability.cognition.ignore" event:schema="../schemas/bot.ability.cognition.ignore.json">
       <log label="cognition.ignore" expr="turnLog()"/>
     </transition>
+    <!-- A lesson is taken after the turn's output (completing). -->
+    <transition event="bot.ability.learning.input" event:schema="../schemas/bot.ability.learning.input.json">
+      <log label="cognition.lesson" expr="turnLog()"/>
+    </transition>
     <transition event="bot.ability.reasoning.input" event:schema="../schemas/bot.ability.reasoning.input.json">
       <log label="cognition.handoff" expr="turnLog()"/>
     </transition>
@@ -464,6 +501,7 @@
       </transition>
       <transition event="done.invoke.autonomy" cond="isUnhandled(_event)" target="after_autonomy">
         <log label="cognition.stage" expr="stageLog('autonomy unhandled', _event)"/>
+        <assign location="declined" expr="declinedCandidates(_event)"/>
         <assign location="acted_percepts" expr="perceptsAfter(_event)"/>
         <assign location="acted" expr="actedAfter(_event)"/>
       </transition>
@@ -690,7 +728,21 @@
           <param name="turn" expr="turn"/>
           <param name="cognition_input" expr="cognitionInput()"/>
           <param name="cognition_output" expr="selected"/>
+          <param name="self" expr="selfFact()"/>
+          <param name="choices" expr="choices"/>
+          <param name="declined" expr="declined"/>
         </send>
+        <!-- A lesson the turn selected goes to the learning with the turn
+             (decision D149), unless the turn perceives a lesson's result
+             or a routine's tick (decision D220);
+             last: a send that fails ends the rest of this block. -->
+        <if cond="perceivesLessonOrTick()">
+          <log label="cognition.lesson" expr="'bounded'"/>
+        <elseif cond="hasLesson()"/>
+          <send event="bot.ability.learning.lesson" target="#_learning">
+            <content expr="turnLesson()"/>
+          </send>
+        </if>
       </onentry>
       <transition target="idle"/>
     </state>
@@ -712,6 +764,16 @@
             <param name="participants" expr="participants"/>
           </send>
         </if>
+        <!-- The failed turn is remembered (decision D139), last: a send that
+             fails ends the rest of this block. -->
+        <send event="bot.ability.reflection.input" target="#_reflection">
+          <param name="turn" expr="turn"/>
+          <param name="cognition_input" expr="cognitionInput()"/>
+          <param name="cognition_output" expr="[]"/>
+          <param name="outcome" expr="'failed'"/>
+          <param name="failure" expr="failure"/>
+          <param name="self" expr="selfFact()"/>
+        </send>
       </onentry>
       <transition target="idle"/>
     </state>
@@ -738,6 +800,14 @@
         <onentry>
           <send event="bot.ability.cognition.cancelled" target="#_parent">
             <param name="turn" expr="turn"/>
+          </send>
+          <!-- The cancelled turn is remembered (decision D139). -->
+          <send event="bot.ability.reflection.input" target="#_reflection">
+            <param name="turn" expr="turn"/>
+            <param name="cognition_input" expr="cognitionInput()"/>
+            <param name="cognition_output" expr="[]"/>
+            <param name="outcome" expr="'cancelled'"/>
+            <param name="self" expr="selfFact()"/>
           </send>
         </onentry>
         <transition target="idle"/>
@@ -768,6 +838,13 @@
           <content expr="({})"/>
         </send>
       </transition>
+      <!-- A persona revision reflection selected (decision D145) goes to the
+           body, which passes it to the persona. -->
+      <transition event="bot.ability.persona.revise" event:schema="../schemas/bot.ability.persona.revise.json">
+        <send event="bot.ability.persona.revise" target="#_parent">
+          <content expr="_event.data"/>
+        </send>
+      </transition>
       <!-- The reflection's reboot: the body restarts this ability. -->
       <transition event="bot.reboot" event:schema="../schemas/bot.reboot.json" target="rebooting">
         <assign location="reboot_reason" expr="_event.data.reason"/>
@@ -777,6 +854,34 @@
       </transition>
     </state>
     <state id="reflection_stopped"/>
+  </state>
+
+  <!-- The learning: a long-lived child that learns each lesson a turn
+       selected, and whose result goes to the body, which grants it a turn
+       (decision D149). -->
+  <state id="learning_region" initial="learning_running">
+    <state id="learning_running">
+      <invoke id="learning" type="scxml" src="../learning/learning.scx">
+        <param name="database" expr="database"/>
+        <param name="model" expr="model"/>
+        <param name="bounds" expr="bounds"/>
+      </invoke>
+      <transition event="bot.ability.learning.output" event:schema="../schemas/bot.ability.learning.output.json">
+        <!-- The result first: with the routines stopped the reconcile's
+             send fails and ends the block. -->
+        <send event="bot.ability.cognition.input" target="#_parent">
+          <param name="stimulus" expr="lessonStimulus(_event)"/>
+          <param name="participants" expr="_event.data.participants"/>
+        </send>
+        <send event="bot.ability.routines.reconcile" target="#_routines">
+          <content expr="({})"/>
+        </send>
+      </transition>
+      <transition event="error.communication.learning" target="learning_stopped">
+        <log label="cognition.learning.failed" expr="_event.name"/>
+      </transition>
+    </state>
+    <state id="learning_stopped"/>
   </state>
 
   <!-- The routines: a long-lived child whose ticks go to the body, which

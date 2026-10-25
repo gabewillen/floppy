@@ -43,7 +43,7 @@ function firstDiagnosticSummary() {
 
 // Whether the builder.request data satisfies schemas/builder.request.json.
 function satisfiesBuilderRequest(_event) {
-  return _event.data !== null && typeof _event.data === 'object' && !Array.isArray(_event.data) && Object.keys(_event.data).every(function (k) { return ['spec', 'name', 'constraints', 'max_attempts', 'model', 'generate_timeout_ms', 'generate_ceiling_ms', 'min_every_ms', 'turn_after_bound_ms', 'apply'].indexOf(k) >= 0; }) && isOptionalBound(_event.data.min_every_ms) && isOptionalBound(_event.data.turn_after_bound_ms) && isOptionalApply(_event.data.apply) && typeof _event.data.spec === 'string' && _event.data.spec.trim().length > 0 && (_event.data.name === undefined || (typeof _event.data.name === 'string' && _event.data.name.length > 0)) && (_event.data.constraints === undefined || (Array.isArray(_event.data.constraints) && _event.data.constraints.length <= 32 && _event.data.constraints.every(function (c) { return typeof c === 'string'; }))) && (_event.data.max_attempts === undefined || (Number.isInteger(_event.data.max_attempts) && _event.data.max_attempts >= 1 && _event.data.max_attempts <= 8)) && (_event.data.model === undefined || (typeof _event.data.model === 'string' && _event.data.model.length > 0)) && isOptionalGenerateBound(_event.data.generate_timeout_ms) && isOptionalGenerateBound(_event.data.generate_ceiling_ms);
+  return _event.data !== null && typeof _event.data === 'object' && !Array.isArray(_event.data) && Object.keys(_event.data).every(function (k) { return ['spec', 'name', 'constraints', 'context', 'max_attempts', 'model', 'generate_timeout_ms', 'generate_ceiling_ms', 'min_every_ms', 'turn_after_bound_ms', 'apply', 'document_max_completion_tokens'].indexOf(k) >= 0; }) && isOptionalBound(_event.data.min_every_ms) && isOptionalBound(_event.data.turn_after_bound_ms) && isOptionalApply(_event.data.apply) && typeof _event.data.spec === 'string' && _event.data.spec.trim().length > 0 && (_event.data.context === undefined || (_event.data.context !== null && typeof _event.data.context === 'object' && !Array.isArray(_event.data.context))) && (_event.data.name === undefined || (typeof _event.data.name === 'string' && _event.data.name.length > 0)) && (_event.data.constraints === undefined || (Array.isArray(_event.data.constraints) && _event.data.constraints.length <= 32 && _event.data.constraints.every(function (c) { return typeof c === 'string'; }))) && (_event.data.max_attempts === undefined || (Number.isInteger(_event.data.max_attempts) && _event.data.max_attempts >= 1 && _event.data.max_attempts <= 8)) && (_event.data.model === undefined || (typeof _event.data.model === 'string' && _event.data.model.length > 0)) && isOptionalGenerateBound(_event.data.generate_timeout_ms) && isOptionalGenerateBound(_event.data.generate_ceiling_ms) && (_event.data.document_max_completion_tokens === undefined || (Number.isInteger(_event.data.document_max_completion_tokens) && _event.data.document_max_completion_tokens >= 1024 && _event.data.document_max_completion_tokens <= document_token_ceiling));
 }
 
 // An absent lifetime bound, or one of 1 ms to 1 day.
@@ -51,9 +51,9 @@ function isOptionalBound(value) {
   return value === undefined || (Number.isInteger(value) && value >= 1 && value <= 86400000);
 }
 
-// An absent live turn, or {turn, input, targets} as schemas/builder.request.json has it.
+// An absent live turn, or {turn, input, targets, choices?} as schemas/builder.request.json has it.
 function isOptionalApply(value) {
-  return value === undefined || (value !== null && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every(function (k) { return ['turn', 'input', 'targets'].indexOf(k) >= 0; }) && Number.isInteger(value.turn) && value.turn >= 1 && value.input !== null && typeof value.input === 'object' && !Array.isArray(value.input) && Array.isArray(value.targets) && value.targets.length <= 32 && value.targets.every(function (t) { return typeof t === 'string' && t.length > 0; }));
+  return value === undefined || (value !== null && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every(function (k) { return ['turn', 'input', 'targets', 'choices', 'handled', 'decline'].indexOf(k) >= 0; }) && (value.handled === undefined || typeof value.handled === 'boolean') && (value.decline === undefined || (value.decline !== null && typeof value.decline === 'object' && !Array.isArray(value.decline))) && (value.choices === undefined || (Array.isArray(value.choices) && value.choices.every(function (c) { return c !== null && typeof c === 'object' && typeof c.event === 'string'; }))) && Number.isInteger(value.turn) && value.turn >= 1 && value.input !== null && typeof value.input === 'object' && !Array.isArray(value.input) && Array.isArray(value.targets) && value.targets.length <= 32 && value.targets.every(function (t) { return typeof t === 'string' && t.length > 0; }));
 }
 
 // The request's live turn, else null (a turn behavior runs only its own tests).
@@ -70,12 +70,32 @@ function requestName(_event) {
   return _event.data.name === undefined ? null : _event.data.name;
 }
 
+function requestContext(_event) {
+  return _event.data.context === undefined ? null : _event.data.context;
+}
+
 function requestConstraints(_event) {
   return _event.data.constraints === undefined ? [] : _event.data.constraints;
 }
 
 function requestMaxAttempts(_event) {
-  return _event.data.max_attempts === undefined ? null : _event.data.max_attempts;
+  return _event.data.max_attempts === undefined ? max_attempts : _event.data.max_attempts;
+}
+
+function requestDocumentTokens(_event) {
+  return _event.data.document_max_completion_tokens === undefined ? document_max_completion_tokens : _event.data.document_max_completion_tokens;
+}
+
+// The next author call's token bound: doubled after a truncated author
+// generation, up to document_token_ceiling (decision D135).
+function grownDocumentTokens() {
+  return gen_failure === 'truncated' ? Math.min(document_max_completion_tokens * 2, document_token_ceiling) : document_max_completion_tokens;
+}
+
+// The next design call's token bound: doubled after a truncated design
+// generation, up to document_token_ceiling (decision D223).
+function grownDesignTokens() {
+  return gen_failure === 'truncated' ? Math.min(max_completion_tokens * 2, document_token_ceiling) : max_completion_tokens;
 }
 
 function requestModel(_event) {
@@ -147,8 +167,9 @@ function designLog() {
   return (previous_plan === null ? 'planning' : 'replanning') + ' the topology; failures ' + failures;
 }
 
-function designPrompt() {
-  return JSON.stringify({task: 'design', spec: spec, constraints: constraints, previous_plan: previous_plan, diagnostics: diagnostics});
+// The design request (model-facing XML in the prompt, decision D201).
+function designRequest() {
+  return ({task: 'design', spec: spec, context: context, constraints: constraints, previous_plan: previous_plan, diagnostics: diagnostics});
 }
 
 // The arguments of a generate.result's first call of the function
@@ -174,9 +195,17 @@ function previousDraft(field) {
   return draft === null ? null : draft[field];
 }
 
-function authorPrompt() {
+// The author rules and the SCXML schema the draft is written against
+// (decision D134).
+function authorSystem() {
+  return author_system + '\n\nThe SCXML 1.0 XML Schema (W3C), whose modules follow, each after its file name: the document is valid against it, and every element, attribute and child it holds is one the schema declares for that place (attributes of another namespace, such as event:schema, are allowed where the schema allows ##other).\n\n' + scxml_xsd;
+}
+
+// The draft or repair request (model-facing XML in the prompt, decision
+// D201).
+function authorRequest() {
   var repair = mode === 'repair';
-  return JSON.stringify({task: mode, name: fileName(), spec: spec, constraints: constraints, plan: plan, previous_scxml: repair ? scxml_text : null, previous_schemas: repair ? previous_schemas : null, previous_script: repair ? previous_script : null, previous_tests: repair ? previous_tests : null, diagnostics: diagnostics});
+  return ({task: mode, name: fileName(), spec: spec, context: context, constraints: constraints, plan: plan, previous_scxml: repair ? scxml_text : null, previous_schemas: repair ? previous_schemas : null, previous_script: repair ? previous_script : null, previous_tests: repair ? previous_tests : null, diagnostics: diagnostics, repeated: repeated.map(function (d) { return d.message; })});
 }
 
 function draftGenerated(_event) {
@@ -199,6 +228,31 @@ function noDocumentDiagnostics() {
 // it is one plain file name and a relative URI as it stands.
 function fileName() {
   return String(name !== null ? name : plan.name).replace(/[^A-Za-z0-9_-]+/g, '_');
+}
+
+// The request as the build reads it (decision D226): the name, the
+// spec, the constraints, the context's fields, the bounds, and the live
+// turn's turn, targets, choice events and handled.
+function requestLog() {
+  return JSON.stringify({name: name, spec: spec, constraints: constraints, context: Object.keys(context || {}), min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms,
+    apply: live_turn === null ? null : {turn: live_turn.turn, targets: live_turn.targets, choices: (live_turn.choices || []).map(function (c) { return c.event; }), handled: live_turn.handled !== false, decline: live_turn.decline !== undefined}});
+}
+
+// One attempt's draft (decision D226): the attempt, its path, and each
+// document's length and FNV-1a digest.
+function draftLog() {
+  return 'attempt ' + attempt + ' ' + draftPath() + ' scxml ' + digestOf(scxml_text) + ' schemas ' + digestOf(schemasText()) + ' script ' + digestOf(draft.script);
+}
+
+// A text's length and 32-bit FNV-1a digest of its UTF-16 code units.
+function digestOf(text) {
+  text = typeof text === 'string' ? text : '';
+  var h = 0x811c9dc5;
+  for (var i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return text.length + ':' + ('0000000' + h.toString(16)).slice(-8);
 }
 
 function draftFile(extension) {
@@ -239,6 +293,11 @@ function hasTestsWithinBounds() {
 
 function isReadyToSimulate() {
   return isValidatorClean() && hasTestsWithinBounds();
+}
+
+// A routine whose forced tick runs its copy (decision D153).
+function isReadyToTick() {
+  return isReadyToSimulate() && isRoutineTicked() && tick_scxml !== null;
 }
 
 function testsOutOfBoundsDiagnostics() {
@@ -309,7 +368,31 @@ function isValidated() {
 // Each error with rendered, the form scx validate prints it in (rustc's):
 // a repair is told the line and column of what it names, not only its code.
 function validateDiagnostics() {
-  return validatorErrors().slice(0, 20).map(function (d) { var at = sourceAt(d.primary.span); return {kind: 'validate', code: d.code, label: d.primary.message ? d.primary.message : d.message, line: at.text.trim(), message: d.help ? d.message + ' Help: ' + d.help : d.message, rendered: renderedDiagnostic(d, at)}; });
+  return validatorErrors().slice(0, 20).map(function (d) { var at = sourceAt(d.primary.span); return {kind: 'validate', code: d.code, label: d.primary.message ? d.primary.message : d.message, line: at.text.trim(), message: d.help ? d.message + ' Help: ' + d.help : d.message, rendered: renderedDiagnostic(d, at), schema: elementSchema(elementAt(d.primary.span))}; });
+}
+
+// The SCXML element whose start tag holds or begins at a span: the name
+// after the last < at or before it, null for another namespace's element
+// or none (decision D137).
+function elementAt(span) {
+  var text = report.validator.source_text;
+  var start = charIndexOfByte(text, span.start);
+  var open = text.lastIndexOf('<', text.charAt(start) === '<' ? start : start - 1);
+  var name = open < 0 ? null : /^<\/?([A-Za-z_][A-Za-z0-9_.-]*)(?=[\s/>])/.exec(text.slice(open, open + 64));
+  return name === null ? null : name[1];
+}
+
+// What the SCXML schema declares for an element (decision D137): its
+// attributes, its content and the element itself, the scxml_xsd lines from
+// its attlist to its element declaration; '' when it declares none.
+function elementSchema(element) {
+  if (element === null) {
+    return '';
+  }
+  var from = scxml_xsd.indexOf('<xsd:attributeGroup name="scxml.' + element + '.attlist">');
+  var declared = '<xsd:element name="' + element + '" type="scxml.' + element + '.type"/>';
+  var to = scxml_xsd.indexOf(declared, from);
+  return from < 0 || to < 0 ? '' : scxml_xsd.slice(from, to + declared.length);
 }
 
 // The character index of the UTF-8 byte offset of the report's source text
@@ -369,17 +452,18 @@ function hasLifetimeErrors() {
 // The behavior checks: a persistent routine is checked by one forced tick
 // (D84); a turn behavior, given the request's live turn, by one run on that turn (D131).
 function simTests() {
-  return isRoutineTicked() ? draft.tests.concat([firstTickTest()]) : isLiveTurnChecked() ? draft.tests.concat([liveTurnTest()]) : draft.tests;
+  return isRoutineTicked() ? draft.tests.concat([firstTickTest()]) : isLiveTurnChecked() ? draft.tests.concat(liveTurnTests()) : draft.tests;
 }
 
 function isRoutineTicked() {
   return isLifetimeChecked() && lifetime === 'persistent' && schedules.length > 0;
 }
 
-// The routine's tick, forced by delivering its first schedule's event at once (the
-// timer clock fires its first schedule wait at once, decision D84), within 2 s.
+// The routine's forced tick (decision D84): its copy with each schedule 1500 ms
+// away runs with no event sent to it, so its own schedule send must fire its first
+// tick within 2 s (decision D153).
 function firstTickTest() {
-  return {name: 'first tick', events: [{name: schedules[0], data: '', delay_ms: 0}], settle_ms: 2000, expect_events: ['bot.behavior.tick'], expect_done: false, tick: true};
+  return {name: 'first tick', events: [], settle_ms: 2000, expect_events: ['bot.behavior.tick'], expect_done: false, tick: true};
 }
 
 // lifetime is written by validate's <behavior:lifetime_errors>, with or without bounds.
@@ -390,7 +474,17 @@ function isLiveTurnChecked() {
 // The run on the live turn (sim_apply): expect_events [] admits any outputs, and
 // <behavior:verify_apply> judges its donedata.
 function liveTurnTest() {
-  return {name: 'live turn', events: [], settle_ms: liveTurnBoundMs(), expect_events: [], expect_done: true, apply: true, live: true, turn: live_turn.turn, input: live_turn.input, targets: live_turn.targets, handled: true};
+  return {name: 'live turn', events: [], settle_ms: liveTurnBoundMs(), expect_events: [], expect_done: true, apply: true, live: true, turn: live_turn.turn, input: live_turn.input, targets: live_turn.targets, choices: live_turn.choices === undefined ? null : live_turn.choices, handled: live_turn.handled !== false};
+}
+
+// The live run, then, with the request's decline, a run on that input
+// that must decline (decision D229).
+function liveTurnTests() {
+  var live = liveTurnTest();
+  if (live_turn.decline === undefined) {
+    return [live];
+  }
+  return [live, Object.assign({}, live, {name: 'declined turn', input: live_turn.decline, handled: false, decline: true})];
 }
 
 // The 2 s verify timeout (decision D131), within the turn's silence bound when the request names it.
@@ -423,6 +517,11 @@ function currentTest() {
   return sim_tests[sim_index];
 }
 
+// The forced tick runs the routine's copy (decision D153), every other test the draft.
+function testPath() {
+  return isTickTest() ? '../../behaviors/' + draftFile('.tick.scx') : draftPath();
+}
+
 function currentTestEvents() {
   return currentTest().events;
 }
@@ -433,10 +532,6 @@ function candidateTarget() {
 
 function stepDelay(step) {
   return delay(Math.min(Math.max(step.delay_ms, 0), 60000));
-}
-
-function stepData(step) {
-  return step.data === '' ? null : JSON.parse(step.data);
 }
 
 // The settle time: the script's settle_ms, after its last event, within sim_test_cap_ms.
@@ -466,6 +561,29 @@ function testInput() {
 
 function testTargets() {
   return currentTest().targets;
+}
+
+// Whether the live run must handle its turn: not on a turn that taught
+// the behavior (decision D222).
+function testHandled() {
+  return currentTest().handled !== false;
+}
+
+// The live turn's choices its selections are held to (decision D221),
+// null for none.
+function testChoices() {
+  return currentTest().choices === undefined ? null : currentTest().choices;
+}
+
+// A declined run's messages and, when it handled the input it must
+// decline, why that is refused (decision D229).
+function declinedApply() {
+  var d = child_data;
+  if (currentTest().decline !== true || d === null || typeof d !== 'object' || d.handled !== true || !Array.isArray(d.selected) || d.selected.length === 0) {
+    return apply;
+  }
+  var events = d.selected.map(function (s) { return s !== null && typeof s === 'object' ? String(s.event) : String(s); });
+  return apply.concat(['turn behavior handled the input it must decline (the lesson\'s counterexample, a message the lesson does not describe), selecting ' + events.join(', ') + ': it answers only the messages the lesson describes and ends handled false with selected [] on every other turn, ignoring included.']);
 }
 
 // done.invoke's donedata, which scxml.rs does not check; none is {}, which
@@ -540,13 +658,17 @@ function hasTopLevelFinal() {
 
 // retry_gate
 
+function diagnosticIdentity(d) {
+  return d.kind + '|' + d.code + '|' + (d.kind === 'validate' ? d.label : d.message);
+}
+
 // The sorted, distinct identities of the failure's diagnostics: kind|code
 // and, for a validate diagnostic, its primary label (not the line it marks:
 // the same mistake moves around between drafts), else its message (a
 // simulate message names the test, its expected and observed outputs, its
 // done and its error; the rest are the builder's own or a namespace's).
 function diagnosticsFingerprint() {
-  return diagnostics.map(function (d) { return d.kind + '|' + d.code + '|' + (d.kind === 'validate' ? d.label : d.message); }).sort().filter(function (key, i, keys) { return i === 0 || key !== keys[i - 1]; });
+  return diagnostics.map(diagnosticIdentity).sort().filter(function (key, i, keys) { return i === 0 || key !== keys[i - 1]; });
 }
 
 // The last draft a check rejected (validate, lifetime, simulate, apply),
@@ -562,13 +684,14 @@ function nextAttemptLog() {
 }
 
 function retryGateLog() {
-  return 'failure ' + failures + (max_attempts === null ? '' : ' of ' + max_attempts) + firstDiagnosticSummary();
+  return 'failure ' + failures + ' of ' + max_attempts + (repeated.length > 0 ? ', ' + repeated.length + ' repeated' : '') + firstDiagnosticSummary();
 }
 
-// A diagnostic an earlier failure of this build already had, consecutive
-// or not: the same failure more than once ends the build (decision D124).
-function isNoProgress() {
-  return fingerprint.some(function (key) { return fingerprints.indexOf(key) >= 0; });
+// The failure's diagnostics whose identity an earlier failure of this build
+// already had, consecutive or not (decision D133): the build goes on, and
+// the next author call is told that its earlier fix of them did not work.
+function repeatedDiagnostics() {
+  return diagnostics.filter(function (d) { return fingerprints.indexOf(diagnosticIdentity(d)) >= 0; });
 }
 
 // The identities of every failure so far, this one's included.
@@ -577,7 +700,7 @@ function nextFingerprints() {
 }
 
 function isAttemptsExhausted() {
-  return max_attempts !== null && failures >= max_attempts;
+  return failures >= max_attempts;
 }
 
 // triage

@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.learning.output",
+  "additionalProperties": false,
+  "description": "How the bot's practice of a lesson it was taught went.\n\nThe bot perceives this as a turn of its own, after the turn it was taught on. learned true: the lesson is now a behavior of the bot (a rule it answers with, or a routine it keeps on its schedule), and the bot may say so in its own words. learned false: the lesson did not take yet, as a person needs more practice; the bot may say that it needs more practice or to be shown again, never why it failed. A turn that perceives this cannot select another lesson.",
+  "properties": {
+    "lesson": {
+      "description": "The lesson as it was taught.",
+      "minLength": 1,
+      "title": "Lesson",
+      "type": "string"
+    },
+    "lesson_turn": {
+      "description": "The turn it was taught on [floppy field].",
+      "minimum": 1,
+      "title": "Lesson turn",
+      "type": "integer"
+    },
+    "learned": {
+      "description": "Whether the bot learned it.",
+      "title": "Learned",
+      "type": "boolean"
+    },
+    "behavior": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "status": {
+              "description": "ACTIVE: the bot does it now; BROKEN: the bot stopped it, as the lesson asked (decision D220).",
+              "enum": [
+                "ACTIVE",
+                "BROKEN"
+              ]
+            }
+          },
+          "required": [
+            "name",
+            "description",
+            "status"
+          ],
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The behavior it learned or stopped (null when it did not): its name, what it does, and whether it now runs.",
+      "title": "Behavior"
+    },
+    "participants": {
+      "description": "Who took part in the teaching turn: present on the learning's answer to the cognition, which hands them to the body with the stimulus, and absent in the stimulus the bot perceives [floppy field].",
+      "items": {
+        "type": "object"
+      },
+      "maxItems": 32,
+      "type": "array"
+    }
+  },
+  "required": [
+    "lesson",
+    "lesson_turn",
+    "learned",
+    "behavior"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "lesson": "Whenever I say exactly 'ping', reply with exactly 'pong'.",
+      "lesson_turn": 3,
+      "learned": true,
+      "behavior": {
+        "name": "PingPong",
+        "description": "Reply pong to ping.",
+        "status": "ACTIVE"
+      }
+    },
+    {
+      "lesson": "Remind me to drink water every hour.",
+      "lesson_turn": 5,
+      "learned": false,
+      "behavior": null
+    }
+  ]
+}
