@@ -1,0 +1,22 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "body": {
+        "object": "chat.completion",
+        "choices": [
+          {
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {
+              "role": "assistant",
+              "content": "{\"events\": [{\"event\": \"bot.behavior.break\", \"target\": \"session.learning\", \"data\": {\"event\": \"bot.behavior.break\", \"name\": \"GreetOnKnock\", \"reason\": \"I was asked to stop greeting a knock.\"}, \"reason\": \"the lesson\"}]}"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

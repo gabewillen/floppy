@@ -34,5 +34,8 @@
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>
+    <test id="131" conformance="mandatory" manual="false">
+      <start uri="131/test131.scxml"/>
+    </test>
   </assert>
 </assertions>
