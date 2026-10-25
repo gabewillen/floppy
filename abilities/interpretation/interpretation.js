@@ -463,6 +463,11 @@ function ownMediaDir() {
   return utterance.audio.slice(0, utterance.audio.lastIndexOf('/') + 1);
 }
 
+function ownVoiceUndetected(_event) {
+  var message = Object(_event.data).message;
+  return 'the bot\'s own voice could not be detected' + (typeof message === 'string' ? ': ' + message : '');
+}
+
 function ownVoiceUnidentified(_event) {
   var message = Object(_event.data).message;
   return 'no embedding for the bot\'s own voice' + (typeof message === 'string' ? ': ' + message : '');

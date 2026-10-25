@@ -80,7 +80,7 @@ fn layout(seeing: &Seeing, data: &[(&str, &str)]) -> PathBuf {
         .expect("the body is readable");
     let declared = r#"<data id="input" expr="['listening']"/>"#;
     assert!(body.contains(declared), "the body declares its input");
-    let mut body = body.replacen(declared, r#"<data id="input" expr="[]"/>"#, 1);
+    let mut body = body.replacen(declared, r#"<data id="input" expr="['identity']"/>"#, 1);
     for (id, expr) in data {
         let start = body
             .find(&format!(r#"<data id="{id}" expr=""#))
