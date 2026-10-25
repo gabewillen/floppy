@@ -703,8 +703,11 @@
         <transition event="done.invoke.own_voice_detection" cond="isOwnVoiceLongEnough(_event)" target="IdentifyingOwnVoice">
           <assign location="utterance.voice_detection" expr="_event.data.voice_detection"/>
         </transition>
-        <transition event="done.invoke.own_voice_detection" target="Idle">
+        <transition event="done.invoke.own_voice_detection" cond="isApplyData(_event)" target="Idle">
           <log label="interpretation.unidentified" expr="'too little of the bot\'s own voice'"/>
+        </transition>
+        <transition event="done.invoke.own_voice_detection" target="Idle">
+          <log label="interpretation.unidentified" expr="ownVoiceUndetected(_event)"/>
         </transition>
         <transition event="DetectingOwnVoice.after" target="Idle">
           <log label="interpretation.unidentified" expr="'the bot\'s own voice undetected after ' + stage_timeout_ms + ' ms'"/>
