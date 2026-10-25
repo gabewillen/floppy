@@ -47,6 +47,7 @@
   </state>
   <transition event="bot.ability.speaking.efference"/>
   <transition event="bot.ability.speaking.progress"/>
+  <transition event="bot.ability.listening.enroll"/>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
 </state>
 <final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
