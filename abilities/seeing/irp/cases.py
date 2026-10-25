@@ -35,7 +35,7 @@ P2 = {"ref": "person-2", "role": "source"}
 
 READY = expect("bot.ability.ready")
 # The offer: look alone, with its effort (1), its schema, read from its live
-# session (decisions D242, D246).
+# session (decisions D242, D250).
 OFFERED = offers("offers.length === 1 && offers[0].event === 'bot.ability.seeing.look' && offers[0].effort === 1"
                  " && offers[0].target === undefined && offers[0].schema.additionalProperties === false")
 
@@ -102,7 +102,7 @@ PERSON = {"label": "person", "confidence": 0.75, "box": box(0, 0, 0.5, 1)}
 LAMP = {"label": "lamp", "confidence": None, "box": box(0.75, 0.25, 0.25, 0.5)}
 DESCRIBED = "A white square."
 
-S.statement(1, "On start it sends its parent `bot.ability.ready`, once and with no data (decision D242). What it offers, read from its live session (`<decision:offers>`), is the one model-callable `bot.ability.seeing.look` with its effort (`look_effort`, 1; decision D246), with its schema (`{}` with no other property), no target.")
+S.statement(1, "On start it sends its parent `bot.ability.ready`, once and with no data (decision D242). What it offers, read from its live session (`<decision:offers>`), is the one model-callable `bot.ability.seeing.look` with its effort (`look_effort`, 1; decision D250), with its schema (`{}` with no other property), no target.")
 S.statement(2, "An `environment.visual` with a `source` is held as that source's view and, as the source's first view, measured and handed on: the parent gets `bot.ability.cognition.input` `{stimulus: {event: \"bot.ability.seeing.sight\", data: {cause: \"change\", views: [view], participants}, source: <the view's source>}, participants}`, the view `{image, media_type, kind, participants, change: null, age_ms, objects: null, description: null}` copied from the stimulus (`media_type` and `kind` null when it names none) and `participants` the view's stamped participants.")
 S.statement(3, "An `environment.visual` without a `source` is dropped: nothing is held, measured or handed on, and a look then sees nothing (`{cause: \"look\", views: [], participants: []}`, source `\"seeing\"`).")
 S.statement(4, "A later view of a source is measured against the signature of the last view of that source handed on, by `measure` (`byte_identity` by default: 0 for the same bytes, 1 for others; or `frame_diff`, the mean difference of the views' blurred 32x32 grays): a change of at least `change_threshold` (0.1) is handed on with its change; a smaller change is not.")

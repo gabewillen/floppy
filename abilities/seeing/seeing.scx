@@ -121,7 +121,7 @@
   model-callable event, of look_effort, 1 by default: as in mosfet.py, a
   look is no reflex, so the decision layer, ceiling 0, holds it and hands
   the turn on, and intuition and reasoning, which see the views, may take
-  it; decisions D206, D246), which every state of perceiving takes.
+  it; decisions D206, D250), which every state of perceiving takes.
 
   Logs (closed values only; never a source, a reference, a label, a
   description or a signature): seeing.degraded, seeing.view,

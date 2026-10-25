@@ -7,7 +7,7 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
-## 2026-10-25, seeing hill climb (D246), model `sparks/qwen3.8-flash-next`
+## 2026-10-25, seeing hill climb (D250), model `sparks/qwen3.8-flash-next`
 
 `eval.py run` on the seeing scenarios from a cloud session, the bot on
 `sparks/qwen3.8-flash-next` through the CPA gateway and the decision service
@@ -19,7 +19,7 @@ the bot. Results are in the project's `floppy-eval/seeing/`.
 
 | Run | Bot | Split | Score |
 | --- | --- | --- | --- |
-| see-test-baseline | before D246 (reasoning and seeing documents of `1da406ed`) | test | 0.000 (both loop on look) |
+| see-test-baseline | before D250 (reasoning and seeing documents of `1da406ed`) | test | 0.000 (both loop on look) |
 | see-train3 | images reach reasoning | train | 0.000 (the decision layer, text only, selects look on every sight) |
 | see-train4 | and look of effort 1 | train | 0.333 (`seeing_look` answered $14.21) |
 | see-train5 | and an unsent image marked `omitted` | train | 0.647 |

@@ -122,7 +122,7 @@
 //! `imageslocation` (optional) receives the references of the stimulus's
 //! images, in the order of their placeholders' `ref`s (`[]` for none), so a
 //! model that takes images is sent each as an image part after the content
-//! (decision D246); it reads which is which by its `ref`. Without
+//! (decision D250); it reads which is which by its `ref`. Without
 //! `imageslocation` the images are not sent, and each placeholder is
 //! `<media:image media_type? omitted="media_type" />` instead, as mosfet.py
 //! shows an image to a text-only model, so the model knows it is not seeing

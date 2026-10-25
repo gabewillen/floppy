@@ -54,7 +54,7 @@
   sight's view, a visual stimulus) renders as its <media:image ref>
   placeholder, and the user message's content is then the text followed by
   each image as an image part, in ref order, so the model sees what the bot
-  sees (decision D246). The stimulus's data is JSON here,
+  sees (decision D250). The stimulus's data is JSON here,
   so it renders as plain data: a content field, an object as entry elements, an array as item elements,
   each object or array item filled as one (decision D99), indented by two
   spaces, an empty element written as <name />. The budgets hold: 262144 encoded bytes, 4096
@@ -182,7 +182,7 @@
     <data id="prompt" expr="null"/>
     <data id="prompt_failure" expr="null"/>
     <!-- The references of the images the stimulus carries, sent as image
-         parts after the prompt (decision D246). -->
+         parts after the prompt (decision D250). -->
     <data id="images" expr="[]"/>
     <data id="selected" expr="null"/>
     <!-- Whether the selections held the deliberative handoff. -->
