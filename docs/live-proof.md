@@ -7,6 +7,29 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-25, the live voice path (D240) from a cloud session, model `gabe-codex-1/gpt-6-luna`
+
+Every live test on floppy main `3bc0f496` (after #71 and #78, before the
+learning stack), from a cloud session with no lab access. scx ignores the
+session's proxy, so each backend was a local relay: CPA for chat
+(`FLOPPY_BASE_URL`; `gpt-6-luna` without an account prefix was refused,
+its token invalidated), TypeSafe for decisions (`TYPESAFE_BASE_URL`), and,
+standing in for the lab's speech gateway, a local OpenAI-compatible
+`/v1/audio/transcriptions` and `/v1/audio/speech` answered by Gemini
+(`gemini-3.8-flash`, `gemini-3.8-flash-tts`, 24 kHz PCM) at
+`FLOPPY_SPEECH_BASE_URL`; voice detection was `scripts/vad-server.py`
+(Silero VAD v5) at `FLOPPY_VOICE_BASE_URL`. `cargo test -p floppy-tests
+--test floppy_live -- --ignored --test-threads 1`.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| `floppy_live` `live_listening` | pass (458 s with the build) | the spoken question was detected, decoded ("Hey Floppy, what is the capital of France?"), answered and spoken: `floppy.say` "The capital of France is Paris.", `bot.ability.speaking.output` `completed`, no listening or processing failure |
+| `floppy_live` `live_chat` | fail, then pass (56 s) | answered and spoken ("Hi Gabe! Hello!"); the test still expected `communication.product` to log the message's sequence (`0`), but since S1 to S4 it logs the message's `provenance.turn_ref` (`input-1:turn:gabe`). The test now checks one product of the input's turn |
+| `floppy_live` `live_cascade` | pass | |
+| `floppy_live` `live_choices` | pass | |
+| `floppy_live` `live_identity` | pass | |
+| `floppy_live` `live_conversation` | pass | turn 1 answered and stored; turn 2 ("Whenever I say 'ping', reply 'pong'") created `PingPongExact` ACTIVE, but the decision layer chose the ignore, so nothing was said; turn 3 ("ping") matched `PingPongExact`, which left the turn unhandled, and the decision layer chose the ignore again, so no "pong" was said and reflection changed the behavior; turn 4 "Your favorite color is green." The test checks neither turn 2's nor turn 3's reply |
+
 ## 2026-10-21, D124's no-progress on the maintainer's lab stack, model `gemma-4-26b-a4b`
 
 The first runs on the maintainer's lab stack:

@@ -281,7 +281,10 @@ fn live_chat() {
         .pop()
         .and_then(|text| serde_json::from_str::<Json>(&text).ok());
     let said = texts(&all, "floppy.say");
-    let pass = texts(&all, "communication.product") == ["0"]
+    // One product, of this input's turn (its `provenance.turn_ref`).
+    let products = texts(&all, "communication.product");
+    let pass = products.len() == 1
+        && products[0].ends_with(":turn:gabe")
         && output.as_ref().is_some_and(|output| output["turn"] == 1)
         && all_sent(&all, output.as_ref())
         && said.len() == 1
