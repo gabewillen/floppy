@@ -7,6 +7,31 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-25, memory hill climb (D246), model `sparks/qwen3.8-flash-next`
+
+`eval.py run` on the memory scenarios, split as `climb` splits them
+(seed 7, test share 0.34): train `recall_many`, `recall_people`,
+`recall_restart`; held-out test `people_overheard`, `recall_update`. Two
+repeats each, from a cloud session through the relays of docs/eval.md,
+judges `gabe-codex-0/gpt-6.1-sol` and `gemini-4-argon`. The baseline is
+the same tree with D246's documents overlaid by their earlier versions
+(`--overlay`). The held-out set was run once, on the change.
+
+| Run | Train | Held-out test |
+| --- | --- | --- |
+| baseline | 0.38 (recall_many 0.07, recall_people 1.00, recall_restart 0.07) | 0.23 (people_overheard 0.46, recall_update 0.00) |
+| D246 | 0.86 (recall_many 0.99, recall_people 0.58, recall_restart 1.00) | 0.81 (people_overheard 0.72, recall_update 0.91) |
+
+Read before trusting: recall_people's two misses are not memory's. In
+one, reasoning ran past its 240 s bound on the backend; in the other,
+floppy adopted "floppy" as its name and answered each question twice (a
+conversation turn and an addressed turn), so the eval read the answers a
+step late. people_overheard-r0 answered both questions right ("A blue
+teapot", "a marathon"), the first a step late after answering the side
+talk (#96). recall_update-r0 said "tacos now, right? Not sushi", which
+the `not_says` sushi check counts against it. Intervals are wide (±0.18
+on train, ±0.20 on test, 6 and 4 jobs).
+
 ## 2026-10-25, every feature graded (D245), model `sparks/qwen3.8-flash-next`
 
 `eval.py features --no-tests` (docs/eval.md's feature grade) on #83's

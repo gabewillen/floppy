@@ -22,6 +22,7 @@
 {"label":"bot.ability.speaking.output","session":"session","text":"{\"channels\":1,\"media_type\":\"audio/pcm\",\"outcome\":\"completed\",\"sample_rate_hz\":24000,\"spoken\":\"Hi! I am floppy.\",\"text\":\"Hi! I am floppy.\",\"unspoken\":\"\",\"voice_id\":null}","type":"log"}
 {"label":"conversation","parent":"session.floppy.communication","session":"session.floppy.communication.conversation","text":"outbound 0","type":"log"}
 {"label":"communication.exchange","parent":"session.floppy","session":"session.floppy.communication","text":"1","type":"log"}
+{"label":"stm.turn.recorded","parent":"session.floppy","session":"session.floppy.stm","text":"said cut=false","type":"log"}
 {"label":"reflection.selected","parent":"session.floppy.cognition","session":"session.floppy.cognition.reflection","text":"none","type":"log"}
 {"label":"reflection.stored","parent":"session.floppy.cognition","session":"session.floppy.cognition.reflection","text":"turn 1","type":"log"}
 {"label":"bot.ability.reflection.output","parent":"session.floppy","session":"session.floppy.cognition","text":"turn 1","type":"log"}
