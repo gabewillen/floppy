@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/seeing/irp/sources">
   <assert id="seeing-1" specnum="1" specid="#seeing-1">
-    <![CDATA[On start it sends its parent `bot.ability.ready`, once and with no data (decision D242). What it offers, read from its live session (`<decision:offers>`), is the one model-callable `bot.ability.seeing.look`, of no effort, with its schema (`{}` with no other property), no target.]]>
+    <![CDATA[On start it sends its parent `bot.ability.ready`, once and with no data (decision D242). What it offers, read from its live session (`<decision:offers>`), is the one model-callable `bot.ability.seeing.look` with its effort (`look_effort`, 1; decision D246), with its schema (`{}` with no other property), no target.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>

@@ -122,7 +122,11 @@
 //! `imageslocation` (optional) receives the references of the stimulus's
 //! images, in the order of their placeholders' `ref`s (`[]` for none), so a
 //! model that takes images is sent each as an image part after the content
-//! (decision D246); it reads which is which by its `ref`.
+//! (decision D246); it reads which is which by its `ref`. Without
+//! `imageslocation` the images are not sent, and each placeholder is
+//! `<media:image media_type? omitted="media_type" />` instead, as mosfet.py
+//! shows an image to a text-only model, so the model knows it is not seeing
+//! it.
 //!
 //! `systemlocation` (optional) receives the system channel: the `instructions`
 //! (optional, a string; `null` is none), trimmed, then a blank line and the
@@ -782,6 +786,7 @@ fn model_facing_content<H: CognitionHost>(
         prior_episodes: &prior_episodes,
         standing_directives: &standing_directives,
         feedback: &feedback,
+        images: images_location.is_some(),
     };
     let system = system(&instructions, &known);
     let projected = project(&input, &system, tool_bytes, budget);
@@ -1191,6 +1196,10 @@ pub struct TurnInput<'a> {
     pub standing_directives: &'a [Json],
     /// The repair feedback, empty for none.
     pub feedback: &'a str,
+    /// Whether the stimulus's images are sent with the content (an
+    /// `imageslocation` takes them): else each placeholder says it was
+    /// left out.
+    pub images: bool,
 }
 
 /// How a projection was fitted to a fitted budget.
@@ -1416,7 +1425,7 @@ fn content(
         Stimulus::Null => Some(stimulus_element(None, &mut stimulus_budget)?.text(0)),
         Stimulus::Envelope(envelope) => {
             let mut root = stimulus_element(Some(envelope), &mut stimulus_budget)?;
-            images = attach_images(&mut root);
+            images = attach_images(&mut root, input.images);
             Some(root.text(0))
         }
     };
@@ -1854,9 +1863,9 @@ struct Element {
 /// An image placeholder's tag.
 const IMAGE_PLACEHOLDER: &str = "media:image";
 
-/// The most bytes a placeholder's `ref` adds: ` ref="image-N"`, N at most
-/// the node budget.
-const IMAGE_REF_ROOM: &str = " ref=\"image-4096\"";
+/// The most bytes a placeholder's verdict adds: ` omitted="media_type"`
+/// (a ` ref="image-N"` is shorter, N at most the node budget).
+const IMAGE_REF_ROOM: &str = " omitted=\"media_type\"";
 
 /// The placeholders of `element` and its descendants, in document order.
 fn placeholders(element: &mut Element) -> Vec<&mut Element> {
@@ -1866,13 +1875,21 @@ fn placeholders(element: &mut Element) -> Vec<&mut Element> {
     element.children.iter_mut().flat_map(placeholders).collect()
 }
 
-/// Numbers the placeholders under `root` in document order: each gains
-/// `ref="image-N"`, N its place from 1. Returns their images' references,
-/// in `ref` order.
-fn attach_images(root: &mut Element) -> Vec<String> {
+/// Numbers the placeholders under `root` in document order when their
+/// images are `sent`: each gains `ref="image-N"`, N its place from 1, and
+/// their references are returned in `ref` order. Else each gains
+/// `omitted="media_type"`, as mosfet.py's text-only model sees an image,
+/// and none is returned.
+fn attach_images(root: &mut Element, sent: bool) -> Vec<String> {
     let mut references = Vec::new();
     for element in placeholders(root) {
         if let Some(reference) = &element.image {
+            if !sent {
+                element
+                    .attributes
+                    .push(("omitted".to_owned(), "media_type".to_owned()));
+                continue;
+            }
             references.push(reference.clone());
             element
                 .attributes

@@ -118,8 +118,10 @@
   bot.ability.ready to the body, once (decision D242). What it offers, the
   body reads from its live session with <decision:offers>: the event its
   offerable <data> declares, bot.ability.seeing.look (its one
-  model-callable event, of no effort), which every state of perceiving
-  takes.
+  model-callable event, of look_effort, 1 by default: as in mosfet.py, a
+  look is no reflex, so the decision layer, ceiling 0, holds it and hands
+  the turn on, and intuition and reasoning, which see the views, may take
+  it; decisions D206, D246), which every state of perceiving takes.
 
   Logs (closed values only; never a source, a reference, a label, a
   description or a signature): seeing.degraded, seeing.view,
@@ -155,6 +157,13 @@
     <data id="detect" expr="false"/>
     <data id="describe" expr="false"/>
     <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <!-- How heavy an action bot.ability.seeing.look is (decision D206),
+         which the cognition holds against each tier's effort ceiling:
+         mosfet.py's look is M, above its decision layer's ceiling, so the
+         decision layer (ceiling 0), which cannot see a view, holds it, and
+         intuition (ceiling 1) and reasoning may take it. An invoker's
+         <param> sets it. -->
+    <data id="look_effort" expr="1"/>
     <!-- The held views, in receipt order: {source, visual, received_at,
          measured, measured_at}; the signature last handed on per source,
          {source, signature}; and whether a look is waiting. -->
@@ -176,8 +185,8 @@
     <!-- The timer in hand. -->
     <data id="timer" expr="null"/>
     <!-- What it offers its parent (decision D242), which reads it from its
-         live session with <decision:offers>: the look, of no effort. -->
-    <data id="offerable" expr="({'bot.ability.seeing.look': {}})"/>
+         live session with <decision:offers>: the look, of look_effort. -->
+    <data id="offerable" expr="({'bot.ability.seeing.look': {effort: look_effort}})"/>
   </datamodel>
   <script src="seeing.js"/>
 

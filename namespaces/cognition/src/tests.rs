@@ -1405,6 +1405,25 @@ fn a_stimulus_image_renders_as_a_placeholder_and_its_reference_is_handed_on() {
     );
     assert!(!content.contains("media/"), "{content}");
     assert!(!content.contains(r#"key="media_type""#), "{content}");
+    // Without imageslocation the images are not sent, and the
+    // placeholders say so.
+    let input = json!({
+        "stimulus": {"event": "bot.ability.seeing.sight", "source": "seeing",
+                     "data": {"cause": "look", "views": views}},
+        "prior_episodes": [], "standing_directives": [], "environment": null,
+        "instructions": "s", "schema": null,
+    });
+    let (_, _, Data::String(content)) = projected(&input) else {
+        panic!("the content is assigned as a string");
+    };
+    assert!(
+        content.contains(r#"<media:image media_type="image/jpeg" omitted="media_type" />"#),
+        "{content}"
+    );
+    assert!(
+        content.contains(r#"<media:image omitted="media_type" />"#),
+        "{content}"
+    );
     // A stimulus without images hands on none.
     let (content, images) = sight_projected(&json!([]));
     assert_eq!(images, data(&json!([])));
