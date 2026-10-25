@@ -7,6 +7,22 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-25, GPT-Live as the person talking to floppy, model `gabe-codex-1/gpt-6-luna`
+
+`scripts/talk-live.py` on floppy main `3bc0f496`, from a cloud session, with
+the same relays as the run below (CPA, TypeSafe, the Gemini speech stand-in
+at `FLOPPY_SPEECH_BASE_URL`, Silero VAD at `FLOPPY_VOICE_BASE_URL`). The
+person was OpenAI's `gpt-live-1` (voice `marin`, client delegation, never
+delegating), reached directly on `wss://api.openai.com/v1/live/sessions`
+with `OPENAI_API_KEY` from the session's environment; its 24 kHz PCM went
+to the room as `environment.sound` from `gabe`, and floppy's sounds were
+streamed back to it in real time. `--minutes 6`.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| first run, no nudge | one exchange | "Hey Floppy, what's the capital of France?" was heard, floppy said "Paris." 9.6 s after the question ended, GPT-Live heard "Paris" and said "Right, Paris. Exactly. Thanks, Floppy."; then both sides waited for the other for five minutes |
+| with `--nudge-s 30` | 15 utterances, every question answered aloud | eleven questions (nine capitals, floppy's name, "what we just talked about"), each answered by `floppy.say` and heard back by GPT-Live; floppy's spoken answer began 7 to 20 s after each question ended; "I don't have a name yet—you can give me one if you'd like."; the recap listed all seven capitals so far and the name exchange. GPT-Live's closing remarks drew "You're welcome!" twice; the conversation went quiet three times and the harness nudged GPT-Live on |
+
 ## 2026-10-25, the live voice path (D240) from a cloud session, model `gabe-codex-1/gpt-6-luna`
 
 Every live test on floppy main `3bc0f496` (after #71 and #78, before the
