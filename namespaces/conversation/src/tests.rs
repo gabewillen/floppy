@@ -1281,8 +1281,8 @@ fn a_representative_voice_is_its_unit_vector_in_signed_bytes() {
     assert!(cosine_similarity(&long, &back).expect("same size") > 0.999);
 }
 
-/// Decision D194: a voice memory holds is its person, by D90's match
-/// (cosine at 0.85, margin 0.05).
+/// Decision D194: a voice memory holds is its person, by D90's match at
+/// the voice threshold (cosine at 0.50, margin 0.05).
 #[test]
 fn a_voice_memory_holds_is_its_person() {
     let input = json!({"source_ids": [[0.3, 0.95]], "target_ids": ["floppy"], "content": "hi"});
@@ -1352,14 +1352,14 @@ fn a_person_scores_their_closest_voice_and_two_close_people_are_no_ones() {
             .map(|(person, voice)| ((*person).to_owned(), voice.to_vec()))
             .collect()
     };
-    // Below the threshold (cos 0.8): no one.
+    // Below the voice threshold (cos 0.45): no one.
     assert_eq!(
-        person_for_voice(&[1.0, 0.0], &known(&[("p", [0.8, 0.6])])),
+        person_for_voice(&[1.0, 0.0], &known(&[("p", [0.45, 0.892_996_080_652_404_7])])),
         None
     );
     // At the threshold or above: the person.
     assert_eq!(
-        person_for_voice(&[1.0, 0.0], &known(&[("p", [0.85, 0.526_782_687_642_637])])),
+        person_for_voice(&[1.0, 0.0], &known(&[("p", [0.5, 0.866_025_403_784_438_6])])),
         Some("p")
     );
     // A person scores their closest voice.

@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- identity-7: a sound with no file in the media directory fails the decoding. -->
+<!-- interpretation-14: the bot's own voice is learned from speaking's copy and answered with its id. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
-  <invoke id="identity" type="scxml" src="../../../identity.scx">
-    <param name="name" expr='"Floppy"'/>
+  <invoke id="interpretation" type="scxml" src="../../../interpretation.scx">
+    <param name="stage_timeout_ms" expr="600000"/>
+    <param name="diarizer" expr="true"/>
+    <param name="voice_classifier" expr="true"/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
@@ -14,9 +16,9 @@
   </state>
   <state id="step1">
     <onentry>
-      <send event="environment.sound" target="#_identity"><content expr='{"audio": "media/missing.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}'/></send>
+      <send event="bot.ability.listening.enroll" target="#_interpretation"><content expr='{"voice_id": null, "segment": {"audio": "media/voiced.pcm", "media_type": "audio/pcm", "sample_rate_hz": 16000, "channels": 1, "start_seconds": 0.0, "end_seconds": 0.1}}'/></send>
     </onentry>
-    <transition event="bot.ability.failed" cond="typeof _event.data.message === 'string' &amp;&amp; _event.data.message.length &gt; 0" target="step2"/>
+    <transition event="bot.ability.listening.enrolled" cond="_event.data.voice_id === 'self'" target="step2"/>
   </state>
   <state id="step2">
     <transition target="pass"/>

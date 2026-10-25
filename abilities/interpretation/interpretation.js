@@ -85,17 +85,13 @@ function speechProduct(content, contentType, scored, voiceDetection, sourceIds, 
 // initializing
 
 // The configuration initializing refuses: a negative threshold, a
-// recognize_timeout_ms that is not positive, identification with decoding.
+// recognize_timeout_ms that is not positive.
 function hasNegativeThreshold() {
   return product_threshold_db < 0;
 }
 
 function hasNoRecognizeTimeout() {
   return !(recognize_timeout_ms > 0);
-}
-
-function refusesIdentificationWithDecoding() {
-  return voice_classifier && speech_decoder;
 }
 
 // Working
@@ -115,6 +111,14 @@ function stageErrorFailure(_event) {
 
 function isStageChildFailure(_event) {
   return stage !== null && typeof Object(_event.data).message === 'string';
+}
+
+// Idle, HearingSpeech
+
+// The bot's own voice arriving as predicted: heard while producing, below
+// the product threshold. A sound with no level is never predicted.
+function isPredictedOwnVoice(scored) {
+  return scored.producing === true && scored.perceived_level_db != null && scored.perceived_level_db < product_threshold_db;
 }
 
 // DetectingVoice, FeedingSpeech (voice detection)
@@ -258,8 +262,10 @@ function diarizedOutput() {
   return media_dir + 'floppy-diarized-' + serial;
 }
 
+// Identified before anything else only when nothing decodes: decoded
+// speech is identified after its words.
 function isDiarizedToIdentify(_event) {
-  return hasSegments(_event) && voice_classifier;
+  return hasSegments(_event) && voice_classifier && !speech_decoder;
 }
 
 function isDiarizedToDecode(_event) {
@@ -320,6 +326,11 @@ function identifyTimedOut(count) {
 
 // IdentifyingVoice
 
+// Decoded speech stays decoded speech once its voices are identified.
+function identifiedKind() {
+  return completion.kind === 'decoding' ? 'decoding' : 'identification';
+}
+
 // No voice for any segment.
 function unidentifiedEmbeddings() {
   return completion.segments.map(function () { return null; });
@@ -340,7 +351,32 @@ function embeddingCountFailure() {
 // DecodingSpeech
 
 function decodingCompletion(_event) {
-  return ({kind: 'decoding', sensed: open_sensed || detection.sensed, voice_detection: detection.voice_detection, text: _event.data.text});
+  return ({kind: 'decoding', sensed: open_sensed || detection.sensed, voice_detection: detection.voice_detection, text: _event.data.text,
+    segments: isDiarization() ? completion.segments : []});
+}
+
+// Decoded words after diarization (In() no longer holds once the
+// transition's content runs: its source state has been exited).
+function isDiarization() {
+  return completion !== null && completion.kind === 'diarization';
+}
+
+// Decoded words whose diarized voices are identified next.
+function identifiesDecoded(_event) {
+  return hasText(_event) && voice_classifier && In('Diarized') && completion.segments.length > 0;
+}
+
+// The diarized segments embedded for decoded speech: those of at least
+// min_voice_seconds, else the longest (a print from less is too little to
+// tell a voice by).
+function voicedSegments() {
+  var long = completion.segments.filter(function (segment) { return segment.end_seconds - segment.start_seconds >= min_voice_seconds; });
+  if (long.length > 0) {
+    return long;
+  }
+  return [completion.segments.reduce(function (longest, segment) {
+    return segment.end_seconds - segment.start_seconds > longest.end_seconds - longest.start_seconds ? segment : longest;
+  })];
 }
 
 // HandingOff
@@ -361,9 +397,79 @@ function isDecoding() {
   return completion.kind === 'decoding';
 }
 
-// Decoding rewrites the observation: it becomes words.
+// Decoding rewrites the observation: it becomes words, with the voices
+// heard that are not the bot's own as its source_ids.
 function decodedProduct() {
-  return speechProduct(completion.text, 'text/plain', completion.sensed, completion.voice_detection, []);
+  return speechProduct(completion.text, 'text/plain', completion.sensed, completion.voice_detection, otherVoices());
+}
+
+// The identified voices of decoded speech.
+function heardVoices() {
+  return Array.isArray(completion.embeddings) ? completion.embeddings.filter(function (voice) { return voice !== null && Array.isArray(voice.embedding); }) : [];
+}
+
+function cosine(a, b) {
+  if (a.length !== b.length) {
+    return null;
+  }
+  var dot = 0, aa = 0, bb = 0;
+  for (var i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    aa += a[i] * a[i];
+    bb += b[i] * b[i];
+  }
+  return aa === 0 || bb === 0 ? null : dot / Math.sqrt(aa * bb);
+}
+
+// A voice at least voice_similarity_threshold alike to the bot's own.
+function isOwnVoice(voice) {
+  if (own_voice === null) {
+    return false;
+  }
+  var score = cosine(voice.embedding, own_voice.embedding);
+  return score !== null && score >= voice_similarity_threshold;
+}
+
+// The embeddings of the voices that are not the bot's own, the first of
+// alike ones (at the threshold) once, at most 4.
+function otherVoices() {
+  var others = [];
+  heardVoices().forEach(function (voice) {
+    if (isOwnVoice(voice) || others.length >= 4) {
+      return;
+    }
+    var known = others.some(function (other) {
+      var score = cosine(other, voice.embedding);
+      return score !== null && score >= voice_similarity_threshold;
+    });
+    if (!known) {
+      others.push(voice.embedding);
+    }
+  });
+  return others;
+}
+
+// The participants stamped on the sound, and the bot's own voice when it
+// was heard.
+function decodedParticipants() {
+  var participants = active_participants.slice();
+  if (heardVoices().some(isOwnVoice) && participants.length < 32
+      && !participants.some(function (p) { return p.ref === voice_id && p.role === 'source'; })) {
+    participants.push({ref: voice_id, role: 'source', own: true});
+  }
+  return participants;
+}
+
+// Enrolling
+
+function hasOwnEmbedding(_event) {
+  return hasEmbeddings(_event) && _event.data.embeddings.length === 1 && _event.data.embeddings[0] !== null
+    && Array.isArray(_event.data.embeddings[0].embedding);
+}
+
+// The copy's voice id, else the bot's own subject in memory.
+function ownVoiceId() {
+  return typeof copy.voice_id === 'string' ? copy.voice_id : 'self';
 }
 
 function isSegmented() {

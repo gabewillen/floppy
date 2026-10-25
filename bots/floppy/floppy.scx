@@ -106,6 +106,10 @@
   environment whose id the body passes it (decision D103, amended
   2026-10-15: the copy reaches the listening first), and the sound comes
   back to the body as any sound there does (the bot hears itself).
+  Speaking's copy of the bot's own voice, bot.ability.listening.enroll,
+  goes the same way to each Listening ability, and a Listening's
+  bot.ability.listening.enrolled (the bot's own voice id it learned) goes
+  to the communication, for speaking.
 
   Environment: environment.sound and environment.visual from the
   environment, while active, are first recorded in the short-term
@@ -117,8 +121,8 @@
   one-way message, so registration never blocks admitting the stimulus),
   then go to
   each input ability (input: the invoke ids
-  of the abilities that perceive raw stimuli; the identity and the
-  listening), in
+  of the abilities that perceive raw stimuli: the listening; the identity
+  hears words, as communication input, never sound, #89), in
   order, by <foreach>; never to the cognition, which hears of a stimulus
   only as an input ability's product: the listening hands its decoded
   speech or labelled non-speech over as bot.ability.cognition.input, which
@@ -336,7 +340,7 @@
     <data id="waiting" expr="[]"/>
     <!-- The input abilities each environment.* stimulus fans out to
          (as invoke ids), and the one being sent to. -->
-    <data id="input" expr="['identity', 'listening']"/>
+    <data id="input" expr="['listening']"/>
     <!-- Whether the eye perceives (decision D189): on, seeing is expected,
          takes every environment.visual and offers its look. -->
     <data id="seeing_enabled" expr="false"/>
@@ -661,6 +665,21 @@
               <content expr="_event.data"/>
             </send>
           </foreach>
+        </transition>
+        <!-- Speaking's copy of the bot's own voice goes to Listening, as
+             the efference copy does, and what Listening learned from it
+             back to the communication, for speaking. -->
+        <transition event="bot.ability.listening.enroll" event:schema="../../abilities/schemas/bot.ability.listening.enroll.json">
+          <foreach array="listening_abilities" item="ability">
+            <send event="bot.ability.listening.enroll" targetexpr="abilityTarget(ability)">
+              <content expr="_event.data"/>
+            </send>
+          </foreach>
+        </transition>
+        <transition event="bot.ability.listening.enrolled" event:schema="../../abilities/schemas/bot.ability.listening.enrolled.json">
+          <send event="bot.ability.listening.enrolled" target="#_communication">
+            <content expr="_event.data"/>
+          </send>
         </transition>
         <!-- What the communication said, and its failures. -->
         <transition event="bot.ability.speaking.output" event:schema="../../abilities/schemas/bot.ability.speaking.output.json">

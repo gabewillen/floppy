@@ -19,7 +19,7 @@ use serde_json::{Map, Value as Json};
 
 use super::{
     Attribute, Content, ConversationHost, Data, Executed, Failure, SIMILARITY_MARGIN,
-    SIMILARITY_THRESHOLD, assign_to, attribute_values, cosine_similarity, embedding, evaluate,
+    SIMILARITY_THRESHOLD, VOICE_SIMILARITY_THRESHOLD, assign_to, attribute_values, cosine_similarity, embedding, evaluate,
     identities_of, is_identity, no_content, read_json, relationship_context_ref, unit_vector,
 };
 
@@ -272,9 +272,9 @@ pub(super) fn people_for_input_element<H: ConversationHost>(
 
 /// The person a voice is, among the `known` voices (`(person_ref,
 /// embedding)`, in the order memory holds them), by the conversation's
-/// embedding match (decision D90): a person scores the highest cosine
-/// similarity of the voice with any of theirs, and is a candidate at
-/// [`SIMILARITY_THRESHOLD`] or more; the best candidate is the voice's
+/// embedding match (decision D90) at the voice threshold: a person scores
+/// the highest cosine similarity of the voice with any of theirs, and is a
+/// candidate at [`VOICE_SIMILARITY_THRESHOLD`] or more; the best candidate is the voice's
 /// person unless another candidate comes within [`SIMILARITY_MARGIN`] of
 /// it (as two identity groups' matches are refused), when the voice is no
 /// one's.
@@ -293,7 +293,7 @@ pub fn person_for_voice<'a>(voice: &[f64], known: &'a [(String, Vec<f64>)]) -> O
     let mut best: Option<(&str, f64)> = None;
     let mut second: Option<f64> = None;
     for (person, score) in scores {
-        if score < SIMILARITY_THRESHOLD {
+        if score < VOICE_SIMILARITY_THRESHOLD {
             continue;
         }
         match best {

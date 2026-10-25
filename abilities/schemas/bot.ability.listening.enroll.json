@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.listening.enroll",
+  "additionalProperties": false,
+  "description": "Speaking's motor-side copy of the bot's own voice: the PCM its mouth was commanded to play and, once learned, the voice id it has, so hearing can learn that voice as the bot's own. A nerve, never a model-offerable selection.",
+  "properties": {
+    "voice_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The bot's own voice id once it has learned one; null until then, so hearing learns the voice anew.",
+      "examples": [
+        null,
+        "self"
+      ],
+      "title": "Voice Id"
+    },
+    "segment": {
+      "additionalProperties": false,
+      "description": "The commanded PCM of the bot's own voice: a reference to raw audio/pcm in the media directory the run grants the speech service, with its format and span, at least 1.5 seconds long.",
+      "properties": {
+        "audio": {
+          "description": "Reference to the PCM file.",
+          "minLength": 1,
+          "title": "Audio",
+          "type": "string",
+          "examples": [
+            "media/floppy-speaking-1.pcm"
+          ]
+        },
+        "media_type": {
+          "const": "audio/pcm",
+          "title": "Media Type",
+          "type": "string"
+        },
+        "sample_rate_hz": {
+          "minimum": 1,
+          "title": "Sample Rate Hz",
+          "type": "integer",
+          "examples": [
+            24000
+          ]
+        },
+        "channels": {
+          "minimum": 1,
+          "title": "Channels",
+          "type": "integer",
+          "examples": [
+            1
+          ]
+        },
+        "start_seconds": {
+          "minimum": 0.0,
+          "title": "Start Seconds",
+          "type": "number"
+        },
+        "end_seconds": {
+          "exclusiveMinimum": 0.0,
+          "title": "End Seconds",
+          "type": "number"
+        }
+      },
+      "required": [
+        "audio",
+        "media_type",
+        "sample_rate_hz",
+        "channels",
+        "start_seconds",
+        "end_seconds"
+      ],
+      "title": "VoiceSegment",
+      "type": "object"
+    }
+  },
+  "required": [
+    "segment"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "voice_id": null,
+      "segment": {
+        "audio": "media/floppy-speaking-1.pcm",
+        "media_type": "audio/pcm",
+        "sample_rate_hz": 24000,
+        "channels": 1,
+        "start_seconds": 0.0,
+        "end_seconds": 2.4
+      }
+    }
+  ]
+}

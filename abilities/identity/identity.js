@@ -82,20 +82,6 @@ function heardText(data) {
 
 // recognizing
 
-// The speech decoding answered with a transcript (its decoded text).
-function hasTranscript(_event) {
-  return typeof Object(_event.data).text === 'string';
-}
-
-// The recognizer's error, as the stage failure.
-function recognitionFailedMessage(_event) {
-  return typeof Object(_event.data).message === 'string' ? _event.data.message : 'Identity recognizer produced output that does not match its output schema.';
-}
-
-function recognitionErrorMessage(_event) {
-  return 'Identity recognition could not run (' + _event.name + ').';
-}
-
 function addressedLog() {
   return 'addressed as ' + name;
 }

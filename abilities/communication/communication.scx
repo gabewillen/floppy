@@ -81,7 +81,10 @@
   environment, at #_scxml_ + the <data> environment (the environment's id,
   the body's <param>; decision D103, amended 2026-10-15: the communication
   puts the sound into the environment, after the copy has left for the
-  body, so the copy reaches the listening first).
+  body, so the copy reaches the listening first). Speaking's copy of the
+  bot's own voice, bot.ability.listening.enroll, goes to the body too
+  (for its Listening), and the body's bot.ability.listening.enrolled
+  goes to speaking, whatever the state.
 
   Activate: bot.ability.communication.activate {} keeps the one
   conversation active (a catalog of conversations to switch between is
@@ -205,6 +208,18 @@
     </transition>
     <transition event="bot.ability.speaking.efference" event:schema="../schemas/bot.ability.speaking.efference.json">
       <send event="bot.ability.speaking.efference" target="#_parent">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <!-- Speaking's copy of the bot's own voice goes to the body, for its
+         Listening; the Listening's answer comes back to speaking. -->
+    <transition event="bot.ability.listening.enroll" event:schema="../schemas/bot.ability.listening.enroll.json">
+      <send event="bot.ability.listening.enroll" target="#_parent">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <transition event="bot.ability.listening.enrolled" event:schema="../schemas/bot.ability.listening.enrolled.json">
+      <send event="bot.ability.listening.enrolled" target="#_speaking">
         <content expr="_event.data"/>
       </send>
     </transition>

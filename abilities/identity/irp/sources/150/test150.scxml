@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- identity-6: its name heard in a sound addresses it. -->
+<!-- identity-6: a sound produces nothing and decodes nothing; its name in text still addresses it. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="identity" type="scxml" src="../../../identity.scx">
@@ -15,10 +15,17 @@
   <state id="step1">
     <onentry>
       <send event="environment.sound" target="#_identity"><content expr='{"audio": "media/hey.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}'/></send>
+      <send event="harness.waited" delay="1s"/>
     </onentry>
-    <transition event="bot.ability.cognition.input" cond="_event.data.stimulus.event === 'bot.ability.identity.addressed' &amp;&amp; _event.data.stimulus.data.name === &quot;Floppy&quot; &amp;&amp; _event.data.stimulus.source === 'identity'" target="step2"/>
+    <transition event="harness.waited" target="step2"/>
   </state>
   <state id="step2">
+    <onentry>
+      <send event="bot.ability.communication.input" target="#_identity"><content expr='{"source_ids": ["gabe"], "target_ids": ["floppy"], "content": "Floppy", "content_type": "text/plain"}'/></send>
+    </onentry>
+    <transition event="bot.ability.cognition.input" cond="_event.data.stimulus.event === 'bot.ability.identity.addressed' &amp;&amp; _event.data.stimulus.data.name === &quot;Floppy&quot; &amp;&amp; _event.data.stimulus.source === 'identity'" target="step3"/>
+  </state>
+  <state id="step3">
     <transition target="pass"/>
   </state>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>

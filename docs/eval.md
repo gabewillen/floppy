@@ -62,7 +62,7 @@ never edits the workspace: everything goes under `target/floppy-eval/`.
 | `voice_question` | voice | two questions out loud, answered and said out loud correctly |
 | `voice_overlap` | voice | a second question out loud while floppy still says its first answer: both answered, floppy's own words not taken for the person's |
 | `voice_pause` | voice | a question out loud with a pause in the middle: answered once, not at the fragment |
-| `voice_people` | voice | two voices on one microphone (diarization on), each asking its own name |
+| `voice_people` | voice | two voices on one microphone, each asking its own name |
 | `voice_rest` | voice | an introduction, a quiet spell long enough to rest and consolidate (`rest_after_ms` 20 s), then the name and a fact |
 | `seeing_look` | seeing | a camera shows "Total due: $14.21" (seeing on); floppy is asked the total |
 | `chat_understand` | conversation | answers never said outright: when to leave for a 7 am flight, what to grab in the rain, the day after tomorrow from Friday |
@@ -81,8 +81,7 @@ criteria}`, with optional `criteria_features` (`{feature: [criterion]}`:
 the judges' criteria that grade a feature), `params` (`{name: expr}`,
 data the room passes the bot beside its model: `seeing_enabled`, `bounds`)
 and `edits` (`[{path, old, new}]`, each `old` found exactly once in the
-job's scratch copy of the bot: `voice_people` turns the interpretation's
-`diarizer` on).
+job's scratch copy of the bot).
 Each session is the bot started again on the same memory and behaviors
 directories (a restart with what it learned). A step is `{"say": text,
 "source"?: id, "timeout_s"?: n}`, one `bot.ability.communication.input`

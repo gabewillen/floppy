@@ -15,8 +15,9 @@
         DiarizingVoice -> IdentifyingVoice | DecodingSpeech.Diarized | HandingOff
         IdentifyingVoiceDirect -> HearingSpeech
         IdentifyingVoice -> HandingOff
-        DecodingSpeech { Detected, Diarized } -> HandingOff
+        DecodingSpeech { Detected, Diarized } -> IdentifyingVoice | HandingOff
         HandingOff -> Idle }
+      Idle -bot.ability.listening.enroll-> Working.Enrolling -> Idle
       Working -bot.ability.listening.stage.failed-> Idle }
 
   Configuration (as <data>): the voice activity
@@ -27,15 +28,24 @@
   stage operation timeout, and recognize_timeout_ms 2 s (decision D177).
   floppy's bot configures voice
   detection, sound classification and speech decoding (the phase 6 plan:
-  speech is decoded in listening). Voice identification with speech
-  decoding is refused (embedding correlation would be lost), as are a negative product_threshold_db and a
-  recognize_timeout_ms that is not positive: initializing ends in the final
-  state degraded, and the listening degrades.
+  speech is decoded in listening), with voice diarization and voice
+  identification, so decoded speech says who spoke. A negative
+  product_threshold_db and a recognize_timeout_ms that is not positive are
+  refused: initializing ends in the final state degraded, and the
+  listening degrades.
 
   Input: bot.ability.listening.sensitivity.output {sound, parent,
   perceived_level_db, producing} (sensitivity's output) from the
-  listening; producing is not read yet (echo handling waits for the
-  hearing stream, D177). Scored sounds that arrive while Working are held by
+  listening. The bot's own voice arriving as predicted (producing, with a
+  perceived_level_db below product_threshold_db) is not interpreted: Idle
+  and HearingSpeech take it and do nothing, so it neither opens an
+  utterance nor joins the open one, and a person's words heard while the
+  bot speaks, or just after it, stay one utterance of their own (#30;
+  mosfet.py's streaming hearing gates its predicted voice the same way,
+  W3-11). Anything else heard while producing (another source, or the
+  bot's own voice coming back wrong) is interpreted as usual, and the one
+  comparison at HandingOff still decides whether it is a turn. Scored
+  sounds that arrive while Working are held by
   <event:defer/> (scxml.rs namespaces/event) and taken, in order, by Idle
   and HearingSpeech: interpretation is serial, and
   the score was taken on arrival.
@@ -84,13 +94,34 @@
     opens with no source identity, or each segment is handed off with no embedding.
   * DecodingSpeech invokes abilities/speech_decoding/speech_decoding.scx (the speech
     service) on the utterance: decoding rewrites the observation into
-    words.
+    words. After diarization with voice identification configured, the
+    words then go to IdentifyingVoice, which embeds the diarized segments
+    of at least min_voice_seconds (1 s, mosfet.py's shortest new voice),
+    or the longest when none is that long: decoded speech says who spoke
+    (mosfet.py's streaming hearing does the same for each turn).
+  * Enrolling (bot.ability.listening.enroll {voice_id, segment}, taken
+    in Idle when voice identification is configured, else ignored;
+    serial work, so sounds wait behind it) embeds speaking's copy of the
+    bot's own voice through voice identification and keeps it as
+    own_voice, then answers the listening with
+    bot.ability.listening.enrolled {voice_id} (the copy's voice_id, else
+    "self", the bot's own subject in memory). A copy that cannot be
+    embedded, or not in time, is logged (interpretation.unidentified) and
+    tells nobody: the bot's own voice stays unknown and the next copy is
+    tried (mosfet.py's own-voice enrollment).
   * HandingOff is the one comparison: a
     product whose perceived_level_db is null or at least
     product_threshold_db goes to the listening; a quieter one is dropped.
     The products: decoded
     speech as bot.ability.listening.speech.output with content the words
-    and content_type text/plain (a sound with no sample rate fails); one speech product per diarized segment (its PCM, span,
+    and content_type text/plain (a sound with no sample rate fails), and,
+    when its voices were identified, who spoke: each voice whose embedding
+    is at least voice_similarity_threshold (0.50, mosfet.py's voice match)
+    alike to own_voice is the bot's own and is stamped as the participant
+    {ref: voice_id, role: "source", own: true}; every other voice's
+    embedding is one of its source_ids (at most 4, the first of alike
+    ones), which the conversation identifies as a person. Only the voices
+    that are not the bot's own become source_ids (mosfet.py). One speech product per diarized segment (its PCM, span,
     confidence, and, after identification, its embedding as its source
     identity); a silence observation as a speech product of the sound's
     PCM; a labelled sound, or a sound that is not PCM, as
@@ -136,8 +167,16 @@
     <data id="recognize_timeout_ms" expr="2000"/>
     <data id="sound_classifier" expr="true"/>
     <data id="speech_decoder" expr="true"/>
-    <data id="diarizer" expr="false"/>
-    <data id="voice_classifier" expr="false"/>
+    <data id="diarizer" expr="true"/>
+    <data id="voice_classifier" expr="true"/>
+    <!-- Who spoke: the shortest segment embedded for decoded speech, the
+         least cosine at which a voice is the bot's own (mosfet.py's voice
+         match), and the bot's own voice and its id once learned. -->
+    <data id="min_voice_seconds" expr="1.0"/>
+    <data id="voice_similarity_threshold" expr="0.5"/>
+    <data id="own_voice" expr="null"/>
+    <data id="voice_id" expr="null"/>
+    <data id="copy" expr="null"/>
     <!-- Scored sounds waiting for the interpretation. -->
     <!-- The scored sound in hand, its stage, its directory, and a counter
          naming the files written for it. -->
@@ -178,9 +217,6 @@
     <transition cond="hasNoRecognizeTimeout()" target="degraded">
       <log label="interpretation.degraded" expr="'recognize_timeout must be positive'"/>
     </transition>
-    <transition cond="refusesIdentificationWithDecoding()" target="degraded">
-      <log label="interpretation.degraded" expr="'voice identification cannot be combined with speech decoding'"/>
-    </transition>
     <transition target="Interpretation"/>
   </state>
 
@@ -201,6 +237,15 @@
         <assign location="utterance" expr="null"/>
         <assign location="stage" expr="null"/>
       </onentry>
+      <!-- Speaking's copy of the bot's own voice, learned when voices are
+           identified. -->
+      <transition event="bot.ability.listening.enroll" event:schema="../schemas/bot.ability.listening.enroll.json"
+                  cond="voice_classifier" target="Enrolling">
+        <assign location="copy" expr="_event.data"/>
+      </transition>
+      <!-- The bot's own voice arriving as predicted opens no utterance. -->
+      <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json"
+                  cond="isPredictedOwnVoice(_event.data)"/>
       <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json" target="DetectingVoice">
         <assign location="sensed" expr="_event.data"/>
         <foreach array="soundParticipants(sensed)" item="participant">
@@ -215,6 +260,9 @@
          once, not on every stage. -->
     <state id="Working" initial="DetectingVoice">
       <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json">
+        <event:defer/>
+      </transition>
+      <transition event="bot.ability.listening.enroll" event:schema="../schemas/bot.ability.listening.enroll.json">
         <event:defer/>
       </transition>
       <transition event="bot.ability.listening.stage.failed" event:schema="../schemas/bot.ability.listening.stage.failed.json"
@@ -304,6 +352,10 @@
             </send>
           </if>
         </onentry>
+        <!-- Nor does it join the open one: the person's words stay whole
+             and theirs while the bot talks over them. -->
+        <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json"
+                    cond="isPredictedOwnVoice(_event.data)"/>
         <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json" target="FeedingSpeech">
           <assign location="sensed" expr="_event.data"/>
           <foreach array="soundParticipants(sensed)" item="participant">
@@ -401,6 +453,7 @@
         </transition>
         <transition event="done.invoke.open_speech" cond="hasAudio(_event)" target="DecodingSpeech">
           <assign location="utterance" expr="_event.data"/>
+          <assign location="completion" expr="null"/>
         </transition>
       </state>
 
@@ -547,14 +600,14 @@
           </send>
         </transition>
         <transition event="done.invoke.voice_identification" cond="hasEmbeddings(_event)" target="HandingOff">
-          <assign location="completion.kind" expr="'identification'"/>
+          <assign location="completion.kind" expr="identifiedKind()"/>
           <assign location="completion.embeddings" expr="_event.data.embeddings"/>
         </transition>
         <!-- Nobody identified in time: identification completes as usual,
              with no voice for any segment (decision D177). -->
         <transition event="IdentifyingVoice.after" cond="isIdentifyTimer(_event)" target="HandingOff">
           <log label="interpretation.unidentified" expr="identifyTimedOut(completion.segments.length)"/>
-          <assign location="completion.kind" expr="'identification'"/>
+          <assign location="completion.kind" expr="identifiedKind()"/>
           <assign location="completion.embeddings" expr="unidentifiedEmbeddings()"/>
         </transition>
         <transition event="done.invoke.voice_identification" cond="isNotChildFailure(_event)">
@@ -579,6 +632,10 @@
           <param name="audio" expr="utterance.audio"/>
           <param name="media_type" expr="utterance.media_type"/>
         </invoke>
+        <transition event="done.invoke.speech_decoding" cond="identifiesDecoded(_event)" target="IdentifyingVoice">
+          <assign location="completion" expr="decodingCompletion(_event)"/>
+          <assign location="completion.segments" expr="voicedSegments()"/>
+        </transition>
         <transition event="done.invoke.speech_decoding" cond="hasText(_event)" target="HandingOff">
           <assign location="completion" expr="decodingCompletion(_event)"/>
         </transition>
@@ -590,6 +647,36 @@
         <!-- From the window directly, or after diarization. -->
         <state id="Detected"/>
         <state id="Diarized"/>
+      </state>
+
+      <!-- The bot's own voice, from speaking's copy of it. -->
+      <state id="Enrolling">
+        <onentry>
+          <assign location="stage" expr="null"/>
+          <send id="enrolling-timer" event="Enrolling.after" delayexpr="identifyDelay()"/>
+        </onentry>
+        <onexit>
+          <cancel sendid="enrolling-timer"/>
+        </onexit>
+        <invoke id="enrolling_identification" type="scxml" src="../voice_identification/voice_identification.scx">
+          <param name="segments" expr="[copy.segment]"/>
+        </invoke>
+        <transition event="done.invoke.enrolling_identification" cond="hasOwnEmbedding(_event)" target="Idle">
+          <assign location="own_voice" expr="_event.data.embeddings[0]"/>
+          <assign location="voice_id" expr="ownVoiceId()"/>
+          <send event="bot.ability.listening.enrolled" target="#_parent">
+            <param name="voice_id" expr="voice_id"/>
+          </send>
+        </transition>
+        <transition event="done.invoke.enrolling_identification" target="Idle">
+          <log label="interpretation.unidentified" expr="'no embedding for the bot\'s own voice'"/>
+        </transition>
+        <transition event="Enrolling.after" target="Idle">
+          <log label="interpretation.unidentified" expr="'the bot\'s own voice unidentified after ' + (stage_timeout_ms + recognize_timeout_ms) + ' ms'"/>
+        </transition>
+        <transition event="error.*" target="Idle">
+          <log label="interpretation.unidentified" expr="'the bot\'s own voice could not be identified (' + _event.name + ')'"/>
+        </transition>
       </state>
 
       <!-- The one comparison: is enough of this left for a turn? -->
@@ -608,7 +695,7 @@
         <!-- Decoding rewrites this observation: it becomes words. -->
         <transition cond="isDecoding()" target="Idle">
           <assign location="product" expr="decodedProduct()"/>
-          <assign location="product.participants" expr="active_participants"/>
+          <assign location="product.participants" expr="decodedParticipants()"/>
           <send event="bot.ability.listening.speech.output" target="#_parent">
             <content expr="product"/>
           </send>

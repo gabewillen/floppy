@@ -50,10 +50,14 @@
   can tell its own voice apart: while the copy's window is open the
   sensitivity scores a sound whose source is the copy's mouth against the
   prediction (fully predicted its level is 0, below the interpretation's
-  threshold, so its product is withheld), and any other sound at its
-  received level. The interpretation still runs on the bot's own voice
-  (the one comparison is made at the end of the pipeline),
-  so a voice detection backend the run does not configure fails it there.
+  threshold), and any other sound at its received level. The
+  interpretation does not interpret the bot's own voice arriving as
+  predicted (#30), so it never opens an utterance or joins a person's.
+
+  Own voice: speaking's copy of the bot's own voice,
+  bot.ability.listening.enroll (the body sends it here as it sends the
+  efference copy), goes to the interpretation from wherever perception is,
+  and the interpretation's bot.ability.listening.enrolled goes to the body.
 
   Readiness: the entry into Perceiving sends bot.ability.ready to the
   body (decision D242); it offers nothing (the
@@ -117,6 +121,19 @@
            prediction from wherever perception happens to be. -->
       <transition event="bot.ability.speaking.efference" event:schema="../schemas/bot.ability.speaking.efference.json">
         <send event="bot.ability.speaking.efference" target="#_sensitivity">
+          <content expr="_event.data"/>
+        </send>
+      </transition>
+      <!-- Speaking's copy of the bot's own voice goes to the
+           interpretation, which learns it, and what it learned goes back
+           out. -->
+      <transition event="bot.ability.listening.enroll" event:schema="../schemas/bot.ability.listening.enroll.json">
+        <send event="bot.ability.listening.enroll" target="#_interpretation">
+          <content expr="_event.data"/>
+        </send>
+      </transition>
+      <transition event="bot.ability.listening.enrolled" event:schema="../schemas/bot.ability.listening.enrolled.json">
+        <send event="bot.ability.listening.enrolled" target="#_parent">
           <content expr="_event.data"/>
         </send>
       </transition>

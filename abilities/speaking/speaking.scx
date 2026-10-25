@@ -88,8 +88,9 @@
 
   recording builds the outbound message with <conversation:message_for_turn>
   (direction outbound, content what was spoken, content_type text/plain,
-  and participants the bot's own voice stamped own, which it has none of
-  until it is voiced, decision D176) and sends
+  and participants the bot's own voice stamped own, {ref: voice_id, role:
+  "source", own: true}, once it has learned it; none before, decision
+  D176) and sends
   bot.ability.conversation.append {message} to the parent, which holds the
   conversation (a sibling is out of a child's reach: SCXML sends go only to
   #_parent and to a session's own children); an utterance that spoke
@@ -98,9 +99,21 @@
   bot.ability.speaking.output {text, spoken, unspoken, outcome, voice_id,
   media_type, sample_rate_hz, channels} (decision D179: text the words
   asked for, spoken what the played audio covers, unspoken the rest,
-  outcome "completed" or "stopped"; voice_id is null, as the bot has no
-  voice of its own until persona voices it, parity decision 6; no per-part
+  outcome "completed" or "stopped"; voice_id the bot's own voice id, null
+  until hearing has learned it; no per-part
   expression is reported, as no encoder applies a cue, D178).
+
+  Own voice (mosfet.py's enrollment, the motor side of
+  self-recognition): the mouth knows exactly what it said, so while the
+  bot has no voice_id, recording also hands the parent a copy of the
+  utterance it commanded, bot.ability.listening.enroll {voice_id: null,
+  segment} (segment: the encoding output's PCM, its format, from 0 to its
+  duration), once that utterance played whole and lasted at least 1.5 s.
+  The body carries it to the bot's Listening, which learns that voice as
+  the bot's own and answers bot.ability.listening.enrolled {voice_id},
+  taken in idle or speaking while voice_id is null: from then on what it
+  says carries its own voice. It is not a scripted calibration phrase:
+  it is the first real utterance's signal.
 
   Failures: a vocal failure (its bot.ability.failed), an encoding or
   recording timeout, or a vocal that cannot run answers the parent with
@@ -181,6 +194,11 @@
     <data id="outcome" expr="null"/>
     <data id="spoken" expr="null"/>
     <data id="unspoken" expr="null"/>
+    <!-- The bot's own voice id, once hearing has learned it, and the
+         utterance's encoded audio (the encoding output), the copy of its
+         own voice it hands hearing until then. -->
+    <data id="voice_id" expr="null"/>
+    <data id="said_audio" expr="null"/>
     <!-- The ids of the last finished_utterances_bound utterances said, so a
          late copy of one never reopens it, and how many other utterances
          wait while one is said (decision D175). -->
@@ -224,6 +242,11 @@
     <transition event="bot.ability.speaking.stop" event:schema="../schemas/bot.ability.speaking.stop.json">
       <log label="speaking.stale" expr="_event.name"/>
     </transition>
+    <!-- Hearing learned the bot's own voice from the copy. -->
+    <transition event="bot.ability.listening.enrolled" event:schema="../schemas/bot.ability.listening.enrolled.json"
+                cond="voice_id === null">
+      <assign location="voice_id" expr="_event.data.voice_id"/>
+    </transition>
   </state>
 
   <!-- One utterance in hand, from its encoding to its record; other input
@@ -241,6 +264,7 @@
       <assign location="commands" expr="0"/>
       <assign location="mark" expr="null"/>
       <assign location="outcome" expr="'completed'"/>
+      <assign location="said_audio" expr="null"/>
     </onentry>
     <onexit>
       <assign location="finished_utterances" expr="finishedUtterances()"/>
@@ -261,6 +285,11 @@
       <assign location="held" expr="held + 1"/>
       <assign location="held_ids" expr="heldIds(_event)"/>
       <log label="speaking.deferred" expr="_event.name"/>
+    </transition>
+    <!-- Hearing learned the bot's own voice from the copy. -->
+    <transition event="bot.ability.listening.enrolled" event:schema="../schemas/bot.ability.listening.enrolled.json"
+                cond="voice_id === null">
+      <assign location="voice_id" expr="_event.data.voice_id"/>
     </transition>
     <transition event="bot.ability.speaking.input" event:schema="../schemas/bot.ability.speaking.input.json">
       <log label="speaking.rejected" expr="heldOverMessage()"/>
@@ -360,6 +389,7 @@
         <transition event="bot.ability.vocal.speech.encoding.output" event:schema="../schemas/bot.ability.vocal.speech.encoding.output.json">
           <assign location="encoded_all" expr="true"/>
           <assign location="encoded" expr="encodedFormat(_event)"/>
+          <assign location="said_audio" expr="_event.data"/>
           <cancel sendidexpr="timer"/>
         </transition>
         <!-- The encoding failed or ran out of time mid-stream: the mouth
@@ -515,6 +545,7 @@
                       target="recording">
             <assign location="encoded_all" expr="true"/>
             <assign location="encoded" expr="encodedFormat(_event)"/>
+            <assign location="said_audio" expr="_event.data"/>
             <assign location="spoken" expr="text"/>
             <assign location="unspoken" expr="''"/>
             <if cond="hasDuration()">
@@ -538,6 +569,12 @@
                                          message="outboundMessage()" provenance="({id: 'speaking-' + operation})"/>
           <send event="bot.ability.conversation.append" target="#_parent">
             <param name="message" expr="message"/>
+          </send>
+        </if>
+        <!-- Until hearing knows the bot's own voice, a copy of it. -->
+        <if cond="enrolls()">
+          <send event="bot.ability.listening.enroll" target="#_parent">
+            <content expr="enrollCopy()"/>
           </send>
         </if>
         <raise event="bot.ability.speaking.conversation.recorded"/>

@@ -510,16 +510,15 @@ fn the_efference_copy_opens_a_window_that_closes_itself() {
 
 /// The bot's own speech, as speaking emits it (its source the mouth its
 /// efference copy names, no levels to compare), is scored against the
-/// prediction while the copy's window is open: it is still interpreted
-/// (the pipeline runs on the bot's own voice too), but fully predicted,
-/// its product is withheld. A sound from no source arriving in the same
-/// window is still heard.
+/// prediction while the copy's window is open: fully predicted, it is not
+/// interpreted at all (nothing of it is decoded, #30). A sound from no
+/// source arriving in the same window is still heard.
 #[test]
-fn the_bots_own_speech_is_scored_as_the_mouths_and_withheld() {
+fn the_bots_own_speech_is_scored_as_the_mouths_and_not_interpreted() {
     let harness = layout(&[]);
     let (mut run, backend) = started(
         &harness,
-        "the_bots_own_speech_is_scored_as_the_mouths_and_withheld",
+        "the_bots_own_speech_is_scored_as_the_mouths_and_not_interpreted",
         &[
             ("own.wav", spoken_wav("own voice")),
             ("cut-in.wav", spoken_wav("cut in")),
@@ -543,9 +542,9 @@ fn the_bots_own_speech_is_scored_as_the_mouths_and_withheld() {
     });
     let finished = close(
         run,
-        "the_bots_own_speech_is_scored_as_the_mouths_and_withheld",
+        "the_bots_own_speech_is_scored_as_the_mouths_and_not_interpreted",
     );
-    assert_eq!(backend.decoded(), vec!["own voice", "cut in"]);
+    assert_eq!(backend.decoded(), vec!["cut in"]);
     assert_eq!(
         json_texts(&finished.all, "harness.speech"),
         vec![speech("cut in", &cut_in)]
