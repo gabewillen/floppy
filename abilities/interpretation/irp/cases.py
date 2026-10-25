@@ -2,14 +2,14 @@
 #
 # Each case's audio is in its sources/<id>/media/ (16 kHz mono 16-bit:
 # voiced*.wav 0.1 s of constant non-zero samples, silence.wav 0.1 s of
-# zeros, *.pcm the same samples raw); the fake backend answers what each
+# zeros, *.pcm the same samples raw, said.pcm 2 s of them); the fake backend answers what each
 # stage asks, in order.
 
 import json
 
 S = suite
 S.media({"voiced.wav": wav(1000), "voiced2.wav": wav(1000), "silence.wav": wav(), "ring.wav": wav(), "hum.wav": wav(),
-         "voiced.pcm": pcm(1000), "silence.pcm": pcm()})
+         "voiced.pcm": pcm(1000), "silence.pcm": pcm(), "said.pcm": pcm(1000, seconds=2.0)})
 SCORED = "bot.ability.listening.sensitivity.output"
 SPEECH = "bot.ability.listening.speech.output"
 COGNITION = "bot.ability.cognition.input"
@@ -224,38 +224,36 @@ S.case(212, 12, "a sound heard while producing with no level is interpreted.",
 
 
 S.statement(13, "With speech decoding, diarization and voice identification (the document's defaults), the decoded utterance's diarized segments of at least `min_voice_seconds` (1 s), else the longest, are embedded after its words: each voice that is not the bot's own is one of the decoded product's `source_ids` (its embedding), and the product carries no `voice_embedding`.")
-S.statement(14, "`bot.ability.listening.enroll` `{voice_id, segment}` (speaking's copy of the bot's own voice), taken when voice identification is configured, is embedded and kept as the bot's own voice, and answered `bot.ability.listening.enrolled` `{voice_id}` (the copy's, else `\"self\"`); without voice identification it is ignored. A decoded voice at least `voice_similarity_threshold` (0.50) alike to the bot's own is not a source id: the product carries the participant `{ref: <voice_id>, role: \"source\", own: true}`.")
+S.statement(14, "The bot's own voice is heard from speaking's copy of a completed utterance, `bot.ability.speaking.efference` with `audio` (its PCM, `media_type` `audio/pcm` with a sample rate), taken while voice identification is configured and the own voice is unknown: its voice is detected, and when at least `min_voice_seconds` (1 s) lies from its first voice to its last, that span is identified and kept as the bot's own voice; a copy with less voice is logged `interpretation.unidentified`, a copy without audio is nothing, and without voice identification the copy is ignored. A decoded voice at least `voice_similarity_threshold` (0.50) alike to the bot's own is not a source id.")
+
+LONG_VOICED = {"path": "/vad", "status": 200, "body": {"segments": [{"start": 0.0, "end": 0.05}, {"start": 0.5, "end": 1.6}]}}
 
 
-def enroll(voice_id=None):
-    return send("bot.ability.listening.enroll", js({"voice_id": voice_id, "segment": {
-        "audio": "media/voiced.pcm", "media_type": "audio/pcm", "sample_rate_hz": 16000, "channels": 1,
-        "start_seconds": 0.0, "end_seconds": 0.1}}))
+def own_copy(audio="media/said.pcm"):
+    return send("bot.ability.speaking.efference", js({"mouth": "speaking", "duration": 0, "audio": audio,
+        "media_type": "audio/pcm", "sample_rate_hz": 16000, "channels": 1}))
 
 
-def heard(text, sources, own=False):
+def heard(text, sources):
     """Decoded speech and who spoke in it."""
-    cond = (f"_event.data.content === {js(text)} && _event.data.content_type === 'text/plain'"
-            f" && JSON.stringify(_event.data.source_ids) === {js(json.dumps(sources, separators=(',', ':')))}"
-            " && !('voice_embedding' in _event.data)")
-    stamped = "_event.data.participants.some(function (p) { return p.ref === 'self' && p.role === 'source' && p.own === true; })"
-    return expect(SPEECH, cond + " && " + (stamped if own else "!" + "(" + stamped + ")"))
+    return expect(SPEECH, f"_event.data.content === {js(text)} && _event.data.content_type === 'text/plain'"
+                  f" && JSON.stringify(_event.data.source_ids) === {js(json.dumps(sources, separators=(',', ':')))}"
+                  " && !('voice_embedding' in _event.data)")
 
 
 S.case(220, 13, "decoded speech says who spoke: the voice's embedding is its source id.",
        [READY] + utterance() + [heard("hello", [[0.5, -0.25]])],
        params=VOICES, backend=[VOICED, SILENT, DIARIZED, decoded("hello"), EMBEDDED])
-S.case(230, 14, "the bot's own voice is learned from speaking's copy and answered with its id.",
-       [READY, enroll(), expect("bot.ability.listening.enrolled", "_event.data.voice_id === 'self'")],
-       params=VOICES, backend=[EMBEDDED])
-S.case(231, 14, "decoded speech in the bot's own voice has no source id and stamps its own participant.",
-       [READY, enroll(), expect("bot.ability.listening.enrolled", "_event.data.voice_id === 'self'")] + utterance()
-       + [heard("hello", [], own=True)],
-       params=VOICES, backend=[EMBEDDED, VOICED, SILENT, DIARIZED, decoded("hello"), EMBEDDED])
-S.case(232, 14, "another voice is a source id even once the bot's own voice is known.",
-       [READY, enroll(), expect("bot.ability.listening.enrolled")] + utterance()
-       + [heard("hello", [[0.25, 0.5]])],
-       params=VOICES, backend=[EMBEDDED, VOICED, SILENT, DIARIZED, decoded("hello"), OTHER_EMBEDDED])
+S.case(230, 14, "decoded speech in the bot's own voice, learned from speaking's copy, has no source id.",
+       [READY, own_copy()] + utterance() + [heard("hello", [])],
+       params=VOICES, backend=[LONG_VOICED, EMBEDDED, VOICED, SILENT, DIARIZED, decoded("hello"), EMBEDDED])
+S.case(231, 14, "another voice is a source id even once the bot's own voice is known.",
+       [READY, own_copy()] + utterance() + [heard("hello", [[0.25, 0.5]])],
+       params=VOICES, backend=[LONG_VOICED, EMBEDDED, VOICED, SILENT, DIARIZED, decoded("hello"), OTHER_EMBEDDED])
+S.case(232, 14, "a copy with too little voice teaches nothing: the bot's voice stays a source id.",
+       [READY, own_copy()] + utterance() + [heard("hello", [[0.5, -0.25]])],
+       params=VOICES, backend=[VOICED, VOICED, SILENT, DIARIZED, decoded("hello"), EMBEDDED],
+       logs={"interpretation.unidentified": ["too little of the bot's own voice"]})
 S.case(233, 14, "without voice identification the copy is ignored.",
-       [READY, enroll()] + utterance() + [words("hello")],
+       [READY, own_copy()] + utterance() + [words("hello")],
        params=PATIENT, backend=[VOICED, SILENT, decoded("hello")])

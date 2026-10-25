@@ -123,7 +123,7 @@
     </test>
   </assert>
   <assert id="interpretation-14" specnum="14" specid="#interpretation-14">
-    <![CDATA[`bot.ability.listening.enroll` `{voice_id, segment}` (speaking's copy of the bot's own voice), taken when voice identification is configured, is embedded and kept as the bot's own voice, and answered `bot.ability.listening.enrolled` `{voice_id}` (the copy's, else `"self"`); without voice identification it is ignored. A decoded voice at least `voice_similarity_threshold` (0.50) alike to the bot's own is not a source id: the product carries the participant `{ref: <voice_id>, role: "source", own: true}`.]]>
+    <![CDATA[The bot's own voice is heard from speaking's copy of a completed utterance, `bot.ability.speaking.efference` with `audio` (its PCM, `media_type` `audio/pcm` with a sample rate), taken while voice identification is configured and the own voice is unknown: its voice is detected, and when at least `min_voice_seconds` (1 s) lies from its first voice to its last, that span is identified and kept as the bot's own voice; a copy with less voice is logged `interpretation.unidentified`, a copy without audio is nothing, and without voice identification the copy is ignored. A decoded voice at least `voice_similarity_threshold` (0.50) alike to the bot's own is not a source id.]]>
     <test id="230" conformance="mandatory" manual="false">
       <start uri="230/test230.scxml"/>
     </test>

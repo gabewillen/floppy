@@ -19,8 +19,9 @@ use serde_json::{Map, Value as Json};
 
 use super::{
     Attribute, Content, ConversationHost, Data, Executed, Failure, SIMILARITY_MARGIN,
-    SIMILARITY_THRESHOLD, VOICE_SIMILARITY_THRESHOLD, assign_to, attribute_values, cosine_similarity, embedding, evaluate,
-    identities_of, is_identity, no_content, read_json, relationship_context_ref, unit_vector,
+    SIMILARITY_THRESHOLD, VOICE_SIMILARITY_THRESHOLD, assign_to, attribute_values,
+    cosine_similarity, embedding, evaluate, identities_of, is_identity, no_content, read_json,
+    relationship_context_ref, unit_vector,
 };
 
 /// The prefix of a person's participant ref, `person-<n>`.

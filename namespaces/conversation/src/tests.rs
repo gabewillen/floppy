@@ -1354,12 +1354,18 @@ fn a_person_scores_their_closest_voice_and_two_close_people_are_no_ones() {
     };
     // Below the voice threshold (cos 0.45): no one.
     assert_eq!(
-        person_for_voice(&[1.0, 0.0], &known(&[("p", [0.45, 0.892_996_080_652_404_7])])),
+        person_for_voice(
+            &[1.0, 0.0],
+            &known(&[("p", [0.45, 0.892_996_080_652_404_7])])
+        ),
         None
     );
     // At the threshold or above: the person.
     assert_eq!(
-        person_for_voice(&[1.0, 0.0], &known(&[("p", [0.5, 0.866_025_403_784_438_6])])),
+        person_for_voice(
+            &[1.0, 0.0],
+            &known(&[("p", [0.5, 0.866_025_403_784_438_6])])
+        ),
         Some("p")
     );
     // A person scores their closest voice.

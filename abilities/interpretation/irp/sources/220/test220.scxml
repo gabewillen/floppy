@@ -19,7 +19,7 @@
       <send event="bot.ability.listening.sensitivity.output" target="#_interpretation"><content expr='{"sound": {"audio": "media/voiced.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}, "parent": {"event": "environment.sound", "data": {"audio": "media/voiced.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}}, "perceived_level_db": null}'/></send>
       <send event="bot.ability.listening.sensitivity.output" target="#_interpretation"><content expr='{"sound": {"audio": "media/silence.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}, "parent": {"event": "environment.sound", "data": {"audio": "media/silence.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}}, "perceived_level_db": null}'/></send>
     </onentry>
-    <transition event="bot.ability.listening.speech.output" cond="_event.data.content === &quot;hello&quot; &amp;&amp; _event.data.content_type === 'text/plain' &amp;&amp; JSON.stringify(_event.data.source_ids) === &quot;[[0.5,-0.25]]&quot; &amp;&amp; !('voice_embedding' in _event.data) &amp;&amp; !(_event.data.participants.some(function (p) { return p.ref === 'self' &amp;&amp; p.role === 'source' &amp;&amp; p.own === true; }))" target="step2"/>
+    <transition event="bot.ability.listening.speech.output" cond="_event.data.content === &quot;hello&quot; &amp;&amp; _event.data.content_type === 'text/plain' &amp;&amp; JSON.stringify(_event.data.source_ids) === &quot;[[0.5,-0.25]]&quot; &amp;&amp; !('voice_embedding' in _event.data)" target="step2"/>
   </state>
   <state id="step2">
     <transition target="pass"/>

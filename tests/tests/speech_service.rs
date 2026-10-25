@@ -846,8 +846,13 @@ fn live_speech_round_trip_through_an_env_file() {
         let data: serde_json::Value = chunk
             .strip_prefix("bot.ability.vocal.speech.encoding.chunk ")
             .and_then(|data| serde_json::from_str(data).ok())
-            .unwrap_or_else(|| panic!("each event before the output is a chunk: {encoded_events:?}"));
-        assert_eq!(data["sequence"], index, "the chunks are numbered from 0 with no gap");
+            .unwrap_or_else(|| {
+                panic!("each event before the output is a chunk: {encoded_events:?}")
+            });
+        assert_eq!(
+            data["sequence"], index,
+            "the chunks are numbered from 0 with no gap"
+        );
     }
     assert!(
         Path::new(&media.join("said.wav"))

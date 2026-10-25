@@ -127,7 +127,9 @@ function chunkFormat(_event) {
 
 // The encoded speech's format, from its output.
 function encodedFormat(_event) {
-  return soundFormat(_event.data);
+  var format = soundFormat(_event.data);
+  format.audio = typeof _event.data.audio === 'string' ? _event.data.audio : null;
+  return format;
 }
 
 // A chunk's measured length in ms, 0 when it has none (decision D203).
@@ -189,6 +191,16 @@ function efferenceCopy(seconds) {
   var format = audioFormat();
   return ({mouth: mouth, duration: seconds, media_type: format.media_type,
     sample_rate_hz: format.sample_rate_hz, channels: format.channels});
+}
+
+// The copy once a completed utterance has played: nothing left, and the
+// audio it commanded, whole (the bot's own voice, heard by listening).
+function completedCopy() {
+  var copy = efferenceCopy(0);
+  if (encoded_all && encoded !== null && encoded.audio !== null) {
+    copy.audio = encoded.audio;
+  }
+  return copy;
 }
 
 // The seconds of measured audio received and not yet played.
@@ -267,35 +279,15 @@ function hasSpoken() {
 
 // What was spoken, as the outbound message the conversation commits: no
 // participants until speaking has a voice of its own (decision D176).
-// Stamped with the bot's own voice once hearing has learned it.
 function outboundMessage() {
-  return ({source_ids: [], target_ids: [], content: spoken, content_type: 'text/plain', participants: ownVoice()});
-}
-
-function ownVoice() {
-  return voice_id === null ? [] : [{ref: voice_id, role: 'source', own: true}];
-}
-
-// A copy of the bot's own voice is handed to hearing until it has learned
-// it: an utterance played whole, its encoded audio PCM of at least 1.5 s
-// (mosfet.py's shortest enrollment).
-function enrolls() {
-  return voice_id === null && outcome === 'completed' && said_audio !== null && said_audio.media_type === 'audio/pcm'
-    && typeof said_audio.duration === 'number' && said_audio.duration >= 1.5;
-}
-
-// bot.ability.listening.enroll: the commanded PCM of the utterance.
-function enrollCopy() {
-  var format = soundFormat(said_audio);
-  return ({voice_id: voice_id, segment: {audio: said_audio.audio, media_type: 'audio/pcm',
-    sample_rate_hz: format.sample_rate_hz, channels: format.channels, start_seconds: 0, end_seconds: said_audio.duration}});
+  return ({source_ids: [], target_ids: [], content: spoken, content_type: 'text/plain', participants: []});
 }
 
 // The answer to the parent: bot.ability.speaking.output (decision D179;
-// voice_id null until hearing has learned the bot's own voice).
+// voice_id null until speaking is voiced).
 function speechProduct() {
   var format = audioFormat();
-  return ({text: text, spoken: spoken, unspoken: unspoken, outcome: outcome, voice_id: voice_id,
+  return ({text: text, spoken: spoken, unspoken: unspoken, outcome: outcome, voice_id: null,
     media_type: format.media_type, sample_rate_hz: format.sample_rate_hz, channels: format.channels});
 }
 

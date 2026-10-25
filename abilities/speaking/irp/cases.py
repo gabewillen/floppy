@@ -35,7 +35,6 @@ PROGRESS = "bot.ability.speaking.progress"
 STOP = "bot.ability.speaking.stop"
 SOUND = "environment.sound"
 APPEND = "bot.ability.conversation.append"
-ENROLL = "bot.ability.listening.enroll"
 READY = expect("bot.ability.ready")
 
 # The OpenAI-compatible speech API's answer, speaking's default encoder:
@@ -229,7 +228,7 @@ S.case(182, 9, "another copy of a held utterance is dropped and takes no slot: a
 
 S.case(190, 10, "a 2 s playout is four pieces: a copy and a progress after each, then the record.",
        [READY, say("one two three four")] + spoken("one two three four", 1, duration_ms=2000),
-       ignore=[ENROLL], params=PATIENT + GEMINI, backend=[LONG_PCM])
+       params=PATIENT + GEMINI, backend=[LONG_PCM])
 S.case(191, 10, "with no measured duration the utterance is spoken at once, with no copy.",
        [READY, say("hi"), sound(1, "mpeg", "audio/mpeg"), progress("0"), appended("hi", 1),
         output("hi", "audio/mpeg")],
@@ -254,39 +253,28 @@ OPENAI_PCM = [("encoding_timeout_ms", "600000"), ("provider", "null"), ("model",
 S.case(200, 12, "a streamed reply plays chunk by chunk: the first copy is its first chunk's, each chunk sounds in turn, and the copy of nothing left follows the last.",
        [READY, say("one two three four"), efference("0.5"), sound(1), sound(1, chunk=1), sound(1, chunk=2), sound(1, chunk=3),
         efference("0"), appended("one two three four", 1), output("one two three four")],
-       ignore=[EFFERENCE, PROGRESS, ENROLL], params=OPENAI_PCM, backend=[STREAMED_PCM])
+       ignore=[EFFERENCE, PROGRESS], params=OPENAI_PCM, backend=[STREAMED_PCM])
 S.case(201, 12, "the progress counts the seconds played across the chunks, up to the whole reply.",
        [READY, say("one two three four"), progress("0"), progress("0.5"), progress("1"), progress("1.5"), progress("2"),
         output("one two three four")],
-       ignore=[EFFERENCE, SOUND, APPEND, ENROLL], params=OPENAI_PCM, backend=[STREAMED_PCM])
+       ignore=[EFFERENCE, SOUND, APPEND], params=OPENAI_PCM, backend=[STREAMED_PCM])
 S.case(202, 12, "the default encoder (provider null, the lab's voice) streams the same chunks: each sounds in turn, then the copy of nothing left.",
        [READY, say("one two three four"), efference("0.5"), sound(1), sound(1, chunk=1), sound(1, chunk=2), sound(1, chunk=3),
         efference("0"), appended("one two three four", 1), output("one two three four")],
-       ignore=[EFFERENCE, PROGRESS, ENROLL], params=PATIENT, backend=[STREAMED_PCM])
+       ignore=[EFFERENCE, PROGRESS], params=PATIENT, backend=[STREAMED_PCM])
 
-S.statement(13, "Until the speaking has a voice of its own (`voice_id` null), recording a completed utterance of at least 1.5 s of PCM also sends its parent `bot.ability.listening.enroll` `{voice_id: null, segment: {audio, media_type: \"audio/pcm\", sample_rate_hz, channels, start_seconds: 0, end_seconds: <its duration>}}`, the copy of what it said; a shorter one sends none. `bot.ability.listening.enrolled` `{voice_id}`, taken while `voice_id` is null, is the speaking's own voice: from then on it sends no copy, its outbound messages carry the participant `{ref: <voice_id>, role: \"source\", own: true}`, and its output's `voice_id` is that id.")
-
-
-def enroll(n, end):
-    return expect(ENROLL, f"_event.data.voice_id === null && _event.data.segment.audio === 'media/speaking-{n}.pcm'"
-                  " && _event.data.segment.media_type === 'audio/pcm' && _event.data.segment.sample_rate_hz === 24000"
-                  f" && _event.data.segment.channels === 1 && _event.data.segment.start_seconds === 0 && _event.data.segment.end_seconds === {end}")
+S.statement(13, "The efference copy `{duration: 0}` of a completed utterance also carries `audio`, the file the whole utterance was encoded to (`media/speaking-<n>.pcm`): the bot's own voice as it commanded it, for the listening to learn; a copy before the utterance completed, or of a stopped one, carries none.")
 
 
-def enrolled(voice_id):
-    return send("bot.ability.listening.enrolled", js({"voice_id": voice_id}))
+def completed_copy(n):
+    return expect(EFFERENCE, f"_event.data.duration === 0 && _event.data.audio === 'media/speaking-{n}.pcm'"
+                  " && _event.data.media_type === 'audio/pcm' && _event.data.sample_rate_hz === 24000")
 
 
-OWN = ("_event.data.message.participants.length === 1 && _event.data.message.participants[0].ref === 'self'"
-       " && _event.data.message.participants[0].role === 'source' && _event.data.message.participants[0].own === true")
+def copy_without_audio(duration):
+    return expect(EFFERENCE, f"_event.data.duration === {duration} && !('audio' in _event.data)")
 
-S.case(210, 13, "a 2 s utterance is recorded with a copy of the bot's own voice.",
-       [READY, say("one two three four"), expect(APPEND), enroll(1, 2), expect(OUTPUT)],
-       ignore=[EFFERENCE, PROGRESS, SOUND], params=OPENAI_PCM, backend=[STREAMED_PCM])
-S.case(211, 13, "a 0.1 s utterance sends no copy.",
-       [READY, say("hi"), expect(APPEND), expect(OUTPUT)],
-       ignore=[EFFERENCE, PROGRESS, SOUND], params=PATIENT, backend=[PCM])
-S.case(212, 13, "once enrolled the speaking sends no copy and stamps its own voice.",
-       [READY, enrolled("self"), say("one two three four"), expect(APPEND, OWN),
-        expect(OUTPUT, "_event.data.voice_id === 'self'")],
-       ignore=[EFFERENCE, PROGRESS, SOUND], params=OPENAI_PCM, backend=[STREAMED_PCM])
+
+S.case(210, 13, "a played-out utterance's last copy carries its audio.",
+       [READY, say("hi"), copy_without_audio("0.1"), completed_copy(1), output("hi")],
+       ignore=[PROGRESS, SOUND, APPEND], params=PATIENT, backend=[PCM])

@@ -16,7 +16,7 @@
   </state>
   <state id="step1">
     <onentry>
-      <send event="bot.ability.listening.enroll" target="#_interpretation"><content expr='{"voice_id": null, "segment": {"audio": "media/voiced.pcm", "media_type": "audio/pcm", "sample_rate_hz": 16000, "channels": 1, "start_seconds": 0.0, "end_seconds": 0.1}}'/></send>
+      <send event="bot.ability.speaking.efference" target="#_interpretation"><content expr='{"mouth": "speaking", "duration": 0, "audio": "media/said.pcm", "media_type": "audio/pcm", "sample_rate_hz": 16000, "channels": 1}'/></send>
       <send event="bot.ability.listening.sensitivity.output" target="#_interpretation"><content expr='{"sound": {"audio": "media/voiced.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}, "parent": {"event": "environment.sound", "data": {"audio": "media/voiced.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}}, "perceived_level_db": null}'/></send>
       <send event="bot.ability.listening.sensitivity.output" target="#_interpretation"><content expr='{"sound": {"audio": "media/silence.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}, "parent": {"event": "environment.sound", "data": {"audio": "media/silence.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}}, "perceived_level_db": null}'/></send>
     </onentry>

@@ -1,12 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- speaking-13: a 2 s utterance is recorded with a copy of the bot's own voice. -->
+<!-- speaking-13: a played-out utterance's last copy carries its audio. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="speaking" type="scxml" src="../../../speaking.scx">
     <param name="encoding_timeout_ms" expr="600000"/>
-    <param name="provider" expr="null"/>
-    <param name="model" expr="'tts-1'"/>
-    <param name="voice" expr="'alloy'"/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
@@ -17,22 +14,22 @@
   </state>
   <state id="step1">
     <onentry>
-      <send event="bot.ability.speaking.input" target="#_speaking"><content expr='{"parts": [{"words": "one two three four"}]}'/></send>
+      <send event="bot.ability.speaking.input" target="#_speaking"><content expr='{"parts": [{"words": "hi"}]}'/></send>
     </onentry>
-    <transition event="bot.ability.conversation.append" target="step2"/>
+    <transition event="bot.ability.speaking.efference" cond="_event.data.duration === 0.1 &amp;&amp; !('audio' in _event.data)" target="step2"/>
   </state>
   <state id="step2">
-    <transition event="bot.ability.listening.enroll" cond="_event.data.voice_id === null &amp;&amp; _event.data.segment.audio === 'media/speaking-1.pcm' &amp;&amp; _event.data.segment.media_type === 'audio/pcm' &amp;&amp; _event.data.segment.sample_rate_hz === 24000 &amp;&amp; _event.data.segment.channels === 1 &amp;&amp; _event.data.segment.start_seconds === 0 &amp;&amp; _event.data.segment.end_seconds === 2" target="step3"/>
+    <transition event="bot.ability.speaking.efference" cond="_event.data.duration === 0 &amp;&amp; _event.data.audio === 'media/speaking-1.pcm' &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000" target="step3"/>
   </state>
   <state id="step3">
-    <transition event="bot.ability.speaking.output" target="step4"/>
+    <transition event="bot.ability.speaking.output" cond="_event.data.text === &quot;hi&quot; &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.spoken === &quot;hi&quot; &amp;&amp; _event.data.unspoken === &quot;&quot; &amp;&amp; _event.data.outcome === 'completed' &amp;&amp; _event.data.voice_id === null" target="step4"/>
   </state>
   <state id="step4">
     <transition target="pass"/>
   </state>
-  <transition event="bot.ability.speaking.efference"/>
   <transition event="bot.ability.speaking.progress"/>
   <transition event="environment.sound"/>
+  <transition event="bot.ability.conversation.append"/>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
 </state>
 <final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>

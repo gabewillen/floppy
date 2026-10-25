@@ -23,6 +23,23 @@
       "title": "Duration",
       "type": "number"
     },
+    "audio": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Reference to the audio the whole command played out, once it has completed: the bot's own voice as it commanded it. Null or absent on a copy sent before the command completed.",
+      "examples": [
+        "media/speaking-1.pcm"
+      ],
+      "title": "Audio"
+    },
     "media_type": {
       "anyOf": [
         {
