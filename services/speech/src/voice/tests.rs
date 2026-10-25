@@ -400,9 +400,19 @@ fn diarization_uploads_a_wav_and_clips_each_segment() {
             ("/media/diarized-1".to_owned(), pcm(&[3, 4])),
         ]
     );
+    let returned = diarization_outcome(
+        "Voice diarization",
+        ok(br#"{"segments":[{"start":0.5,"end":1.08}]}"#),
+        (&utterance, 4, 1),
+        &media("media/d"),
+        &mut |_, _| Ok(()),
+    );
+    assert_eq!(returned.name, DIARIZATION_OUTPUT_EVENT);
+    assert_eq!(data(&returned)["segments"][0]["end_seconds"], json!(1.0));
     for answer in [
         ok(br#"{"segments":[]}"#),
         ok(br#"{"segments":[{"start":0.5,"end":1.5}]}"#),
+        ok(br#"{"segments":[{"start":1.0,"end":1.05}]}"#),
     ] {
         let returned = diarization_outcome(
             "Voice diarization",

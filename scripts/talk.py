@@ -16,7 +16,7 @@ Runs the room (environments/room/room.scx) under `scx run` and is its host:
   utterance (24 kHz mono 16-bit PCM or WAV) instead of the microphone.
 
 Speech goes to whatever the env file names: FLOPPY_SPEECH_BASE_URL and
-FLOPPY_VOICE_BASE_URL (the lab's speech gateway), FLOPPY_BASE_URL (chat),
+FLOPPY_VOICE_BASE_URL (the lab's https://api.willen.dev/v1), FLOPPY_BASE_URL (chat),
 TYPESAFE_BASE_URL (decisions). Standard library only; needs ffmpeg (ffmpeg
 for the microphone, ffplay for the speaker).
 

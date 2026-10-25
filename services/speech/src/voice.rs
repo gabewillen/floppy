@@ -948,10 +948,17 @@ pub fn indexed(output: &Media, index: usize) -> Media {
     }
 }
 
+/// How far past the utterance a diarized segment may end and still be cut
+/// to the utterance's end: pyannote rounds a segment's end up to its frame
+/// grid, and api.willen.dev's answers end up to 0.08 s past the audio they
+/// were given (decision D244).
+pub const DIARIZATION_END_SLACK_SECONDS: f64 = 0.1;
+
 /// What a settled voice diarization becomes: each segment's PCM written to
 /// `<output>-<index>`, then [`DIARIZATION_OUTPUT_EVENT`] (at least one
 /// segment, ascending by start), or [`super::FAILED_EVENT`] (a span outside
-/// the utterance fails it).
+/// the utterance fails it; an end at most
+/// [`DIARIZATION_END_SLACK_SECONDS`] past it is the utterance's end).
 #[must_use]
 pub fn diarization_outcome(
     direction: &'static str,
@@ -971,6 +978,11 @@ pub fn diarization_outcome(
     spans.sort_by(|left, right| left.0.total_cmp(&right.0));
     let mut segments = Vec::with_capacity(spans.len());
     for (index, (start, end, confidence)) in spans.into_iter().enumerate() {
+        let end = if end > total && end <= total + DIARIZATION_END_SLACK_SECONDS {
+            total
+        } else {
+            end
+        };
         if start < 0.0 || end <= start || end > total + 1e-9 {
             return Returned::failed_named(direction, FailureCode::Malformed);
         }

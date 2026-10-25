@@ -58,10 +58,12 @@ its `model` `nemotron-speech-streaming-en-0.6b`. `abilities/speaking/speaking.sc
 `provider` is `null`, its `model` `sidekick-tts-engine-breeze` and its
 `voice` `warm`, which it passes to vocal for the speech service (vocal's own
 are `null`: its invoker names them). Both directions therefore call the
-OpenAI-compatible audio API on the lab's speech gateway, so
+OpenAI-compatible audio API on the lab's shared model API, so
 `FLOPPY_SPEECH_BASE_URL` and `FLOPPY_VOICE_BASE_URL` are
-`http://192.168.2.2:8090/v1`: Nemotron streaming STT, Breeze TTS and the
-LocalAI voice models behind one origin (decision D240). A `provider` of
+`https://api.willen.dev/v1` and both keys are one of its bearer keys:
+Nemotron streaming STT, Breeze TTS and the LocalAI voice models behind one
+origin, described by its `https://api.willen.dev/openapi.json` (decisions
+D240 and D244). From the lab, `http://192.168.2.2:8090/v1` serves the same. A `provider` of
 `gemini` is the Gemini API (decision D94).
 
 ## Timeouts and bounds

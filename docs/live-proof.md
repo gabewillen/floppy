@@ -7,6 +7,26 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-25, speech and voice on api.willen.dev (D244), model `gabe-codex-1/gpt-6-luna`
+
+`scripts/talk-live.py` on floppy main `e1c17c48` with this change, from a
+cloud session: the same CPA and TypeSafe relays as below, and one relay to
+`https://api.willen.dev` for both `FLOPPY_SPEECH_BASE_URL` and
+`FLOPPY_VOICE_BASE_URL` (its bearer key added by the session's proxy), with
+each document's default models (`nemotron-speech-streaming-en-0.6b`,
+`sidekick-tts-engine-breeze` voice `warm`, `silero-vad`,
+`pyannote-diarization`). The person was `gpt-live-1` (voice `marin`).
+`voice-detect-wespeaker-resnet34` on `/v1/voice/embed` answered a
+256-dimension embedding when called directly; no run reaches it, since
+floppy's interpretation refuses voice identification beside speech
+decoding.
+
+| Run | Result | Note |
+| --- | --- | --- |
+| as shipped, `--minutes 5` | 13 utterances, each question answered aloud | 91 `/v1/vad`, 25 `/v1/audio/transcriptions`, 8 `/v1/audio/speech`, all 200; "Paris.", "I'm Floppy.", "Tokyo.", "I said Paris.", a favorite color, a topic and its one-sentence restatement, each heard back by GPT-Live; floppy's spoken answer began 5 to 10 s after each question ended; "what's two plus three?" went unanswered |
+| `diarizer` true (a local edit), `--minutes 3` | 9 utterances, five `Voice diarization failed: the backend's answer is malformed.` | pyannote ended segments up to 0.08 s past the utterance it was given (3.52 s of a 3.5 s clip), which `diarization_outcome` refused; it now cuts an end at most 0.1 s past to the utterance's end |
+| `diarizer` true, with the fix, `--minutes 3` | 10 utterances, no listening failure | 71 `/v1/vad`, 16 `/v1/audio/diarization`, 16 `/v1/audio/transcriptions`, 5 `/v1/audio/speech`, all 200; every utterance decoded correctly (checked by decoding each saved utterance again); two of GPT-Live's questions were heard in one utterance with floppy's own reply before them ("You're welcome. Can you remind me what we just said?") and went unanswered: the room lets floppy hear itself |
+
 ## 2026-10-25, GPT-Live as the person talking to floppy, model `gabe-codex-1/gpt-6-luna`
 
 `scripts/talk-live.py` on floppy main `3bc0f496`, from a cloud session, with
