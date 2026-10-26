@@ -21,6 +21,9 @@
                    the instructions then the self block.
                    fitlocation (optional): receives fit, cut or overflow
                    when a budget is given.
+                   imageslocation (optional): receives the references of
+                   the images the stimulus carries, in the order of their
+                   placeholders' refs.
                    stimulus, self, recent, environment, acted,
                    prior_episodes, standing_directives, feedback,
                    instructions, schema, budget, held (optional):
@@ -70,6 +73,7 @@
       <xs:attribute name="schema" type="xs:string" use="optional"/>
       <xs:attribute name="budget" type="xs:string" use="optional"/>
       <xs:attribute name="held" type="xs:string" use="optional"/>
+      <xs:attribute name="imageslocation" type="xs:string" use="optional"/>
     </xs:complexType>
   </xs:element>
   <xs:element name="within_ceiling">

@@ -858,7 +858,7 @@ fn malformed_content_elements_or_values_raise_error_execution() {
         ),
         (
             unknown,
-            "cognition:model_facing_content takes only the location, failurelocation, systemlocation, fitlocation, stimulus, self, recent, environment, acted, prior_episodes, standing_directives, feedback, instructions, schema, budget and held attributes",
+            "cognition:model_facing_content takes only the location, failurelocation, systemlocation, fitlocation, stimulus, self, recent, environment, acted, prior_episodes, standing_directives, feedback, instructions, schema, budget, held and imageslocation attributes",
         ),
         (
             empty,
@@ -1374,4 +1374,75 @@ fn malformed_within_ceiling_elements_or_values_raise_error_execution() {
         )),
         "cognition:within_ceiling could not assign heldlocation"
     );
+}
+
+/// What the element assigns for a sight of `views`: the content and the
+/// images' references.
+fn sight_projected(views: &Json) -> (String, Data) {
+    let input = json!({
+        "stimulus": {"event": "bot.ability.seeing.sight", "source": "seeing",
+                     "data": {"cause": "look", "views": views}},
+        "prior_episodes": [], "standing_directives": [], "environment": null,
+        "instructions": "s", "schema": null,
+    });
+    let mut attributes = content_attributes();
+    attributes.push(attr("imageslocation", "images"));
+    let mut host = content_host(&input);
+    assert_eq!(
+        execute(CONTENT, &attributes, &[], &mut host),
+        Ok(Executed::Handled)
+    );
+    let mut assigned: BTreeMap<String, Data> = host.assigned.into_iter().collect();
+    let Some(Data::String(content)) = assigned.remove("prompt") else {
+        panic!("the content is assigned as a string");
+    };
+    (
+        content,
+        assigned.remove("images").expect("the images are assigned"),
+    )
+}
+
+#[test]
+fn a_stimulus_image_renders_as_a_placeholder_and_its_reference_is_handed_on() {
+    let views = json!([
+        {"image": "media/c.jpg", "media_type": "image/jpeg", "kind": "camera", "change": 0.5},
+        {"image": "media/a.png", "media_type": null, "kind": "screen", "change": null},
+    ]);
+    let (content, images) = sight_projected(&views);
+    // Each image is a placeholder numbered in document order, its media
+    // type on it; the reference is never shown.
+    assert_eq!(images, data(&json!(["media/c.jpg", "media/a.png"])));
+    assert!(
+        content.contains(r#"<media:image media_type="image/jpeg" ref="image-1" />"#),
+        "{content}"
+    );
+    assert!(
+        content.contains(r#"<media:image ref="image-2" />"#),
+        "{content}"
+    );
+    assert!(!content.contains("media/"), "{content}");
+    assert!(!content.contains(r#"key="media_type""#), "{content}");
+    // Without imageslocation the images are not sent, and the
+    // placeholders say so.
+    let input = json!({
+        "stimulus": {"event": "bot.ability.seeing.sight", "source": "seeing",
+                     "data": {"cause": "look", "views": views}},
+        "prior_episodes": [], "standing_directives": [], "environment": null,
+        "instructions": "s", "schema": null,
+    });
+    let (_, _, Data::String(content)) = projected(&input) else {
+        panic!("the content is assigned as a string");
+    };
+    assert!(
+        content.contains(r#"<media:image media_type="image/jpeg" omitted="media_type" />"#),
+        "{content}"
+    );
+    assert!(
+        content.contains(r#"<media:image omitted="media_type" />"#),
+        "{content}"
+    );
+    // A stimulus without images hands on none.
+    let (content, images) = sight_projected(&json!([]));
+    assert_eq!(images, data(&json!([])));
+    assert!(!content.contains("media:image"), "{content}");
 }

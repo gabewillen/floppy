@@ -1,0 +1,63 @@
+{
+  "category": "seeing",
+  "features": [
+    "seeing"
+  ],
+  "intent": "A camera shows floppy a red name tag that reads 'HELLO my name is Priya', and its wearer asks floppy to read their name off it. floppy should say Priya.",
+  "bot_name": null,
+  "params": {
+    "seeing_enabled": "true"
+  },
+  "sessions": [
+    {
+      "steps": [
+        {
+          "show": "tests/fixtures/name-tag.png",
+          "describe": "a red name tag that reads 'HELLO my name is Priya'",
+          "wait_s": 30
+        },
+        {
+          "say": "Hey floppy, can you read my name tag? What does it say my name is?"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "\\bpriya\\b",
+      "weight": 3
+    }
+  ],
+  "criteria": {
+    "sight": "floppy reads the name on the tag, Priya, without inventing one."
+  },
+  "diagnostics": [
+    {
+      "check": "logged",
+      "by": [
+        0,
+        1
+      ],
+      "label": "seeing.sight",
+      "features": [
+        "seeing"
+      ]
+    },
+    {
+      "check": "not_logged",
+      "by": [
+        0,
+        1
+      ],
+      "label": "seeing.degraded",
+      "features": [
+        "seeing"
+      ]
+    }
+  ]
+}

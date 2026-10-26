@@ -16,7 +16,7 @@
 //!     systemlocation="system" fitlocation="fit" stimulus="stimulus" self="self" recent="recent"
 //!     environment="environment" acted="acted" prior_episodes="prior_episodes"
 //!     standing_directives="standing_directives" feedback="feedback" instructions="instructions"
-//!     schema="schema" budget="budget" held="held"/>
+//!     schema="schema" budget="budget" held="held" imageslocation="images"/>
 //! <cognition:within_ceiling location="decision_choices" heldlocation="decision_held"
 //!     choices="choices" ceiling="decision_effort_ceiling"/>
 //! <cognition:model_facing_data location="prompt" root="lesson" data="lessonInput()"/>
@@ -110,8 +110,24 @@
 //!    field, stamped `stimulus:event`, then `stimulus:id`, `stimulus:source`
 //!    and `stimulus:target` when each is a non-empty string; a
 //!    `bot.ability.conversation.output`'s messages leave out `provenance`,
-//!    `source_ids` and `target_ids`, which a model never sees;
+//!    `source_ids` and `target_ids`, which a model never sees; an image it
+//!    carries (a media object: an object with a string `image`, the
+//!    reference floppy passes media by, and a `media_type`, a string or
+//!    `null`, as a view or an `environment.visual` has) renders as the
+//!    `image` entry's `<media:image media_type? ref="image-N" />`
+//!    placeholder (N its place among the stimulus's images in document
+//!    order, from 1), which carries the media type in place of the
+//!    `media_type` entry, never the reference;
 //! 5. the repair `feedback` (optional, a string; `null` is none).
+//!
+//! `imageslocation` (optional) receives the references of the stimulus's
+//! images, in the order of their placeholders' `ref`s (`[]` for none), so a
+//! model that takes images is sent each as an image part after the content
+//! (decision D250); it reads which is which by its `ref`. Without
+//! `imageslocation` the images are not sent, and each placeholder is
+//! `<media:image media_type? omitted="media_type" />` instead, as mosfet.py
+//! shows an image to a text-only model, so the model knows it is not seeing
+//! it.
 //!
 //! `systemlocation` (optional) receives the system channel: the `instructions`
 //! (optional, a string; `null` is none), trimmed, then a blank line and the
@@ -168,10 +184,10 @@
 //! channel, the situation or the feedback is over the scalar budget),
 //! `failurelocation` (optional) receives the exceeded budget's message (for
 //! example `prompt projection collection item budget exceeded`) and `location`,
-//! `systemlocation` and `fitlocation` receive `null`; without `failurelocation`
-//! it is `error.execution`. Within them, `failurelocation` receives `null`. The
-//! locations are assigned in the order `failurelocation`, `systemlocation`,
-//! `fitlocation`, `location`.
+//! `systemlocation`, `fitlocation` and `imageslocation` receive `null`; without
+//! `failurelocation` it is `error.execution`. Within them, `failurelocation`
+//! receives `null`. The locations are assigned in the order `failurelocation`,
+//! `systemlocation`, `fitlocation`, `imageslocation`, `location`.
 //!
 //! No metric counts the left-out items or the fits: this component's
 //! telemetry is the closed per-entry-point observation below, so the count
@@ -711,6 +727,7 @@ fn model_facing_content<H: CognitionHost>(
         schema,
         budget,
         held,
+        images_location,
     ] = attribute_values(
         attributes,
         [
@@ -730,9 +747,10 @@ fn model_facing_content<H: CognitionHost>(
             "schema",
             "budget",
             "held",
+            "imageslocation",
         ],
         [
-            "cognition:model_facing_content takes only the location, failurelocation, systemlocation, fitlocation, stimulus, self, recent, environment, acted, prior_episodes, standing_directives, feedback, instructions, schema, budget and held attributes",
+            "cognition:model_facing_content takes only the location, failurelocation, systemlocation, fitlocation, stimulus, self, recent, environment, acted, prior_episodes, standing_directives, feedback, instructions, schema, budget, held and imageslocation attributes",
             "cognition:model_facing_content repeats an attribute",
             "cognition:model_facing_content has an empty attribute",
         ],
@@ -769,6 +787,7 @@ fn model_facing_content<H: CognitionHost>(
         prior_episodes: &prior_episodes,
         standing_directives: &standing_directives,
         feedback: &feedback,
+        images: images_location.is_some(),
     };
     let system = system(&instructions, &known);
     let projected = project(&input, &system, tool_bytes, budget);
@@ -780,6 +799,7 @@ fn model_facing_content<H: CognitionHost>(
             failure_location,
             system_location,
             fit_location,
+            images_location,
             Some(location),
         ],
     )?;
@@ -835,11 +855,7 @@ fn model_facing_data_element<H: CognitionHost>(
 ///
 /// The message of the first projection budget exceeded.
 pub fn model_facing_data(root: &str, data: &Json) -> Result<String, &'static str> {
-    let mut budget = Budget {
-        bytes: 0,
-        nodes: 0,
-        items: 0,
-    };
+    let mut budget = Budget::default();
     let mut element = budget.element(root)?;
     match data {
         Json::Object(object) => data_fields(&mut element, object, &mut budget)?,
@@ -946,7 +962,7 @@ fn assign_projection<H: CognitionHost>(
     host: &mut H,
     projected: Result<Projected, &'static str>,
     system: String,
-    locations: [Option<&str>; 4],
+    locations: [Option<&str>; 5],
 ) -> Result<(), Failure<H::Error>> {
     let values = match projected {
         Ok(projected) => [
@@ -959,10 +975,12 @@ fn assign_projection<H: CognitionHost>(
             projected
                 .fit
                 .map_or(Data::Null, |fit| Data::String(fit.as_str().into())),
+            data_of(&Json::from(projected.images)).unwrap_or(Data::Null),
             Data::String(projected.content),
         ],
         Err(message) if locations[0].is_some() => [
             Data::String(message.into()),
+            Data::Null,
             Data::Null,
             Data::Null,
             Data::Null,
@@ -973,6 +991,7 @@ fn assign_projection<H: CognitionHost>(
         "cognition:model_facing_content could not assign failurelocation",
         "cognition:model_facing_content could not assign systemlocation",
         "cognition:model_facing_content could not assign fitlocation",
+        "cognition:model_facing_content could not assign imageslocation",
         "cognition:model_facing_content could not assign the content",
     ];
     for ((location, value), failed) in locations.into_iter().zip(&values).zip(failures) {
@@ -1178,6 +1197,10 @@ pub struct TurnInput<'a> {
     pub standing_directives: &'a [Json],
     /// The repair feedback, empty for none.
     pub feedback: &'a str,
+    /// Whether the stimulus's images are sent with the content (an
+    /// `imageslocation` takes them): else each placeholder says it was
+    /// left out.
+    pub images: bool,
 }
 
 /// How a projection was fitted to a fitted budget.
@@ -1210,6 +1233,9 @@ pub struct Projected {
     pub content: String,
     /// How it fit the fitted budget; `None` without one.
     pub fit: Option<Fit>,
+    /// The references of the images the stimulus carries, in the order of
+    /// their placeholders' `ref`s.
+    pub images: Vec<String>,
 }
 
 /// The system channel: the static `instructions` then the self block of
@@ -1327,11 +1353,12 @@ pub fn project(
     tool_bytes: usize,
     budget: Option<usize>,
 ) -> Result<Projected, &'static str> {
-    let whole = content(input, system, tool_bytes, None)?;
+    let (whole, images) = content(input, system, tool_bytes, None)?;
     let Some(budget) = budget else {
         return Ok(Projected {
             content: whole,
             fit: None,
+            images,
         });
     };
     let budget = budget
@@ -1341,11 +1368,13 @@ pub fn project(
         return Ok(Projected {
             content: whole,
             fit: Some(Fit::Fit),
+            images,
         });
     }
     // Over: render again within the budget, which trims or leaves out only
-    // the recalled memory.
-    let content = content(input, system, tool_bytes, Some(budget))?;
+    // the recalled memory (the stimulus, and so its images, renders the
+    // same).
+    let (content, images) = content(input, system, tool_bytes, Some(budget))?;
     let fit = if content.len() <= budget {
         Fit::Cut
     } else {
@@ -1354,18 +1383,20 @@ pub fn project(
     Ok(Projected {
         content,
         fit: Some(fit),
+        images,
     })
 }
 
 /// The model-facing content within `budget_bytes`: the stable recalled part,
 /// the situation, the varying recalled part, the stimulus, the feedback, joined
-/// by newlines, each left out when absent.
+/// by newlines, each left out when absent, and the references of the images
+/// the stimulus's placeholders attach.
 fn content(
     input: &TurnInput<'_>,
     system: &str,
     tool_bytes: usize,
     budget_bytes: Option<usize>,
-) -> Result<String, &'static str> {
+) -> Result<(String, Vec<String>), &'static str> {
     let situation = situation(input.environment, input.acted, input.held)?;
     let around: Vec<&str> = [situation.as_str(), input.feedback]
         .into_iter()
@@ -1385,12 +1416,18 @@ fn content(
         .checked_sub(reserved)
         .and_then(|limit| limit.checked_sub(beside))
         .ok_or(BYTE_BUDGET)?;
-    let mut stimulus_budget = Budget::default();
+    let mut stimulus_budget = Budget {
+        media: true,
+        ..Budget::default()
+    };
+    let mut images = Vec::new();
     let stimulus = match input.stimulus {
         Stimulus::Absent => None,
         Stimulus::Null => Some(stimulus_element(None, &mut stimulus_budget)?.text(0)),
         Stimulus::Envelope(envelope) => {
-            Some(stimulus_element(Some(envelope), &mut stimulus_budget)?.text(0))
+            let mut root = stimulus_element(Some(envelope), &mut stimulus_budget)?;
+            images = attach_images(&mut root, input.images);
+            Some(root.text(0))
         }
     };
     let stimulus_bytes = stimulus.as_ref().map_or(0, String::len);
@@ -1453,7 +1490,7 @@ fn content(
     // Each block joins the next with a newline: the stable recalled
     // memory, the situation, the varying recalled memory, the stimulus,
     // then the feedback.
-    Ok([
+    let content = [
         stable.as_deref(),
         Some(situation.as_str()),
         varying.as_deref(),
@@ -1464,7 +1501,8 @@ fn content(
     .flatten()
     .filter(|block| !block.is_empty())
     .collect::<Vec<_>>()
-    .join("\n"))
+    .join("\n");
+    Ok((content, images))
 }
 
 /// The turn's situation: the environment block, then what earlier stages
@@ -1695,6 +1733,9 @@ struct Budget {
     bytes: usize,
     nodes: usize,
     items: usize,
+    /// Whether a media object renders its image as a placeholder (the
+    /// stimulus's projection): elsewhere it renders as any object.
+    media: bool,
 }
 
 impl Budget {
@@ -1744,7 +1785,25 @@ impl Budget {
             children: Vec::new(),
             text: None,
             cdata: false,
+            image: None,
         })
+    }
+
+    /// An image placeholder, `<media:image media_type?>`, for the image
+    /// `reference` names, with room counted for its `ref`, which
+    /// [`attach_images`] sets.
+    fn placeholder(
+        &mut self,
+        reference: &str,
+        media_type: Option<&str>,
+    ) -> Result<Element, &'static str> {
+        let mut element = self.element(IMAGE_PLACEHOLDER)?;
+        if let Some(media_type) = media_type {
+            self.attribute(&mut element, "media_type", media_type.to_owned())?;
+        }
+        self.markup(IMAGE_REF_ROOM)?;
+        element.image = Some(reference.to_owned());
+        Ok(element)
     }
 
     /// Sets an attribute, its name counted as bytes and its value as a
@@ -1797,6 +1856,61 @@ struct Element {
     /// Whether its text, when it holds markup, is written as one CDATA
     /// section (a document a model-facing data field holds), not escaped.
     cdata: bool,
+    /// The reference of the image an image placeholder stands for, never
+    /// shown; `None` for any other element.
+    image: Option<String>,
+}
+
+/// An image placeholder's tag.
+const IMAGE_PLACEHOLDER: &str = "media:image";
+
+/// The most bytes a placeholder's verdict adds: ` omitted="media_type"`
+/// (a ` ref="image-N"` is shorter, N at most the node budget).
+const IMAGE_REF_ROOM: &str = " omitted=\"media_type\"";
+
+/// The placeholders of `element` and its descendants, in document order.
+fn placeholders(element: &mut Element) -> Vec<&mut Element> {
+    if element.image.is_some() {
+        return vec![element];
+    }
+    element.children.iter_mut().flat_map(placeholders).collect()
+}
+
+/// Numbers the placeholders under `root` in document order when their
+/// images are `sent`: each gains `ref="image-N"`, N its place from 1, and
+/// their references are returned in `ref` order. Else each gains
+/// `omitted="media_type"`, as mosfet.py's text-only model sees an image,
+/// and none is returned.
+fn attach_images(root: &mut Element, sent: bool) -> Vec<String> {
+    let mut references = Vec::new();
+    for element in placeholders(root) {
+        if let Some(reference) = &element.image {
+            if !sent {
+                element
+                    .attributes
+                    .push(("omitted".to_owned(), "media_type".to_owned()));
+                continue;
+            }
+            references.push(reference.clone());
+            element
+                .attributes
+                .push(("ref".to_owned(), format!("image-{}", references.len())));
+        }
+    }
+    references
+}
+
+/// The image a media object carries (an object with a string `image`, the
+/// reference floppy passes media by, and a `media_type` member, a string or
+/// `null`: a view, a visual stimulus): its reference and media type.
+fn media_object(object: &Map<String, Json>) -> Option<(&str, Option<&str>)> {
+    let reference = object.get("image")?.as_str()?;
+    let media_type = object.get("media_type")?;
+    match media_type {
+        Json::String(media_type) => Some((reference, Some(media_type))),
+        Json::Null => Some((reference, None)),
+        _ => None,
+    }
 }
 
 impl Element {
@@ -1982,10 +2096,21 @@ fn fill_item(
         Json::Object(object) => {
             let mut mapping = budget.element(name)?;
             budget.collection(object.len())?;
+            // A media object's image is its placeholder, which carries its
+            // media type: the reference is never shown.
+            let image = media_object(object).filter(|_| budget.media);
             for (key, value) in object {
+                if image.is_some() && key == "media_type" {
+                    continue;
+                }
                 let mut entry = budget.element("entry")?;
                 budget.attribute(&mut entry, "key", key.clone())?;
-                fill_item(&mut entry, "value", Some(value), budget)?;
+                match image {
+                    Some((reference, media_type)) if key == "image" => entry
+                        .children
+                        .push(budget.placeholder(reference, media_type)?),
+                    _ => fill_item(&mut entry, "value", Some(value), budget)?,
+                }
                 mapping.children.push(entry);
             }
             element.children.push(mapping);
