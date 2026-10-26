@@ -7,6 +7,114 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-26, floppy remembers what it saw (D252), model `sparks/qwen3.8-flash-next`
+
+`eval.py run` with the same setup as D250's climb below, on main with the
+memory branch (D251) merged in. The four new `seeing_recall_*` scenarios
+show an image, follow it with unrelated talk (and, in two of them, a
+restart), and only then ask about the image. With them added, the seeded
+split (`--seed 7`, `--test-share 0.34`) holds out `seeing_nametag`,
+`seeing_recall_nametag` and `seeing_recall_shape`. Only train was looked at
+while changing the bot. The baseline overlays reflection's document from
+before D252, so episodes keep no images. Every run used two repeats.
+Results are in the project's `floppy-eval/seeing/`.
+
+| Run | Bot | Split | Score |
+| --- | --- | --- | --- |
+| recall-train-baseline | before D252 | train | 0.760 (recalled only when floppy had happened to say aloud what it saw) |
+| recall-train1 | episodes keep images | train | 0.040 (the recalled-episode schema refused the new field, so every later turn failed) |
+| recall-train2 | and the schemas declare it | train | 0.500 (the driver moved the media directory at the restart, so the recalled reference was unreadable) |
+| recall-train3 | and the driver keeps the media directory across a restart, as a bot's disk does | train | 0.995 ± 0.010 |
+| recall-test-baseline | before D252 | test | 0.687 ± 0.389 (`seeing_recall_nametag` 0.04 and 0.08) |
+| recall-test1 | as recall-train3 | test | **0.987 ± 0.019** |
+
+## 2026-10-26, floppy hears the tone of a voice (D247), model `sparks/qwen3.8-flash-next`
+
+`eval.py run --scenario emotion` on `claude/project-thread-7d33ln` (the
+voice branch plus emotion), from a cloud session: the bot on
+`sparks/qwen3.8-flash-next` through the CPA relay, the decision service on
+the TypeSafe relay, speech, voice and emotion on one relay to
+`https://api.willen.dev` (emotion at `/emotion/v1`), each heard step
+synthesized with its `instructions` (seed 42), the judges
+`gabe-codex-0/gpt-6.1-sol` and `gemini-4-argon`.
+
+| Run | Branch state | Jobs | Emotion |
+| --- | --- | --- | --- |
+| `eval-base` | the tone on the speech product only (`0be3f825`) | 5 | 0.434 ± 0.302 |
+| `eval-parent` | the speech as the turn's `parent` (`485709eb`) | 5 | 0.498 ± 0.173 |
+| `eval-r3` | the same, merged with the voice branch (`4dc163c7`) | 15 | 0.598 ± 0.124 |
+
+Every job logged `listening.affect heard ...`: emotion2vec heard sad
+(0.98 to 1.00) and happy (0.99 to 1.00) as the voices were asked to sound,
+but heard the angry voice as happy (0.83), so `emotion_angry` measures the
+synthesis and classifier more than floppy. In `eval-base` the tone was heard
+and never reached the model: the speech-heard seed admitted the words
+without their speech, so floppy asked "how did it go?" of a crying voice.
+With the speech as the turn's parent the model reads it ("Hey, Gabe. You
+sound sad about that. Do you want to talk about it?"); `emotion.second`
+(the heartbroken repeat) went from 0.00 to 0.92. What is left is
+mostly the first, joyful turn of `emotion_contrast` (0.30), which the
+decision service ignored as ambient.
+
+A hill climb of `abilities/reasoning/reasoning.scx#instructions` (`climb1`,
+3 generations of 2 candidates, train `emotion_contrast`, `emotion_happy`,
+`emotion_sad`, held out `emotion_angry`, `emotion_tonight`, the seeded
+split) raised train from 0.490 to 0.877 while the held-out test went from
+0.860 to 0.490 (single runs): the prompt fit its own scenarios and was not
+adopted; the instructions stay empty.
+
+## 2026-10-25, memory hill climb (D251), model `sparks/qwen3.8-flash-next`
+
+`eval.py run` on the memory scenarios, split as `climb` splits them
+(seed 7, test share 0.34): train `recall_many`, `recall_people`,
+`recall_restart`; held-out test `people_overheard`, `recall_update`. Two
+repeats each, from a cloud session through the relays of docs/eval.md,
+judges `gabe-codex-0/gpt-6.1-sol` and `gemini-4-argon`. The baseline is
+the same tree with D251's documents overlaid by their earlier versions
+(`--overlay`). The held-out set was run once, on the change.
+
+| Run | Train | Held-out test |
+| --- | --- | --- |
+| baseline | 0.38 (recall_many 0.07, recall_people 1.00, recall_restart 0.07) | 0.23 (people_overheard 0.46, recall_update 0.00) |
+| D251 | 0.86 (recall_many 0.99, recall_people 0.58, recall_restart 1.00) | 0.81 (people_overheard 0.72, recall_update 0.91) |
+
+Read before trusting: recall_people's two misses are not memory's. In
+one, reasoning ran past its 240 s bound on the backend; in the other,
+floppy adopted "floppy" as its name and answered each question twice (a
+conversation turn and an addressed turn), so the eval read the answers a
+step late. people_overheard-r0 answered both questions right ("A blue
+teapot", "a marathon"), the first a step late after answering the side
+talk (#96). recall_update-r0 said "tacos now, right? Not sushi", which
+the `not_says` sushi check counts against it. Intervals are wide (±0.18
+on train, ±0.20 on test, 6 and 4 jobs).
+
+## 2026-10-25, seeing hill climb (D250), model `sparks/qwen3.8-flash-next`
+
+`eval.py run` on the seeing scenarios from a cloud session, the bot on
+`sparks/qwen3.8-flash-next` through the CPA gateway and the decision service
+on TypeSafe, each by a local relay (`TYPESAFE_BASE_URL` names the relay
+without `/v1`: the service appends `/v1/systemone`), judges `codex` and
+`gemini`. The seeded split (`--seed 7`, `--test-share 0.34`) holds out
+`seeing_hours` and `seeing_wifi`; only train was looked at while changing
+the bot. Results are in the project's `floppy-eval/seeing/`.
+
+| Run | Bot | Split | Score |
+| --- | --- | --- | --- |
+| see-test-baseline | before D250 (reasoning and seeing documents of `1da406ed`) | test | 0.000 (both loop on look) |
+| see-train3 | images reach reasoning | train | 0.000 (the decision layer, text only, selects look on every sight) |
+| see-train4 | and look of effort 1 | train | 0.333 (`seeing_look` answered $14.21) |
+| see-train5 | and an unsent image marked `omitted` | train | 0.647 |
+| see-train6 | and the memory thread's `d04f28a8` (the conversation feeds the recent turns), cherry-picked | train | 0.993 ± 0.013 |
+| see-test1 | as see-train6, two repeats | test | **0.940 ± 0.083** |
+
+What was left: the recent-turns register had no writer, so a look's sight
+turn never saw the question it was asked for and reasoning ignored it
+(`d04f28a8` on `claude/project-thread-btnyen` fixes that; this branch
+depends on it for the look path). In `seeing_wifi-r0` floppy read the card
+on the change sight, then answered the question with "I don't know what's
+on the card": an episode keeps no image, so what it saw is forgotten by
+the next turn (mosfet.py's memory keeps a turn's images).
+
 ## 2026-10-25, every feature graded (D245), model `sparks/qwen3.8-flash-next`
 
 `eval.py features --no-tests` (docs/eval.md's feature grade) on #83's

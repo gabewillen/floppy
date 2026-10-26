@@ -18,7 +18,8 @@
 #  3. builds the in-workspace scxml-wasm-meter tool (cargo --locked), then
 #     transpiles each component once with the pinned jco transpiler and meters
 #     every core module, twice into separate directories, and requires
-#     byte-identical output;
+#     byte-identical output, with one more extension component added through
+#     --extensions (the example component under another name and digest);
 #  4. runs the Node smoke, contract, capability, and IRP parity tests (the
 #     same ES modules and metered core Wasm a browser loads): the shared
 #     trace fixture, hostile IR, deterministic fuel exhaustion of hostile
@@ -115,11 +116,26 @@ test -f "$ir" || { echo "missing CLI-compiled lowered IR: $ir" >&2; exit 1; }
 cargo build --release --locked --manifest-path "$workspace/Cargo.toml" -p scxml-wasm-meter
 meter="$target_root/release/scxml-wasm-meter"
 
+# One more extension component for build.mjs's --extensions: the example
+# component under another name, with a name section of its own so its
+# release digest differs (test/extension.test.mjs).
+extensions="$artifacts/extensions"
+rm -rf "$extensions"
+mkdir -p "$extensions"
+wasm-tools metadata add --name scxml_extension_extra "$artifacts/scxml_extension_example.virtualized.wasm" \
+    -o "$extensions/scxml_extension_extra.virtualized.wasm"
+{
+    printf 'schema\tstateforward.wasm-artifacts/v1\n'
+    printf 'artifact\tscxml_extension_extra\tscxml_extension_extra.virtualized.wasm\t%s\t%s\n' \
+        "$(wc -c < "$extensions/scxml_extension_extra.virtualized.wasm" | tr -d ' ')" \
+        "$(sha256_file "$extensions/scxml_extension_extra.virtualized.wasm")"
+} > "$extensions/manifest.tsv"
+
 cd "$package"
 npm ci --ignore-scripts --no-audit --no-fund
 npm run typecheck
-node scripts/build.mjs --artifacts "$artifacts" --meter "$meter"
-node scripts/build.mjs --artifacts "$artifacts" --meter "$meter" --out "$check_dist"
+node scripts/build.mjs --artifacts "$artifacts" --meter "$meter" --extensions "$extensions"
+node scripts/build.mjs --artifacts "$artifacts" --meter "$meter" --extensions "$extensions" --out "$check_dist"
 diff -r dist "$check_dist" >/dev/null || { echo "non-deterministic jco transpile output" >&2; exit 1; }
 printf 'browser-host dist build-manifest sha256=%s\n' "$(sha256_file dist/build-manifest.json)"
 

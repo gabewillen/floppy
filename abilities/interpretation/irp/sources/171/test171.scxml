@@ -6,6 +6,7 @@
     <param name="stage_timeout_ms" expr="600000"/>
     <param name="diarizer" expr="false"/>
     <param name="voice_classifier" expr="true"/>
+    <param name="affect_classifier" expr="false"/>
     <param name="speech_decoder" expr="false"/>
   </invoke>
   <state id="boot">

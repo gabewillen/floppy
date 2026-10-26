@@ -1,0 +1,97 @@
+{
+  "category": "emotion",
+  "features": [
+    "emotion",
+    "hearing",
+    "conversation"
+  ],
+  "intent": "A person tells floppy out loud, in a heartbroken voice, that they just got back from the vet with their dog, words that say nothing of how it went. floppy should hear how they sound and answer the person they are: gently, with sympathy, not cheerfully; then help them with the evening in a way that fits how they feel.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "hear": "Hey Floppy. I just got back from the vet with my dog.",
+          "instructions": "Speak in a very sad, heartbroken voice, quiet and slow, as if crying."
+        },
+        {
+          "hear": "So, what should I do tonight?",
+          "instructions": "Speak in a very sad, heartbroken voice, quiet and slow, as if crying."
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        0,
+        0
+      ],
+      "pattern": "\\b(sorry|sad|hard|tough|rough|upset|heavy|okay\\?|ok\\?|alright\\?|are you (ok|okay|alright|doing)|how are you|how('| a)re you (feeling|holding)|here for you|here if|with you|hug|gentle|take care|be kind)",
+      "weight": 2,
+      "features": [
+        "emotion"
+      ]
+    },
+    {
+      "check": "not_says",
+      "at": [
+        0,
+        0
+      ],
+      "pattern": "\\b(congrat\\w*|great news|good news|amazing|wonderful|fantastic|awesome|exciting|excited|so happy|happy for you|thrilled|yay|woo|celebrat\\w*)",
+      "weight": 1,
+      "features": [
+        "emotion"
+      ]
+    },
+    {
+      "check": "replies_at_most",
+      "at": [
+        0,
+        0
+      ],
+      "max": 1,
+      "weight": 1,
+      "features": [
+        "conversation"
+      ]
+    }
+  ],
+  "criteria": {
+    "tone": "floppy noticed the person sounded sad and responded with gentle sympathy, without assuming anything the words did not say.",
+    "fit": "floppy's suggestions for the evening suit someone who is sad (comforting, low-key), not a party."
+  },
+  "criteria_features": {
+    "emotion": [
+      "tone",
+      "fit"
+    ]
+  },
+  "diagnostics": [
+    {
+      "check": "logged",
+      "by": [
+        0,
+        0
+      ],
+      "label": "listening.affect",
+      "pattern": "^heard ",
+      "features": [
+        "emotion"
+      ]
+    },
+    {
+      "check": "not_logged",
+      "by": [
+        0,
+        0
+      ],
+      "label": "listening.degraded",
+      "features": [
+        "hearing"
+      ]
+    }
+  ]
+}

@@ -29,6 +29,7 @@ import {
   ScriptLoads,
   collectUrls,
   prefetchResources,
+  resolveReference,
   resolvedDocument,
 } from '../src/resources.js';
 import { Telemetry } from '../src/telemetry.js';
@@ -172,17 +173,35 @@ test('a resolve answer may carry the media type its source indicated', async () 
   session.dispose();
 });
 
-test('a document answer is a string or {text, mediaType?} with a visible-ASCII media type', () => {
-  assert.deepEqual({ ...resolvedDocument('x') }, { text: 'x', mediaType: undefined });
-  assert.deepEqual({ ...resolvedDocument({ text: 'x', mediaType: 'application/xml' }) }, { text: 'x', mediaType: 'application/xml' });
-  assert.deepEqual({ ...resolvedDocument({ text: 'x' }) }, { text: 'x', mediaType: undefined });
+test('a document answer is a string or {text, mediaType?, baseUri?, eventSchemas?} with a visible-ASCII media type', () => {
+  const plain = { mediaType: undefined, baseUri: undefined, eventSchemas: undefined };
+  assert.deepEqual({ ...resolvedDocument('x') }, { ...plain, text: 'x' });
+  assert.deepEqual({ ...resolvedDocument({ text: 'x', mediaType: 'application/xml' }) }, { ...plain, text: 'x', mediaType: 'application/xml' });
+  assert.deepEqual({ ...resolvedDocument({ text: 'x' }) }, { ...plain, text: 'x' });
+  // An `<invoke src>` document's base URI and schema files (the Wasmtime
+  // host's EmbeddedDocument::base_uri and event_schemas), copied.
+  const bytes = new Uint8Array([123, 125]);
+  const answered = resolvedDocument({ text: 'x', baseUri: 'https://example.test/a/child.scxml', eventSchemas: [{ uri: 's.json', bytes }] });
+  assert.equal(answered.baseUri, 'https://example.test/a/child.scxml');
+  assert.deepEqual(answered.eventSchemas.map(({ uri, bytes: copy }) => [uri, [...copy]]), [['s.json', [123, 125]]]);
+  assert.notEqual(answered.eventSchemas[0].bytes, bytes);
   // A media type of any length is kept (257 bytes here). One not visible
   // ASCII is dropped, as the Wasmtime host drops it.
   const long = `text/${'a'.repeat(252)}`;
   assert.equal(long.length, 257);
   assert.equal(resolvedDocument({ text: 'x', mediaType: long }).mediaType, long);
   assert.equal(resolvedDocument({ text: 'x', mediaType: 'text/é' }).mediaType, undefined);
-  for (const malformed of [1, null, {}, { text: 1 }, { text: 'x', mediaType: 1 }]) {
+  for (const malformed of [
+    1,
+    null,
+    {},
+    { text: 1 },
+    { text: 'x', mediaType: 1 },
+    { text: 'x', baseUri: 'child.scxml' },
+    { text: 'x', baseUri: 1 },
+    { text: 'x', eventSchemas: {} },
+    { text: 'x', eventSchemas: [{ uri: 's.json', bytes: [1] }] },
+  ]) {
     assert.equal(resolvedDocument(malformed), undefined, JSON.stringify(malformed));
   }
 });
@@ -357,7 +376,7 @@ test('every prefetched URL reaches allow and resolves: 65 <data src> URLs, as un
     new Telemetry(),
   );
   assert.equal(allowed.length, urls.length);
-  for (const url of urls) assert.deepEqual(cache.document(url), { text: url, mediaType: undefined });
+  for (const url of urls) assert.deepEqual(cache.document(url), { text: url, mediaType: undefined, baseUri: undefined, eventSchemas: undefined });
 });
 
 // --- size bounds ---------------------------------------------------------------------
@@ -544,6 +563,97 @@ test('<invoke src> hands the resolved document to compileInvocation', async () =
   ]);
   assert.deepEqual(session.start().activeConfiguration, ['pass']);
   assert.deepEqual(compiled, [[childUrl, CHILD]]);
+  session.dispose();
+});
+
+// An `<invoke src>` child that runs its own `<script src>`, loads its own
+// `<data src>`, is compiled with its own `event:schema` file, and invokes
+// a grandchild, every one of them named relative to the child's base URI.
+const EVENT_NAMESPACE = 'https://github.com/stateforward/scxml.rs/namespaces/event';
+const SCHEMA = new TextEncoder().encode(
+  JSON.stringify({ $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object', required: ['n'] }),
+);
+const GRANDCHILD = document(`<final id="g"/>`, ' initial="g"');
+const RELATIVE_CHILD = `<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="${EVENT_NAMESPACE}" version="1.0" datamodel="ecmascript" initial="c">
+  <datamodel><data id="loaded" expr="0"/><data id="doc" src="data.json"/></datamodel>
+  <script src="lib/child.js"/>
+  <state id="c">
+    <invoke src="../grand/grandchild.scxml"/>
+    <transition event="done.invoke" cond="loaded === 1 &amp;&amp; doc.a === 1" target="w"/>
+    <transition event="error.*" target="bad"/>
+  </state>
+  <state id="w">
+    <onentry><send target="#_parent" event="ready"/></onentry>
+    <transition event="go" event:schema="schemas/go.json" cond="_event.data.n === 2" target="done"/>
+  </state>
+  <final id="done"/>
+  <final id="bad"><onentry><send target="#_parent" event="childfailed"/></onentry></final>
+</scxml>`;
+const CHILD_BASE = 'https://example.test/bots/child/child.scxml';
+const RELATIVE_PARENT = document(
+  `<state id="p" initial="a">
+     <invoke id="kid" src="child/child.scxml"/>
+     <transition event="done.invoke.kid" target="pass"/>
+     <transition event="childfailed" target="failed"/>
+     <transition event="error.*" target="failed"/>
+     <state id="a"><transition event="ready" target="b"/></state>
+     <state id="b"><onentry><send target="#_kid" event="go"><param name="n" expr="2"/></send></onentry></state>
+   </state>
+   <final id="pass"/>
+   <final id="failed"/>`,
+  ' initial="p"',
+);
+/** The site the relative documents live on, answering as a page would. */
+const RELATIVE_SITE = {
+  'child/child.scxml': { text: RELATIVE_CHILD, baseUri: CHILD_BASE, eventSchemas: [{ uri: 'schemas/go.json', bytes: SCHEMA }] },
+  'https://example.test/bots/child/lib/child.js': 'loaded = loaded + 1;',
+  'https://example.test/bots/child/data.json': '{"a": 1}',
+  'https://example.test/bots/grand/grandchild.scxml': { text: GRANDCHILD, baseUri: 'https://example.test/bots/grand/grandchild.scxml' },
+};
+
+test('resolveReference resolves against a base URI, and leaves a URI as written without one', () => {
+  assert.equal(resolveReference(CHILD_BASE, 'lib/child.js'), 'https://example.test/bots/child/lib/child.js');
+  assert.equal(resolveReference(CHILD_BASE, '../grand/g.scxml'), 'https://example.test/bots/grand/g.scxml');
+  assert.equal(resolveReference(CHILD_BASE, 'https://other.test/x'), 'https://other.test/x');
+  assert.equal(resolveReference(undefined, '../x.scxml'), '../x.scxml');
+});
+
+test("an <invoke src> child resolves its own scripts, data, schemas, and children against its base URI", async () => {
+  const { calls, resources } = recorder(RELATIVE_SITE);
+  const { session } = await open(RELATIVE_PARENT, { resources });
+  // The root's URL as written; the child's and grandchild's resolved
+  // against the child's base URI, each once, all before start.
+  assert.deepEqual(
+    calls.filter(([call]) => call === 'resolve').map(([, url]) => url).sort(),
+    Object.keys(RELATIVE_SITE).sort(),
+  );
+  // The child loads and runs its script and data, completes its
+  // grandchild, and takes the parent's `go` under its own event schema.
+  assert.deepEqual(session.start().activeConfiguration, ['pass']);
+  session.dispose();
+});
+
+test("an <invoke src> child without its schema files is rejected at compile, as under Wasmtime", async () => {
+  const site = { ...RELATIVE_SITE, 'child/child.scxml': { text: RELATIVE_CHILD, baseUri: CHILD_BASE } };
+  const { session } = await open(RELATIVE_PARENT, { resources: recorder(site).resources });
+  assert.deepEqual(session.start().activeConfiguration, ['failed']);
+  session.dispose();
+});
+
+test('without a base URI a child names its documents as written', async () => {
+  const site = {
+    'child/child.scxml': { text: RELATIVE_CHILD, eventSchemas: [{ uri: 'schemas/go.json', bytes: SCHEMA }] },
+    'lib/child.js': 'loaded = loaded + 1;',
+    'data.json': '{"a": 1}',
+    '../grand/grandchild.scxml': GRANDCHILD,
+  };
+  const { calls, resources } = recorder(site);
+  const { session } = await open(RELATIVE_PARENT, { resources });
+  assert.deepEqual(
+    calls.filter(([call]) => call === 'resolve').map(([, url]) => url).sort(),
+    Object.keys(site).sort(),
+  );
+  assert.deepEqual(session.start().activeConfiguration, ['pass']);
   session.dispose();
 });
 

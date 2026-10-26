@@ -83,6 +83,10 @@
   puts the sound into the environment, after the copy has left for the
   body, so the copy reaches the listening first).
 
+  Short-term memory: the conversation's bot.ability.memory.stm.turn (each
+  message it commits with words, heard or said) goes on to the body
+  unchanged, whatever the state.
+
   Activate: bot.ability.communication.activate {} keeps the one
   conversation active (a catalog of conversations to switch between is
   loaded through memory, phase 3); it is taken and logged in inactive only.
@@ -192,6 +196,13 @@
     </transition>
     <transition event="done.invoke.conversation done.invoke.speaking" target="degraded">
       <assign location="failure" expr="childEndFailure(_event)"/>
+    </transition>
+    <!-- The conversation's short-term memory turns go on to the body,
+         which holds the register. -->
+    <transition event="bot.ability.memory.stm.turn" event:schema="../schemas/bot.ability.memory.stm.turn.json">
+      <send event="bot.ability.memory.stm.turn" target="#_parent">
+        <content expr="_event.data"/>
+      </send>
     </transition>
     <!-- Speaking's record of what it said, and its playout: the copy to
          the body, then the sound into the environment, in the order speaking

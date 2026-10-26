@@ -1,12 +1,18 @@
 """Build the website and workshop into web/dist for GitHub Pages.
 
 The workshop's block catalog is extracted from the XSDs at build time, so the
-blocks always match the schemas in this repository.
+blocks always match the schemas in this repository. Its runtime is scxml.rs's
+browser host as web/build-host.sh builds it into target/web/host: run that
+first. The bots, abilities and environments are copied beside the pages, so a
+document the workshop opens loads its scripts, schemas and children by the
+same relative URIs `scx run` does.
 """
-import json, os, subprocess, sys
+import glob, json, os, shutil, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)
 SRC, DIST = os.path.join(HERE, "src"), os.path.join(HERE, "dist")
+HOST = os.path.join(ROOT, "target", "web")
 
 
 def read(name):
@@ -30,7 +36,45 @@ def fill(template, parts):
 
 catalog = subprocess.run([sys.executable, os.path.join(SRC, "extract.py")], check=True, capture_output=True, text=True).stdout
 critter = read("critter.bundle.js")
-write(os.path.join(DIST, "index.html"), fill(read("site.html"), {"/*DATA*/": read("site-data.js"), "/*SHEET*/": read("site-sheet.js"), "/*CRITTER*/": critter}))
+facts = subprocess.run([sys.executable, os.path.join(SRC, "register.py")], check=True, capture_output=True, text=True).stdout
+write(os.path.join(DIST, "index.html"), fill(read("site.html"), {"/*DATA*/": fill(read("site-data.js"), {"/*FACTS*/": facts}), "/*SHEET*/": read("site-sheet.js"), "/*CRITTER*/": critter}))
 write(os.path.join(DIST, "workshop", "index.html"), fill(read("workshop.html"), {"/*CRITTER*/": critter, "/*CATALOG*/": json.dumps(json.loads(catalog), separators=(",", ":"))}))
 write(os.path.join(DIST, ".nojekyll"), "")
+
+# The workshop's runtime.
+if not os.path.isfile(os.path.join(HOST, "host", "dist", "build-manifest.json")):
+    sys.exit("build: the browser host is not built; run sh web/build-host.sh first")
+workshop = os.path.join(DIST, "workshop")
+shutil.copytree(os.path.join(HOST, "host"), os.path.join(workshop, "host"), dirs_exist_ok=True)
+shutil.copy(os.path.join(SRC, "runtime.js"), os.path.join(workshop, "runtime.js"))
+
+# The namespace packages the runtime binds: scx and floppy's, each with its
+# schema and its component (the bytes authenticateExtensionComponent hashes).
+def package(manifest_path, component_dir):
+    with open(manifest_path, encoding="utf-8") as f:
+        m = json.load(f)
+    name = os.path.basename(os.path.dirname(os.path.dirname(manifest_path)))
+    target = os.path.join(workshop, "packages", name)
+    os.makedirs(target, exist_ok=True)
+    shutil.copy(os.path.join(os.path.dirname(manifest_path), m["schema-artifact"]), target)
+    shutil.copy(os.path.join(component_dir, m["extension-artifact"]), target)
+    return {"manifest": {"namespaceUri": m["namespace-uri"], "packageVersion": m["package-version"], "extensionArtifact": m["extension-artifact"],
+                         "schemaArtifact": m["schema-artifact"], "schemaSha256": m["schema-sha256"], "witWorld": m["wit-world"], "witVersion": m["wit-version"]},
+            "schema": f"packages/{name}/{m['schema-artifact']}", "component": f"packages/{name}/{m['extension-artifact']}"}
+
+packages = [package(os.path.join(ROOT, "scxml.rs", "namespaces", "scx", "package", "scx.extension.json"), os.path.join(HOST, "scxml"))]
+packages += [package(path, os.path.join(HOST, "components", "namespaces")) for path in sorted(glob.glob(os.path.join(ROOT, "namespaces", "*", "package", "*.extension.json")))]
+write(os.path.join(workshop, "packages.json"), json.dumps({"packages": packages}, indent=1))
+
+# Bots, abilities and environments: their documents, scripts and schemas,
+# and the list of documents the workshop opens.
+documents = sorted(os.path.relpath(p, ROOT).replace(os.sep, "/") for top in ("bots", "abilities", "environments")
+                   for p in glob.glob(os.path.join(ROOT, top, "*", "*.scx")) + glob.glob(os.path.join(ROOT, top, "*", "examples", "*", "*.scx")))
+write(os.path.join(workshop, "documents.json"), json.dumps({"documents": documents}, indent=1))
+for top in ("bots", "abilities", "environments"):
+    for path in glob.glob(os.path.join(ROOT, top, "**", "*"), recursive=True):
+        rel = os.path.relpath(path, ROOT)
+        if os.path.isfile(path) and os.path.splitext(path)[1] in (".scx", ".js", ".json") and "/irp/" not in "/" + rel.replace(os.sep, "/"):
+            os.makedirs(os.path.dirname(os.path.join(DIST, rel)), exist_ok=True)
+            shutil.copy(path, os.path.join(DIST, rel))
 print("built", DIST)

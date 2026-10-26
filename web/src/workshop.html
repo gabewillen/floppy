@@ -1,3 +1,5 @@
+<!doctype html>
+<meta charset="utf-8">
 <title>floppy Workshop</title>
 <meta name="description" content="Build, test and watch your own software robots in the browser, with Bill the builder.">
 <meta name="theme-color" content="#103766">
@@ -65,6 +67,11 @@ floppy-block>.hd .tag .ico{display:inline-block;min-width:1.3em;margin-right:6px
 floppy-workshop:not([data-show-details]) floppy-block>.hd .tag{text-transform:none;letter-spacing:.02em;font-size:20px}
 .details{display:inline-flex;align-items:center;gap:6px;margin-left:auto;font:600 14px var(--f-c);letter-spacing:.12em;text-transform:uppercase;color:var(--mute);cursor:pointer}
 .details input{accent-color:var(--acc);width:16px;height:16px}
+.open{display:inline-flex;align-items:center;gap:6px;font:600 14px var(--f-c);letter-spacing:.12em;text-transform:uppercase;color:var(--mute)}
+.open select{background:var(--field);border:1px solid var(--mute);padding:3px 6px;font:12px var(--f-mono);letter-spacing:0;text-transform:none;max-width:260px}
+.open input[type=file]{font:12px var(--f-mono);letter-spacing:0;text-transform:none;max-width:220px}
+.dm{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:2px 10px;margin:0;font-size:11.5px}
+.dm dt{color:var(--mute)} .dm dd{margin:0;overflow-wrap:anywhere;max-height:6em;overflow:auto}
 .top .details+floppy-modes{margin-left:0}
 floppy-block>.hd label{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:rgba(255,255,255,.9)}
 floppy-block>.hd input,floppy-block>.hd select{background:var(--field);color:var(--ink);border:0;border-bottom:1px solid var(--mute);border-radius:0;padding:3px 6px;font-family:var(--f-mono);font-size:13px;max-width:240px}
@@ -89,7 +96,7 @@ floppy-block[data-state="refusing"]>.mouth{outline:1.5px dashed var(--bad);outli
 .ins{position:absolute;left:0;right:-40px;height:2px;background:var(--ok);pointer-events:none;z-index:5}
 
 /* run panel */
-floppy-run{display:flex;flex-direction:column}
+floppy-run{display:flex;flex-direction:column;min-width:0;overflow-x:hidden}
 .tabs{display:flex;border-bottom:1.5px solid var(--line)}
 .tabs button{flex:1;border:0;border-right:1px solid var(--mute);background:transparent;padding:8px 6px;font:600 14px var(--f-c);letter-spacing:.1em;text-transform:uppercase;color:var(--mute)}
 .tabs button:last-child{border-right:0}
@@ -101,9 +108,9 @@ floppy-run{display:flex;flex-direction:column}
 .cfg{font-size:12.5px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;color:var(--mute)}
 .cfg span{border:1px solid var(--line);background:var(--c-state);color:#fff;padding:2px 8px}
 .cfg span.leaf{border-color:var(--led);background:var(--led);color:#061a35;font-weight:700}
-.et{display:flex;justify-content:space-between;gap:8px;align-items:center;border:1.5px solid var(--acc);background:var(--well);color:var(--ink);padding:8px 10px;font-size:12px;text-align:left;width:100%}
+.et{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 8px;align-items:center;min-width:0;overflow-wrap:anywhere;border:1.5px solid var(--acc);background:var(--well);color:var(--ink);padding:8px 10px;font-size:12px;text-align:left;width:100%}
 .et:hover{background:#12406f}
-.et small{font-size:11px;color:var(--acc);white-space:nowrap}
+.et small{font-size:11px;color:var(--acc);margin-left:auto}
 .tm{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:12px;border:1px dashed var(--dash);padding:6px 8px}
 .tm button{border:1px solid var(--warn);color:var(--warn);background:transparent;padding:2px 8px;font-size:11px}
 .inject{display:flex;gap:6px}
@@ -209,9 +216,11 @@ floppy-observe .ph .dot.on{background:var(--ok);border-color:var(--ok)}
 
 <floppy-workshop><p class="loading">Loading the workshop…</p><noscript><p class="loading">The workshop needs JavaScript to run.</p></noscript></floppy-workshop>
 
+<script type="importmap">{ "imports": { "@opentelemetry/api": "./host/opentelemetry-api/index.js" } }</script>
 <script type="module">/*CRITTER*/</script>
 <script type="module">
 import * as lib from "https://cdn.jsdelivr.net/npm/@stateforward/hsm.ts@1.3.3/dist/index.js";
+import * as runtime from "./runtime.js";
 
 /* ---------------------------------------------------------------
    hsm.ts host helpers:
@@ -338,18 +347,45 @@ function fits(parent, child) {
 ---------------------------------------------------------------- */
 let uid = 0;
 const N = (tag, attrs = {}, kids = []) => ({ id: "n" + (++uid), tag, attrs, kids });
+/* The builder's traffic light. Each state schedules its timer before it tells
+   the parent, so that run on its own (no parent: the send to #_parent raises
+   error.communication and ends that onentry, SCXML 5.10) it still cycles. */
 function trafficLight() {
   const send = (event, more = {}) => N("send", { event, ...more });
   return N("scxml", { version: "1.0", datamodel: "ecmascript", initial: "idle" }, [
     N("state", { id: "idle" }, [N("onentry", {}, [send("light.red", { target: "#_parent" })]), N("transition", { target: "green" })]),
     N("state", { id: "green" }, [
-      N("onentry", {}, [send("light.green", { target: "#_parent" }), send("timer.green", { delay: "5s" })]),
+      N("onentry", {}, [send("timer.green", { delay: "5s" }), send("light.green", { target: "#_parent" })]),
       N("transition", { event: "timer.green", target: "yellow" }),
       N("transition", { event: "ped.button", "event:schema": '{"type":"object"}', target: "yellow" })]),
-    N("state", { id: "yellow" }, [N("onentry", {}, [send("light.yellow", { target: "#_parent" }), send("timer.yellow", { delay: "2s" })]), N("transition", { event: "timer.yellow", target: "red" })]),
+    N("state", { id: "yellow" }, [N("onentry", {}, [send("timer.yellow", { delay: "2s" }), send("light.yellow", { target: "#_parent" })]), N("transition", { event: "timer.yellow", target: "red" })]),
     N("state", { id: "red" }, [N("onentry", {}, [send("light.red", { target: "#_parent" })]), N("transition", { target: "walk" })]),
-    N("state", { id: "walk" }, [N("onentry", {}, [send("walk.on", { target: "#_parent" }), send("timer.walk", { delay: "4s" })]), N("transition", { event: "timer.walk", target: "green" })]),
+    N("state", { id: "walk" }, [N("onentry", {}, [send("timer.walk", { delay: "4s" }), send("walk.on", { target: "#_parent" })]), N("transition", { event: "timer.walk", target: "green" })]),
   ]);
+}
+/* Parses an SCXML document into blocks; an element's text (a <content>
+   body, a <script>) is kept as it is and written back unchanged. */
+function fromSCXML(text) {
+  const xml = new DOMParser().parseFromString(text, "application/xml");
+  if (xml.getElementsByTagName("parsererror").length) throw new Error("the file is not well-formed XML");
+  const prefixOf = uri => uri === SCXML_NS || !uri ? "" : uri === ENV_NS ? "env" : Object.entries(CATALOG.ext).find(([, e]) => e.uri === uri.replace(/@[^/]*$/, ""))?.[0] ?? null;
+  const conv = el => {
+    const p = prefixOf(el.namespaceURI);
+    if (p === null) throw new Error(`<${el.tagName}> is in a namespace the workshop has no blocks for (${el.namespaceURI})`);
+    const attrs = {};
+    for (const a of el.attributes) {
+      if (a.name === "xmlns" || a.name.startsWith("xmlns:")) continue;
+      const ap = a.namespaceURI ? prefixOf(a.namespaceURI) : "";
+      attrs[ap ? `${ap}:${a.localName}` : a.localName] = a.value;
+    }
+    const kids = [...el.children].map(conv), body = [...el.childNodes].filter(n => n.nodeType === 3 || n.nodeType === 4).map(n => n.nodeValue).join("");
+    const n = N(p ? `${p}:${el.localName}` : el.localName, attrs, kids);
+    if (!el.children.length && body.trim()) n.text = body;
+    return n;
+  };
+  const root = conv(xml.documentElement);
+  if (root.tag !== "scxml") throw new Error("the file's root element is not <scxml>");
+  return root;
 }
 function walk(n, f, parent = null) { f(n, parent); n.kids.forEach(k => walk(k, f, n)); }
 function find(root, id) { let r = null, p = null; walk(root, (n, par) => { if (n.id === id) { r = n; p = par; } }); return r ? { node: r, parent: p } : null; }
@@ -529,102 +565,21 @@ class FloppyPalette extends hsm.from(HTMLElement) {
 customElements.define("floppy-palette", FloppyPalette);
 
 /* ---------------------------------------------------------------
-   SCXML preview interpreter: one active configuration, eventless
-   transitions, delayed sends held as timers, enabled transitions
-   listed for the user to take.
+   Running: the document is validated, compiled and run in the page by
+   scxml.rs's browser host (runtime.js). The machine selects every
+   transition; the panels show its snapshot.
 ---------------------------------------------------------------- */
-function matchDesc(desc, name) { return (desc || "").split(/\s+/).some(d => d === "*" || d === name || (d && name.startsWith(d.replace(/\.?\*$/, "") + "."))); }
-class Interp {
-  constructor(root) { this.root = root; this.reset(); }
-  idx() { this.byId = new Map(); this.parent = new Map(); walk(this.root, (n, p) => { if (n.attrs.id) this.byId.set(n.attrs.id, n); this.parent.set(n, p); }); }
-  isState(n) { return ["state", "parallel", "final"].includes(n.tag); }
-  say(t) { this.log.push({ n: this.log.length + 1, t }); }
-  reset() { this.idx(); this.queue = []; this.active = []; this.log = []; this.timers = []; this.done = false; this.guard = 0; const first = this.initialOf(this.root); first ? this.enterNode(first) : this.say("no state to enter"); }
-  initialOf(n) {
-    const kids = n.kids.filter(k => this.isState(k));
-    if (n.attrs.initial && this.byId.has(n.attrs.initial.split(/\s+/)[0])) return this.byId.get(n.attrs.initial.split(/\s+/)[0]);
-    const ini = n.kids.find(k => k.tag === "initial"), t = ini?.kids.find(k => k.tag === "transition");
-    if (t && this.byId.has(t.attrs.target)) return this.byId.get(t.attrs.target);
-    return kids[0] || null;
-  }
-  leafOf(n) { let x = n, g = 0; while (x && x.tag !== "final" && x.kids.some(k => this.isState(k)) && g++ < 50) x = this.initialOf(x); return x; }
-  pathOf(n) { const p = []; let x = n; while (x && x.tag !== "scxml") { p.unshift(x); x = this.parent.get(x); } return p; }
-  run(list, where) {
-    for (const a of list) {
-      const t = a.tag;
-      if (t === "send") {
-        if (a.attrs.delay) { this.timers.push({ event: a.attrs.event || "(eventexpr)", delay: a.attrs.delay }); this.say(`send ${a.attrs.event} delay ${a.attrs.delay}`); }
-        else if (a.attrs.target === "#_parent") this.say(`send ${a.attrs.event} → #_parent`);
-        else { this.say(`send ${a.attrs.event}${a.attrs.target ? " → " + a.attrs.target : ""}`); if (!a.attrs.target || a.attrs.target === "#_internal") this.queue.push(a.attrs.event); }
-      } else if (t === "raise") { this.say(`raise ${a.attrs.event}`); this.queue.push(a.attrs.event); }
-      else if (t === "log") this.say(`log ${a.attrs.label || ""} ${a.attrs.expr || ""}`.trim());
-      else if (t === "assign") this.say(`assign ${a.attrs.location} = ${a.attrs.expr || ""}`);
-      else if (t === "cancel") this.say(`cancel ${a.attrs.sendid || ""}`);
-      else if (t === "if" || t === "foreach") { this.say(`${t} ${a.attrs.cond || a.attrs.array || ""} (taken)`); const cut = a.kids.findIndex(k => k.tag === "elseif" || k.tag === "else"); this.run(cut < 0 ? a.kids : a.kids.slice(0, cut), where); }
-      else if (t === "script") this.say("script (not run in preview)");
-      else if (t.includes(":")) this.say(`${t} ran (not run in preview)`);
-    }
-  }
-  enterNode(target) {
-    this.queue = this.queue || [];
-    const leaf = this.leafOf(target); if (!leaf) return;
-    const path = this.pathOf(leaf), old = this.active;
-    old.filter(n => !path.includes(n)).reverse().forEach(n => { n.kids.filter(k => k.tag === "onexit").forEach(k => this.run(k.kids, n)); n.kids.filter(k => k.tag === "invoke").forEach(k => this.say(`invoke ${k.attrs.id || k.attrs.type} cancelled`)); this.say("exit " + n.attrs.id); });
-    path.filter(n => !old.includes(n)).forEach(n => { this.say("enter " + n.attrs.id); n.kids.filter(k => k.tag === "onentry").forEach(k => this.run(k.kids, n)); n.kids.filter(k => k.tag === "invoke").forEach(k => this.say(`invoke ${k.attrs.id || ""} ${k.attrs.type || ""}${k.attrs.src ? " " + k.attrs.src : ""} started`.replace(/\s+/g, " "))); });
-    this.active = path;
-    if (leaf.tag === "final") {
-      const par = this.parent.get(leaf);
-      if (!par || par.tag === "scxml") { this.done = true; this.say("final " + leaf.attrs.id + ": the machine is done"); return; }
-      this.queue.push("done.state." + par.attrs.id);
-    }
-    this.settle();
-  }
-  settle() {
-    while (this.guard++ < 60) {
-      const free = this.transitions().find(t => !t.attrs.event);
-      if (free) { this.take(free, "eventless"); return; }
-      const ev = this.queue.shift(); if (!ev) break;
-      const t = this.transitions().find(t => t.attrs.event && matchDesc(t.attrs.event, ev));
-      if (t) { this.take(t, ev); return; } else this.say(`${ev} discarded: no transition`);
-    }
-    this.guard = 0;
-  }
-  transitions() { const out = []; [...this.active].reverse().forEach(s => s.kids.filter(k => k.tag === "transition").forEach(t => out.push(t))); return out; }
-  enabled() { return this.done ? [] : this.transitions().filter(t => t.attrs.event); }
-  take(t, label) {
-    this.say(label === "eventless" ? "eventless transition" : `event ${label}${t.attrs.cond ? " [" + t.attrs.cond + "]" : ""}`);
-    this.run(t.kids, t);
-    const tg = t.attrs.target && this.byId.get(t.attrs.target.split(/\s+/)[0]);
-    if (t.attrs.target && !tg) { this.say(`error.execution: no state "${t.attrs.target}"`); return; }
-    if (tg) this.enterNode(tg); else this.settle();
-  }
-  deliver(name) {
-    this.timers = this.timers.filter((x, i, a) => !(x.event === name && a.findIndex(y => y.event === name) === i));
-    const t = this.enabled().find(t => matchDesc(t.attrs.event, name));
-    if (t) this.take(t, name); else this.say(`${name} discarded: no enabled transition`);
-  }
-}
-
-/* XSD check: required attributes, fixed values, IDREFs, content models. */
-function check(root) {
-  const ids = new Set(stateIds(root)), out = [];
-  walk(root, (n, p) => {
-    const spec = SPECS.get(n.tag);
-    spec.attrs.filter(a => a.use === "required" && !n.attrs[a.name]).forEach(a => out.push({ id: n.id, msg: `${nm(n.tag)} needs ${a.name}` }));
-    spec.attrs.filter(a => a.fixed && n.attrs[a.name] && n.attrs[a.name] !== a.fixed).forEach(a => out.push({ id: n.id, msg: `${nm(n.tag)} ${a.name} must be ${a.fixed}` }));
-    ["target", "initial"].forEach(k => (n.attrs[k] || "").split(/\s+/).filter(Boolean).forEach(t => { if (!ids.has(t) && !(n.tag === "send" && k === "target")) out.push({ id: n.id, msg: `${nm(n.tag)} ${k} "${t}" names no state` }); }));
-    if (p && !xsdAllows(p.tag, n.tag)) out.push({ id: n.id, msg: `${nm(n.tag)} doesn't go inside ${nm(p.tag)}` });
-  });
-  return out;
-}
+/* The first event name a transition's descriptor matches ("a.*" and "a." match "a"). */
+const eventOf = desc => (desc || "").split(/\s+/).filter(d => d && d !== "*").map(d => d.replace(/\.?\*$/, "").replace(/\.$/, ""))[0] || "";
 
 /* Serialize to SCXML. */
-function toSCXML(root, activeIds) {
+function scxmlLines(root, activeIds = new Set()) {
   const prefixes = new Set();
   walk(root, n => { if (n.tag.includes(":")) prefixes.add(n.tag.split(":")[0]); Object.keys(n.attrs).forEach(k => k.includes(":") && prefixes.add(k.split(":")[0])); });
   const uri = p => p === "env" ? ENV_NS : CATALOG.ext[p]?.uri;
   const lines = [];
-  const attrs = n => Object.entries(n.attrs).map(([k, v]) => ` ${k}=${v.includes('"') ? `'${v}'` : `"${v}"`}`).join("");
+  const xa = v => v.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const attrs = n => Object.entries(n.attrs).map(([k, v]) => ` ${k}=${v.includes('"') ? `'${xa(v).replace(/'/g, "&apos;")}'` : `"${xa(v)}"`}`).join("");
   const emit = (n, depth) => {
     const pad = "  ".repeat(depth);
     let open = `<${n.tag}`;
@@ -632,16 +587,21 @@ function toSCXML(root, activeIds) {
     open += attrs(n);
     const hot = activeIds.has(n.id);
     const L = s => lines.push({ s: pad + s, hot });
+    if (n.text !== undefined) { L(open + ">" + n.text.replace(/&/g, "&amp;").replace(/</g, "&lt;") + `</${n.tag}>`); return; }
     if (!n.kids.length) { L(open + "/>"); return; }
     L(open + ">"); n.kids.forEach(k => emit(k, depth + 1)); L(`</${n.tag}>`);
   };
   emit(root, 0);
-  return lines.map(l => l.hot ? `<mark>${esc(l.s)}</mark>` : esc(l.s)).join("\n");
+  return lines;
 }
+const scxmlText = root => scxmlLines(root).map(l => l.s).join("\n") + "\n";
+const toSCXML = (root, activeIds) => scxmlLines(root, activeIds).map(l => l.hot ? `<mark>${esc(l.s)}</mark>` : esc(l.s)).join("\n");
+/* State ids the machine reports active, as block ids. */
+function activeBlocks(root, names) { const want = new Set(names), out = new Set(); walk(root, n => { if (n.attrs.id && want.has(n.attrs.id) && ["state", "parallel", "final"].includes(n.tag)) out.add(n.id); }); return out; }
 
 /* ---------------------------------------------------------------
-   <floppy-run>: its machine is the panel tab; the preview machine
-   above runs the document.
+   <floppy-run>: its machine is the panel tab; the bot runs in the
+   page's scxml.rs session (runtime.js).
 ---------------------------------------------------------------- */
 class FloppyRun extends hsm.from(HTMLElement) {
   static model = hsm.define("RunPanel",
@@ -661,21 +621,28 @@ class FloppyRun extends hsm.from(HTMLElement) {
   }
   static show(tab) { return (c, r) => { r.tab = tab; FloppyRun.paint(c, r); }; }
   static paint(_c, r) {
-    const ws = r.closest("floppy-workshop"); if (!ws || !ws.sim) return;
-    const tabs = ws.mode === "testbench" ? [["run", "Simulator"]] : [["source", "Code"], ["check", "Check"]];
-    const tab = tabs.some(t => t[0] === r.tab) ? r.tab : tabs[0][0], sim = ws.sim, issues = check(ws.doc);
-    const en = sim.enabled();
+    const ws = r.closest("floppy-workshop"); if (!ws) return;
+    const tabs = ws.mode === "testbench" ? [["run", "TestBench"]] : [["source", "Code"], ["check", "Check"]];
+    const tab = tabs.some(t => t[0] === r.tab) ? r.tab : tabs[0][0], v = ws.view, c = ws.compiled;
+    const issues = c?.diagnostics ?? [], errors = issues.filter(d => d.severity !== "warning" && d.severity !== "note").length;
     let body = "";
-    if (tab === "run") body = `
-      <div class="sec"><h3>Configuration</h3><div class="cfg">${sim.done ? "<span>done</span>" : sim.active.map((n, i, a) => `<span class="${i === a.length - 1 ? "leaf" : ""}">${esc(n.attrs.id)}</span>`).join("›")}</div></div>
-      <div class="sec"><h3>Enabled transitions</h3>${en.length ? en.map(t => { const tm = sim.timers.find(x => matchDesc(t.attrs.event, x.event)); return `<button class="et" data-take="${t.id}">${esc(t.attrs.event)}${t.attrs.cond ? " [" + esc(t.attrs.cond) + "]" : ""}<small>→ ${esc(t.attrs.target || "(no target)")}${tm ? " · after " + esc(tm.delay) : ""}</small></button>`; }).join("") : `<p class="none">${sim.done ? "The machine reached a top-level final state." : "No event-triggered transitions in this configuration."}</p>`}
-        ${sim.timers.length ? `<h3>Pending delayed sends</h3>${sim.timers.map(t => `<div class="tm">${esc(t.event)} · ${esc(t.delay)}<button data-deliver="${esc(t.event)}">Deliver now</button></div>`).join("")}` : ""}
-        <form class="inject"><input id="inject-event" placeholder="send an event, e.g. ped.button" aria-label="Event name"><button>Send</button></form>
-        <button class="restart" data-restart="1">Restart</button></div>
-      <div class="sec" style="border-bottom:0"><h3>Run log</h3><ol class="log">${sim.log.slice(-60).reverse().map(l => `<li><span>${l.n}</span><b>${esc(l.t)}</b></li>`).join("")}</ol></div>`;
-    if (tab === "source") body = `<pre class="src">${toSCXML(ws.doc, new Set(sim.active.map(n => n.id)))}</pre>`;
-    if (tab === "check") body = `<div class="sec" style="border-bottom:0"><h3>Checks</h3>${issues.length ? `<ul class="issues">${issues.map(i => `<li>${esc(i.msg)} <button data-select="${i.id}">show</button></li>`).join("")}</ul>` : '<p class="none">No problems: every required field is set, every target names a state, and every block sits where it fits.</p>'}</div>`;
-    r.innerHTML = (tabs.length === 1 ? `<div class="ph">${tabs[0][1]}</div>` : `<div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${tab === k}">${l}${k === "check" ? `<b class="${issues.length ? "bad" : ""}">${issues.length}</b>` : ""}</button>`).join("")}</div>`) + body;
+    if (tab === "run") {
+      const head = ws.starting ? "<p class=\"none\">Compiling and starting the bot in the browser…</p>"
+        : !v ? `<p class="none">${c && !c.ok ? "The bot doesn't compile yet. Open the Check tab on the Workbench." : "Not running."}</p>`
+        : "";
+      body = head + (v ? `
+      <div class="sec"><h3>Configuration</h3><div class="cfg">${v.status === "finished" ? "<span>done</span>" : v.failure ? `<span class="bad">${esc(v.failure)}</span>` : v.full.map((n, i, a) => `<span class="${v.atomic.includes(n) ? "leaf" : ""}">${esc(n)}</span>`).join("›")}</div></div>
+      <div class="sec"><h3>Enabled transitions</h3>${v.transitions.length ? v.transitions.map(t => `<button class="et" data-send="${esc(eventOf(t.events.join(" ")))}">${esc(t.events.join(" "))}${t.has_cond ? " [" + esc(t.cond ?? "cond") + "]" : ""}<small>${esc(t.source)} → ${esc(t.targets?.length ? t.targets.join(" ") : "(no target)")}</small></button>`).join("") : `<p class="none">${v.status === "finished" ? "The machine reached a top-level final state." : "No event-triggered transitions in this configuration."}</p>`}
+        ${v.pending.length ? `<h3>Pending delayed sends</h3>${v.pending.map(t => `<div class="tm">${esc(t.event?.name ?? t.sendid)} · due at ${esc(String(t.deadline_ms))} ms</div>`).join("")}` : ""}
+        ${v.invocations.length ? `<h3>Invocations</h3>${v.invocations.map(i => `<div class="tm">${esc(i.invoke_id)} · ${esc(i.type)}${i.finished ? " · finished" : ""}</div>`).join("")}` : ""}
+        <form class="inject"><input id="inject-event" placeholder="send an event, e.g. ped.button" aria-label="Event name"><button>Send</button></form></div>
+      ${v.data.length ? `<div class="sec"><h3>Data model</h3><dl class="dm">${v.data.map(d => `<dt>${esc(d.name)}</dt><dd>${esc(d.value)}</dd>`).join("")}</dl></div>` : ""}
+      <div class="sec" style="border-bottom:0"><h3>Run log</h3><ol class="log">${v.log.slice(-60).map((l, i, a) => `<li><span>${l.kind}</span><b>${esc(l.text)}</b></li>`).reverse().join("")}</ol></div>` : "")
+        + `<div class="sec" style="border-bottom:0"><button class="restart" data-restart="1">${v ? "Restart" : "Start"}</button></div>`;
+    }
+    if (tab === "source") body = `<pre class="src">${toSCXML(ws.doc, activeBlocks(ws.doc, v?.full ?? []))}</pre>`;
+    if (tab === "check") body = `<div class="sec" style="border-bottom:0"><h3>Checks</h3>${!c ? '<p class="none">Checking with the scxml.rs validator and compiler…</p>' : issues.length ? `<ul class="issues">${issues.map(i => `<li><b>${esc(i.code ?? "")}</b> ${esc(i.message)}${i.line ? ` <small>line ${i.line}</small>` : ""}</li>`).join("")}</ul>` : '<p class="none">The scxml.rs validator and compiler accept the bot.</p>'}</div>`;
+    r.innerHTML = (tabs.length === 1 ? `<div class="ph">${tabs[0][1]}</div>` : `<div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${tab === k}">${l}${k === "check" ? `<b class="${errors ? "bad" : ""}">${c ? issues.length : "…"}</b>` : ""}</button>`).join("")}</div>`) + body;
   }
 }
 customElements.define("floppy-run", FloppyRun);
@@ -686,7 +653,7 @@ customElements.define("floppy-run", FloppyRun);
 ---------------------------------------------------------------- */
 class FloppyCanvas extends HTMLElement {
   paint(ws) {
-    const sim = ws.mode === "observe" ? ws.live : ws.mode === "testbench" ? ws.sim : null, ids = stateIds(ws.doc), active = new Set(sim ? sim.active.map(n => n.id) : []); /* the white outline is for running only */
+    const running = ws.mode === "observe" || ws.mode === "testbench", ids = stateIds(ws.doc), active = running && ws.view ? activeBlocks(ws.doc, ws.view.full) : new Set(); /* the white outline is for running only */
     this.innerHTML = `<div class="pad${ws.mode === "workbench" ? "" : " ro"}">${FloppyBlock.html(ws.doc, ids, { sel: ws.selected, active })}</div><p class="status ${ws.statusKind}" role="status">${esc(ws.status)}</p>`;
     requestAnimationFrame(() => shapeAll(this));
   }
@@ -883,8 +850,8 @@ class FloppyBill extends hsm.from(HTMLElement) {
       : `<p>It runs in a browser tab with the same sandboxed parts.</p>`;
     b.add("bill", `<b>${r.name}</b> is ready.
       <div class="card result"><div class="files"><span>${r.name}/${r.name}.scx</span><span>${r.name}/${r.name}.js</span></div>${how}</div>
-      Change its blocks on the Workbench, simulate it on the TestBench, or watch it live on Observe.`);
-    b.chips = [["Simulate on the TestBench", "testbench"], ["Open the Workbench", "workbench"], ["Watch it on Observe", "observe"], ["Build another robot", "over"]];
+      Change its blocks on the Workbench, run it on the TestBench, or watch it live on Observe.`);
+    b.chips = [["Run it on the TestBench", "testbench"], ["Open the Workbench", "workbench"], ["Watch it on Observe", "observe"], ["Build another robot", "over"]];
   }
   static go(_c, b, e) { b.ws?.setMode(e.data, e.data === "testbench" ? b.recipe?.event : null); }
   paint() {
@@ -922,17 +889,16 @@ class FloppyModes extends hsm.from(HTMLElement) {
 }
 
 /* ---------------------------------------------------------------
-   <floppy-observe>: a running robot, read-only. Its own copy of the
-   robot steps on a timer, as a deployed one would on its own
-   stimuli; the blocks light up and every event lands in the stream.
+   <floppy-observe>: the running robot, read-only. It watches the
+   session the TestBench started in this page: the blocks light up
+   with its configuration and every event lands in the stream.
 ---------------------------------------------------------------- */
-const KIND = t => t.startsWith("event ") ? "in" : /^(send|raise) /.test(t) ? "out" : /^(enter|exit|final) /.test(t) ? "state" : t.startsWith("invoke ") ? "service" : "note";
 class FloppyObserve extends hsm.from(HTMLElement) {
   static model = hsm.define("Observe",
     hsm.initial(hsm.target("idle")),
     hsm.state("idle", hsm.entry(FloppyObserve.view("idle")), hsm.transition(hsm.on("watch"), hsm.target("../watching")), hsm.transition(hsm.on("filter"), hsm.effect(FloppyObserve.filter))),
     hsm.state("watching", hsm.entry(FloppyObserve.view("watching")),
-      hsm.transition(hsm.after(() => FloppyObserve.everyMs), hsm.target("../watching"), hsm.effect(FloppyObserve.step)),
+      hsm.transition(hsm.on("refresh"), hsm.effect(FloppyObserve.paint)),
       hsm.transition(hsm.on("pause"), hsm.target("../paused")),
       hsm.transition(hsm.on("leave"), hsm.target("../idle")),
       hsm.transition(hsm.on("filter"), hsm.effect(FloppyObserve.filter))),
@@ -941,8 +907,7 @@ class FloppyObserve extends hsm.from(HTMLElement) {
       hsm.transition(hsm.on("leave"), hsm.target("../idle")),
       hsm.transition(hsm.on("filter"), hsm.effect(FloppyObserve.filter))),
   );
-  static everyMs = 1400;
-  stream = []; seen = 0; show = "all"; t0 = performance.now();
+  show = "all";
   connectedCallback() {
     hsm.start(this, FloppyObserve.model);
     this.addEventListener("click", e => {
@@ -952,31 +917,20 @@ class FloppyObserve extends hsm.from(HTMLElement) {
     });
   }
   get ws() { return this.closest("floppy-workshop"); }
-  reset() { this.stream = []; this.seen = 0; this.t0 = performance.now(); }
   static view(st) { return (c, o) => { o.st = st; FloppyObserve.paint(c, o); }; }
   static filter(_c, o, e) { o.show = e.data; FloppyObserve.paint(_c, o); }
-  static step(_c, o) {
-    const ws = o.ws, live = ws.live; if (!live) return;
-    if (live.done) { ws.live = new Interp(ws.doc); o.seen = 0; o.push("note", "robot restarted"); }
-    else {
-      const opts = [...live.enabled().map(t => ({ t })), ...live.timers.map(x => ({ timer: x.event }))];
-      if (!opts.length) { ws.live = new Interp(ws.doc); o.seen = 0; o.push("note", "robot restarted"); }
-      else { const pick = opts[Math.floor(Math.random() * opts.length)]; if (pick.t) live.take(pick.t, pick.t.attrs.event.split(/\s+/)[0].replace(/\.\*$/, "")); else live.deliver(pick.timer); }
-    }
-    ws.live.log.slice(o.seen).forEach(l => o.push(KIND(l.t), l.t)); o.seen = ws.live.log.length;
-    ws.canvas.paint(ws);
-  }
-  push(kind, raw) { const text = raw.replace(/\s*https?:\/\/\S+\/services\/(\w+)/, "").replace(" (not run in preview)", ""); const ms = performance.now() - this.t0; this.stream.unshift({ kind, text, at: `${String(Math.floor(ms / 60000)).padStart(2, "0")}:${(ms / 1000 % 60).toFixed(3).padStart(6, "0")}` }); this.stream.length = Math.min(this.stream.length, 200); }
   static paint(_c, o) {
     const ws = o.ws; if (!ws) return;
-    const live = ws.live, on = o.st === "watching", r = ws.robot;
-    const rows = o.stream.filter(s => o.show === "all" || s.kind === o.show);
-    o.innerHTML = `<div class="ph"><span><i class="dot ${on ? "on" : ""}"></i>${on ? "Live" : "Paused"} · ${esc(r.name)} · ${r.place === "browser" ? "in the browser" : "on this device"}</span>
+    const v = ws.view, on = o.st === "watching", r = ws.robot;
+    if (on || !o.rows) o.rows = (v?.log ?? []).map(l => ({ kind: l.kind === "log" ? "note" : l.kind === "error" ? "note" : l.kind, text: l.text, at: l.at })).reverse();
+    const rows = o.rows.filter(s => o.show === "all" || s.kind === o.show);
+    const t0 = ws.started ?? 0, at = ms => { const d = Math.max(0, ms - t0); return `${String(Math.floor(d / 60000)).padStart(2, "0")}:${(d / 1000 % 60).toFixed(3).padStart(6, "0")}`; };
+    o.innerHTML = `<div class="ph"><span><i class="dot ${on && v ? "on" : ""}"></i>${on ? "Live" : "Paused"} · ${esc(r.name)} · in the browser</span>
         <button class="pause" data-act="${on ? "pause" : "resume"}">${on ? "Pause" : "Resume"}</button></div>
-      <div class="sec"><h3>Now in</h3><div class="cfg">${live ? (live.done ? "<span>done</span>" : live.active.map((n, i, a) => `<span class="${i === a.length - 1 ? "leaf" : ""}">${esc(n.attrs.id)}</span>`).join("›")) : ""}</div></div>
+      <div class="sec"><h3>Now in</h3><div class="cfg">${v ? (v.status === "finished" ? "<span>done</span>" : v.full.map(n => `<span class="${v.atomic.includes(n) ? "leaf" : ""}">${esc(n)}</span>`).join("›")) : '<span>not running: start it on the TestBench</span>'}</div></div>
       <div class="sec" style="border-bottom:0"><h3>Event stream</h3>
-        <div class="filt" role="group" aria-label="Show">${[["all", "All"], ["in", "In"], ["out", "Out"], ["state", "States"], ["service", "Services"]].map(([k, l]) => `<button data-show="${k}" aria-pressed="${o.show === k}">${l}</button>`).join("")}</div>
-        <ol class="stream">${rows.length ? rows.map(s => `<li class="${s.kind}"><time>${s.at}</time><em>${s.kind}</em><b>${esc(s.text)}</b></li>`).join("") : '<li class="note"><b>Waiting for the robot…</b></li>'}</ol></div>`;
+        <div class="filt" role="group" aria-label="Show">${[["all", "All"], ["in", "In"], ["out", "Out"], ["state", "States"], ["note", "Logs"]].map(([k, l]) => `<button data-show="${k}" aria-pressed="${o.show === k}">${l}</button>`).join("")}</div>
+        <ol class="stream">${rows.length ? rows.map(s => `<li class="${s.kind}"><time>${at(s.at)}</time><em>${s.kind}</em><b>${esc(s.text)}</b></li>`).join("") : '<li class="note"><b>Waiting for the robot…</b></li>'}</ol></div>`;
   }
 }
 customElements.define("floppy-modes", FloppyModes);
@@ -997,9 +951,8 @@ class FloppyWorkshop extends hsm.from(HTMLElement) {
       hsm.transition(hsm.on("remove"), hsm.effect(FloppyWorkshop.remove)),
       hsm.transition(hsm.on("set_attr"), hsm.effect(FloppyWorkshop.setAttr)),
       hsm.transition(hsm.on("select"), hsm.effect(FloppyWorkshop.select)),
-      hsm.transition(hsm.on("take"), hsm.effect((c, w, e) => { w.sim.take(e.data, e.data.attrs.event); w.repaint(); })),
-      hsm.transition(hsm.on("deliver"), hsm.effect((c, w, e) => { w.sim.deliver(e.data); w.repaint(); })),
-      hsm.transition(hsm.on("restart"), hsm.effect((c, w) => { w.sim = new Interp(w.doc); w.repaint(); })),
+      hsm.transition(hsm.on("deliver"), hsm.effect((c, w, e) => w.send(e.data))),
+      hsm.transition(hsm.on("restart"), hsm.effect((c, w) => w.restart())),
       hsm.transition(hsm.on("load"), hsm.effect(FloppyWorkshop.loadDoc)),
       hsm.state("idle",
         hsm.transition(hsm.on("drag_start"), hsm.target("../dragging"), hsm.effect(FloppyWorkshop.lift))),
@@ -1011,7 +964,11 @@ class FloppyWorkshop extends hsm.from(HTMLElement) {
   doc = trafficLight();
   mode = "build";
   robot = { name: "traffic_light", place: "device", event: null };
-  live = null;
+  path = "bots/builder/examples/traffic_light/traffic_light.scx";
+  compiled = null;
+  session = null;
+  view = null;
+  starting = false;
   selected = null;
   status = "Drag blocks by their header. Mouths outline green where the block fits.";
   statusKind = "";
@@ -1019,39 +976,76 @@ class FloppyWorkshop extends hsm.from(HTMLElement) {
 
   connectedCallback() {
     this.innerHTML = `<div class="top"><h1>floppy <span>workshop</span></h1><span class="doc">bots/builder/examples/traffic_light/traffic_light.scx</span>
+      <label class="open">Open <select data-open aria-label="Open a document"><option value="">a bot or ability…</option></select></label>
+      <label class="open">or a file <input type="file" accept=".scx,.scxml,.xml" data-open-file aria-label="Open a file"></label>
       <label class="details"><input type="checkbox" data-details> Details</label><floppy-modes></floppy-modes></div>
       <div class="grid"><floppy-bill class="panel"></floppy-bill><floppy-palette class="panel"></floppy-palette><floppy-canvas></floppy-canvas><floppy-run class="panel"></floppy-run><floppy-observe class="panel"></floppy-observe></div>`;
-    this.sim = new Interp(this.doc);
     hsm.start(this, FloppyWorkshop.model);
     this.canvas = this.querySelector("floppy-canvas");
     this.palette = this.querySelector("floppy-palette");
     this.run = this.querySelector("floppy-run");
     this.repaint();
     this.wire();
+    this.edited();
     if (document.fonts) document.fonts.ready.then(() => shapeAll(this));
   }
   repaint() {
-    if (this.sim && !this.sim.active.every(n => contains(this.doc, n))) this.sim = new Interp(this.doc);
     this.canvas.paint(this);
     hsm.live(this.run, "refresh");
+    const o = this.querySelector("floppy-observe"); if (o?.dispatch) hsm.live(o, "refresh");
+  }
+  /* The document changed: the running session is for the old one, so it
+     stops, and the new document is checked by the validator and compiler. */
+  edited() {
+    this.stop();
+    const doc = this.doc, text = scxmlText(doc);
+    this.compiled = null;
+    clearTimeout(this.checking);
+    this.checking = setTimeout(async () => {
+      let c;
+      try { c = await runtime.compile(text, this.path); } catch (e) { c = { ok: false, diagnostics: [{ code: "workshop", message: `The runtime failed to load: ${e?.message ?? e}` }] }; }
+      if (this.doc === doc && scxmlText(doc) === text) { this.compiled = { ...c, text }; this.repaint(); }
+    }, 250);
+    this.repaint();
+  }
+  stop() { this.session?.dispose(); this.session = null; this.view = null; }
+  /* Compiles the document as it stands and starts a fresh session of it. */
+  async restart() {
+    this.stop(); this.starting = true; this.repaint();
+    const text = scxmlText(this.doc);
+    try {
+      const c = this.compiled?.text === text ? this.compiled : { ...(await runtime.compile(text, this.path)), text };
+      this.compiled = c;
+      if (!c.ok) { this.say("The bot doesn't compile: see the Check tab on the Workbench.", "bad"); return; }
+      this.started = performance.now();
+      let run = null;
+      run = await runtime.Run.start(c, view => { if (!run || this.session === run) { this.view = view; this.repaint(); } });
+      this.session = run; this.view = await run.view();
+    } catch (e) { this.say(`The bot couldn't start: ${e?.message ?? e}`, "bad"); }
+    finally { this.starting = false; this.repaint(); }
+  }
+  async send(name) {
+    if (!this.session) await this.restart();
+    await this.session?.send(name);
   }
   say(msg, kind = "") { this.status = msg; this.statusKind = kind; }
   load(doc, path, robot) { hsm.live(this, "load", { doc, path, robot }); }
   setMode(mode, send) {
     hsm.live(this.querySelector("floppy-modes"), "show_" + mode);
-    if (send) setTimeout(() => { hsm.live(this, "restart"); setTimeout(() => hsm.live(this, "deliver", send), 60); }, 60);
+    if (send) this.restart().then(() => this.send(send));
   }
-  static HINT = { build: "", workbench: "Drag blocks by their header. Mouths outline green where the block fits.", testbench: "Simulating. Send events from the panel and watch the blocks light up.", observe: "Read-only. Blocks light up as the running robot moves." };
+  static HINT = { build: "", workbench: "Drag blocks by their header. Mouths outline green where the block fits.", testbench: "Running in your browser on scxml.rs. Send events from the panel and watch the blocks light up.", observe: "Read-only. Blocks light up as the running robot moves." };
   entered(mode) {
     this.mode = mode; this.dataset.mode = mode; this.say(FloppyWorkshop.HINT[mode]);
     const o = this.querySelector("floppy-observe");
     if (!o?.dispatch) { if (this.canvas) this.repaint(); return; }
-    if (mode === "observe") { if (!this.live) { this.live = new Interp(this.doc); o.reset(); o.seen = 0; } hsm.live(o, "watch"); }
+    if (mode === "observe") hsm.live(o, "watch");
     else hsm.live(o, "leave");
+    if (mode === "testbench" && !this.session && !this.starting) this.restart();
     if (this.canvas) this.repaint();
     requestAnimationFrame(() => shapeAll(this));
   }
-  static loadDoc(_c, w, e) { w.doc = e.data.doc; w.selected = null; w.sim = new Interp(w.doc); w.live = null; w.robot = e.data.robot || { name: e.data.path.split("/")[0], place: "device", event: null }; w.querySelector(".top .doc").textContent = e.data.path; w.say(FloppyWorkshop.HINT[w.mode], "ok"); w.repaint(); }
+  static loadDoc(_c, w, e) { w.doc = e.data.doc; w.path = e.data.path; w.selected = null; w.robot = e.data.robot || { name: e.data.path.split("/").pop().replace(/\.\w+$/, ""), place: "browser", event: null }; w.querySelector(".top .doc").textContent = e.data.path; w.say(FloppyWorkshop.HINT[w.mode], "ok"); w.edited(); }
 
   static add(_c, w, e) {
     const { node, into, index } = e.data;
@@ -1064,15 +1058,15 @@ class FloppyWorkshop extends hsm.from(HTMLElement) {
     if (!parent) { w.say("Select a block first, or drag the block onto a mouth.", "bad"); w.repaint(); return; }
     const f = fits(parent.tag, node.tag);
     if (!f.ok) { w.say(f.why, "bad"); w.repaint(); return; }
-    parent.kids.splice(at, 0, node); w.selected = node.id; w.say(f.why, "ok"); w.sim = new Interp(w.doc); w.repaint();
+    parent.kids.splice(at, 0, node); w.selected = node.id; w.say(f.why, "ok"); w.edited();
   }
-  static remove(_c, w, e) { const f = find(w.doc, e.data); if (f?.parent) { f.parent.kids.splice(f.parent.kids.indexOf(f.node), 1); w.selected = null; w.say(`Removed ${nm(f.node.tag)}.`); w.sim = new Interp(w.doc); w.repaint(); } }
+  static remove(_c, w, e) { const f = find(w.doc, e.data); if (f?.parent) { f.parent.kids.splice(f.parent.kids.indexOf(f.node), 1); w.selected = null; w.say(`Removed ${nm(f.node.tag)}.`); w.edited(); } }
   static setAttr(_c, w, e) {
     const { id, key, value } = e.data, f = find(w.doc, id); if (!f) return;
     const spec = SPECS.get(f.node.tag), req = spec.attrs.find(a => a.name === key)?.use === "required";
     if (key === "id" && f.node.attrs.id) { const old = f.node.attrs.id; walk(w.doc, n => ["target", "initial"].forEach(k => { if (n.attrs[k] === old) n.attrs[k] = value; })); }
     if (value === "" && !req) delete f.node.attrs[key]; else f.node.attrs[key] = value;
-    w.sim = new Interp(w.doc); w.repaint();
+    w.edited();
   }
   static select(_c, w, e) { w.selected = e.data; w.repaint(); const el = w.canvas.querySelector(`[data-id="${e.data}"]`); el?.scrollIntoView({ block: "nearest", inline: "nearest" }); }
   static lift(_c, w, e) {
@@ -1092,10 +1086,10 @@ class FloppyWorkshop extends hsm.from(HTMLElement) {
       const dest = find(w.doc, into).node; const at = (dest === f.parent && from < index) ? index - 1 : index;
       dest.kids.splice(at, 0, node);
     } else find(w.doc, into).node.kids.splice(index, 0, node);
-    w.say(fits(e.data.parentTag, node.tag).why, "ok"); w.selected = node.id; w.drag = null; delete w.canvas.dataset.dragging; w.sim = new Interp(w.doc); w.repaint();
+    w.say(fits(e.data.parentTag, node.tag).why, "ok"); w.selected = node.id; w.drag = null; delete w.canvas.dataset.dragging; w.edited();
   }
   static refuse(_c, w, e) {
-    if (e.data?.remove && w.drag.move) { const f = find(w.doc, w.drag.move); f.parent.kids.splice(f.parent.kids.indexOf(f.node), 1); w.say(`Removed ${nm(f.node.tag)}.`); w.sim = new Interp(w.doc); }
+    if (e.data?.remove && w.drag.move) { const f = find(w.doc, w.drag.move); f.parent.kids.splice(f.parent.kids.indexOf(f.node), 1); w.say(`Removed ${nm(f.node.tag)}.`); w.edited(); }
     else w.say(e.data ? (w.drag.move && contains(find(w.doc, w.drag.move).node, find(w.doc, e.data.into).node) ? "A block can't go inside itself." : fits(e.data.parentTag, w.drag.tag).why) : "Dropped outside a mouth.", e.data?.remove ? "" : "bad");
     w.drag = null; delete w.canvas.dataset.dragging; w.repaint();
   }
@@ -1112,16 +1106,32 @@ class FloppyWorkshop extends hsm.from(HTMLElement) {
     });
     this.addEventListener("floppy-intent", e => {
       const d = e.detail;
-      if (d.take) { const t = find(this.doc, d.take)?.node; if (t) hsm.live(this, "take", t); }
-      else if (d.deliver) hsm.live(this, "deliver", d.deliver);
+      if (d.send !== undefined) { if (d.send) hsm.live(this, "deliver", d.send); else { const i = this.querySelector("#inject-event"); if (i) { i.focus(); i.placeholder = "this transition takes a wildcard: name the event"; } } }
       else if (d.inject) hsm.live(this, "deliver", d.inject);
       else if (d.restart) hsm.live(this, "restart");
       else if (d.select) { hsm.live(this, "select", d.select); }
     });
+    fetch("documents.json").then(r => r.json()).then(list => {
+      const sel = this.querySelector("[data-open]");
+      sel.insertAdjacentHTML("beforeend", list.documents.map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join(""));
+    }).catch(() => {});
     this.addEventListener("change", e => {
+      if (e.target.matches("[data-open]") && e.target.value) {
+        const path = e.target.value; e.target.value = "";
+        fetch("../" + path).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
+          .then(text => this.load(fromSCXML(text), path))
+          .catch(err => { this.say(`Couldn't open ${path}: ${err.message}`, "bad"); this.repaint(); });
+        return;
+      }
+      if (e.target.matches("[data-open-file]") && e.target.files[0]) {
+        const file = e.target.files[0]; e.target.value = "";
+        file.text().then(text => this.load(fromSCXML(text), "uploads/" + file.name.replace(/[^\w.-]/g, "_")))
+          .catch(err => { this.say(`Couldn't open ${file.name}: ${err.message}`, "bad"); this.repaint(); });
+        return;
+      }
       if (e.target.matches("[data-details]")) { VIEW.details = e.target.checked; this.toggleAttribute("data-show-details", VIEW.details); hsm.live(this.palette, "category", this.palette.cat); this.repaint(); return; }
       const t = e.target, b = t.closest("floppy-canvas floppy-block"); if (!b) return;
-      if (t.dataset.addattr !== undefined) { if (t.value) { const f = find(this.doc, b.dataset.id); f.node.attrs[t.value] = t.value === "event:schema" ? '{"type":"object"}' : ""; this.repaint(); } return; }
+      if (t.dataset.addattr !== undefined) { if (t.value) { const f = find(this.doc, b.dataset.id); f.node.attrs[t.value] = t.value === "event:schema" ? '{"type":"object"}' : ""; this.edited(); } return; }
       if (t.dataset.attr) hsm.live(this, "set_attr", { id: b.dataset.id, key: t.dataset.attr, value: t.value.trim() });
     });
     this.addEventListener("input", e => { if (e.target.closest("floppy-canvas")) { const b = e.target.closest("floppy-block"); e.target.size = Math.max(4, Math.min(34, e.target.value.length + 1)); requestAnimationFrame(() => { let x = b; while (x) { shapeBlock(x); x = x.parentElement.closest("floppy-block"); } }); } });

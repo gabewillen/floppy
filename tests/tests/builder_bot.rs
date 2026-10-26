@@ -1218,7 +1218,7 @@ fn env_file(
     path
 }
 
-const ALL: [&str; 9] = support::GRANTED;
+const ALL: [&str; 11] = support::GRANTED;
 
 fn run(mock: &Mock, test: &str, route: &str, env: &[&str], request: &Json) -> Vec<Json> {
     run_deciding(mock, test, route, "typesafe", env, request)

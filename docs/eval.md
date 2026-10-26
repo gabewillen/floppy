@@ -65,11 +65,24 @@ never edits the workspace: everything goes under `target/floppy-eval/`.
 | `voice_people` | voice | two voices on one microphone, each asking its own name |
 | `voice_rest` | voice | an introduction, a quiet spell long enough to rest and consolidate (`rest_after_ms` 20 s), then the name and a fact |
 | `seeing_look` | seeing | a camera shows "Total due: $14.21" (seeing on); floppy is asked the total |
+| `seeing_wifi` | seeing | a card with a Wi-Fi network and its password; floppy is asked the password |
+| `seeing_hours` | seeing | a shop sign with its hours, closed Sundays; floppy is asked if it opens on Sunday |
+| `seeing_nametag` | seeing | a name tag reading Priya; its wearer asks floppy to read their name |
+| `seeing_shape` | seeing | a green triangle on a card; floppy is asked its shape and color |
+| `seeing_recall_wifi` | seeing | the Wi-Fi card, then unrelated talk; floppy is asked the password it saw |
+| `seeing_recall_hours` | seeing | the shop sign, then unrelated talk and a restart; floppy is asked if it opens on Sunday |
+| `seeing_recall_nametag` | seeing | the name tag, then unrelated talk; floppy is asked the name it saw |
+| `seeing_recall_shape` | seeing | the green triangle, then unrelated talk and a restart; floppy is asked its shape and color |
 | `chat_understand` | conversation | answers never said outright: when to leave for a 7 am flight, what to grab in the rain, the day after tomorrow from Friday |
 | `recall_many` | memory | five facts in one message, two unrelated questions; three of the facts after a restart |
 | `recall_update` | memory | a favorite food, corrected later; the corrected one after a restart |
 | `people_overheard` | memory | Gabe and Ana talk to each other (ambient) and mention their pottery and marathon; later each asks floppy about themselves |
 | `voice_self` | voice | floppy's own answer echoed back to the microphone in its own voice (`warm`): no reply to itself; then the person's next question answered |
+| `emotion_sad` | emotion | "I just got back from the vet with my dog." and "what should I do tonight?" said heartbroken: a gentle, sympathetic answer and evening ideas that suit it |
+| `emotion_happy` | emotion | "I just opened the letter from the university." said laughing with joy: shared as good news |
+| `emotion_angry` | emotion | "The delivery came again today." shouted angrily: the frustration acknowledged, not cheered |
+| `emotion_contrast` | emotion | "I just talked to my brother." said joyfully, then the same words heartbroken: each answered as it sounds |
+| `emotion_tonight` | emotion | "what should I do tonight?" said close to tears: answered with care |
 | `turn_failure` | failure | reasoning bounded to one second: floppy still answers the person, then a greeting |
 
 The name is Juniper, not floppy, because the reasoning prompt already calls
@@ -110,7 +123,9 @@ input the room gives everyone, which floppy overhears). A heard step,
 `{"hear": text, "voice"?, "segments"?, "source"?, "who"?}`, is the person
 saying it out loud: `sound.py` synthesizes it on the speech backend's
 `/audio/speech` in `voice` (default `canvas`; floppy speaks in `warm`), or
-`segments` (text pieces and numbers, a pause of that many seconds), and the
+`segments` (text pieces and numbers, a pause of that many seconds), said as
+its `instructions` tell when it has them (the speech API's `instructions`:
+the tone, which the judges read beside the words), and the
 driver gives the room the 24 kHz PCM as `environment.sound` from `source`
 with a second of silence, as `scripts/talk-live.py` does; `who` names the
 person for the judges when the source is a shared microphone. It is waited
@@ -239,8 +254,8 @@ each evidence label of `features.json` (labels that show its parts ran,
 and failure labels that should never be logged), and its offline tests
 (`cargo test -p floppy-tests --test <name>`, run once each by `eval.py
 features`). A feature with no live path (reading, which nothing invokes,
-and the api.willen.dev emotion, voiceprint and streaming endpoints floppy
-does not call) carries a `status` and is listed ungraded.
+and the api.willen.dev voiceprint and streaming endpoints floppy does not
+call) carries a `status` and is listed ungraded.
 
 `eval.py features` runs the offline tests (each target once; about 8 minutes each on four cores, so `--no-tests` skips them and `eval.py tests <run>` then `eval.py grade <run>` adds them later) and every scenario, and writes
 `features.md` and `features.json`; `eval.py run` and `eval.py grade`

@@ -100,6 +100,13 @@
     of at least min_voice_seconds (1 s, mosfet.py's shortest new voice),
     or the longest when none is that long: decoded speech says who spoke
     (mosfet.py's streaming hearing does the same for each turn).
+  * DecodingSpeech also hears the utterance's tone, with affect_classifier
+    (true; mosfet.py's Listening(affect_classifier=)): it invokes
+    abilities/voice_affect/voice_affect.scx beside the decoder, on the
+    utterance or, after diarization, its diarized segments (the longest of
+    at least 0.3 s is heard, within 3 s), and leaves once the words are
+    decoded and the tone is heard or not (mosfet.py's tone, heard
+    alongside decoding). A tone not heard never fails the stage.
   * The bot's own voice is heard as any sound is: speaking's efference
     copy of a completed utterance carries the audio it commanded
     (bot.ability.speaking.efference {audio, media_type, sample_rate_hz,
@@ -118,7 +125,9 @@
     product_threshold_db goes to the listening; a quieter one is dropped.
     The products: decoded
     speech as bot.ability.listening.speech.output with content the words
-    and content_type text/plain (a sound with no sample rate fails), and,
+    and content_type text/plain (a sound with no sample rate fails), its
+    affect {label, scores, valence, confidence} when its tone was heard
+    (mosfet.py's SpeechData.affect), and,
     when its voices were identified, who spoke: each voice whose embedding
     is at least voice_similarity_threshold (0.50, mosfet.py's voice match)
     alike to own_voice is the bot's own and is no source; every other voice's
@@ -172,6 +181,12 @@
     <data id="speech_decoder" expr="true"/>
     <data id="diarizer" expr="true"/>
     <data id="voice_classifier" expr="true"/>
+    <!-- Whether decoded speech carries the tone of its longest voice
+         (mosfet.py's affect_classifier); the tone heard, and whether it is
+         still being heard. -->
+    <data id="affect_classifier" expr="true"/>
+    <data id="affect" expr="null"/>
+    <data id="classifying" expr="false"/>
     <!-- Who spoke: the shortest segment embedded for decoded speech, the
          least cosine at which a voice is the bot's own (mosfet.py's voice
          match), and the bot's own voice once learned. -->
@@ -236,6 +251,7 @@
         <assign location="active_voice_embedding" expr="null"/>
         <assign location="active_participants" expr="[]"/>
         <assign location="utterance" expr="null"/>
+        <assign location="affect" expr="null"/>
         <assign location="stage" expr="null"/>
       </onentry>
       <!-- Speaking's copy of what it said: the bot's own voice, heard
@@ -623,6 +639,9 @@
       <state id="DecodingSpeech" initial="Detected">
         <onentry>
           <assign location="stage" expr="'speech_decoding'"/>
+          <assign location="result" expr="null"/>
+          <assign location="affect" expr="null"/>
+          <assign location="classifying" expr="affect_classifier"/>
           <send id="speech-decoding-timer" event="bot.ability.listening.stage.failed" delayexpr="stageDelay()">
             <content expr="stageTimeout()"/>
           </send>
@@ -634,17 +653,29 @@
           <param name="audio" expr="utterance.audio"/>
           <param name="media_type" expr="utterance.media_type"/>
         </invoke>
-        <transition event="done.invoke.speech_decoding" cond="identifiesDecoded(_event)" target="IdentifyingVoice">
-          <assign location="completion" expr="decodingCompletion(_event)"/>
-          <assign location="completion.segments" expr="voicedSegments()"/>
+        <!-- The tone, heard alongside the words (mosfet.py's tone). -->
+        <invoke id="voice_affect" type="scxml" src="../voice_affect/voice_affect.scx">
+          <param name="segments" expr="affectSegments()"/>
+        </invoke>
+        <transition event="done.invoke.voice_affect">
+          <assign location="affect" expr="heardAffect(_event)"/>
+          <assign location="classifying" expr="false"/>
         </transition>
-        <transition event="done.invoke.speech_decoding" cond="hasText(_event)" target="HandingOff">
-          <assign location="completion" expr="decodingCompletion(_event)"/>
+        <transition event="done.invoke.speech_decoding" cond="hasText(_event)">
+          <assign location="result" expr="_event.data"/>
         </transition>
         <transition event="done.invoke.speech_decoding" cond="isNotChildFailure(_event)">
           <send event="bot.ability.listening.stage.failed" target="#_internal">
             <content expr="stageFailure('Speech decoding child produced a non-bytes terminal.')"/>
           </send>
+        </transition>
+        <!-- The words and their tone are both in hand. -->
+        <transition cond="identifiesDecoded()" target="IdentifyingVoice">
+          <assign location="completion" expr="decodingCompletion()"/>
+          <assign location="completion.segments" expr="voicedSegments()"/>
+        </transition>
+        <transition cond="isDecoded()" target="HandingOff">
+          <assign location="completion" expr="decodingCompletion()"/>
         </transition>
         <!-- From the window directly, or after diarization. -->
         <state id="Detected"/>
