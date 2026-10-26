@@ -17,11 +17,13 @@
   carries (stimulus.data.observation.event), or, for a conversation
   product (stimulus.event bot.ability.conversation.output), the first word
   of its last message's text, whose observed data is then the number of messages, or,
-  for bot.ability.identity.addressed, "addressed" with the name observed, or,
   for the listening's bot.ability.listening.speech.output, the first word
   of its content, with the content observed, or, for its environment.sound,
   "ignore" with the sound's kind observed, or, for seeing's
-  bot.ability.seeing.sight, "ignore" with the sight's cause observed:
+  bot.ability.seeing.sight, "ignore" with the sight's cause observed. A
+  conversation product or heard speech whose turn's environment says the
+  bot was named (self.identity.addressed, the identity's state the body
+  read) is "addressed" instead, with the name observed:
 
   Like a stage of the real cognition, it sends each selection it makes to
   its target, the session id the turn's choices tag the first choice of
@@ -74,6 +76,7 @@
     <data id="turn" expr="0"/>
     <data id="action" expr="null"/>
     <data id="observed" expr="null"/>
+    <data id="named" expr="null"/>
     <data id="stimulus" expr="null"/>
     <data id="focus" expr="null"/>
     <!-- The turn's choices, its selections, and the one being sent. -->
@@ -102,8 +105,9 @@
         <assign location="stimulus" expr="_event.data.stimulus"/>
         <assign location="focus" expr="_event.data.focus"/>
         <assign location="choices" expr="_event.data.choices"/>
-        <assign location="action" expr="stimulus.event === 'bot.perceived' ? 'perceived' : stimulus.event === 'bot.ability.listening.speech.output' ? stimulus.data.content.split(' ')[0] : stimulus.event === 'environment.sound' || stimulus.event === 'bot.ability.seeing.sight' ? 'ignore' : stimulus.event === 'bot.ability.identity.addressed' ? 'addressed' : stimulus.event === 'bot.ability.conversation.output' ? stimulus.data.messages[stimulus.data.messages.length - 1].content.split(' ')[0] : stimulus.data.observation.event"/>
-        <assign location="observed" expr="stimulus.event === 'bot.perceived' ? stimulus.data.percepts.map(function (p) { return p.stimulus.data.observation.data; }) : stimulus.event === 'bot.ability.listening.speech.output' ? stimulus.data.content : stimulus.event === 'environment.sound' ? stimulus.data.kind : stimulus.event === 'bot.ability.seeing.sight' ? stimulus.data.cause : stimulus.event === 'bot.ability.identity.addressed' ? stimulus.data.name : stimulus.event === 'bot.ability.conversation.output' ? stimulus.data.messages.length : stimulus.data.observation.data"/>
+        <assign location="named" expr="(stimulus.event === 'bot.ability.conversation.output' || stimulus.event === 'bot.ability.listening.speech.output') &amp;&amp; _event.data.environment.self.identity !== undefined &amp;&amp; _event.data.environment.self.identity.addressed === true ? _event.data.environment.self.identity.name : null"/>
+        <assign location="action" expr="named !== null ? 'addressed' : stimulus.event === 'bot.perceived' ? 'perceived' : stimulus.event === 'bot.ability.listening.speech.output' ? stimulus.data.content.split(' ')[0] : stimulus.event === 'environment.sound' || stimulus.event === 'bot.ability.seeing.sight' ? 'ignore' : stimulus.event === 'bot.ability.conversation.output' ? stimulus.data.messages[stimulus.data.messages.length - 1].content.split(' ')[0] : stimulus.data.observation.event"/>
+        <assign location="observed" expr="named !== null ? named : stimulus.event === 'bot.perceived' ? stimulus.data.percepts.map(function (p) { return p.stimulus.data.observation.data; }) : stimulus.event === 'bot.ability.listening.speech.output' ? stimulus.data.content : stimulus.event === 'environment.sound' ? stimulus.data.kind : stimulus.event === 'bot.ability.seeing.sight' ? stimulus.data.cause : stimulus.event === 'bot.ability.conversation.output' ? stimulus.data.messages.length : stimulus.data.observation.data"/>
         <log label="double.input" expr="turn + ' ' + action + ' ' + JSON.stringify(observed)"/>
         <log label="double.choices" expr="JSON.stringify(_event.data.choices)"/>
         <log label="double.environment" expr="JSON.stringify(_event.data.environment)"/>

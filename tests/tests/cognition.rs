@@ -61,7 +61,7 @@ const STALLED_REASONING_BOUNDS: &str =
 /// A model context whose budget (three bytes a token) holds the first
 /// turn's prompt, the lesson offer's schema among its choices (decision
 /// D149), but not the second's with its recalled episode.
-const FITTED_TOKENS: u32 = 4_300;
+const FITTED_TOKENS: u32 = 4_520;
 /// The model a bot composing the intuition tier gives it.
 const INTUITION_MODEL: &str = "chat-model";
 const ADOPT: &str = "bot.ability.identity.adopt";

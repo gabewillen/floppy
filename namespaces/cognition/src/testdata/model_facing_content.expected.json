@@ -47,6 +47,10 @@
   "content": "<boolean content=\"true\" stimulus:event=\"bot.tick\" />",
   "system": null
  },
+ "handed_back": {
+  "content": "<object stimulus:event=\"bot.ability.cognition.step.timed_out\" stimulus:source=\"cognition\">\n  <content>\n    <entry key=\"message\" value=\"Cognition's reasoning step took longer than 1 seconds, so the turn failed.\" />\n    <entry key=\"stage\" value=\"reasoning\" />\n    <entry key=\"stimulus\">\n      <value>\n        <entry key=\"data\">\n          <value>\n            <entry key=\"messages\">\n              <value count=\"2\">\n                <item>\n                  <entry key=\"content\" value=\"hi\" />\n                  <entry key=\"content_type\" value=\"text/plain\" />\n                  <entry key=\"direction\" value=\"heard\" />\n                  <entry key=\"participants\">\n                    <value count=\"1\">\n                      <item>\n                        <entry key=\"ref\" value=\"voice:1\" />\n                        <entry key=\"role\" value=\"source\" />\n                      </item>\n                    </value>\n                  </entry>\n                </item>\n                <item>\n                  <entry key=\"content\" value=\"hello\" />\n                  <entry key=\"content_type\" value=\"text/plain\" />\n                  <entry key=\"direction\" value=\"said\" />\n                </item>\n              </value>\n            </entry>\n            <entry key=\"parent\" value=\"p-1\" />\n          </value>\n        </entry>\n        <entry key=\"event\" value=\"bot.ability.conversation.output\" />\n        <entry key=\"source\" value=\"conversation\" />\n      </value>\n    </entry>\n    <entry key=\"timeout_seconds\" value=\"1\" />\n    <entry key=\"turn\" value=\"1\" />\n  </content>\n</object>",
+  "system": null
+ },
  "listed": {
   "content": "<array stimulus:event=\"bot.tick\">\n  <content count=\"4\">\n    <item>1</item>\n    <item>a</item>\n    <item>\n      <entry key=\"k\">\n        <value count=\"0\" />\n      </entry>\n    </item>\n    <item count=\"0\" />\n  </content>\n</array>",
   "system": null

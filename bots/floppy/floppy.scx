@@ -6,7 +6,7 @@
   (decision D6: the invoke lifecycle is their attach and detach).
 
     live { activating -> active { unfocused, focused,
-      processing { reading_turns, deciding }, cancelling_processing } }
+      processing { reading_self, reading_turns, deciding }, cancelling_processing } }
     live -bot.deactivate-> deactivating -> inactive (final)
     live -bot.reboot (the cognition asks for one)-> live (re-entered:
       every ability is cancelled and invoked again)
@@ -60,16 +60,19 @@
   bot.ability.speaking.output or bot.ability.communication.failed, and
   forwards the conversation's bot.ability.conversation.failed and a
   product that is not text, bot.ability.conversation.output, all of
-  which the body logs. The same input goes to the identity, which hands
-  over bot.ability.cognition.input {stimulus: bot.ability.identity.addressed}
-  when the text names the bot, as the cognition hands over a routine's
-  bot.behavior.tick (its routines).
+  which the body logs. The same input goes to the identity, whose state
+  then says whether the text named the bot (its addressed datum): the
+  body reads that state each turn (<device:snapshot>) into the turn's
+  environment, so being named is never a turn of its own.
 
   Short-term memory: the body relays a child's bot.ability.memory.stm.turn
   to the register: the communication's, from its conversation, one for
   each message the conversation commits with words (heard, typed or
-  decoded from speech, and said). Each turn starts in
-  processing's reading_turns: it reads the register's recent turns
+  decoded from speech, and said). Each turn starts in processing's
+  reading_self, which asks the identity (bot.ability.identity.ask) and
+  reads its state once it answers (it has then taken every input relayed
+  before the turn), or after reading_turns_timeout_ms; then reading_turns
+  reads the register's recent turns
   (bot.ability.memory.stm.recent_turns {}) and relays the answer,
   bot.ability.memory.stm.recent_turns.output, to the cognition ahead of
   the turn's input; after reading_turns_timeout_ms (1 s) the turn starts
@@ -310,6 +313,9 @@
     <data id="firmware_check_ms" expr="10"/>
     <!-- The firmware read this turn (<device:snapshot>), or null. -->
     <data id="firmware_snapshot" expr="null"/>
+    <!-- The identity read this turn (<device:snapshot>), or null: whether
+         what it last recognized named the bot is part of its state. -->
+    <data id="identity_snapshot" expr="null"/>
     <data id="processing_timeout_ms" expr="300000"/>
     <data id="reading_turns_timeout_ms" expr="1000"/>
     <!-- The register's reads not answered yet (each run's register is
@@ -742,7 +748,7 @@
         <!-- One turn of the cognition: it takes what is held (at least one
              percept) and perceives
              it: the recent turns first, then the turn's input. -->
-        <state id="processing" initial="reading_turns">
+        <state id="processing" initial="reading_self">
           <onentry>
             <assign location="turn" expr="nextTurn()"/>
             <assign location="take" expr="takePercepts()"/>
@@ -766,6 +772,7 @@
             <if cond="hasFirmware()">
               <device:snapshot location="firmware_snapshot" target="firmwareTarget()"/>
             </if>
+            <assign location="identity_snapshot" expr="null"/>
           </onentry>
           <!-- What each ability offers, read from its live session
                (decision D242), each in its own block so a read that fails
@@ -844,6 +851,29 @@
                the turn's input; a register that does not answer within
                reading_turns_timeout_ms leaves the cognition the turns it
                had. -->
+          <!-- The identity's state, read once it has taken every input the
+               body relayed it before this turn: the body's ask follows them,
+               so its answer means they are taken (an identity that does not
+               answer within reading_turns_timeout_ms is read as it is). The
+               answer goes to the cognition, as every named does. -->
+          <state id="reading_self">
+            <onentry>
+              <send event="bot.ability.identity.ask" target="#_identity">
+                <content expr="emptyData()"/>
+              </send>
+              <send id="reading-self-after" event="reading_self.after" delayexpr="delay(reading_turns_timeout_ms)"/>
+            </onentry>
+            <onexit>
+              <cancel sendid="reading-self-after"/>
+              <device:snapshot location="identity_snapshot" target="'#_identity'"/>
+            </onexit>
+            <transition event="bot.ability.identity.named" event:schema="../../abilities/schemas/bot.ability.identity.named.json" target="reading_turns">
+              <send event="bot.ability.identity.named" target="#_cognition">
+                <content expr="_event.data"/>
+              </send>
+            </transition>
+            <transition event="reading_self.after" target="reading_turns"/>
+          </state>
           <state id="reading_turns">
             <onentry>
               <if cond="choicesFit()">

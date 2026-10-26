@@ -214,6 +214,12 @@ fn start(body: &Path, memory: &Path, media: &Path, job: &Json) -> Run {
 const LESSON_OPEN_LABELS: &[&str] = &["learning.recalled"];
 const LESSON_CLOSE_LABELS: &[&str] = &["learning.learned", "learning.failed"];
 
+/// The label of a turn that failed, which the cognition hands back as a
+/// turn of its own (decision D139), and of one it does not hand back
+/// (`bounded`: the failed turn was itself perceiving a failure).
+const FAILED_LABELS: &[&str] = &["cognition.failed"];
+const BOUNDED_LABELS: &[&str] = &["cognition.handed_back"];
+
 fn is_log_of(record: &Json, labels: &[&str]) -> bool {
     record["type"] == "log"
         && record["label"]
@@ -257,13 +263,14 @@ fn owes_relayed_turn(run: &Run) -> bool {
     last.get()
 }
 
-/// The records of a run so far that open a lesson, close one, and settle a
-/// turn.
+/// The records of a run so far that open a lesson, close one, settle a
+/// turn, and hand a failed turn back.
 #[derive(Clone, Copy)]
 struct Tally {
     opened: usize,
     closed: usize,
     settled: usize,
+    handed_back: usize,
 }
 
 impl Tally {
@@ -272,14 +279,18 @@ impl Tally {
             opened: run.count(|r| is_log_of(r, LESSON_OPEN_LABELS)),
             closed: run.count(|r| is_log_of(r, LESSON_CLOSE_LABELS)),
             settled: run.count(is_settled),
+            handed_back: run
+                .count(|r| is_log_of(r, FAILED_LABELS))
+                .saturating_sub(run.count(|r| is_log_of(r, BOUNDED_LABELS))),
         }
     }
 }
 
 /// Waits, once a said step's own turn settled, until every lesson opened
 /// since `before` has closed and one more turn has settled for each closed
-/// lesson (the turn carrying its result), at most `limit`; whether they
-/// did, and how many lessons closed. A turn that settles in the meantime
+/// lesson (the turn carrying its result) and for each failed turn handed
+/// back (the turn perceiving the failure, which still answers the person),
+/// at most `limit`; whether they did, and how many lessons closed. A turn that settles in the meantime
 /// for another reason (a routine's tick) counts too, so this can end
 /// early, never late.
 fn lessons_settle(run: &Run, limit: Duration, before: Tally) -> (bool, usize) {
@@ -291,7 +302,8 @@ fn lessons_settle(run: &Run, limit: Duration, before: Tally) -> (bool, usize) {
         let closed = now.closed.saturating_sub(before.closed);
         // The step's own turn is the first settle.
         let results = now.settled.saturating_sub(before.settled).saturating_sub(1);
-        if opened <= closed && results >= closed {
+        let handed_back = now.handed_back.saturating_sub(before.handed_back);
+        if opened <= closed && results >= closed + handed_back {
             if waited {
                 wait(run, SAY_GRACE, |_| false);
             }

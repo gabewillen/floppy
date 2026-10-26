@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- identity-5: with a database the adopted name is written down, then answered to; a second adoption replaces it. -->
-<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision" version="1.0" datamodel="ecmascript" initial="harness">
+<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision" xmlns:device="https://github.com/stateforward/floppy/namespaces/device" version="1.0" datamodel="ecmascript" initial="harness">
 <datamodel>
   <data id="offers" expr="null"/>
+  <data id="snapshot" expr="null"/>
 </datamodel>
 <state id="harness" initial="boot">
   <invoke id="identity" type="scxml" src="../../../identity.scx">
@@ -48,13 +49,44 @@
     </onentry>
     <transition event="harness.waited" target="step6"/>
   </state>
-  <state id="step6">
+  <state id="step6" initial="step6_read">
+    <onentry>
+      <send event="harness.snapshot.deadline" id="step6_deadline" delay="30s"/>
+    </onentry>
+    <onexit><cancel sendid="step6_deadline"/></onexit>
+    <transition event="harness.snapshot.deadline" target="fail"><log label="unexpected" expr="'snapshot ' + JSON.stringify(snapshot)"/></transition>
+    <state id="step6_read">
+      <onentry>
+        <device:snapshot location="snapshot" target="'#_identity'"/>
+      </onentry>
+      <transition cond="snapshot.attributes.addressed === false" target="step7"/>
+      <transition target="step6_again"/>
+    </state>
+    <state id="step6_again">
+      <onentry><send event="harness.waited" delay="100ms"/></onentry>
+      <transition event="harness.waited" target="step6_read"/>
+    </state>
+  </state>
+  <state id="step7" initial="step7_read">
     <onentry>
       <send event="bot.ability.communication.input" target="#_identity"><content expr='{"source_ids": ["gabe"], "target_ids": ["floppy"], "content": "Pip?", "content_type": "text/plain"}'/></send>
+      <send event="harness.snapshot.deadline" id="step7_deadline" delay="30s"/>
     </onentry>
-    <transition event="bot.ability.cognition.input" cond="_event.data.stimulus.event === 'bot.ability.identity.addressed' &amp;&amp; _event.data.stimulus.data.name === &quot;Pip&quot; &amp;&amp; _event.data.stimulus.source === 'identity'" target="step7"/>
+    <onexit><cancel sendid="step7_deadline"/></onexit>
+    <transition event="harness.snapshot.deadline" target="fail"><log label="unexpected" expr="'snapshot ' + JSON.stringify(snapshot)"/></transition>
+    <state id="step7_read">
+      <onentry>
+        <device:snapshot location="snapshot" target="'#_identity'"/>
+      </onentry>
+      <transition cond="snapshot.attributes.addressed === true &amp;&amp; snapshot.attributes.name === &quot;Pip&quot; &amp;&amp; snapshot.state === 'listening'" target="step8"/>
+      <transition target="step7_again"/>
+    </state>
+    <state id="step7_again">
+      <onentry><send event="harness.waited" delay="100ms"/></onentry>
+      <transition event="harness.waited" target="step7_read"/>
+    </state>
   </state>
-  <state id="step7">
+  <state id="step8">
     <transition target="pass"/>
   </state>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
