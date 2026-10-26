@@ -20,6 +20,7 @@
 {"label":"conversation","parent":"session.floppy.communication","session":"session.floppy.communication.conversation","text":"outbound 0","type":"log"}
 {"label":"communication.exchange","parent":"session.floppy","session":"session.floppy.communication","text":"1","type":"log"}
 {"label":"interpretation.unidentified","parent":"session.floppy.listening","session":"session.floppy.listening.interpretation","text":"the bot's own voice could not be detected: Voice detection failed: the backend is not configured.","type":"log"}
+{"label":"stm.turn.recorded","parent":"session.floppy","session":"session.floppy.stm","text":"said cut=false","type":"log"}
 {"label":"reflection.selected","parent":"session.floppy.cognition","session":"session.floppy.cognition.reflection","text":"none","type":"log"}
 {"label":"reflection.stored","parent":"session.floppy.cognition","session":"session.floppy.cognition.reflection","text":"turn 1","type":"log"}
 {"label":"bot.ability.reflection.output","parent":"session.floppy","session":"session.floppy.cognition","text":"turn 1","type":"log"}
