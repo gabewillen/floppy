@@ -11,12 +11,12 @@
     {
       "steps": [
         {
-          "hear": "Hey Floppy, I just talked to my brother.",
+          "hear": "I just talked to my brother.",
           "instructions": "Speak in an overjoyed, happy, excited voice, laughing.",
           "voice": "storyteller"
         },
         {
-          "hear": "Hey Floppy, I just talked to my brother.",
+          "hear": "I just talked to my brother.",
           "instructions": "Speak in a very sad, heartbroken voice, quiet and slow, as if crying.",
           "voice": "storyteller"
         }

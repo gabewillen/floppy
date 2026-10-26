@@ -11,7 +11,7 @@
     {
       "steps": [
         {
-          "hear": "Floppy, the delivery came again today.",
+          "hear": "The delivery came again today.",
           "instructions": "Angry. Shout harshly, seething with rage.",
           "voice": "storyteller"
         }

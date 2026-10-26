@@ -41,10 +41,16 @@ eval caches a step's first clip: `emotion_angry`'s clip in `canvas` came out
 happy (emotion2vec 0.83), and `emotion_contrast`'s heartbroken repeat neutral
 (0.90). Both now speak in `storyteller`, which a sweep heard as asked (angry 4
 of 5, sad and happy 4 of 4), and their diagnostics name the tone expected
-(`^heard angry `). The two scenarios that never addressed floppy ("The
-delivery came again today.") were ignored as ambient by the decision service
-in 2 of 3 runs, which is not what they test; they now open "Floppy," / "Hey
-Floppy,". The `says` checks also took "Oh nice!" and "you sound down" for
+(`^heard angry `). Two scenarios never address floppy ("The delivery came again
+today."); with them opening "Floppy," / "Hey Floppy," for a run (`eval-r3c`),
+the rest of this paragraph's numbers are of that wording, which the
+maintainer turned down ("Hey floppy?"): the scenarios keep their ambient
+wording, and floppy must hear it. Ambient (`eval-amb`, 3 repeats each):
+`emotion_contrast` 0.62, the joyful first turn ignored by the decision
+service every time (`bot.ability.cognition.ignore`, confidence 56 to 61) and
+the heartbroken repeat answered every time; `emotion_angry` 0.00, never a
+turn at all: silero VAD finds no voice in the shouted `storyteller` clip
+(`{"segments":[]}` on every try), so the sound is dropped as voiceless. The `says` checks also took "Oh nice!" and "you sound down" for
 misses; their patterns gained `nice`, `wow`, `tell me everything`, `so glad`,
 `that's great`, `down` and `I'm here`. On main `b35ad413` with these
 scenarios, `eval-r3c` (15 jobs): emotion **0.864 ± 0.104**, angry 0.99,
