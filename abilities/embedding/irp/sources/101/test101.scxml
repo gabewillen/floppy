@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- embedding-1: a document's vector is answered in the space its model and dimensions name. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="embedding" type="scxml" src="../../../embedding.scx">
+    <param name="dimensions" expr="2"/>
+    <param name="timeout_ms" expr="600000"/>
+    <param name="model" expr="'other-model'"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <onentry>
+      <send event="bot.ability.embedding.input" target="#_embedding"><content expr='{"role": "document", "items": [{"parts": [{"kind": "text", "text": "Gabe lives in Lisbon"}]}]}'/></send>
+    </onentry>
+    <transition event="bot.ability.embedding.output" cond='_event.data.role === "document" &amp;&amp; _event.data.space.model === "other-model" &amp;&amp; _event.data.space.dimensions === 2 &amp;&amp; JSON.stringify(_event.data.vectors.map(function (v) { return v.values; })) === "[[1,0]]"' target="step1"/>
+  </state>
+  <state id="step1">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

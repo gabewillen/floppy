@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<!-- The embedding document's implementation report plan: each assertion is a
+     numbered statement of README.md ("Statements"). -->
+<assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/embedding/irp/sources">
+  <assert id="embedding-1" specnum="1" specid="#embedding-1">
+    <![CDATA[`bot.ability.embedding.input` `{role, items}` is embedded through the generate service's embeddings mode (`POST {base}/embeddings`, with its `model` and `dimensions`, `<param>`s defaulting to `embeddinggemma-2` and 256) and answered `bot.ability.embedding.output` `{space: {model, dimensions}, role, vectors: [{values}]}`: the role echoed, one unit vector per item, in the items' order whatever the order of the reply's rows.]]>
+    <test id="100" conformance="mandatory" manual="false">
+      <start uri="100/test100.scxml"/>
+    </test>
+    <test id="101" conformance="mandatory" manual="false">
+      <start uri="101/test101.scxml"/>
+    </test>
+    <test id="102" conformance="mandatory" manual="false">
+      <start uri="102/test102.scxml"/>
+    </test>
+  </assert>
+  <assert id="embedding-2" specnum="2" specid="#embedding-2">
+    <![CDATA[Requests that arrive while one is in flight are held and served in order, each answered once.]]>
+    <test id="110" conformance="mandatory" manual="false">
+      <start uri="110/test110.scxml"/>
+    </test>
+  </assert>
+  <assert id="embedding-3" specnum="3" specid="#embedding-3">
+    <![CDATA[A request the embedder cannot serve is answered `bot.ability.embedding.failed` `{kind, message}`, and the next request is served: an error status is `embed_failed` (`The embedder failed (status).`), a reply that is not one vector per item `invalid_response` (`The embedder failed (malformed).`), and no answer within `timeout_ms` (10 s, a `<param>`) `timeout` (`The embedder did not answer within <s>s.`).]]>
+    <test id="120" conformance="mandatory" manual="false">
+      <start uri="120/test120.scxml"/>
+    </test>
+    <test id="121" conformance="mandatory" manual="false">
+      <start uri="121/test121.scxml"/>
+    </test>
+    <test id="122" conformance="mandatory" manual="false">
+      <start uri="122/test122.scxml"/>
+    </test>
+  </assert>
+  <assert id="embedding-4" specnum="4" specid="#embedding-4">
+    <![CDATA[An input its schema refuses (no items, a part without text) never arrives: the send raises `error.execution` in the sender, and the next request is served.]]>
+    <test id="130" conformance="mandatory" manual="false">
+      <start uri="130/test130.scxml"/>
+    </test>
+  </assert>
+</assertions>
