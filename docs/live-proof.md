@@ -7,6 +7,27 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-26, floppy remembers what it saw (D252), model `sparks/qwen3.8-flash-next`
+
+`eval.py run` with the same setup as D250's climb below, on main with the
+memory branch (D251) merged in. The four new `seeing_recall_*` scenarios
+show an image, follow it with unrelated talk (and, in two of them, a
+restart), and only then ask about the image. With them added, the seeded
+split (`--seed 7`, `--test-share 0.34`) holds out `seeing_nametag`,
+`seeing_recall_nametag` and `seeing_recall_shape`. Only train was looked at
+while changing the bot. The baseline overlays reflection's document from
+before D252, so episodes keep no images. Every run used two repeats.
+Results are in the project's `floppy-eval/seeing/`.
+
+| Run | Bot | Split | Score |
+| --- | --- | --- | --- |
+| recall-train-baseline | before D252 | train | 0.760 (recalled only when floppy had happened to say aloud what it saw) |
+| recall-train1 | episodes keep images | train | 0.040 (the recalled-episode schema refused the new field, so every later turn failed) |
+| recall-train2 | and the schemas declare it | train | 0.500 (the driver moved the media directory at the restart, so the recalled reference was unreadable) |
+| recall-train3 | and the driver keeps the media directory across a restart, as a bot's disk does | train | 0.995 ± 0.010 |
+| recall-test-baseline | before D252 | test | 0.687 ± 0.389 (`seeing_recall_nametag` 0.04 and 0.08) |
+| recall-test1 | as recall-train3 | test | **0.987 ± 0.019** |
+
 ## 2026-10-25, seeing hill climb (D250), model `sparks/qwen3.8-flash-next`
 
 `eval.py run` on the seeing scenarios from a cloud session, the bot on
