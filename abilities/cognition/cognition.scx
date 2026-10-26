@@ -113,7 +113,9 @@
   "bot.ability.cognition.step.failed" or
   "bot.ability.cognition.step.timed_out", data: {message, stage,
   timeout_seconds (timed out only), turn, stimulus}, source:
-  "cognition"} (abilities/schemas/ describes each data), a new turn the
+  "cognition"} (abilities/schemas/ describes each data; stimulus is the
+  failed turn's own stimulus envelope, so what went unanswered, and who
+  said it, is perceived with the failure), a new turn the
   bot decides on, with the failed turn's participants. stage is the
   tier: reflex (autonomy or the decision layer), intuition or
   reasoning. Bounded: a turn that perceives a handed-back failure itself

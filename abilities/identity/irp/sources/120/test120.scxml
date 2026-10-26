@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- identity-3: its name in text addresses it. -->
-<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:device="https://github.com/stateforward/floppy/namespaces/device" version="1.0" datamodel="ecmascript" initial="harness">
+<datamodel>
+  <data id="snapshot" expr="null"/>
+</datamodel>
 <state id="harness" initial="boot">
   <invoke id="identity" type="scxml" src="../../../identity.scx">
     <param name="name" expr='"Floppy"'/>
@@ -12,11 +15,24 @@
   <state id="step0">
     <transition event="bot.ability.ready" target="step1"/>
   </state>
-  <state id="step1">
+  <state id="step1" initial="step1_read">
     <onentry>
       <send event="bot.ability.communication.input" target="#_identity"><content expr="{&quot;source_ids&quot;: [&quot;gabe&quot;], &quot;target_ids&quot;: [&quot;floppy&quot;], &quot;content&quot;: &quot;hey floppy, what's your name?&quot;, &quot;content_type&quot;: &quot;text/plain&quot;}"/></send>
+      <send event="harness.snapshot.deadline" id="step1_deadline" delay="30s"/>
     </onentry>
-    <transition event="bot.ability.cognition.input" cond="_event.data.stimulus.event === 'bot.ability.identity.addressed' &amp;&amp; _event.data.stimulus.data.name === &quot;Floppy&quot; &amp;&amp; _event.data.stimulus.source === 'identity'" target="step2"/>
+    <onexit><cancel sendid="step1_deadline"/></onexit>
+    <transition event="harness.snapshot.deadline" target="fail"><log label="unexpected" expr="'snapshot ' + JSON.stringify(snapshot)"/></transition>
+    <state id="step1_read">
+      <onentry>
+        <device:snapshot location="snapshot" target="'#_identity'"/>
+      </onentry>
+      <transition cond="snapshot.attributes.addressed === true &amp;&amp; snapshot.attributes.name === &quot;Floppy&quot; &amp;&amp; snapshot.state === 'listening'" target="step2"/>
+      <transition target="step1_again"/>
+    </state>
+    <state id="step1_again">
+      <onentry><send event="harness.waited" delay="100ms"/></onentry>
+      <transition event="harness.waited" target="step1_read"/>
+    </state>
   </state>
   <state id="step2">
     <transition target="pass"/>

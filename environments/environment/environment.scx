@@ -68,8 +68,11 @@
 
   Host input (decision D108) enters the environment and is routed by what
   its payload says, never by who sent it: bot.ability.communication.input
-  goes to each participant its target_ids names, and to every participant
-  when target_ids is empty (the input is ambient);
+  goes to each participant its target_ids names, stamped with that
+  participant as its own target (participants [{ref, role: "target", own:
+  true}], the environment being the producer that knows it), and to every
+  participant when target_ids is empty (the input is ambient, and nobody
+  is stamped);
   environment.sound and environment.visual go to every participant (a
   broadcast); bot.deactivate and bot.input go to every bot.
 
@@ -206,7 +209,7 @@
     <transition event="bot.ability.communication.input" event:schema="../../abilities/schemas/bot.ability.communication.input.json">
       <foreach array="addressees(_event.data.target_ids)" item="participant">
         <send event="bot.ability.communication.input" targetexpr="participantTarget(participant)">
-          <content expr="_event.data"/>
+          <content expr="inputFor(_event.data, participant)"/>
         </send>
       </foreach>
     </transition>

@@ -34,6 +34,27 @@ all three questions, and D256 answered "Lisbon" and "a blue Volvo".
 `3:0.772 5:0.673 7:0.640`). The held-out baseline is D251's earlier run,
 not a rerun on this tree. Intervals are wide (2 jobs per probe, 4 on
 test).
+## 2026-10-26, decisions from the snapshot (D257), model `sparks/qwen3.8-flash-next`
+
+`eval.py run`, one repeat, 12 scenarios with the stratified split
+(`split_scenarios`, 0.34, seed 7; held out: chat_understand, recall_many,
+recall_people, reflex_greeting), turn_failure bounded at 20 s on both sides.
+Services through local relays (CPA, TypeSafe, api.willen.dev); judges codex
+and gemini.
+
+| run | held-out | train | suite |
+| --- | --- | --- | --- |
+| baseline (PR #83 head 1da406ed) | 0.550 | 0.402 | 0.452 |
+| first dev run (hand-back, own target, ignore description) | 0.995 | 0.855 | 0.902 |
+| this branch on main 33a50bea | 0.985 | 0.946 | 0.959 |
+
+The first dev run is the clean comparison: the same base, scenarios and driver as the baseline, with only floppy changed. The last run also carries other threads' merges and the driver's fix that keeps a failed turn's hand-back reply in its own step. No grader, scorer or expected output changed. On this branch turn_failure is 1.0 (it was 0.38: the bounded turn's
+hand-back answers the question), people_overheard 0.92, and recall_restart,
+recall_update and reflex_pingpong 1.0. name_adopt, run beside the split, is
+1.0, and each step that names the bot got one reply (`replies_at_most`).
+chat_ignore is noisy: 0.65 here, and 0.67, 1.0 and 0.98 over three more
+runs. Twice reasoning answered "Ana, could you pass me the salt?", which
+had no target.
 
 ## 2026-10-26, floppy remembers what it saw (D252), model `sparks/qwen3.8-flash-next`
 

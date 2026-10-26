@@ -119,7 +119,9 @@
 //!    `null`, as a view or an `environment.visual` has) renders as the
 //!    `image` entry's `<media:image media_type? ref="image-N" />`
 //!    placeholder, which carries the media type in place of the
-//!    `media_type` entry, never the reference;
+//!    `media_type` entry, never the reference; and a stimulus the data
+//!    carries as its `stimulus` (a handed-back failure's, the turn that
+//!    failed) is shown the same way;
 //! 5. the repair `feedback` (optional, a string; `null` is none).
 //!
 //! `imageslocation` (optional) receives the references of the images the
@@ -2178,13 +2180,7 @@ fn stimulus_element(
     envelope: Option<&Map<String, Json>>,
     budget: &mut Budget,
 ) -> Result<Element, &'static str> {
-    let data = envelope.and_then(|envelope| envelope.get("data"));
-    let shown = match envelope.and_then(|envelope| envelope.get("event")) {
-        Some(Json::String(event)) if event == CONVERSATION_OUTPUT => {
-            data.map(model_facing_messages)
-        }
-        _ => data.cloned(),
-    };
+    let shown = envelope.and_then(model_facing_stimulus_data);
     let tag = match &shown {
         None | Some(Json::Null) => "null",
         Some(Json::Bool(_)) => "boolean",
@@ -2232,6 +2228,28 @@ const MESSAGE_EXCLUDED_FIELDS: [&str; 3] = ["provenance", "source_ids", "target_
 /// correlation and a voice's embedding (biometric).
 const PARENT_EXCLUDED_FIELDS: [&str; 4] =
     ["provenance", "source_ids", "target_ids", "voice_embedding"];
+
+/// An envelope's data as a model sees it: a conversation output's
+/// messages without their correlation, and a stimulus the data carries
+/// (a handed-back failure's, the turn that failed) shown the same way.
+fn model_facing_stimulus_data(envelope: &Map<String, Json>) -> Option<Json> {
+    let data = envelope.get("data")?;
+    let mut shown = match envelope.get("event") {
+        Some(Json::String(event)) if event == CONVERSATION_OUTPUT => model_facing_messages(data),
+        _ => data.clone(),
+    };
+    if let Some(Json::Object(stimulus)) = shown.get("stimulus")
+        && stimulus.contains_key("event")
+        && let Some(inner) = model_facing_stimulus_data(stimulus)
+    {
+        let mut stimulus = stimulus.clone();
+        stimulus.insert("data".to_owned(), inner);
+        if let Some(fields) = shown.as_object_mut() {
+            fields.insert("stimulus".to_owned(), Json::Object(stimulus));
+        }
+    }
+    Some(shown)
+}
 
 /// A conversation output's data with each of its `messages` without
 /// [`MESSAGE_EXCLUDED_FIELDS`], and its `parent`'s data, and each parent's

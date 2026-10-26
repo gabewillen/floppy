@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "bot.ability.cognition.ignore",
   "additionalProperties": false,
-  "description": "Deliberately ignore this stimulus: no device command, no focus change, no speech. Required when no other offered event should run. Do not use a device command or focus as a stand-in for ignore. Put why on the selection envelope reason field, not on this empty payload.",
+  "description": "Deliberately ignore this stimulus: no device command, no focus change, no speech. It is for what is not for you: people talking to each other (words that speak to someone else, when no participant that is you, own, is their target), and sounds or sights that ask nothing of you. What someone says to you, a question or only something they tell you, is not ignored: it gets an answer, even a short one. A routine of yours that fires is for you too: what it proposes is not done until you select it. Do not use a device command or focus as a stand-in for ignore. Put why on the selection envelope reason field, not on this empty payload.",
   "properties": {},
   "type": "object",
   "examples": [

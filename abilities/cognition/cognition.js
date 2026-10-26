@@ -100,18 +100,20 @@ function ceilingDelay() {
 }
 
 // The handed-back stimulus of a step that timed out: the bound that
-// fired, in seconds.
+// fired, in seconds, and the stimulus the failed turn perceived, so the
+// turn that perceives the failure perceives what went unanswered too.
 function timedOutStep(_event) {
   var seconds = (_event.sendid === ceiling_timer ? ceilingMs() : inactivityMs()) / 1000;
   var message = "Cognition's " + tier() + ' step took longer than ' + seconds + ' seconds, so the turn failed.';
-  var data = {message: message, stage: tier(), timeout_seconds: seconds, turn: turn, stimulus: stimulus.event};
+  var data = {message: message, stage: tier(), timeout_seconds: seconds, turn: turn, stimulus: stimulus};
   return ({event: 'bot.ability.cognition.step.timed_out', data: data, source: 'cognition'});
 }
 
-// The handed-back stimulus of a step that failed with message.
+// The handed-back stimulus of a step that failed with message, with the
+// stimulus the failed turn perceived.
 function failedStep(message) {
   var text = "Cognition's " + tier() + ' step failed, so the turn failed: ' + message;
-  var data = {message: text, stage: tier(), turn: turn, stimulus: stimulus.event};
+  var data = {message: text, stage: tier(), turn: turn, stimulus: stimulus};
   return ({event: 'bot.ability.cognition.step.failed', data: data, source: 'cognition'});
 }
 

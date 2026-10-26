@@ -30,6 +30,13 @@ step is one of
                                     location="offers">, decision D242) and
                                     goes on when `cond` holds of `offers`;
                                     otherwise the case fails, logging them
+  snapshot(cond, within="30s")      reads the child's live state
+                                    (<device:snapshot location="snapshot">,
+                                    decision D109), again every 100 ms, and
+                                    goes on once `cond` holds of `snapshot`;
+                                    if it does not within `within` (a CSS2
+                                    duration; give the case clock="wall"),
+                                    the case fails, logging it
   ignore(event)                     drops `event` wherever it arrives
 
 and the case passes when every expect was met in order. Any other event
@@ -97,6 +104,16 @@ def offers(cond, undeclared=None):
     return Offers(cond, undeclared)
 
 
+class Snapshot:
+    def __init__(self, cond, within):
+        self.cond, self.within = cond, within
+
+
+def snapshot(cond, within="30s"):
+    """A step that reads the child's live state until `cond` holds of it, for at most `within`."""
+    return Snapshot(cond, within)
+
+
 def js(value):
     return json.dumps(value, sort_keys=False)
 
@@ -154,15 +171,18 @@ class Suite:
     # ------------------------------------------------------------ writing
     def document(self, case):
         name = self.name
-        reads = any(isinstance(item, Offers) for step in case["steps"]
-                    for item in (step if isinstance(step, list) else [step]))
+        items = [item for step in case["steps"] for item in (step if isinstance(step, list) else [step])]
+        reads = any(isinstance(item, Offers) for item in items)
+        snapshots = any(isinstance(item, Snapshot) for item in items)
         decision = ' xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision"' if reads else ""
+        if snapshots:
+            decision += ' xmlns:device="https://github.com/stateforward/floppy/namespaces/device"'
         lines = [
             '<?xml version="1.0" encoding="UTF-8"?>',
             f"<!-- {case['assertion']}: {escape(case['comment'])} -->",
             f'<scxml xmlns="http://www.w3.org/2005/07/scxml"{decision} version="1.0" datamodel="ecmascript" initial="harness">',
         ]
-        data = list(case["data"]) + ([("offers", "null")] if reads else [])
+        data = list(case["data"]) + ([("offers", "null")] if reads else []) + ([("snapshot", "null")] if snapshots else [])
         if data:
             lines.append("<datamodel>")
             for location, expr in data:
@@ -215,6 +235,29 @@ class Suite:
                     "    </onentry>",
                     f"    <transition cond={quoteattr(item.cond)} target=\"step{step + 1}\"/>",
                     '    <transition target="fail"><log label="unexpected" expr="\'offers \' + JSON.stringify(offers)"/></transition>',
+                    "  </state>",
+                ]
+                step += 1
+                continue
+            if isinstance(item, Snapshot):
+                # Read again every 100 ms until `cond` holds, failing at the deadline.
+                lines[-1] = f'  <state id="step{step}" initial="step{step}_read">'
+                lines += ["    <onentry>"] + sends + [
+                    f'      <send event="harness.snapshot.deadline" id="step{step}_deadline" delay={quoteattr(item.within)}/>',
+                    "    </onentry>",
+                    f'    <onexit><cancel sendid="step{step}_deadline"/></onexit>',
+                    '    <transition event="harness.snapshot.deadline" target="fail"><log label="unexpected" expr="\'snapshot \' + JSON.stringify(snapshot)"/></transition>',
+                    f'    <state id="step{step}_read">',
+                    "      <onentry>",
+                    f"        <device:snapshot location=\"snapshot\" target=\"'#_{name}'\"/>",
+                    "      </onentry>",
+                    f"      <transition cond={quoteattr(item.cond)} target=\"step{step + 1}\"/>",
+                    f'      <transition target="step{step}_again"/>',
+                    "    </state>",
+                    f'    <state id="step{step}_again">',
+                    '      <onentry><send event="harness.waited" delay="100ms"/></onentry>',
+                    f'      <transition event="harness.waited" target="step{step}_read"/>',
+                    "    </state>",
                     "  </state>",
                 ]
                 step += 1
@@ -342,7 +385,7 @@ class Suite:
 def load(kind, name):
     path = os.path.join(ROOT, kind, name, "irp", "cases.py")
     suite = Suite(kind, name)
-    runpy.run_path(path, init_globals=dict(suite=suite, send=send, expect=expect, offers=offers, wait=wait, js=js, wav=wav,
+    runpy.run_path(path, init_globals=dict(suite=suite, send=send, expect=expect, offers=offers, snapshot=snapshot, wait=wait, js=js, wav=wav,
                                            pcm=pcm, png=png))
     return suite
 
