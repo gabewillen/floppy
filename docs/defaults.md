@@ -22,6 +22,8 @@ values. No package has a default model endpoint (decision D31).
 | `FLOPPY_SPEECH_API_KEY` | the `speech` service (`env:apikey`), as above | for a keyed backend, as `FLOPPY_API_KEY` |
 | `FLOPPY_VOICE_BASE_URL` | the `speech` service (`env:baseurl`): the floppy bot's voice detection, diarization and voice identification (listening), on LocalAI's voice APIs | yes: without it every sound the bot hears fails voice detection |
 | `FLOPPY_VOICE_API_KEY` | the `speech` service (`env:apikey`), as above | for a keyed backend, as `FLOPPY_API_KEY` |
+| `FLOPPY_EMOTION_BASE_URL` | the `speech` service (`env:baseurl`): the tone the floppy bot hears in decoded speech (listening's `voice_affect`, a speech server's `/emotion`) | no: without it `voice_affect` fails `unconfigured`, logs it (`listening.affect`), and decoded speech carries no `affect` |
+| `FLOPPY_EMOTION_API_KEY` | the `speech` service (`env:apikey`), as above | for a keyed backend, as `FLOPPY_API_KEY` |
 
 The live tests read `FLOPPY_LIVE_ENV_FILE` (the env files, joined like
 `PATH`) and `FLOPPY_LIVE_MODEL` (default: the model below); the trace tests
@@ -63,7 +65,9 @@ OpenAI-compatible audio API on the lab's shared model API, so
 `https://api.willen.dev/v1` and both keys are one of its bearer keys:
 Nemotron streaming STT, Breeze TTS and the LocalAI voice models behind one
 origin, described by its `https://api.willen.dev/openapi.json` (decisions
-D240 and D244). From the lab, `http://192.168.2.2:8090/v1` serves the same. A `provider` of
+D240 and D244). The emotion API (emotion2vec+) is on the same origin under
+its own path, so `FLOPPY_EMOTION_BASE_URL` is
+`https://api.willen.dev/emotion/v1` (decision D247). From the lab, `http://192.168.2.2:8090/v1` serves the same. A `provider` of
 `gemini` is the Gemini API (decision D94).
 
 ## Timeouts and bounds
@@ -123,6 +127,8 @@ D240 and D244). From the lab, `http://192.168.2.2:8090/v1` serves the same. A `p
 | `abilities/interpretation/interpretation.scx` | `stage_timeout_ms` | `30000` | each interpretation stage |
 | `abilities/interpretation/interpretation.scx` | `recognize_timeout_ms` | `2000` | identification's extra time past the stage timeout (decision D177) |
 | `abilities/interpretation/interpretation.scx` | `product_threshold_db` | `3.0` | the perceived level a listening product needs |
+| `abilities/voice_affect/voice_affect.scx` | `timeout_ms` | `3000` | hearing a decoded utterance's tone, alongside its decoding (mosfet.py's tone bound; decision D247) |
+| `abilities/voice_affect/voice_affect.scx` | `min_segment_seconds` | `0.3` | the shortest voice whose tone is asked (mosfet.py's speech server's shortest segment) |
 | `abilities/seeing/seeing.scx` | `measure_timeout_ms` | `2000` | one change measurement through the vision service |
 | `abilities/seeing/seeing.scx` | `measure_every_ms` | `500` | the pace between measurements, whatever the frame rate |
 | `abilities/seeing/seeing.scx` | `settle_after_ms` | `5000` | the settle after every sight: at most one sight per settle, plus looks |

@@ -57,9 +57,13 @@ class Backend:
             time.sleep(2 ** attempt)
         raise RuntimeError(f"the speech backend gave no answer to {path} ({'; '.join(errors)})")
 
-    def speak(self, text, voice=VOICE):
-        """`text` in `voice` as 24 kHz mono 16-bit PCM."""
-        body = json.dumps({"input": text, "voice": voice, "response_format": "wav"}).encode()
+    def speak(self, text, voice=VOICE, instructions=None):
+        """`text` in `voice` as 24 kHz mono 16-bit PCM, said as `instructions`
+        tell when given (the speech API's `instructions`: the tone)."""
+        request = {"input": text, "voice": voice, "response_format": "wav"}
+        if instructions:
+            request["instructions"] = instructions
+        body = json.dumps(request).encode()
         return pcm_of_wav(self._post("/audio/speech", body, "application/json"))
 
     def transcribe(self, pcm):
@@ -106,20 +110,22 @@ def silence(seconds):
 
 def utterance(backend, step, cache):
     """The PCM of a heard step: its `segments` (text in the step's voice,
-    a number a pause of that many seconds) or its `hear` text, each piece of
-    speech synthesized once into `cache`."""
+    a number a pause of that many seconds) or its `hear` text, said as its
+    `instructions` tell (a tone) when it has them, each piece of speech
+    synthesized once into `cache`."""
     voice = step.get("voice", VOICE)
+    instructions = step.get("instructions")
     pieces = step.get("segments") or [step["hear"]]
     pcm = b""
     for piece in pieces:
         if isinstance(piece, (int, float)):
             pcm += silence(piece)
             continue
-        key = hashlib.sha256(json.dumps([voice, piece]).encode()).hexdigest()[:24]
+        key = hashlib.sha256(json.dumps([voice, piece] + ([instructions] if instructions else [])).encode()).hexdigest()[:24]
         path = os.path.join(cache, f"{key}.pcm")
         if not os.path.exists(path):
             os.makedirs(cache, exist_ok=True)
-            spoken = backend.speak(piece, voice)
+            spoken = backend.speak(piece, voice, instructions)
             with open(path + ".part", "wb") as handle:
                 handle.write(spoken)
             os.replace(path + ".part", path)

@@ -486,6 +486,146 @@ fn identification_embeds_each_segment() {
     assert_eq!(returned.name, IDENTIFICATION_OUTPUT_EVENT);
 }
 
+fn classification_of(extra: &[(&str, Data)]) -> Classification {
+    let mut parameters = vec![
+        ("operation", text("classify")),
+        ("audio", text("media/heard.pcm")),
+    ];
+    parameters.extend(extra.iter().cloned());
+    match parse(&parameters) {
+        Ok(Operation::Classify(classification)) => classification,
+        other => panic!("a classification: {other:?}"),
+    }
+}
+
+#[test]
+fn classification_takes_a_segment_and_no_model() {
+    let classification = classification_of(&[
+        ("media_type", text("audio/pcm")),
+        ("sample_rate_hz", number(24_000.0)),
+        ("channels", number(1.0)),
+    ]);
+    assert_eq!(classification.audio.path, "/media/heard.pcm");
+    assert_eq!(
+        classification.format,
+        Format {
+            sample_rate_hz: Some(24_000),
+            channels: Some(1)
+        }
+    );
+    for (parameters, refusal) in [
+        (
+            vec![
+                ("operation", text("classify")),
+                ("model", text("emotion2vec")),
+                ("audio", text("media/a.pcm")),
+            ],
+            "speech classify takes no model parameter",
+        ),
+        (
+            vec![("operation", text("classify"))],
+            "speech classify requires an audio parameter",
+        ),
+        (
+            vec![
+                ("operation", text("classify")),
+                ("audio", text("media/a.pcm")),
+                ("output", text("media/b.pcm")),
+            ],
+            "speech classify takes audio, media_type, sample_rate_hz, and channels only",
+        ),
+    ] {
+        assert_eq!(parse(&parameters).err(), Some(refusal));
+    }
+}
+
+#[test]
+fn classification_sends_mono_pcm_at_a_rate_the_server_takes() {
+    let mono = classification_of(&[("sample_rate_hz", number(24_000.0))]);
+    assert_eq!(
+        affect_pcm(&mono, pcm(&[1, -2, 3])),
+        Ok((24_000, pcm(&[1, -2, 3])))
+    );
+    let stereo = classification_of(&[
+        ("sample_rate_hz", number(48_000.0)),
+        ("channels", number(2.0)),
+    ]);
+    assert_eq!(
+        affect_pcm(&stereo, pcm(&[100, 300, -50, -150])),
+        Ok((48_000, pcm(&[200, -100])))
+    );
+    let other = classification_of(&[("sample_rate_hz", number(32_000.0))]);
+    let (rate, resampled) = affect_pcm(&other, pcm(&[0, 0, 16_384, 16_384])).expect("resampled");
+    assert_eq!(rate, VAD_SAMPLE_RATE_HZ);
+    assert_eq!(resampled, pcm(&[0, 16_384]));
+    let wav = classification_of(&[("media_type", text("audio/wav"))]);
+    assert_eq!(
+        affect_pcm(&wav, wav_container(&pcm(&[7, 8]), 16_000, 1)),
+        Ok((16_000, pcm(&[7, 8])))
+    );
+    let unknown = classification_of(&[]);
+    assert_eq!(affect_pcm(&unknown, pcm(&[1, 2])), Err(FailureCode::Format));
+    assert_eq!(affect_pcm(&mono, Vec::new()), Err(FailureCode::Empty));
+    let request = affect_request(5, Some(6), 24_000, pcm(&[1]));
+    assert_eq!(
+        request.url,
+        vec![
+            Part::Reference(5),
+            Part::Literal("/emotion?sample_rate=24000".into())
+        ]
+    );
+    assert_eq!(request.body, pcm(&[1]));
+    assert_eq!(
+        affect_request(5, None, 16_000, Vec::new())
+            .headers
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect::<Vec<_>>(),
+        ["content-type", "accept"]
+    );
+}
+
+#[test]
+fn an_affect_is_the_answers_label_scores_valence_and_confidence() {
+    let returned = affect_outcome(
+        "Affect classification",
+        ok(br#"{"label":"happy","scores":{"happy":0.9997,"sad":0.0},"valence":0.9997,"confidence":0.9997,"snr_db":15.8,"model":"emotion2vec/emotion2vec_plus_large","seconds":3.2}"#),
+    );
+    assert_eq!(returned.name, CLASSIFICATION_OUTPUT_EVENT);
+    assert_eq!(
+        data(&returned),
+        json!({"label": "happy", "scores": {"happy": 0.9997, "sad": 0.0}, "valence": 0.9997, "confidence": 0.9997})
+    );
+    let bare = affect_outcome("Affect classification", ok(br#"{"label":"neutral"}"#));
+    assert_eq!(
+        data(&bare),
+        json!({"label": "neutral", "scores": {}, "valence": null, "confidence": null})
+    );
+    for body in [
+        &br#"{"scores":{}}"#[..],
+        br#"{"label":""}"#,
+        br#"{"label":"happy","scores":{"happy":1.5}}"#,
+        br#"{"label":"happy","valence":-2}"#,
+        br#"{"label":"happy","confidence":"high"}"#,
+        b"not json",
+    ] {
+        assert_eq!(
+            data(&affect_outcome("Affect classification", ok(body))),
+            json!({"message": "Affect classification failed: the backend's answer is malformed."})
+        );
+    }
+    assert_eq!(
+        data(&affect_outcome(
+            "Affect classification",
+            Ok(Response {
+                status: 422,
+                body: br#"{"detail":"too short: 0.10 s"}"#.to_vec()
+            })
+        )),
+        json!({"message": "Affect classification failed: the backend answered an error status."})
+    );
+}
+
 fn normalization(media_type: Option<&str>, format: Format) -> Normalization {
     Normalization {
         audio: media("media/s.wav"),
@@ -706,4 +846,18 @@ fn every_voice_event_satisfies_its_published_schema() {
     let embedding = embedding_outcome(ok(br#"{"embedding":[0.5]}"#), "m").expect("an embedding");
     let returned = identification_returned(&[embedding]);
     assert!(identified.admits(&Data::JsonObject(returned.data)));
+    let classified = compile(include_str!(
+        "../../schemas/bot.ability.classifying.output.json"
+    ));
+    for body in [
+        &br#"{"label":"sad","scores":{"sad":0.8,"neutral":0.2},"valence":-0.7,"confidence":0.8}"#[..],
+        br#"{"label":"neutral"}"#,
+    ] {
+        let returned = affect_outcome("Affect classification", ok(body));
+        assert!(
+            classified.admits(&Data::JsonObject(returned.data.clone())),
+            "{}",
+            returned.data
+        );
+    }
 }

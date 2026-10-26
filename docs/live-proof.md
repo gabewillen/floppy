@@ -7,6 +7,41 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-26, floppy hears the tone of a voice (D247), model `sparks/qwen3.8-flash-next`
+
+`eval.py run --scenario emotion` on `claude/project-thread-7d33ln` (the
+voice branch plus emotion), from a cloud session: the bot on
+`sparks/qwen3.8-flash-next` through the CPA relay, the decision service on
+the TypeSafe relay, speech, voice and emotion on one relay to
+`https://api.willen.dev` (emotion at `/emotion/v1`), each heard step
+synthesized with its `instructions` (seed 42), the judges
+`gabe-codex-0/gpt-6.1-sol` and `gemini-4-argon`.
+
+| Run | Branch state | Jobs | Emotion |
+| --- | --- | --- | --- |
+| `eval-base` | the tone on the speech product only (`0be3f825`) | 5 | 0.434 ± 0.302 |
+| `eval-parent` | the speech as the turn's `parent` (`485709eb`) | 5 | 0.498 ± 0.173 |
+| `eval-r3` | the same, merged with the voice branch (`4dc163c7`) | 15 | 0.598 ± 0.124 |
+
+Every job logged `listening.affect heard ...`: emotion2vec heard sad
+(0.98 to 1.00) and happy (0.99 to 1.00) as the voices were asked to sound,
+but heard the angry voice as happy (0.83), so `emotion_angry` measures the
+synthesis and classifier more than floppy. In `eval-base` the tone was heard
+and never reached the model: the speech-heard seed admitted the words
+without their speech, so floppy asked "how did it go?" of a crying voice.
+With the speech as the turn's parent the model reads it ("Hey, Gabe. You
+sound sad about that. Do you want to talk about it?"); `emotion.second`
+(the heartbroken repeat) went from 0.00 to 0.92. What is left is
+mostly the first, joyful turn of `emotion_contrast` (0.30), which the
+decision service ignored as ambient.
+
+A hill climb of `abilities/reasoning/reasoning.scx#instructions` (`climb1`,
+3 generations of 2 candidates, train `emotion_contrast`, `emotion_happy`,
+`emotion_sad`, held out `emotion_angry`, `emotion_tonight`, the seeded
+split) raised train from 0.490 to 0.877 while the held-out test went from
+0.860 to 0.490 (single runs): the prompt fit its own scenarios and was not
+adopted; the instructions stay empty.
+
 ## 2026-10-25, memory hill climb (D251), model `sparks/qwen3.8-flash-next`
 
 `eval.py run` on the memory scenarios, split as `climb` splits them

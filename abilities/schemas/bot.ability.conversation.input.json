@@ -114,6 +114,30 @@
         1
       ],
       "title": "Channels"
+    },
+    "parent": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "properties": {
+            "event": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "data": {}
+          },
+          "required": [
+            "event"
+          ],
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The stimulus this turn was heard as (mosfet.py's TurnData.parent), an envelope {event, data}: heard speech's bot.ability.listening.speech.output, stamped by the producer; host-created inputs omit it.",
+      "title": "Parent"
     }
   },
   "required": [

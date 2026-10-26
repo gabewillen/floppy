@@ -19,8 +19,9 @@
   selected}. handled carries one selection {event:
   bot.ability.communication.input, data, reason}, its data the speech's
   source_ids, an empty target_ids, its content, content_type,
-  sample_rate_hz and channels. The event's schema has no parent, so the
-  selection carries none.
+  sample_rate_hz and channels, and its parent the speech envelope {event,
+  data} (mosfet.py's TurnData.parent), so the speech's affect reaches the
+  conversation's exchange with its words.
 
   Contracts: none of its own; the selection's data is
   schemas/bot.ability.communication.input.json, checked where the body

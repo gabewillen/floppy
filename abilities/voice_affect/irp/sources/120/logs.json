@@ -1,0 +1,5 @@
+{
+  "listening.affect": [
+    "failed: Affect classification failed: the backend answered an error status."
+  ]
+}
