@@ -44,11 +44,11 @@
 //!
 //! * `operation` (required): `decode` (speech to text), `encode`
 //!   (text to speech), or one of the voice operations `detect`, `diarize`,
-//!   `identify`, `normalize`, `append`, and `clip` ([`voice`] documents
+//!   `identify`, `classify`, `normalize`, `append`, and `clip` ([`voice`] documents
 //!   their parameters, requests, and results).
 //! * `model` (required for decode and encode, optional for the backend
-//!   voice operations, refused by the media steps, a non-empty string): the
-//!   backend's model name.
+//!   voice operations but `classify`, refused by `classify` and the media
+//!   steps, a non-empty string): the backend's model name.
 //! * decode: `audio` (required, a reference to the speech to decode),
 //!   `media_type` (optional, a `type/subtype` sent as the file part's
 //!   `content-type`, `application/octet-stream` without it, or as Gemini's
@@ -153,8 +153,9 @@
 //!   rate), else `null`. `D` is the seconds of sound measured from the bytes
 //!   of linear PCM.
 //! * [`voice::DETECTION_OUTPUT_EVENT`], [`voice::DIARIZATION_OUTPUT_EVENT`],
-//!   and [`voice::IDENTIFICATION_OUTPUT_EVENT`]: the voice operations'
-//!   results ([`voice`]).
+//!   [`voice::IDENTIFICATION_OUTPUT_EVENT`], and
+//!   [`voice::CLASSIFICATION_OUTPUT_EVENT`]: the voice operations' results
+//!   ([`voice`]).
 //! * [`FAILED_EVENT`] `{"message": M}`, `M` one closed message per
 //!   [`FailureCode`] and direction.
 //!
@@ -499,6 +500,8 @@ pub enum Operation {
     Diarize(voice::Diarization),
     /// `identify` (voice identification).
     Identify(voice::Identification),
+    /// `classify` (a voice segment's affect).
+    Classify(voice::Classification),
     /// `normalize` (a sound to PCM).
     Normalize(voice::Normalization),
     /// `append` (open speech to one utterance).
@@ -517,6 +520,7 @@ impl Operation {
             Self::Detect(_) => "Voice detection",
             Self::Diarize(_) => "Voice diarization",
             Self::Identify(_) => "Voice identification",
+            Self::Classify(_) => "Affect classification",
             Self::Normalize(_) => "Sound normalization",
             Self::Append(_) => "Open speech",
             Self::Clip(_) => "Voice segment clipping",
@@ -800,6 +804,7 @@ pub fn parse_parameters<'a>(
             "detect" => Some(|given| voice::detection(given).map(Operation::Detect)),
             "diarize" => Some(|given| voice::diarization(given).map(Operation::Diarize)),
             "identify" => Some(|given| voice::identification(given).map(Operation::Identify)),
+            "classify" => Some(|given| voice::classification(given).map(Operation::Classify)),
             "normalize" => Some(|given| voice::normalization(given).map(Operation::Normalize)),
             "append" => Some(|given| voice::appending(given).map(Operation::Append)),
             "clip" => Some(|given| voice::clipping(given).map(Operation::Clip)),
@@ -841,7 +846,7 @@ pub fn parse_parameters<'a>(
             encoding(model, parts, voice, output, media_type, provider).map(Operation::Encode)
         }
         _ => Err(
-            "speech operation must be decode, encode, detect, diarize, identify, normalize, append, or clip",
+            "speech operation must be decode, encode, detect, diarize, identify, classify, normalize, append, or clip",
         ),
     }
 }
@@ -1988,6 +1993,19 @@ mod guest {
                     }
                 }
                 voice::identification_returned(&embeddings)
+            }
+            Operation::Classify(classification) => {
+                let segment = super::read_audio(&classification.audio.path)
+                    .and_then(|audio| voice::affect_pcm(classification, audio));
+                let (rate, pcm) = match segment {
+                    Ok(segment) => segment,
+                    Err(code) => return failed(code),
+                };
+                let built = voice::affect_request(base_url, api_key, rate, pcm);
+                if scxml_types::exceeds_wasm_bound(built.body.len(), super::MAX_AUDIO_BYTES) {
+                    return failed(super::FailureCode::TooLarge);
+                }
+                voice::affect_outcome(operation.direction(), fetch(built).await)
             }
             _ => return failed(super::FailureCode::Malformed),
         })

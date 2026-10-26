@@ -1,0 +1,2 @@
+cargo:rustc-link-lib=static=wit_bindgen_cabi0_51_0
+cargo:rustc-link-search=native=/home/user/floppy/target-main/wasm32-wasip2/release/build/wit-bindgen-e7438576f38bc6d9/out

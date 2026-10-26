@@ -21,6 +21,7 @@ telemetry.
 | `detect` | `voice_detection` | `POST {base}/vad` | `bot.ability.hearing.voice.detection.output` |
 | `diarize` | `voice_diarization` | `POST {base}/audio/diarization` | `bot.ability.hearing.voice.diarization.output` |
 | `identify` | `voice_identification` | `POST {base}/voice/embed` per segment | `bot.ability.hearing.voice.identification.output` |
+| `classify` | `voice_affect` | `POST {base}/emotion?sample_rate=R`, the segment's raw 16-bit mono PCM | `bot.ability.classifying.output {label, scores, valence, confidence}` |
 | `normalize`, `append`, `clip` | `voice_detection` (`normalize`), `interpretation` (`append`), `voice_identification` (`clip`): steps on PCM | none: files in the granted directory | done data |
 
 A failure answers `bot.ability.failed {message}`.
@@ -74,7 +75,9 @@ and send nothing. A run that holds a base URL and no key reaches a keyless
 server: the request carries no key header at all (decision D127). floppy's documents bind
 `FLOPPY_SPEECH_BASE_URL` and `FLOPPY_SPEECH_API_KEY` for `decode` and
 `encode`, and `FLOPPY_VOICE_BASE_URL` and `FLOPPY_VOICE_API_KEY` (a LocalAI
-server) for `detect`, `diarize` and `identify`. The models are each
+server) for `detect`, `diarize` and `identify`, and `FLOPPY_EMOTION_BASE_URL`
+and `FLOPPY_EMOTION_API_KEY` (a speech server's emotion API, emotion2vec+)
+for `classify`. The models are each
 document's `model` `<data>`
 ([Defaults](../../docs/defaults.md#speech-and-voice-models)).
 

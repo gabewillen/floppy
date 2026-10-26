@@ -2722,7 +2722,7 @@ fn speech(source_ids: &Json) -> Json {
     json!({
         "content": "what is the weather like?",
         "content_type": "text/plain",
-        "voice_detection": {"segments": [{"start_seconds": 0.0, "end_seconds": 0.4, "confidence": 0.9}]},
+        "voice_detection": {"segments": [{"start_seconds": 0, "end_seconds": 0.4, "confidence": 0.9}]},
         "media_type": "audio/pcm",
         "sample_rate_hz": 48000,
         "channels": 1,
@@ -2747,7 +2747,8 @@ fn autonomy_turn(run: &mut Run, turn: u64, event: &str, data: &Json) -> Json {
 }
 
 /// The selection the speech-heard seed makes: one
-/// `bot.ability.communication.input` carrying the speech as its turn.
+/// `bot.ability.communication.input` carrying the speech as its turn, its
+/// parent the speech (mosfet.py's `TurnData.parent`).
 fn admitted(turn: u64) -> Json {
     json!({
         "turn": turn,
@@ -2761,6 +2762,7 @@ fn admitted(turn: u64) -> Json {
                 "content_type": "text/plain",
                 "sample_rate_hz": 48000,
                 "channels": 1,
+                "parent": {"event": SPEECH, "data": speech(&json!(["caller"]))},
             },
             "reason": "seeded speech admit via communication",
         }],

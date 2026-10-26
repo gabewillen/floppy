@@ -53,6 +53,15 @@ compiles and exports the fuel global. It records the metering parameters and
 every output digest in `dist/build-manifest.json`, and each component's
 release digest and imported interfaces in `dist/identity.js`.
 
+`--extensions <dir>` (repeatable) ships more extension components: every
+artifact `<dir>/manifest.tsv` lists (the same `stateforward.wasm-artifacts/v1`
+rows, virtualized components with no WASI import) is authenticated and
+transpiled like the others into `dist/<name>/`, `<name>` its artifact name
+with `_` as `-` (lowercase ASCII letters and `-` only). A name or release
+digest another component already has fails the build, so a digest
+authenticates exactly one component. `dist/extensions.js` lists every
+extension component the build ships.
+
 The validator and `scx` components validate with the bundled, unmodified W3C
 SCXML 1.0 schema set, so the package carries its W3C notice (`NOTICE.md`,
 copied by `npm pack`).
@@ -214,7 +223,7 @@ the browser to the checked-in Wasmtime baselines.
 | `cancel` | SCXML I/O processor `cancel` | as browser |
 | `send-basichttp` | BasicHTTP processor component; its `http-transport` is the page's `http.send`, only for URLs `http.allow` accepts (deny-all by default); `unavailable` -> `undeliverable` (`error.communication`); a delayed send is `check`ed, scheduled through the SCXML processor's `schedule-basichttp`, and posted when due (a failure then raises `error.communication` with its send id) | BasicHTTP processor over the in-process loopback |
 | `load-document` | a static URL `resources` prefetched (allowlisted by the page), else `capabilities.loadDocument(kind, uri)`; either answers the text or `{text, mediaType}`, the media type becoming the WIT `loaded-document` indication (kept when visible ASCII, of any length, else dropped); a document of any size; `unavailable` (error.execution) without either, detail `dynamic-url-unavailable` for a runtime URL when `resources` is set; in an `async: 'auto'` session, that runtime URL waits on `resources` (see [Async sessions](#async-sessions)) | the embedder's documents |
-| `compile-invocation` | default (`invoke.compile: 'auto'`): the session's own compiler component instance, pre-warmed with the root IR's static inline children and cached by `(sourceName, source)`; rejected documents (the compiler component's own bounds included; the host caps no source size) are `invalid-input` (error.execution), compiler faults fail the session. A page `capabilities.compileInvocation` overrides it; under `'provided'` without one, **unsupported** (`execution`, detail `unsupported-invoke`: error.execution, the invocation never starts) | compiler component, same request and outcome mapping |
+| `compile-invocation` | default (`invoke.compile: 'auto'`): the session's own compiler component instance, pre-warmed with the root IR's static inline children and the `<invoke src>` documents `resources` prefetched, and cached by `(sourceName, source, eventSchemas)`; rejected documents (the compiler component's own bounds included; the host caps no source size) are `invalid-input` (error.execution), compiler faults fail the session. A page `capabilities.compileInvocation` overrides it; under `'provided'` without one, **unsupported** (`execution`, detail `unsupported-invoke`: error.execution, the invocation never starts) | compiler component, same request and outcome mapping |
 | `start-invocation` (`session`) | invoked machine, data model, I/O processor, and clock built synchronously from preloaded modules, then `start-invoked`; an invoked session invokes in turn; beyond the limits the page set in `invokeLimits` `invalid-input` (error.execution) | as browser (sessions built from compiled components) |
 | `start-invocation` (`service`) | `unavailable`: this host binds no invoked-service component, so every service `<invoke>`, literal or `typeexpr`, fails when it starts with `error.execution` (SCXML 6.4); the session start is unaffected | the service component bound to the exact type URI (`SessionHost::with_service_components`): one instance per invocation, driven through its `invoke` export; an unbound type fails its `<invoke>` when it starts |
 | `cancel-invocation`, `forward-to-invocation` | the invoked session's cancellation begins (its later sends are ignored), its `cancel` runs, and it is dropped with every session below it; autoforward onto a live invoked session's external queue; when none is live, the case the WIT defines as a no-op | as browser |
@@ -321,7 +330,8 @@ const session = await createSession({ ir, dataModel, extensionComponents: extens
   digest is the release artifact of an extension component this package
   ships transpiled and fuel-metered at build time (`dist/`: the example
   namespace, `components/scxml-extension-example`, and `scx`,
-  `namespaces/scx`). A component this package does not ship is
+  `namespaces/scx`, plus any the build's `--extensions` added; see
+  [Build](#build)). A component this build does not ship is
   `artifact-kind-mismatch`: browsers run only components built with the
   package (a component resolved at run time needs a build of its own).
 - **Binding.** `bind(pkg, component)` checks what the Wasmtime host checks:
@@ -366,8 +376,9 @@ const session = await createSession({ ir, dataModel, extensionComponents: extens
 ### URL resources
 
 A `resolve(url)` or `capabilities.loadDocument` answer is the text, or
-`{text, mediaType}` with the media type the source indicated (for example
-the `Content-Type` of the page's `fetch`). SCXML B.2.1 says "if an
+`{text, mediaType, baseUri, eventSchemas}` (each field but `text`
+optional) with the media type the source indicated (for example the
+`Content-Type` of the page's `fetch`). SCXML B.2.1 says "if an
 indication of the type of the content is available (e.g., via a
 Content-Type header), then the Processor SHOULD try to interpret the
 content according to that indication": for `<data src>` the ECMAScript data
@@ -377,6 +388,17 @@ B.2.1's own rules. Any other type, `text/plain` included, indicates nothing:
 it is the label resources get by default (RFC 2045 §5.2), and the official
 W3C cases ship JSON and XML in `.txt` files that they expect read by
 content. A script's media type is ignored.
+
+For an `<invoke src>` document, `baseUri` and `eventSchemas` are what the
+Wasmtime host's embedder answers in `EmbeddedDocument`: `baseUri` is the
+absolute URI the child's own relative URIs resolve against (RFC 3986
+§5.1: its `<data src>`, `<script src>`, and `<invoke src>`, so a child's
+children resolve against their own base in turn), and `eventSchemas`
+(`{uri, bytes}[]`, as `createCompiler().compile` takes them) are the
+`event:schema` files the child is compiled with. A `baseUri` that is not
+an absolute URL fails the answer. The root session has no base URI: its
+URIs reach `allow` as written, and an inline `<content>` child shares
+its invoking session's base.
 
 **Security: the default is deny.** Without `resources`, no URL is ever
 resolved, and every `<data src>`, `<script src>`, and `<invoke src>` keeps
@@ -401,8 +423,13 @@ origin cannot take a load outside the allowlist.
 - Machine calls are synchronous and a page's fetch is not, so
   `createSession` resolves URLs before the machine runs. It collects every
   statically known URL of the IR: `<data src>`, unpinned `<script src>`, and
-  `<invoke src>`. This scan only chooses what to prefetch; the machine still
-  validates the IR and decides every load.
+  `<invoke src>`. With the host's automatic compiler (see
+  [Invocations](#invocations)), each `<invoke src>` document it resolved
+  is then compiled, with its `eventSchemas`, and the static URLs of the
+  child's IR, resolved against its `baseUri`, are prefetched the same way,
+  breadth first, each distinct URL once, for at most
+  `MAX_PREFETCHED_CHILDREN` (64) children. This scan only chooses what to
+  prefetch; the machine still validates the IR and decides every load.
 - `allow(url)` is asked once per distinct URL (an http(s) URL in its
   canonical form), synchronously, before any `resolve`. Only a result of exactly `true`
   admits the URL; anything else, or a throw, denies it. `resolve(url)` (a
@@ -436,8 +463,10 @@ origin cannot take a load outside the allowlist.
   it (see [Async sessions](#async-sessions)). Otherwise it is
   `unavailable` with detail `UNSUPPORTED.dynamicUrl`
   (`dynamic-url-unavailable`), which the machine raises as
-  `error.execution`. URLs inside an invoked child document are known only
-  once the child is compiled, so they are treated the same way.
+  `error.execution`. URLs of an invoked child beyond the prefetch (one the
+  page's `compileInvocation` compiles, one named at run time, or one past
+  `MAX_PREFETCHED_CHILDREN`) are known only once the child is compiled, so
+  they are treated the same way.
 - Each resolution is one `capability` host operation. URLs are never
   telemetry attributes.
 
@@ -452,7 +481,9 @@ from it inside the call, exactly as the Wasmtime host answers it from its
 compiler component:
 
 - the request is the Wasmtime host's: lowered IR, schema policy off,
-  runtime script resolution;
+  runtime script resolution, and the `eventSchemas` of the page's answer
+  for an `<invoke src>` document (none for inline `<content>`; see
+  [URL resources](#url-resources));
 - a child the compiler rejects (diagnostics, or `invalid-request`) is
   `invalid-input`, which fails the invocation with error.execution in the
   parent (SCXML 6.4); any other compiler failure fails the session, with
@@ -463,15 +494,17 @@ compiler component:
   [Fuel](#fuel)) and capped by `invoke.fuel` (default
   `DEFAULT_COMPILE_FUEL`); the host caps no source size, so only the
   compiler component's own bounds reject a large child;
-- outcomes are cached per session by the exact `(sourceName, source)`
-  pair (at most 64 entries and 32 MiB, oldest evicted first), so invoking
-  the same child again compiles nothing;
+- outcomes are cached per session by the exact `(sourceName, source,
+  eventSchemas)` request (at most 64 entries and 32 MiB, oldest evicted
+  first), so invoking the same child again compiles nothing;
 - pre-warm: before `start`, `createSession` compiles every child the root
   IR fixes statically (an SCXML-typed `<invoke>` with inline `<content>`
   and no `src`, `srcexpr`, `typeexpr`, or content `expr`), rebuilding the
   exact source the machine will request, so the first invocation is a
-  cache hit. This is the only IR the host reads, and only as a hint: the
-  machine still validates the IR and decides every invocation.
+  cache hit; with `resources`, the `<invoke src>` documents the prefetch
+  resolved are compiled to the same cache. This is the only IR the host
+  reads, and only as a hint: the machine still validates the IR and
+  decides every invocation.
 
 A page may still pass `capabilities.compileInvocation`, a synchronous
 provider of pre-lowered child IR (see `CapabilityProviders`); it overrides

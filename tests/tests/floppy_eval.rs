@@ -18,7 +18,7 @@
 //! `path`), and runs the scenario's sessions one after another on one
 //! memory directory, one behaviors directory and one media directory
 //! (`<out>/media`, granted to the speech, generate and vision services,
-//! and moved to `<out>/media-<session>` when the session ends), so a later
+//! and copied to `<out>/media-<session>` when the session ends), so a later
 //! session is the bot restarted with what it learned. The environment
 //! passes the bot the scenario's `params` (`{name: expr}`) beside its
 //! model. A session's steps are:
@@ -503,6 +503,18 @@ fn show(run: &mut Run, spec: &Json, media: &Path, name: &str) -> Done {
     }
 }
 
+/// Copies the files directly in `from` into `to`, created.
+fn copy_files(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).expect("the copy's directory is creatable");
+    for entry in std::fs::read_dir(from).expect("the media directory is readable") {
+        let path = entry.expect("a media entry is readable").path();
+        if path.is_file() {
+            let name = path.file_name().expect("a media file has a name");
+            std::fs::copy(&path, to.join(name)).expect("a media file is copyable");
+        }
+    }
+}
+
 /// Runs one job of the plan.
 fn run_job(job: &Json, clock: Instant) {
     let id = job["id"].as_str().expect("a job has an id");
@@ -582,10 +594,10 @@ fn run_job(job: &Json, clock: Instant) {
         )
         .expect("the records are writable");
         // A restarted floppy numbers its utterances from 1 again: each
-        // session's sounds are kept apart for the grade to hear.
-        std::fs::rename(&media, out.join(format!("media-{session}")))
-            .expect("the session's media directory is movable");
-        std::fs::create_dir_all(&media).expect("the media directory is creatable");
+        // session's sounds are copied apart for the grade to hear, and the
+        // media directory stays, as a restarted bot's disk does, so what an
+        // earlier session showed it is still there.
+        copy_files(&media, &out.join(format!("media-{session}")));
     }
     std::fs::write(
         out.join("steps.json"),

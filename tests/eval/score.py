@@ -378,7 +378,10 @@ def summary(scenario, job, limit=600):
             lines.append(f"{head} {spec.get('source', 'gabe')} says: {spec['say']!r}")
         elif step["kind"] == "hear":
             # `who` names the person when the source is a shared microphone.
-            lines.append(f"{head} {spec.get('who', spec.get('source', 'gabe'))} says out loud: {spec['hear']!r}")
+            # How the person was told to say it (the speech API's
+            # `instructions`) is heard by the judges too, as a person would.
+            said = f" ({spec['instructions']})" if spec.get("instructions") else ""
+            lines.append(f"{head} {spec.get('who', spec.get('source', 'gabe'))} says out loud{said}: {spec['hear']!r}")
         elif step["kind"] == "show":
             lines.append(f"{head} {spec.get('source', 'camera')} shows floppy an image: {spec.get('describe', 'an image')}")
         else:

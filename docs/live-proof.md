@@ -7,6 +7,110 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-26, floppy remembers what it saw (D252), model `sparks/qwen3.8-flash-next`
+
+`eval.py run` with the same setup as D250's climb below, on main with the
+memory branch (D251) merged in. The four new `seeing_recall_*` scenarios
+show an image, follow it with unrelated talk (and, in two of them, a
+restart), and only then ask about the image. With them added, the seeded
+split (`--seed 7`, `--test-share 0.34`) holds out `seeing_nametag`,
+`seeing_recall_nametag` and `seeing_recall_shape`. Only train was looked at
+while changing the bot. The baseline overlays reflection's document from
+before D252, so episodes keep no images. Every run used two repeats.
+Results are in the project's `floppy-eval/seeing/`.
+
+| Run | Bot | Split | Score |
+| --- | --- | --- | --- |
+| recall-train-baseline | before D252 | train | 0.760 (recalled only when floppy had happened to say aloud what it saw) |
+| recall-train1 | episodes keep images | train | 0.040 (the recalled-episode schema refused the new field, so every later turn failed) |
+| recall-train2 | and the schemas declare it | train | 0.500 (the driver moved the media directory at the restart, so the recalled reference was unreadable) |
+| recall-train3 | and the driver keeps the media directory across a restart, as a bot's disk does | train | 0.995 ± 0.010 |
+| recall-test-baseline | before D252 | test | 0.687 ± 0.389 (`seeing_recall_nametag` 0.04 and 0.08) |
+| recall-test1 | as recall-train3 | test | **0.987 ± 0.019** |
+
+## 2026-10-26, floppy hears the tone of a voice (D247), model `sparks/qwen3.8-flash-next`
+
+`eval.py run --scenario emotion` on `claude/project-thread-7d33ln` (the
+voice branch plus emotion), from a cloud session: the bot on
+`sparks/qwen3.8-flash-next` through the CPA relay, the decision service on
+the TypeSafe relay, speech, voice and emotion on one relay to
+`https://api.willen.dev` (emotion at `/emotion/v1`), each heard step
+synthesized with its `instructions` (seed 42), the judges
+`gabe-codex-0/gpt-6.1-sol` and `gemini-4-argon`.
+
+| Run | Branch state | Jobs | Emotion |
+| --- | --- | --- | --- |
+| `eval-base` | the tone on the speech product only (`0be3f825`) | 5 | 0.434 ± 0.302 |
+| `eval-parent` | the speech as the turn's `parent` (`485709eb`) | 5 | 0.498 ± 0.173 |
+| `eval-r3` | the same, merged with the voice branch (`4dc163c7`) | 15 | 0.598 ± 0.124 |
+
+Every job logged `listening.affect heard ...`: emotion2vec heard sad
+(0.98 to 1.00) and happy (0.99 to 1.00) as the voices were asked to sound,
+but heard the angry voice as happy (0.83), so `emotion_angry` measures the
+synthesis and classifier more than floppy. In `eval-base` the tone was heard
+and never reached the model: the speech-heard seed admitted the words
+without their speech, so floppy asked "how did it go?" of a crying voice.
+With the speech as the turn's parent the model reads it ("Hey, Gabe. You
+sound sad about that. Do you want to talk about it?"); `emotion.second`
+(the heartbroken repeat) went from 0.00 to 0.92. What is left is
+mostly the first, joyful turn of `emotion_contrast` (0.30), which the
+decision service ignored as ambient.
+
+Two of the five scenarios then measured the eval more than floppy. The
+speech API's synthesis varies call to call (seed 42 notwithstanding), and the
+eval caches a step's first clip: `emotion_angry`'s clip in `canvas` came out
+happy (emotion2vec 0.83), and `emotion_contrast`'s heartbroken repeat neutral
+(0.90). Both now speak in `storyteller`, which a sweep heard as asked (angry 4
+of 5, sad and happy 4 of 4), and their diagnostics name the tone expected
+(`^heard angry `). Two scenarios never address floppy ("The delivery came again
+today."); with them opening "Floppy," / "Hey Floppy," for a run (`eval-r3c`),
+the rest of this paragraph's numbers are of that wording, which the
+maintainer turned down ("Hey floppy?"): the scenarios keep their ambient
+wording, and floppy must hear it. Ambient (`eval-amb`, 3 repeats each):
+`emotion_contrast` 0.62, the joyful first turn ignored by the decision
+service every time (`bot.ability.cognition.ignore`, confidence 56 to 61) and
+the heartbroken repeat answered every time; `emotion_angry` 0.00, never a
+turn at all: silero VAD finds no voice in the shouted `storyteller` clip
+(`{"segments":[]}` on every try), so the sound is dropped as voiceless. The `says` checks also took "Oh nice!" and "you sound down" for
+misses; their patterns gained `nice`, `wow`, `tell me everything`, `so glad`,
+`that's great`, `down` and `I'm here`. On main `b35ad413` with these
+scenarios, `eval-r3c` (15 jobs): emotion **0.864 ± 0.104**, angry 0.99,
+contrast 0.95, sad 0.84, tonight 0.99, happy 0.55. What is left is
+`emotion_happy`: floppy hears the joy ("You're beaming") and still asks what
+the letter said before celebrating.
+
+A hill climb of `abilities/reasoning/reasoning.scx#instructions` (`climb1`,
+3 generations of 2 candidates, train `emotion_contrast`, `emotion_happy`,
+`emotion_sad`, held out `emotion_angry`, `emotion_tonight`, the seeded
+split) raised train from 0.490 to 0.877 while the held-out test went from
+0.860 to 0.490 (single runs): the prompt fit its own scenarios and was not
+adopted; the instructions stay empty.
+
+## 2026-10-25, memory hill climb (D251), model `sparks/qwen3.8-flash-next`
+
+`eval.py run` on the memory scenarios, split as `climb` splits them
+(seed 7, test share 0.34): train `recall_many`, `recall_people`,
+`recall_restart`; held-out test `people_overheard`, `recall_update`. Two
+repeats each, from a cloud session through the relays of docs/eval.md,
+judges `gabe-codex-0/gpt-6.1-sol` and `gemini-4-argon`. The baseline is
+the same tree with D251's documents overlaid by their earlier versions
+(`--overlay`). The held-out set was run once, on the change.
+
+| Run | Train | Held-out test |
+| --- | --- | --- |
+| baseline | 0.38 (recall_many 0.07, recall_people 1.00, recall_restart 0.07) | 0.23 (people_overheard 0.46, recall_update 0.00) |
+| D251 | 0.86 (recall_many 0.99, recall_people 0.58, recall_restart 1.00) | 0.81 (people_overheard 0.72, recall_update 0.91) |
+
+Read before trusting: recall_people's two misses are not memory's. In
+one, reasoning ran past its 240 s bound on the backend; in the other,
+floppy adopted "floppy" as its name and answered each question twice (a
+conversation turn and an addressed turn), so the eval read the answers a
+step late. people_overheard-r0 answered both questions right ("A blue
+teapot", "a marathon"), the first a step late after answering the side
+talk (#96). recall_update-r0 said "tacos now, right? Not sushi", which
+the `not_says` sushi check counts against it. Intervals are wide (±0.18
+on train, ±0.20 on test, 6 and 4 jobs).
+
 ## 2026-10-25, seeing hill climb (D250), model `sparks/qwen3.8-flash-next`
 
 `eval.py run` on the seeing scenarios from a cloud session, the bot on

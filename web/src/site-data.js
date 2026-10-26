@@ -45,6 +45,21 @@ const P=[
   <param name="choices" expr="choices"/>
   <param name="threshold" expr="threshold"/>
 </invoke>`},
+ {id:'files',kind:'service',uri:GH+'services/files',ver:'0.1.0',
+  sum:'Reads and writes documents in one granted directory: the builder writes each draft through it, and reflection reads a stored behavior back.',
+  params:[],events:[],env:[],origins:[],grant:'--dir …/services/files=HOST::/behaviors',
+  snip:`<invoke id="write" type="${GH}services/files">
+  <param name="operation" expr="'write'"/>
+</invoke>`},
+ {id:'vision',kind:'service',uri:GH+'services/vision',ver:'0.1.0',
+  sum:'Measures how much a view changed since the last one handed on: byte identity or a blurred grayscale frame difference.',
+  params:[],events:[],env:[],origins:[],grant:'--dir …/services/vision=$PWD/media::/media',
+  snip:`<invoke id="measure" type="${GH}services/vision">
+  <param name="measure" expr="'frame_diff'"/>
+</invoke>`},
+ {id:'device',kind:'namespace',prefix:'device',uri:GH+'namespaces/device',ver:'0.1.0',
+  sum:'A bot\u2019s synchronous read of a device it holds: another session of the run, read through its snapshot. Never sends, does no I/O.',
+  elements:[]},
  {id:'decision',kind:'namespace',prefix:'decision',uri:GH+'namespaces/decision',ver:'0.1.0',
   sum:'The synchronous half of a decision: reads the choices a state offers, or a child\u2019s live session offers, and pins one property of them.',
   elements:['choice','offers','pin'],artifact:'floppy_decision.virtualized.wasm',wit:'stateforward:scxml/executable-content-extension 0.2.0',
@@ -89,7 +104,6 @@ const P=[
 const EL=[
  ['decision','choice','location events',4,'Offers events as enabled transitions the turn can select.'],
  ['decision','offers','location target undeclared?',1,'Reads what a child\u2019s live session offers: its enabled transitions its offerable data declares.'],
- ['decision','pin','location event property values',1,'Pins an event property to an enum of allowed values.'],
  ['processing','model_facing_schema','location bound? overlocation?',4,'The model-facing choices: no $schema, title or examples, and over the bound no descriptions.'],
  ['processing','collect_offered_events','location choices offers? devices? focus? bound? overlocation? sizelocation?',1,'The turn\u2019s choices, each tagged with its offering session\u2019s id.'],
  ['processing','send','location choices max?',2,'The dispatch tool schema of the choices.'],
@@ -120,10 +134,37 @@ const EL=[
  ['behavior','verify_apply','location done turn input targets error?',1,'The check of a turn behavior\u2019s run on its live turn (E0008).'],
  ['autonomy','behavior_input_payload','location stimulus focus focus_candidates',2,'The input a learned behavior runs with.'],
  ['migration','plan','location revisions current target?',1,'Orders migration steps from current to target.'],
+ ['conversation','people_for_input','',1,'The input with each voice replaced by its person, and the people and voices to store.'],
+ ['conversation','fold_voices','',1,'A person\u2019s representative voice with more voices folded in.'],
+ ['conversation','people_to_merge','',1,'The two people to merge first, and their merged representative.'],
+ ['conversation','merged_context_refs','',1,'The relationship references that change when one person is merged into another.'],
+ ['cognition','within_ceiling','',1,'The choices within a tier\u2019s effort ceiling, and the actions it holds.'],
+ ['cognition','model_facing_data','',1,'Data as model-facing XML under one root element.'],
+ ['memory','cut_at_word','',1,'Words within 2048 UTF-8 bytes, cut at a whole word.'],
+ ['memory','stm_projection','',1,'The bounded scalar projection of a stimulus\u2019s data.'],
+ ['device','snapshot','',1,'Reads a session the bot holds: its states, data model and the events it accepts.'],
  ['scx','validate','',1,'Validates a document from inside a machine.'],
 ].map(([ns,n,attrs,uses,sum])=>({id:ns+':'+n,kind:'element',ns,n,attrs:attrs?attrs.split(' '):[],uses,sum,
   uri:(ns==='scx'?SX:GH+'namespaces/')+ns+'#'+n,ver:ns==='scx'?'built in':'0.1.0',
   snip:`<scxml xmlns:${ns}="${ns==='scx'?SX+'scx':GH+'namespaces/'+ns}" …>
   …
   <${ns}:${n}${attrs?' '+attrs.split(' ').filter(a=>!a.endsWith('?')).slice(0,3).map(a=>a+'="…"').join(' '):''}/>`}));
+/* The facts (versions, artifacts, worlds, env slots, origins, elements and
+   their attributes, and who uses what) are read from the repository at build
+   time (register.py); the prose above stays. */
+const FACTS=/*FACTS*/;
+for (const f of [...FACTS.services.map(x => ({...x, kind:'service'})), ...FACTS.namespaces.map(x => ({...x, kind:'namespace'}))]) {
+  let p = P.find(x => x.kind === f.kind && x.id === f.id);
+  if (!p) { p = {id:f.id, kind:f.kind, prefix:f.id, sum:'', params:[], events:[], grant:'none'}; P.push(p); }
+  Object.assign(p, {uri:f.uri, ver:f.ver, artifact:f.artifact, wit:f.wit, used:f.used}, f.kind === 'service' ? {env:f.env, origins:f.origins} : {elements:f.elements.map(e => e.n)});
+  if (f.kind === 'namespace') for (const e of f.elements) {
+    const el = EL.find(x => x.ns === f.id && x.n === e.n);
+    if (el) Object.assign(el, {attrs:e.attrs, uses:e.uses});
+    else EL.push({id:f.id+':'+e.n, kind:'element', ns:f.id, n:e.n, attrs:e.attrs, uses:e.uses, sum:'', uri:GH+'namespaces/'+f.id+'#'+e.n, ver:f.ver});
+  }
+}
+for (let i = EL.length - 1; i >= 0; i--) { const f = FACTS.namespaces.find(x => x.id === EL[i].ns); if (f && !f.elements.some(e => e.n === EL[i].n)) EL.splice(i, 1); }
+for (const el of EL) if (el.ns !== 'scx') el.snip = `<scxml xmlns:${el.ns}="${GH}namespaces/${el.ns}" …>
+  …
+  <${el.ns}:${el.n}${el.attrs.length ? ' ' + el.attrs.filter(a => !a.endsWith('?')).slice(0, 3).map(a => a + '="…"').join(' ') : ''}/>`;
 const ALL=[...P.filter(p=>p.kind==='service'),...P.filter(p=>p.kind==='namespace'),...EL];

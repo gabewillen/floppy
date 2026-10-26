@@ -324,6 +324,14 @@ fn answered(
     record: &mut Json,
 ) -> Option<(&'static str, Json)> {
     let ok = "200 OK";
+    if let Some(rate) = path.strip_prefix("/v1/emotion?sample_rate=") {
+        record["sample_rate"] = json!(rate);
+        record["heard"] = json!(spelled(&samples_of(body).0));
+        return Some((
+            ok,
+            json!({"label": "neutral", "scores": {"neutral": 1.0}, "valence": 0.0, "confidence": 1.0}),
+        ));
+    }
     match path {
         "/v1/vad" => {
             let request: Json = serde_json::from_slice(body).unwrap_or(Json::Null);
@@ -499,7 +507,7 @@ pub fn granted(test: &str, backend: &Backend, files: &[(&str, Vec<u8>)]) -> Gran
     std::fs::write(
         &env,
         format!(
-            "FLOPPY_SPEECH_API_KEY={FAKE_KEY}\nFLOPPY_SPEECH_BASE_URL={url}\nFLOPPY_VOICE_API_KEY={FAKE_KEY}\nFLOPPY_VOICE_BASE_URL={url}\n",
+            "FLOPPY_SPEECH_API_KEY={FAKE_KEY}\nFLOPPY_SPEECH_BASE_URL={url}\nFLOPPY_VOICE_API_KEY={FAKE_KEY}\nFLOPPY_VOICE_BASE_URL={url}\nFLOPPY_EMOTION_API_KEY={FAKE_KEY}\nFLOPPY_EMOTION_BASE_URL={url}\n",
             url = backend.base_url
         ),
     )

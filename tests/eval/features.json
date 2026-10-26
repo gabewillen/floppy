@@ -469,11 +469,26 @@
   {
    "name": "emotion",
    "title": "Emotion",
-   "what": "Hears the emotion in a voice.",
-   "status": "not built: api.willen.dev serves /emotion/v1/emotion, which no floppy ability calls (D244)",
-   "parts": [],
-   "evidence": [],
-   "tests": []
+   "what": "Hears the emotion in a voice: the tone of decoded speech (emotion2vec+ affect) reaches the model with the words.",
+   "parts": [
+    "abilities/interpretation",
+    "abilities/voice_affect",
+    "services/speech"
+   ],
+   "evidence": [
+    {
+     "label": "listening.affect",
+     "pattern": "^heard "
+    },
+    {
+     "label": "listening.affect",
+     "pattern": "^failed",
+     "absent": true
+    }
+   ],
+   "tests": [
+    "speech_service"
+   ]
   },
   {
    "name": "voiceprints",

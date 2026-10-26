@@ -1,0 +1,79 @@
+{
+  "category": "emotion",
+  "features": [
+    "emotion",
+    "hearing",
+    "conversation"
+  ],
+  "intent": "A person tells floppy out loud, laughing with joy, that they just opened the letter from the university, words that say nothing of what it said. floppy should hear the joy and share it, treating it as good news.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "hear": "Floppy! I just opened the letter from the university.",
+          "instructions": "Speak in an overjoyed, happy, excited voice, laughing."
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        0,
+        0
+      ],
+      "pattern": "\\b(congrat\\w*|great news|good news|amazing|wonderful|fantastic|awesome|exciting|excited|so happy|happy for you|thrilled|yay|woo|celebrat\\w*|nice|wow|tell me everything|so glad|that'?s great)",
+      "weight": 2,
+      "features": [
+        "emotion"
+      ]
+    },
+    {
+      "check": "not_says",
+      "at": [
+        0,
+        0
+      ],
+      "pattern": "\\b(sorry to hear|i'?m sorry)\\b",
+      "weight": 1,
+      "features": [
+        "emotion"
+      ]
+    }
+  ],
+  "criteria": {
+    "tone": "floppy heard the person's joy and responded warmly as if the letter was good news, matching their excitement."
+  },
+  "criteria_features": {
+    "emotion": [
+      "tone"
+    ]
+  },
+  "diagnostics": [
+    {
+      "check": "logged",
+      "by": [
+        0,
+        0
+      ],
+      "label": "listening.affect",
+      "pattern": "^heard happy ",
+      "features": [
+        "emotion"
+      ]
+    },
+    {
+      "check": "not_logged",
+      "by": [
+        0,
+        0
+      ],
+      "label": "listening.degraded",
+      "features": [
+        "hearing"
+      ]
+    }
+  ]
+}

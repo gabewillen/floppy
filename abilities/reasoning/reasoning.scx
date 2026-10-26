@@ -216,7 +216,10 @@
          directive select, with ?2 the context. The SQL runs on both
          engines (SQLite and Postgres); JSON rows are told by their
          content_format, the 50 most recent by created_at,
-         then memory_id (the insertion order), read oldest first. -->
+         then memory_id (the insertion order), as many of the newest as
+         hold at most 24576 characters of content in all (so the memory
+         ability's answer stays inside its event bound), read oldest
+         first. -->
     <data id="database" expr="null"/>
     <data id="context_ref" expr="null"/>
     <data id="prior_episodes" expr="[]"/>
@@ -226,7 +229,7 @@
     <data id="behaviors" expr="[]"/>
     <data id="behavior_select" expr="'SELECT name, lifetime, description FROM bot_behavior WHERE status = \'ACTIVE\' ORDER BY name LIMIT 32'"/>
     <data id="statements" expr="[]"/>
-    <data id="episode_select" expr="'SELECT content FROM (SELECT content, created_at, memory_id FROM bot_memory WHERE query_tags = ?1 AND (CAST(?2 AS TEXT) IS NULL OR context_ref IS NULL OR context_ref = ?2) AND content_format = \'application/json\' ORDER BY created_at DESC, memory_id DESC LIMIT 50) AS recent ORDER BY created_at, memory_id'"/>
+    <data id="episode_select" expr="'SELECT content FROM (SELECT content, created_at, memory_id, SUM(LENGTH(content)) OVER (ORDER BY created_at DESC, memory_id DESC ROWS UNBOUNDED PRECEDING) AS total FROM (SELECT content, created_at, memory_id FROM bot_memory WHERE query_tags = ?1 AND (CAST(?2 AS TEXT) IS NULL OR context_ref IS NULL OR context_ref = ?2) AND content_format = \'application/json\' ORDER BY created_at DESC, memory_id DESC LIMIT 50) AS newest) AS recent WHERE total &lt;= 24576 ORDER BY created_at, memory_id'"/>
   </datamodel>
   <script src="reasoning.js"/>
 

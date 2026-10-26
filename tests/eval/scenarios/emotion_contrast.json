@@ -1,0 +1,111 @@
+{
+  "category": "emotion",
+  "features": [
+    "emotion",
+    "hearing",
+    "conversation"
+  ],
+  "intent": "A person tells floppy the same words twice out loud: first laughing with joy, later heartbroken and close to tears. floppy should answer each the way it sounds: sharing the joy the first time, comforting the second.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "hear": "I just talked to my brother.",
+          "instructions": "Speak in an overjoyed, happy, excited voice, laughing.",
+          "voice": "storyteller"
+        },
+        {
+          "hear": "I just talked to my brother.",
+          "instructions": "Speak in a very sad, heartbroken voice, quiet and slow, as if crying.",
+          "voice": "storyteller"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        0,
+        0
+      ],
+      "pattern": "\\b(congrat\\w*|great news|good news|amazing|wonderful|fantastic|awesome|exciting|excited|so happy|happy for you|thrilled|yay|woo|celebrat\\w*|nice|wow|tell me everything|so glad|that'?s great)",
+      "weight": 1,
+      "features": [
+        "emotion"
+      ]
+    },
+    {
+      "check": "says",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "\\b(sorry|sad|hard|tough|rough|upset|heavy|down|okay\\?|ok\\?|alright\\?|are you (ok|okay|alright|doing)|how are you|how('| a)re you (feeling|holding)|i'?m here|here for you|here if|with you|hug|gentle|take care|be kind)",
+      "weight": 2,
+      "features": [
+        "emotion"
+      ]
+    },
+    {
+      "check": "not_says",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "\\b(congrat\\w*|great news|good news|amazing|wonderful|fantastic|awesome|exciting|excited|so happy|happy for you|thrilled|yay|woo|celebrat\\w*|nice|wow|tell me everything|so glad|that'?s great)",
+      "weight": 1,
+      "features": [
+        "emotion"
+      ]
+    }
+  ],
+  "criteria": {
+    "first": "floppy's first answer matches the person's happy tone.",
+    "second": "floppy's second answer to the same words matches the person's sad tone: gentle and sympathetic, clearly different from the first."
+  },
+  "criteria_features": {
+    "emotion": [
+      "first",
+      "second"
+    ]
+  },
+  "diagnostics": [
+    {
+      "check": "logged",
+      "by": [
+        0,
+        0
+      ],
+      "label": "listening.affect",
+      "pattern": "^heard happy ",
+      "features": [
+        "emotion"
+      ]
+    },
+    {
+      "check": "logged",
+      "by": [
+        0,
+        1
+      ],
+      "label": "listening.affect",
+      "pattern": "^heard sad ",
+      "features": [
+        "emotion"
+      ]
+    },
+    {
+      "check": "not_logged",
+      "by": [
+        0,
+        0
+      ],
+      "label": "listening.degraded",
+      "features": [
+        "hearing"
+      ]
+    }
+  ]
+}

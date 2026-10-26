@@ -18,6 +18,7 @@
 {"label":"conversation","parent":"session.floppy.communication","session":"session.floppy.communication.conversation","text":"outbound 0","type":"log"}
 {"label":"communication.exchange","parent":"session.floppy","session":"session.floppy.communication","text":"1","type":"log"}
 {"label":"interpretation.unidentified","parent":"session.floppy.listening","session":"session.floppy.listening.interpretation","text":"the bot's own voice could not be detected: Voice detection failed: the backend is not configured.","type":"log"}
+{"label":"stm.turn.recorded","parent":"session.floppy","session":"session.floppy.stm","text":"said cut=false","type":"log"}
 {"label":"cognition.stage","parent":"session.floppy","session":"session.floppy.cognition","text":"reasoning handled","type":"log"}
 {"label":"floppy.output","parent":"session","session":"session.floppy","text":"{\"turn\":1,\"output\":[{\"data\":{\"parts\":[{\"words\":\"Let me think.\"}]},\"event\":\"bot.ability.communication.respond\",\"reason\":\"hold on\",\"target\":\"session.floppy.communication\"},{\"data\":{\"parts\":[{\"words\":\"Hi! I am floppy.\"}]},\"event\":\"bot.ability.communication.respond\",\"reason\":\"greet\",\"target\":\"session.floppy.communication\"}]}","type":"log"}
 {"label":"bot.processing.completed","session":"session","text":"{\"focus_candidates\":[],\"output\":[{\"data\":{\"parts\":[{\"words\":\"Let me think.\"}]},\"event\":\"bot.ability.communication.respond\",\"reason\":\"hold on\",\"target\":\"session.floppy.communication\"},{\"data\":{\"parts\":[{\"words\":\"Hi! I am floppy.\"}]},\"event\":\"bot.ability.communication.respond\",\"reason\":\"greet\",\"target\":\"session.floppy.communication\"}],\"turn\":1}","type":"log"}
@@ -29,6 +30,7 @@
 {"label":"conversation","parent":"session.floppy.communication","session":"session.floppy.communication.conversation","text":"outbound 1","type":"log"}
 {"label":"communication.exchange","parent":"session.floppy","session":"session.floppy.communication","text":"2","type":"log"}
 {"label":"interpretation.unidentified","parent":"session.floppy.listening","session":"session.floppy.listening.interpretation","text":"the bot's own voice could not be detected: Voice detection failed: the backend is not configured.","type":"log"}
+{"label":"stm.turn.recorded","parent":"session.floppy","session":"session.floppy.stm","text":"said cut=false","type":"log"}
 {"label":"reflection.selected","parent":"session.floppy.cognition","session":"session.floppy.cognition.reflection","text":"none","type":"log"}
 {"label":"reflection.stored","parent":"session.floppy.cognition","session":"session.floppy.cognition.reflection","text":"turn 1","type":"log"}
 {"label":"bot.ability.reflection.output","parent":"session.floppy","session":"session.floppy.cognition","text":"turn 1","type":"log"}

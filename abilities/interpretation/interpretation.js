@@ -350,8 +350,8 @@ function embeddingCountFailure() {
 
 // DecodingSpeech
 
-function decodingCompletion(_event) {
-  return ({kind: 'decoding', sensed: open_sensed || detection.sensed, voice_detection: detection.voice_detection, text: _event.data.text,
+function decodingCompletion() {
+  return ({kind: 'decoding', sensed: open_sensed || detection.sensed, voice_detection: detection.voice_detection, text: result.text,
     segments: isDiarization() ? completion.segments : []});
 }
 
@@ -361,9 +361,32 @@ function isDiarization() {
   return completion !== null && completion.kind === 'diarization';
 }
 
+// The words decoded and the tone heard (or not asked for).
+function isDecoded() {
+  return result !== null && !classifying;
+}
+
 // Decoded words whose diarized voices are identified next.
-function identifiesDecoded(_event) {
-  return hasText(_event) && voice_classifier && In('Diarized') && completion.segments.length > 0;
+function identifiesDecoded() {
+  return isDecoded() && voice_classifier && In('Diarized') && completion.segments.length > 0;
+}
+
+// The voices whose tone is heard (mosfet.py's tone): the diarized
+// segments, else the whole utterance; none without an affect classifier.
+function affectSegments() {
+  if (!affect_classifier) {
+    return [];
+  }
+  if (In('Diarized') && completion !== null && Array.isArray(completion.segments)) {
+    return completion.segments;
+  }
+  return [{audio: utterance.audio, media_type: utterance.media_type, sample_rate_hz: utterance.sample_rate_hz, channels: utterance.channels}];
+}
+
+// The tone voice_affect heard, or null.
+function heardAffect(_event) {
+  var heard = Object(_event.data).affect;
+  return heard !== null && typeof Object(heard).label === 'string' ? heard : null;
 }
 
 // The diarized segments embedded for decoded speech: those of at least
@@ -400,7 +423,11 @@ function isDecoding() {
 // Decoding rewrites the observation: it becomes words, with the voices
 // heard that are not the bot's own as its source_ids.
 function decodedProduct() {
-  return speechProduct(completion.text, 'text/plain', completion.sensed, completion.voice_detection, otherVoices());
+  var product = speechProduct(completion.text, 'text/plain', completion.sensed, completion.voice_detection, otherVoices());
+  if (affect !== null) {
+    product.affect = affect;
+  }
+  return product;
 }
 
 // The identified voices of decoded speech.

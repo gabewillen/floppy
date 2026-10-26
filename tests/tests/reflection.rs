@@ -573,6 +573,7 @@ fn unapplied_episode() -> Json {
         "focus": "door",
         "focus_candidates": ["door"],
         "stimulus_name": "environment.sound",
+        "heard": [],
         "output": input(1)["cognition_output"],
         "behavior": null,
     })
@@ -616,6 +617,73 @@ fn an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it() {
 fn postgres_an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it() {
     let server = support::Pglite::start().expect("FLOPPY_PGLITE_SERVER is set");
     an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it_on(&server.database());
+}
+
+/// An episode keeps the words its stimulus carried (mosfet.py's
+/// `EpisodeData.heard`), each message of a text type's content once and in
+/// order, whatever else the stimulus holds (#85), so a later turn recalls
+/// what was said even when the bot said nothing back.
+#[test]
+fn a_turns_episode_keeps_the_words_its_stimulus_carried() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "none", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let message = |content: &str, content_type: &str| json!({"direction": "inbound", "content": content, "content_type": content_type, "participants": [{"ref": "gabe", "role": "source"}]});
+    let mut turn = input(1);
+    turn["cognition_input"]["stimulus"] = json!({
+        "event": "bot.perceived",
+        "data": {"percepts": [
+            {"stimulus": {"event": "bot.ability.conversation.output", "data": {"messages": [
+                message("My dog's name is Rufus.", "text/plain"),
+                message("{\"a\":1}", "application/json"),
+            ]}}},
+            {"stimulus": {"event": "bot.ability.conversation.output", "data": {"messages": [
+                message("  My dog's name is Rufus.  ", "text/plain"),
+                message("And my favorite color is green.", "text/plain"),
+                message("   ", "text/plain"),
+            ]}}},
+        ]},
+    });
+    turn["cognition_output"] =
+        json!([{"event": "bot.ability.cognition.ignore", "data": {}, "target": "cognition"}]);
+    let records = reflect_on(&mut run, &turn);
+    drop(run.close(WAIT));
+    let episodes = json_log(&records, "episodes");
+    assert_eq!(
+        episodes[0]["content"]["heard"],
+        json!(["My dog's name is Rufus.", "And my favorite color is green."])
+    );
+}
+
+/// An episode keeps the images its stimulus carried (decision D252), each
+/// once and in order, so a later turn recalls what floppy saw.
+#[test]
+fn a_turns_episode_keeps_the_images_its_stimulus_carried() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "none", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let view = |image: &str, media_type: &Json| json!({"image": image, "media_type": media_type, "kind": "camera"});
+    let mut turn = input(1);
+    turn["cognition_input"]["stimulus"] = json!({
+        "event": "bot.perceived",
+        "data": {"percepts": [
+            {"stimulus": {"event": "environment.visual", "data": {"image": "media/a.png", "media_type": "image/png", "source": "camera"}}},
+            {"stimulus": {"event": "bot.ability.seeing.sight", "data": {"cause": "look", "views": [
+                view("media/a.png", &json!("image/png")),
+                view("media/b.jpg", &Json::Null),
+            ]}}},
+        ]},
+    });
+    turn["cognition_output"] =
+        json!([{"event": "bot.ability.cognition.ignore", "data": {}, "target": "cognition"}]);
+    let records = reflect_on(&mut run, &turn);
+    drop(run.close(WAIT));
+    let episodes = json_log(&records, "episodes");
+    // Each image once, as its reference and media type.
+    assert_eq!(
+        episodes[0]["content"]["images"],
+        json!([{"image": "media/a.png", "media_type": "image/png"}, {"image": "media/b.jpg", "media_type": null}])
+    );
 }
 
 fn an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it_on(database: &str) {

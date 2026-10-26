@@ -1,0 +1,15 @@
+/home/user/floppy/target-main/wasm32-wasip2/release/deps/floppy_autonomy.d: namespaces/autonomy/src/lib.rs /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/scxml.wit /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/clock/clock.wit /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-cli/cli.wit /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-clocks/clocks.wit /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-filesystem/filesystem.wit /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-http/http.wit /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-random/random.wit /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-sockets/sockets.wit
+
+/home/user/floppy/target-main/wasm32-wasip2/release/deps/floppy_autonomy.wasm: namespaces/autonomy/src/lib.rs /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/scxml.wit /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/clock/clock.wit /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-cli/cli.wit /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-clocks/clocks.wit /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-filesystem/filesystem.wit /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-http/http.wit /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-random/random.wit /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-sockets/sockets.wit
+
+/home/user/floppy/target-main/wasm32-wasip2/release/deps/libfloppy_autonomy.rlib: namespaces/autonomy/src/lib.rs /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/scxml.wit /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/clock/clock.wit /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-cli/cli.wit /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-clocks/clocks.wit /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-filesystem/filesystem.wit /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-http/http.wit /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-random/random.wit /tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-sockets/sockets.wit
+
+namespaces/autonomy/src/lib.rs:
+/tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/scxml.wit:
+/tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/clock/clock.wit:
+/tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-cli/cli.wit:
+/tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-clocks/clocks.wit:
+/tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-filesystem/filesystem.wit:
+/tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-http/http.wit:
+/tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-random/random.wit:
+/tmp/claude-0/main-wt/scxml.rs/crates/scxml-wit/wit/scxml/deps/wasi-sockets/sockets.wit:

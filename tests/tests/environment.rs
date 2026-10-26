@@ -643,7 +643,9 @@ fn a_bot_that_runs_stable_after_ms_has_its_attempts_reset() {
     assert_eq!(
         logs(&records)
             .into_iter()
-            .filter(|(label, _)| (label == "supervision.restarted" || label == "supervision.exhausted"))
+            .filter(
+                |(label, _)| label == "supervision.restarted" || label == "supervision.exhausted"
+            )
             .collect::<Vec<_>>(),
         support::labelled(&[
             (
@@ -711,10 +713,9 @@ fn a_degraded_bot_is_restarted_after_a_backoff_until_its_budget_is_spent() {
     assert_eq!(
         logs(&records)
             .into_iter()
-            .filter(
-                |(label, _)| (label == "supervision.restarted" || label == "supervision.exhausted")
-                    || label == "bot.degraded"
-            )
+            .filter(|(label, _)| label == "supervision.restarted"
+                || label == "supervision.exhausted"
+                || label == "bot.degraded")
             .collect::<Vec<_>>(),
         support::labelled(&[
             ("bot.degraded", r#"{"stage":"processing_cancel"}"#),
@@ -728,7 +729,10 @@ fn a_degraded_bot_is_restarted_after_a_backoff_until_its_budget_is_spent() {
                 r#"{"participant":"floppy","attempt":2,"delay_ms":300}"#
             ),
             ("bot.degraded", r#"{"stage":"processing_cancel"}"#),
-            ("supervision.exhausted", r#"{"participant":"floppy","attempts":3}"#),
+            (
+                "supervision.exhausted",
+                r#"{"participant":"floppy","attempts":3}"#
+            ),
         ])
     );
     // A restarted bot is a participant again: host input reached it.
@@ -765,10 +769,9 @@ fn a_bot_whose_activation_fails_is_restarted() {
     assert_eq!(
         logs(&records)
             .into_iter()
-            .filter(
-                |(label, _)| (label == "supervision.restarted" || label == "supervision.exhausted")
-                    || label == "bot.activating.failed"
-            )
+            .filter(|(label, _)| label == "supervision.restarted"
+                || label == "supervision.exhausted"
+                || label == "bot.activating.failed")
             .collect::<Vec<_>>(),
         support::labelled(&[
             ("bot.activating.failed", "{}"),
@@ -777,7 +780,10 @@ fn a_bot_whose_activation_fails_is_restarted() {
                 r#"{"participant":"floppy","attempt":1,"delay_ms":100}"#
             ),
             ("bot.activating.failed", "{}"),
-            ("supervision.exhausted", r#"{"participant":"floppy","attempts":2}"#),
+            (
+                "supervision.exhausted",
+                r#"{"participant":"floppy","attempts":2}"#
+            ),
         ])
     );
 }

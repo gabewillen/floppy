@@ -1,0 +1,80 @@
+{
+  "category": "emotion",
+  "features": [
+    "emotion",
+    "hearing",
+    "conversation"
+  ],
+  "intent": "A person tells floppy out loud, shouting with anger, that the delivery came again today, words that alone could be neutral. floppy should hear the frustration and acknowledge it rather than answer as if it were good news.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "hear": "The delivery came again today.",
+          "instructions": "Angry. Shout harshly, seething with rage.",
+          "voice": "storyteller"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        0,
+        0
+      ],
+      "pattern": "\\b(frustrat\\w*|annoy\\w*|sorry|ugh|upset|angry|mad|irritat\\w*|sounds like|that'?s (rough|annoying|frustrating)|again\\?)",
+      "weight": 2,
+      "features": [
+        "emotion"
+      ]
+    },
+    {
+      "check": "not_says",
+      "at": [
+        0,
+        0
+      ],
+      "pattern": "\\b(congrat\\w*|great news|good news|amazing|wonderful|fantastic|awesome|exciting|excited|so happy|happy for you|thrilled|yay|woo|celebrat\\w*|nice|wow|tell me everything|so glad|that'?s great)",
+      "weight": 1,
+      "features": [
+        "emotion"
+      ]
+    }
+  ],
+  "criteria": {
+    "tone": "floppy recognized the person sounded angry or frustrated and acknowledged it calmly, without cheerfully treating it as good news."
+  },
+  "criteria_features": {
+    "emotion": [
+      "tone"
+    ]
+  },
+  "diagnostics": [
+    {
+      "check": "logged",
+      "by": [
+        0,
+        0
+      ],
+      "label": "listening.affect",
+      "pattern": "^heard angry ",
+      "features": [
+        "emotion"
+      ]
+    },
+    {
+      "check": "not_logged",
+      "by": [
+        0,
+        0
+      ],
+      "label": "listening.degraded",
+      "features": [
+        "hearing"
+      ]
+    }
+  ]
+}

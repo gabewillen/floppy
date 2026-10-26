@@ -9,7 +9,10 @@
 // instance per session, opened before `start` and then called
 // synchronously inside the capability:
 // * the request is the Wasmtime host's: lowered IR, schema policy off,
-//   runtime script resolution;
+//   runtime script resolution, and the `event:schema` files the page's
+//   answer for an `<invoke src>` document carried (`eventSchemas`, as the
+//   Wasmtime embedder's `EmbeddedDocument::event_schemas`; none for inline
+//   `<content>`);
 // * outcomes map as Wasmtime maps them: emitted IR is the child; a report
 //   that rejects the document (diagnostics, no artifact) or the compiler's
 //   `invalid-request` is `rejected`, which the machine turns into
@@ -21,7 +24,8 @@
 //   budget (src/fuel.js), capped per compile by `invoke.fuel`: a compile
 //   inside a machine command spends that command's budget, and a pre-warm
 //   compile is a host call of its own;
-// * results are cached per session by the exact `(sourceName, source)` key,
+// * results are cached per session by the exact `(sourceName, source,
+//   eventSchemas)` key,
 //   at most MAX_CACHED_INVOCATIONS entries and MAX_INVOCATION_CACHE_BYTES
 //   in all (oldest evicted first). Compilation is deterministic, so a hit
 //   is exactly the outcome a fresh compile would give.
@@ -30,13 +34,16 @@
 // the root IR whose child document is known without evaluating anything
 // (SCXML type, no `src`/`srcexpr`, inline `<content>` without `expr`) and
 // rebuilds the exact source the machine will request, so the first
-// invocation is a cache hit. This is the one place the host reads IR, and
+// invocation is a cache hit; with `resources`, the `<invoke src>`
+// documents the prefetch resolved are compiled too (prefetchInvoked,
+// src/resources.js), to the same cache. This is the one place the host reads IR, and
 // only as a hint: a document it cannot read is simply not pre-warmed, and
 // the machine still validates the IR and decides every invocation.
 //
 // Depth: an invoked session invokes in turn, as under Wasmtime, within the
-// session's invoke limits. Only the root's statically known children are
-// pre-warmed; deeper documents compile on first use.
+// session's invoke limits. Only the root's statically known inline
+// children, and the `<invoke src>` documents the prefetch reaches, are
+// pre-warmed; other documents compile on first use.
 
 import { openCompiler } from './compiler.js';
 import { ScxmlCompileError, ScxmlHostError } from './errors.js';
@@ -70,6 +77,22 @@ export function isInvokeOption(value) {
     (value.compile === undefined || INVOKE_COMPILE_MODES.includes(value.compile)) &&
     (value.fuel === undefined || isFuel(value.fuel))
   );
+}
+
+/**
+ * The exact cache key of one compile request: each part length-prefixed,
+ * schema bytes as Latin-1 text, so distinct requests never share a key.
+ */
+function cacheKey(sourceName, source, eventSchemas) {
+  const parts = [sourceName, source];
+  for (const { uri, bytes } of eventSchemas) {
+    let text = '';
+    for (let index = 0; index < bytes.length; index += 0x8000) {
+      text += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+    }
+    parts.push(uri, text);
+  }
+  return parts.map((part) => `${part.length}:${part}`).join('');
 }
 
 /** Whether the UTF-8 length of `text` exceeds `bound` (encoded only when it could). */
@@ -223,23 +246,43 @@ export class InvocationCompiler {
   async prewarm(documents) {
     for (const [sourceName, source] of documents) {
       if (this.#cache.size >= MAX_CACHED_INVOCATIONS) return;
-      if (this.compile(sourceName, source).fault !== undefined) this.#compiler = await this.#open();
+      await this.prewarmOne(sourceName, source);
     }
+  }
+
+  /**
+   * Compiles one pre-warm request (as `prewarm` does) and returns its
+   * outcome.
+   * @param {string} sourceName
+   * @param {string} source
+   * @param {Array<{uri: string, bytes: Uint8Array}>} [eventSchemas]
+   */
+  async prewarmOne(sourceName, source, eventSchemas) {
+    const outcome = this.compile(sourceName, source, eventSchemas);
+    if (outcome.fault !== undefined) this.#compiler = await this.#open();
+    return outcome;
   }
 
   /**
    * The outcome of compiling one child document (see the module comment).
    * @param {string} sourceName
    * @param {string} source
+   * @param {Array<{uri: string, bytes: Uint8Array}>} [eventSchemas] the
+   *   document's schema files
    * @returns {{ir: Uint8Array} | {rejected: true} | {fault: Error}}
    */
-  compile(sourceName, source) {
-    const key = `${sourceName.length}:${sourceName}${source}`;
+  compile(sourceName, source, eventSchemas = []) {
+    const key = cacheKey(sourceName, source, eventSchemas);
     const hit = this.#cache.get(key);
     if (hit !== undefined) return hit.outcome;
     let outcome;
     try {
-      const result = this.#compiler.compile(source, { sourceName, schemaPolicy: 'off', packages: this.#packages });
+      const result = this.#compiler.compile(source, {
+        sourceName,
+        schemaPolicy: 'off',
+        packages: this.#packages,
+        eventSchemas,
+      });
       outcome = result.status === 'emitted' ? { ir: result.ir } : { rejected: true };
     } catch (error) {
       if (error instanceof ScxmlCompileError && error.code === 'invalid-request') {
