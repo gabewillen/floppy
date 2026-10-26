@@ -572,7 +572,7 @@ fn a_deactivated_bot_leaves_its_environment() {
     );
     // A bot that leaves on bot.deactivate is not restarted (D158).
     assert!(
-        sessions_of(&finished.records, "environment.restarted").is_empty(),
+        sessions_of(&finished.records, "bot.restarted").is_empty(),
         "{:?}",
         finished.records
     );
@@ -615,7 +615,7 @@ fn a_bot_sent_bot_deactivate_in_its_backoff_is_not_restarted() {
     assert!(
         logs(&records)
             .iter()
-            .all(|(label, _)| label != "environment.restarted"),
+            .all(|(label, _)| label != "bot.restarted"),
         "{records:?}"
     );
 }
@@ -633,26 +633,25 @@ fn a_bot_that_runs_stable_after_ms_has_its_attempts_reset() {
     let mut run = Run::start(&[environment.display().to_string()], &[]);
     all_activated(&run, &["floppy"]);
     run.event("bot.input", &input("deaf", "x"));
-    let mut records = run.until(WAIT, label_is("environment.restarted"));
+    let mut records = run.until(WAIT, label_is("bot.restarted"));
     records.extend(run.until(WAIT, label_is("bot.activated")));
     std::thread::sleep(Duration::from_millis(3000));
     run.event("bot.input", &input("deaf", "x"));
-    records.extend(run.until(WAIT, label_is("environment.restarted")));
+    records.extend(run.until(WAIT, label_is("bot.restarted")));
     let finished = run.close(WAIT);
     records.extend(finished.records);
     assert_eq!(
         logs(&records)
             .into_iter()
-            .filter(|(label, _)| (label == "environment.restarted"
-                || label == "runtime.supervisor.exhausted"))
+            .filter(|(label, _)| (label == "bot.restarted" || label == "bot.exhausted"))
             .collect::<Vec<_>>(),
         support::labelled(&[
             (
-                "environment.restarted",
+                "bot.restarted",
                 r#"{"participant":"floppy","attempt":1,"delay_ms":200}"#
             ),
             (
-                "environment.restarted",
+                "bot.restarted",
                 r#"{"participant":"floppy","attempt":1,"delay_ms":200}"#
             ),
         ])
@@ -702,36 +701,34 @@ fn a_degraded_bot_is_restarted_after_a_backoff_until_its_budget_is_spent() {
     let mut records = Vec::new();
     for _ in 0..2 {
         run.event("bot.input", &input("deaf", "x"));
-        records.extend(run.until(WAIT, label_is("environment.restarted")));
+        records.extend(run.until(WAIT, label_is("bot.restarted")));
         records.extend(run.until(WAIT, label_is("bot.activated")));
     }
     run.event("bot.input", &input("deaf", "x"));
-    records.extend(run.until(WAIT, label_is("runtime.supervisor.exhausted")));
+    records.extend(run.until(WAIT, label_is("bot.exhausted")));
     let finished = run.close(WAIT);
     records.extend(finished.records);
     assert_eq!(
         logs(&records)
             .into_iter()
-            .filter(|(label, _)| (label == "environment.restarted"
-                || label == "runtime.supervisor.exhausted")
-                || label == "bot.degraded")
+            .filter(
+                |(label, _)| (label == "bot.restarted" || label == "bot.exhausted")
+                    || label == "bot.degraded"
+            )
             .collect::<Vec<_>>(),
         support::labelled(&[
             ("bot.degraded", r#"{"stage":"processing_cancel"}"#),
             (
-                "environment.restarted",
+                "bot.restarted",
                 r#"{"participant":"floppy","attempt":1,"delay_ms":200}"#
             ),
             ("bot.degraded", r#"{"stage":"processing_cancel"}"#),
             (
-                "environment.restarted",
+                "bot.restarted",
                 r#"{"participant":"floppy","attempt":2,"delay_ms":300}"#
             ),
             ("bot.degraded", r#"{"stage":"processing_cancel"}"#),
-            (
-                "runtime.supervisor.exhausted",
-                r#"{"participant":"floppy","attempts":3}"#
-            ),
+            ("bot.exhausted", r#"{"participant":"floppy","attempts":3}"#),
         ])
     );
     // A restarted bot is a participant again: host input reached it.
@@ -762,27 +759,25 @@ fn a_bot_whose_activation_fails_is_restarted() {
         "{max_restarts: 2, backoff_initial_ms: 100, backoff_max_ms: 100, stable_after_ms: 600000}",
     );
     let run = Run::start(&[environment.display().to_string()], &[]);
-    let mut records = run.until(WAIT, label_is("environment.restarted"));
-    records.extend(run.until(WAIT, label_is("runtime.supervisor.exhausted")));
+    let mut records = run.until(WAIT, label_is("bot.restarted"));
+    records.extend(run.until(WAIT, label_is("bot.exhausted")));
     drop(run.close(WAIT));
     assert_eq!(
         logs(&records)
             .into_iter()
-            .filter(|(label, _)| (label == "environment.restarted"
-                || label == "runtime.supervisor.exhausted")
-                || label == "bot.activating.failed")
+            .filter(
+                |(label, _)| (label == "bot.restarted" || label == "bot.exhausted")
+                    || label == "bot.activating.failed"
+            )
             .collect::<Vec<_>>(),
         support::labelled(&[
             ("bot.activating.failed", "{}"),
             (
-                "environment.restarted",
+                "bot.restarted",
                 r#"{"participant":"floppy","attempt":1,"delay_ms":100}"#
             ),
             ("bot.activating.failed", "{}"),
-            (
-                "runtime.supervisor.exhausted",
-                r#"{"participant":"floppy","attempts":2}"#
-            ),
+            ("bot.exhausted", r#"{"participant":"floppy","attempts":2}"#),
         ])
     );
 }

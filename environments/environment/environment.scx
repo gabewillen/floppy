@@ -36,16 +36,16 @@
   (error.communication.<bot>) is restarted: recovering.<bot> counts the
   failed attempt and waits in backoff.<bot> (a doubling backoff from
   backoff_initial_ms, capped at backoff_max_ms) before
-  running.<bot> invokes it again, logged environment.restarted {participant,
+  running.<bot> invokes it again, logged bot.restarted {participant,
   attempt, delay_ms}; when another attempt would not fit max_restarts the
-  bot is left, logged runtime.supervisor.exhausted {participant, attempts}
+  bot is left, logged bot.exhausted {participant, attempts}
   (exhausted.<bot>). A bot that has run stable_after_ms has its attempts
   reset, counted once from its first bot.activated (starting.<bot>,
   serving.<bot>; a reboot does not re-arm it). A bot that leaves on
   bot.deactivate, or is sent one while it waits in backoff.<bot>, is not
   restarted (left.<bot>). The leave and the activation are announced to
-  the regions as environment.left {participant, restart} [floppy name] and
-  runtime.supervisor.running {participant} (mosfet's name), internal
+  the regions as bot.left {participant, restart} and bot.running
+  {participant} [placeholder names, D248], internal
   events of the environment (participant
   null for a failed send, which names no invoke and no region takes).
 
@@ -142,32 +142,32 @@
              once, in serving, which it enters on activation); a reboot's
              activation does not re-arm it. -->
         <state id="starting.floppy">
-          <transition event="runtime.supervisor.running" cond="isFor(_event, 'floppy')" target="serving.floppy"/>
+          <transition event="bot.running" cond="isFor(_event, 'floppy')" target="serving.floppy"/>
         </state>
         <state id="serving.floppy">
           <onentry>
-            <send id="stable.floppy" event="environment.stable" delayexpr="stableDelay()">
+            <send id="stable.floppy" event="bot.stable" delayexpr="stableDelay()">
               <param name="participant" expr="'floppy'"/>
             </send>
           </onentry>
         </state>
-        <transition event="environment.stable" cond="isFor(_event, 'floppy')">
+        <transition event="bot.stable" cond="isFor(_event, 'floppy')">
           <assign location="attempts.floppy" expr="0"/>
         </transition>
-        <transition event="environment.left" cond="isRestartable(_event, 'floppy')" target="recovering.floppy"/>
-        <transition event="environment.left" cond="isFor(_event, 'floppy')" target="left.floppy"/>
+        <transition event="bot.left" cond="isRestartable(_event, 'floppy')" target="recovering.floppy"/>
+        <transition event="bot.left" cond="isFor(_event, 'floppy')" target="left.floppy"/>
       </state>
       <state id="recovering.floppy">
         <transition cond="isWithinBudget('floppy')" target="backoff.floppy">
           <assign location="attempts.floppy" expr="nextAttempt('floppy')"/>
         </transition>
         <transition target="exhausted.floppy">
-          <log label="runtime.supervisor.exhausted" expr="exhaustedJson('floppy')"/>
+          <log label="bot.exhausted" expr="exhaustedJson('floppy')"/>
         </transition>
       </state>
       <state id="backoff.floppy">
         <onentry>
-          <send id="restart.floppy" event="environment.restart" delayexpr="backoffDelay('floppy')">
+          <send id="restart.floppy" event="bot.restart" delayexpr="backoffDelay('floppy')">
             <param name="participant" expr="'floppy'"/>
           </send>
         </onentry>
@@ -176,8 +176,8 @@
         </onexit>
         <!-- A stop while it waits: it is not restarted. -->
         <transition event="bot.deactivate" event:schema="../../bots/floppy/schemas/bot.deactivate.json" target="left.floppy"/>
-        <transition event="environment.restart" cond="isFor(_event, 'floppy')" target="running.floppy">
-          <log label="environment.restarted" expr="restartedJson('floppy')"/>
+        <transition event="bot.restart" cond="isFor(_event, 'floppy')" target="running.floppy">
+          <log label="bot.restarted" expr="restartedJson('floppy')"/>
           <assign location="activation_failed.floppy" expr="false"/>
         </transition>
       </state>
@@ -190,14 +190,14 @@
     <transition event="done.invoke">
       <log label="done.invoke" expr="leaveJson(_event)"/>
       <assign location="participants" expr="without(_event.invokeid)"/>
-      <send event="environment.left" target="#_internal">
+      <send event="bot.left" target="#_internal">
         <content expr="leftData(_event, false)"/>
       </send>
     </transition>
     <transition event="error.communication">
       <log label="error.communication" expr="leaveJson(_event)"/>
       <assign location="participants" expr="without(_event.invokeid)"/>
-      <send event="environment.left" target="#_internal">
+      <send event="bot.left" target="#_internal">
         <content expr="leftData(_event, true)"/>
       </send>
     </transition>
@@ -250,7 +250,7 @@
     <!-- What the bots emit. -->
     <transition event="bot.activated" event:schema="../../bots/floppy/schemas/bot.activated.json">
       <log label="bot.activated" expr="eventDataJson(_event)"/>
-      <send event="runtime.supervisor.running" target="#_internal">
+      <send event="bot.running" target="#_internal">
         <content expr="activatedData(_event)"/>
       </send>
     </transition>

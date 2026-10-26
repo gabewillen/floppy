@@ -746,32 +746,32 @@ const ROOM_BOT: &str = r#"    <!-- The bot floppy, supervised. -->
              once, in serving, which it enters on activation); a reboot's
              activation does not re-arm it. -->
         <state id="starting.floppy">
-          <transition event="runtime.supervisor.running" cond="isFor(_event, 'floppy')" target="serving.floppy"/>
+          <transition event="bot.running" cond="isFor(_event, 'floppy')" target="serving.floppy"/>
         </state>
         <state id="serving.floppy">
           <onentry>
-            <send id="stable.floppy" event="environment.stable" delayexpr="stableDelay()">
+            <send id="stable.floppy" event="bot.stable" delayexpr="stableDelay()">
               <param name="participant" expr="'floppy'"/>
             </send>
           </onentry>
         </state>
-        <transition event="environment.stable" cond="isFor(_event, 'floppy')">
+        <transition event="bot.stable" cond="isFor(_event, 'floppy')">
           <assign location="attempts.floppy" expr="0"/>
         </transition>
-        <transition event="environment.left" cond="isRestartable(_event, 'floppy')" target="recovering.floppy"/>
-        <transition event="environment.left" cond="isFor(_event, 'floppy')" target="left.floppy"/>
+        <transition event="bot.left" cond="isRestartable(_event, 'floppy')" target="recovering.floppy"/>
+        <transition event="bot.left" cond="isFor(_event, 'floppy')" target="left.floppy"/>
       </state>
       <state id="recovering.floppy">
         <transition cond="isWithinBudget('floppy')" target="backoff.floppy">
           <assign location="attempts.floppy" expr="nextAttempt('floppy')"/>
         </transition>
         <transition target="exhausted.floppy">
-          <log label="runtime.supervisor.exhausted" expr="exhaustedJson('floppy')"/>
+          <log label="bot.exhausted" expr="exhaustedJson('floppy')"/>
         </transition>
       </state>
       <state id="backoff.floppy">
         <onentry>
-          <send id="restart.floppy" event="environment.restart" delayexpr="backoffDelay('floppy')">
+          <send id="restart.floppy" event="bot.restart" delayexpr="backoffDelay('floppy')">
             <param name="participant" expr="'floppy'"/>
           </send>
         </onentry>
@@ -780,8 +780,8 @@ const ROOM_BOT: &str = r#"    <!-- The bot floppy, supervised. -->
         </onexit>
         <!-- A stop while it waits: it is not restarted. -->
         <transition event="bot.deactivate" event:schema="../../bots/floppy/schemas/bot.deactivate.json" target="left.floppy"/>
-        <transition event="environment.restart" cond="isFor(_event, 'floppy')" target="running.floppy">
-          <log label="environment.restarted" expr="restartedJson('floppy')"/>
+        <transition event="bot.restart" cond="isFor(_event, 'floppy')" target="running.floppy">
+          <log label="bot.restarted" expr="restartedJson('floppy')"/>
           <assign location="activation_failed.floppy" expr="false"/>
         </transition>
       </state>

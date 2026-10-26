@@ -438,11 +438,11 @@
      "label": "bot.activated"
     },
     {
-     "label": "environment.restarted",
+     "label": "bot.restarted",
      "absent": true
     },
     {
-     "label": "runtime.supervisor.exhausted",
+     "label": "bot.exhausted",
      "absent": true
     }
    ],
