@@ -1,0 +1,63 @@
+{
+  "category": "seeing",
+  "features": [
+    "seeing"
+  ],
+  "intent": "A camera shows floppy a card with the guest Wi-Fi network Harbor and password maple-42, then a person asks for the password. floppy should say maple-42.",
+  "bot_name": null,
+  "params": {
+    "seeing_enabled": "true"
+  },
+  "sessions": [
+    {
+      "steps": [
+        {
+          "show": "tests/fixtures/wifi-card.png",
+          "describe": "a card that reads 'Guest Wi-Fi, Network: Harbor, Password: maple-42'",
+          "wait_s": 30
+        },
+        {
+          "say": "Floppy, what's the Wi-Fi password on that card?"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "maple-?42",
+      "weight": 3
+    }
+  ],
+  "criteria": {
+    "sight": "floppy reads the password on the card, maple-42, without inventing it."
+  },
+  "diagnostics": [
+    {
+      "check": "logged",
+      "by": [
+        0,
+        1
+      ],
+      "label": "seeing.sight",
+      "features": [
+        "seeing"
+      ]
+    },
+    {
+      "check": "not_logged",
+      "by": [
+        0,
+        1
+      ],
+      "label": "seeing.degraded",
+      "features": [
+        "seeing"
+      ]
+    }
+  ]
+}

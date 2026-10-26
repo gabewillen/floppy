@@ -1,0 +1,72 @@
+{
+  "category": "seeing",
+  "features": [
+    "seeing"
+  ],
+  "intent": "A camera shows floppy a green triangle on a white card, then a person asks what shape and color it is. floppy should say a green triangle.",
+  "bot_name": null,
+  "params": {
+    "seeing_enabled": "true"
+  },
+  "sessions": [
+    {
+      "steps": [
+        {
+          "show": "tests/fixtures/green-triangle.png",
+          "describe": "a green triangle on a white card",
+          "wait_s": 30
+        },
+        {
+          "say": "Floppy, what shape is on the card I'm holding up, and what color is it?"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "\\btriangle",
+      "weight": 2
+    },
+    {
+      "check": "says",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "\\bgreen\\b",
+      "weight": 2
+    }
+  ],
+  "criteria": {
+    "sight": "floppy says the card shows a green triangle, without inventing a different shape or color."
+  },
+  "diagnostics": [
+    {
+      "check": "logged",
+      "by": [
+        0,
+        1
+      ],
+      "label": "seeing.sight",
+      "features": [
+        "seeing"
+      ]
+    },
+    {
+      "check": "not_logged",
+      "by": [
+        0,
+        1
+      ],
+      "label": "seeing.degraded",
+      "features": [
+        "seeing"
+      ]
+    }
+  ]
+}

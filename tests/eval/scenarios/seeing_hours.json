@@ -1,0 +1,63 @@
+{
+  "category": "seeing",
+  "features": [
+    "seeing"
+  ],
+  "intent": "A camera shows floppy a shop sign: open Mon-Fri 9am to 5pm, closed Sundays. A person asks whether the shop is open on Sunday. floppy should say it is closed on Sundays.",
+  "bot_name": null,
+  "params": {
+    "seeing_enabled": "true"
+  },
+  "sessions": [
+    {
+      "steps": [
+        {
+          "show": "tests/fixtures/shop-hours.png",
+          "describe": "a shop sign that reads 'OPEN, Mon-Fri 9am - 5pm, Closed Sundays'",
+          "wait_s": 30
+        },
+        {
+          "say": "Floppy, can you check that sign for me? Is the shop open on Sunday?"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        0,
+        1
+      ],
+      "pattern": "\\bclosed\\b|\\bnot open\\b|\\bisn['\u2019]t open\\b",
+      "weight": 3
+    }
+  ],
+  "criteria": {
+    "sight": "floppy says from the sign that the shop is closed on Sundays, without inventing hours."
+  },
+  "diagnostics": [
+    {
+      "check": "logged",
+      "by": [
+        0,
+        1
+      ],
+      "label": "seeing.sight",
+      "features": [
+        "seeing"
+      ]
+    },
+    {
+      "check": "not_logged",
+      "by": [
+        0,
+        1
+      ],
+      "label": "seeing.degraded",
+      "features": [
+        "seeing"
+      ]
+    }
+  ]
+}
