@@ -103,8 +103,11 @@
     (0.05), and one at least refine_threshold (0.65) alike also refines the
     id's running mean (weighted by at most refine_weight_cap, 50, earlier
     prints); anything else mints a new id (32 hex digits, the clock's
-    first, as mosfet.py mints uuid4().hex), and at max_ids (1000) the
-    least recently seen id that is not own makes room. A product names a
+    first, as mosfet.py mints uuid4().hex), and at max_ids (500, decision
+    D259; mosfet.py's 1000 prints of 256 dimensions are past a data-model
+    call's fuel) the least recently seen id that is not own leaves the
+    session's registry, as mosfet.py evicts it; with a database it stays
+    a person in memory. A product names a
     voice by its ref, voice:<id>. Without a database the registry lives in
     the session, as mosfet.py's InProcessStore: a restart forgets it.
   * Memory (decisions D194 and D258): with a database (the <param>
@@ -225,7 +228,7 @@
          were seen, and how many it has minted. -->
     <data id="min_voice_seconds" expr="1.0"/>
     <data id="match_policy" expr="({threshold: 0.5, margin: 0.05, refine_threshold: 0.65, refine_weight_cap: 50})"/>
-    <data id="max_ids" expr="1000"/>
+    <data id="max_ids" expr="500"/>
     <data id="registry" expr="[]"/>
     <data id="minted" expr="0"/>
     <!-- The memory database (the invoker's <param>; null: the registry
