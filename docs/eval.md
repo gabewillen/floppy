@@ -74,6 +74,11 @@ never edits the workspace: everything goes under `target/floppy-eval/`.
 | `recall_update` | memory | a favorite food, corrected later; the corrected one after a restart |
 | `people_overheard` | memory | Gabe and Ana talk to each other (ambient) and mention their pottery and marathon; later each asks floppy about themselves |
 | `voice_self` | voice | floppy's own answer echoed back to the microphone in its own voice (`warm`): no reply to itself; then the person's next question answered |
+| `emotion_sad` | emotion | "I just got back from the vet with my dog." and "what should I do tonight?" said heartbroken: a gentle, sympathetic answer and evening ideas that suit it |
+| `emotion_happy` | emotion | "I just opened the letter from the university." said laughing with joy: shared as good news |
+| `emotion_angry` | emotion | "The delivery came again today." shouted angrily: the frustration acknowledged, not cheered |
+| `emotion_contrast` | emotion | "I just talked to my brother." said joyfully, then the same words heartbroken: each answered as it sounds |
+| `emotion_tonight` | emotion | "what should I do tonight?" said close to tears: answered with care |
 | `turn_failure` | failure | reasoning bounded to one second: floppy still answers the person, then a greeting |
 
 The name is Juniper, not floppy, because the reasoning prompt already calls
@@ -114,7 +119,9 @@ input the room gives everyone, which floppy overhears). A heard step,
 `{"hear": text, "voice"?, "segments"?, "source"?, "who"?}`, is the person
 saying it out loud: `sound.py` synthesizes it on the speech backend's
 `/audio/speech` in `voice` (default `canvas`; floppy speaks in `warm`), or
-`segments` (text pieces and numbers, a pause of that many seconds), and the
+`segments` (text pieces and numbers, a pause of that many seconds), said as
+its `instructions` tell when it has them (the speech API's `instructions`:
+the tone, which the judges read beside the words), and the
 driver gives the room the 24 kHz PCM as `environment.sound` from `source`
 with a second of silence, as `scripts/talk-live.py` does; `who` names the
 person for the judges when the source is a shared microphone. It is waited
@@ -243,8 +250,8 @@ each evidence label of `features.json` (labels that show its parts ran,
 and failure labels that should never be logged), and its offline tests
 (`cargo test -p floppy-tests --test <name>`, run once each by `eval.py
 features`). A feature with no live path (reading, which nothing invokes,
-and the api.willen.dev emotion, voiceprint and streaming endpoints floppy
-does not call) carries a `status` and is listed ungraded.
+and the api.willen.dev voiceprint and streaming endpoints floppy does not
+call) carries a `status` and is listed ungraded.
 
 `eval.py features` runs the offline tests (each target once; about 8 minutes each on four cores, so `--no-tests` skips them and `eval.py tests <run>` then `eval.py grade <run>` adds them later) and every scenario, and writes
 `features.md` and `features.json`; `eval.py run` and `eval.py grade`

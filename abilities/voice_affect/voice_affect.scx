@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's affect classification: the tone of a voice, mosfet.py's
+  Classifying over a voice segment (hearing/voice/affect.py and
+  listening/tone.py), through the speech service's classify operation (a
+  speech server's POST {base}/emotion, emotion2vec+). The interpretation
+  (abilities/interpretation/interpretation.scx) invokes it once per
+  decoded utterance from DecodingSpeech, alongside speech decoding.
+
+    applying (an invoked speech service) -> applied (final)
+
+  Input: the <param> segments, the voices of the utterance (each
+  {audio, media_type, sample_rate_hz, channels, start_seconds?,
+  end_seconds?}: the whole utterance, or its diarized segments), and
+  timeout_ms (3 s, mosfet.py's bound on hearing a tone). The classifier
+  hears one segment: the longest (the first of equals), a segment with no
+  span counting as long enough; a segment shorter than
+  min_segment_seconds (0.3 s, mosfet.py's speech server's shortest) is
+  never sent. With no such segment nothing is asked.
+
+  Output: <donedata>, received by the interpretation as
+  done.invoke.voice_affect: {affect} when the service answers
+  bot.ability.classifying.output (mosfet.py's voice.Affect: {label, scores,
+  valence, confidence}), else {affect: null}: a tone not heard in time, not
+  heard at all, or nothing to hear. A tone is a perception, so its failure
+  never fails the utterance; each is logged (listening.affect, the name of
+  mosfet.py's bot.listening.affect.count), with no label, score or audio
+  beyond the label heard.
+
+  Bindings: the speech service package; env scopes FLOPPY_EMOTION_BASE_URL
+  and FLOPPY_EMOTION_API_KEY to the service's <invoke> (no default
+  backend, decision D31; without a key it asks a keyless backend with no
+  key header, decision D127). The run grants the service the media
+  directory. An invoked service's events are not checked against
+  event:schema, so their shape is checked by cond.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="voice_affect" initial="applying">
+  <datamodel>
+    <!-- The invoker's <param>s. -->
+    <data id="segments" expr="[]"/>
+    <data id="timeout_ms" expr="3000"/>
+    <!-- The shortest segment sent (mosfet.py's MIN_SEGMENT_SECONDS). -->
+    <data id="min_segment_seconds" expr="0.3"/>
+    <!-- The segment heard, and the result. -->
+    <data id="segment" expr="null"/>
+    <data id="result" expr="null"/>
+  </datamodel>
+  <script src="voice_affect.js"/>
+
+  <state id="applying">
+    <onentry>
+      <assign location="segment" expr="longestSegment()"/>
+      <assign location="result" expr="unheardResult()"/>
+      <send id="affect-timer" event="applying.after" delayexpr="timeoutDelay()"/>
+    </onentry>
+    <onexit>
+      <cancel sendid="affect-timer"/>
+    </onexit>
+    <!-- Nothing to hear: the classifier is never asked. -->
+    <transition cond="hasNoSegment()" target="applied">
+      <log label="listening.affect" expr="skippedLog()"/>
+    </transition>
+    <invoke id="classifier" type="https://github.com/stateforward/floppy/services/speech"
+            env:baseurl="FLOPPY_EMOTION_BASE_URL" env:apikey="FLOPPY_EMOTION_API_KEY">
+      <param name="operation" expr="'classify'"/>
+      <param name="audio" expr="segment.audio"/>
+      <param name="media_type" expr="segmentMediaType()"/>
+      <param name="sample_rate_hz" expr="segmentRate()"/>
+      <param name="channels" expr="segmentChannels()"/>
+    </invoke>
+    <transition event="bot.ability.classifying.output" cond="isAffect(_event)" target="applied">
+      <assign location="result" expr="heardResult(_event)"/>
+      <log label="listening.affect" expr="heardLog()"/>
+    </transition>
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="applied">
+      <log label="listening.affect" expr="failedLog(_event)"/>
+    </transition>
+    <transition event="applying.after" target="applied">
+      <log label="listening.affect" expr="timedOutLog()"/>
+    </transition>
+    <transition event="done.invoke.classifier" target="applied">
+      <log label="listening.affect" expr="endedLog()"/>
+    </transition>
+    <transition event="error.*" target="applied">
+      <log label="listening.affect" expr="errorLog(_event)"/>
+    </transition>
+    <!-- Anything else the classifier sends (the transitions above come first). -->
+    <transition event="*" target="applied">
+      <log label="listening.affect" expr="mismatchedLog()"/>
+    </transition>
+  </state>
+
+  <final id="applied">
+    <donedata>
+      <content expr="result"/>
+    </donedata>
+  </final>
+</scxml>

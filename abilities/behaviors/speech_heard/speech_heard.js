@@ -9,8 +9,12 @@ function hasAdmissibleSpeech() {
   return stimulus.data.source_ids.length > 0;
 }
 
+// The turn heard: the speech's words and who spoke, its parent the speech
+// itself (mosfet.py's TurnData.parent), so what was heard with the words,
+// such as their tone, stays with them.
 function turnData() {
-  return ({source_ids: stimulus.data.source_ids, target_ids: [], content: stimulus.data.content});
+  return ({source_ids: stimulus.data.source_ids, target_ids: [], content: stimulus.data.content,
+           parent: {event: stimulus.event, data: stimulus.data}});
 }
 
 // handled

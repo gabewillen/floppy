@@ -1,0 +1,45 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/vad",
+      "status": 200,
+      "body": {
+        "segments": [
+          {
+            "start": 0.0,
+            "end": 0.1
+          }
+        ]
+      }
+    },
+    {
+      "path": "/vad",
+      "status": 200,
+      "body": {
+        "segments": []
+      }
+    },
+    {
+      "path": "/audio/transcriptions",
+      "status": 200,
+      "body": {
+        "text": "hello"
+      }
+    },
+    {
+      "path": "/emotion?sample_rate=16000",
+      "status": 200,
+      "body": {
+        "label": "sad",
+        "scores": {
+          "sad": 0.8,
+          "neutral": 0.2
+        },
+        "valence": -0.7,
+        "confidence": 0.8,
+        "snr_db": 30.0
+      }
+    }
+  ]
+}

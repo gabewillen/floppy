@@ -643,6 +643,108 @@
       "title": "ApplyData",
       "type": "object"
     },
+    "affect": {
+      "anyOf": [
+        {
+          "description": "The tone heard in a voice: an affect label, the classifier's score per affect class, valence from negative to positive, and the classifier's confidence in the label.",
+          "properties": {
+            "label": {
+              "description": "The affect class the voice sounded most like, as the classifier names it.",
+              "examples": [
+                "happy",
+                "neutral",
+                "angry"
+              ],
+              "maxLength": 32,
+              "minLength": 1,
+              "title": "Label",
+              "type": "string"
+            },
+            "scores": {
+              "additionalProperties": {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              "propertyNames": {
+                "maxLength": 32,
+                "minLength": 1
+              },
+              "maxProperties": 16,
+              "description": "The classifier's score from 0 to 1 for each affect class it knows; empty when it gives none.",
+              "examples": [
+                {
+                  "happy": 0.71,
+                  "neutral": 0.2,
+                  "sad": 0.09
+                }
+              ],
+              "title": "Scores",
+              "type": "object"
+            },
+            "valence": {
+              "anyOf": [
+                {
+                  "maximum": 1.0,
+                  "minimum": -1.0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "How positive the voice sounded, from -1 (negative) to 1 (positive), when the classifier says.",
+              "examples": [
+                0.62
+              ],
+              "title": "Valence"
+            },
+            "confidence": {
+              "anyOf": [
+                {
+                  "maximum": 1.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "The classifier's confidence in the label, from 0 to 1, when it says.",
+              "examples": [
+                0.71
+              ],
+              "title": "Confidence"
+            }
+          },
+          "required": [
+            "label"
+          ],
+          "additionalProperties": false,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The tone this speech was said in, heard in its longest voice: an affect label with the classifier's scores, valence and confidence. Present only on decoded (text) speech when an affect classifier is composed and answered in time; a perception, not a judgment.",
+      "examples": [
+        {
+          "label": "happy",
+          "scores": {
+            "happy": 0.71,
+            "neutral": 0.2,
+            "sad": 0.09
+          },
+          "valence": 0.62,
+          "confidence": 0.71
+        }
+      ],
+      "title": "Affect"
+    },
     "sample_rate_hz": {
       "description": "Sample rate of audio in hertz (required to place the observation on a conversation timeline).",
       "examples": [

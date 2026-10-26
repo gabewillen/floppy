@@ -70,11 +70,15 @@ fn layout(edits: &[(&str, &[(&str, &str)])]) -> PathBuf {
     copy_dir(&workspace().join("abilities/schemas"), &dir.join("schemas"));
     support::copy_listening(&dir);
     // These tests pin the words-only pipeline: voices (diarization and
-    // identification, the interpretation's defaults) are on only where a
-    // test turns them on.
+    // identification) and their tone (the affect classifier), the
+    // interpretation's defaults, are on only where a test turns them on.
     rewrite(
         &dir.join("interpretation/interpretation.scx"),
-        &[("diarizer", "false"), ("voice_classifier", "false")],
+        &[
+            ("diarizer", "false"),
+            ("voice_classifier", "false"),
+            ("affect_classifier", "false"),
+        ],
     );
     for (document, data) in edits {
         rewrite(&dir.join(document), data);
@@ -209,6 +213,41 @@ fn a_heard_utterance_is_decoded_into_a_speech_product() {
         vec![speech("what is the weather", &voiced)]
     );
     assert!(texts(&finished.all, "harness.failed").is_empty());
+}
+
+/// With the affect classifier, decoded speech carries the tone the
+/// backend heard in its voice (mosfet.py's `SpeechData.affect`), its
+/// segment sent as mono PCM at its own rate.
+#[test]
+fn decoded_speech_carries_the_tone_of_its_voice() {
+    let harness = layout(&[(
+        "interpretation/interpretation.scx",
+        &[("affect_classifier", "true")],
+    )]);
+    let (mut run, backend) = started(
+        &harness,
+        "decoded_speech_carries_the_tone_of_its_voice",
+        &[
+            ("weather.wav", spoken_wav("what is the weather")),
+            ("silence.wav", silent_wav()),
+        ],
+    );
+    let voiced = sound("weather.wav", &json!({}));
+    utter(&mut run, &voiced, &sound("silence.wav", &json!({})));
+    run.until(WAIT, label_is("harness.speech"));
+    let finished = close(run, "decoded_speech_carries_the_tone_of_its_voice");
+    let classified = backend.received_at("/emotion?sample_rate=16000");
+    assert_eq!(classified.len(), 1, "the utterance's tone is heard once");
+    assert_eq!(classified[0]["keyed"], true);
+    assert_eq!(classified[0]["heard"], "what is the weather");
+    let mut expected = speech("what is the weather", &voiced);
+    expected["affect"] =
+        json!({"label": "neutral", "scores": {"neutral": 1}, "valence": 0, "confidence": 1});
+    assert_eq!(json_texts(&finished.all, "harness.speech"), vec![expected]);
+    assert_eq!(
+        texts(&finished.all, "listening.affect"),
+        vec!["heard neutral 1".to_owned()]
+    );
 }
 
 #[test]
