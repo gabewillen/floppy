@@ -22,13 +22,20 @@ Last updated: 2026-10-24.
   data, schema files and children against the child's base URI (the page
   answers each document with `baseUri` and `eventSchemas`, as the Wasmtime
   embedder's `EmbeddedDocument`), so 38 of the 40 documents run with their
-  children in the page. Not yet (browser parity slice 2): a service
-  `<invoke>` raises `error.execution` (no service binding), and the floppy
-  bot and the environment exceed Chromium's limit of about 125 live Wasm memories
-  per page (each session's machine, data model, I/O processor, clock and
-  namespaces hold 2 or 3 memories per component, so a tree of more than a
-  handful of sessions fails with `instance-lost`); sharing component
-  instances across a run's sessions upstream is the fix. The register's
+  children in the page. Invoked services run in the page too (scxml.rs
+  `633db909`, browser parity slice 2): the host build ships every service
+  but `pgsql` (sockets), the TestBench's Service keys dialog holds the
+  `env` values in the page's memory only, requests go through the page's
+  `fetch`, and `sql`, `files`, `generate`, `speech` and `vision` get
+  in-memory directories at their `--dir` paths (JSPI: Chrome 137+). Not
+  yet: the floppy bot and the environment exceed Chromium's limit of about
+  125 live Wasm memories per page (each session holds about 20: machine,
+  data model, I/O processor, clock and namespaces), so a tree of more
+  than a handful of sessions fails with `instance-lost`, which the
+  TestBench explains. Host-side sharing cannot fix it: the data model,
+  I/O processor, clock and extension WIT interfaces hold one session per
+  instance, so it needs a WIT contract change (stateforward/scxml.rs#33,
+  not scheduled: the maintainer's call). The register's
   facts come from `web/src/register.py`.
 - **What is heard and said is remembered (2026-10-25, D251, #85, #87):**
   the conversation writes each message it commits with words to the
