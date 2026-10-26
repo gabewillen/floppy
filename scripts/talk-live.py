@@ -166,7 +166,7 @@ async def converse(args: argparse.Namespace, media: Path, environment: talk.Envi
                     else:
                         loop.call_soon_threadsafe(outgoing.extend, pcm)
                         last_sound[0] = time.monotonic() + len(pcm) / 2 / RATE
-            elif label and (label.endswith(".failed") or label == "bot.exhausted"):
+            elif label and (label.endswith(".failed") or label == "supervision.exhausted"):
                 transcript.line(label, str(talk.decoded(text)))
         loop.call_soon_threadsafe(ended.set)
 

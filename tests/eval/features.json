@@ -438,11 +438,11 @@
      "label": "bot.activated"
     },
     {
-     "label": "bot.restarted",
+     "label": "supervision.restarted",
      "absent": true
     },
     {
-     "label": "bot.exhausted",
+     "label": "supervision.exhausted",
      "absent": true
     }
    ],

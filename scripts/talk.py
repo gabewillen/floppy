@@ -282,7 +282,7 @@ def main() -> None:
                 data = sound.get("data", sound) if isinstance(sound, dict) else None
                 if isinstance(data, dict) and data.get("audio") and data.get("source") != args.name:
                     speaker.play(data)
-            elif label and (label.endswith(".failed") or label in ("bot.exhausted",)):
+            elif label and (label.endswith(".failed") or label in ("supervision.exhausted",)):
                 print(f"[{label}] {decoded(text)}", flush=True)
         done.set()
 

@@ -30,8 +30,8 @@ What it does (decisions D103, D105, D108):
 - **Supervision** (D158): each bot runs
   in its own region of `present` (`supervising.<bot>`). A bot that leaves
   degraded, after a failed activation, or failed is invoked again after a
-  doubling backoff (`bot.restarted`), until another attempt would not fit
-  `max_restarts` (`bot.exhausted`); one that has run `stable_after_ms` has
+  doubling backoff (`supervision.restarted`), until another attempt would not fit
+  `max_restarts` (`supervision.exhausted`); one that has run `stable_after_ms` has
   its attempts reset, and one that leaves on `bot.deactivate` stays gone.
 - **The bots' events** (`bot.activated`, `bot.processing.completed`, ...)
   are logged as `<log label="EVENT">` with their data. A voice embedding is
