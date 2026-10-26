@@ -98,7 +98,16 @@ export type HostErrorCode =
   /** A bound extension component does not implement its namespace URI; the session start fails. */
   | 'extension-component-uri-mismatch'
   /** A bound extension component's `initialize` failed; the session start fails. */
-  | 'extension-component-initialize-failed';
+  | 'extension-component-initialize-failed'
+  /** A bound service component imports an interface the host never links; createSession fails. */
+  | 'unknown-import'
+  /**
+   * A bound service component imports a WASI resource the run does not
+   * grant, or one a browser cannot grant (`wasi:sockets`); createSession fails.
+   */
+  | 'wasi-resource-ungranted'
+  /** A WASI grant names no bound service, or a resource its component does not import. */
+  | 'wasi-grant-undeclared';
 
 export type CompilerErrorCode =
   | 'invalid-request'
@@ -1151,6 +1160,12 @@ export function createSession(options: {
    * compiler. Not accepted by `async: 'auto'` sessions.
    */
   extensionComponents?: ExtensionComponents;
+  /**
+   * The invoked-service components bound to the types the document's (and
+   * every invoked document's) service `<invoke>`s name. Not accepted by
+   * `async: 'auto'` sessions.
+   */
+  serviceComponents?: ServiceComponents;
   /** 'off' (default): this synchronous session. See the `async: 'auto'` overload. */
   async?: 'off';
 }): Promise<MachineSession>;
@@ -1382,6 +1397,111 @@ export const MAX_NAMESPACE_URI_BYTES: number;
 export const MAX_NAMESPACE_SCHEMA_BYTES: number;
 /** Maximum `session-snapshot-host.snapshot` calls of one `execute` call. */
 export const MAX_EXTENSION_SNAPSHOTS: number;
+
+/**
+ * One invoked-service package: the manifest fields of a
+ * `stateforward.scxml.service-package/v1` manifest (the Wasmtime host's
+ * `ServicePackage`), already verified by the page.
+ */
+export interface ServicePackage {
+  /** Exact service type URI; the binding key. */
+  serviceUri: string;
+  packageVersion: string;
+  serviceArtifact: string;
+  witWorld: string;
+  witVersion: string;
+  /** The origins or URL prefixes the component's requests may reach (at most MAX_DECLARED_ITEMS). */
+  httpOrigins: string[];
+  /** The `env` slots an `<invoke>` of the service may bind (at most MAX_DECLARED_ITEMS). */
+  envSlots: string[];
+}
+
+/** A service component authenticateServiceComponent accepted. */
+export interface AuthenticatedServiceComponent {
+  readonly kind: 'service-component';
+  /** The trusted SHA-256 of its bytes (its release artifact digest). */
+  readonly sha256: string;
+  /** The `dist/` component built from it. */
+  readonly component: string;
+}
+
+/**
+ * Authenticates one invoked-service component: `bytes` must hash to
+ * `sha256` (the trust anchor), and that digest must be the release artifact
+ * of a service component this package ships transpiled and fuel-metered
+ * (`dist/services.js`). Throws ScxmlHostError 'invalid-argument',
+ * 'artifact-digest-mismatch', or 'artifact-kind-mismatch'.
+ */
+export function authenticateServiceComponent(bytes: Uint8Array, sha256: string): Promise<AuthenticatedServiceComponent>;
+
+/** One variable the page grants services' `env` slots: never sent to a service, only referenced. */
+export interface EnvVariable {
+  name: string;
+  value: string;
+  /** The exact service type URIs whose `<invoke>`s may reference it. */
+  packages: string[];
+}
+
+/** The transport admitted `outbound-http` requests go through, called like the WHATWG `fetch`. */
+export interface ServiceHttpTransport {
+  fetch(url: string, init: { method: 'GET' | 'POST'; headers: [string, string][]; body?: Uint8Array; signal: AbortSignal; redirect: 'manual'; credentials: 'omit' }): Promise<Response>;
+}
+
+/** An in-memory directory tree (preview2-shim's form), read and written in place. */
+export interface DirectoryTree {
+  dir: Record<string, DirectoryTree | { source: Uint8Array | string }>;
+}
+
+/**
+ * Invoked-service components a session links, keyed by exact type URI (the
+ * Wasmtime host's `ServiceComponents`; createSession `serviceComponents`).
+ *
+ * An `<invoke>` of a bound type gets its own instance, started inside
+ * `start-invocation`; its `invoke` runs on the browser event loop through
+ * JavaScript Promise Integration (where `WebAssembly.Suspending` is
+ * missing, the `<invoke>` raises error.execution). Events sent to
+ * `#_<invokeid>` (and autoforwarded) reach its `events` stream; the events
+ * it returns reach the invoking session stamped with the invoke id, in a
+ * later event-loop turn the page hears through `onTimer`; its future
+ * resolving `ok` becomes `done.invoke.<id>`, and `err`, a trap, an invalid
+ * event, or a rejected start becomes `error.communication.<id>`. Cancelling
+ * the invocation aborts its requests and drops what it returns afterwards.
+ */
+export class ServiceComponents {
+  constructor();
+  /**
+   * Binds `component` to `pkg.serviceUri` (byte for byte). Throws
+   * ScxmlHostError 'artifact-kind-mismatch', or 'namespace-binding' for a
+   * URI that names no service, a URI already bound, more than
+   * MAX_BOUND_SERVICES bindings, or invalid `httpOrigins` or `envSlots`.
+   */
+  bind(pkg: ServicePackage, component: AuthenticatedServiceComponent): this;
+  /** The values `env` slots may reference; throws ScxmlHostError 'invalid-argument'. */
+  withValues(variables: EnvVariable[]): this;
+  /** The transport of admitted `outbound-http` requests (default: none, every request `unavailable`). */
+  withOutboundHttp(transport: ServiceHttpTransport): this;
+  /** The WASI directories the run grants the service bound to exactly `uri`: each `[tree, guestPath]`. */
+  withWasi(uri: string, options: { dirs: [DirectoryTree, string][] }): this;
+  /** The fuel an invocation may run between two inputs (default DEFAULT_SERVICE_CALL_FUEL). */
+  withCallFuel(fuel: number): this;
+  /** Whether no service is bound. */
+  isEmpty(): boolean;
+}
+
+/** Default fuel of one invocation between two inputs. */
+export const DEFAULT_SERVICE_CALL_FUEL: number;
+/** Maximum service type URIs one ServiceComponents binds. */
+export const MAX_BOUND_SERVICES: number;
+/** Maximum entries of a package's `httpOrigins` and of its `envSlots`. */
+export const MAX_DECLARED_ITEMS: number;
+/** Maximum events one invocation returns per input. */
+export const MAX_RETURNED_EVENTS_PER_INPUT: number;
+/** Maximum bytes of the events one invocation returns per input. */
+export const MAX_RETURNED_BYTES_PER_INPUT: number;
+/** Maximum requests of one invocation in flight at once. */
+export const MAX_REQUESTS_IN_FLIGHT: number;
+/** The namespace of an `<invoke>`'s `env` attributes. */
+export const ENV_NAMESPACE_URI: string;
 
 /** A package validator component authenticatePackageValidatorComponent accepted. */
 export interface AuthenticatedPackageValidator {

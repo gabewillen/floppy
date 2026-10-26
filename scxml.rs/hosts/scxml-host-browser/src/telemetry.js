@@ -9,12 +9,12 @@
 //   tracer `scxml-host-browser`   one span per host operation, named after
 //                                 the operation, attributes
 //                                 scxml.module = host-browser,
-//                                 scxml.operation = HOST_OPERATIONS (17),
+//                                 scxml.operation = HOST_OPERATIONS (22),
 //                                 scxml.outcome = OUTCOMES (3)
 //   tracer `scxml-component-guest` guest spans and point signals opened
 //                                 through the WIT telemetry imports, named
 //                                 after the WIT operation, attributes
-//                                 scxml.module = GUEST_MODULES (6),
+//                                 scxml.module = GUEST_MODULES (7),
 //                                 scxml.operation = WIT operation enum,
 //                                 scxml.outcome = WIT outcome enum (3),
 //                                 error.type = compiler WIT error-category;
@@ -69,6 +69,7 @@ export const GUEST_MODULES = Object.freeze({
   snapshotCodec: 'snapshot-codec-component',
   validator: 'validator-component',
   extension: 'executable-content-extension',
+  service: 'invoked-service',
 });
 /**
  * Instrumentation scope and `scxml.module` of the capability guests (the
@@ -95,6 +96,11 @@ export const HOST_OPERATIONS = Object.freeze([
   'extension-execute',
   'extension-shutdown',
   'package-validator-validate',
+  'service-start',
+  'service-send',
+  'service-cancel',
+  'service-http-fetch',
+  'service-http-send',
 ]);
 /** Closed `scxml.outcome` values (the WIT telemetry `outcome` enum). */
 export const OUTCOMES = Object.freeze(['ok', 'rejected', 'failed']);

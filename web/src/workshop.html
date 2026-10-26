@@ -116,6 +116,13 @@ floppy-run{display:flex;flex-direction:column;min-width:0;overflow-x:hidden}
 .inject{display:flex;gap:6px}
 .inject input{flex:1;min-width:0;border:0;border-bottom:1px solid var(--mute);background:var(--code);padding:6px 8px;font-size:12px}
 .inject input::placeholder{color:var(--mute)}
+.keys{background:var(--panel);color:var(--ink);border:1.5px solid var(--line);padding:0;max-width:min(560px,calc(100vw - 32px));width:100%;max-height:calc(100vh - 32px);overflow:auto}
+.keys::backdrop{background:rgba(6,26,53,.7)}
+.keys form{display:grid;gap:10px;padding:12px}
+.keys label{display:grid;gap:3px;font-size:12px;color:var(--mute)}
+.keys input{border:0;border-bottom:1px solid var(--mute);background:var(--code);color:var(--ink);padding:6px 8px;font:12px var(--f-mono)}
+.keys p{margin:0;font-size:12px;color:var(--mute)}
+.keys .row{display:flex;gap:8px;justify-content:flex-end}
 .inject button,.restart{border:1px solid var(--mute);background:transparent;padding:5px 10px;font:600 13px var(--f-c);letter-spacing:.1em;text-transform:uppercase;color:var(--ink)}
 .none{font-size:12px;color:var(--mute);margin:0;line-height:1.5}
 .log{list-style:none;margin:0;padding:0;font-size:11.5px;line-height:1.6;max-height:260px;overflow-y:auto}
@@ -615,6 +622,7 @@ class FloppyRun extends hsm.from(HTMLElement) {
     this.addEventListener("click", e => {
       const b = e.target.closest("button"); if (!b) return;
       if (b.dataset.tab) return hsm.live(this, "show_" + b.dataset.tab);
+      if (b.dataset.keys) return openKeys();
       this.dispatchEvent(new CustomEvent("floppy-intent", { bubbles: true, detail: { ...b.dataset } }));
     });
     this.addEventListener("submit", e => { e.preventDefault(); const v = this.querySelector("#inject-event").value.trim(); if (v) this.dispatchEvent(new CustomEvent("floppy-intent", { bubbles: true, detail: { inject: v } })); });
@@ -638,7 +646,7 @@ class FloppyRun extends hsm.from(HTMLElement) {
         <form class="inject"><input id="inject-event" placeholder="send an event, e.g. ped.button" aria-label="Event name"><button>Send</button></form></div>
       ${v.data.length ? `<div class="sec"><h3>Data model</h3><dl class="dm">${v.data.map(d => `<dt>${esc(d.name)}</dt><dd>${esc(d.value)}</dd>`).join("")}</dl></div>` : ""}
       <div class="sec" style="border-bottom:0"><h3>Run log</h3><ol class="log">${v.log.slice(-60).map((l, i, a) => `<li><span>${l.kind}</span><b>${esc(l.text)}</b></li>`).reverse().join("")}</ol></div>` : "")
-        + `<div class="sec" style="border-bottom:0"><button class="restart" data-restart="1">${v ? "Restart" : "Start"}</button></div>`;
+        + `<div class="sec" style="border-bottom:0;display:flex;gap:8px"><button class="restart" data-restart="1">${v ? "Restart" : "Start"}</button><button class="restart" data-keys="1">Service keys</button></div>`;
     }
     if (tab === "source") body = `<pre class="src">${toSCXML(ws.doc, activeBlocks(ws.doc, v?.full ?? []))}</pre>`;
     if (tab === "check") body = `<div class="sec" style="border-bottom:0"><h3>Checks</h3>${!c ? '<p class="none">Checking with the scxml.rs validator and compiler…</p>' : issues.length ? `<ul class="issues">${issues.map(i => `<li><b>${esc(i.code ?? "")}</b> ${esc(i.message)}${i.line ? ` <small>line ${i.line}</small>` : ""}</li>`).join("")}</ul>` : '<p class="none">The scxml.rs validator and compiler accept the bot.</p>'}</div>`;
@@ -646,6 +654,25 @@ class FloppyRun extends hsm.from(HTMLElement) {
   }
 }
 customElements.define("floppy-run", FloppyRun);
+
+/* The service keys dialog: the values of the environment variables the
+   bots bind to service slots (env:<slot>="NAME"), as `scx run` takes them
+   from its environment. They stay in this page's memory, are never stored,
+   and take effect when the bot starts again. */
+async function openKeys() {
+  const names = await runtime.variables();
+  const dialog = document.querySelector("dialog.keys") ?? document.body.appendChild(Object.assign(document.createElement("dialog"), { className: "keys" }));
+  const secret = name => /KEY|TOKEN|SECRET/.test(name);
+  dialog.innerHTML = `<div class="ph">Service keys</div><form method="dialog">
+    <p>Services reach their servers from this page, so a server must allow this site's origin. Values stay in this page only and are used when the bot starts again.${runtime.servicesSupported ? "" : " This browser cannot run services (they need Chrome 137 or later)."}</p>
+    ${names.map(n => `<label>${esc(n)}<input name="${esc(n)}" type="${secret(n) ? "password" : "text"}" autocomplete="off" spellcheck="false" value="${esc(runtime.environment.get(n) ?? "")}"></label>`).join("")}
+    <div class="row"><button class="restart" value="cancel">Cancel</button><button class="restart" value="save">Save</button></div></form>`;
+  dialog.onclose = () => {
+    if (dialog.returnValue !== "save") return;
+    for (const input of dialog.querySelectorAll("input")) runtime.environment.set(input.name, input.value.trim());
+  };
+  dialog.showModal();
+}
 
 /* ---------------------------------------------------------------
    <floppy-canvas>: renders the document's blocks and turns DOM

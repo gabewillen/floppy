@@ -23,10 +23,18 @@ no bundler step for the pages themselves.
   the same relative URIs as under `scx run`, so the workshop opens any bot or
   ability of this repository, or a `.scx` file of your own; each document
   answers with its own URL as its base and with its `event:schema` files,
-  so an invoked child resolves its names against itself. The browser host
-  binds no invoked service, so a service `<invoke>` raises `error.execution`
-  in the page, and a run of more than a handful of sessions (the floppy
-  bot) exceeds the browser's limit on live Wasm memories.
+  so an invoked child resolves its names against itself. Invoked services
+  run in the page too (every service but `pgsql`, which needs sockets), as
+  under `scx run`: the TestBench's Service keys dialog takes the values of
+  the environment variables the documents bind to service slots (kept in the
+  page's memory only, never stored), a service's requests go through the
+  page's `fetch` (so its server must allow the site's origin), and `sql`,
+  `files`, `generate`, `speech` and `vision` get in-memory directories at the
+  paths their `--dir` grants name. Services need JavaScript Promise
+  Integration (Chrome 137 or later). A run of more than a handful of
+  sessions (the floppy bot) still exceeds the browser's limit of about 125
+  live Wasm memories (each session takes about 20; stateforward/scxml.rs#33),
+  and the TestBench says so.
 - `src/critter.bundle.js`: the animated robot (`<floppy-bot>`), an esbuild
   0.24.0 bundle with hsm.ts kept external.
 

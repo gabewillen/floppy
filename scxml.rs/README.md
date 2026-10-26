@@ -393,10 +393,12 @@ The full list, with evidence, is in
   `resources` only in a cross-origin-isolated `async: 'auto'` worker
   session), its async sessions do not take the `http` option, and it runs no
   extension components.
-- Invoked services (`<invoke type>` other than SCXML) run only under the
-  Wasmtime session host, bound by exact type URI (`--service-package`); a
-  session holding one cannot be snapshotted, and the browser host binds none
-  (a service `<invoke>` there raises `error.execution` when it runs). WASI
+- Invoked services (`<invoke type>` other than SCXML) run under the
+  Wasmtime session host, bound by exact type URI (`--service-package`), and
+  under the browser host, which binds the service components its build
+  ships and needs JavaScript Promise Integration (without it a service
+  `<invoke>` raises `error.execution` when it runs); a session holding one
+  cannot be snapshotted. WASI
   is linked into service components only, by rule (extension elements are
   synchronous executable content), as each component's own `wasi:*` imports
   with the runtime resources the run grants (`--dir`, `--wasi`); `wasi:cli`,

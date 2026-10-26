@@ -14,7 +14,9 @@ import { Telemetry, isTelemetryOption } from './telemetry.js';
  * createValidator; and the extension components (`extension-example`, the
  * example namespace, and `scx`, the `scx` namespace) only when a page binds
  * one. A build may ship more extension components (`--extensions`, listed
- * in `dist/extensions.js`); the loader accepts those names too.
+ * in `dist/extensions.js`) and ships invoked-service components
+ * (`service-example` and those `--services` adds, listed
+ * in `dist/services.js`); the loader accepts those names too.
  */
 export const COMPONENTS = Object.freeze([
   'machine',
@@ -47,8 +49,21 @@ export function shippedExtensions() {
   );
 }
 
-/** The extension components named at build time (`--extensions` included). */
-const EXTENSION_COMPONENTS = Object.keys(await shippedExtensions());
+/**
+ * The invoked-service components this build ships (`dist/services.js`,
+ * written by scripts/build.mjs): `{name: () => import(bindings)}`, frozen;
+ * empty when `dist/` is not built.
+ * @returns {Promise<Readonly<Record<string, () => Promise<object>>>>}
+ */
+export function shippedServices() {
+  return import('../dist/services.js').then(
+    (module) => module.SERVICES,
+    () => Object.freeze({}),
+  );
+}
+
+/** The extension and service components named at build time. */
+const EXTENSION_COMPONENTS = [...Object.keys(await shippedExtensions()), ...Object.keys(await shippedServices())];
 
 /**
  * Loader that fetches `<baseUrl>/<component>/<file>` and compiles it with

@@ -9,6 +9,7 @@
 // Usage: node scripts/build.mjs --artifacts <dir-with-manifest.tsv>
 //          --meter <scxml-wasm-meter binary> [--out dist]
 //          [--extensions <dir-with-manifest.tsv>]...
+//          [--services <dir-with-manifest.tsv>]...
 //
 // Contract:
 // * every transpiled component is listed in `manifest.tsv` and its bytes hash
@@ -40,6 +41,20 @@
 // * `dist/extensions.js` lists every shipped extension component (the
 //   bundled ones and those `--extensions` adds) with the import of its
 //   bindings, which src/extension.js and src/loader.js read;
+// * invoked-service components (`scxml_service_example`, and each artifact
+//   a `--services <dir>` (repeatable) lists, named as `--extensions` names
+//   them, such as `scxml_service_files`, which a page binds with the WASI
+//   directory it grants and the artifact manifest therefore omits) are built like
+//   the others; their `async func` exports and imports become JavaScript
+//   Promise Integration (JSPI) wrappers, so they run only where
+//   `WebAssembly.Suspending` exists. `dist/services.js` lists them with the
+//   import of each one's bindings, which src/service.js and src/loader.js
+//   read;
+// * `dist/wasi/` holds the WASI 0.2 browser implementation of the pinned
+//   `@bytecodealliance/preview2-shim` (its `dist/browser/` modules and its
+//   license, unchanged), which src/service.js links into the service
+//   components that import `wasi:filesystem`, `wasi:io`, `wasi:random`, or
+//   `wasi:clocks/wall-clock`;
 // * the optional session snapshot codec (`scxml_snapshot_codec`) is built
 //   into `dist/snapshot-codec/` like every other component and loaded by the
 //   host only on first use (src/snapshot.js); a deployment may omit that
@@ -104,6 +119,12 @@ const COMPONENTS = [
     file: 'scxml_package_validator_example.virtualized.wasm',
   },
   { name: 'scx', artifact: 'scx', file: 'scx.virtualized.wasm', extension: true },
+  {
+    name: 'service-example',
+    artifact: 'scxml_service_example',
+    file: 'scxml_service_example.virtualized.wasm',
+    service: true,
+  },
 ];
 // 2 GiB - 1: components ship as GitHub release assets, and "each file
 // included in a release must be under 2 GiB"
@@ -119,15 +140,15 @@ function fail(message) {
 }
 
 function parseArgs(argv) {
-  const options = { artifacts: undefined, meter: undefined, out: join(packageRoot, 'dist'), extensions: [] };
+  const options = { artifacts: undefined, meter: undefined, out: join(packageRoot, 'dist'), extensions: [], services: [] };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     const value = argv[index + 1];
     if ((flag === '--artifacts' || flag === '--out' || flag === '--meter') && typeof value === 'string') {
       options[flag.slice(2)] = resolve(value);
       index += 1;
-    } else if (flag === '--extensions' && typeof value === 'string') {
-      options.extensions.push(resolve(value));
+    } else if ((flag === '--extensions' || flag === '--services') && typeof value === 'string') {
+      options[flag.slice(2)].push(resolve(value));
       index += 1;
     } else {
       fail(`unknown or incomplete argument: ${flag}`);
@@ -163,16 +184,15 @@ function readManifest(path) {
 
 const TRANSPILER = '@bytecodealliance/jco-transpile';
 
-function pinnedTranspilerVersion() {
+/** The exact version package.json pins `name` to, which must be the one installed. */
+function pinnedVersion(name) {
   const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'));
-  const pinned = manifest.devDependencies?.[TRANSPILER];
+  const pinned = manifest.devDependencies?.[name];
   if (typeof pinned !== 'string' || !/^[0-9]+\.[0-9]+\.[0-9]+$/.test(pinned)) {
-    fail(`package.json must pin ${TRANSPILER} to an exact version`);
+    fail(`package.json must pin ${name} to an exact version`);
   }
-  const installed = JSON.parse(
-    readFileSync(join(packageRoot, 'node_modules', TRANSPILER, 'package.json'), 'utf8'),
-  ).version;
-  if (installed !== pinned) fail(`installed ${TRANSPILER} ${installed} does not match pinned ${pinned}`);
+  const installed = JSON.parse(readFileSync(join(packageRoot, 'node_modules', name, 'package.json'), 'utf8')).version;
+  if (installed !== pinned) fail(`installed ${name} ${installed} does not match pinned ${pinned}`);
   return pinned;
 }
 
@@ -219,18 +239,20 @@ function safeOutputPath(path) {
 }
 
 const options = parseArgs(process.argv.slice(2));
-const transpilerVersion = pinnedTranspilerVersion();
+const transpilerVersion = pinnedVersion(TRANSPILER);
 const manifest = readManifest(join(options.artifacts, 'manifest.tsv'));
 
 // Every component to build, with the directory and manifest entry of its
 // source: the package's own, then each `--extensions` directory's.
 const builds = COMPONENTS.map((component) => ({ ...component, dir: options.artifacts, entry: manifest.get(component.artifact) }));
-for (const dir of options.extensions) {
-  for (const [artifact, entry] of readManifest(join(dir, 'manifest.tsv'))) {
-    const name = artifact.replaceAll('_', '-');
-    if (!/^[a-z]+(-[a-z]+)*$/.test(name)) fail(`extension artifact ${artifact} is not a lowercase ASCII name`);
-    if (builds.some((other) => other.name === name)) fail(`extension component ${name} is already built`);
-    builds.push({ name, artifact, file: entry.file, extension: true, dir, entry });
+for (const [kind, dirs] of [['extension', options.extensions], ['service', options.services]]) {
+  for (const dir of dirs) {
+    for (const [artifact, entry] of readManifest(join(dir, 'manifest.tsv'))) {
+      const name = artifact.replaceAll('_', '-');
+      if (!/^[a-z]+(-[a-z]+)*$/.test(name)) fail(`${kind} artifact ${artifact} is not a lowercase ASCII name`);
+      if (builds.some((other) => other.name === name)) fail(`${kind} component ${name} is already built`);
+      builds.push({ name, artifact, file: entry.file, [kind]: true, dir, entry });
+    }
   }
 }
 const digests = new Set();
@@ -313,18 +335,49 @@ for (const component of builds) {
 }
 
 rmSync(scratch, { recursive: true, force: true });
+
+// The WASI 0.2 browser implementation service components link: the pinned
+// preview2-shim's `dist/browser/` modules that filesystem, io, clocks, and random
+// import (followed through their relative imports), and its license.
+const SHIM = '@bytecodealliance/preview2-shim';
+const shimVersion = pinnedVersion(SHIM);
+const shimRoot = join(packageRoot, 'node_modules', SHIM);
+const wasiFiles = new Set();
+const pending = ['filesystem.js', 'io.js', 'clocks.js', 'random.js'];
+while (pending.length > 0) {
+  const file = pending.pop();
+  if (wasiFiles.has(file)) continue;
+  wasiFiles.add(file);
+  const text = readFileSync(join(shimRoot, 'dist', 'browser', file), 'utf8');
+  for (const [, imported] of text.matchAll(/(?:from|import)\s*["']([^"']+)["']/g)) {
+    if (!/^\.\/[a-z-]+\.js$/.test(imported)) fail(`${SHIM} ${file} imports ${imported}, outside its browser modules`);
+    pending.push(imported.slice(2));
+  }
+}
+mkdirSync(join(options.out, 'wasi'), { recursive: true });
+record.wasi = { package: `${SHIM}@${shimVersion}`, files: [] };
+for (const [file, from] of [...[...wasiFiles].sort().map((file) => [file, join(shimRoot, 'dist', 'browser', file)]), ['LICENSE', join(shimRoot, 'LICENSE')]]) {
+  const content = readFileSync(from);
+  writeFileSync(join(options.out, 'wasi', file), content);
+  record.wasi.files.push({ path: `wasi/${file}`, sha256: sha256(content) });
+}
 writeFileSync(join(options.out, 'build-manifest.json'), `${JSON.stringify(record, null, 2)}\n`);
 // Release identities for the snapshot's component list, keyed by dist name.
 const identities = Object.fromEntries(record.components.map((component) => [component.name, component.source_sha256]));
 const imports = Object.fromEntries(record.components.map((component) => [component.name, component.imports]));
-const extensions = builds.filter((component) => component.extension).map((component) => component.name);
-writeFileSync(
-  join(options.out, 'extensions.js'),
-  '// Generated by scripts/build.mjs: the extension components this build ships and the import of each one\'s bindings.\n' +
-    'export const EXTENSIONS = Object.freeze({\n' +
-    extensions.map((name) => `  ${JSON.stringify(name)}: () => import(${JSON.stringify(`./${name}/${name}.js`)}),\n`).join('') +
-    '});\n',
-);
+for (const [kind, constant, file] of [
+  ['extension', 'EXTENSIONS', 'extensions.js'],
+  ['service', 'SERVICES', 'services.js'],
+]) {
+  const names = builds.filter((component) => component[kind]).map((component) => component.name);
+  writeFileSync(
+    join(options.out, file),
+    `// Generated by scripts/build.mjs: the ${kind} components this build ships and the import of each one's bindings.\n` +
+      `export const ${constant} = Object.freeze({\n` +
+      names.map((name) => `  ${JSON.stringify(name)}: () => import(${JSON.stringify(`./${name}/${name}.js`)}),\n`).join('') +
+      '});\n',
+  );
+}
 writeFileSync(
   join(options.out, 'identity.js'),
   '// Generated by scripts/build.mjs: release-artifact SHA-256 and imported interfaces of each component.\n' +

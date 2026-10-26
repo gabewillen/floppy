@@ -28,6 +28,17 @@ export {
   MAX_NAMESPACE_URI_BYTES,
   authenticateExtensionComponent,
 } from './extension.js';
+export {
+  DEFAULT_SERVICE_CALL_FUEL,
+  ENV_NAMESPACE_URI,
+  MAX_BOUND_SERVICES,
+  MAX_DECLARED_ITEMS,
+  MAX_REQUESTS_IN_FLIGHT,
+  MAX_RETURNED_BYTES_PER_INPUT,
+  MAX_RETURNED_EVENTS_PER_INPUT,
+  ServiceComponents,
+  authenticateServiceComponent,
+} from './service.js';
 export { DEFAULT_COMPILE_FUEL, DEFAULT_FUEL, FUEL_EXPORT, MAX_FUEL } from './fuel.js';
 export { COMPONENTS, cachedCoreModules, fetchCoreModules } from './loader.js';
 export {

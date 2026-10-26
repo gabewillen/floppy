@@ -6,10 +6,23 @@
 
    packages.json (web/build.py) lists the namespace packages the components
    implement: the `scx` namespace and floppy's namespaces, each with its
-   manifest fields, its schema file and its component file. */
+   manifest fields, its schema file and its component file. services.json
+   lists the service packages a page can run (all but pgsql, which needs
+   sockets), each with its component file and the directory `scx run`'s
+   `--dir` grants it, and the environment variables the documents bind to
+   service slots.
+
+   Services run as under `scx run`: each sees only the values the page sets
+   (environment, held in this page's memory only, never stored), as
+   references it can use in its own requests; its requests go through this
+   page's fetch (so the server must allow this site's origin); and its
+   directory is an in-memory one that lives as long as the page. Services
+   need JavaScript Promise Integration (Chrome 137 or later). */
 import {
   ExtensionComponents,
+  ServiceComponents,
   authenticateExtensionComponent,
+  authenticateServiceComponent,
   createCompiler,
   createEcmaScriptDataModel,
   createSession,
@@ -22,8 +35,16 @@ const decoder = new TextDecoder();
 const bytesOf = async url => { const r = await fetch(url, { credentials: "omit" }); if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`); return new Uint8Array(await r.arrayBuffer()); };
 const hex = async bytes => [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map(b => b.toString(16).padStart(2, "0")).join("");
 
+/* The environment variables' values the services may use, by name: set by
+   the TestBench, kept in this page only. */
+export const environment = new Map();
+/* The in-memory directories the services are granted, by guest path
+   (shared, as `scx run` grants the same host directory to several). */
+const directories = new Map();
+
 let ready = null;
-/* Loads the components once: validator, compiler and every bound namespace. */
+/* Loads the components once: validator, compiler, every bound namespace
+   and every service. */
 export function load() {
   ready ??= (async () => {
     const index = await (await fetch(new URL("packages.json", HERE))).json();
@@ -34,8 +55,14 @@ export function load() {
       const bytes = await bytesOf(new URL(p.component, HERE));
       extensions.bind(pkg, await authenticateExtensionComponent(bytes, await hex(bytes)));
     }
+    const catalog = await (await fetch(new URL("services.json", HERE))).json();
+    const services = [];
+    for (const s of catalog.services) {
+      const bytes = await bytesOf(new URL(s.component, HERE));
+      services.push({ manifest: s.manifest, dir: s.dir, component: await authenticateServiceComponent(bytes, await hex(bytes)) });
+    }
     const [validator, compiler] = await Promise.all([createValidator({ dataModel: await createEcmaScriptDataModel() }), createCompiler()]);
-    return { packages, extensions, validator, compiler, namespaces: index.packages.map(p => p.manifest.namespaceUri) };
+    return { packages, extensions, services, variables: catalog.variables, validator, compiler, namespaces: index.packages.map(p => p.manifest.namespaceUri) };
   })();
   return ready;
 }
@@ -44,6 +71,29 @@ export function load() {
 async function eventSchemas(text, base) {
   const refs = new Set([...text.matchAll(/event:schema="([^"]+)"/g)].map(m => m[1]).filter(r => !r.trim().startsWith("{")));
   return Promise.all([...refs].map(async uri => ({ uri, bytes: await bytesOf(new URL(uri, base)) })));
+}
+
+/* The environment variables documents bind to service slots. */
+export async function variables() { return (await load()).variables; }
+
+/* Whether this browser can run services (JavaScript Promise Integration). */
+export const servicesSupported = typeof WebAssembly.Suspending === "function";
+
+/* The services one run binds: every service, the environment's values
+   (granted to each service, used only as references), this page's fetch,
+   and each service's in-memory directory. */
+function serviceComponents(rt) {
+  const services = new ServiceComponents();
+  for (const s of rt.services) services.bind(s.manifest, s.component);
+  const uris = rt.services.map(s => s.manifest.serviceUri);
+  services.withValues([...environment].filter(([, value]) => value !== "").map(([name, value]) => ({ name, value, packages: uris })));
+  services.withOutboundHttp({ fetch: (url, init) => fetch(url, init) });
+  for (const s of rt.services) {
+    if (!s.dir) continue;
+    if (!directories.has(s.dir)) directories.set(s.dir, { dir: {} });
+    services.withWasi(s.manifest.serviceUri, { dirs: [[directories.get(s.dir), s.dir]] });
+  }
+  return services;
 }
 
 /* Diagnostics of a canonical scxml.report/v3 report. */
@@ -79,6 +129,7 @@ export class Run {
       ir: compiled.ir,
       dataModel: await createEcmaScriptDataModel(),
       extensionComponents: rt.extensions,
+      serviceComponents: serviceComponents(rt),
       capabilities: { log: ({ label, text }) => say("log", label ? `${label}: ${text}` : text) },
       // The documents and scripts the bot loads come from this site only. A
       // relative name of the bot reaches the page as the document wrote it,
@@ -108,7 +159,16 @@ export class Run {
     return run;
   }
 
-  fail(e) { this.failure = e?.code ? `${e.code}${e.detail ? ": " + e.detail : ""}` : String(e?.message ?? e); this.say("error", this.failure); this.changed(); }
+  fail(e) {
+    this.failure = e?.code ? `${e.code}${e.detail ? ": " + e.detail : ""}` : String(e?.message ?? e);
+    this.say("error", this.failure);
+    // A page holds about 125 Wasm memories, and every running session takes
+    // about 20 (its machine, data model, I/O processor, clock and
+    // namespaces), so a bot that runs more than a few sessions at once
+    // loses an instance here (stateforward/scxml.rs#33).
+    if (e?.code === "instance-lost") this.say("error", "This bot most likely runs more sessions at once than a browser page has memory for. Run it with scx run instead.");
+    this.changed();
+  }
 
   /* Sends one external event: {name, data?}. */
   async send(name, data) {
@@ -127,7 +187,13 @@ export class Run {
   async view() {
     let snap = null;
     if (!this.failure) {
-      try { snap = JSON.parse(decoder.decode(await this.session.snapshot({ exclude: ["queues"] }))); } catch (e) { this.failure ??= e?.code ?? String(e); }
+      try { snap = JSON.parse(decoder.decode(await this.session.snapshot({ exclude: ["queues"] }))); } catch (e) {
+        // A session holding a live service cannot be snapshotted (as under
+        // scx): the configuration and status are read on their own then.
+        if (e?.code === "unavailable") {
+          try { const atomic = this.session.configuration(); snap = { root: { status: this.session.status(), configuration: { atomic, full: atomic } } }; } catch (e2) { this.failure ??= e2?.code ?? String(e2); }
+        } else this.failure ??= e?.code ?? String(e);
+      }
     }
     try {
       const entries = this.session.trace().entries;
