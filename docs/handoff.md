@@ -23,7 +23,7 @@ Last updated: 2026-10-24.
   answers each document with `baseUri` and `eventSchemas`, as the Wasmtime
   embedder's `EmbeddedDocument`), so 38 of the 40 documents run with their
   children in the page. Invoked services run in the page too (scxml.rs
-  `633db909`, browser parity slice 2): the host build ships every service
+  `e4896082`, browser parity slice 2): the host build ships every service
   but `pgsql` (sockets), the TestBench's Service keys dialog holds the
   `env` values in the page's memory only, requests go through the page's
   `fetch`, and `sql`, `files`, `generate`, `speech` and `vision` get
