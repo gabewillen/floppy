@@ -18,7 +18,10 @@
   decision service, which never offers the deliberate handoff
   bot.ability.reasoning.input. Its state is {turn: T}, T the model-facing
   text of the stimulus (<cognition:model_facing_content>, decision
-  D150: what reasoning reads, never the raw envelope), after the <held>
+  D150: what reasoning reads, never the raw envelope), after the recent
+  turns of the bot's conversations (the <param> recent) and the environment
+  block (the <param> environment), the situation reasoning reads too
+  (decision D254), and after the <held>
   block of the actions over the ceiling (the <param> held, decision
   D206), which the decision cannot choose and only a pass hands on; the
   stimulus goes too, but only to ground each event's required data from its
@@ -112,9 +115,11 @@
          D206): {event, description?} each, rendered as the <held> block of
          the state the decision reads, so a pass can hand them on. -->
     <data id="held" expr="[]"/>
-    <!-- The bot's environment (decision D106): the decision's situation once
-         the cognition's situation renderer gives it one (D150). -->
+    <!-- The bot's environment (decision D106) and the recent turns of its
+         conversations, the situation the decision reads before the turn, as
+         reasoning reads them. -->
     <data id="environment" expr="null"/>
+    <data id="recent" expr="[]"/>
     <data id="confidence_tuner" expr="({mean: 70, var: 100, n: 0})"/>
     <data id="decision_timeout_ms" expr="20000"/>
     <!-- The later tiers a pass may hand the turn to (decision D150). -->
@@ -140,8 +145,9 @@
   <state id="deciding">
     <onentry>
       <send idlocation="decision_timer" event="deciding.after" delayexpr="decisionTimeoutDelay()"/>
-      <cognition:model_facing_content location="stimulus_content" stimulus="stimulus"
-                                      prior_episodes="[]" standing_directives="[]" held="held"/>
+      <cognition:model_facing_content location="stimulus_content" stimulus="stimulus" recent="recent"
+                                      environment="environment" prior_episodes="[]" standing_directives="[]"
+                                      held="held"/>
     </onentry>
     <onexit>
       <cancel sendidexpr="decision_timer"/>
