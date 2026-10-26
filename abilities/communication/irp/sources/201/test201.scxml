@@ -56,6 +56,7 @@
   <state id="step10">
     <transition target="pass"/>
   </state>
+  <transition event="bot.ability.memory.stm.turn"/>
   <transition event="harness.send.r-1"><send event="bot.ability.communication.respond" id="r-1" target="#_communication"><content expr='{"parts": [{"words": "first"}]}'/></send></transition>
   <transition event="harness.send.r-2"><send event="bot.ability.communication.respond" id="r-2" target="#_communication"><content expr='{"parts": [{"words": "second"}]}'/></send></transition>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>

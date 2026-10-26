@@ -1257,54 +1257,12 @@ pub fn parse_parameters<'a>(
         if conversation.iter().any(Option::is_some) {
             return Err("generate input takes only model and dimensions");
         }
-        return Ok(Generation {
-            model,
-            messages: Vec::new(),
-            schema: None,
-            reasoning_effort: DEFAULT_REASONING_EFFORT,
-            stream: false,
-            max_completion_tokens: None,
-            temperature: None,
-            thinking_token_budget: None,
-            embeddings: Some(Embeddings {
-                input: input_parameter(input)?,
-                dimensions: dimensions_parameter(dimensions)?,
-            }),
-        });
+        return embeddings_generation(model, input, dimensions);
     }
     if dimensions.is_some() {
         return Err("generate dimensions requires an input");
     }
-    let mut conversation = Vec::new();
-    if let Some(system) = system {
-        conversation.push(Message {
-            role: Role::System,
-            content: Content::Text(text_parameter(
-                system,
-                "generate system must be a non-empty string",
-            )?),
-        });
-    }
-    match (prompt, messages) {
-        (Some(prompt), None) => conversation.push(Message {
-            role: Role::User,
-            content: Content::Text(text_parameter(
-                prompt,
-                "generate prompt must be a non-empty string",
-            )?),
-        }),
-        (None, Some(Data::JsonArray(text))) => {
-            conversation.extend(messages_from_json(text, &mut read)?);
-        }
-        (None, Some(_)) => return Err("generate messages must be a JSON array of messages"),
-        _ => return Err("generate takes exactly one of prompt or messages"),
-    }
-    let bytes = text_bytes(&conversation);
-    if exceeds_wasm_bound(conversation.len(), MAX_MESSAGES)
-        || exceeds_wasm_bound(bytes, MAX_CONVERSATION_BYTES)
-    {
-        return Err("generate conversation exceeds its bound");
-    }
+    let conversation = conversation_parameter(system, prompt, messages, &mut read)?;
     let schema_name = schema_name_parameter(schema_name)?;
     let reasoning_effort = reasoning_effort_parameter(reasoning_effort, schema.is_some())?;
     let stream = boolean_parameter(stream, "generate stream must be a boolean")?.unwrap_or(false);
@@ -1329,6 +1287,69 @@ pub fn parse_parameters<'a>(
         thinking_token_budget,
         embeddings: None,
     })
+}
+
+/// The embeddings generation of `input` (see [`parse_parameters`]).
+fn embeddings_generation(
+    model: String,
+    input: &Data,
+    dimensions: Option<&Data>,
+) -> Result<Generation, &'static str> {
+    Ok(Generation {
+        model,
+        messages: Vec::new(),
+        schema: None,
+        reasoning_effort: DEFAULT_REASONING_EFFORT,
+        stream: false,
+        max_completion_tokens: None,
+        temperature: None,
+        thinking_token_budget: None,
+        embeddings: Some(Embeddings {
+            input: input_parameter(input)?,
+            dimensions: dimensions_parameter(dimensions)?,
+        }),
+    })
+}
+
+/// The conversation of `system` and exactly one of `prompt` or `messages`,
+/// inside its bounds (see [`parse_parameters`]).
+fn conversation_parameter(
+    system: Option<&Data>,
+    prompt: Option<&Data>,
+    messages: Option<&Data>,
+    read: &mut impl FnMut(&str, usize) -> Result<Vec<u8>, ImageReadFailure>,
+) -> Result<Vec<Message>, &'static str> {
+    let mut conversation = Vec::new();
+    if let Some(system) = system {
+        conversation.push(Message {
+            role: Role::System,
+            content: Content::Text(text_parameter(
+                system,
+                "generate system must be a non-empty string",
+            )?),
+        });
+    }
+    match (prompt, messages) {
+        (Some(prompt), None) => conversation.push(Message {
+            role: Role::User,
+            content: Content::Text(text_parameter(
+                prompt,
+                "generate prompt must be a non-empty string",
+            )?),
+        }),
+        (None, Some(Data::JsonArray(text))) => {
+            conversation.extend(messages_from_json(text, read)?);
+        }
+        (None, Some(_)) => return Err("generate messages must be a JSON array of messages"),
+        _ => return Err("generate takes exactly one of prompt or messages"),
+    }
+    let bytes = text_bytes(&conversation);
+    if exceeds_wasm_bound(conversation.len(), MAX_MESSAGES)
+        || exceeds_wasm_bound(bytes, MAX_CONVERSATION_BYTES)
+    {
+        return Err("generate conversation exceeds its bound");
+    }
+    Ok(conversation)
 }
 
 /// `input`: a non-empty string, or a JSON array of 1 to [`MAX_INPUTS`]

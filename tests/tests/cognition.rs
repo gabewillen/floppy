@@ -30,6 +30,7 @@
 
 mod support;
 
+use std::fmt::Write as _;
 use std::io::{BufRead as _, BufReader, Read as _, Write as _};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
@@ -348,7 +349,7 @@ fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
         let dimensions = body["dimensions"].as_u64().unwrap_or(2);
         let data: Vec<Json> = body["input"]
             .as_array()
-            .map(|input| input.as_slice())
+            .map(Vec::as_slice)
             .unwrap_or_default()
             .iter()
             .enumerate()
@@ -1618,10 +1619,8 @@ fn an_episode_like_the_cue_is_recalled_first() {
     let bot = layout(&mock, Decision::Abstain, Generation::Respond, &[]);
     support::use_database(&bot.body, DATABASE);
     let mut text = std::fs::read_to_string(&bot.env).expect("the env file is readable");
-    text.push_str(&format!(
-        "FLOPPY_EMBEDDING_BASE_URL={}/embed/v1\n",
-        mock.origin
-    ));
+    writeln!(text, "FLOPPY_EMBEDDING_BASE_URL={}/embed/v1", mock.origin)
+        .expect("the env text is writable");
     std::fs::write(&bot.env, text).expect("the env file is writable");
     let mut run = start(&bot);
     tell(&mut run, "My favorite color is green.");
