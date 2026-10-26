@@ -898,10 +898,12 @@ fn a_bot_hears_its_own_speech_through_the_environment_and_withholds_it() {
     run.event("bot.ability.communication.input", &said("reply now", &[]));
     let spoken = run.until(WAIT, label_is("bot.ability.speaking.output"));
     run.event("environment.sound", &silence());
-    // The listening decodes the bot's own words, after its efference
-    // copy, and hands over no product (decision D98).
+    // The bot's own voice arrives as its efference copy predicted, so the
+    // listening never interprets it (decision D246): it reaches neither
+    // voice detection nor decoding, and no product is handed over. The
+    // silence after it is the first sound it hears.
     let mut seen = Vec::new();
-    while !backend.decoded().contains(&"ignore this".to_owned()) {
+    while backend.received_at("/vad").is_empty() {
         seen.extend(run.until(WAIT, |record| record["type"] == "call"));
     }
     let finished = run.close(WAIT);
@@ -911,6 +913,7 @@ fn a_bot_hears_its_own_speech_through_the_environment_and_withholds_it() {
         Vec::<String>::new(),
         "{seen:?}"
     );
+    assert_eq!(backend.decoded(), Vec::<String>::new(), "{seen:?}");
     let mut all = spoken;
     all.extend(seen);
     assert!(
