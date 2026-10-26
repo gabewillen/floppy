@@ -80,6 +80,10 @@ const SAY_TIMEOUT: Duration = Duration::from_mins(15);
 /// reply can be said after its reflection settled.
 const SAY_GRACE: Duration = Duration::from_secs(15);
 
+/// How long a relayed percept's answering turn may take to settle once it
+/// ended (its reflection may have settled with the relaying turn's).
+const RELAY_SETTLE: Duration = Duration::from_secs(60);
+
 /// How much longer a `"quiet"` step waits for its turn past its timeout:
 /// floppy takes up and settles every input, ignored or answered, so a turn
 /// that is only slow (a bot still starting) settles in its own step, not
@@ -219,6 +223,38 @@ fn is_log_of(record: &Json, labels: &[&str]) -> bool {
 
 fn is_settled(record: &Json) -> bool {
     is_log_of(record, SETTLED)
+}
+
+/// The records that end a cognition turn.
+const PROCESSED: &[&str] = &["bot.processing.completed", "bot.processing.failed"];
+
+/// Whether a turn's record relays what floppy perceived back to it as
+/// `bot.ability.communication.input` (a heard voice it knows becomes
+/// speech from someone): the reply is the next turn's.
+fn is_relay(record: &Json) -> bool {
+    is_log_of(record, &["bot.processing.completed"])
+        && record["text"]
+            .as_str()
+            .and_then(|text| serde_json::from_str::<Json>(text).ok())
+            .and_then(|done| done["output"].as_array().cloned())
+            .is_some_and(|output| {
+                output
+                    .iter()
+                    .any(|item| item["event"] == "bot.ability.communication.input")
+            })
+}
+
+/// Whether the run's last ended turn relayed its percept, so the turn
+/// that answers it is still owed.
+fn owes_relayed_turn(run: &Run) -> bool {
+    let last = std::cell::Cell::new(false);
+    run.count(|r| {
+        if is_log_of(r, PROCESSED) {
+            last.set(is_relay(r));
+        }
+        false
+    });
+    last.get()
 }
 
 /// The records of a run so far that open a lesson, close one, and settle a
@@ -384,8 +420,20 @@ fn converse(run: &mut Run, spec: &Json, media: &Path, name: &str, target: &mut u
         };
     }
     let quiet = spec["settle"].as_str() == Some("quiet");
-    let settled =
+    let mut settled =
         settles_to(run, limit, *target) || (quiet && settles_to(run, QUIET_GRACE, *target));
+    // A relayed percept settles its own turn first: the answering turn,
+    // and its settling, belong to this step too.
+    // Reflection may settle the two turns at once (before the answering
+    // turn ends), so the answering turn's end is waited on, then its
+    // settling for at most RELAY_SETTLE.
+    while settled && owes_relayed_turn(run) {
+        settled = wait(run, limit, |r| is_log_of(r, PROCESSED));
+        if settled && !owes_relayed_turn(run) {
+            wait(run, RELAY_SETTLE, is_settled);
+        }
+        *target = Tally::of(run).settled;
+    }
     if !settled && quiet {
         // Input floppy may rightly leave alone need not settle a turn: the
         // step ends at its bound, and owes nothing.

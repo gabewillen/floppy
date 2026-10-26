@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- interpretation-2: voice identification with speech decoding degrades the interpretation. -->
+<!-- interpretation-2: voice identification with speech decoding is no refusal: the interpretation is ready. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="interpretation" type="scxml" src="../../../interpretation.scx">
@@ -10,7 +10,7 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.interpretation" target="step1"/>
+    <transition event="bot.ability.ready" target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

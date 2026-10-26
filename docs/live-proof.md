@@ -7,6 +7,33 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-25, seeing hill climb (D250), model `sparks/qwen3.8-flash-next`
+
+`eval.py run` on the seeing scenarios from a cloud session, the bot on
+`sparks/qwen3.8-flash-next` through the CPA gateway and the decision service
+on TypeSafe, each by a local relay (`TYPESAFE_BASE_URL` names the relay
+without `/v1`: the service appends `/v1/systemone`), judges `codex` and
+`gemini`. The seeded split (`--seed 7`, `--test-share 0.34`) holds out
+`seeing_hours` and `seeing_wifi`; only train was looked at while changing
+the bot. Results are in the project's `floppy-eval/seeing/`.
+
+| Run | Bot | Split | Score |
+| --- | --- | --- | --- |
+| see-test-baseline | before D250 (reasoning and seeing documents of `1da406ed`) | test | 0.000 (both loop on look) |
+| see-train3 | images reach reasoning | train | 0.000 (the decision layer, text only, selects look on every sight) |
+| see-train4 | and look of effort 1 | train | 0.333 (`seeing_look` answered $14.21) |
+| see-train5 | and an unsent image marked `omitted` | train | 0.647 |
+| see-train6 | and the memory thread's `d04f28a8` (the conversation feeds the recent turns), cherry-picked | train | 0.993 ± 0.013 |
+| see-test1 | as see-train6, two repeats | test | **0.940 ± 0.083** |
+
+What was left: the recent-turns register had no writer, so a look's sight
+turn never saw the question it was asked for and reasoning ignored it
+(`d04f28a8` on `claude/project-thread-btnyen` fixes that; this branch
+depends on it for the look path). In `seeing_wifi-r0` floppy read the card
+on the change sight, then answered the question with "I don't know what's
+on the card": an episode keeps no image, so what it saw is forgotten by
+the next turn (mosfet.py's memory keeps a turn's images).
+
 ## 2026-10-25, every feature graded (D245), model `sparks/qwen3.8-flash-next`
 
 `eval.py features --no-tests` (docs/eval.md's feature grade) on #83's

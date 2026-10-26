@@ -83,10 +83,15 @@ function hasNoPrompt() {
 }
 
 // The conversation generate is sent: the system channel when there is one,
-// then the turn's user content.
+// then the turn's user content, with the stimulus's images as image parts.
 function messages() {
-  var user = [{role: 'user', content: prompt}];
+  var user = [{role: 'user', content: images.length === 0 ? prompt : userParts()}];
   return system === null ? user : [{role: 'system', content: system}].concat(user);
+}
+
+// The prompt as a text part, then each image by its reference, in ref order.
+function userParts() {
+  return [{kind: 'text', content: prompt}].concat(images.map(function (r) { return {kind: 'image', content: r}; }));
 }
 
 function projectionFailedResult() {

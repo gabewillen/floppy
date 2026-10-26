@@ -134,4 +134,10 @@
       <start uri="202/test202.scxml"/>
     </test>
   </assert>
+  <assert id="speaking-13" specnum="13" specid="#speaking-13">
+    <![CDATA[The efference copy `{duration: 0}` of a completed utterance also carries `audio`, the file the whole utterance was encoded to (`media/speaking-<n>.pcm`): the bot's own voice as it commanded it, for the listening to learn; a copy before the utterance completed, or of a stopped one, carries none.]]>
+    <test id="210" conformance="mandatory" manual="false">
+      <start uri="210/test210.scxml"/>
+    </test>
+  </assert>
 </assertions>

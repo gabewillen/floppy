@@ -80,6 +80,11 @@ function selectFailedMessage(detail) {
   return 'Learning select failed (' + detail + ')';
 }
 
+// Whether the select call may be made again: once (#93).
+function canRetrySelect() {
+  return select_attempt < 1;
+}
+
 function generateFailedMessage() {
   return selectFailedMessage(gen_failure === null ? 'no selection' : gen_failure);
 }

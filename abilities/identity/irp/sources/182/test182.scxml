@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- identity-9: an ask that arrives while recalling is answered with the recalled name once it knows. -->
+<!-- identity-8: an ask that arrives while recalling is answered with the recalled name once it knows. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="identity" type="scxml" src="../../../identity.scx">

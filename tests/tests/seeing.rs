@@ -78,7 +78,7 @@ fn layout(seeing: &Seeing, data: &[(&str, &str)]) -> PathBuf {
     );
     let body = std::fs::read_to_string(workspace().join("bots/floppy/floppy.scx"))
         .expect("the body is readable");
-    let declared = r#"<data id="input" expr="['identity', 'listening']"/>"#;
+    let declared = r#"<data id="input" expr="['listening']"/>"#;
     assert!(body.contains(declared), "the body declares its input");
     let mut body = body.replacen(declared, r#"<data id="input" expr="['identity']"/>"#, 1);
     for (id, expr) in data {
