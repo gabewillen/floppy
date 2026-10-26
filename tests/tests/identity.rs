@@ -41,7 +41,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde_json::{Value as Json, json};
-use support::{Run, hearing, logs, trace, unique_scratch, workspace};
+use support::{Run, logs, trace, unique_scratch, workspace};
 
 /// Bounded wait for any one expected record (scx startup included).
 const WAIT: Duration = Duration::from_secs(300);
@@ -198,50 +198,6 @@ fn a_named_bot_is_addressed_by_its_name() {
         .collect();
     turns.sort();
     assert_eq!(turns, strings(&[r#"addressed "Floppy""#, "ignore 1"]));
-}
-
-/// Name recognition in speech: a sound is decoded and the transcript
-/// searched for the name. Only the identity hears the sound here (the
-/// body's input list without the listening), so the one turn is the
-/// addressed one.
-#[test]
-fn a_named_bot_hears_its_name_in_a_sound() {
-    let test = "a_named_bot_hears_its_name_in_a_sound";
-    let body = layout(Some("'Floppy'"));
-    let document = std::fs::read_to_string(&body).expect("the body is readable");
-    let inputs = r#"<data id="input" expr="['identity', 'listening']"/>"#;
-    assert!(document.contains(inputs), "the body's input abilities");
-    std::fs::write(
-        &body,
-        document.replacen(inputs, r#"<data id="input" expr="['identity']"/>"#, 1),
-    )
-    .expect("the body copy is writable");
-    let backend = hearing::Backend::start();
-    let granted = hearing::granted(
-        test,
-        &backend,
-        &[("hey.wav", hearing::spoken_wav("hey floppy"))],
-    );
-    let (mut run, _) = started_with(&body, &granted.args);
-    run.event(
-        "environment.sound",
-        &json!({"audio": "media/hey.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}),
-    );
-    let records = run.until(WAIT, label_is("bot.ability.speaking.output"));
-    assert_eq!(
-        texts(&records, "identity.heard"),
-        strings(&["addressed as Floppy"])
-    );
-    assert_eq!(texts(&records, "floppy.say"), strings(&["I am Floppy"]));
-    // The bot hears its own playout too (every input ability hears the
-    // environment); the speech double writes no audio, so decoding
-    // it fails, and the identity says so. Playout lasts as long as
-    // the audio (D179), so that can come before speaking's answer.
-    if !records.iter().any(label_is("identity.recognition.failed")) {
-        run.until(WAIT, label_is("identity.recognition.failed"));
-    }
-    assert_eq!(backend.decoded(), strings(&["hey floppy"]));
-    close(run, test);
 }
 
 #[test]

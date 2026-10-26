@@ -69,6 +69,13 @@ fn layout(edits: &[(&str, &[(&str, &str)])]) -> PathBuf {
     let dir = unique_scratch("listening").join("abilities");
     copy_dir(&workspace().join("abilities/schemas"), &dir.join("schemas"));
     support::copy_listening(&dir);
+    // These tests pin the words-only pipeline: voices (diarization and
+    // identification, the interpretation's defaults) are on only where a
+    // test turns them on.
+    rewrite(
+        &dir.join("interpretation/interpretation.scx"),
+        &[("diarizer", "false"), ("voice_classifier", "false")],
+    );
     for (document, data) in edits {
         rewrite(&dir.join(document), data);
     }
@@ -510,16 +517,15 @@ fn the_efference_copy_opens_a_window_that_closes_itself() {
 
 /// The bot's own speech, as speaking emits it (its source the mouth its
 /// efference copy names, no levels to compare), is scored against the
-/// prediction while the copy's window is open: it is still interpreted
-/// (the pipeline runs on the bot's own voice too), but fully predicted,
-/// its product is withheld. A sound from no source arriving in the same
-/// window is still heard.
+/// prediction while the copy's window is open: fully predicted, it is not
+/// interpreted at all (nothing of it is decoded, #30). A sound from no
+/// source arriving in the same window is still heard.
 #[test]
-fn the_bots_own_speech_is_scored_as_the_mouths_and_withheld() {
+fn the_bots_own_speech_is_scored_as_the_mouths_and_not_interpreted() {
     let harness = layout(&[]);
     let (mut run, backend) = started(
         &harness,
-        "the_bots_own_speech_is_scored_as_the_mouths_and_withheld",
+        "the_bots_own_speech_is_scored_as_the_mouths_and_not_interpreted",
         &[
             ("own.wav", spoken_wav("own voice")),
             ("cut-in.wav", spoken_wav("cut in")),
@@ -543,9 +549,9 @@ fn the_bots_own_speech_is_scored_as_the_mouths_and_withheld() {
     });
     let finished = close(
         run,
-        "the_bots_own_speech_is_scored_as_the_mouths_and_withheld",
+        "the_bots_own_speech_is_scored_as_the_mouths_and_not_interpreted",
     );
-    assert_eq!(backend.decoded(), vec!["own voice", "cut in"]);
+    assert_eq!(backend.decoded(), vec!["cut in"]);
     assert_eq!(
         json_texts(&finished.all, "harness.speech"),
         vec![speech("cut in", &cut_in)]
@@ -1020,26 +1026,36 @@ fn a_negative_product_threshold_degrades_the_listening() {
 }
 
 #[test]
-fn voice_identification_with_speech_decoding_degrades_the_listening() {
+fn with_voices_decoded_speech_says_who_spoke() {
+    // The interpretation's defaults: diarization and voice identification
+    // with speech decoding.
     let harness = layout(&[(
         "interpretation/interpretation.scx",
-        &[("voice_classifier", "true")],
+        &[("diarizer", "true"), ("voice_classifier", "true")],
     )]);
-    let backend = Backend::start();
-    let mut args = hearing::granted(
-        "voice_identification_with_speech_decoding_degrades_the_listening",
-        &backend,
-        &[],
-    )
-    .args;
-    args.push(harness.display().to_string());
-    let run = Run::start(&args, &[]);
-    run.until(WAIT, label_is("interpretation.degraded"));
-    let finished = close(
-        run,
-        "voice_identification_with_speech_decoding_degrades_the_listening",
+    let (mut run, backend) = started(
+        &harness,
+        "with_voices_decoded_speech_says_who_spoke",
+        &[
+            ("weather.wav", spoken_wav("what is the weather")),
+            ("silence.wav", silent_wav()),
+        ],
     );
-    assert!(texts(&finished.all, "harness.ready").is_empty());
+    utter(
+        &mut run,
+        &sound("weather.wav", &json!({})),
+        &sound("silence.wav", &json!({})),
+    );
+    run.until(WAIT, label_is("harness.speech"));
+    let finished = close(run, "with_voices_decoded_speech_says_who_spoke");
+    assert_eq!(backend.received_at("/audio/diarization").len(), 1);
+    assert_eq!(backend.received_at("/voice/embed").len(), 1);
+    let heard = json_texts(&finished.all, "harness.speech");
+    assert_eq!(heard.len(), 1);
+    assert_eq!(heard[0]["content"], "what is the weather");
+    let sources = heard[0]["source_ids"].as_array().expect("source ids");
+    assert_eq!(sources.len(), 1, "one voice spoke: {heard:?}");
+    assert!(sources[0].is_array(), "the voice is its embedding");
 }
 
 #[test]

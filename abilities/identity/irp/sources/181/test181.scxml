@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- identity-9: a named identity is asked and answers its name. -->
+<!-- identity-8: a named identity is asked and answers its name. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="identity" type="scxml" src="../../../identity.scx">

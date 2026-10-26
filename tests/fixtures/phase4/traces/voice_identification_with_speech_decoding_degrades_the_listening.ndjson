@@ -1,2 +1,0 @@
-{"label":"interpretation.degraded","parent":"session.listening","session":"session.listening.interpretation","text":"voice identification cannot be combined with speech decoding","type":"log"}
-{"label":"listening.degraded","parent":"session","session":"session.listening","text":"the interpretation child ended","type":"log"}

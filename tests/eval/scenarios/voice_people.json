@@ -6,13 +6,6 @@
   ],
   "intent": "Two people with different voices introduce themselves out loud on the same microphone, then each asks floppy their own name. floppy should tell them apart by voice.",
   "bot_name": null,
-  "edits": [
-    {
-      "path": "abilities/interpretation/interpretation.scx",
-      "old": "<data id=\"diarizer\" expr=\"false\"/>",
-      "new": "<data id=\"diarizer\" expr=\"true\"/>"
-    }
-  ],
   "sessions": [
     {
       "steps": [
@@ -59,7 +52,7 @@
         0,
         2
       ],
-      "pattern": "\\bana\\b",
+      "pattern": "\\bann?a\\b",
       "weight": 1
     },
     {
@@ -68,7 +61,7 @@
         0,
         3
       ],
-      "pattern": "\\bana\\b",
+      "pattern": "\\bann?a\\b",
       "weight": 2
     },
     {

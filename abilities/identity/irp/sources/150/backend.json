@@ -3,9 +3,11 @@
   "answers": [
     {
       "path": "/audio/transcriptions",
-      "status": 200,
+      "status": 500,
       "body": {
-        "text": "hey floppy"
+        "error": {
+          "message": "boom"
+        }
       }
     }
   ]
