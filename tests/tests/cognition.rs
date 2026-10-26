@@ -342,7 +342,7 @@ fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
     }
     let target = request_line.split(' ').nth(1).unwrap_or("").to_owned();
     let body: Json = serde_json::from_slice(&body).unwrap_or(Json::Null);
-    // The embedder (decision D253): a text about color is the vector
+    // The embedder (decision D255): a text about color is the vector
     // (1, 0, 0, …), any other (0, 1, 0, …).
     if target == "/embed/v1/embeddings" {
         let dimensions = body["dimensions"].as_u64().unwrap_or(2);
@@ -1608,7 +1608,7 @@ fn a_reasoned_turn_is_recalled_by_the_next() {
     reasoned_turns_recalled(DATABASE, Some("a_reasoned_turn_is_recalled_by_the_next"));
 }
 
-/// Recall by association (decision D253): with an embedder, reflection
+/// Recall by association (decision D255): with an embedder, reflection
 /// stores each episode's words embedded, and reasoning ranks the episodes
 /// by their cosine with the turn's cue before their recency, so the
 /// question about a color ranks the older episode that told it first.

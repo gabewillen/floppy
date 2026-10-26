@@ -183,7 +183,7 @@ the decoded stimulus carries it as `affect` `{label, scores, valence,
 confidence}` (decision D247); without that backend it carries none. A sound that cannot be heard is logged as
 `bot.ability.listening.failed`.
 
-Memory recalls by association (decision D253): the Embedding ability
+Memory recalls by association (decision D255): the Embedding ability
 (`abilities/embedding/embedding.scx`) embeds each episode reflection stores
 and each turn's cue reasoning recalls with, through
 `FLOPPY_EMBEDDING_BASE_URL` with `FLOPPY_EMBEDDING_API_KEY` (an

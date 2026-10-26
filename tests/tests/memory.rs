@@ -196,7 +196,7 @@ fn the_head_schema_keeps_the_people() {
 
 #[test]
 fn the_head_schema_keeps_the_memory_embeddings() {
-    // Decision D253: the episodes' embeddings, shaped like the people's,
+    // Decision D255: the episodes' embeddings, shaped like the people's,
     // are revision 0002.
     let directory = unique_scratch("memory");
     let finished = run(

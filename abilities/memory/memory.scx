@@ -27,7 +27,7 @@
   short-term register tables, bot_stm_turn, the short-term memory of
   turns, and the people long-term memory holds (bot_person, and
   bot_person_embedding, the embeddings heard for each person, kind
-  voice; decision D194); 0002 (decision D253) creates
+  voice; decision D194); 0002 (decision D255) creates
   bot_memory_embedding, the embeddings of what memory holds (kind text,
   a cognitive episode's words), shaped like bot_person_embedding. On Postgres the defaulted created_at and updated_at
   are TIMESTAMPTZ DEFAULT NOW(). The database carries Alembic's

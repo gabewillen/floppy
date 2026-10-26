@@ -1,0 +1,117 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/vad",
+      "status": 200,
+      "body": {
+        "segments": [
+          {
+            "start": 0.5,
+            "end": 0.6
+          }
+        ]
+      }
+    },
+    {
+      "path": "/vad",
+      "status": 200,
+      "body": {
+        "segments": []
+      }
+    },
+    {
+      "path": "/audio/diarization",
+      "status": 200,
+      "body": {
+        "task": "diarize",
+        "duration": 0.2,
+        "num_speakers": 1,
+        "segments": [
+          {
+            "id": 0,
+            "speaker": "SPEAKER_00",
+            "label": "SPEAKER_00",
+            "start": 0.0,
+            "end": 0.1
+          }
+        ]
+      }
+    },
+    {
+      "path": "/audio/transcriptions",
+      "status": 200,
+      "body": {
+        "text": "hello"
+      }
+    },
+    {
+      "path": "/voice/embed",
+      "status": 200,
+      "body": {
+        "embedding": [
+          0.5,
+          -0.25
+        ],
+        "dim": 2,
+        "model": "voice-detect-wespeaker-resnet34"
+      }
+    },
+    {
+      "path": "/vad",
+      "status": 200,
+      "body": {
+        "segments": [
+          {
+            "start": 0.5,
+            "end": 0.6
+          }
+        ]
+      }
+    },
+    {
+      "path": "/vad",
+      "status": 200,
+      "body": {
+        "segments": []
+      }
+    },
+    {
+      "path": "/audio/diarization",
+      "status": 200,
+      "body": {
+        "task": "diarize",
+        "duration": 0.2,
+        "num_speakers": 1,
+        "segments": [
+          {
+            "id": 0,
+            "speaker": "SPEAKER_00",
+            "label": "SPEAKER_00",
+            "start": 0.0,
+            "end": 0.1
+          }
+        ]
+      }
+    },
+    {
+      "path": "/audio/transcriptions",
+      "status": 200,
+      "body": {
+        "text": "again"
+      }
+    },
+    {
+      "path": "/voice/embed",
+      "status": 200,
+      "body": {
+        "embedding": [
+          0.5,
+          -0.25
+        ],
+        "dim": 2,
+        "model": "voice-detect-wespeaker-resnet34"
+      }
+    }
+  ]
+}

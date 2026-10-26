@@ -340,7 +340,7 @@ fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
     }
     let target = request_line.split(' ').nth(1).unwrap_or("").to_owned();
     let body: Json = serde_json::from_slice(&body).unwrap_or(Json::Null);
-    // The embedder (decision D253): every input is the vector (3, 4, 0, …)
+    // The embedder (decision D255): every input is the vector (3, 4, 0, …)
     // of as many components as asked.
     if target == "/embed/v1/embeddings" {
         let dimensions = body["dimensions"].as_u64().unwrap_or(2);
@@ -680,7 +680,7 @@ fn a_turns_episode_keeps_the_words_its_stimulus_carried() {
 }
 
 /// A turn's episode is stored with its words embedded as a document
-/// (decision D253): the Embedding ability asks the embedder for the heard
+/// (decision D255): the Embedding ability asks the embedder for the heard
 /// words with the document prefix, and the episode's vector is kept in
 /// `bot_memory_embedding` as its compact text (`i8:` and base64 of signed
 /// bytes); an episode without words asks nothing.

@@ -39,7 +39,7 @@ function episodeSelectStatements() {
   return [{sql: 'SELECT content FROM bot_memory WHERE memory_id IN (' + marks + ') ORDER BY created_at, memory_id', parameters: episode_ids}];
 }
 
-// The cue's words (decision D253): the content of each message of a text
+// The cue's words (decision D255): the content of each message of a text
 // type the stimulus carries, read through envelopes and arrays, each once,
 // at most 2048 UTF-8 bytes in all, as reflection reads an episode's heard.
 function cueWords() {

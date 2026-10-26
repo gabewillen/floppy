@@ -1,7 +1,7 @@
 {
   "revision": "0002",
   "down_revision": "0001",
-  "doc": "The episodes' embeddings (decision D253): bot_memory_embedding, one row per vector of a memory, kind text (the words of a cognitive episode, embedded as a document), its embedding the vector's compact text (i8: and base64 signed bytes, as a person's representative voice), shaped like bot_person_embedding, and its index.",
+  "doc": "The episodes' embeddings (decision D255): bot_memory_embedding, one row per vector of a memory, kind text (the words of a cognitive episode, embedded as a document), its embedding the vector's compact text (i8: and base64 signed bytes, as a person's representative voice), shaped like bot_person_embedding, and its index.",
   "upgrade": [
     {
       "sql": "CREATE TABLE bot_memory_embedding (seq INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, memory_id TEXT NOT NULL, kind TEXT NOT NULL, embedding TEXT NOT NULL, created_at TEXT DEFAULT (CURRENT_TIMESTAMP) NOT NULL, FOREIGN KEY(memory_id) REFERENCES bot_memory (memory_id) ON DELETE CASCADE)"

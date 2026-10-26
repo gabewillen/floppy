@@ -107,8 +107,8 @@ S.statement(3, "With the default configuration (voice detection, sound classific
 S.statement(4, "A sound without voice is classified: a labelled one (a non-blank kind) is handed to the parent as `bot.ability.cognition.input` `{stimulus}`, the stimulus `{event: \"environment.sound\", data: <the sound as voice detection normalized it, its PCM written beside it as floppy-sound-<n>.pcm>, source: \"listening\"}`; an unlabelled one is dropped while speech decoding is configured.")
 S.statement(5, "A product is handed off only when audible: its `perceived_level_db` null or at least `product_threshold_db` (3 dB); a quieter one is dropped.")
 S.statement(6, "With neither speech decoding nor sound classification, a sound without voice is a silence observation: a speech product of the sound's PCM (`content` its floppy-sound-<n>.pcm, `content_type` `audio/pcm`, no voice spans); a PCM sound with no sample rate is handed off as the `environment.sound` stimulus instead. While the window is open and neither decoding nor diarization owns the product, each frame (the closing one too) is streamed as such a speech product with its voice spans.")
-S.statement(7, "With diarization the closed utterance is diarized: one speech product per clipped segment (`content` floppy-diarized-<n>-<index>, its span, `confidence`, a `voice_detection` of its own length, `voice_embedding` null and no source ids), or, with voice identification too, each identified by its embedding (`source_ids` `[embedding]`, `voice_embedding` the embedding); with speech decoding too, the utterance is decoded instead.")
-S.statement(8, "Voice identification without diarization identifies the opening voice span directly: its one embedding is the window's source identity, carried by every streamed frame; a sound that is not PCM with a sample rate cannot be identified and fails the `voice_identification` stage. Identification waits for its voices at most `stage_timeout_ms` + `recognize_timeout_ms` (2 s past the stage bound by default, decision D177); past that, or with no opening embedding, it completes with nobody identified: the window opens with no source identity, or each diarized segment is handed off with no embedding.")
+S.statement(7, "With diarization the closed utterance is diarized: one speech product per clipped segment (`content` floppy-diarized-<n>-<index>, its span, `confidence`, a `voice_detection` of its own length, and no source ids), or, with voice identification too, each identified (`source_ids` `[voice:<id>]`, its voice's ref); with speech decoding too, the utterance is decoded instead.")
+S.statement(8, "Voice identification without diarization identifies the opening voice span directly: its one embedding is identified and the voice's ref is the window's source identity, carried by every streamed frame; a sound that is not PCM with a sample rate cannot be identified and fails the `voice_identification` stage. Identification waits for its voices at most `stage_timeout_ms` + `recognize_timeout_ms` (2 s past the stage bound by default, decision D177); past that, or with no opening embedding, it completes with nobody identified: the window opens with no source identity, or each diarized segment is handed off with nobody.")
 S.statement(9, "A stage failure (its child's failure, an error, or its timer) answers `bot.ability.listening.failed` `{stage, message}` and returns to `Idle`, where the next sound is interpreted; decoded speech of a sound with no sample rate fails the `speech_decoding` stage.")
 S.statement(10, "Scored sounds that arrive while one is being interpreted are held (`<event:defer/>`) and taken in order.")
 S.statement(11, "Each stage but identification (statement 8) is bounded by `stage_timeout_ms` (30 s by default): its timer fails it with `{stage, message: \"Listening <stage> timed out.\"}`.")
@@ -159,23 +159,32 @@ S.case(152, 6, "without a decoder, each frame of the open window is streamed, th
                                 frame(2, 0, "silence.wav")],
        params=STREAMING, backend=[VOICED, SILENT])
 
+# A voice's ref, as the registry mints it (mosfet.py's uuid4().hex).
+VOICE_REF = "/^voice:[0-9a-f]{32}$/"
+
+
+def voices(count):
+    """The product names `count` voices, each by a minted ref, each once."""
+    return (f"_event.data.source_ids.length === {count}"
+            f" && _event.data.source_ids.every(function (ref) {{ return {VOICE_REF}.test(ref); }})")
+
+
+ONE_VOICE = voices(1)
 SEGMENT = (" && _event.data.content === 'media/floppy-diarized-2-0' && _event.data.content_type === 'audio/pcm'" + PCM_FORMAT +
            " && _event.data.start_seconds === 0 && _event.data.end_seconds === 0.1 && _event.data.confidence === null"
            " && _event.data.voice_detection.segments.length === 1 && _event.data.voice_detection.segments[0].end_seconds === 0.1"
            " && _event.data.parent.data.audio === 'media/voiced.wav'")
 S.case(160, 7, "a diarized utterance is one speech product per segment.",
-       [READY] + utterance() + [expect(SPEECH, "_event.data.voice_embedding === null && _event.data.source_ids.length === 0" + SEGMENT)],
+       [READY] + utterance() + [expect(SPEECH, "!('voice_embedding' in _event.data) && _event.data.source_ids.length === 0" + SEGMENT)],
        params=DIARIZING, backend=[VOICED, SILENT, DIARIZED])
-S.case(161, 7, "diarized segments are identified by their voice embedding.",
-       [READY] + utterance() + [expect(SPEECH, "JSON.stringify(_event.data.source_ids) === '[[0.5,-0.25]]'"
-                                               " && JSON.stringify(_event.data.voice_embedding.embedding) === '[0.5,-0.25]'" + SEGMENT)],
+S.case(161, 7, "diarized segments are identified: each names its voice by its ref.",
+       [READY] + utterance() + [expect(SPEECH, ONE_VOICE + " && !('voice_embedding' in _event.data)" + SEGMENT)],
        params=config(speech_decoder="false", diarizer="true", voice_classifier="true"), backend=[VOICED, SILENT, DIARIZED, EMBEDDED])
 S.case(162, 7, "with speech decoding too, the diarized utterance is decoded.",
        [READY] + utterance() + [words("hello")],
        params=config(diarizer="true"), backend=[VOICED, SILENT, DIARIZED, decoded("hello")])
 
-IDENTIFIED = (" && JSON.stringify(_event.data.source_ids) === '[[0.5,-0.25]]'"
-              " && JSON.stringify(_event.data.voice_embedding.embedding) === '[0.5,-0.25]'")
+IDENTIFIED = " && " + ONE_VOICE + " && !('voice_embedding' in _event.data)"
 S.case(170, 8, "the opening voice is identified directly and every streamed frame carries its identity.",
        [READY] + utterance() + [frame(1, 1, "voiced.wav", IDENTIFIED), frame(2, 0, "silence.wav", IDENTIFIED)],
        params=config(speech_decoder="false", voice_classifier="true"), backend=[VOICED, EMBEDDED, SILENT])
@@ -223,8 +232,9 @@ S.case(212, 12, "a sound heard while producing with no level is interpreted.",
        params=PATIENT, backend=[VOICED, SILENT, decoded("hello")])
 
 
-S.statement(13, "With speech decoding, diarization and voice identification (the document's defaults), the decoded utterance's diarized segments of at least `min_voice_seconds` (1 s), else the longest, are embedded after its words: each voice that is not the bot's own is one of the decoded product's `source_ids` (its embedding), and the product carries no `voice_embedding`.")
-S.statement(14, "The bot's own voice is heard from speaking's copy of a completed utterance, `bot.ability.speaking.efference` with `audio` (its PCM, `media_type` `audio/pcm` with a sample rate), taken while voice identification is configured and the own voice is unknown: its voice is detected, and when at least `min_voice_seconds` (1 s) lies from its first voice to its last, that span is identified and kept as the bot's own voice; a copy with less voice is logged `interpretation.unidentified`, a copy without audio is nothing, and without voice identification the copy is ignored. A decoded voice at least `voice_similarity_threshold` (0.50) alike to the bot's own is not a source id.")
+S.statement(13, "With speech decoding, diarization and voice identification (the document's defaults), the decoded utterance's diarized segments of at least `min_voice_seconds` (1 s), else the longest, are embedded after its words: each voice that is not the bot's own is one of the decoded product's `source_ids` by its ref `voice:<id>`, and the product carries no embedding.")
+S.statement(15, "Identification is mosfet.py's (decision D253): the interpretation's voice registry matches each embedding to an id, or mints one (32 hex digits), so an embedding never leaves the interpretation: a voice heard again, at least `match_policy.threshold` (0.50) alike and clear of the next by its margin (0.05), is named by the same ref, and a voice unlike every id by a new one.")
+S.statement(14, "The bot's own voice is heard from speaking's copy of a completed utterance, `bot.ability.speaking.efference` with `audio` (its PCM, `media_type` `audio/pcm` with a sample rate), taken while voice identification is configured and the own voice is unknown: its voice is detected, and when at least `min_voice_seconds` (1 s) lies from its first voice to its last, that span is identified and enrolled as an own id; a copy with less voice is logged `interpretation.unidentified`, a copy without audio is nothing, and without voice identification the copy is ignored. A decoded voice recognized as the own id is not a source id.")
 
 LONG_VOICED = {"path": "/vad", "status": 200, "body": {"segments": [{"start": 0.5, "end": 0.55}, {"start": 1.0, "end": 2.1}]}}
 
@@ -234,24 +244,35 @@ def own_copy(audio="media/said.pcm"):
         "media_type": "audio/pcm", "sample_rate_hz": 16000, "channels": 1}))
 
 
-def heard(text, sources):
-    """Decoded speech and who spoke in it."""
+def heard(text, count, cond="", assigns=()):
+    """Decoded speech and who spoke in it: `count` voices, by their refs."""
     return expect(SPEECH, f"_event.data.content === {js(text)} && _event.data.content_type === 'text/plain'"
-                  f" && JSON.stringify(_event.data.source_ids) === {js(json.dumps(sources, separators=(',', ':')))}"
-                  " && !('voice_embedding' in _event.data)")
+                  f" && {voices(count)} && !('voice_embedding' in _event.data)" + cond, assigns)
 
 
-S.case(220, 13, "decoded speech says who spoke: the voice's embedding is its source id.",
-       [READY] + utterance() + [heard("hello", [[0.5, -0.25]])],
+FIRST = [("first", "_event.data.source_ids[0]")]
+
+S.case(220, 13, "decoded speech says who spoke: the voice's ref is its source id.",
+       [READY] + utterance() + [heard("hello", 1)],
        params=VOICES, backend=[VOICED, SILENT, DIARIZED, decoded("hello"), EMBEDDED])
+S.case(221, 15, "a voice heard again is named by the same ref.",
+       [READY] + utterance() + [heard("hello", 1, assigns=FIRST)]
+       + utterance("voiced2.wav") + [heard("again", 1, " && _event.data.source_ids[0] === first")],
+       data=[("first", "null")], params=VOICES,
+       backend=[VOICED, SILENT, DIARIZED, decoded("hello"), EMBEDDED, VOICED, SILENT, DIARIZED, decoded("again"), EMBEDDED])
+S.case(222, 15, "a voice unlike every id is named by a new ref.",
+       [READY] + utterance() + [heard("hello", 1, assigns=FIRST)]
+       + utterance("voiced2.wav") + [heard("again", 1, " && _event.data.source_ids[0] !== first")],
+       data=[("first", "null")], params=VOICES,
+       backend=[VOICED, SILENT, DIARIZED, decoded("hello"), EMBEDDED, VOICED, SILENT, DIARIZED, decoded("again"), OTHER_EMBEDDED])
 S.case(230, 14, "decoded speech in the bot's own voice, learned from speaking's copy, has no source id.",
-       [READY, own_copy()] + utterance() + [heard("hello", [])],
+       [READY, own_copy()] + utterance() + [heard("hello", 0)],
        params=VOICES, backend=[LONG_VOICED, EMBEDDED, VOICED, SILENT, DIARIZED, decoded("hello"), EMBEDDED])
 S.case(231, 14, "another voice is a source id even once the bot's own voice is known.",
-       [READY, own_copy()] + utterance() + [heard("hello", [[0.25, 0.5]])],
+       [READY, own_copy()] + utterance() + [heard("hello", 1)],
        params=VOICES, backend=[LONG_VOICED, EMBEDDED, VOICED, SILENT, DIARIZED, decoded("hello"), OTHER_EMBEDDED])
 S.case(232, 14, "a copy with too little voice teaches nothing: the bot's voice stays a source id.",
-       [READY, own_copy()] + utterance() + [heard("hello", [[0.5, -0.25]])],
+       [READY, own_copy()] + utterance() + [heard("hello", 1)],
        params=VOICES, backend=[VOICED, VOICED, SILENT, DIARIZED, decoded("hello"), EMBEDDED],
        logs={"interpretation.unidentified": ["too little of the bot's own voice"]})
 S.case(233, 14, "without voice identification the copy is ignored.",

@@ -87,12 +87,25 @@
     utterance (its clipped segments are floppy-diarized-<n>-<index>).
   * IdentifyingVoiceDirect invokes abilities/voice_identification/voice_identification.scx on
     the opening voice span (clipped to floppy-voice-<n>.pcm); its one
-    embedding becomes the window's source identity. IdentifyingVoice
-    embeds each diarized segment. Exactly one embedding per segment. Both
+    embedding is identified, and the voice's ref becomes the window's source
+    identity. IdentifyingVoice embeds each diarized segment, exactly one
+    embedding per segment, and identifies each. Both
     wait for their voices at most stage_timeout_ms + recognize_timeout_ms
     (decision D177): past that deadline, or with no opening embedding,
     identification completes as usual with nobody identified: the window
-    opens with no source identity, or each segment is handed off with no embedding.
+    opens with no source identity, or each segment is handed off with nobody.
+  * Identification (mosfet.py's identification, decision D253): the
+    interpretation owns the voice registry, so an embedding (a print, and
+    biometric) never leaves it. Each print is matched to an id or mints
+    one, as mosfet.py's decide does with its match_policy: the closest id
+    must be at least threshold (0.50) alike and beat the next by margin
+    (0.05), and one at least refine_threshold (0.65) alike also refines the
+    id's running mean (weighted by at most refine_weight_cap, 50, earlier
+    prints); anything else mints a new id (32 hex digits, the clock's
+    first, as mosfet.py mints uuid4().hex), and at max_ids (1000) the
+    least recently seen id that is not own makes room. The registry lives
+    in the session, as mosfet.py's InProcessStore: a restart forgets it. A
+    product names a voice by its ref, voice:<id>.
   * DecodingSpeech invokes abilities/speech_decoding/speech_decoding.scx (the speech
     service) on the utterance: decoding rewrites the observation into
     words. After diarization with voice identification configured, the
@@ -115,7 +128,8 @@
     DetectingOwnVoice finds its voice (voice detection), and when at least
     min_voice_seconds of it is voiced, IdentifyingOwnVoice identifies that
     voice (direct identification of the span from its first voice to its
-    last) and keeps it as own_voice. Serial work, so sounds wait behind
+    last) and enrolls it as an own id (mosfet.py's own enrollment: it
+    refines the nearest own id or mints one). Serial work, so sounds wait behind
     it; a copy with too little voice, or whose voice cannot be identified
     in time, is logged (interpretation.unidentified) and the next copy is
     tried. A copy without audio, or once the voice is known, is nothing
@@ -128,14 +142,13 @@
     and content_type text/plain (a sound with no sample rate fails), its
     affect {label, scores, valence, confidence} when its tone was heard
     (mosfet.py's SpeechData.affect), and,
-    when its voices were identified, who spoke: each voice whose embedding
-    is at least voice_similarity_threshold (0.50, mosfet.py's voice match)
-    alike to own_voice is the bot's own and is no source; every other voice's
-    embedding is one of its source_ids (at most 4, the first of alike
-    ones), which the conversation identifies as a person. Only the voices
-    that are not the bot's own become source_ids (mosfet.py). One speech product per diarized segment (its PCM, span,
-    confidence, and, after identification, its embedding as its source
-    identity); a silence observation as a speech product of the sound's
+    when its voices were identified, who spoke: a voice recognized as an
+    own id is the bot's own and is no source; every other voice's ref is
+    one of its source_ids (each once, at most 4), which the conversation
+    takes as a participant. Only the voices that are not the bot's own
+    become source_ids (mosfet.py). One speech product per diarized segment (its PCM, span,
+    confidence, and, after identification, its voice's ref as its source
+    identity unless the voice is the bot's own); a silence observation as a speech product of the sound's
     PCM; a labelled sound, or a sound that is not PCM, as
     bot.ability.cognition.input {stimulus} whose stimulus is the
     environment.sound envelope (source "listening", the ability it hands
@@ -187,12 +200,15 @@
     <data id="affect_classifier" expr="true"/>
     <data id="affect" expr="null"/>
     <data id="classifying" expr="false"/>
-    <!-- Who spoke: the shortest segment embedded for decoded speech, the
-         least cosine at which a voice is the bot's own (mosfet.py's voice
-         match), and the bot's own voice once learned. -->
+    <!-- Who spoke: the shortest segment embedded for decoded speech, and
+         the voice registry (mosfet.py's identification): its match policy,
+         its bound, its ids {id, vector, own, seen_count} in the order they
+         were seen, and how many it has minted. -->
     <data id="min_voice_seconds" expr="1.0"/>
-    <data id="voice_similarity_threshold" expr="0.5"/>
-    <data id="own_voice" expr="null"/>
+    <data id="match_policy" expr="({threshold: 0.5, margin: 0.05, refine_threshold: 0.65, refine_weight_cap: 50})"/>
+    <data id="max_ids" expr="1000"/>
+    <data id="registry" expr="[]"/>
+    <data id="minted" expr="0"/>
     <!-- Scored sounds waiting for the interpretation. -->
     <!-- The scored sound in hand, its stage, its directory, and a counter
          naming the files written for it. -->
@@ -209,7 +225,6 @@
     <data id="open_frames" expr="[]"/>
     <data id="open_sensed" expr="null"/>
     <data id="active_source_ids" expr="[]"/>
-    <data id="active_voice_embedding" expr="null"/>
     <!-- The ordered union of the participants stamped on the sound taken
          into the open utterance. -->
     <data id="active_participants" expr="[]"/>
@@ -248,7 +263,6 @@
         <assign location="open_frames" expr="[]"/>
         <assign location="open_sensed" expr="null"/>
         <assign location="active_source_ids" expr="[]"/>
-        <assign location="active_voice_embedding" expr="null"/>
         <assign location="active_participants" expr="[]"/>
         <assign location="utterance" expr="null"/>
         <assign location="affect" expr="null"/>
@@ -586,8 +600,7 @@
         <!-- The first segment's identity is committed, then the window
              opens with this frame. -->
         <transition event="done.invoke.direct_voice_identification" cond="hasEmbeddings(_event)" target="HearingSpeech">
-          <assign location="active_voice_embedding" expr="firstEmbedding(_event)"/>
-          <assign location="active_source_ids" expr="activeSourceIds()"/>
+          <assign location="active_source_ids" expr="activeSourceIds(_event)"/>
           <assign location="open_sensed" expr="detection.sensed"/>
           <assign location="open_frames" expr="openingFrames()"/>
         </transition>
@@ -619,14 +632,14 @@
         </transition>
         <transition event="done.invoke.voice_identification" cond="hasEmbeddings(_event)" target="HandingOff">
           <assign location="completion.kind" expr="identifiedKind()"/>
-          <assign location="completion.embeddings" expr="_event.data.embeddings"/>
+          <assign location="completion.recognitions" expr="identify(_event.data.embeddings)"/>
         </transition>
         <!-- Nobody identified in time: identification completes as usual,
              with no voice for any segment (decision D177). -->
         <transition event="IdentifyingVoice.after" cond="isIdentifyTimer(_event)" target="HandingOff">
           <log label="interpretation.unidentified" expr="identifyTimedOut(completion.segments.length)"/>
           <assign location="completion.kind" expr="identifiedKind()"/>
-          <assign location="completion.embeddings" expr="unidentifiedEmbeddings()"/>
+          <assign location="completion.recognitions" expr="unidentifiedVoices()"/>
         </transition>
         <transition event="done.invoke.voice_identification" cond="isNotChildFailure(_event)">
           <send event="bot.ability.listening.stage.failed" target="#_internal">
@@ -732,7 +745,7 @@
           <param name="output" expr="voiceOutput()"/>
         </invoke>
         <transition event="done.invoke.own_voice_identification" cond="hasOneEmbedding(_event)" target="Idle">
-          <assign location="own_voice" expr="firstEmbedding(_event)"/>
+          <assign location="registry" expr="enrolledOwn(firstEmbedding(_event))"/>
         </transition>
         <transition event="done.invoke.own_voice_identification" target="Idle">
           <log label="interpretation.unidentified" expr="ownVoiceUnidentified(_event)"/>
@@ -785,7 +798,7 @@
             </send>
           <else/>
             <foreach array="completion.segments" item="segment" index="index">
-              <assign location="result" expr="segmentEmbedding()"/>
+              <assign location="result" expr="segmentRecognition()"/>
               <assign location="product" expr="segmentProduct()"/>
               <assign location="product.participants" expr="active_participants"/>
               <send event="bot.ability.listening.speech.output" target="#_parent">
