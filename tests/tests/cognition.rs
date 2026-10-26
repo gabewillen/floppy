@@ -557,7 +557,7 @@ fn start(bot: &Bot) -> Run {
     start_activated(bot, &[])
 }
 
-/// [`start`] with `params` as the bot's activation settings in the room
+/// [`start`] with `params` as the bot's activation settings in the environment
 /// that invokes it (decision D107); the bot activates on joining.
 fn start_activated(bot: &Bot, params: &[(&str, &str)]) -> Run {
     let run = Run::start(
@@ -2972,7 +2972,7 @@ fn autonomy_runs_the_seeds_before_the_learned_behaviors() {
 /// Reasoning's prompt carries the environment block (decision D106): the
 /// structured environment the body sends, rendered by its prompt renderer
 /// (D99) as XML elements, values escaped. The bot holds the lamp the
-/// room runs.
+/// environment runs.
 #[test]
 fn reasonings_prompt_carries_the_environment_block() {
     let mock = Mock::start();
@@ -2984,14 +2984,14 @@ fn reasonings_prompt_carries_the_environment_block() {
         .and_then(Path::parent)
         .expect("the layout's root")
         .to_path_buf();
-    let room = support::environment_with_devices(
+    let environment = support::environment_with_devices(
         &layout_dir,
         &["floppy"],
         &["lamp"],
         &[("floppy", &["lamp"])],
         &[],
     );
-    let lamp = layout_dir.join("environments/room/lamp/lamp.scx");
+    let lamp = layout_dir.join("environments/environment/lamp/lamp.scx");
     let text = std::fs::read_to_string(&lamp).expect("the lamp copy is readable");
     std::fs::write(
         &lamp,
@@ -3005,7 +3005,7 @@ fn reasonings_prompt_carries_the_environment_block() {
         &[
             "--env-file".to_owned(),
             bot.env.display().to_string(),
-            room.display().to_string(),
+            environment.display().to_string(),
         ],
         &[],
     );

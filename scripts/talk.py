@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Talk to floppy live from a Mac: microphone in, speaker out.
 
-Runs the room (environments/room/room.scx) under `scx run` and is its host:
+Runs the environment (environments/environment/environment.scx) under `scx run` and is its host:
 
 * the microphone, through ffmpeg (avfoundation), is read as 24 kHz mono
-  16-bit PCM; each utterance (cut by loudness: speech over the room's noise
+  16-bit PCM; each utterance (cut by loudness: speech over the environment's noise
   floor, ended by a pause) is written to the media directory and given to
-  the room as `environment.sound`, the way the live tests give a recorded
+  the environment as `environment.sound`, the way the live tests give a recorded
   one (tests/tests/floppy_live.rs, `live_listening`);
 * each sound floppy's mouth makes (an `environment.sound` from the bot, as
-  the room logs it) is played on the speaker with afplay, and the
+  the environment logs it) is played on the speaker with afplay, and the
   microphone is muted while it plays, so floppy does not hear itself;
 * a line typed on the terminal is sent as text
   (`bot.ability.communication.input`), and `--say FILE` sends a recorded
@@ -159,8 +159,8 @@ class Speaker:
             self.until = time.monotonic()
 
 
-class Room:
-    """`scx run` of the room, fed on standard input, read on standard output."""
+class Environment:
+    """`scx run` of the environment, fed on standard input, read on standard output."""
 
     def __init__(self, args: argparse.Namespace, media: Path, document: Path | None = None):
         grants = []
@@ -179,7 +179,7 @@ class Room:
             *grants,
             "--dir", f"{SERVICES}/files={behaviors}::/behaviors",
             "--fuel", "9223372036854775807",
-            str(document or ROOT / "environments/room/room.scx"),
+            str(document or ROOT / "environments/environment/environment.scx"),
         ]
         self.process = subprocess.Popen(
             command, cwd=ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1
@@ -187,7 +187,7 @@ class Room:
         self.lock = threading.Lock()
 
     def send(self, name: str, data: dict) -> None:
-        """Sends an event to the room; once the room has exited it is dropped."""
+        """Sends an event to the environment; once the environment has exited it is dropped."""
         with self.lock:
             assert self.process.stdin is not None
             try:
@@ -234,12 +234,12 @@ def main() -> None:
     parser.add_argument("--min-db", type=float, default=-50.0, help="and at least this loud (dBFS)")
     parser.add_argument("--pause-ms", type=int, default=700, help="a pause this long ends an utterance")
     parser.add_argument("--min-ms", type=int, default=300, help="shorter sounds are ignored")
-    parser.add_argument("--verbose", action="store_true", help="print every record the room writes")
+    parser.add_argument("--verbose", action="store_true", help="print every record the environment writes")
     args = parser.parse_args()
 
     media = ROOT / "media" / "talk"
     media.mkdir(parents=True, exist_ok=True)
-    room = Room(args, media)
+    environment = Environment(args, media)
     speaker = Speaker(media, tail_s=0.3)
     ready = threading.Event()
     done = threading.Event()
@@ -260,13 +260,13 @@ def main() -> None:
         if not silence.exists():
             silence.write_bytes(bytes(2 * RATE))
         for audio in (f"media/{name}", "media/silence.pcm"):
-            room.send("environment.sound", {
+            environment.send("environment.sound", {
                 "audio": audio, "media_type": "audio/pcm",
                 "sample_rate_hz": RATE, "channels": 1, "source": args.name,
             })
 
     def watch() -> None:
-        for record in room.records():
+        for record in environment.records():
             if args.verbose:
                 print(json.dumps(record), flush=True)
             if record.get("type") != "log":
@@ -282,23 +282,23 @@ def main() -> None:
                 data = sound.get("data", sound) if isinstance(sound, dict) else None
                 if isinstance(data, dict) and data.get("audio") and data.get("source") != args.name:
                     speaker.play(data)
-            elif label and (label.endswith(".failed") or label in ("room.exhausted",)):
+            elif label and (label.endswith(".failed") or label in ("supervision.exhausted",)):
                 print(f"[{label}] {decoded(text)}", flush=True)
         done.set()
 
     def typed() -> None:
         for line in sys.stdin:
             if line.strip():
-                room.send("bot.ability.communication.input", {
+                environment.send("bot.ability.communication.input", {
                     "source_ids": [args.name], "target_ids": ["floppy"],
                     "content": line.strip(), "content_type": "text/plain",
                 })
 
     threading.Thread(target=watch, daemon=True).start()
-    print("[starting the room]", flush=True)
+    print("[starting the environment]", flush=True)
     while not ready.wait(0.5):
         if done.is_set():
-            sys.exit(f"the room ended before floppy activated (exit {room.process.wait()}); rerun with --verbose")
+            sys.exit(f"the environment ended before floppy activated (exit {environment.process.wait()}); rerun with --verbose")
     threading.Thread(target=typed, daemon=True).start()
 
     try:
@@ -330,11 +330,11 @@ def main() -> None:
         if mic is not None:
             mic.terminate()
             mic.wait()
-        room.send("bot.deactivate", {})
+        environment.send("bot.deactivate", {})
         try:
-            room.process.wait(timeout=10)
+            environment.process.wait(timeout=10)
         except subprocess.TimeoutExpired:
-            room.process.terminate()
+            environment.process.terminate()
         if speaker.player.stdin is not None:
             try:
                 speaker.player.stdin.close()

@@ -8,8 +8,8 @@
 //! generate service has no default backend) and `TYPESAFE_API_KEY` (the
 //! intuition's decision service); the model is
 //! `FLOPPY_LIVE_MODEL`, else `Qwen/Qwen3.8-Flash-Next`, given to the bot
-//! as its `model` param by the room that invokes it
-//! (`environments/room/room.scx`, laid out beside a scratch copy of the
+//! as its `model` param by the environment that invokes it
+//! (`environments/environment/environment.scx`, laid out beside a scratch copy of the
 //! bot, the files service granted the layout's `behaviors/`, where the
 //! builder reflection invokes writes a learned behavior's documents). Each
 //! test writes the run's records under
@@ -45,13 +45,13 @@ fn start() -> Run {
     start_body(&scratch_bot())
 }
 
-/// Starts the room with the laid-out body at `body` as its bot, given the
+/// Starts the environment with the laid-out body at `body` as its bot, given the
 /// live model.
 fn start_body(body: &Path) -> Run {
     start_holding(body, &[])
 }
 
-/// [`start_body`] with the bot holding `devices`, which the room does not
+/// [`start_body`] with the bot holding `devices`, which the environment does not
 /// run (every read of one fails and it offers nothing).
 fn start_holding(body: &Path, devices: &[&str]) -> Run {
     start_granting(body, devices, &[])
@@ -71,7 +71,7 @@ fn start_granting(body: &Path, devices: &[&str], grants: &[String]) -> Run {
         .and_then(Path::parent)
         .and_then(Path::parent)
         .expect("the body is <layout>/bots/floppy/floppy.scx");
-    let room = support::environment_with_devices(
+    let environment = support::environment_with_devices(
         layout,
         &["floppy"],
         &[],
@@ -80,8 +80,8 @@ fn start_granting(body: &Path, devices: &[&str], grants: &[String]) -> Run {
     );
     // The builder (reflection's) writes and reads its documents in the
     // layout's behaviors directory (decision D121).
-    args.extend(support::behaviors_grant(&room));
-    args.push(room.display().to_string());
+    args.extend(support::behaviors_grant(&environment));
+    args.push(environment.display().to_string());
     Run::start(&args, &[])
 }
 
@@ -542,7 +542,7 @@ fn live_conversation() {
 /// the voice (`FLOPPY_VOICE_BASE_URL`, `LocalAI`'s `/vad` or
 /// `scripts/vad-server.py`), decodes the words (`FLOPPY_SPEECH_BASE_URL`)
 /// and hands them over as a turn, which the bot answers aloud. The bot
-/// runs in the room, which delivers each sound to it. The env files must
+/// runs in the environment, which delivers each sound to it. The env files must
 /// also hold the speech and voice variables.
 #[test]
 #[ignore = "makes real decision, model, speech and voice calls; needs FLOPPY_LIVE_ENV_FILE"]
@@ -554,7 +554,7 @@ fn live_listening() {
     )
     .expect("the question is copyable");
     std::fs::write(media.join("silence.pcm"), vec![0_u8; 48_000]).expect("writable");
-    // In the room, which activates the bot with the run's fuel (decision
+    // In the environment, which activates the bot with the run's fuel (decision
     // D111) and gives each sound to every participant (D103).
     let mut run = start_granting(&scratch_bot(), &[], &support::speech_grant(&media));
     run.until(Duration::from_mins(2), |record| {

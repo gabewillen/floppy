@@ -2,7 +2,7 @@
 utterance is synthesized on a speech backend's `/audio/speech` in the
 person's voice, and a `speaks` check transcribes the sounds floppy made on
 its `/audio/transcriptions`, so the voice path is graded on what a person
-in the room would hear.
+in the environment would hear.
 
 The backend is OpenAI-compatible: `FLOPPY_EVAL_SPEECH_BASE_URL` (default
 `https://api.willen.dev/v1`, the lab's shared model API, decision D244)

@@ -1,6 +1,6 @@
 //! The floppy bot's body (`bots/floppy/floppy.scx`): its lifecycle and
 //! processing turns, run through `scx run` on the wall clock as the one
-//! participant (`floppy`) of the room (`environments/room/room.scx`, laid
+//! participant (`floppy`) of the environment (`environments/environment/environment.scx`, laid
 //! out beside it by `support::environment`), which activates it on joining.
 //!
 //! Each test lays out a scratch copy of the repository's shape (the body
@@ -14,7 +14,7 @@
 //! (`reply`, `fail`, `stale`, `reboot`, `hang`, `deaf`). Timer bounds are
 //! shortened by rewriting the copy's `<data>` expressions.
 //!
-//! The body sends each event it emits to the room, which writes it as a
+//! The body sends each event it emits to the environment, which writes it as a
 //! `log` record labelled with the event's name; the double logs `double.input` and `double.exit`.
 //!
 //! The double offers `bot.ability.cognition.ignore` and the communication
@@ -167,7 +167,7 @@ fn layout(cognition: &Cognition, data: &[(&str, &str)]) -> PathBuf {
     body_path
 }
 
-/// Starts the room with the laid-out body as its one bot, `floppy`.
+/// Starts the environment with the laid-out body as its one bot, `floppy`.
 fn start(body: &Path) -> Run {
     start_with(body, &[])
 }
@@ -198,7 +198,7 @@ fn pairs(expected: &[(&str, &str)]) -> Vec<(String, String)> {
     support::labelled(expected)
 }
 
-/// Waits for the bot to activate: it does on joining the room (decision
+/// Waits for the bot to activate: it does on joining the environment (decision
 /// D107), which logs its bot.activated.
 fn activated(run: &mut Run) -> Vec<Json> {
     run.until(WAIT, label_is("bot.activated"))
@@ -1062,7 +1062,7 @@ fn last_json(records: &[Json], label: &str) -> Json {
 #[test]
 fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
     let body = layout(&Cognition::Double("'ready'"), &[]);
-    // The bot holds the lamp and the fan, which the room does not run:
+    // The bot holds the lamp and the fan, which the environment does not run:
     // each focused turn's read of the lamp fails, so it offers no device
     // choice.
     let layout_root = body
@@ -1070,14 +1070,14 @@ fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
         .and_then(Path::parent)
         .and_then(Path::parent)
         .expect("the layout's root");
-    let room = support::environment_with_devices(
+    let environment = support::environment_with_devices(
         layout_root,
         &["floppy"],
         &[],
         &[("floppy", &["lamp", "fan"])],
         &[],
     );
-    let mut run = Run::start(&[room.display().to_string()], &[]);
+    let mut run = Run::start(&[environment.display().to_string()], &[]);
     activated(&mut run);
     // Unfocused, the input names the lamp: the body turns to it
     // (decision D155), its only candidate. The body offers

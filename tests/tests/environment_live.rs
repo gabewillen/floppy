@@ -1,4 +1,4 @@
-//! Two floppy bots in one environment (`environments/room/room.scx`)
+//! Two floppy bots in one environment (`environments/environment/environment.scx`)
 //! against real backends, on the wall clock. Ignored by default:
 //!
 //! `FLOPPY_LIVE_ENV_FILE=<paths> cargo test -p floppy-tests --test
@@ -84,9 +84,9 @@ fn texts_of(records: &[Json], session: &str, label: &str) -> Vec<String> {
 }
 
 /// A scratch copy of the repository's bot, abilities, and the builder
-/// reflection invokes, with the room invoking bots `a` and `b` given the
+/// reflection invokes, with the environment invoking bots `a` and `b` given the
 /// live model.
-fn room() -> std::path::PathBuf {
+fn environment() -> std::path::PathBuf {
     let dir = unique_scratch("environment-live");
     support::copy_tree(&workspace().join("bots/floppy"), &dir.join("bots/floppy"));
     support::copy_tree(&workspace().join("bots/builder"), &dir.join("bots/builder"));
@@ -95,7 +95,7 @@ fn room() -> std::path::PathBuf {
     support::environment(&dir, &["a", "b"], &[("model", &model)])
 }
 
-/// Two bots in one room: `a` is asked to say something, speaks it, and `b`
+/// Two bots in one environment: `a` is asked to say something, speaks it, and `b`
 /// hears it, decodes it and takes a turn on it; `a` does not take its own
 /// speech as a turn (its efference copy withholds it, D98).
 #[test]
@@ -106,7 +106,7 @@ fn live_two_participants() {
         missing.is_empty(),
         "the env files set no value for {missing:?}"
     );
-    let room = room();
+    let environment = environment();
     let media = unique_scratch("environment-live-media");
     std::fs::write(media.join("silence.wav"), support::hearing::silent_wav())
         .expect("the media directory is writable");
@@ -118,8 +118,8 @@ fn live_two_participants() {
     args.extend(support::speech_grant(&media));
     // The builder (reflection's) writes and reads its documents in the
     // layout's behaviors directory (decision D121).
-    args.extend(support::behaviors_grant(&room));
-    args.push(room.display().to_string());
+    args.extend(support::behaviors_grant(&environment));
+    args.push(environment.display().to_string());
     let started = Instant::now();
     let mut run = Run::start(&args, &[]);
     let mut all = Vec::new();
