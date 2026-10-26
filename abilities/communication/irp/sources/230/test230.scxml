@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- communication-15: the heard input and the said response each reach the body as a short-term memory turn. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision" version="1.0" datamodel="ecmascript" initial="harness">
+<datamodel>
+  <data id="offers" expr="null"/>
+</datamodel>
+<state id="harness" initial="boot">
+  <invoke id="communication" type="scxml" src="../../../communication.scx">
+    <param name="environment" expr="_sessionid"/>
+    <param name="encoding_timeout_ms" expr="600000"/>
+    <param name="response_timeout_ms" expr="600000"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.ready" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.communication.input" target="#_communication"><content expr='{"source_ids": ["gabe"], "target_ids": ["floppy"], "content": "hello there", "content_type": "text/plain"}'/></send>
+    </onentry>
+    <transition event="bot.ability.memory.stm.turn" cond="_event.data.direction === 'heard' &amp;&amp; _event.data.text === 'hello there' &amp;&amp; _event.data.cut === false &amp;&amp; JSON.stringify(_event.data.speakers) === JSON.stringify([{ref: 'gabe', role: 'source'}]) &amp;&amp; _event.data.conversation === 'session.communication.conversation'" target="step2"/>
+  </state>
+  <state id="step2">
+    <transition event="bot.ability.cognition.input" cond="_event.data.stimulus.data.messages[0].content === 'hello there'" target="step3"/>
+  </state>
+  <state id="step3">
+    <onentry>
+      <send event="bot.ability.communication.respond" target="#_communication"><content expr='{"parts": [{"words": "hi gabe"}]}'/></send>
+    </onentry>
+    <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 0.1 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step4"/>
+  </state>
+  <state id="step4">
+    <transition event="environment.sound" cond="_event.data.audio === &quot;media/speaking-1.0.pcm&quot; &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.source === 'speaking'" target="step5"/>
+  </state>
+  <state id="step5">
+    <transition event="bot.ability.speaking.efference" cond="_event.data.mouth === 'speaking' &amp;&amp; _event.data.duration === 0 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1" target="step6"/>
+  </state>
+  <state id="step6">
+    <transition event="bot.ability.speaking.output" cond="_event.data.text === &quot;hi gabe&quot; &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.sample_rate_hz === 24000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.spoken === &quot;hi gabe&quot; &amp;&amp; _event.data.outcome === 'completed'" target="step7"/>
+  </state>
+  <state id="step7">
+    <transition event="bot.ability.memory.stm.turn" cond="_event.data.direction === 'said' &amp;&amp; _event.data.text === 'hi gabe' &amp;&amp; _event.data.cut === false &amp;&amp; _event.data.conversation === 'session.communication.conversation'" target="step8"/>
+  </state>
+  <state id="step8">
+    <onentry>
+      <decision:offers location="offers" target="'#_communication'"/>
+    </onentry>
+    <transition cond="offers.length === 1 &amp;&amp; offers[0].event === 'bot.ability.communication.respond' &amp;&amp; offers[0].effort === undefined &amp;&amp; offers[0].target === undefined &amp;&amp; offers[0].schema.required.indexOf('parts') &gt;= 0" target="step9"/>
+    <transition target="fail"><log label="unexpected" expr="'offers ' + JSON.stringify(offers)"/></transition>
+  </state>
+  <state id="step9">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>
