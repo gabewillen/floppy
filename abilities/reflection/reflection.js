@@ -290,12 +290,105 @@ function breakFailedMessage(detail) {
 // The turn's cognitive episode, with the behavior the turn applied (null: none).
 function cognitiveEpisode(applied) {
   var input = cognition_input;
-  var episode = {focus: input.focus, focus_candidates: input.focus_candidates, stimulus_name: input.stimulus.event, output: cognition_output, behavior: applied};
+  var episode = {focus: input.focus, focus_candidates: input.focus_candidates, stimulus_name: input.stimulus.event, heard: heardWords(input.stimulus), output: cognition_output, behavior: applied};
   if (isUnreflected()) {
     episode.outcome = outcome;
     episode.failure = turn_failure;
   }
+  var images = seenImages(input.stimulus);
+  if (images.length > 0) {
+    episode.images = images;
+  }
   return episode;
+}
+
+// The images the stimulus carried, in order, each once, at most 8 (mosfet.py
+// keeps a turn's worth, media.MAX_TURN_IMAGES, in EpisodeData.parts): each
+// media object ({image, media_type}, the reference floppy passes media by)
+// read through envelopes and arrays, kept as its reference and media type,
+// so a recalled episode shows the model what the turn saw (decision D252).
+function seenImages(stimulus) {
+  var found = [];
+  function read(item, depth) {
+    if (depth > 8 || found.length >= 8 || item === null || typeof item !== 'object') {
+      return;
+    }
+    if (Array.isArray(item)) {
+      item.forEach(function (each) { read(each, depth + 1); });
+      return;
+    }
+    if (typeof item.image === 'string' && (typeof item.media_type === 'string' || item.media_type === null)) {
+      if (!found.some(function (each) { return each.image === item.image; })) {
+        found.push({image: item.image, media_type: item.media_type});
+      }
+      return;
+    }
+    Object.keys(item).forEach(function (key) { read(item[key], depth + 1); });
+  }
+  read(stimulus, 0);
+  return found;
+}
+
+// The words the stimulus carried, in order, each once (mosfet.py's
+// EpisodeData.heard): the content of each message of a text type, as the
+// payloads holding them declare them, read through envelopes and arrays,
+// at most 2048 UTF-8 bytes in all (a short-term turn's bound), the last cut
+// at a whole word.
+function heardWords(stimulus) {
+  var found = [];
+  var room = 2048;
+  function read(item, depth) {
+    if (depth > 8 || room <= 0 || item === null || typeof item !== 'object') {
+      return;
+    }
+    if (Array.isArray(item)) {
+      item.forEach(function (each) { read(each, depth + 1); });
+      return;
+    }
+    if (typeof item.content === 'string' && typeof item.content_type === 'string' && /^text\//i.test(item.content_type)) {
+      var words = item.content.trim();
+      if (words !== '' && found.indexOf(words) < 0) {
+        words = cutAtWord(words, room);
+        if (words !== '') {
+          found.push(words);
+          room -= utf8Bytes(words);
+        }
+      }
+      return;
+    }
+    Object.keys(item).forEach(function (key) { read(item[key], depth + 1); });
+  }
+  read(stimulus, 0);
+  return found;
+}
+
+// The words within bytes UTF-8 bytes: whole, or their longest prefix
+// ending at a word break, trailing white space removed.
+function cutAtWord(words, bytes) {
+  if (utf8Bytes(words) <= bytes) {
+    return words;
+  }
+  var end = 0;
+  var used = 0;
+  for (var i = 0; i < words.length; i++) {
+    used += utf8Bytes(words.charAt(i));
+    if (used > bytes) {
+      break;
+    }
+    if (/\s/.test(words.charAt(i))) {
+      end = i;
+    }
+  }
+  return words.slice(0, end).trim();
+}
+
+function utf8Bytes(text) {
+  var bytes = 0;
+  for (var i = 0; i < text.length; i++) {
+    var code = text.charCodeAt(i);
+    bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : (code >= 0xd800 && code < 0xdc00) ? 4 : (code >= 0xdc00 && code < 0xe000) ? 0 : 3;
+  }
+  return bytes;
 }
 
 // Whether a failing turn has not tried to store its episode yet.

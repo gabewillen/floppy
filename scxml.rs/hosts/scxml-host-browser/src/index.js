@@ -39,7 +39,7 @@ export {
   diffSnapshots,
 } from './snapshot.js';
 export { MAX_OPEN_SPANS } from './telemetry.js';
-export { MAX_RESOURCE_URL_BYTES, RESOURCE_DETAILS } from './resources.js';
+export { MAX_PREFETCHED_CHILDREN, MAX_RESOURCE_URL_BYTES, RESOURCE_DETAILS } from './resources.js';
 export { STATUSES } from './values.js';
 export {
   COMPILER_ERROR_CODES,

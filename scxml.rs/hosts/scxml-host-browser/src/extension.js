@@ -56,6 +56,7 @@ import {
   toComponentError,
 } from './errors.js';
 import { FuelBudget, FuelMeter, isFuel } from './fuel.js';
+import { shippedExtensions } from './loader.js';
 import { sha256Hex } from './sha256.js';
 import { encodeCapture, isDataModelSnapshot, stripTraceContext } from './snapshot.js';
 import { GUEST_MODULES, Telemetry, scxmlTelemetryImport } from './telemetry.js';
@@ -79,13 +80,12 @@ const SCXML_PROCESSOR_TYPES = new Set(['scxml', 'http://www.w3.org/TR/scxml/#SCX
 const encoder = new TextEncoder();
 
 /**
- * The extension components this package ships, by `dist/` component name:
- * their jco bindings are imported only when a page binds one.
+ * The extension components this build ships, by `dist/` component name
+ * (`dist/extensions.js`: the example namespace, `scx`, and those the build's
+ * `--extensions` added): their jco bindings are imported only when a page
+ * binds one.
  */
-const SHIPPED = Object.freeze({
-  'extension-example': () => import('../dist/extension-example/extension-example.js'),
-  scx: () => import('../dist/scx/scx.js'),
-});
+const SHIPPED = await shippedExtensions();
 
 let identities;
 

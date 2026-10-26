@@ -11,6 +11,33 @@ Last updated: 2026-10-24.
 
 ## Current state (2026-10-09) — resume here
 
+- **The workshop compiles and runs bots in the browser (2026-10-26, #104):**
+  the website's workshop validates, compiles and runs a document in the
+  page with scxml.rs's browser host and the same components `scx run`
+  uses (`web/src/runtime.js`); its JavaScript preview interpreter is gone.
+  scxml.rs's browser host build takes `--extensions <dir>` so it ships
+  floppy's namespace components (scxml.rs `1e16968e`),
+  `web/build-host.sh` builds it into `target/web`, and the Pages workflow
+  runs it. The browser host resolves an `<invoke src>` child's own scripts,
+  data, schema files and children against the child's base URI (the page
+  answers each document with `baseUri` and `eventSchemas`, as the Wasmtime
+  embedder's `EmbeddedDocument`), so 38 of the 40 documents run with their
+  children in the page. Not yet (browser parity slice 2): a service
+  `<invoke>` raises `error.execution` (no service binding), and the floppy
+  bot and the room exceed Chromium's limit of about 125 live Wasm memories
+  per page (each session's machine, data model, I/O processor, clock and
+  namespaces hold 2 or 3 memories per component, so a tree of more than a
+  handful of sessions fails with `instance-lost`); sharing component
+  instances across a run's sessions upstream is the fix. The register's
+  facts come from `web/src/register.py`.
+- **What is heard and said is remembered (2026-10-25, D251, #85, #87):**
+  the conversation writes each message it commits with words to the
+  short-term register (heard for inbound text, typed or decoded from
+  speech; said for appends), so the recent turns reasoning reads are no
+  longer empty, and each episode keeps the words its stimulus carried
+  (`heard`). Memory's held-out eval score went from 0.23 to 0.81. Episodes
+  keep no images yet (the seeing thread's), and recall is still by
+  recency, not by meaning (embeddings next).
 - **Speech on api.willen.dev (2026-10-25, D244):** both speech variables
   name `https://api.willen.dev/v1` (its openapi.json is the contract), with
   the documents' models unchanged; the GPT-Live harness ran on it with

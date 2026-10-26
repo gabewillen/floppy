@@ -173,6 +173,27 @@ function isTextMessage() {
   return typeof message.content === 'string' && /^text\//i.test(message.content_type);
 }
 
+// The committed message has words: content with something but white space.
+function hasWords() {
+  return typeof message.content === 'string' && /\S/.test(message.content);
+}
+
+// The committed message as a short-term memory turn (its words cut).
+function heardTurn() {
+  return memoryTurn('heard');
+}
+
+function saidTurn() {
+  return memoryTurn('said');
+}
+
+function memoryTurn(direction) {
+  var provenance = message.provenance || {};
+  var id = [provenance.id, provenance.turn_ref, provenance.event].filter(function (value) { return typeof value === 'string' && value !== ''; })[0] || direction;
+  var speakers = (message.participants || []).filter(function (participant) { return participant.role === 'source'; }).slice(0, 8);
+  return {id: id, direction: direction, speakers: speakers, text: words.text, cut: words.cut, conversation: _sessionid};
+}
+
 // A voice embedding is biometric and never logged: it is written as
 // <biometric:VoiceEmbedding>.
 function inboundCommitLog() {

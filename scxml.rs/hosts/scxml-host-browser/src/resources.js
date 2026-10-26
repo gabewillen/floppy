@@ -85,21 +85,64 @@ export function byteLength(text, bound) {
 const failure = (code, detail) => ({ version: 'v1', code, detail });
 
 /**
- * A page's answer for one document as `{text, mediaType}`, or `undefined`
- * when it is neither a string nor `{text: string, mediaType?: string}`.
+ * A page's answer for one document as `{text, mediaType, baseUri,
+ * eventSchemas}`, or `undefined` when it is neither a string nor
+ * `{text: string, mediaType?: string, baseUri?: string, eventSchemas?:
+ * Array<{uri: string, bytes: Uint8Array}>}`.
  * The media type (an HTTP `Content-Type` the page read, for example) is
  * the indication SCXML B.2.1 lets the processor interpret `<data src>`
  * content by; one not visible ASCII is dropped, as the Wasmtime host
- * drops it, and one of any length is kept.
+ * drops it, and one of any length is kept. `baseUri` and `eventSchemas`
+ * are the Wasmtime host's `EmbeddedDocument::base_uri` and
+ * `event_schemas`, read only when the document is an `<invoke src>`
+ * child: the absolute URI its own relative references resolve against
+ * (RFC 3986 §5.1), and the `event:schema` files it is compiled with. A
+ * `baseUri` that is not an absolute URL fails the answer.
  */
 export function resolvedDocument(value) {
-  if (typeof value === 'string') return Object.freeze({ text: value, mediaType: undefined });
+  if (typeof value === 'string') return Object.freeze({ text: value, mediaType: undefined, baseUri: undefined, eventSchemas: undefined });
   if (value === null || typeof value !== 'object' || typeof value.text !== 'string') return undefined;
-  const { mediaType } = value;
+  const { mediaType, baseUri, eventSchemas } = value;
   if (mediaType !== undefined && typeof mediaType !== 'string') return undefined;
+  if (baseUri !== undefined && (typeof baseUri !== 'string' || !URL.canParse(baseUri))) return undefined;
+  const schemas = documentSchemas(eventSchemas);
+  if (schemas === null) return undefined;
   const kept =
     mediaType !== undefined && /^[\x20-\x7e]*$/.test(mediaType) ? mediaType : undefined;
-  return Object.freeze({ text: value.text, mediaType: kept });
+  return Object.freeze({ text: value.text, mediaType: kept, baseUri, eventSchemas: schemas });
+}
+
+/**
+ * A frozen copy of a document's `eventSchemas` answer, `undefined` when
+ * absent, `null` when malformed.
+ */
+function documentSchemas(value) {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) return null;
+  const schemas = [];
+  for (const schema of value) {
+    if (schema === null || typeof schema !== 'object' || typeof schema.uri !== 'string' || !(schema.bytes instanceof Uint8Array)) {
+      return null;
+    }
+    schemas.push(Object.freeze({ uri: schema.uri, bytes: schema.bytes.slice() }));
+  }
+  return Object.freeze(schemas);
+}
+
+/**
+ * `uri` resolved against a session's base URI (RFC 3986 §5.2, as
+ * `scxml_types::resolve_reference` resolves it under the Wasmtime host);
+ * as written when the session has no base URI or `uri` does not resolve.
+ * @param {string | undefined} base
+ * @param {string} uri
+ */
+export function resolveReference(base, uri) {
+  if (base === undefined) return uri;
+  try {
+    return new URL(uri, base).href;
+  } catch {
+    return uri;
+  }
 }
 
 /**
@@ -192,8 +235,12 @@ export function allowedUrl(resources, url) {
  * @returns {Promise<ResourceCache>}
  */
 export async function prefetchResources(ir, resources, telemetry) {
-  const urls = collectUrls(ir);
-  const pending = urls.map((url, index) => {
+  return new ResourceCache(new Map(await resolveAll(collectUrls(ir), resources, telemetry)));
+}
+
+/** `[url, entry]` for each of `urls`, resolved as prefetchResources describes. */
+async function resolveAll(urls, resources, telemetry) {
+  const pending = urls.map((url) => {
     if (byteLength(url, MAX_RESOURCE_URL_BYTES) === Infinity) {
       telemetry.observe('capability', 'rejected');
       return { error: failure('unavailable', RESOURCE_DETAILS.limit) };
@@ -214,7 +261,7 @@ export async function prefetchResources(ir, resources, telemetry) {
             return { error: failure('unavailable', RESOURCE_DETAILS.unresolved), fetchFailed: true };
           }
           telemetry.end(span, 'ok');
-          return { text: document.text, mediaType: document.mediaType };
+          return { ...document };
         },
         (thrown) => {
           // `unavailable` is the page saying the URL names nothing; any
@@ -226,8 +273,63 @@ export async function prefetchResources(ir, resources, telemetry) {
       );
   });
   const settled = await Promise.all(pending);
-  const entries = new Map();
-  urls.forEach((url, index) => entries.set(url, Object.freeze(settled[index])));
+  return urls.map((url, index) => [url, Object.freeze(settled[index])]);
+}
+
+/** Most `<invoke src>` children one session's prefetch compiles to scan. */
+export const MAX_PREFETCHED_CHILDREN = 64;
+
+/** The string `src` of every `<invoke>` of one Machine IR, in IR order. */
+function invokeSources(ir) {
+  let machine;
+  try {
+    machine = JSON.parse(decoder.decode(ir));
+  } catch {
+    return [];
+  }
+  const sources = [];
+  for (const state of Array.isArray(machine?.states) ? machine.states : []) {
+    for (const invoke of Array.isArray(state?.invokes) ? state.invokes : []) {
+      if (typeof invoke?.src === 'string') sources.push(invoke.src);
+    }
+  }
+  return sources;
+}
+
+/**
+ * Extends `cache`, the prefetch of the root IR `ir`, with the statically
+ * known URLs of every `<invoke src>` child it reaches, breadth first: each
+ * resolved child document is compiled (`compile(src, entry)`, the child's
+ * IR or `undefined`), and the URLs of its IR, resolved against the
+ * child's `baseUri` (resolveReference), are resolved as prefetchResources
+ * resolves the root's. A URL is resolved once however many documents name
+ * it, and at most MAX_PREFETCHED_CHILDREN children are compiled; deeper or
+ * further children load on first use, as runtime URLs do. Like the root's
+ * scan, this only chooses what to prefetch.
+ * @param {ResourceCache} cache
+ * @param {Uint8Array} ir
+ * @param {object} resources the page's `resources` option
+ * @param {import('./telemetry.js').Telemetry} telemetry
+ * @param {(src: string, entry: object) => Promise<Uint8Array | undefined>} compile
+ * @returns {Promise<ResourceCache>}
+ */
+export async function prefetchInvoked(cache, ir, resources, telemetry, compile) {
+  const entries = new Map(cache.entries());
+  const queue = invokeSources(ir).map((src) => [undefined, src]);
+  const scanned = new Set();
+  while (queue.length > 0 && scanned.size < MAX_PREFETCHED_CHILDREN) {
+    const [base, src] = queue.shift();
+    const url = resolveReference(base, src);
+    const entry = entries.get(url);
+    if (scanned.has(url) || entry?.text === undefined) continue;
+    scanned.add(url);
+    const childIr = await compile(src, entry);
+    if (childIr === undefined) continue;
+    const missing = new Set(collectUrls(childIr).map((uri) => resolveReference(entry.baseUri, uri)));
+    for (const known of entries.keys()) missing.delete(known);
+    for (const [missed, resolved] of await resolveAll([...missing], resources, telemetry)) entries.set(missed, resolved);
+    for (const child of invokeSources(childIr)) queue.push([entry.baseUri, child]);
+  }
   return new ResourceCache(entries);
 }
 
@@ -253,14 +355,14 @@ export class ResourceCache {
   }
 
   /**
-   * `load-document` for a prefetched `url` (`has(url)`): its WIT
-   * `loaded-document` (`{text, mediaType}`), or the Wasmtime host's
-   * failure as a thrown ImportFailure.
+   * `load-document` for a prefetched `url` (`has(url)`): its resolved
+   * document (`{text, mediaType, baseUri, eventSchemas}`, resolvedDocument),
+   * or the Wasmtime host's failure as a thrown ImportFailure.
    */
   document(url) {
     const entry = this.#entries.get(url);
     if (entry.text === undefined) throw new ImportFailure(entry.error);
-    return { text: entry.text, mediaType: entry.mediaType };
+    return entry;
   }
 
   /** The prefetched entry of `url`, if any. */
@@ -296,17 +398,23 @@ function validScriptUri(uri) {
  */
 export class ScriptLoads {
   #cache;
+  #base;
   /** uri -> script text */
   #loaded = new Map();
 
-  /** @param {ResourceCache} cache */
-  constructor(cache) {
+  /**
+   * @param {ResourceCache} cache
+   * @param {string} [base] the session's base URI, which relative script
+   *   URIs resolve against (resolveReference)
+   */
+  constructor(cache, base) {
     this.#cache = cache;
+    this.#base = base;
   }
 
   /** Whether this cache answers `reference` (an unpinned, prefetched URI). */
   serves(reference) {
-    return reference.pinned === undefined && this.#cache.has(reference.uri);
+    return reference.pinned === undefined && this.#cache.has(resolveReference(this.#base, reference.uri));
   }
 
   /**
@@ -321,7 +429,7 @@ export class ScriptLoads {
       throw new ImportFailure(failure('invalid-input', 'script src URI is empty, oversized, or malformed'));
     }
     if (this.#loaded.has(uri)) return;
-    const entry = this.#cache.entry(uri);
+    const entry = this.#cache.entry(resolveReference(this.#base, uri));
     if (entry.text === undefined) {
       if (entry.fetchFailed) throw new ImportFailure(failure('platform', 'script loader failed'));
       throw new ImportFailure(failure('unavailable', 'script loader did not provide the script'));
