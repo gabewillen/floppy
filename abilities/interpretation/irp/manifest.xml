@@ -60,7 +60,7 @@
     </test>
   </assert>
   <assert id="interpretation-7" specnum="7" specid="#interpretation-7">
-    <![CDATA[With diarization the closed utterance is diarized: one speech product per clipped segment (`content` floppy-diarized-<n>-<index>, its span, `confidence`, a `voice_detection` of its own length, `voice_embedding` null and no source ids), or, with voice identification too, each identified by its embedding (`source_ids` `[embedding]`, `voice_embedding` the embedding); with speech decoding too, the utterance is decoded instead.]]>
+    <![CDATA[With diarization the closed utterance is diarized: one speech product per clipped segment (`content` floppy-diarized-<n>-<index>, its span, `confidence`, a `voice_detection` of its own length, and no source ids), or, with voice identification too, each identified (`source_ids` `[voice:<id>]`, its voice's ref); with speech decoding too, the utterance is decoded instead.]]>
     <test id="160" conformance="mandatory" manual="false">
       <start uri="160/test160.scxml"/>
     </test>
@@ -72,7 +72,7 @@
     </test>
   </assert>
   <assert id="interpretation-8" specnum="8" specid="#interpretation-8">
-    <![CDATA[Voice identification without diarization identifies the opening voice span directly: its one embedding is the window's source identity, carried by every streamed frame; a sound that is not PCM with a sample rate cannot be identified and fails the `voice_identification` stage. Identification waits for its voices at most `stage_timeout_ms` + `recognize_timeout_ms` (2 s past the stage bound by default, decision D177); past that, or with no opening embedding, it completes with nobody identified: the window opens with no source identity, or each diarized segment is handed off with no embedding.]]>
+    <![CDATA[Voice identification without diarization identifies the opening voice span directly: its one embedding is identified and the voice's ref is the window's source identity, carried by every streamed frame; a sound that is not PCM with a sample rate cannot be identified and fails the `voice_identification` stage. Identification waits for its voices at most `stage_timeout_ms` + `recognize_timeout_ms` (2 s past the stage bound by default, decision D177); past that, or with no opening embedding, it completes with nobody identified: the window opens with no source identity, or each diarized segment is handed off with nobody.]]>
     <test id="170" conformance="mandatory" manual="false">
       <start uri="170/test170.scxml"/>
     </test>
@@ -117,13 +117,34 @@
     </test>
   </assert>
   <assert id="interpretation-13" specnum="13" specid="#interpretation-13">
-    <![CDATA[With speech decoding, diarization and voice identification (the document's defaults), the decoded utterance's diarized segments of at least `min_voice_seconds` (1 s), else the longest, are embedded after its words: each voice that is not the bot's own is one of the decoded product's `source_ids` (its embedding), and the product carries no `voice_embedding`.]]>
+    <![CDATA[With speech decoding, diarization and voice identification (the document's defaults), the decoded utterance's diarized segments of at least `min_voice_seconds` (1 s), else the longest, are embedded after its words: each voice that is not the bot's own is one of the decoded product's `source_ids` by its ref `voice:<id>`, and the product carries no embedding.]]>
     <test id="220" conformance="mandatory" manual="false">
       <start uri="220/test220.scxml"/>
     </test>
   </assert>
+  <assert id="interpretation-15" specnum="15" specid="#interpretation-15">
+    <![CDATA[Identification is mosfet.py's (decision D253): the interpretation's voice registry matches each embedding to an id, or mints one (32 hex digits), so an embedding never leaves the interpretation: a voice heard again, at least `match_policy.threshold` (0.50) alike and clear of the next by its margin (0.05), is named by the same ref, and a voice unlike every id by a new one.]]>
+    <test id="221" conformance="mandatory" manual="false">
+      <start uri="221/test221.scxml"/>
+    </test>
+    <test id="222" conformance="mandatory" manual="false">
+      <start uri="222/test222.scxml"/>
+    </test>
+    <test id="240" conformance="mandatory" manual="false">
+      <start uri="240/test240.scxml"/>
+    </test>
+    <test id="241" conformance="mandatory" manual="false">
+      <start uri="241/test241.scxml"/>
+    </test>
+    <test id="242" conformance="mandatory" manual="false">
+      <start uri="242/test242.scxml"/>
+    </test>
+    <test id="243" conformance="mandatory" manual="false">
+      <start uri="243/test243.scxml"/>
+    </test>
+  </assert>
   <assert id="interpretation-14" specnum="14" specid="#interpretation-14">
-    <![CDATA[The bot's own voice is heard from speaking's copy of a completed utterance, `bot.ability.speaking.efference` with `audio` (its PCM, `media_type` `audio/pcm` with a sample rate), taken while voice identification is configured and the own voice is unknown: its voice is detected, and when at least `min_voice_seconds` (1 s) lies from its first voice to its last, that span is identified and kept as the bot's own voice; a copy with less voice is logged `interpretation.unidentified`, a copy without audio is nothing, and without voice identification the copy is ignored. A decoded voice at least `voice_similarity_threshold` (0.50) alike to the bot's own is not a source id.]]>
+    <![CDATA[The bot's own voice is heard from speaking's copy of a completed utterance, `bot.ability.speaking.efference` with `audio` (its PCM, `media_type` `audio/pcm` with a sample rate), taken while voice identification is configured and the own voice is unknown: its voice is detected, and when at least `min_voice_seconds` (1 s) lies from its first voice to its last, that span is identified and enrolled as an own id; a copy with less voice is logged `interpretation.unidentified`, a copy without audio is nothing, and without voice identification the copy is ignored. A decoded voice recognized as the own id is not a source id.]]>
     <test id="230" conformance="mandatory" manual="false">
       <start uri="230/test230.scxml"/>
     </test>
@@ -139,6 +160,12 @@
   </assert>
   <assert id="interpretation-15" specnum="15" specid="#interpretation-15">
     <![CDATA[With an affect classifier (`affect_classifier`, a document default), decoded speech carries the tone of its longest voice (mosfet.py's `SpeechData.affect`), heard through `abilities/voice_affect/voice_affect.scx` alongside decoding: the utterance, or with diarization its diarized segments; the product's `affect` is `{label, scores, valence, confidence}`. A tone not heard (a failure, a voice under 0.3 s, no answer within 3 s) leaves the product without `affect`, and the words still flow.]]>
+    <test id="221" conformance="mandatory" manual="false">
+      <start uri="221/test221.scxml"/>
+    </test>
+    <test id="222" conformance="mandatory" manual="false">
+      <start uri="222/test222.scxml"/>
+    </test>
     <test id="240" conformance="mandatory" manual="false">
       <start uri="240/test240.scxml"/>
     </test>

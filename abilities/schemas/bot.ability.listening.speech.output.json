@@ -442,97 +442,12 @@
       ],
       "title": "Confidence"
     },
-    "voice_embedding": {
-      "anyOf": [
-        {
-          "description": "Provider-neutral embedding value returned for an identified voice segment.",
-          "examples": [
-            {
-              "confidence": 0.91,
-              "embedding": [
-                0.12,
-                -0.08,
-                0.31
-              ],
-              "model": "voice-embedding-v1"
-            }
-          ],
-          "properties": {
-            "embedding": {
-              "description": "Provider-neutral numeric voice embedding produced by the classifier. Providers decide how to index and compare the vector; it is not a human-readable speaker label.",
-              "examples": [
-                [
-                  0.12,
-                  -0.08,
-                  0.31
-                ]
-              ],
-              "items": {
-                "type": "number"
-              },
-              "minItems": 1,
-              "title": "Embedding",
-              "type": "array"
-            },
-            "model": {
-              "anyOf": [
-                {
-                  "minLength": 1,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Optional embedding model identifier that produced this voice embedding.",
-              "examples": [
-                "voice-embedding-v1"
-              ],
-              "title": "Model"
-            },
-            "confidence": {
-              "anyOf": [
-                {
-                  "maximum": 1.0,
-                  "minimum": 0.0,
-                  "type": "number"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "description": "Optional provider confidence that the voice embedding represents this speaker, normalized from 0.0 to 1.0.",
-              "examples": [
-                0.91
-              ],
-              "title": "Confidence"
-            }
-          },
-          "required": [
-            "embedding"
-          ],
-          "title": "VoiceEmbedding",
-          "type": "object"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "Optional voice embedding produced by the configured classifier."
-    },
     "source_ids": {
       "description": "Opaque source identities for this speech observation. Empty source_ids are permitted when Listening has speech evidence but no identity classifier result; Conversation rejects them.",
       "examples": [
         [],
         [
-          [
-            0.12,
-            -0.08,
-            0.31
-          ]
+          "voice:3f2a9c"
         ]
       ],
       "items": {

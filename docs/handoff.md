@@ -30,6 +30,13 @@ Last updated: 2026-10-24.
   handful of sessions fails with `instance-lost`); sharing component
   instances across a run's sessions upstream is the fix. The register's
   facts come from `web/src/register.py`.
+- **A voice is named by its ref (2026-10-26, D253):** the interpretation
+  owns the voice registry (mosfet.py's identification), so an embedding
+  never leaves it and products carry `voice:<id>` refs. This keeps a long
+  spoken conversation's episodes and prompts small (the embeddings used to
+  push a generate invoke past 64 KiB by the third spoken turn). The
+  registry is in the session only: a restart forgets voices until it gets
+  mosfet.py's `IdentityStore` (`bot_identity`), the next step.
 - **What is heard and said is remembered (2026-10-25, D251, #85, #87):**
   the conversation writes each message it commits with words to the
   short-term register (heard for inbound text, typed or decoded from
