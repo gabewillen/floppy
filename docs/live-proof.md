@@ -7,6 +7,55 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-26, recall by association (D256), model `sparks/qwen3.8-flash-next`
+
+`eval.py run` from a cloud session through the relays of docs/eval.md
+(the embedder `embeddinggemma-2` on api.willen.dev), two repeats each.
+The baseline is the same tree with `FLOPPY_EMBEDDING_*` unset, which
+recalls by recency exactly as before D256. The train split is `climb`'s
+(seed 7, test share 0.34); the held-out test was run once, on the
+change. The long-recall probe is a scratch scenario kept out of
+`tests/eval/scenarios` so the split stays as it was: Gabe tells floppy
+four facts, asks fifty unrelated questions, and after a restart asks
+for three of them.
+
+| Run | Train | Long-recall probe (20 / 50 questions) | Held-out test |
+| --- | --- | --- | --- |
+| baseline (recency) | 0.99 ± 0.01 | 0.97 / 0.08 | 0.81 (D251's run) |
+| D256 | 0.99 ± 0.01 | 0.97 / 0.97 | 0.88 ± 0.08 (people_overheard 0.86, recall_update 0.91) |
+
+Read before trusting: the train scenarios were already saturated by
+D251, so they show no regression rather than a gain. The probe is where
+recall by association matters: after fifty questions the facts are older
+than the short-term register's turns and than the newest episodes that
+fit 24576 characters, so the baseline answered "you never told me" to
+all three questions, and D256 answered "Lisbon" and "a blue Volvo".
+`reasoning.recall` logged the cue's best matches (for example
+`3:0.772 5:0.673 7:0.640`). The held-out baseline is D251's earlier run,
+not a rerun on this tree. Intervals are wide (2 jobs per probe, 4 on
+test).
+## 2026-10-26, decisions from the snapshot (D257), model `sparks/qwen3.8-flash-next`
+
+`eval.py run`, one repeat, 12 scenarios with the stratified split
+(`split_scenarios`, 0.34, seed 7; held out: chat_understand, recall_many,
+recall_people, reflex_greeting), turn_failure bounded at 20 s on both sides.
+Services through local relays (CPA, TypeSafe, api.willen.dev); judges codex
+and gemini.
+
+| run | held-out | train | suite |
+| --- | --- | --- | --- |
+| baseline (PR #83 head 1da406ed) | 0.550 | 0.402 | 0.452 |
+| first dev run (hand-back, own target, ignore description) | 0.995 | 0.855 | 0.902 |
+| this branch on main 33a50bea | 0.985 | 0.946 | 0.959 |
+
+The first dev run is the clean comparison: the same base, scenarios and driver as the baseline, with only floppy changed. The last run also carries other threads' merges and the driver's fix that keeps a failed turn's hand-back reply in its own step. No grader, scorer or expected output changed. On this branch turn_failure is 1.0 (it was 0.38: the bounded turn's
+hand-back answers the question), people_overheard 0.92, and recall_restart,
+recall_update and reflex_pingpong 1.0. name_adopt, run beside the split, is
+1.0, and each step that names the bot got one reply (`replies_at_most`).
+chat_ignore is noisy: 0.65 here, and 0.67, 1.0 and 0.98 over three more
+runs. Twice reasoning answered "Ana, could you pass me the salt?", which
+had no target.
+
 ## 2026-10-26, floppy remembers what it saw (D252), model `sparks/qwen3.8-flash-next`
 
 `eval.py run` with the same setup as D250's climb below, on main with the

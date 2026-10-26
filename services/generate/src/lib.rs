@@ -84,6 +84,26 @@
 //! rejects the start: the `<invoke>` raises `error.execution` and nothing is
 //! sent.
 //!
+//! # Embeddings
+//!
+//! With `input` in place of the conversation the call embeds instead
+//! (`OpenAI`'s Embeddings API, `POST {base}/embeddings`, which the
+//! embedding models the maintainer serves speak, `embeddinggemma-2` among
+//! them): `input` (a non-empty string, or a JSON array of 1 to
+//! [`MAX_INPUTS`] non-empty strings, each one vector) is sent as `input`,
+//! and `dimensions` (optional, a whole number from 1 to
+//! [`MAX_DIMENSIONS`]) as `dimensions`, which a Matryoshka model answers
+//! with its truncation. Only `model` goes with them: any parameter of the
+//! conversation rejects the start. The body is canonical JSON,
+//! `{"dimensions":D,"input":[…],"model":"…"}`, and the result is
+//! [`RESULT_EVENT`] `{"vectors": [[…]], "request_bytes": B, "usage": U}`:
+//! one vector per input, in input order (the reply's `data` rows read by
+//! their `index`), each its first `dimensions` components (all of them
+//! without one) scaled to unit length, so a cosine is a dot product (the
+//! contract of mosfet.py's Embedding). A reply without exactly one row of
+//! at least that many finite numbers per input, or a vector without a
+//! norm, is `malformed`.
+//!
 //! # Images
 //!
 //! A message's `content` may be an array of reading parts (`kind` and
@@ -308,6 +328,13 @@ pub const STREAM_SLOT: &str = "stream";
 pub const MAX_COMPLETION_TOKENS: u32 = 1_048_576;
 /// The path appended to the base URL.
 pub const CHAT_COMPLETIONS_PATH: &str = "/chat/completions";
+/// The path appended to the base URL for embeddings (`input`).
+pub const EMBEDDINGS_PATH: &str = "/embeddings";
+/// Most inputs one embeddings call may carry (mosfet.py's Embedding's
+/// items).
+pub const MAX_INPUTS: usize = 64;
+/// Upper bound of `dimensions` (mosfet.py's Embedding's).
+pub const MAX_DIMENSIONS: u32 = 4096;
 /// `tool_choice` with a schema when the invocation names none: a call of
 /// the one tool is required (decision D112).
 pub const TOOL_CHOICE: &str = "required";
@@ -530,6 +557,16 @@ pub struct ResponseSchema {
     pub tool_choice: &'static str,
 }
 
+/// What an embeddings call asks (`input`): the texts, one vector each, and
+/// `dimensions`, when the invocation gave one.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Embeddings {
+    /// The texts, in order.
+    pub input: Vec<String>,
+    /// `dimensions`.
+    pub dimensions: Option<u64>,
+}
+
 /// One validated generation request: what an invocation's parameters ask.
 #[derive(Debug)]
 pub struct Generation {
@@ -550,6 +587,9 @@ pub struct Generation {
     /// `thinking_token_budget` (vLLM's bound on a reasoning model's
     /// thinking), when the invocation gave one.
     pub thinking_token_budget: Option<u64>,
+    /// The embeddings asked for in place of a completion (`input`); the
+    /// conversation is empty then.
+    pub embeddings: Option<Embeddings>,
 }
 
 /// The closed failure codes of [`FAILED_EVENT`].
@@ -1167,6 +1207,8 @@ pub fn parse_parameters<'a>(
     let mut tool_choice = None;
     let mut temperature = None;
     let mut thinking_token_budget = None;
+    let mut input = None;
+    let mut dimensions = None;
     for (name, value) in parameters {
         let slot = match name {
             "model" => &mut model,
@@ -1181,6 +1223,8 @@ pub fn parse_parameters<'a>(
             "tool_choice" => &mut tool_choice,
             "temperature" => &mut temperature,
             "thinking_token_budget" => &mut thinking_token_budget,
+            "input" => &mut input,
+            "dimensions" => &mut dimensions,
             _ => return Err("generate takes no parameter of that name"),
         };
         if slot.replace(value).is_some() {
@@ -1196,36 +1240,29 @@ pub fn parse_parameters<'a>(
     if exceeds_wasm_bound(model.len(), MAX_MODEL_BYTES) {
         return Err("generate model exceeds its bound");
     }
-    let mut conversation = Vec::new();
-    if let Some(system) = system {
-        conversation.push(Message {
-            role: Role::System,
-            content: Content::Text(text_parameter(
-                system,
-                "generate system must be a non-empty string",
-            )?),
-        });
-    }
-    match (prompt, messages) {
-        (Some(prompt), None) => conversation.push(Message {
-            role: Role::User,
-            content: Content::Text(text_parameter(
-                prompt,
-                "generate prompt must be a non-empty string",
-            )?),
-        }),
-        (None, Some(Data::JsonArray(text))) => {
-            conversation.extend(messages_from_json(text, &mut read)?);
+    if let Some(input) = input {
+        let conversation = [
+            prompt,
+            messages,
+            system,
+            schema,
+            schema_name,
+            reasoning_effort,
+            stream,
+            max_completion_tokens,
+            tool_choice,
+            temperature,
+            thinking_token_budget,
+        ];
+        if conversation.iter().any(Option::is_some) {
+            return Err("generate input takes only model and dimensions");
         }
-        (None, Some(_)) => return Err("generate messages must be a JSON array of messages"),
-        _ => return Err("generate takes exactly one of prompt or messages"),
+        return embeddings_generation(model, input, dimensions);
     }
-    let bytes = text_bytes(&conversation);
-    if exceeds_wasm_bound(conversation.len(), MAX_MESSAGES)
-        || exceeds_wasm_bound(bytes, MAX_CONVERSATION_BYTES)
-    {
-        return Err("generate conversation exceeds its bound");
+    if dimensions.is_some() {
+        return Err("generate dimensions requires an input");
     }
+    let conversation = conversation_parameter(system, prompt, messages, &mut read)?;
     let schema_name = schema_name_parameter(schema_name)?;
     let reasoning_effort = reasoning_effort_parameter(reasoning_effort, schema.is_some())?;
     let stream = boolean_parameter(stream, "generate stream must be a boolean")?.unwrap_or(false);
@@ -1248,7 +1285,121 @@ pub fn parse_parameters<'a>(
         max_completion_tokens,
         temperature,
         thinking_token_budget,
+        embeddings: None,
     })
+}
+
+/// The embeddings generation of `input` (see [`parse_parameters`]).
+fn embeddings_generation(
+    model: String,
+    input: &Data,
+    dimensions: Option<&Data>,
+) -> Result<Generation, &'static str> {
+    Ok(Generation {
+        model,
+        messages: Vec::new(),
+        schema: None,
+        reasoning_effort: DEFAULT_REASONING_EFFORT,
+        stream: false,
+        max_completion_tokens: None,
+        temperature: None,
+        thinking_token_budget: None,
+        embeddings: Some(Embeddings {
+            input: input_parameter(input)?,
+            dimensions: dimensions_parameter(dimensions)?,
+        }),
+    })
+}
+
+/// The conversation of `system` and exactly one of `prompt` or `messages`,
+/// inside its bounds (see [`parse_parameters`]).
+fn conversation_parameter(
+    system: Option<&Data>,
+    prompt: Option<&Data>,
+    messages: Option<&Data>,
+    read: &mut impl FnMut(&str, usize) -> Result<Vec<u8>, ImageReadFailure>,
+) -> Result<Vec<Message>, &'static str> {
+    let mut conversation = Vec::new();
+    if let Some(system) = system {
+        conversation.push(Message {
+            role: Role::System,
+            content: Content::Text(text_parameter(
+                system,
+                "generate system must be a non-empty string",
+            )?),
+        });
+    }
+    match (prompt, messages) {
+        (Some(prompt), None) => conversation.push(Message {
+            role: Role::User,
+            content: Content::Text(text_parameter(
+                prompt,
+                "generate prompt must be a non-empty string",
+            )?),
+        }),
+        (None, Some(Data::JsonArray(text))) => {
+            conversation.extend(messages_from_json(text, read)?);
+        }
+        (None, Some(_)) => return Err("generate messages must be a JSON array of messages"),
+        _ => return Err("generate takes exactly one of prompt or messages"),
+    }
+    let bytes = text_bytes(&conversation);
+    if exceeds_wasm_bound(conversation.len(), MAX_MESSAGES)
+        || exceeds_wasm_bound(bytes, MAX_CONVERSATION_BYTES)
+    {
+        return Err("generate conversation exceeds its bound");
+    }
+    Ok(conversation)
+}
+
+/// `input`: a non-empty string, or a JSON array of 1 to [`MAX_INPUTS`]
+/// non-empty strings, their bytes inside [`MAX_CONVERSATION_BYTES`].
+fn input_parameter(value: &Data) -> Result<Vec<String>, &'static str> {
+    const INVALID: &str = "generate input must be a non-empty string or an array of them";
+    let input = match value {
+        Data::String(text) => vec![text.clone()],
+        Data::JsonArray(text) => {
+            let items: Vec<Json> = serde_json::from_str(text).map_err(|_| INVALID)?;
+            items
+                .into_iter()
+                .map(|item| match item {
+                    Json::String(text) => Ok(text),
+                    _ => Err(INVALID),
+                })
+                .collect::<Result<_, _>>()?
+        }
+        _ => return Err(INVALID),
+    };
+    if input.is_empty() || input.iter().any(|text| text.trim().is_empty()) {
+        return Err(INVALID);
+    }
+    let bytes = input
+        .iter()
+        .map(String::len)
+        .fold(0_usize, usize::saturating_add);
+    if input.len() > MAX_INPUTS || exceeds_wasm_bound(bytes, MAX_CONVERSATION_BYTES) {
+        return Err("generate input exceeds its bound");
+    }
+    Ok(input)
+}
+
+/// `dimensions`: absent, or a whole number from 1 to [`MAX_DIMENSIONS`].
+fn dimensions_parameter(value: Option<&Data>) -> Result<Option<u64>, &'static str> {
+    match value {
+        None => Ok(None),
+        Some(Data::Number(number))
+            if number.get().fract() == 0.0
+                && (1.0..=f64::from(MAX_DIMENSIONS)).contains(&number.get()) =>
+        {
+            #[allow(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                reason = "a whole number checked to lie in 1..=MAX_DIMENSIONS"
+            )]
+            Ok(Some(number.get() as u64))
+        }
+        Some(_) => Err("generate dimensions must be a whole number from 1 to 4096"),
+    }
 }
 
 /// The one function tool of `schema` (absent without one), named
@@ -1378,6 +1529,9 @@ pub fn build_request(
     stream: Option<u32>,
     generation: &Generation,
 ) -> Request {
+    if let Some(embeddings) = &generation.embeddings {
+        return embeddings_request(base_url, api_key, &generation.model, embeddings);
+    }
     let mut body = Map::new();
     body.insert(
         "messages".into(),
@@ -1434,38 +1588,142 @@ pub fn build_request(
             Part::Reference(base_url),
             Part::Literal(CHAT_COMPLETIONS_PATH.into()),
         ],
-        headers: api_key
-            .map(|api_key| {
-                (
-                    "authorization".to_owned(),
-                    vec![Part::Literal("Bearer ".into()), Part::Reference(api_key)],
-                )
-            })
-            .into_iter()
-            .chain([
-                (
-                    "content-type".into(),
-                    vec![Part::Literal("application/json".into())],
-                ),
-                (
-                    "accept".into(),
-                    vec![Part::Literal(
-                        if generation.stream {
-                            "text/event-stream"
-                        } else if stream.is_some() {
-                            "application/json, text/event-stream"
-                        } else {
-                            "application/json"
-                        }
-                        .into(),
-                    )],
-                ),
-            ])
-            .collect(),
+        headers: headers(
+            api_key,
+            if generation.stream {
+                "text/event-stream"
+            } else if stream.is_some() {
+                "application/json, text/event-stream"
+            } else {
+                "application/json"
+            },
+        ),
         body: canonical_json(&body).into_bytes(),
         stream: stream.filter(|_| !generation.stream),
         request_bytes,
     }
+}
+
+/// The headers of a request: the bearer key (none without one), the
+/// content type, and `accept`.
+fn headers(api_key: Option<u32>, accept: &str) -> Vec<(String, Vec<Part>)> {
+    api_key
+        .map(|api_key| {
+            (
+                "authorization".to_owned(),
+                vec![Part::Literal("Bearer ".into()), Part::Reference(api_key)],
+            )
+        })
+        .into_iter()
+        .chain([
+            (
+                "content-type".into(),
+                vec![Part::Literal("application/json".into())],
+            ),
+            ("accept".into(), vec![Part::Literal(accept.into())]),
+        ])
+        .collect()
+}
+
+/// The Embeddings request: `POST {base}/embeddings` with the bearer key
+/// and a canonical JSON body, `dimensions` (when asked), `input` and
+/// `model`.
+fn embeddings_request(
+    base_url: u32,
+    api_key: Option<u32>,
+    model: &str,
+    embeddings: &Embeddings,
+) -> Request {
+    let mut body = Map::new();
+    if let Some(dimensions) = embeddings.dimensions {
+        body.insert("dimensions".into(), dimensions.into());
+    }
+    body.insert("input".into(), embeddings.input.clone().into());
+    body.insert("model".into(), model.into());
+    let body = canonical_json(&Json::Object(body));
+    Request {
+        url: vec![
+            Part::Reference(base_url),
+            Part::Literal(EMBEDDINGS_PATH.into()),
+        ],
+        headers: headers(api_key, "application/json"),
+        request_bytes: body.len(),
+        body: body.into_bytes(),
+        stream: None,
+    }
+}
+
+/// The vectors of an Embeddings reply: `{"vectors": [[…]], "usage": U}`,
+/// one per input in input order (the `data` rows read by `index`), each its
+/// first `dimensions` components (all without one) scaled to unit length.
+///
+/// # Errors
+///
+/// [`FailureCode::Malformed`] when the body is not such a reply: not a JSON
+/// object, an `error` object, not exactly one row per input with a distinct
+/// in-range `index`, a row of fewer than `dimensions` finite numbers, or a
+/// vector without a norm.
+pub fn embeddings_answer(body: &[u8], embeddings: &Embeddings) -> Result<Json, FailureCode> {
+    let reply: Json = serde_json::from_slice(body).map_err(|_| FailureCode::Malformed)?;
+    if !reply.is_object() || reply.get("error").is_some() {
+        return Err(FailureCode::Malformed);
+    }
+    let rows = reply
+        .get("data")
+        .and_then(Json::as_array)
+        .filter(|rows| rows.len() == embeddings.input.len())
+        .ok_or(FailureCode::Malformed)?;
+    let mut vectors: Vec<Option<Json>> = vec![None; rows.len()];
+    for row in rows {
+        let index = row
+            .get("index")
+            .and_then(Json::as_u64)
+            .and_then(|index| usize::try_from(index).ok())
+            .filter(|index| *index < vectors.len())
+            .ok_or(FailureCode::Malformed)?;
+        let values = row
+            .get("embedding")
+            .and_then(Json::as_array)
+            .ok_or(FailureCode::Malformed)?
+            .iter()
+            .map(|value| value.as_f64().filter(|value| value.is_finite()))
+            .collect::<Option<Vec<f64>>>()
+            .ok_or(FailureCode::Malformed)?;
+        let length = match embeddings.dimensions {
+            Some(dimensions) => usize::try_from(dimensions).map_err(|_| FailureCode::Malformed)?,
+            None => values.len(),
+        };
+        let head = values
+            .get(..length)
+            .filter(|head| !head.is_empty())
+            .ok_or(FailureCode::Malformed)?;
+        let norm = head.iter().map(|value| value * value).sum::<f64>().sqrt();
+        if !norm.is_finite() || norm == 0.0 {
+            return Err(FailureCode::Malformed);
+        }
+        let unit = head
+            .iter()
+            .map(|value| serde_json::Number::from_f64(value / norm).map(Json::Number))
+            .collect::<Option<Vec<Json>>>()
+            .ok_or(FailureCode::Malformed)?;
+        let slot = vectors.get_mut(index).ok_or(FailureCode::Malformed)?;
+        if slot.replace(Json::Array(unit)).is_some() {
+            return Err(FailureCode::Malformed);
+        }
+    }
+    let mut answer = Map::new();
+    answer.insert(
+        "vectors".into(),
+        vectors
+            .into_iter()
+            .collect::<Option<Vec<Json>>>()
+            .ok_or(FailureCode::Malformed)?
+            .into(),
+    );
+    if let Some(usage) = reply.get("usage").and_then(Usage::read) {
+        answer.insert("usage".into(), usage.json());
+    }
+    Ok(answer.into())
 }
 
 /// A message's content on the wire: a string as itself, parts as Chat
@@ -2344,6 +2602,20 @@ pub fn outcome(
     };
     if !(200..300).contains(&response.status) {
         return Returned::failed(FailureCode::Status);
+    }
+    if let Some(embeddings) = &generation.embeddings {
+        return match embeddings_answer(&response.body, embeddings) {
+            Ok(mut data) => {
+                if let Json::Object(members) = &mut data {
+                    members.insert("request_bytes".into(), request_bytes.into());
+                }
+                Returned {
+                    name: RESULT_EVENT,
+                    data: canonical_json(&data),
+                }
+            }
+            Err(code) => Returned::failed(code),
+        };
     }
     let reply = if is_event_stream(&response.body) {
         stream_reply(&response.body)

@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.embedding.output",
+  "additionalProperties": false,
+  "description": "One embedding result (mosfet.py's Embedding OutputData): a unit vector per requested item, in input order, in one declared space.",
+  "examples": [
+    {
+      "space": {
+        "model": "embeddinggemma-2",
+        "dimensions": 2
+      },
+      "role": "query",
+      "vectors": [
+        {
+          "values": [
+            0.6,
+            0.8
+          ]
+        }
+      ]
+    }
+  ],
+  "properties": {
+    "space": {
+      "additionalProperties": false,
+      "description": "The vector space a vector belongs to. Vectors from different spaces must never be compared.",
+      "properties": {
+        "model": {
+          "description": "Stable name of the embedding model that defines this space.",
+          "examples": [
+            "embeddinggemma-2"
+          ],
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "dimensions": {
+          "description": "Number of components in every vector of this space (a Matryoshka model's truncation is its own space).",
+          "examples": [
+            256
+          ],
+          "maximum": 4096,
+          "minimum": 1,
+          "title": "Dimensions",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "model",
+        "dimensions"
+      ],
+      "title": "Space",
+      "type": "object"
+    },
+    "role": {
+      "description": "The request's role, echoed.",
+      "enum": [
+        "query",
+        "document"
+      ],
+      "examples": [
+        "query"
+      ],
+      "title": "Role",
+      "type": "string"
+    },
+    "vectors": {
+      "description": "One unit vector per requested item; vectors[i] embeds items[i].",
+      "items": {
+        "additionalProperties": false,
+        "description": "One L2-unit embedding vector with finite components.",
+        "properties": {
+          "values": {
+            "description": "Vector components; finite, with an L2 norm of 1.",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 4096,
+            "minItems": 1,
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "values"
+        ],
+        "title": "Vector",
+        "type": "object"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "title": "Vectors",
+      "type": "array"
+    }
+  },
+  "required": [
+    "space",
+    "role",
+    "vectors"
+  ],
+  "type": "object"
+}

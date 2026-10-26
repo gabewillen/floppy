@@ -7,10 +7,29 @@ history lives in [decisions.md](decisions.md) (numbered decisions),
 [live-proof.md](live-proof.md) (every live run). Where they disagree with
 this file, the newer of decisions.md and this file wins.
 
-Last updated: 2026-10-24.
+Last updated: 2026-10-26.
 
 ## Current state (2026-10-09) — resume here
 
+- **Recall by association (2026-10-26, D256, #86):** the Embedding
+  ability (`abilities/embedding/`) embeds each episode's heard words
+  (reflection, stored in `bot_memory_embedding`) and each turn's cue
+  (reasoning), on `FLOPPY_EMBEDDING_BASE_URL` (`embeddinggemma-2`, 256
+  dimensions, api.willen.dev). Reasoning ranks the 64 newest episodes by
+  mosfet.py's associative score and recalls the best within 24576
+  characters; without an embedder recall is by recency.
+- **Decisions from the snapshot (2026-10-26, D257, #84 #95 #96):** a
+  failed turn hands back its whole stimulus, so the turn that perceives the
+  failure answers what went unanswered; the environment stamps the bot as
+  an `own` target when `target_ids` names it, and the ignore's description
+  says whom words are for in those terms; being named is the identity's
+  state (`environment.self.identity {name, addressed}`), read each turn
+  once the identity answers the turn's ask, never a turn of its own.
+  Eval (12 scenarios, the stratified split, seed 7): held-out 0.985
+  (baseline 0.550), suite 0.959 (baseline 0.452); chat_ignore is noisy (0.83 over four runs: two answered "Ana, could you pass me the salt?"). Open: overheard,
+  ignored turns are not recalled (people_overheard, memory's), and
+  `a_bot_hears_its_own_speech_through_the_environment_and_withholds_it`
+  fails on main too.
 - **The workshop compiles and runs bots in the browser (2026-10-26, #104):**
   the website's workshop validates, compiles and runs a document in the
   page with scxml.rs's browser host and the same components `scx run`
@@ -37,6 +56,14 @@ Last updated: 2026-10-24.
   instance, so it needs a WIT contract change (stateforward/scxml.rs#33,
   not scheduled: the maintainer's call). The register's
   facts come from `web/src/register.py`.
+- **Voices are remembered as people (2026-10-26, D258):** with a
+  database, the interpretation recalls the people long-term memory holds
+  before it is ready, and remembers each new voice as a person whose ref
+  is the voice's `voice:<id>` (the representative its running mean), so a
+  voice is recognized across restarts (`listening.rs`
+  `a_voice_heard_before_a_restart_is_recognized_after_it`). The body
+  passes its database through the listening. The bot's own voice is still
+  learned again each run.
 - **The prompt fits a generate call (2026-10-26, D255):** the cognition's
   prompt budget (`MAX_PROJECTION_BYTES`) is 49152, down from 262144, so
   the system channel, the schema and the prompt fit the 65536-byte event

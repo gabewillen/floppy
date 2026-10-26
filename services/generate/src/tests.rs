@@ -1854,3 +1854,137 @@ fn a_finish_reason_must_agree_with_the_tool_calls() {
         "a call without an id"
     );
 }
+
+#[test]
+fn an_input_embeds_with_only_a_model_and_dimensions() {
+    let generation = parse(&[
+        ("model", text("embeddinggemma-2")),
+        ("input", Data::JsonArray(r#"["a dog","a cat"]"#.into())),
+        ("dimensions", number(2.0)),
+    ])
+    .expect("valid parameters");
+    let request = build_request(2, None, Some(3), &generation);
+    assert_eq!(
+        request.url,
+        [Part::Reference(2), Part::Literal(EMBEDDINGS_PATH.into())]
+    );
+    assert_eq!(request.headers[0].0, "content-type");
+    assert_eq!(request.stream, None);
+    assert_eq!(
+        String::from_utf8(request.body.clone()).expect("UTF-8"),
+        r#"{"dimensions":2,"input":["a dog","a cat"],"model":"embeddinggemma-2"}"#
+    );
+    assert_eq!(request.request_bytes, request.body.len());
+    let one = parse(&[("model", text("m")), ("input", text("a dog"))]).expect("valid");
+    assert_eq!(
+        String::from_utf8(build_request(2, None, None, &one).body).expect("UTF-8"),
+        r#"{"input":["a dog"],"model":"m"}"#
+    );
+    for (parameters, detail) in [
+        (
+            vec![
+                ("model", text("m")),
+                ("input", text("a")),
+                ("prompt", text("p")),
+            ],
+            "generate input takes only model and dimensions",
+        ),
+        (
+            vec![
+                ("model", text("m")),
+                ("input", text("a")),
+                ("stream", Data::Bool(true)),
+            ],
+            "generate input takes only model and dimensions",
+        ),
+        (
+            vec![
+                ("model", text("m")),
+                ("prompt", text("p")),
+                ("dimensions", number(8.0)),
+            ],
+            "generate dimensions requires an input",
+        ),
+        (
+            vec![("model", text("m")), ("input", text("  "))],
+            "generate input must be a non-empty string or an array of them",
+        ),
+        (
+            vec![
+                ("model", text("m")),
+                ("input", Data::JsonArray("[]".into())),
+            ],
+            "generate input must be a non-empty string or an array of them",
+        ),
+        (
+            vec![
+                ("model", text("m")),
+                ("input", Data::JsonArray("[1]".into())),
+            ],
+            "generate input must be a non-empty string or an array of them",
+        ),
+        (
+            vec![
+                ("model", text("m")),
+                ("input", text("a")),
+                ("dimensions", number(0.5)),
+            ],
+            "generate dimensions must be a whole number from 1 to 4096",
+        ),
+        (
+            vec![
+                ("model", text("m")),
+                ("input", text("a")),
+                ("dimensions", number(4097.0)),
+            ],
+            "generate dimensions must be a whole number from 1 to 4096",
+        ),
+    ] {
+        assert_eq!(parse(&parameters).map(|_| ()), Err(detail));
+    }
+    let many = serde_json::to_string(&vec!["a"; MAX_INPUTS + 1]).expect("JSON");
+    assert_eq!(
+        parse(&[("model", text("m")), ("input", Data::JsonArray(many))]).map(|_| ()),
+        Err("generate input exceeds its bound")
+    );
+}
+
+#[test]
+fn an_embeddings_reply_is_one_unit_vector_per_input_in_order() {
+    let generation = parse(&[
+        ("model", text("m")),
+        ("input", Data::JsonArray(r#"["a","b"]"#.into())),
+        ("dimensions", number(2.0)),
+    ])
+    .expect("valid");
+    let body = serde_json::json!({
+        "object": "list",
+        "data": [
+            {"object": "embedding", "index": 1, "embedding": [0.0, 2.0, 9.0]},
+            {"object": "embedding", "index": 0, "embedding": [3.0, 4.0, 9.0]},
+        ],
+        "usage": {"prompt_tokens": 4, "total_tokens": 4},
+    });
+    assert_eq!(
+        outcome(&generation, 7, ok(body.to_string().into_bytes())),
+        Returned {
+            name: RESULT_EVENT,
+            data: r#"{"request_bytes":7,"usage":{"input_tokens":4,"total_tokens":4},"vectors":[[0.6,0.8],[0.0,1.0]]}"#.into()
+        }
+    );
+    for data in [
+        serde_json::json!([{"index": 0, "embedding": [1.0, 0.0]}]),
+        serde_json::json!([{"index": 0, "embedding": [1.0, 0.0]}, {"index": 0, "embedding": [1.0, 0.0]}]),
+        serde_json::json!([{"index": 0, "embedding": [1.0, 0.0]}, {"index": 2, "embedding": [1.0, 0.0]}]),
+        serde_json::json!([{"index": 0, "embedding": [1.0]}, {"index": 1, "embedding": [1.0, 0.0]}]),
+        serde_json::json!([{"index": 0, "embedding": [0.0, 0.0]}, {"index": 1, "embedding": [1.0, 0.0]}]),
+        serde_json::json!([{"index": 0, "embedding": ["1", 0.0]}, {"index": 1, "embedding": [1.0, 0.0]}]),
+    ] {
+        let body = serde_json::json!({ "data": data }).to_string().into_bytes();
+        assert_eq!(
+            outcome(&generation, 0, ok(body)),
+            Returned::failed(FailureCode::Malformed),
+            "{data}"
+        );
+    }
+}

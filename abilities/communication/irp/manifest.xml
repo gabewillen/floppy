@@ -125,4 +125,10 @@
       <start uri="221/test221.scxml"/>
     </test>
   </assert>
+  <assert id="communication-15" specnum="15" specid="#communication-15">
+    <![CDATA[The conversation's `bot.ability.memory.stm.turn` `{id, direction, speakers, text, cut, conversation}` (each message it commits with words: a heard turn for inbound text, a said turn for a response it records, decision D251) goes on to the body unchanged, whatever the state.]]>
+    <test id="230" conformance="mandatory" manual="false">
+      <start uri="230/test230.scxml"/>
+    </test>
+  </assert>
 </assertions>

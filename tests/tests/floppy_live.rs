@@ -329,8 +329,9 @@ fn with_name(name: &str) -> PathBuf {
 }
 
 /// A bot named Floppy is addressed by "Floppy, what's your name?": the
-/// identity hears its name (`identity.heard`), the addressed is a turn's
-/// stimulus, and the bot answers through `communication.respond`.
+/// identity hears its name (`identity.heard`), the turn's environment
+/// carries the identity's state, and the bot answers through
+/// `communication.respond`.
 #[test]
 #[ignore = "makes real decision and model calls; needs FLOPPY_LIVE_ENV_FILE"]
 fn live_identity() {

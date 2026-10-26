@@ -4,7 +4,7 @@
   out to be. The listening (abilities/listening/listening.scx) invokes it
   as its long-lived child "interpretation" and hands it each scored sound.
 
-    initializing -> Interpretation {
+    initializing -> Recalling? -> Interpretation {
       Idle -bot.ability.listening.sensitivity.output-> Working {
         DetectingVoice -> Idle | HandingOff | ClassifyingSound
                         | IdentifyingVoiceDirect | HearingSpeech
@@ -19,6 +19,7 @@
         HandingOff -> Idle }
       Idle -bot.ability.speaking.efference {audio}-> Working.DetectingOwnVoice
         -> IdentifyingOwnVoice -> Idle
+      Idle -voices to remember-> Working.Remembering -> Idle
       Working -bot.ability.listening.stage.failed-> Idle }
 
   Configuration (as <data>): the voice activity
@@ -102,10 +103,31 @@
     (0.05), and one at least refine_threshold (0.65) alike also refines the
     id's running mean (weighted by at most refine_weight_cap, 50, earlier
     prints); anything else mints a new id (32 hex digits, the clock's
-    first, as mosfet.py mints uuid4().hex), and at max_ids (1000) the
-    least recently seen id that is not own makes room. The registry lives
-    in the session, as mosfet.py's InProcessStore: a restart forgets it. A
-    product names a voice by its ref, voice:<id>.
+    first, as mosfet.py mints uuid4().hex), and at max_ids (500, decision
+    D259; mosfet.py's 1000 prints of 256 dimensions are past a data-model
+    call's fuel) the least recently seen id that is not own leaves the
+    session's registry, as mosfet.py evicts it; with a database it stays
+    a person in memory. A product names a
+    voice by its ref, voice:<id>. Without a database the registry lives in
+    the session, as mosfet.py's InProcessStore: a restart forgets it.
+  * Memory (decisions D194 and D258): with a database (the <param>
+    database, the memory database file), the voices heard are the people
+    long-term memory holds (bot_person, bot_person_embedding and
+    bot_person_centroid, kind voice), each id that is not own a person
+    whose ref is the id's, so a voice is recognized across restarts.
+    Recalling, before Interpretation is ready, invokes the memory ability
+    (abilities/memory/memory.scx) with one read, the representatives of the
+    96 people seen most recently (one compact row a person; about 100 fit
+    the memory ability's output, decision D205), as ids weighted by their representative's
+    weight; a failure is logged (memory) and the registry starts empty. A
+    minted id is remembered as a new person with the print as heard their
+    first voice and its compact text (i8:, the conversation namespace's
+    encode_voice) their representative, weight 1; a refined id's
+    representative becomes its running mean and weight. From Idle,
+    Remembering writes what is waiting in one transaction of the memory
+    ability, as Working, so sounds wait behind it; a failure is logged
+    (memory) and those writes are dropped. The bot's own voice is not
+    remembered: it is learned again each run.
   * DecodingSpeech invokes abilities/speech_decoding/speech_decoding.scx (the speech
     service) on the utterance: decoding rewrites the observation into
     words. After diarization with voice identification configured, the
@@ -178,7 +200,7 @@
   cond.
 
   Bindings: the speech service for the append step (no backend); the
-  stages bind their own services.
+  stages bind their own services, and the memory ability its own.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
@@ -206,9 +228,19 @@
          were seen, and how many it has minted. -->
     <data id="min_voice_seconds" expr="1.0"/>
     <data id="match_policy" expr="({threshold: 0.5, margin: 0.05, refine_threshold: 0.65, refine_weight_cap: 50})"/>
-    <data id="max_ids" expr="1000"/>
+    <data id="max_ids" expr="500"/>
     <data id="registry" expr="[]"/>
     <data id="minted" expr="0"/>
+    <!-- The memory database (the invoker's <param>; null: the registry
+         lives in the session), the statements waiting to be written, and
+         the people memory holds and remembers. -->
+    <data id="database" expr="null"/>
+    <data id="statements" expr="[]"/>
+    <data id="voice_select" expr="'SELECT person_id, centroid, weight FROM bot_person_centroid WHERE kind = ?1 ORDER BY updated_at DESC, person_id LIMIT 96'"/>
+    <data id="person_insert" expr="'INSERT INTO bot_person (person_id) VALUES (?1)'"/>
+    <data id="voice_insert" expr="'INSERT INTO bot_person_embedding (person_id, kind, embedding) SELECT CAST(?1 AS TEXT), CAST(?2 AS TEXT), CAST(?3 AS TEXT) WHERE EXISTS (SELECT 1 FROM bot_person WHERE person_id = ?1)'"/>
+    <data id="representative_insert" expr="'INSERT INTO bot_person_centroid (person_id, kind, centroid, weight, first_seq, through_seq) SELECT CAST(?1 AS TEXT), CAST(?2 AS TEXT), CAST(?3 AS TEXT), 1, MIN(seq), MIN(seq) FROM bot_person_embedding WHERE person_id = ?1 AND kind = ?2'"/>
+    <data id="representative_update" expr="'UPDATE bot_person_centroid SET centroid = ?1, weight = ?2, updated_at = CURRENT_TIMESTAMP WHERE person_id = ?3 AND kind = ?4'"/>
     <!-- Scored sounds waiting for the interpretation. -->
     <!-- The scored sound in hand, its stage, its directory, and a counter
          naming the files written for it. -->
@@ -248,7 +280,27 @@
     <transition cond="hasNoRecognizeTimeout()" target="degraded">
       <log label="interpretation.degraded" expr="'recognize_timeout must be positive'"/>
     </transition>
+    <transition cond="database !== null" target="Recalling"/>
     <transition target="Interpretation"/>
+  </state>
+
+  <!-- The people memory holds, before the first voice is identified. -->
+  <state id="Recalling">
+    <invoke id="recall" type="scxml" src="../memory/memory.scx">
+      <param name="database" expr="database"/>
+      <param name="statements" expr="recallStatements()"/>
+    </invoke>
+    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="Interpretation">
+      <foreach array="recalledRows(_event)" item="result">
+        <assign location="registry" expr="withRecalled(result)"/>
+      </foreach>
+    </transition>
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="Interpretation">
+      <log label="memory" expr="memoryFailure(_event)"/>
+    </transition>
+    <transition event="error.*" target="Interpretation">
+      <log label="memory" expr="'the voices heard could not be recalled (' + _event.name + ')'"/>
+    </transition>
   </state>
 
   <state id="Interpretation" initial="Idle">
@@ -268,6 +320,8 @@
         <assign location="affect" expr="null"/>
         <assign location="stage" expr="null"/>
       </onentry>
+      <!-- The voices heard are remembered first. -->
+      <transition cond="hasStatements()" target="Remembering"/>
       <!-- Speaking's copy of what it said: the bot's own voice, heard
            until it is known. -->
       <transition event="bot.ability.speaking.efference" event:schema="../schemas/bot.ability.speaking.efference.json"
@@ -755,6 +809,25 @@
         </transition>
         <transition event="error.*" target="Idle">
           <log label="interpretation.unidentified" expr="'the bot\'s own voice could not be identified (' + _event.name + ')'"/>
+        </transition>
+      </state>
+
+      <!-- The voices heard, written to memory in one transaction. -->
+      <state id="Remembering">
+        <invoke id="remember" type="scxml" src="../memory/memory.scx">
+          <param name="database" expr="database"/>
+          <param name="statements" expr="statements"/>
+        </invoke>
+        <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="Idle">
+          <assign location="statements" expr="[]"/>
+        </transition>
+        <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="Idle">
+          <log label="memory" expr="memoryFailure(_event)"/>
+          <assign location="statements" expr="[]"/>
+        </transition>
+        <transition event="error.*" target="Idle">
+          <log label="memory" expr="'the voices heard could not be remembered (' + _event.name + ')'"/>
+          <assign location="statements" expr="[]"/>
         </transition>
       </state>
 

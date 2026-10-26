@@ -14,7 +14,9 @@
 //!   parameter strictly closest to it within two edits ([`PARAMETERS`]).
 //! * `duplicate_param` (error): a parameter given twice.
 //! * `missing_param` (error): no `model`, or not exactly one of `prompt` and
-//!   `messages`; `schemaname` or `tool_choice` without `schema`.
+//!   `messages`; `schemaname` or `tool_choice` without `schema`; with
+//!   `input` (an embeddings call), any parameter but `model` and
+//!   `dimensions`; `dimensions` without `input`.
 //! * `invalid_value` (error, ECMAScript documents, literal `expr` only): a
 //!   `reasoning_effort` that is not one of [`REASONING_EFFORTS`] (a
 //!   machine-applicable fix to the one strictly closest within two edits)
@@ -23,8 +25,9 @@
 //!   a `stream` that is not `true` or `false`, a `temperature` that is not
 //!   a number from 0 to 2, a `max_completion_tokens` or
 //!   `thinking_token_budget` that is not a whole number from 1 to 1048576,
-//!   a `schemaname` outside `[A-Za-z0-9_-]{1,64}`, or an empty `model`,
-//!   `prompt`, or `system`.
+//!   a `schemaname` outside `[A-Za-z0-9_-]{1,64}`, a `dimensions` that is
+//!   not a whole number from 1 to 4096, or an empty `model`, `prompt`,
+//!   `system`, or `input`.
 //! * `schema_mismatch` (warning): a transition that can take the
 //!   invocation's events (in the invoking state, an ancestor, or a
 //!   descendant) handles `generate.failed` or `generate.result` with a
@@ -32,7 +35,8 @@
 //!   closed failure code, a refused call's `rejection`, or a `{"content",
 //!   "tool_calls", "request_bytes", "usage"}` reply: a text reply without a
 //!   `schema` parameter, a tool call with one, and no call with a
-//!   `tool_choice` that may be `auto`, any but a literal `required`); the
+//!   `tool_choice` that may be `auto`, any but a literal `required`; with
+//!   `input`, a `{"vectors", "request_bytes", "usage"}` reply); the
 //!   help names the schema of what
 //!   it returns.
 //!
@@ -55,7 +59,7 @@ use serde_json::Value as Json;
 /// The service's exact type URI.
 pub const SERVICE_URI: &str = "https://github.com/stateforward/floppy/services/generate";
 /// The parameters the service takes.
-pub const PARAMETERS: [&str; 12] = [
+pub const PARAMETERS: [&str; 14] = [
     "model",
     "prompt",
     "messages",
@@ -68,6 +72,8 @@ pub const PARAMETERS: [&str; 12] = [
     "tool_choice",
     "temperature",
     "thinking_token_budget",
+    "input",
+    "dimensions",
 ];
 /// The `tool_choice` values the service accepts.
 pub const TOOL_CHOICES: [&str; 2] = ["required", "auto"];
@@ -97,6 +103,8 @@ const MAX_SCHEMA_NAME_BYTES: usize = 64;
 const MAX_TEMPERATURE: f64 = 2.0;
 /// Upper bound on `max_completion_tokens` and `thinking_token_budget`.
 const MAX_COMPLETION_TOKENS: u32 = 1_048_576;
+
+const MAX_DIMENSIONS: u32 = 4096;
 
 const SCXML: &str = "http://www.w3.org/2005/07/scxml";
 
@@ -309,6 +317,8 @@ struct Given {
     /// It gives a `tool_choice` that may be `auto` (any but a literal
     /// `required`): the reply may hold no call.
     tool_choice: bool,
+    /// It gives `input`: the reply is vectors.
+    input: bool,
 }
 
 /// Checks the parameters of `invoke`; what it gives.
@@ -359,10 +369,26 @@ fn parameters(document: &Document, invoke: &Element, findings: &mut Vec<Finding>
             "add `<param name=\"model\" expr=\"…\"/>`",
         ));
     }
-    if has("prompt") == has("messages") {
+    if has("input") {
+        if let Some(name) = seen
+            .iter()
+            .find(|name| !matches!(**name, "model" | "input" | "dimensions"))
+        {
+            findings.push(missing(
+                &format!("`input` takes only `model` and `dimensions`, not `{name}`"),
+                &format!("remove `{name}`, or embed in another invocation"),
+            ));
+        }
+    } else if has("prompt") == has("messages") {
         findings.push(missing(
             "the generate service takes exactly one of `prompt` and `messages`",
             "give either a `prompt` or a `messages` parameter",
+        ));
+    }
+    if has("dimensions") && !has("input") {
+        findings.push(missing(
+            "`dimensions` requires an `input` parameter",
+            "add the `input` parameter, or remove `dimensions`",
         ));
     }
     for name in ["schemaname", "tool_choice"] {
@@ -395,6 +421,7 @@ fn parameters(document: &Document, invoke: &Element, findings: &mut Vec<Finding>
     Given {
         schema: has("schema"),
         tool_choice: has("tool_choice") && !required_choice,
+        input: has("input"),
     }
 }
 
@@ -496,7 +523,7 @@ fn value(name: &str, expr: &Attribute, findings: &mut Vec<Finding>) {
             None,
         )),
         (
-            "temperature" | "max_completion_tokens" | "thinking_token_budget",
+            "temperature" | "max_completion_tokens" | "thinking_token_budget" | "dimensions",
             Literal::String(_) | Literal::Bool,
         ) => findings.push(invalid(
             format!("{name} must be a number"),
@@ -530,7 +557,9 @@ fn value(name: &str, expr: &Attribute, findings: &mut Vec<Finding>) {
                 None,
             ));
         }
-        ("model" | "prompt" | "system", Literal::String(text)) if text.trim().is_empty() => {
+        ("model" | "prompt" | "system" | "input", Literal::String(text))
+            if text.trim().is_empty() =>
+        {
             findings.push(invalid(
                 format!("{name} must be a non-empty string"),
                 format!("give the {name} text"),
@@ -554,6 +583,11 @@ fn out_of_bounds(name: &str, number: f64) -> Option<String> {
                 || !(1.0..=f64::from(MAX_COMPLETION_TOKENS)).contains(&number) =>
         {
             Some(format!("a whole number from 1 to {MAX_COMPLETION_TOKENS}"))
+        }
+        "dimensions"
+            if number.fract() != 0.0 || !(1.0..=f64::from(MAX_DIMENSIONS)).contains(&number) =>
+        {
+            Some(format!("a whole number from 1 to {MAX_DIMENSIONS}"))
         }
         _ => None,
     }
@@ -589,6 +623,32 @@ fn contains(document: &Document, ancestor: usize, element: usize) -> bool {
             .and_then(|parent| usize::try_from(parent).ok());
     }
     false
+}
+
+/// An embeddings reply: one unit vector per input, `(event, the schema of
+/// its data, instances)`.
+fn embeddings_returned(count: &Json, usage_schema: &Json) -> (&'static str, Json, Vec<Json>) {
+    (
+        RESULT_EVENT,
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "vectors": {"type": "array", "items": {"type": "array", "items": {"type": "number"}}},
+                "request_bytes": count,
+                "usage": usage_schema,
+            },
+            "required": ["vectors", "request_bytes"],
+            "additionalProperties": false,
+        }),
+        vec![
+            serde_json::json!({ "vectors": [[0.6, 0.8]], "request_bytes": 40 }),
+            serde_json::json!({
+                "vectors": [[0.6, 0.8]],
+                "request_bytes": 40,
+                "usage": {"input_tokens": 4, "total_tokens": 4},
+            }),
+        ],
+    )
 }
 
 /// What the service returns: `(event, the schema of its data, instances)`.
@@ -654,6 +714,20 @@ fn returned(given: Given) -> Vec<(&'static str, Json, Vec<Json>)> {
         samples.push(serde_json::json!({ "content": "", "request_bytes": 120, "tool_calls": [] }));
     }
     let count = serde_json::json!({"type": "integer", "minimum": 0});
+    let usage_schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "input_tokens": count,
+            "output_tokens": count,
+            "reasoning_tokens": count,
+            "total_tokens": count,
+        },
+        "additionalProperties": false,
+    });
+    if given.input {
+        events.push(embeddings_returned(&count, &usage_schema));
+        return events;
+    }
     events.push((
         RESULT_EVENT,
         serde_json::json!({
@@ -667,16 +741,7 @@ fn returned(given: Given) -> Vec<(&'static str, Json, Vec<Json>)> {
                     "additionalProperties": false,
                 }},
                 "request_bytes": count,
-                "usage": {
-                    "type": "object",
-                    "properties": {
-                        "input_tokens": count,
-                        "output_tokens": count,
-                        "reasoning_tokens": count,
-                        "total_tokens": count,
-                    },
-                    "additionalProperties": false,
-                },
+                "usage": usage_schema,
             },
             "required": ["content", "tool_calls", "request_bytes"],
             "additionalProperties": false,

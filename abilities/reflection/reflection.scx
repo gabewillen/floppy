@@ -126,6 +126,16 @@
   mosfet.py's episodes keep them), and a failed or
   cancelled turn's outcome and failure (decision D139), inserted with
   query_tags cognitive_episode, then bot.ability.reflection.output.
+  Before it is inserted, the episode's words (what was heard, its heard
+  one message per line) are embedded as a document by the
+  Embedding ability (abilities/embedding/embedding.scx; decision D256),
+  and its vector is stored with it in bot_memory_embedding (kind text,
+  the vector's compact text: i8: and the base64 of its components as
+  signed bytes, as a person's representative voice is kept), so
+  reasoning can recall it by association. An episode without words, or
+  one the Embedding ability fails (logged reflection.embedding: the
+  failure's kind), is stored without a vector and recalled by recency
+  alone; so is the episode a failing turn stores.
   Reflection alone records the turn (decision D97), so a failure after the
   recall still stores the turn's episode, with behavior null, before it
   reports bot.ability.failed; a failure of that store, or of storing
@@ -236,6 +246,10 @@
     <!-- The episode's insert; the memory id is the next
          row count as 32 zero-padded digits, since neither engine's
          randomness is unique across invocations in Wasm. -->
+    <!-- The episode's vector (its words embedded as a document, as
+         compact text), stored for the episode just inserted. -->
+    <data id="insert_embedding">INSERT INTO bot_memory_embedding (memory_id, kind, embedding) VALUES ((SELECT MAX(memory_id) FROM bot_memory), 'text', ?)</data>
+    <data id="vector" expr="null"/>
     <data id="insert_episode">INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT substr('00000000000000000000000000000000', 1, 32 - length(n)) || n FROM (SELECT CAST(COUNT(*) + 1 AS TEXT) AS n FROM bot_memory) AS c), 'memory', ?, NULL, 'task', 'standard', 'retain', ?, 'application/json', 'cognitive_episode')</data>
   </datamodel>
   <script src="reflection.js"/>
@@ -549,29 +563,66 @@
     </transition>
   </state>
 
-  <!-- This turn's episode. -->
-  <state id="storing">
+  <!-- This turn's episode: its words embedded, then the episode stored
+       with its vector (decision D256). -->
+  <state id="storing" initial="storing_embedding">
     <transition event="bot.ability.reflection.input" event:schema="../schemas/bot.ability.reflection.input.json">
       <assign location="deferred" expr="deferred.concat([_event.data])"/>
     </transition>
     <onentry>
       <assign location="episode" expr="cognitiveEpisode(behavior)"/>
-      <assign location="statements" expr="insertEpisodeStatements()"/>
+      <assign location="vector" expr="null"/>
     </onentry>
-    <invoke id="storing_memory" type="scxml" src="../memory/memory.scx">
-      <param name="database" expr="database"/>
-      <param name="statements" expr="statements"/>
-    </invoke>
-    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="idle">
-      <log label="reflection.stored" expr="storedLog()"/>
-      <send event="bot.ability.reflection.output" target="#_parent"/>
-    </transition>
-    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failing">
-      <assign location="failure" expr="episodeStoreFailedMessage(_event.data.message)"/>
-    </transition>
-    <transition event="error.*" target="failing">
-      <assign location="failure" expr="episodeStoreFailedMessage(_event.name)"/>
-    </transition>
+    <!-- The request goes once the embedding has started (the next
+         macrostep). An episode without words has nothing to embed. -->
+    <state id="storing_embedding">
+      <onentry>
+        <if cond="hasEpisodeWords()">
+          <send event="bot.ability.embedding.input">
+            <content expr="episodeEmbeddingInput()"/>
+          </send>
+        </if>
+      </onentry>
+      <transition cond="hasNoEpisodeWords()" target="storing_episode"/>
+      <invoke id="embedding" type="scxml" src="../embedding/embedding.scx"/>
+      <transition event="bot.ability.embedding.input" event:schema="../schemas/bot.ability.embedding.input.json">
+        <send event="bot.ability.embedding.input" target="#_embedding">
+          <content expr="_event.data"/>
+        </send>
+      </transition>
+      <transition event="bot.ability.embedding.output" event:schema="../schemas/bot.ability.embedding.output.json"
+                  target="storing_episode">
+        <assign location="vector" expr="compactVector(_event.data.vectors[0].values)"/>
+      </transition>
+      <!-- An episode that cannot be embedded is still stored, found by
+           recency alone. -->
+      <transition event="bot.ability.embedding.failed" event:schema="../schemas/bot.ability.embedding.failed.json"
+                  target="storing_episode">
+        <log label="reflection.embedding" expr="_event.data.kind"/>
+      </transition>
+      <transition event="error.*" target="storing_episode">
+        <log label="reflection.embedding" expr="_event.name"/>
+      </transition>
+    </state>
+    <state id="storing_episode">
+      <onentry>
+        <assign location="statements" expr="insertEpisodeStatements()"/>
+      </onentry>
+      <invoke id="storing_memory" type="scxml" src="../memory/memory.scx">
+        <param name="database" expr="database"/>
+        <param name="statements" expr="statements"/>
+      </invoke>
+      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="idle">
+        <log label="reflection.stored" expr="storedLog()"/>
+        <send event="bot.ability.reflection.output" target="#_parent"/>
+      </transition>
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failing">
+        <assign location="failure" expr="episodeStoreFailedMessage(_event.data.message)"/>
+      </transition>
+      <transition event="error.*" target="failing">
+        <assign location="failure" expr="episodeStoreFailedMessage(_event.name)"/>
+      </transition>
+    </state>
   </state>
 
   <!-- A stage's failure goes to the cognition,
@@ -588,6 +639,7 @@
     <state id="failing_storing">
       <onentry>
         <assign location="episode" expr="cognitiveEpisode(null)"/>
+        <assign location="vector" expr="null"/>
         <assign location="statements" expr="insertEpisodeStatements()"/>
       </onentry>
       <invoke id="failing_memory" type="scxml" src="../memory/memory.scx">

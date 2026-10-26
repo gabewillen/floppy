@@ -3,10 +3,10 @@
   "features": [
     "failed_turns"
   ],
-  "intent": "floppy's reasoning is bounded to one second, so a question that needs reasoning fails its turn. floppy should still tell the person something (that it could not answer, or a short answer) rather than go silent, and answer a simple greeting.",
+  "intent": "floppy's reasoning is bounded to 20 seconds, so a question that needs a long, detailed answer fails its turn while a short reply fits. floppy should still tell the person something (that it could not answer, or a short answer) rather than go silent, and answer a simple greeting.",
   "bot_name": null,
   "params": {
-    "bounds": "({reasoning_timeout_ms: 1000})"
+    "bounds": "({reasoning_timeout_ms: 20000})"
   },
   "sessions": [
     {
