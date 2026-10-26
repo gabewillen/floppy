@@ -49,11 +49,12 @@
   was said. A sound is not something it takes. <identity:hears_name> decides whether its text (a string content with
   a text/* content_type) names the bot: the name's case-folded
   letter-and-digit tokens appear as a whole run in the text's (so a bot
-  named "Al" is not addressed by "always"). Addressed: the body gets
-  bot.ability.cognition.input {stimulus} whose stimulus is
-  bot.ability.identity.addressed {name} from "identity", and grants it a
-  turn. Not addressed, or no name yet, produces nothing: a
-  nameless bot only hears words. Other communication content is not
+  named "Al" is not addressed by "always"). Each recognition sets its
+  addressed datum, part of its state: it sends nothing, and the body reads
+  that state each turn with <device:snapshot>, as it reads the firmware's,
+  so whether the bot was named is in the turn's environment, never a turn
+  of its own. No name yet recognizes nothing: a nameless bot only hears
+  words. Other communication content is not
   heard.
 
   Readiness: the first entry into knowing, from recalling, sends
@@ -107,9 +108,9 @@
          invoker's <param> sets it. -->
     <data id="adopt_effort" expr="1"/>
     <data id="name" expr="null"/>
+    <!-- Whether the last text it recognized named it: part of its
+         state, which the body reads each turn (<device:snapshot>). -->
     <data id="addressed" expr="false"/>
-    <!-- The addressed stimulus envelope, for the handoff. -->
-    <data id="handoff" expr="null"/>
     <data id="adopting_name" expr="null"/>
     <!-- What it offers its parent (decision D242), which reads it from its
          live session with <decision:offers>: the adoption, of
@@ -255,14 +256,6 @@
       <state id="recognized">
         <transition cond="addressed" target="listening">
           <log label="identity.heard" expr="addressedLog()"/>
-          <assign location="handoff" expr="({})"/>
-          <assign location="handoff.event" expr="'bot.ability.identity.addressed'"/>
-          <assign location="handoff.data" expr="({})"/>
-          <assign location="handoff.data.name" expr="name"/>
-          <assign location="handoff.source" expr="'identity'"/>
-          <send event="bot.ability.cognition.input" target="#_parent">
-            <param name="stimulus" expr="handoff"/>
-          </send>
         </transition>
         <transition target="listening">
           <log label="identity.heard" expr="'not addressed'"/>

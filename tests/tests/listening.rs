@@ -1108,7 +1108,7 @@ fn with_voices_decoded_speech_says_who_spoke() {
 }
 
 /// The interpretation remembers the voices it hears as the people long-term
-/// memory holds (decision D257): a voice heard before a restart is heard
+/// memory holds (decision D258): a voice heard before a restart is heard
 /// as the same voice after it.
 #[test]
 fn a_voice_heard_before_a_restart_is_recognized_after_it() {

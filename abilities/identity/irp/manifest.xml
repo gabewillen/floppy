@@ -30,7 +30,7 @@
     </test>
   </assert>
   <assert id="identity-3" specnum="3" specid="#identity-3">
-    <![CDATA[A named identity that hears its name in `bot.ability.communication.input` text (string content of a `text/*` content_type; the name's words, split at white space, case-folded and keeping only their letters and digits, appear as a whole run of the text's) hands the body `bot.ability.cognition.input` `{stimulus}`, the stimulus `{event: "bot.ability.identity.addressed", data: {name}, source: "identity"}`.]]>
+    <![CDATA[A named identity that hears its name in `bot.ability.communication.input` text (string content of a `text/*` content_type; the name's words, split at white space, case-folded and keeping only their letters and digits, appear as a whole run of the text's) is addressed: its `addressed` datum, part of its state (`<device:snapshot>`, decision D109), is true. It sends nothing; the body reads that state each turn.]]>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>
@@ -42,7 +42,7 @@
     </test>
   </assert>
   <assert id="identity-4" specnum="4" specid="#identity-4">
-    <![CDATA[Nothing else it hears produces anything: text that does not name it (the name only as part of a word included), content that is not `text/*`, and anything heard while it has no name.]]>
+    <![CDATA[Nothing else it hears addresses it, and nothing it hears produces anything: text that does not name it (the name only as part of a word included), content that is not `text/*`, and anything heard while it has no name.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>

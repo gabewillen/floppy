@@ -125,6 +125,17 @@ function addressees(targetIds) {
   return participants.filter(function (participant) { return targetIds.indexOf(participant) >= 0; });
 }
 
+// The input as participant receives it: when its target_ids names the
+// participant, the environment, which delivers it, stamps the participant as its
+// own target (own true), so the bot knows the input was addressed to it.
+function inputFor(data, participant) {
+  if (data.target_ids.indexOf(participant) < 0) {
+    return data;
+  }
+  var stamped = Array.isArray(data.participants) ? data.participants : [];
+  return Object.assign({}, data, {participants: stamped.concat([{ref: participant, role: 'target', own: true}])});
+}
+
 // Holdings (decision D105): the bots present (holdings' keys), and the
 // devices bot holds as reference (its device's invoke id) to address
 // (<_sessionid>.<invoke id>, decision D110).

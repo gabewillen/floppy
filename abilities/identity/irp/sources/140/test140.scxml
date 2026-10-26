@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- identity-5: an adopted name is taken without a database, offered again, and answered to. -->
-<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision" version="1.0" datamodel="ecmascript" initial="harness">
+<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision" xmlns:device="https://github.com/stateforward/floppy/namespaces/device" version="1.0" datamodel="ecmascript" initial="harness">
 <datamodel>
   <data id="offers" expr="null"/>
+  <data id="snapshot" expr="null"/>
 </datamodel>
 <state id="harness" initial="boot">
   <invoke id="identity" type="scxml" src="../../../identity.scx"/>
@@ -26,11 +27,24 @@
     <transition cond="offers.length === 1 &amp;&amp; offers[0].event === 'bot.ability.identity.adopt' &amp;&amp; offers[0].effort === 1 &amp;&amp; offers[0].target === undefined &amp;&amp; offers[0].schema.required[0] === 'name' &amp;&amp; typeof offers[0].description === 'string'" target="step3"/>
     <transition target="fail"><log label="unexpected" expr="'offers ' + JSON.stringify(offers)"/></transition>
   </state>
-  <state id="step3">
+  <state id="step3" initial="step3_read">
     <onentry>
       <send event="bot.ability.communication.input" target="#_identity"><content expr='{"source_ids": ["gabe"], "target_ids": ["floppy"], "content": "hi floppy", "content_type": "text/plain"}'/></send>
+      <send event="harness.snapshot.deadline" id="step3_deadline" delay="30s"/>
     </onentry>
-    <transition event="bot.ability.cognition.input" cond="_event.data.stimulus.event === 'bot.ability.identity.addressed' &amp;&amp; _event.data.stimulus.data.name === &quot;Floppy&quot; &amp;&amp; _event.data.stimulus.source === 'identity'" target="step4"/>
+    <onexit><cancel sendid="step3_deadline"/></onexit>
+    <transition event="harness.snapshot.deadline" target="fail"><log label="unexpected" expr="'snapshot ' + JSON.stringify(snapshot)"/></transition>
+    <state id="step3_read">
+      <onentry>
+        <device:snapshot location="snapshot" target="'#_identity'"/>
+      </onentry>
+      <transition cond="snapshot.attributes.addressed === true &amp;&amp; snapshot.attributes.name === &quot;Floppy&quot; &amp;&amp; snapshot.state === 'listening'" target="step4"/>
+      <transition target="step3_again"/>
+    </state>
+    <state id="step3_again">
+      <onentry><send event="harness.waited" delay="100ms"/></onentry>
+      <transition event="harness.waited" target="step3_read"/>
+    </state>
   </state>
   <state id="step4">
     <transition target="pass"/>

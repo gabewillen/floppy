@@ -202,10 +202,11 @@
 //! "source"}` and then `target_ids` as `{ref, role: "target"}`, followed by
 //! the participants the turn's parent `P` (optional; an envelope, `null`
 //! for none) already carries in its data's `participants` (each `{ref,
-//! role}`). An embedding, or a name longer than
+//! role}`, with `own` true when its producer knows it is the bot itself, as
+//! the environment stamps the bot an input is addressed to). An embedding, or a name longer than
 //! [`MAX_PARTICIPANT_REF_CHARACTERS`] characters (or empty), is not a
-//! producer-stable ref and is never stamped. Deduplicated, the first
-//! occurrence winning, and bounded at [`MAX_PARTICIPANTS`]. `location`
+//! producer-stable ref and is never stamped. Deduplicated by ref and role, the first
+//! occurrence winning (own when any occurrence is), and bounded at [`MAX_PARTICIPANTS`]. `location`
 //! receives the participants, an array.
 //!
 //! # Failures
@@ -2336,7 +2337,8 @@ fn turn_participants_element<H: ConversationHost>(
 }
 
 /// The participants an envelope's data carries: none when it has no data
-/// or no `participants`; `None` when they are not each `{ref, role}`.
+/// or no `participants`; `None` when they are not each `{ref, role}`, with
+/// `own` (a boolean, kept when true) as its producer stamped it.
 fn carried_participants(parent: Option<Json>) -> Option<Vec<Json>> {
     let parent = parent?;
     let Some(participants) = parent.get("data").and_then(|data| data.get("participants")) else {
@@ -2349,8 +2351,18 @@ fn carried_participants(parent: Option<Json>) -> Option<Vec<Json>> {
             let participant = participant.as_object()?;
             let reference = participant.get("ref")?.as_str()?;
             let role = participant.get("role")?.as_str()?;
-            (participant.len() == 2 && matches!(role, "source" | "target"))
-                .then(|| participant_of(reference, role))
+            let own = match participant.get("own") {
+                None => false,
+                Some(own) => own.as_bool()?,
+            };
+            let fields = 2 + usize::from(participant.contains_key("own"));
+            (participant.len() == fields && matches!(role, "source" | "target")).then(|| {
+                let mut carried = participant_of(reference, role);
+                if own {
+                    carried["own"] = Json::Bool(true);
+                }
+                carried
+            })
         })
         .collect()
 }
@@ -2384,10 +2396,19 @@ pub fn turn_participants(sources: &[Json], targets: &[Json], carried: &[Json]) -
             }
             _ => None,
         });
+    // A carried participant the identities already stamped (the same ref
+    // and role) is that one, own when its producer stamped it own.
     let mut participants: Vec<Json> = Vec::new();
     for participant in stamped.chain(carried.iter().cloned()) {
-        if !participants.contains(&participant) {
-            participants.push(participant);
+        match participants.iter_mut().find(|known| {
+            known["ref"] == participant["ref"] && known["role"] == participant["role"]
+        }) {
+            Some(known) => {
+                if participant.get("own") == Some(&Json::Bool(true)) {
+                    known["own"] = Json::Bool(true);
+                }
+            }
+            None => participants.push(participant),
         }
     }
     participants.truncate(MAX_PARTICIPANTS);
