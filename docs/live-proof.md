@@ -86,6 +86,19 @@ split) raised train from 0.490 to 0.877 while the held-out test went from
 0.860 to 0.490 (single runs): the prompt fit its own scenarios and was not
 adopted; the instructions stay empty.
 
+Voice detection now warms silero with half a second of silence on each side
+of a clip (#109; an ablation of 18 clips a kind: shouts 14 heard before, 17
+to 18 after, laughs 17 to 18, calm and crying speech and silence and noise
+unchanged). On main `f089945d`, ambient wording, `eval-vad` (15 jobs):
+emotion **0.783 ± 0.140**, happy 0.94, angry 0.73, tonight 0.76, contrast
+0.73, sad 0.75. Every angry job heard the shout (`heard angry`) and two of
+three answered it ("That's really frustrating"). The silent turns that are
+left (angry once, the joyful first turn of contrast twice) are all the
+decision service choosing `bot.ability.cognition.ignore` for speech that
+does not address floppy (confidence 59), which the confidence tuner does not
+escalate. The rest are judged misses of the tone (sad once, tonight once:
+"Honest answer? I have no idea what's within walking distance").
+
 ## 2026-10-25, memory hill climb (D251), model `sparks/qwen3.8-flash-next`
 
 `eval.py run` on the memory scenarios, split as `climb` splits them
