@@ -11,6 +11,13 @@ Last updated: 2026-10-24.
 
 ## Current state (2026-10-09) — resume here
 
+- **Recall by association (2026-10-26, D253, #86):** the Embedding
+  ability (`abilities/embedding/`) embeds each episode's heard words
+  (reflection, stored in `bot_memory_embedding`) and each turn's cue
+  (reasoning), on `FLOPPY_EMBEDDING_BASE_URL` (`embeddinggemma-2`, 256
+  dimensions, api.willen.dev). Reasoning ranks the 64 newest episodes by
+  mosfet.py's associative score and recalls the best within 24576
+  characters; without an embedder recall is by recency.
 - **What is heard and said is remembered (2026-10-25, D251, #85, #87):**
   the conversation writes each message it commits with words to the
   short-term register (heard for inbound text, typed or decoded from

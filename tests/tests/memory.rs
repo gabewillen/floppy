@@ -126,7 +126,7 @@ fn a_fresh_database_is_migrated_to_the_head_schema() {
         [(
             "output".to_owned(),
             format!(
-                r#"{{"results":[{{"rowcount":1,"rows":[{{"columns":["group_concat(name)"],"values":["{columns}"]}}]}},{{"rowcount":1,"rows":[{{"columns":["name"],"values":["lifetime"]}}]}},{{"rowcount":1,"rows":[{{"columns":["version_num"],"values":["0001"]}}]}}]}}"#
+                r#"{{"results":[{{"rowcount":1,"rows":[{{"columns":["group_concat(name)"],"values":["{columns}"]}}]}},{{"rowcount":1,"rows":[{{"columns":["name"],"values":["lifetime"]}}]}},{{"rowcount":1,"rows":[{{"columns":["version_num"],"values":["0002"]}}]}}]}}"#
             )
         )],
         "{}",
@@ -195,13 +195,35 @@ fn the_head_schema_keeps_the_people() {
 }
 
 #[test]
+fn the_head_schema_keeps_the_memory_embeddings() {
+    // Decision D253: the episodes' embeddings, shaped like the people's,
+    // are revision 0002.
+    let directory = unique_scratch("memory");
+    let finished = run(
+        &directory,
+        &harness(
+            None,
+            "[{sql: 'SELECT group_concat(name) FROM pragma_table_info(\\'bot_memory_embedding\\')'}, {sql: 'SELECT name FROM sqlite_master WHERE type = \\'index\\' AND tbl_name = \\'bot_memory_embedding\\' AND sql IS NOT NULL'}]",
+        ),
+    );
+    assert_eq!(
+        logs(&finished.records),
+        output(
+            r#"[{"rowcount":1,"rows":[{"columns":["group_concat(name)"],"values":["seq,memory_id,kind,embedding,created_at"]}]},{"rowcount":1,"rows":[{"columns":["name"],"values":["bot_memory_embedding_memory_idx"]}]}]"#
+        ),
+        "{}",
+        finished.stderr
+    );
+}
+
+#[test]
 fn a_database_newer_than_the_ability_is_refused_untouched() {
     let directory = unique_scratch("memory");
     let finished = run(
         &directory,
         &harness(
             Some(
-                "[{sql: 'CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)'}, {sql: 'INSERT INTO alembic_version VALUES (\\'0002\\')'}]",
+                "[{sql: 'CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)'}, {sql: 'INSERT INTO alembic_version VALUES (\\'0003\\')'}]",
             ),
             "[{sql: 'SELECT 1'}]",
         ),
@@ -209,7 +231,7 @@ fn a_database_newer_than_the_ability_is_refused_untouched() {
     assert_eq!(
         logs(&finished.records),
         support::labelled(&[
-            ("failed", "Migration could not plan from 0002 to head"),
+            ("failed", "Migration could not plan from 0003 to head"),
             ("kind", "unavailable"),
         ]),
         "{}",
@@ -351,7 +373,7 @@ fn postgres_a_fresh_database_is_migrated_to_the_head_schema() {
     assert_eq!(
         logs(&finished.records),
         output(&format!(
-            r#"[{{"rowcount":1,"rows":[{{"columns":["columns"],"values":["{columns}"]}}]}},{{"rowcount":1,"rows":[{{"columns":["column_name","data_type"],"values":["lifetime","text"]}}]}},{{"rowcount":1,"rows":[{{"columns":["version_num"],"values":["0001"]}}]}}]"#
+            r#"[{{"rowcount":1,"rows":[{{"columns":["columns"],"values":["{columns}"]}}]}},{{"rowcount":1,"rows":[{{"columns":["column_name","data_type"],"values":["lifetime","text"]}}]}},{{"rowcount":1,"rows":[{{"columns":["version_num"],"values":["0002"]}}]}}]"#
         )),
         "{}",
         finished.stderr
@@ -414,7 +436,7 @@ fn postgres_a_database_newer_than_the_ability_is_refused_untouched() {
             &server.database(),
             "pgsql",
             Some(
-                "[{sql: 'CREATE TABLE alembic_version (version_num VARCHAR(32) PRIMARY KEY)'}, {sql: 'INSERT INTO alembic_version VALUES (\\'0002\\')'}]",
+                "[{sql: 'CREATE TABLE alembic_version (version_num VARCHAR(32) PRIMARY KEY)'}, {sql: 'INSERT INTO alembic_version VALUES (\\'0003\\')'}]",
             ),
             "[{sql: 'SELECT 1'}]",
         ),
@@ -422,7 +444,7 @@ fn postgres_a_database_newer_than_the_ability_is_refused_untouched() {
     assert_eq!(
         logs(&finished.records),
         support::labelled(&[
-            ("failed", "Migration could not plan from 0002 to head"),
+            ("failed", "Migration could not plan from 0003 to head"),
             ("kind", "unavailable"),
         ]),
         "{}",

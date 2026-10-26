@@ -22,12 +22,14 @@
   opening picks the engine. migrating invokes the migration ability
   (abilities/migration/migration.scx, Alembic's upgrade head) with
   floppy's revisions in the engine's dialect (abilities/memory/sqlite/ and
-  abilities/memory/postgresql/): one revision, 0001 (decision D193),
+  abilities/memory/postgresql/): two revisions. 0001 (decision D193)
   creates the memory, behavior (with its lifetime), behavior trigger and
   short-term register tables, bot_stm_turn, the short-term memory of
   turns, and the people long-term memory holds (bot_person, and
   bot_person_embedding, the embeddings heard for each person, kind
-  voice; decision D194). On Postgres the defaulted created_at and updated_at
+  voice; decision D194); 0002 (decision D253) creates
+  bot_memory_embedding, the embeddings of what memory holds (kind text,
+  a cognitive episode's words), shaped like bot_person_embedding. On Postgres the defaulted created_at and updated_at
   are TIMESTAMPTZ DEFAULT NOW(). The database carries Alembic's
   alembic_version. A database at a revision the history does not hold is
   refused untouched. applying then runs the statements in one
@@ -63,6 +65,8 @@
          (decision D193). -->
     <data id="sqlite_0001" src="sqlite/0001_initial_memory_schema.json"/>
     <data id="postgresql_0001" src="postgresql/0001_initial_memory_schema.json"/>
+    <data id="sqlite_0002" src="sqlite/0002_memory_embedding.json"/>
+    <data id="postgresql_0002" src="postgresql/0002_memory_embedding.json"/>
     <!-- The engine: Postgres for a postgresql:// URI, else SQLite. -->
     <data id="postgres" expr="false"/>
     <!-- The operation's time bound (60 s), which an invoker may set as a

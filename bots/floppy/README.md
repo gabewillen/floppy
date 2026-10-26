@@ -183,6 +183,14 @@ the decoded stimulus carries it as `affect` `{label, scores, valence,
 confidence}` (decision D247); without that backend it carries none. A sound that cannot be heard is logged as
 `bot.ability.listening.failed`.
 
+Memory recalls by association (decision D253): the Embedding ability
+(`abilities/embedding/embedding.scx`) embeds each episode reflection stores
+and each turn's cue reasoning recalls with, through
+`FLOPPY_EMBEDDING_BASE_URL` with `FLOPPY_EMBEDDING_API_KEY` (an
+`OpenAI`-compatible `/embeddings`, `embeddinggemma-2` at 256 dimensions,
+which `https://api.willen.dev/v1` serves). Without it floppy recalls its
+newest episodes, as before.
+
 Sight (D185 to D189): the body's `seeing_enabled` `<data>` (`false` by
 default; the environment's `<invoke>` may pass it as a `<param>`) turns the
 [seeing](../../abilities/seeing/seeing.scx) ability on. On, every

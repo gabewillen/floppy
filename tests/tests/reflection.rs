@@ -340,6 +340,30 @@ fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
     }
     let target = request_line.split(' ').nth(1).unwrap_or("").to_owned();
     let body: Json = serde_json::from_slice(&body).unwrap_or(Json::Null);
+    // The embedder (decision D253): every input is the vector (3, 4, 0, …)
+    // of as many components as asked.
+    if target == "/embed/v1/embeddings" {
+        let dimensions = body["dimensions"].as_u64().unwrap_or(2);
+        let vector: Vec<f64> = (0..dimensions)
+            .map(|index| {
+                [3.0, 4.0]
+                    .get(usize::try_from(index).unwrap_or(2))
+                    .copied()
+                    .unwrap_or(0.0)
+            })
+            .collect();
+        let data: Vec<Json> = (0..body["input"].as_array().map_or(0, Vec::len))
+            .map(|index| json!({"object": "embedding", "index": index, "embedding": vector}))
+            .collect();
+        let text = json!({"object": "list", "data": data}).to_string();
+        log.lock().expect("the log lock").push(Received { body });
+        let _ = write!(
+            stream,
+            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{text}",
+            text.len()
+        );
+        return;
+    }
     // The builder's generations on the slow routes stream slowly but
     // steadily (seven pieces 1.5 s apart), or stall after their first
     // piece.
@@ -652,6 +676,63 @@ fn a_turns_episode_keeps_the_words_its_stimulus_carried() {
     assert_eq!(
         episodes[0]["content"]["heard"],
         json!(["My dog's name is Rufus.", "And my favorite color is green."])
+    );
+}
+
+/// A turn's episode is stored with its words embedded as a document
+/// (decision D253): the Embedding ability asks the embedder for the heard
+/// words with the document prefix, and the episode's vector is kept in
+/// `bot_memory_embedding` as its compact text (`i8:` and base64 of signed
+/// bytes); an episode without words asks nothing.
+#[test]
+fn a_turns_episode_is_stored_with_its_words_embedded() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "none", "[]", SQLITE);
+    let inspected = std::fs::read_to_string(&harness)
+        .expect("the harness is readable")
+        .replace(
+            "SELECT context_ref, scope, kind, content FROM bot_memory WHERE",
+            "SELECT context_ref, scope, kind, content, (SELECT e.embedding FROM bot_memory_embedding e WHERE e.memory_id = bot_memory.memory_id AND e.kind = 'text') AS embedding FROM bot_memory WHERE",
+        );
+    std::fs::write(&harness, inspected).expect("the harness is writable");
+    let mut file = std::fs::OpenOptions::new()
+        .append(true)
+        .open(&env)
+        .expect("the env file opens");
+    writeln!(file, "FLOPPY_EMBEDDING_BASE_URL={}/embed/v1", mock.origin)
+        .expect("the env file is writable");
+    drop(file);
+    let mut run = start(&harness, &env);
+    let mut turn = input(1);
+    turn["cognition_input"]["stimulus"] = json!({
+        "event": "bot.ability.conversation.output",
+        "data": {"messages": [{"direction": "inbound", "content": "My dog's name is Rufus.", "content_type": "text/plain"}]},
+    });
+    let first = reflect_on(&mut run, &turn);
+    let second = reflect(&mut run, 2);
+    drop(run.close(WAIT));
+    let episodes = json_log(&second, "episodes");
+    let first_vector = json_log(&first, "episodes")[0]["embedding"].clone();
+    // (3, 4, 0, …) as a unit vector is (0.6, 0.8, 0, …): bytes 76, 102, 0, ….
+    let vector = first_vector.as_str().expect("the episode has a vector");
+    assert!(vector.starts_with("i8:TGYA"), "{vector}");
+    assert_eq!(vector.len(), 3 + 256 / 3 * 4 + 4, "{vector}");
+    assert_eq!(episodes[0]["embedding"], first_vector);
+    // The knock carried no words: nothing was embedded.
+    assert_eq!(episodes[1]["embedding"], Json::Null);
+    let asked: Vec<Json> = mock
+        .received
+        .lock()
+        .expect("the log lock")
+        .iter()
+        .filter(|request| request.body.get("input").is_some())
+        .map(|request| request.body.clone())
+        .collect();
+    assert_eq!(
+        asked,
+        [
+            json!({"dimensions": 256, "input": ["title: none | text: My dog's name is Rufus."], "model": "embeddinggemma-2"})
+        ]
     );
 }
 

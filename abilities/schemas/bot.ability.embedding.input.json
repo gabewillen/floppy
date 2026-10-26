@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.embedding.input",
+  "additionalProperties": false,
+  "description": "One embedding request (mosfet.py's Embedding InputData): a task role and the items to embed, one vector per item.",
+  "examples": [
+    {
+      "role": "query",
+      "items": [
+        {
+          "parts": [
+            {
+              "kind": "text",
+              "text": "a red circle"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "properties": {
+    "role": {
+      "description": "Whether the items search ('query') or are being indexed ('document').",
+      "enum": [
+        "query",
+        "document"
+      ],
+      "examples": [
+        "query"
+      ],
+      "title": "Role",
+      "type": "string"
+    },
+    "items": {
+      "description": "Items to embed, in order; the result's vectors[i] embeds items[i].",
+      "items": {
+        "additionalProperties": false,
+        "description": "One thing to embed: an ordered run of text parts that yields exactly one vector.",
+        "properties": {
+          "parts": {
+            "description": "Ordered text parts of this item, joined.",
+            "items": {
+              "additionalProperties": false,
+              "description": "One text part of an item.",
+              "properties": {
+                "kind": {
+                  "const": "text",
+                  "description": "The part's kind: text (floppy's embedder takes no images).",
+                  "examples": [
+                    "text"
+                  ],
+                  "title": "Kind",
+                  "type": "string"
+                },
+                "text": {
+                  "description": "The text to embed.",
+                  "examples": [
+                    "a red circle"
+                  ],
+                  "maxLength": 8192,
+                  "title": "Text",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "text"
+              ],
+              "title": "TextPart",
+              "type": "object"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Parts",
+            "type": "array"
+          },
+          "title": {
+            "description": "Optional document title, used only by models whose instructions template a title for documents.",
+            "examples": [
+              "Brand guide"
+            ],
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "parts"
+        ],
+        "title": "Item",
+        "type": "object"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "title": "Items",
+      "type": "array"
+    }
+  },
+  "required": [
+    "role",
+    "items"
+  ],
+  "type": "object"
+}

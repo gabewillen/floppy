@@ -342,6 +342,35 @@ fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
     }
     let target = request_line.split(' ').nth(1).unwrap_or("").to_owned();
     let body: Json = serde_json::from_slice(&body).unwrap_or(Json::Null);
+    // The embedder (decision D253): a text about color is the vector
+    // (1, 0, 0, …), any other (0, 1, 0, …).
+    if target == "/embed/v1/embeddings" {
+        let dimensions = body["dimensions"].as_u64().unwrap_or(2);
+        let data: Vec<Json> = body["input"]
+            .as_array()
+            .map(|input| input.as_slice())
+            .unwrap_or_default()
+            .iter()
+            .enumerate()
+            .map(|(index, text)| {
+                let hot = u64::from(!text.as_str().unwrap_or_default().contains("color"));
+                let vector: Vec<f64> = (0..dimensions)
+                    .map(|component| if component == hot { 1.0 } else { 0.0 })
+                    .collect();
+                json!({"object": "embedding", "index": index, "embedding": vector})
+            })
+            .collect();
+        let text = json!({"object": "list", "data": data}).to_string();
+        log.lock()
+            .expect("the log lock")
+            .push(Received { target, body });
+        let _ = write!(
+            stream,
+            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{text}",
+            text.len()
+        );
+        return;
+    }
     if target == format!("/{}/v1/chat/completions", Generation::Pings.path())
         && !is_reflection(&body)
     {
@@ -1495,6 +1524,67 @@ fn a_conversation_turn_carries_its_exchange_to_reasoning() {
 #[test]
 fn a_reasoned_turn_is_recalled_by_the_next() {
     reasoned_turns_recalled(DATABASE, Some("a_reasoned_turn_is_recalled_by_the_next"));
+}
+
+/// Recall by association (decision D253): with an embedder, reflection
+/// stores each episode's words embedded, and reasoning ranks the episodes
+/// by their cosine with the turn's cue before their recency, so the
+/// question about a color ranks the older episode that told it first.
+#[test]
+fn an_episode_like_the_cue_is_recalled_first() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Respond, &[]);
+    support::use_database(&bot.body, DATABASE);
+    let mut text = std::fs::read_to_string(&bot.env).expect("the env file is readable");
+    text.push_str(&format!(
+        "FLOPPY_EMBEDDING_BASE_URL={}/embed/v1\n",
+        mock.origin
+    ));
+    std::fs::write(&bot.env, text).expect("the env file is writable");
+    let mut run = start(&bot);
+    tell(&mut run, "My favorite color is green.");
+    run.until(WAIT, turn_ended);
+    tell(&mut run, "I bought milk today.");
+    run.until(WAIT, turn_ended);
+    tell(&mut run, "What is my favorite color?");
+    let records = run.until(WAIT, turn_ended);
+    // The best three candidates as id:cosine; the told color, the oldest,
+    // ranks first.
+    let recall = texts(&records, "reasoning.recall");
+    let ranked: Vec<(u64, &str)> = recall
+        .last()
+        .unwrap_or_else(|| panic!("a reasoning.recall log: {records:?}"))
+        .split(' ')
+        .map(|entry| {
+            let (id, cosine) = entry.split_once(':').expect("id:cosine");
+            (id.parse().expect("a numeric id"), cosine)
+        })
+        .collect();
+    assert_eq!(
+        ranked.iter().map(|(_, cosine)| *cosine).collect::<Vec<_>>(),
+        ["1.000", "0.000"],
+        "{recall:?}"
+    );
+    assert!(ranked[0].0 < ranked[1].0, "{recall:?}");
+    let asked: Vec<String> = mock
+        .received("/embeddings")
+        .iter()
+        .map(|request| {
+            request.body["input"][0]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned()
+        })
+        .collect();
+    assert!(
+        asked.contains(&"task: search result | query: What is my favorite color?".to_owned()),
+        "{asked:?}"
+    );
+    assert!(
+        asked.contains(&"title: none | text: My favorite color is green.".to_owned()),
+        "{asked:?}"
+    );
+    close(run, &mock, "an_episode_like_the_cue_is_recalled_first");
 }
 
 /// Context fit (decision D143): with the bot's `bounds.max_context_tokens`
