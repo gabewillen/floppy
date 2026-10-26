@@ -3214,7 +3214,8 @@ const HELD_ADOPT: &str = "<held count=\"1\">\n  <event name=\"bot.ability.identi
 
 /// Effort ceilings (decision D206): the decision layer's ceiling (0) is
 /// under the identity's adopt (effort 1), so its choices leave adopt out and
-/// the state it decides about renders it held; reasoning, whose ceiling is
+/// the state it decides about renders it held, after the turn's situation
+/// (decision D254); reasoning, whose ceiling is
 /// the whole frame, is offered it and holds nothing.
 #[test]
 fn the_decision_layer_holds_what_is_over_its_effort_ceiling() {
@@ -3236,7 +3237,14 @@ fn the_decision_layer_holds_what_is_over_its_effort_ceiling() {
     let state = decisions[0].body["state"]["turn"]
         .as_str()
         .expect("the decision's state is the turn's text");
-    assert!(state.starts_with(HELD_ADOPT), "{state}");
+    let held = state.find(HELD_ADOPT).unwrap_or_else(|| panic!("{state}"));
+    let situation = state
+        .find("<environment ")
+        .unwrap_or_else(|| panic!("{state}"));
+    assert!(
+        situation < held,
+        "the situation comes before the held block (decision D254): {state}"
+    );
     assert!(
         !decisions[0].body["questions"].to_string().contains(ADOPT),
         "the decision layer is not offered adopt"
