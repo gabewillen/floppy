@@ -1,2 +1,0 @@
-cargo:rerun-if-changed=build.rs
-cargo:rustc-env=DEBUG_OUTPUT_DIR=/home/user/floppy/target-main/release/build/wit-bindgen-rust-macro-9e062cf8e7aa3be5/out
