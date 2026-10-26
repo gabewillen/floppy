@@ -721,14 +721,32 @@ fn a_streamed_response_plays_each_chunk_as_it_arrives() {
 #[test]
 fn a_stop_mid_stream_says_what_played_and_cancels_the_rest() {
     let harness = communication_streaming();
+    // The harness stops the response as the second chunk's sound reaches
+    // it, in the run itself: a stop sent from the test after reading that
+    // record can arrive after the chunk's 0.5 s piece has played on a
+    // loaded host, and then the whole received audio was said.
+    let document = std::fs::read_to_string(&harness).expect("the harness is readable");
+    let generic = r#"<transition event="environment.sound">"#;
+    assert!(document.contains(generic), "the harness logs each sound");
+    std::fs::write(
+        &harness,
+        document.replacen(
+            generic,
+            &format!(
+                r##"<transition event="environment.sound" cond="_event.data.audio === 'media/speaking-1.1.pcm'">
+      <log label="harness.sound" expr="_event.data.audio"/>
+      <send event="bot.ability.communication.stop" target="#_communication"><content expr="({{}})"/></send>
+    </transition>
+    {generic}"##
+            ),
+            1,
+        ),
+    )
+    .expect("the harness is writable");
     let mut run = Run::start(&[harness.display().to_string()], &[]);
     let mut all = run.until(WAIT, label_is("harness.ready"));
     let text = "alpha bravo charlie delta";
     run.event("harness.r1", &json!({"parts": [{"words": text}]}));
-    all.extend(run.until(WAIT, |record| {
-        label_is("harness.sound")(record) && record["text"] == "media/speaking-1.1.pcm"
-    }));
-    run.event("harness.stop", &json!({}));
     all.extend(run.until(WAIT, label_is("harness.answer")));
     assert_eq!(
         texts(&all, "harness.answer"),
