@@ -313,10 +313,22 @@ test('a trap after the start (fuel exhaustion) raises error.communication', asyn
   session.dispose();
 });
 
-test('a live service refuses snapshots, and async sessions refuse services', async () => {
-  const { session } = await open(machine(`<state id="s"><invoke id="e" type="${ECHO}"/></state>`), echoServices());
+test('a run holding a service, live or finished, refuses snapshots, and async sessions refuse services', async () => {
+  const { session, logs } = await open(
+    machine(`<state id="s"><invoke id="e" type="${ECHO}"/>
+      <transition event="stop"><send target="#_e" event="stop"/></transition>
+      <transition event="done.invoke.e"><log expr="'done'"/></transition>
+      <transition event="leave" target="t"/></state><state id="t"/>`),
+    echoServices(),
+  );
+  const refused = (error) => error instanceof ScxmlHostError && error.code === 'unavailable';
   session.start();
-  await assert.rejects(session.snapshot(), (error) => error instanceof ScxmlHostError && error.code === 'unavailable');
+  await assert.rejects(session.snapshot(), refused);
+  session.send({ name: 'stop' });
+  await until(() => logs.includes('done'), 'done.invoke');
+  await assert.rejects(session.snapshot(), refused);
+  session.send({ name: 'leave' });
+  assert.ok((await session.snapshot()).byteLength > 0);
   session.dispose();
   const compiled = await compiler.compile(machine('<state id="s"/>'), {});
   await assert.rejects(
