@@ -663,13 +663,28 @@ fn without_a_decoder_or_classifier_a_sound_without_voice_is_an_acoustic_product(
     assert!(backend.decoded().is_empty());
 }
 
+/// The voice a product names, by the ref the interpretation's registry
+/// minted for it (`voice:` and 32 hex digits): a print never leaves it.
+fn voice_ref(product: &Json) -> Json {
+    let sources = product["source_ids"].as_array().expect("source ids");
+    assert_eq!(sources.len(), 1, "one voice: {product}");
+    let reference = sources[0].as_str().expect("a voice is named by its ref");
+    let id = reference.strip_prefix("voice:").expect("a voice ref");
+    assert!(
+        id.len() == 32
+            && id
+                .chars()
+                .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
+        "{reference}"
+    );
+    sources[0].clone()
+}
+
 /// The speech product of diarized segment `index` of an utterance that
-/// `opened` began and that spelled `text`, identified as `embedding`.
-fn segment(index: usize, text: &str, opened: &Json, embedding: Option<&Json>) -> Json {
+/// `opened` began and that spelled `text`, identified as `voice` (its ref).
+fn segment(index: usize, text: &str, opened: &Json, voice: Option<&Json>) -> Json {
     let end = spelled_seconds(text);
-    let source_ids = embedding
-        .as_ref()
-        .map_or(json!([]), |embedding| json!([embedding["embedding"]]));
+    let source_ids = voice.map_or(json!([]), |voice| json!([voice]));
     json!({
         "content": format!("media/floppy-diarized-2-{index}"),
         "content_type": "audio/pcm",
@@ -682,7 +697,6 @@ fn segment(index: usize, text: &str, opened: &Json, embedding: Option<&Json>) ->
         "voice_detection": {"segments": [{"start_seconds": 0, "end_seconds": end, "confidence": null}]},
         "source_ids": source_ids,
         "participants": [],
-        "voice_embedding": embedding,
         "parent": {"event": "environment.sound", "data": opened},
     })
 }
@@ -717,7 +731,7 @@ fn a_diarized_utterance_is_one_speech_product_per_segment() {
 }
 
 #[test]
-fn diarized_segments_are_identified_by_their_voice_embedding() {
+fn diarized_segments_are_identified_by_their_voice() {
     let harness = layout(&[(
         "interpretation/interpretation.scx",
         &[
@@ -728,26 +742,20 @@ fn diarized_segments_are_identified_by_their_voice_embedding() {
     )]);
     let (mut run, backend) = started(
         &harness,
-        "diarized_segments_are_identified_by_their_voice_embedding",
+        "diarized_segments_are_identified_by_their_voice",
         &[("hi.wav", spoken_wav("hi")), ("silence.wav", silent_wav())],
     );
     let voiced = sound("hi.wav", &json!({}));
     utter(&mut run, &voiced, &sound("silence.wav", &json!({})));
     run.until(WAIT, label_is("harness.speech"));
-    let finished = close(
-        run,
-        "diarized_segments_are_identified_by_their_voice_embedding",
-    );
+    let finished = close(run, "diarized_segments_are_identified_by_their_voice");
     let embedded = backend.received_at("/voice/embed");
     assert_eq!(embedded.len(), 1, "one embedding per segment");
     assert_eq!(embedded[0]["model"], "voice-detect-wespeaker-resnet34");
     assert_eq!(embedded[0]["heard"], "hi");
-    // "hi": 2 characters whose codes sum to 209.
-    let embedding = json!({"embedding": [2, 209], "model": "voice-detect-wespeaker-resnet34", "confidence": null});
-    assert_eq!(
-        json_texts(&finished.all, "harness.speech"),
-        vec![segment(0, "hi", &voiced, Some(&embedding))]
-    );
+    let speech = json_texts(&finished.all, "harness.speech");
+    let voice = voice_ref(&speech[0]);
+    assert_eq!(speech, vec![segment(0, "hi", &voiced, Some(&voice))]);
 }
 
 #[test]
@@ -776,7 +784,8 @@ fn without_diarization_the_opening_voice_is_identified_directly() {
     );
     assert_eq!(backend.received_at("/voice/embed").len(), 1);
     // The window streams each frame as the opening voice's speech.
-    let embedding = json!({"embedding": [2, 209], "model": "voice-detect-wespeaker-resnet34", "confidence": null});
+    let speech = json_texts(&finished.all, "harness.speech");
+    let voice = voice_ref(&speech[0]);
     let frame = |serial: usize, spans: Json, parent: &Json| {
         json!({
             "content": format!("media/floppy-sound-{serial}.pcm"),
@@ -785,9 +794,8 @@ fn without_diarization_the_opening_voice_is_identified_directly() {
             "sample_rate_hz": 16000,
             "channels": 1,
             "media_type": "audio/pcm",
-            "source_ids": [embedding["embedding"]],
+            "source_ids": [voice],
             "participants": [],
-            "voice_embedding": embedding,
             "parent": {"event": "environment.sound", "data": parent},
         })
     };
@@ -927,7 +935,7 @@ fn an_opening_voice_nobody_identifies_in_time_is_heard_unidentified() {
     assert_eq!(speech.len(), 2, "{speech:?}");
     for product in &speech {
         assert_eq!(product["source_ids"], json!([]), "{product}");
-        assert_eq!(product["voice_embedding"], Json::Null, "{product}");
+        assert!(product.get("voice_embedding").is_none(), "{product}");
     }
 }
 
@@ -1040,7 +1048,7 @@ fn an_opening_voice_with_no_embedding_is_heard_unidentified() {
     assert_eq!(speech.len(), 2, "{speech:?}");
     for product in &speech {
         assert_eq!(product["source_ids"], json!([]), "{product}");
-        assert_eq!(product["voice_embedding"], Json::Null, "{product}");
+        assert!(product.get("voice_embedding").is_none(), "{product}");
     }
 }
 
@@ -1096,9 +1104,7 @@ fn with_voices_decoded_speech_says_who_spoke() {
     let heard = json_texts(&finished.all, "harness.speech");
     assert_eq!(heard.len(), 1);
     assert_eq!(heard[0]["content"], "what is the weather");
-    let sources = heard[0]["source_ids"].as_array().expect("source ids");
-    assert_eq!(sources.len(), 1, "one voice spoke: {heard:?}");
-    assert!(sources[0].is_array(), "the voice is its embedding");
+    voice_ref(&heard[0]);
 }
 
 #[test]

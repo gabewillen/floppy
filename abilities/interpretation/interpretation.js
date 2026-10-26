@@ -67,17 +67,13 @@ function hasText(_event) {
   return typeof Object(_event.data).text === 'string';
 }
 
-// A speech product of a scored sound: voice_embedding only when one is
-// given.
-function speechProduct(content, contentType, scored, voiceDetection, sourceIds, voiceEmbedding) {
+// A speech product of a scored sound.
+function speechProduct(content, contentType, scored, voiceDetection, sourceIds) {
   var product = ({content: content, content_type: contentType, voice_detection: voiceDetection});
   product.sample_rate_hz = scored.sound.sample_rate_hz;
   product.channels = soundChannels(scored.sound);
   product.media_type = 'audio/pcm';
   product.source_ids = sourceIds;
-  if (arguments.length > 5) {
-    product.voice_embedding = voiceEmbedding;
-  }
   product.parent = orNull(scored.parent);
   return product;
 }
@@ -202,7 +198,7 @@ function streamsPcmFrame() {
 }
 
 function frameProduct() {
-  return speechProduct(detection.sensed.sound.audio, 'audio/pcm', detection.sensed, detection.voice_detection, active_source_ids, active_voice_embedding);
+  return speechProduct(detection.sensed.sound.audio, 'audio/pcm', detection.sensed, detection.voice_detection, active_source_ids);
 }
 
 // FeedingSpeech
@@ -306,8 +302,9 @@ function firstEmbedding(_event) {
   return _event.data.embeddings[0];
 }
 
-function activeSourceIds() {
-  return [active_voice_embedding.embedding];
+// The opening voice's ref, unless it is the bot's own.
+function activeSourceIds(_event) {
+  return sourceIds(identify([firstEmbedding(_event)]));
 }
 
 // The identification deadline (decision D177): a stage, then the
@@ -332,7 +329,7 @@ function identifiedKind() {
 }
 
 // No voice for any segment.
-function unidentifiedEmbeddings() {
+function unidentifiedVoices() {
   return completion.segments.map(function () { return null; });
 }
 
@@ -423,57 +420,143 @@ function isDecoding() {
 // Decoding rewrites the observation: it becomes words, with the voices
 // heard that are not the bot's own as its source_ids.
 function decodedProduct() {
-  var product = speechProduct(completion.text, 'text/plain', completion.sensed, completion.voice_detection, otherVoices());
+  var product = speechProduct(completion.text, 'text/plain', completion.sensed, completion.voice_detection, sourceIds(completion.recognitions));
   if (affect !== null) {
     product.affect = affect;
   }
   return product;
 }
 
-// The identified voices of decoded speech.
-function heardVoices() {
-  return Array.isArray(completion.embeddings) ? completion.embeddings.filter(function (voice) { return voice !== null && Array.isArray(voice.embedding); }) : [];
+// identification (mosfet.py's identification): the interpretation owns
+// the voice registry, so a print never leaves it; a product names each
+// voice by its ref, voice:<id>.
+
+// A print's vector, L2-normalized (mosfet.py's Print); null for one that
+// is not a non-empty array of finite numbers with a norm.
+function printVector(voice) {
+  var vector = voice === null || typeof voice !== 'object' ? null : voice.embedding;
+  if (!Array.isArray(vector) || vector.length === 0 || !vector.every(function (value) { return typeof value === 'number' && isFinite(value); })) {
+    return null;
+  }
+  var norm = Math.sqrt(vector.reduce(function (sum, value) { return sum + value * value; }, 0));
+  return norm === 0 ? null : vector.map(function (value) { return value / norm; });
 }
 
-function cosine(a, b) {
+// The cosine of two normalized vectors; null across vector spaces.
+function similarity(a, b) {
   if (a.length !== b.length) {
     return null;
   }
-  var dot = 0, aa = 0, bb = 0;
+  var dot = 0;
   for (var i = 0; i < a.length; i++) {
     dot += a[i] * b[i];
-    aa += a[i] * a[i];
-    bb += b[i] * b[i];
   }
-  return aa === 0 || bb === 0 ? null : dot / Math.sqrt(aa * bb);
+  return dot;
 }
 
-// A voice at least voice_similarity_threshold alike to the bot's own.
-function isOwnVoice(voice) {
-  if (own_voice === null) {
-    return false;
+// mosfet.py's identification.decide over the registry's ids (own ones
+// only, when own): the best must reach match_policy.threshold and beat the
+// runner-up by its margin, and one at refine_threshold also refines;
+// anything else mints. {kind: 'match' | 'refine' | 'mint', entry}.
+function decide(vector, own) {
+  var ranked = registry.filter(function (entry) { return !own || entry.own; }).map(function (entry) {
+    return ({entry: entry, similarity: similarity(entry.vector, vector)});
+  }).filter(function (neighbor) { return neighbor.similarity !== null; }).sort(function (a, b) { return b.similarity - a.similarity; });
+  if (ranked.length === 0 || ranked[0].similarity < match_policy.threshold
+      || (ranked.length > 1 && ranked[0].similarity - ranked[1].similarity < match_policy.margin)) {
+    return ({kind: 'mint', entry: null});
   }
-  var score = cosine(voice.embedding, own_voice.embedding);
-  return score !== null && score >= voice_similarity_threshold;
+  return ({kind: ranked[0].similarity >= match_policy.refine_threshold ? 'refine' : 'match', entry: ranked[0].entry});
 }
 
-// The embeddings of the voices that are not the bot's own, the first of
-// alike ones (at the threshold) once, at most 4.
-function otherVoices() {
-  var others = [];
-  heardVoices().forEach(function (voice) {
-    if (isOwnVoice(voice) || others.length >= 4) {
-      return;
+// A minted id, as mosfet.py mints uuid4().hex: 32 hex digits, the clock's
+// first, so ids minted by another run never repeat these.
+function mintedId() {
+  minted = minted + 1;
+  var id = Date.now().toString(16) + minted.toString(16);
+  while (id.length < 32) {
+    id = id + Math.floor(Math.random() * 16).toString(16);
+  }
+  return id.slice(0, 32);
+}
+
+// An id seen now: last in the registry, which is in the order ids were
+// seen (mosfet.py's seen_at).
+function seen(entry) {
+  registry = registry.filter(function (other) { return other !== entry; }).concat([entry]);
+  return entry;
+}
+
+// A new id for a print: at max_ids the least recently seen id that is not
+// own makes room (mosfet.py's InProcessStore).
+function mint(vector, own) {
+  if (registry.length >= max_ids) {
+    var evicted = registry.filter(function (entry) { return !entry.own; })[0];
+    registry = registry.filter(function (entry) { return entry !== evicted; });
+  }
+  return seen(({id: mintedId(), vector: vector, own: own, seen_count: 1}));
+}
+
+// A refined id's running mean, weighted by at most refine_weight_cap
+// earlier prints.
+function refine(entry, vector) {
+  var weight = Math.min(entry.seen_count, match_policy.refine_weight_cap);
+  var sum = entry.vector.map(function (value, i) { return value * weight + vector[i]; });
+  var refined = printVector(({embedding: sum}));
+  entry.vector = refined === null ? entry.vector : refined;
+  entry.seen_count = Math.min(entry.seen_count + 1, match_policy.refine_weight_cap);
+  return entry;
+}
+
+// Who each voice is (mosfet.py's Store.identify): {id, recognized, own}
+// for each print, matched to an id or minted one, or null for no print.
+function identify(voices) {
+  return voices.map(function (voice) {
+    var vector = printVector(voice);
+    if (vector === null) {
+      return null;
     }
-    var known = others.some(function (other) {
-      var score = cosine(other, voice.embedding);
-      return score !== null && score >= voice_similarity_threshold;
-    });
-    if (!known) {
-      others.push(voice.embedding);
+    var decision = decide(vector, false);
+    if (decision.kind === 'mint') {
+      return ({id: mint(vector, false).id, recognized: false, own: false});
+    }
+    var entry = seen(decision.kind === 'refine' ? refine(decision.entry, vector) : decision.entry);
+    return ({id: entry.id, recognized: true, own: entry.own});
+  });
+}
+
+// The registry with the bot's own print enrolled (mosfet.py's
+// Store.enroll, own and undeclared): it refines the nearest own id or
+// mints an own id.
+function enrolledOwn(voice) {
+  var vector = printVector(voice);
+  if (vector !== null) {
+    var decision = decide(vector, true);
+    if (decision.kind === 'mint') {
+      mint(vector, true);
+    } else {
+      seen(refine(decision.entry, vector));
+    }
+  }
+  return registry;
+}
+
+function hasOwnVoice() {
+  return registry.some(function (entry) { return entry.own; });
+}
+
+// The refs of the voices recognized (none when nobody was identified) that
+// are not the bot's own, each once, at most 4 (mosfet.py's
+// MAX_IDENTITY_SET_SIZE).
+function sourceIds(recognitions) {
+  var refs = [];
+  (Array.isArray(recognitions) ? recognitions : []).forEach(function (recognition) {
+    var ref = recognition === null || recognition.own ? null : 'voice:' + recognition.id;
+    if (ref !== null && refs.indexOf(ref) < 0 && refs.length < 4) {
+      refs.push(ref);
     }
   });
-  return others;
+  return refs;
 }
 
 // DetectingOwnVoice, IdentifyingOwnVoice
@@ -481,7 +564,7 @@ function otherVoices() {
 // Speaking's copy of a completed utterance, with the PCM it commanded,
 // while the bot's own voice is unknown and voices are identified.
 function learnsOwnVoice(_event) {
-  return voice_classifier && own_voice === null && typeof _event.data.audio === 'string'
+  return voice_classifier && !hasOwnVoice() && typeof _event.data.audio === 'string'
     && _event.data.media_type === 'audio/pcm' && typeof _event.data.sample_rate_hz === 'number';
 }
 
@@ -557,9 +640,9 @@ function segmentConversionFailure() {
   return ({stage: 'voice_' + completion.kind, message: 'Voice ' + completion.kind + ' product conversion failed: ' + mismatch});
 }
 
-// The segment's embedding, after identification.
-function segmentEmbedding() {
-  return completion.kind === 'identification' ? completion.embeddings[index] : null;
+// The segment's recognition, after identification.
+function segmentRecognition() {
+  return completion.kind === 'identification' ? completion.recognitions[index] : null;
 }
 
 // One speech product per clipped segment.
@@ -572,8 +655,7 @@ function segmentProduct() {
   product.confidence = orNull(segment.confidence);
   product.voice_detection = ({segments: [{start_seconds: 0.0, end_seconds: segment.end_seconds - segment.start_seconds}]});
   product.voice_detection.segments[0].confidence = product.confidence;
-  product.source_ids = result === null ? [] : [result.embedding];
-  product.voice_embedding = result;
+  product.source_ids = sourceIds([result]);
   product.parent = orNull(completion.sensed.parent);
   return product;
 }

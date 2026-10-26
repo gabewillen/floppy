@@ -50,7 +50,7 @@ def speech(text, parent="voiced.wav", extra=""):
     product = "_event.data.stimulus.data"
     return expect(COGNITION, "_event.data.stimulus.event === 'bot.ability.listening.speech.output' && _event.data.stimulus.source === 'listening'"
                   f" && {product}.content === {js(text)} && {product}.content_type === 'text/plain' && {product}.media_type === 'audio/pcm'"
-                  f" && {product}.sample_rate_hz === 16000 && {product}.channels === 1 && JSON.stringify({product}.source_ids) === '[[0.5,-0.25]]'"
+                  f" && {product}.sample_rate_hz === 16000 && {product}.channels === 1 && {product}.source_ids.length === 1 && /^voice:[0-9a-f]{{32}}$/.test({product}.source_ids[0])"
                   f" && {product}.parent.event === 'environment.sound' && {product}.parent.data.audio === 'media/{parent}'" + extra)
 
 
