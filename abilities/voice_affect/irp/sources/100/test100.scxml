@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- voice_affect-1: the longest segment's tone is heard. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="voice_affect" type="scxml" src="../../../voice_affect.scx">
+    <param name="segments" expr='[{"audio": "media/short.pcm", "media_type": "audio/pcm", "sample_rate_hz": 16000, "channels": 1, "start_seconds": 0.0, "end_seconds": 0.2}, {"audio": "media/long.pcm", "media_type": "audio/pcm", "sample_rate_hz": 16000, "channels": 1, "start_seconds": 0.2, "end_seconds": 1.2}, {"audio": "media/short.pcm", "media_type": "audio/pcm", "sample_rate_hz": 16000, "channels": 1, "start_seconds": 1.2, "end_seconds": 1.4}]'/>
+    <param name="timeout_ms" expr="600000"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="done.invoke.voice_affect" cond='JSON.stringify(_event.data) === "{\"affect\":{\"confidence\":0.9,\"label\":\"happy\",\"scores\":{\"happy\":0.9,\"neutral\":0.1},\"valence\":0.9}}"' target="step1"/>
+  </state>
+  <state id="step1">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

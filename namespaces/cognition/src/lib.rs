@@ -112,8 +112,9 @@
 //!    field, stamped `stimulus:event`, then `stimulus:id`, `stimulus:source`
 //!    and `stimulus:target` when each is a non-empty string; a
 //!    `bot.ability.conversation.output`'s messages leave out `provenance`,
-//!    `source_ids` and `target_ids`, which a model never sees; an image it
-//!    carries (a media object: an object with a string `image`, the
+//!    `source_ids` and `target_ids`, which a model never sees, and so do its
+//!    parent's data and each parent's before it, with `voice_embedding`; an
+//!    image it carries (a media object: an object with a string `image`, the
 //!    reference floppy passes media by, and a `media_type`, a string or
 //!    `null`, as a view or an `environment.visual` has) renders as the
 //!    `image` entry's `<media:image media_type? ref="image-N" />`
@@ -2225,8 +2226,15 @@ const CONVERSATION_OUTPUT: &str = "bot.ability.conversation.output";
 /// The fields of a conversation message a model never sees.
 const MESSAGE_EXCLUDED_FIELDS: [&str; 3] = ["provenance", "source_ids", "target_ids"];
 
+/// The fields of a parent's data a model never sees: a message's
+/// correlation and a voice's embedding (biometric).
+const PARENT_EXCLUDED_FIELDS: [&str; 4] =
+    ["provenance", "source_ids", "target_ids", "voice_embedding"];
+
 /// A conversation output's data with each of its `messages` without
-/// [`MESSAGE_EXCLUDED_FIELDS`].
+/// [`MESSAGE_EXCLUDED_FIELDS`], and its `parent`'s data, and each parent's
+/// before it (a turn heard as speech carries its speech, mosfet.py's
+/// `TurnData.parent`), without [`PARENT_EXCLUDED_FIELDS`].
 fn model_facing_messages(data: &Json) -> Json {
     let mut data = data.clone();
     if let Some(messages) = data.get_mut("messages").and_then(Json::as_array_mut) {
@@ -2235,6 +2243,16 @@ fn model_facing_messages(data: &Json) -> Json {
                 message.remove(field);
             }
         }
+    }
+    let mut parent = data.get_mut("parent");
+    while let Some(parent_data) = parent
+        .and_then(|parent| parent.get_mut("data"))
+        .and_then(Json::as_object_mut)
+    {
+        for field in PARENT_EXCLUDED_FIELDS {
+            parent_data.remove(field);
+        }
+        parent = parent_data.get_mut("parent");
     }
     data
 }

@@ -1,0 +1,20 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/emotion?sample_rate=24000",
+      "status": 200,
+      "body": {
+        "label": "happy",
+        "scores": {
+          "happy": 0.9,
+          "neutral": 0.1
+        },
+        "valence": 0.9,
+        "confidence": 0.9,
+        "snr_db": 20.0,
+        "model": "emotion2vec/emotion2vec_plus_large"
+      }
+    }
+  ]
+}

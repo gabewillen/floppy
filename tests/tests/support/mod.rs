@@ -42,7 +42,7 @@ use sha2::{Digest as _, Sha256};
 /// The variables the bots' documents name. The child process never inherits
 /// them, so a test supplies values only through its env file (or an
 /// explicit `--env NAME=VALUE`).
-pub const GRANTED: [&str; 9] = [
+pub const GRANTED: [&str; 11] = [
     "FLOPPY_API_KEY",
     "FLOPPY_BASE_URL",
     "FLOPPY_STREAM",
@@ -52,6 +52,8 @@ pub const GRANTED: [&str; 9] = [
     "FLOPPY_SPEECH_BASE_URL",
     "FLOPPY_VOICE_API_KEY",
     "FLOPPY_VOICE_BASE_URL",
+    "FLOPPY_EMOTION_API_KEY",
+    "FLOPPY_EMOTION_BASE_URL",
 ];
 
 /// The fuel of every run of an environment document (`environments/...`,
@@ -988,7 +990,7 @@ pub fn copy_ability(name: &str, abilities: &Path) -> PathBuf {
 
 /// The listening's abilities (abilities/listening/, its children and its
 /// hearing leaves).
-pub const LISTENING: [&str; 8] = [
+pub const LISTENING: [&str; 9] = [
     "listening",
     "sensitivity",
     "interpretation",
@@ -997,6 +999,7 @@ pub const LISTENING: [&str; 8] = [
     "voice_identification",
     "sound_classification",
     "speech_decoding",
+    "voice_affect",
 ];
 
 /// Copies the listening's abilities into the layout's `abilities`

@@ -1,0 +1,12 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/v1/emotion?sample_rate=16000",
+      "status": 422,
+      "body": {
+        "detail": "too short: 0.10 s"
+      }
+    }
+  ]
+}
