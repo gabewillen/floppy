@@ -655,6 +655,37 @@ fn a_turns_episode_keeps_the_words_its_stimulus_carried() {
     );
 }
 
+/// An episode keeps the images its stimulus carried (decision D252), each
+/// once and in order, so a later turn recalls what floppy saw.
+#[test]
+fn a_turns_episode_keeps_the_images_its_stimulus_carried() {
+    let mock = Mock::start();
+    let (harness, env) = layout(&mock, "none", "[]", SQLITE);
+    let mut run = start(&harness, &env);
+    let view = |image: &str, media_type: &Json| json!({"image": image, "media_type": media_type, "kind": "camera"});
+    let mut turn = input(1);
+    turn["cognition_input"]["stimulus"] = json!({
+        "event": "bot.perceived",
+        "data": {"percepts": [
+            {"stimulus": {"event": "environment.visual", "data": {"image": "media/a.png", "media_type": "image/png", "source": "camera"}}},
+            {"stimulus": {"event": "bot.ability.seeing.sight", "data": {"cause": "look", "views": [
+                view("media/a.png", &json!("image/png")),
+                view("media/b.jpg", &Json::Null),
+            ]}}},
+        ]},
+    });
+    turn["cognition_output"] =
+        json!([{"event": "bot.ability.cognition.ignore", "data": {}, "target": "cognition"}]);
+    let records = reflect_on(&mut run, &turn);
+    drop(run.close(WAIT));
+    let episodes = json_log(&records, "episodes");
+    // Each image once, as its reference and media type.
+    assert_eq!(
+        episodes[0]["content"]["images"],
+        json!([{"image": "media/a.png", "media_type": "image/png"}, {"image": "media/b.jpg", "media_type": null}])
+    );
+}
+
 fn an_empty_selection_stores_the_episode_and_the_next_turn_recalls_it_on(database: &str) {
     let mock = Mock::start();
     let (harness, env) = layout(&mock, "none", "[]", database);

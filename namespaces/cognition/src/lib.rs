@@ -95,7 +95,9 @@
 //! 3. the rest of what the bot has in mind: `<cognition:recalled>` holding
 //!    `prior_episodes` (an array of cognitive episodes: `focus`,
 //!    `focus_candidates`, `stimulus_name`, `heard` (the words its stimulus
-//!    carried, as `item`s, when it carried any), a failed or cancelled turn's
+//!    carried, as `item`s, when it carried any), `images` (the media
+//!    objects it carried, when it carried any, each an `item` whose `image`
+//!    entry is a placeholder, as in the stimulus; decision D252), a failed or cancelled turn's
 //!    `outcome` and `failure` (decision D139), `output` as
 //!    `cognition:event`s and `behavior` as a `behavior:create`,
 //!    `behavior:change` or `behavior:break`) and `standing_directives` (an
@@ -115,15 +117,19 @@
 //!    reference floppy passes media by, and a `media_type`, a string or
 //!    `null`, as a view or an `environment.visual` has) renders as the
 //!    `image` entry's `<media:image media_type? ref="image-N" />`
-//!    placeholder (N its place among the stimulus's images in document
-//!    order, from 1), which carries the media type in place of the
+//!    placeholder, which carries the media type in place of the
 //!    `media_type` entry, never the reference;
 //! 5. the repair `feedback` (optional, a string; `null` is none).
 //!
-//! `imageslocation` (optional) receives the references of the stimulus's
-//! images, in the order of their placeholders' `ref`s (`[]` for none), so a
+//! `imageslocation` (optional) receives the references of the images the
+//! placeholders attach, in the order of their `ref`s (`[]` for none), so a
 //! model that takes images is sent each as an image part after the content
-//! (decision D250); it reads which is which by its `ref`. Without
+//! (decision D250); it reads which is which by its `ref`. At most 8 attach
+//! (mosfet.py's `media.MAX_TURN_IMAGES`): the stimulus's first, then the
+//! newest recalled, each part numbered `image-N` from 1 in document order
+//! within its block; any other is `<media:image media_type?
+//! omitted="capacity" />`, as mosfet.py shows an image past a model's
+//! capacity (decision D252). Without
 //! `imageslocation` the images are not sent, and each placeholder is
 //! `<media:image media_type? omitted="media_type" />` instead, as mosfet.py
 //! shows an image to a text-only model, so the model knows it is not seeing
@@ -1197,9 +1203,9 @@ pub struct TurnInput<'a> {
     pub standing_directives: &'a [Json],
     /// The repair feedback, empty for none.
     pub feedback: &'a str,
-    /// Whether the stimulus's images are sent with the content (an
-    /// `imageslocation` takes them): else each placeholder says it was
-    /// left out.
+    /// Whether the images the stimulus and recalled episodes carry are sent
+    /// with the content (an `imageslocation` takes them): else each
+    /// placeholder says it was left out.
     pub images: bool,
 }
 
@@ -1426,7 +1432,7 @@ fn content(
         Stimulus::Null => Some(stimulus_element(None, &mut stimulus_budget)?.text(0)),
         Stimulus::Envelope(envelope) => {
             let mut root = stimulus_element(Some(envelope), &mut stimulus_budget)?;
-            images = attach_images(&mut root, input.images);
+            attach_images(&mut root, input.images, &mut images);
             Some(root.text(0))
         }
     };
@@ -1480,7 +1486,7 @@ fn content(
             // A newline joins each recalled element to what follows it.
             remaining = remaining.and_then(|remaining| remaining.checked_sub(1));
             if let Some(limit) = remaining
-                && let Some(text) = recalled(&fields, limit)
+                && let Some(text) = recalled(&fields, limit, input.images, &mut images)
             {
                 remaining = Some(limit - text.len());
                 *rendered = Some(text);
@@ -1622,9 +1628,19 @@ struct Field<'a> {
 
 /// One part of what the bot has in mind rendered within `limit` bytes:
 /// `<cognition:recalled>` holding each field with items, the rest at their
-/// defaults rendering nothing; `None` when its frame does not fit.
-fn recalled(fields: &[Field<'_>], limit: usize) -> Option<String> {
-    let mut budget = Budget::default();
+/// defaults rendering nothing; `None` when its frame does not fit. A media
+/// object in a recalled item (the images an episode kept, decision D252) is a
+/// placeholder whose image joins `references` as [`attach_images`] attaches it.
+fn recalled(
+    fields: &[Field<'_>],
+    limit: usize,
+    sent: bool,
+    references: &mut Vec<String>,
+) -> Option<String> {
+    let mut budget = Budget {
+        media: true,
+        ..Budget::default()
+    };
     let mut root = budget.element("cognition:recalled").ok()?;
     let mut deferred = Vec::new();
     for field in fields.iter().filter(|field| !field.items.is_empty()) {
@@ -1643,6 +1659,7 @@ fn recalled(fields: &[Field<'_>], limit: usize) -> Option<String> {
         root.children.push(list);
     }
     render_budgeted(&mut root, &deferred, limit, &mut budget).ok()?;
+    attach_images(&mut root, sent, references);
     let text = root.text(0);
     (text.len() <= limit).then_some(text)
 }
@@ -1692,7 +1709,12 @@ fn render_budgeted(
                 budget.rewind(mark);
                 continue;
             };
-            let cost = element.text(level).len() + line + if kept.is_empty() { opening } else { 0 };
+            // A placeholder's verdict is set once the items render.
+            let verdicts = IMAGE_REF_ROOM.len() * placeholder_count(&element);
+            let cost = element.text(level).len()
+                + verdicts
+                + line
+                + if kept.is_empty() { opening } else { 0 };
             if used + cost > limit || budget.bytes > MAX_PROJECTION_BYTES {
                 budget.rewind(mark);
                 continue;
@@ -1865,8 +1887,23 @@ struct Element {
 const IMAGE_PLACEHOLDER: &str = "media:image";
 
 /// The most bytes a placeholder's verdict adds: ` omitted="media_type"`
-/// (a ` ref="image-N"` is shorter, N at most the node budget).
+/// (` omitted="capacity"` and a ` ref="image-N"` are shorter, N at most
+/// [`MAX_TURN_IMAGES`]).
 const IMAGE_REF_ROOM: &str = " omitted=\"media_type\"";
+
+/// The most images one turn attaches, its stimulus's first, then the newest
+/// recalled (mosfet.py's `media.MAX_TURN_IMAGES`).
+const MAX_TURN_IMAGES: usize = 8;
+
+/// How many placeholders `element` and its descendants hold.
+fn placeholder_count(element: &Element) -> usize {
+    usize::from(element.image.is_some())
+        + element
+            .children
+            .iter()
+            .map(placeholder_count)
+            .sum::<usize>()
+}
 
 /// The placeholders of `element` and its descendants, in document order.
 fn placeholders(element: &mut Element) -> Vec<&mut Element> {
@@ -1876,28 +1913,37 @@ fn placeholders(element: &mut Element) -> Vec<&mut Element> {
     element.children.iter_mut().flat_map(placeholders).collect()
 }
 
-/// Numbers the placeholders under `root` in document order when their
-/// images are `sent`: each gains `ref="image-N"`, N its place from 1, and
-/// their references are returned in `ref` order. Else each gains
-/// `omitted="media_type"`, as mosfet.py's text-only model sees an image,
-/// and none is returned.
-fn attach_images(root: &mut Element, sent: bool) -> Vec<String> {
-    let mut references = Vec::new();
-    for element in placeholders(root) {
-        if let Some(reference) = &element.image {
-            if !sent {
-                element
-                    .attributes
-                    .push(("omitted".to_owned(), "media_type".to_owned()));
-                continue;
-            }
-            references.push(reference.clone());
+/// Attaches the placeholders under `root` when their images are `sent`:
+/// while fewer than [`MAX_TURN_IMAGES`] are attached, the last of them in
+/// document order (the newest recalled), each gains `ref="image-N"`, N its
+/// place in `references` from 1, numbered in document order, and its
+/// reference joins `references`; the rest gain `omitted="capacity"`. Else
+/// each gains `omitted="media_type"`, as mosfet.py's text-only model sees an
+/// image.
+fn attach_images(root: &mut Element, sent: bool, references: &mut Vec<String>) {
+    let mut found = placeholders(root);
+    if !sent {
+        for element in found {
             element
                 .attributes
-                .push(("ref".to_owned(), format!("image-{}", references.len())));
+                .push(("omitted".to_owned(), "media_type".to_owned()));
         }
+        return;
     }
-    references
+    let free = MAX_TURN_IMAGES.saturating_sub(references.len());
+    let first = found.len().saturating_sub(free);
+    for (index, element) in found.iter_mut().enumerate() {
+        let Some(reference) = element.image.clone().filter(|_| index >= first) else {
+            element
+                .attributes
+                .push(("omitted".to_owned(), "capacity".to_owned()));
+            continue;
+        };
+        references.push(reference);
+        element
+            .attributes
+            .push(("ref".to_owned(), format!("image-{}", references.len())));
+    }
 }
 
 /// The image a media object carries (an object with a string `image`, the
@@ -2254,7 +2300,8 @@ fn models(
 }
 
 /// A cognitive episode: `focus`, `focus_candidates`, `stimulus_name`,
-/// `heard` (the words its stimulus carried, when it carried any),
+/// `heard` (the words its stimulus carried, when it carried any), `images`
+/// (the images it carried, when it carried any),
 /// `outcome` and `failure` (a failed or cancelled turn's, decision D139),
 /// `output` (as `cognition:event`s), `behavior`.
 fn episode(
@@ -2280,6 +2327,8 @@ fn episode(
     )?;
     // The words the stimulus carried (none: nothing).
     fill_field(&mut element, "heard", field("heard"), budget)?;
+    // The images it carried, as placeholders (none: nothing; decision D252).
+    fill_field(&mut element, "images", field("images"), budget)?;
     // A failed or cancelled turn's (decision D139); a completed turn's
     // episode has neither.
     fill_field(&mut element, "outcome", field("outcome"), budget)?;

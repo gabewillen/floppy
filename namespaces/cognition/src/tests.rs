@@ -1379,15 +1379,20 @@ fn malformed_within_ceiling_elements_or_values_raise_error_execution() {
 /// What the element assigns for a sight of `views`: the content and the
 /// images' references.
 fn sight_projected(views: &Json) -> (String, Data) {
-    let input = json!({
+    images_projected(&json!({
         "stimulus": {"event": "bot.ability.seeing.sight", "source": "seeing",
                      "data": {"cause": "look", "views": views}},
         "prior_episodes": [], "standing_directives": [], "environment": null,
         "instructions": "s", "schema": null,
-    });
+    }))
+}
+
+/// The content and the images handed on for `input`, with an
+/// `imageslocation`.
+fn images_projected(input: &Json) -> (String, Data) {
     let mut attributes = content_attributes();
     attributes.push(attr("imageslocation", "images"));
-    let mut host = content_host(&input);
+    let mut host = content_host(input);
     assert_eq!(
         execute(CONTENT, &attributes, &[], &mut host),
         Ok(Executed::Handled)
@@ -1445,4 +1450,52 @@ fn a_stimulus_image_renders_as_a_placeholder_and_its_reference_is_handed_on() {
     let (content, images) = sight_projected(&json!([]));
     assert_eq!(images, data(&json!([])));
     assert!(!content.contains("media:image"), "{content}");
+}
+
+#[test]
+fn a_recalled_episodes_images_attach_after_the_stimulus_newest_first_within_the_turns_bound() {
+    let shown =
+        |name: &str| json!({"image": format!("media/{name}.png"), "media_type": "image/png"});
+    let older =
+        json!({"stimulus_name": "environment.visual", "images": [shown("old")], "output": []});
+    let newer: Vec<Json> = (1..=8)
+        .map(|index| shown(&format!("new-{index}")))
+        .collect();
+    let newer = json!({"stimulus_name": "environment.visual", "images": newer, "output": []});
+    let input = json!({
+        "stimulus": {"event": "environment.visual", "data": shown("now")},
+        "prior_episodes": [older, newer], "standing_directives": [], "environment": null,
+        "instructions": "s", "schema": null,
+    });
+    let (content, images) = images_projected(&input);
+    // The stimulus's image first, then the newest recalled, eight in all;
+    // the rest say the turn had no room for them.
+    let mut expected = vec!["media/now.png".to_owned()];
+    expected.extend((2..=8).map(|index| format!("media/new-{index}.png")));
+    assert_eq!(images, data(&json!(expected)));
+    assert_eq!(
+        content.matches(r#"omitted="capacity""#).count(),
+        2,
+        "{content}"
+    );
+    assert!(
+        content.contains("<images count=\"1\">\n        <item>\n          <entry key=\"image\">\n            <media:image media_type=\"image/png\" omitted=\"capacity\" />"),
+        "{content}"
+    );
+    for index in 1..=8 {
+        assert!(
+            content.contains(&format!(
+                r#"<media:image media_type="image/png" ref="image-{index}" />"#
+            )),
+            "{content}"
+        );
+    }
+    assert!(!content.contains("media/"), "{content}");
+    // A text-only model is told it does not see them.
+    let rendered = prompt(&input);
+    assert_eq!(
+        rendered.matches(r#"omitted="media_type""#).count(),
+        10,
+        "{rendered}"
+    );
 }

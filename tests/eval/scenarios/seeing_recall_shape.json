@@ -1,0 +1,82 @@
+{
+  "category": "seeing",
+  "features": [
+    "seeing"
+  ],
+  "intent": "A camera shows floppy a green triangle on a white card. After some unrelated talk and a restart, a person asks what shape and color the picture floppy saw earlier was. floppy should still say a green triangle.",
+  "bot_name": null,
+  "params": {
+    "seeing_enabled": "true"
+  },
+  "sessions": [
+    {
+      "steps": [
+        {
+          "show": "tests/fixtures/green-triangle.png",
+          "describe": "a green triangle on a white card",
+          "wait_s": 30
+        },
+        {
+          "say": "What's a good name for a goldfish?"
+        },
+        {
+          "say": "How many minutes are in an hour?"
+        }
+      ]
+    },
+    {
+      "steps": [
+        {
+          "say": "Floppy, what shape and color was the picture you saw earlier?"
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        1,
+        0
+      ],
+      "pattern": "\\btriangle",
+      "weight": 2
+    },
+    {
+      "check": "says",
+      "at": [
+        1,
+        0
+      ],
+      "pattern": "\\bgreen\\b",
+      "weight": 2
+    }
+  ],
+  "criteria": {
+    "sight": "floppy recalls what it saw earlier rather than inventing it or saying it never saw it."
+  },
+  "diagnostics": [
+    {
+      "check": "logged",
+      "by": [
+        1,
+        0
+      ],
+      "label": "seeing.sight",
+      "features": [
+        "seeing"
+      ]
+    },
+    {
+      "check": "not_logged",
+      "by": [
+        1,
+        0
+      ],
+      "label": "seeing.degraded",
+      "features": [
+        "seeing"
+      ]
+    }
+  ]
+}
