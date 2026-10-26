@@ -11,6 +11,13 @@ Last updated: 2026-10-24.
 
 ## Current state (2026-10-09) — resume here
 
+- **Recall by association (2026-10-26, D256, #86):** the Embedding
+  ability (`abilities/embedding/`) embeds each episode's heard words
+  (reflection, stored in `bot_memory_embedding`) and each turn's cue
+  (reasoning), on `FLOPPY_EMBEDDING_BASE_URL` (`embeddinggemma-2`, 256
+  dimensions, api.willen.dev). Reasoning ranks the 64 newest episodes by
+  mosfet.py's associative score and recalls the best within 24576
+  characters; without an embedder recall is by recency.
 - **The workshop compiles and runs bots in the browser (2026-10-26, #104):**
   the website's workshop validates, compiles and runs a document in the
   page with scxml.rs's browser host and the same components `scx run`

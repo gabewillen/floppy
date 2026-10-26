@@ -7,6 +7,34 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-26, recall by association (D256), model `sparks/qwen3.8-flash-next`
+
+`eval.py run` from a cloud session through the relays of docs/eval.md
+(the embedder `embeddinggemma-2` on api.willen.dev), two repeats each.
+The baseline is the same tree with `FLOPPY_EMBEDDING_*` unset, which
+recalls by recency exactly as before D256. The train split is `climb`'s
+(seed 7, test share 0.34); the held-out test was run once, on the
+change. The long-recall probe is a scratch scenario kept out of
+`tests/eval/scenarios` so the split stays as it was: Gabe tells floppy
+four facts, asks fifty unrelated questions, and after a restart asks
+for three of them.
+
+| Run | Train | Long-recall probe (20 / 50 questions) | Held-out test |
+| --- | --- | --- | --- |
+| baseline (recency) | 0.99 ± 0.01 | 0.97 / 0.08 | 0.81 (D251's run) |
+| D256 | 0.99 ± 0.01 | 0.97 / 0.97 | 0.88 ± 0.08 (people_overheard 0.86, recall_update 0.91) |
+
+Read before trusting: the train scenarios were already saturated by
+D251, so they show no regression rather than a gain. The probe is where
+recall by association matters: after fifty questions the facts are older
+than the short-term register's turns and than the newest episodes that
+fit 24576 characters, so the baseline answered "you never told me" to
+all three questions, and D256 answered "Lisbon" and "a blue Volvo".
+`reasoning.recall` logged the cue's best matches (for example
+`3:0.772 5:0.673 7:0.640`). The held-out baseline is D251's earlier run,
+not a rerun on this tree. Intervals are wide (2 jobs per probe, 4 on
+test).
+
 ## 2026-10-26, floppy remembers what it saw (D252), model `sparks/qwen3.8-flash-next`
 
 `eval.py run` with the same setup as D250's climb below, on main with the

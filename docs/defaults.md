@@ -24,6 +24,8 @@ values. No package has a default model endpoint (decision D31).
 | `FLOPPY_VOICE_API_KEY` | the `speech` service (`env:apikey`), as above | for a keyed backend, as `FLOPPY_API_KEY` |
 | `FLOPPY_EMOTION_BASE_URL` | the `speech` service (`env:baseurl`): the tone the floppy bot hears in decoded speech (listening's `voice_affect`, a speech server's `/emotion`) | no: without it `voice_affect` fails `unconfigured`, logs it (`listening.affect`), and decoded speech carries no `affect` |
 | `FLOPPY_EMOTION_API_KEY` | the `speech` service (`env:apikey`), as above | for a keyed backend, as `FLOPPY_API_KEY` |
+| `FLOPPY_EMBEDDING_BASE_URL` | the `generate` service (`env:baseurl`): the embeddings the floppy bot recalls episodes by (reflection's and reasoning's `embedding`, `/embeddings`) | no: without it `embedding` fails `unavailable`, logs it (`reflection.embedding`, `reasoning.embedding`), and recall is by recency |
+| `FLOPPY_EMBEDDING_API_KEY` | the `generate` service (`env:apikey`), as above | for a keyed backend, as `FLOPPY_API_KEY` |
 
 The live tests read `FLOPPY_LIVE_ENV_FILE` (the env files, joined like
 `PATH`) and `FLOPPY_LIVE_MODEL` (default: the model below); the trace tests
