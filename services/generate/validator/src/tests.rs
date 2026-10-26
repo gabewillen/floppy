@@ -4,8 +4,8 @@ use scxml_types::DataValue;
 
 use super::{
     Attribute, Document, Element, FAILED_EVENT, FAILURE_CODES, Finding, MAX_COMPLETION_TOKENS,
-    MAX_TEMPERATURE, PARAMETERS, REASONING_EFFORTS, RESULT_EVENT, SERVICE_URI, Severity,
-    TOOL_CHOICES, TOOLS_REASONING_EFFORT, Transition, check,
+    MAX_DIMENSIONS, MAX_TEMPERATURE, PARAMETERS, REASONING_EFFORTS, RESULT_EVENT, SERVICE_URI,
+    Severity, TOOL_CHOICES, TOOLS_REASONING_EFFORT, Transition, check,
 };
 
 const EVENT: &str = "https://github.com/stateforward/scxml.rs/namespaces/event";
@@ -358,6 +358,7 @@ fn the_contract_is_the_service_s_own() {
         floppy_service_generate::MAX_COMPLETION_TOKENS
     );
     assert!((MAX_TEMPERATURE - floppy_service_generate::MAX_TEMPERATURE).abs() < f64::EPSILON);
+    assert_eq!(MAX_DIMENSIONS, floppy_service_generate::MAX_DIMENSIONS);
     assert_eq!(RESULT_EVENT, floppy_service_generate::RESULT_EVENT);
     assert_eq!(FAILED_EVENT, floppy_service_generate::FAILED_EVENT);
     let codes: Vec<&str> = [
@@ -388,4 +389,37 @@ fn the_contract_is_the_service_s_own() {
     let accepted: Result<Generation, _> =
         parse_parameters([("model", &text), ("prompt", &text)], no_files);
     assert!(accepted.is_ok());
+}
+
+#[test]
+fn an_embeddings_invocation_takes_only_a_model_and_dimensions() {
+    const INPUT: &str = r#"<param name="input" expr="texts()"/>"#;
+    let clean = invoke(&format!(
+        r#"{MODEL}{INPUT}<param name="dimensions" expr="256"/>"#
+    ));
+    assert!(findings(&clean).1.is_empty());
+    let (_, found) = findings(&invoke(&format!("{MODEL}{INPUT}{PROMPT}")));
+    assert_eq!(codes(&found), ["missing_param"]);
+    assert!(
+        found[0].message.contains("`prompt`"),
+        "{}",
+        found[0].message
+    );
+    let (_, found) = findings(&invoke(&format!(
+        r#"{MODEL}{PROMPT}<param name="dimensions" expr="256"/>"#
+    )));
+    assert_eq!(codes(&found), ["missing_param"]);
+    for value in ["0", "4097", "2.5", "'256'"] {
+        let (_, found) = findings(&invoke(&format!(
+            r#"{MODEL}{INPUT}<param name="dimensions" expr="{value}"/>"#
+        )));
+        assert_eq!(codes(&found), ["invalid_value"], "{value}");
+    }
+    // What it returns is vectors: a transition expecting a text reply
+    // does not take them.
+    let (_, found) = findings(&format!(
+        r#"{}<transition event="generate.result" event:schema='{{"type":"object","required":["content"]}}'/>"#,
+        invoke(&format!("{MODEL}{INPUT}"))
+    ));
+    assert_eq!(codes(&found), ["schema_mismatch"]);
 }

@@ -29,9 +29,138 @@ function hostInput() {
   return ({input: stimulus});
 }
 
-// The prior cognitive episodes.
+// The prior cognitive episodes: those ranked against the cue, read oldest
+// first, else the newest.
 function episodeSelectStatements() {
-  return [{sql: episode_select, parameters: ['cognitive_episode', context_ref]}];
+  if (episode_ids === null || episode_ids.length === 0) {
+    return [{sql: episode_select, parameters: ['cognitive_episode', context_ref]}];
+  }
+  var marks = episode_ids.map(function () { return '?'; }).join(', ');
+  return [{sql: 'SELECT content FROM bot_memory WHERE memory_id IN (' + marks + ') ORDER BY created_at, memory_id', parameters: episode_ids}];
+}
+
+// The cue's words (decision D256): the content of each message of a text
+// type the stimulus carries, read through envelopes and arrays, each once,
+// at most 2048 UTF-8 bytes in all, as reflection reads an episode's heard.
+function cueWords() {
+  var found = [];
+  var room = 2048;
+  function read(item, depth) {
+    if (depth > 8 || room <= 0 || item === null || typeof item !== 'object') {
+      return;
+    }
+    if (Array.isArray(item)) {
+      item.forEach(function (each) { read(each, depth + 1); });
+      return;
+    }
+    if (typeof item.content === 'string' && typeof item.content_type === 'string' && /^text\//i.test(item.content_type)) {
+      var words = item.content.trim().slice(0, room);
+      if (words !== '' && found.indexOf(words) < 0) {
+        found.push(words);
+        room -= words.length;
+      }
+      return;
+    }
+    Object.keys(item).forEach(function (key) { read(item[key], depth + 1); });
+  }
+  read(Object(stimulus).data, 0);
+  return found.join('\n');
+}
+
+function hasCueWords() {
+  return cueWords() !== '';
+}
+
+function hasNoCueWords() {
+  return !hasCueWords();
+}
+
+function cueEmbeddingInput() {
+  return ({role: 'query', items: [{parts: [{kind: 'text', text: cueWords()}]}]});
+}
+
+function candidateSelectStatements() {
+  return [{sql: candidate_select, parameters: ['cognitive_episode', context_ref]}];
+}
+
+// A stored vector's components, from its compact text (i8: and the
+// standard base64 of signed bytes over 127, as
+// namespaces/conversation decode_voice reads it), else null.
+function storedVector(text) {
+  var alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  if (typeof text !== 'string' || text.slice(0, 3) !== 'i8:' || (text.length - 3) % 4 !== 0) {
+    return null;
+  }
+  var body = text.slice(3).replace(/=+$/, '');
+  var values = [];
+  var bits = 0;
+  var held = 0;
+  for (var i = 0; i < body.length; i++) {
+    var sextet = alphabet.indexOf(body.charAt(i));
+    if (sextet < 0) {
+      return null;
+    }
+    held = (held << 6) | sextet;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      var byte = (held >> bits) & 255;
+      values.push((byte > 127 ? byte - 256 : byte) / 127);
+    }
+  }
+  return values;
+}
+
+// The cosine of the cue with a stored vector, 0 for none or another space.
+function cueSimilarity(text) {
+  var values = storedVector(text);
+  if (values === null || values.length !== cue.length) {
+    return 0;
+  }
+  var dot = 0;
+  var norm = 0;
+  for (var i = 0; i < values.length; i++) {
+    dot += values[i] * cue[i];
+    norm += values[i] * values[i];
+  }
+  return norm > 0 ? dot / Math.sqrt(norm) : 0;
+}
+
+// A created_at's milliseconds (SQLite's and Postgres's text, UTC).
+function createdAtMs(text) {
+  var parts = /^(\d{4})-(\d\d)-(\d\d)[ T](\d\d):(\d\d):(\d\d(?:\.\d+)?)/.exec(String(text));
+  return parts === null ? 0 : Date.UTC(+parts[1], parts[2] - 1, +parts[3], +parts[4], +parts[5], 0) + parseFloat(parts[6]) * 1000;
+}
+
+// The candidates scored (mosfet.py's Associative: similarity times the
+// cosine plus recency times 0.5^(age / half-life), the age before the
+// newest candidate), best first, ties newer first.
+function scoredCandidates(_event) {
+  var rows = _event.data.results[0].rows;
+  var newest = rows.reduce(function (most, r) { return Math.max(most, createdAtMs(r.values[1])); }, 0);
+  return rows.map(function (r, order) {
+    var similarity = cueSimilarity(r.values[3]);
+    var recency = Math.pow(0.5, (newest - createdAtMs(r.values[1])) / weights.recency_half_life_ms);
+    return {id: r.values[0], length: Number(r.values[2]), order: order, similarity: similarity, score: weights.similarity * similarity + weights.recency * recency};
+  }).sort(function (a, b) { return b.score - a.score || a.order - b.order; });
+}
+
+// The ids of the best candidates that hold at most 24576 characters of
+// content in all.
+function rankedEpisodeIds(_event) {
+  var room = 24576;
+  var ids = [];
+  scoredCandidates(_event).forEach(function (row) {
+    if (row.length <= room) {
+      ids.push(row.id);
+      room -= row.length;
+    }
+  });
+  return ids;
+}
+
+function recallLog(_event) {
+  return scoredCandidates(_event).slice(0, 3).map(function (row) { return row.id.replace(/^0+/, '') + ':' + row.similarity.toFixed(3); }).join(' ');
 }
 
 // The standing directives appended.

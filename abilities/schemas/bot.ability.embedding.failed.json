@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.embedding.failed",
+  "additionalProperties": false,
+  "description": "An embedding request failed (mosfet.py's Embedding FailureData); kind says how an operator should respond.",
+  "examples": [
+    {
+      "message": "The embedder is not configured (unconfigured).",
+      "kind": "unavailable"
+    }
+  ],
+  "properties": {
+    "message": {
+      "description": "Human-readable failure message.",
+      "examples": [
+        "The embedder is not configured (unconfigured)."
+      ],
+      "title": "Message",
+      "type": "string"
+    },
+    "kind": {
+      "description": "Why the request failed, a closed vocabulary.",
+      "enum": [
+        "invalid_input",
+        "unsupported_input",
+        "too_long",
+        "overloaded",
+        "timeout",
+        "unavailable",
+        "unauthorized",
+        "invalid_response",
+        "embed_failed"
+      ],
+      "examples": [
+        "unavailable"
+      ],
+      "title": "Kind",
+      "type": "string"
+    }
+  },
+  "required": [
+    "message",
+    "kind"
+  ],
+  "type": "object"
+}

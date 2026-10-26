@@ -11,6 +11,13 @@ Last updated: 2026-10-24.
 
 ## Current state (2026-10-09) — resume here
 
+- **Recall by association (2026-10-26, D256, #86):** the Embedding
+  ability (`abilities/embedding/`) embeds each episode's heard words
+  (reflection, stored in `bot_memory_embedding`) and each turn's cue
+  (reasoning), on `FLOPPY_EMBEDDING_BASE_URL` (`embeddinggemma-2`, 256
+  dimensions, api.willen.dev). Reasoning ranks the 64 newest episodes by
+  mosfet.py's associative score and recalls the best within 24576
+  characters; without an embedder recall is by recency.
 - **The workshop compiles and runs bots in the browser (2026-10-26, #104):**
   the website's workshop validates, compiles and runs a document in the
   page with scxml.rs's browser host and the same components `scx run`
@@ -37,6 +44,16 @@ Last updated: 2026-10-24.
   instance, so it needs a WIT contract change (stateforward/scxml.rs#33,
   not scheduled: the maintainer's call). The register's
   facts come from `web/src/register.py`.
+- **The prompt fits a generate call (2026-10-26, D255):** the cognition's
+  prompt budget (`MAX_PROJECTION_BYTES`) is 49152, down from 262144, so
+  the system channel, the schema and the prompt fit the 65536-byte event
+  value a generate call's `messages` is; recalled turns, episodes and
+  directives are trimmed on wasm instead of failing the turn with
+  `error.execution` (reasoning case 141 fails at the old budget). The
+  cognition namespace IRP's manifest names the new budget, but its prepared
+  corpus still carries the old statement text: re-prepare it
+  (`scripts/namespace-irp.sh prepare cognition`, which needs SaxonJ-HE)
+  where Saxon is installed.
 - **A voice is named by its ref (2026-10-26, D253):** the interpretation
   owns the voice registry (mosfet.py's identification), so an embedding
   never leaves it and products carry `voice:<id>` refs. This keeps a long
