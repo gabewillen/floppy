@@ -57,6 +57,7 @@ use crate::{
     HostReply, LOG_TEXT, MAX_FOREACH_FRAMES, MAX_FOREACH_ITEMS, MAX_IN_QUERIES,
     MAX_LOOP_ITERATIONS, MAX_NESTING_DEPTH, MAX_RECURSION_DEPTH, MAX_STACK_SIZE, MAX_VALUE_BYTES,
     SystemContext, bounded, classify_js_error, dom, event_to_source, to_source, validate_event,
+    validate_value,
 };
 
 /// Most parsed programs one realm caches.
@@ -793,8 +794,12 @@ impl Session {
                 match &self.event {
                     Some((bound, value)) if *bound == source => value.clone(),
                     _ => {
-                        let builder = self.dom_build_open.clone();
-                        let value = self.eval_adapter_with(&source, &builder)?;
+                        let value = if let Some(value) = self.event_value(event) {
+                            value
+                        } else {
+                            let builder = self.dom_build_open.clone();
+                            self.eval_adapter_with(&source, &builder)?
+                        };
                         let value = self.call(&self.helpers.guard.clone(), &[value])?;
                         self.event = Some((source, value.clone()));
                         value
@@ -805,6 +810,79 @@ impl Session {
         };
         self.call(&self.helpers.set_event.clone(), &[value])
             .map(drop)
+    }
+
+    /// The `_event` object of `event` built directly, as its source
+    /// ([`event_to_source`]) evaluates: its fields in that order, a field
+    /// with no value `undefined`. `None` when its data is not a primitive or
+    /// JSON that [`Self::json_to_value`] builds, so the caller evaluates the
+    /// source.
+    fn event_value(&mut self, event: &Event) -> Option<JsValue> {
+        let data = match &event.data {
+            DataValue::Absent => JsValue::undefined(),
+            DataValue::JsonArray(json) | DataValue::JsonObject(json) => self.json_to_value(json)?,
+            data => primitive(data)?,
+        };
+        let text = |value: Option<&str>| {
+            value.map_or_else(JsValue::undefined, |value| {
+                JsValue::from(JsString::from(value))
+            })
+        };
+        let fields = [
+            ("name", text(Some(event.name.as_str()))),
+            (
+                "type",
+                text(Some(match event.event_type {
+                    scxml_types::EventType::Internal => "internal",
+                    scxml_types::EventType::External => "external",
+                    scxml_types::EventType::Platform => "platform",
+                })),
+            ),
+            (
+                "sendid",
+                text(event.send_id.as_ref().map(scxml_types::SendId::as_str)),
+            ),
+            ("origin", text(event.origin.as_deref())),
+            ("origintype", text(event.origin_type.as_deref())),
+            (
+                "invokeid",
+                text(event.invoke_id.as_ref().map(scxml_types::InvokeId::as_str)),
+            ),
+            ("data", data),
+            ("raw", text(event.raw.as_deref())),
+        ];
+        let object = JsObject::with_object_proto(self.context.intrinsics());
+        for (name, value) in fields {
+            object
+                .create_data_property_or_throw(JsString::from(name), value, &mut self.context)
+                .ok()?;
+        }
+        Some(object.into())
+    }
+
+    /// The ECMAScript value of the JSON text `json` built directly, without
+    /// the parser, as the same text evaluates as a literal: each object an
+    /// ordinary object with its members in the text's order (a repeated
+    /// member keeps its first place and its last value), each array an
+    /// array. `None` when the text is not JSON this build takes (a number
+    /// [`exact_numbers`] does not vouch for, a lone surrogate, nesting past
+    /// [`MAX_NESTING_DEPTH`]) or a member is named `__proto__` (a literal
+    /// sets the prototype there): the caller evaluates the text instead.
+    pub(crate) fn json_to_value(&mut self, json: &str) -> Option<JsValue> {
+        if !exact_numbers(json) {
+            return None;
+        }
+        let mut deserializer = serde_json::Deserializer::from_str(json);
+        let value = serde::de::DeserializeSeed::deserialize(
+            JsonSeed {
+                context: &mut self.context,
+                depth: 0,
+            },
+            &mut deserializer,
+        )
+        .ok()?;
+        deserializer.end().ok()?;
+        Some(value)
     }
 
     /// Evaluates checked `source` in the global scope through the program
@@ -866,6 +944,12 @@ impl Session {
     pub(crate) fn value_of(&mut self, value: &DataValue) -> Result<JsValue, DataModelError> {
         if let Some(primitive) = primitive(value) {
             return Ok(primitive);
+        }
+        if let DataValue::JsonArray(json) | DataValue::JsonObject(json) = value {
+            validate_value(value)?;
+            if let Some(built) = self.json_to_value(json) {
+                return Ok(built);
+            }
         }
         let built = self.eval_adapter(&to_source(value)?)?;
         if matches!(value, DataValue::Absent) {
@@ -1472,6 +1556,190 @@ enum Json {
 /// The ECMAScript value of a primitive `value`: exactly the value its
 /// source ([`to_source`]) evaluates to, without parsing it. `None` for an
 /// object (JSON, XML) or the absent marker.
+/// Whether `serde_json` reads every number of the JSON text `json` to the
+/// value an ECMAScript literal has: an integer of at most 19 digits (it is
+/// read as an integer, then rounded once), or a number whose significant
+/// digits fit 15 and whose decimal exponent, after its fraction, is within
+/// 22 (one exact power of ten, so one rounding). Its other numbers it reads
+/// by a best-effort multiplication that may miss by a unit in the last
+/// place. A string's characters are skipped; the text is not checked
+/// otherwise.
+fn exact_numbers(json: &str) -> bool {
+    let bytes = json.as_bytes();
+    let mut index = 0;
+    while let Some(&byte) = bytes.get(index) {
+        match byte {
+            b'"' => {
+                index += 1;
+                while let Some(&byte) = bytes.get(index) {
+                    index += if byte == b'\\' { 2 } else { 1 };
+                    if byte == b'"' {
+                        break;
+                    }
+                }
+            }
+            b'-' | b'0'..=b'9' => {
+                let start = index;
+                while bytes.get(index).is_some_and(|byte| {
+                    matches!(byte, b'-' | b'+' | b'.' | b'e' | b'E' | b'0'..=b'9')
+                }) {
+                    index += 1;
+                }
+                if !exact_number(bytes.get(start..index).unwrap_or_default()) {
+                    return false;
+                }
+            }
+            _ => index += 1,
+        }
+    }
+    true
+}
+
+/// Whether one number token is read exactly ([`exact_numbers`]).
+fn exact_number(token: &[u8]) -> bool {
+    let (mantissa, exponent) = match token.iter().position(|byte| matches!(byte, b'e' | b'E')) {
+        Some(at) => (
+            token.get(..at).unwrap_or_default(),
+            std::str::from_utf8(token.get(at + 1..).unwrap_or_default())
+                .ok()
+                .and_then(|exponent| exponent.parse::<i64>().ok()),
+        ),
+        None => (token, Some(0)),
+    };
+    let Some(exponent) = exponent else {
+        return false;
+    };
+    let digits: Vec<u8> = mantissa
+        .iter()
+        .copied()
+        .filter(u8::is_ascii_digit)
+        .collect();
+    let fraction = mantissa
+        .iter()
+        .position(|&byte| byte == b'.')
+        .map_or(0, |at| mantissa.len() - at - 1);
+    if fraction == 0 && token.len() == mantissa.len() {
+        return digits.len() <= 19;
+    }
+    let significant = digits.iter().skip_while(|&&digit| digit == b'0').count();
+    let Ok(fraction) = i64::try_from(fraction) else {
+        return false;
+    };
+    significant <= 15 && exponent.saturating_sub(fraction).abs() <= 22
+}
+
+/// Builds one JSON value in a realm ([`Session::json_to_value`]), `depth`
+/// containers deep.
+struct JsonSeed<'a> {
+    context: &'a mut Context,
+    depth: usize,
+}
+
+impl JsonSeed<'_> {
+    /// The seed of a value inside the container this seed builds.
+    fn inner(&mut self) -> Result<JsonSeed<'_>, JsonRefused> {
+        let depth = self.depth.saturating_add(1);
+        if depth > MAX_NESTING_DEPTH {
+            return Err(JsonRefused);
+        }
+        Ok(JsonSeed {
+            context: self.context,
+            depth,
+        })
+    }
+}
+
+/// Why [`JsonSeed`] stopped: the text is left to the literal's evaluation.
+#[derive(Debug)]
+struct JsonRefused;
+
+impl std::fmt::Display for JsonRefused {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("refused")
+    }
+}
+
+impl<'de> serde::de::DeserializeSeed<'de> for JsonSeed<'_> {
+    type Value = JsValue;
+
+    fn deserialize<D: serde::Deserializer<'de>>(
+        self,
+        deserializer: D,
+    ) -> Result<JsValue, D::Error> {
+        deserializer.deserialize_any(self)
+    }
+}
+
+impl<'de> serde::de::Visitor<'de> for JsonSeed<'_> {
+    type Value = JsValue;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("a JSON value")
+    }
+
+    fn visit_unit<E>(self) -> Result<JsValue, E> {
+        Ok(JsValue::null())
+    }
+
+    fn visit_bool<E>(self, value: bool) -> Result<JsValue, E> {
+        Ok(JsValue::from(value))
+    }
+
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "an ECMAScript number literal rounds the same way"
+    )]
+    fn visit_i64<E>(self, value: i64) -> Result<JsValue, E> {
+        Ok(JsValue::from(value as f64))
+    }
+
+    #[expect(
+        clippy::cast_precision_loss,
+        reason = "an ECMAScript number literal rounds the same way"
+    )]
+    fn visit_u64<E>(self, value: u64) -> Result<JsValue, E> {
+        Ok(JsValue::from(value as f64))
+    }
+
+    fn visit_f64<E>(self, value: f64) -> Result<JsValue, E> {
+        Ok(JsValue::from(value))
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<JsValue, E> {
+        Ok(JsValue::from(JsString::from(value)))
+    }
+
+    fn visit_seq<A: serde::de::SeqAccess<'de>>(
+        mut self,
+        mut sequence: A,
+    ) -> Result<JsValue, A::Error> {
+        let mut items = Vec::new();
+        loop {
+            let seed = self.inner().map_err(serde::de::Error::custom)?;
+            match sequence.next_element_seed(seed)? {
+                Some(item) => items.push(item),
+                None => break,
+            }
+        }
+        Ok(JsArray::from_iter(items, self.context).into())
+    }
+
+    fn visit_map<A: serde::de::MapAccess<'de>>(mut self, mut map: A) -> Result<JsValue, A::Error> {
+        let object = JsObject::with_object_proto(self.context.intrinsics());
+        while let Some(key) = map.next_key::<std::borrow::Cow<'de, str>>()? {
+            if key == "__proto__" {
+                return Err(serde::de::Error::custom(JsonRefused));
+            }
+            let seed = self.inner().map_err(serde::de::Error::custom)?;
+            let value = map.next_value_seed(seed)?;
+            object
+                .create_data_property_or_throw(JsString::from(key.as_ref()), value, self.context)
+                .map_err(|_| serde::de::Error::custom(JsonRefused))?;
+        }
+        Ok(object.into())
+    }
+}
+
 pub(crate) fn primitive(value: &DataValue) -> Option<JsValue> {
     match value {
         DataValue::Undefined => Some(JsValue::undefined()),

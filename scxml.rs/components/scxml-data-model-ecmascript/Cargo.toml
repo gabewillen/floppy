@@ -21,6 +21,7 @@ icu_properties.workspace = true
 scxml-telemetry.workspace = true
 scxml-types.workspace = true
 scxml-xpath.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 wit-bindgen.workspace = true
 

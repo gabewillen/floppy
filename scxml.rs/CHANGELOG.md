@@ -693,6 +693,13 @@ hard cutover.
 
 ### Changed
 
+- The ECMAScript data model builds a JSON data value (an event's data, an
+  invoke's donedata, a `<param>`) and an event's `_event` object directly
+  instead of parsing their source text: an 11 KB object binds in about a
+  fifth of the time. Text a literal could read differently (a `__proto__`
+  member, a lone surrogate, deep nesting, or a number `serde_json` might
+  not read exactly) is still evaluated, so every value is the one its
+  literal gives.
 - An `event:schema` reference resolves against the document's base URI as
   every other relative URI does (`<script src>`, `<invoke src>`; RFC 3986
   §5): its `.` and `..` segments resolve, so `../schemas/order.json` names

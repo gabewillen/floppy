@@ -122,3 +122,125 @@ fn reading_a_value_never_runs_user_code() {
         )
     );
 }
+
+/// Whether two values are the same tree: the same prototypes, own keys in
+/// the same order, the same property attributes and `Object.is` leaves.
+const SAME_TREE: &str = "(function same(a, b) { \
+     if (a === null || typeof a !== 'object' || b === null || typeof b !== 'object') return Object.is(a, b); \
+     if (Array.isArray(a) !== Array.isArray(b) || Object.getPrototypeOf(a) !== Object.getPrototypeOf(b) \
+         || Object.isExtensible(a) !== Object.isExtensible(b)) return false; \
+     const keys = Reflect.ownKeys(a), other = Reflect.ownKeys(b); \
+     if (keys.length !== other.length) return false; \
+     return keys.every((key, i) => { \
+         if (key !== other[i]) return false; \
+         const x = Object.getOwnPropertyDescriptor(a, key), y = Object.getOwnPropertyDescriptor(b, key); \
+         return x.writable === y.writable && x.enumerable === y.enumerable \
+             && x.configurable === y.configurable && same(x.value, y.value); \
+     }); \
+ })";
+
+/// `json` built directly, and whether that is the tree its literal
+/// evaluates to (`None` when the direct build declines it).
+fn built(json: &'static str) -> Option<bool> {
+    let engine = Engine::default();
+    engine
+        .start(&system(), Vec::new())
+        .expect("the realm starts");
+    engine
+        .run(&mut NoHost, None, move |session: &mut Session| {
+            let Some(direct) = session.json_to_value(json) else {
+                return Ok(None);
+            };
+            let literal = session
+                .eval(&format!("({json})"))
+                .map_err(|_| crate::DataModelError::Execution)?;
+            let same = session
+                .call_source(SAME_TREE, &[literal, direct])
+                .map_err(|_| crate::DataModelError::Execution)?;
+            Ok(same.as_boolean())
+        })
+        .expect("the operation runs")
+}
+
+#[test]
+fn json_builds_the_tree_its_literal_evaluates_to() {
+    for json in [
+        "{}",
+        "[]",
+        r#"{"a":1,"b":[true,null,"x"],"c":{"d":-0,"e":1e21,"f":0.1,"g":-0.0}}"#,
+        r#"[1,[2,[3]],{"k":"v\u0000\n\"😀"}]"#,
+        r#"{"z":"last","2":"two","1":"one","a":"first"}"#,
+        r#"{"a":1,"b":2,"a":3}"#,
+        "[9007199254740993,9999999999999999999,-9223372036854775808,0]",
+        "[0.25,123456789.123456,1e-7,-1E+2,1.5e22,0.000000000000000000001]",
+        r#"{"text":"1.7976931348623157e308 \" 0.30000000000000004"}"#,
+        r#"{"constructor":1,"toString":"x","hasOwnProperty":null}"#,
+        "  { \"spaced\" : [ 1 , 2 ] }  ",
+    ] {
+        assert_eq!(built(json), Some(true), "{json}");
+    }
+}
+
+#[test]
+fn json_a_literal_reads_differently_is_left_to_the_literal() {
+    let deep = format!("{}{}", "[".repeat(40), "]".repeat(40));
+    let deep: &'static str = Box::leak(deep.into_boxed_str());
+    for json in [
+        r#"{"__proto__":{"polluted":true}}"#,
+        r#"[{"a":{"__proto__":null}}]"#,
+        "[1e400]",
+        "[0.30000000000000004]",
+        "[2.2250738585072011e-308]",
+        "[5e-324]",
+        "[1.7976931348623157e308]",
+        "[123456789012345678901]",
+        "[1e23]",
+        r#"["\ud800"]"#,
+        deep,
+    ] {
+        assert_eq!(built(json), None, "{json}");
+    }
+}
+
+#[test]
+fn an_event_is_built_as_its_source_evaluates() {
+    use scxml_types::{Event, EventName, InvokeId, SendId};
+    let mut full = Event::external(EventName::new("done.invoke.x").expect("name"));
+    full.send_id = Some(SendId::new("send-1").expect("send id"));
+    full.origin = Some("#_scxml_s1".into());
+    full.origin_type = Some("http://www.w3.org/TR/scxml/#SCXMLEventProcessor".into());
+    full.invoke_id = Some(InvokeId::new("x").expect("invoke id"));
+    full.data =
+        DataValue::canonical_json_object(r#"{"text":"hi","n":[1,2.5]}"#).expect("canonical");
+    full.raw = Some("raw text".into());
+    let mut events = vec![full, Event::external(EventName::new("bare").expect("name"))];
+    for data in [
+        DataValue::String("words".into()),
+        DataValue::Null,
+        DataValue::canonical_json_array("[]").expect("canonical"),
+    ] {
+        let mut event = Event::external(EventName::new("data").expect("name"));
+        event.data = data;
+        events.push(event);
+    }
+    for event in events {
+        let engine = Engine::default();
+        engine
+            .start(&system(), Vec::new())
+            .expect("the realm starts");
+        let source = crate::event_to_source(&event).expect("source");
+        let same = engine
+            .run(&mut NoHost, None, move |session: &mut Session| {
+                let direct = session.event_value(&event).expect("built directly");
+                let literal = session
+                    .eval(&source)
+                    .map_err(|_| crate::DataModelError::Execution)?;
+                session
+                    .call_source(SAME_TREE, &[literal, direct])
+                    .map_err(|_| crate::DataModelError::Execution)
+                    .map(|same| same.as_boolean())
+            })
+            .expect("the operation runs");
+        assert_eq!(same, Some(true));
+    }
+}
