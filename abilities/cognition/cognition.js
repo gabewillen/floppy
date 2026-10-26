@@ -316,9 +316,12 @@ function selfFact() {
   return name_told ? self : ({traits: self.traits, description: self.description});
 }
 
-// The persona's description (absent: none written yet).
+// The persona's description: its text, as the self block renders it and
+// reflection's input takes it ({text, reason, traits, kind} is the
+// persona's stored row; null or absent: none written yet).
 function personaDescription(_event) {
-  return _event.data.description === undefined ? null : _event.data.description;
+  var described = _event.data.description;
+  return described === undefined || described === null ? null : described.text;
 }
 
 // completing
