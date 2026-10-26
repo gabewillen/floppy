@@ -671,7 +671,10 @@ fn voice_ref(product: &Json) -> Json {
     let reference = sources[0].as_str().expect("a voice is named by its ref");
     let id = reference.strip_prefix("voice:").expect("a voice ref");
     assert!(
-        id.len() == 32 && id.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
+        id.len() == 32
+            && id
+                .chars()
+                .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
         "{reference}"
     );
     sources[0].clone()
@@ -745,10 +748,7 @@ fn diarized_segments_are_identified_by_their_voice() {
     let voiced = sound("hi.wav", &json!({}));
     utter(&mut run, &voiced, &sound("silence.wav", &json!({})));
     run.until(WAIT, label_is("harness.speech"));
-    let finished = close(
-        run,
-        "diarized_segments_are_identified_by_their_voice",
-    );
+    let finished = close(run, "diarized_segments_are_identified_by_their_voice");
     let embedded = backend.received_at("/voice/embed");
     assert_eq!(embedded.len(), 1, "one embedding per segment");
     assert_eq!(embedded[0]["model"], "voice-detect-wespeaker-resnet34");

@@ -545,11 +545,12 @@ function hasOwnVoice() {
   return registry.some(function (entry) { return entry.own; });
 }
 
-// The refs of the voices recognized that are not the bot's own, each once,
-// at most 4 (mosfet.py's MAX_IDENTITY_SET_SIZE).
+// The refs of the voices recognized (none when nobody was identified) that
+// are not the bot's own, each once, at most 4 (mosfet.py's
+// MAX_IDENTITY_SET_SIZE).
 function sourceIds(recognitions) {
   var refs = [];
-  recognitions.forEach(function (recognition) {
+  (Array.isArray(recognitions) ? recognitions : []).forEach(function (recognition) {
     var ref = recognition === null || recognition.own ? null : 'voice:' + recognition.id;
     if (ref !== null && refs.indexOf(ref) < 0 && refs.length < 4) {
       refs.push(ref);

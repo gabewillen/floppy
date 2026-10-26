@@ -14,7 +14,9 @@
 //! (`target/test-scratch/<pid>-<name>-<n>`) becomes `<scratch>`, the
 //! workspace root `<workspace>`, a UTC timestamp
 //! (`YYYY-MM-DDTHH:MM:SSZ`) `<timestamp>`, and a UTC time of day
-//! (`HH:MM:SSZ`) `<time>`. Each record is written with its keys
+//! (`HH:MM:SSZ`) `<time>`; a voice ref the interpretation minted
+//! (`voice:` and 32 hex digits) is `voice:<n>`, numbered as the trace first
+//! names each. Each record is written with its keys
 //! sorted (`serde_json` without `preserve_order`).
 //!
 //! [`assert_trace`] rewrites the file instead of comparing when
@@ -110,11 +112,52 @@ pub fn render(records: &[Json], requests: &[(String, Json)]) -> String {
     let requests = requests
         .iter()
         .map(|(target, body)| json!({"type": "request", "target": target, "body": body}));
+    let mut voices = Vec::new();
     for item in records.cloned().chain(requests) {
-        text.push_str(&normalized(&item.to_string()));
+        text.push_str(&voices_normalized(
+            &normalized(&item.to_string()),
+            &mut voices,
+        ));
         text.push('\n');
     }
     text
+}
+
+/// `text` with each voice ref the interpretation's registry minted
+/// (`voice:` and 32 lowercase hex digits, which the clock begins) replaced
+/// by `voice:<n>`, `n` its place among the trace's voices (`voices`, in the
+/// order each first appears), from 1.
+fn voices_normalized(text: &str, voices: &mut Vec<String>) -> String {
+    const PREFIX: &str = "voice:";
+    const DIGITS: usize = 32;
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find(PREFIX) {
+        let after = &rest[at + PREFIX.len()..];
+        let id = after.get(..DIGITS).filter(|id| {
+            id.bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+                && !after[DIGITS..].starts_with(|c: char| c.is_ascii_alphanumeric())
+        });
+        out.push_str(&rest[..at + PREFIX.len()]);
+        if let Some(id) = id {
+            let n = voices
+                .iter()
+                .position(|known| known == id)
+                .unwrap_or_else(|| {
+                    voices.push(id.to_owned());
+                    voices.len() - 1
+                });
+            out.push('<');
+            out.push_str(&(n + 1).to_string());
+            out.push('>');
+            rest = &after[DIGITS..];
+        } else {
+            rest = after;
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// The number of backend requests in the pinned trace of `test`, or
