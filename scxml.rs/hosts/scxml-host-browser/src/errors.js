@@ -63,6 +63,15 @@ export const HOST_ERROR_CODES = Object.freeze([
   // A bound extension component's `initialize` failed; the session start
   // fails.
   'extension-component-initialize-failed',
+  // A bound service component imports an interface the host never links
+  // (ServiceComponents; createSession fails).
+  'unknown-import',
+  // A bound service component imports a WASI resource the run does not
+  // grant, or one a browser cannot grant (`wasi:sockets`).
+  'wasi-resource-ungranted',
+  // A WASI grant names no bound service, or a resource its component does
+  // not import.
+  'wasi-grant-undeclared',
 ]);
 
 const ERROR_CODE_SET = new Set(ERROR_CODES);

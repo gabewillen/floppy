@@ -23,6 +23,9 @@
 //   session may invoke in turn, at any depth within the invoke limits), and
 //   runs every session's external event queue (src/invoked-sessions.js) in the
 //   Wasmtime executor's order;
+// * a service `<invoke>` of a type the page bound (`serviceComponents`)
+//   starts an instance of its invoked-service component (src/service.js),
+//   whose returned events reach the invoking session's external queue;
 // * it links one run-wide BasicHTTP Event I/O Processor (src/basichttp.js):
 //   `send-basichttp` goes through the component, which encodes the request
 //   and hands it to the page's `http` capability only for URLs `http.allow`
@@ -101,6 +104,7 @@ import {
 } from './resources.js';
 import { sha256Hex } from './sha256.js';
 import { SessionNamespaces, isExtensionComponents, prepareExtensions } from './extension.js';
+import { ServiceInvocation, isServiceComponents, prepareServices } from './service.js';
 import { canonicalHttpUrl } from './url.js';
 import {
   MAX_SNAPSHOT_INVOKE_DEPTH,
@@ -250,8 +254,20 @@ function enqueueRouted(run, route, event, sender) {
  * into the session from a capability provider with `reentrant-call`).
  */
 class Run {
-  constructor({ telemetry, capabilities, resources, maxCommands, trace, modules, invocations, fuel, budget, basichttp, bridge, invokeLimits, startEpochMs, extensions }) {
+  constructor({ telemetry, capabilities, resources, maxCommands, trace, modules, invocations, fuel, budget, basichttp, bridge, invokeLimits, startEpochMs, extensions, services }) {
     this.telemetry = telemetry;
+    /**
+     * The bound invoked-service components, prepared for every session
+     * (src/service.js `prepareServices`); undefined when none is bound.
+     */
+    this.services = services;
+    /** Every service invocation of the run not yet cancelled. */
+    this.serviceInvocations = new Set();
+    /**
+     * `() => void`: asks for one delivery turn for what the run's service
+     * invocations queued (set by MachineSession).
+     */
+    this.invocationWake = undefined;
     /**
      * The bound extension components, prepared for every session
      * (src/extension.js `prepareExtensions`, plus the snapshot `codec` when
@@ -326,6 +342,17 @@ class Run {
     this.commands = 0;
     this.trace = [];
     this.fault = undefined;
+  }
+
+  /** Whether cross-session work can be queued: invoked sessions or services. */
+  get settles() {
+    return this.modules !== undefined || this.services !== undefined;
+  }
+
+  /** Cancels every service invocation of the run (it was lost or ended). */
+  cancelServices() {
+    for (const invocation of this.serviceInvocations) invocation.cancel();
+    this.serviceInvocations.clear();
   }
 
   /** Records the run's first fault; later ones are consequences. */
@@ -509,6 +536,8 @@ class SessionLinks {
     this.key = ROOT;
     /** The sessions this one invoked, keyed by invoke id. */
     this.children = new Map();
+    /** The services this one invoked (`{invocation, key}`), keyed by invoke id. */
+    this.services = new Map();
     this.dataModel = dataModel;
     // The data model's stable name (`ecmascript`, `null`, or `xpath`), read
     // once by the caller, so a provider cannot rename itself mid-run.
@@ -605,10 +634,15 @@ class SessionLinks {
     return {
       sessionId: this.sessionId,
       parentSessionId: this.parent?.sessionId,
-      invocations: [...this.children]
-        .filter(([, child]) => !child.finished)
-        .map(([invokeId, child]) => ({ invokeId, sessionId: child.instance.links.sessionId }))
-        .sort((left, right) => byCodePoint(left.invokeId, right.invokeId)),
+      invocations: [
+        ...[...this.children]
+          .filter(([, child]) => !child.finished)
+          .map(([invokeId, child]) => ({ invokeId, sessionId: child.instance.links.sessionId })),
+        // An invoked service has no session: it is addressed by its invoke id alone.
+        ...[...this.services]
+          .filter(([, service]) => service.invocation.state === 'live')
+          .map(([invokeId]) => ({ invokeId, sessionId: undefined })),
+      ].sort((left, right) => byCodePoint(left.invokeId, right.invokeId)),
     };
   }
 
@@ -701,6 +735,12 @@ class Instance {
     // The session ended (finished, failed, or cancelled): its extension
     // component instances are shut down exactly once.
     this.links.namespaces?.shutdown();
+    // Its service invocations are cancelled with it (SCXML 6.4).
+    for (const { invocation } of this.links.services.values()) {
+      invocation.cancel();
+      this.links.run.serviceInvocations.delete(invocation);
+    }
+    this.links.services.clear();
     this.session[Symbol.dispose]?.();
   }
 }
@@ -1219,25 +1259,35 @@ function capabilityResource(links) {
       }
       return ir;
     }
-    // `request` is the WIT `invocation` variant. This host binds no
-    // invoked-service component (invoked services are a Wasmtime host
-    // feature), so every service `<invoke>`, literal or `typeexpr`, answers
-    // `unavailable` when it starts, which fails that `<invoke>` with
+    // `request` is the WIT `invocation` variant. A service `<invoke>`,
+    // literal or `typeexpr`, starts the service component bound to exactly
+    // its type (src/service.js) inside this call; one no binding names
+    // answers `unavailable`, which fails that `<invoke>` with
     // `error.execution`: invocation is a runtime action (SCXML 6.4), so the
     // session start is unaffected.
     startInvocation(request) {
       if (request.tag === 'service') {
-        telemetry.observe('capability', 'rejected');
-        throw unavailable();
+        if (run.services?.prepared.get(request.val.typeUri) === undefined) {
+          telemetry.observe('capability', 'rejected');
+          throw unavailable();
+        }
+        return observed('invocation', () => startService(links, request.val));
       }
       if (run.modules === undefined) throw unsupportedInvoke();
       return observed('invocation', () => requestStart(links, request.val));
     }
     cancelInvocation(invokeId) {
+      if (links.services.has(invokeId)) return observed('invocation', () => cancelService(links, invokeId));
       if (!links.children.has(invokeId)) return 'completed';
       return observed('invocation', () => requestCancel(links, invokeId));
     }
     forwardToInvocation(invokeId, event) {
+      // A live invoked service reads it on its `events` stream.
+      const service = links.services.get(invokeId);
+      if (service !== undefined) {
+        observed('capability', () => service.invocation.send(event));
+        return;
+      }
       // Only a live, unfinished invoked session receives autoforwarded events.
       const child = links.children.get(invokeId);
       if (child === undefined || child.finished) return;
@@ -1354,7 +1404,7 @@ export function requestStart(links, request) {
   const { run } = links;
   // One call defers at most one request before it suspends.
   if (run.deferred !== undefined) throw links.invariant();
-  if (links.children.has(request.invokeId)) {
+  if (links.children.has(request.invokeId) || links.services.has(request.invokeId)) {
     throw componentFailure('duplicate-id', 'invoke id is already live');
   }
   if (!run.invokedSessions.canInvoke(links.key)) {
@@ -1432,6 +1482,75 @@ export function requestStart(links, request) {
     },
   };
   return 'deferred';
+}
+
+/**
+ * Starts one invoked service inside its invoking session's
+ * `start-invocation` call (`completed`): its own instance of the component
+ * bound to the request's type, registered under its invoke id so sends to
+ * `#_<invokeid>` reach its `events` stream. What it returns later is queued
+ * on the invoking session's external queue, delivered in the next delivery
+ * turn (MachineSession). Errors follow the WIT: `duplicate-id`,
+ * `invalid-input` beyond the invoke bounds, for a malformed `env` binding,
+ * or when the component cannot be instantiated; `unavailable` where the
+ * browser runs no service.
+ */
+function startService(links, request) {
+  const { run } = links;
+  if (links.children.has(request.invokeId) || links.services.has(request.invokeId)) {
+    throw componentFailure('duplicate-id', 'invoke id is already live');
+  }
+  if (!run.invokedSessions.canInvoke(links.key)) {
+    throw componentFailure('invalid-input', 'the invocation exceeds the invoked sessions bounds');
+  }
+  const { prepared, transport, values, callFuel } = run.services;
+  let key;
+  const invocation = new ServiceInvocation(
+    prepared.get(request.typeUri),
+    {
+      telemetry: run.telemetry,
+      transport,
+      values,
+      callFuel,
+      now: () => run.clockNow,
+      deliver: (message) => {
+        // Ignored once its cancellation began, as an invoked session's sends are.
+        if (run.invokedSessions.pushToParent(key, message)) run.invocationWake?.();
+      },
+    },
+    request,
+  );
+  try {
+    key = run.invokedSessions.registerService(links.key, request.invokeId, (event) => invocation.send(event));
+  } catch {
+    throw links.invariant();
+  }
+  try {
+    invocation.start();
+  } catch (thrown) {
+    run.invokedSessions.remove(key);
+    if (thrown instanceof ImportFailure) throw thrown;
+    throw componentFailure('invalid-input', 'the invoked service was rejected at its start');
+  }
+  links.services.set(request.invokeId, { invocation, key });
+  run.serviceInvocations.add(invocation);
+  return 'completed';
+}
+
+/**
+ * Cancels one invoked service inside the call (`completed`): from now on
+ * nothing it returns reaches the invoking session, and no `done.invoke`
+ * follows; events it returned earlier stay queued.
+ */
+function cancelService(links, invokeId) {
+  const { run } = links;
+  const { invocation, key } = links.services.get(invokeId);
+  links.services.delete(invokeId);
+  run.invokedSessions.beginCancel(key);
+  run.invokedSessions.remove(key);
+  invocation.cancel();
+  run.serviceInvocations.delete(invocation);
+  return 'completed';
 }
 
 /**
@@ -1661,6 +1780,8 @@ export class MachineSession {
    */
   #late = [];
   #lateTimer;
+  /** The pending delivery turn for what service invocations queued. */
+  #invocationTimer;
 
   /** @internal use createSession */
   constructor(instance, run, scheduling, snapshot = { mode: 'none' }) {
@@ -1677,6 +1798,7 @@ export class MachineSession {
       this.#late.push({ links, sendId });
       this.#scheduleLate();
     };
+    run.invocationWake = () => this.#scheduleInvocations();
   }
 
   get #links() {
@@ -1689,6 +1811,7 @@ export class MachineSession {
     this.#loss ??= error;
     this.#cancelTimer();
     this.#cancelLate();
+    this.#run.cancelServices();
     return error;
   }
 
@@ -1932,7 +2055,7 @@ export class MachineSession {
               this.#childAt(links.key, (session) => session.communicationError(sendId));
             }
           }
-          if (this.#run.modules !== undefined && !this.#settle(results, budget)) {
+          if (this.#run.settles && !this.#settle(results, budget)) {
             this.#backlog = true;
             break;
           }
@@ -1940,6 +2063,42 @@ export class MachineSession {
         if (this.#status !== 'running') this.#late = [];
         this.#requireLive();
         return { results, complete: this.#late.length === 0 };
+      });
+    } catch (error) {
+      outcome = { error };
+    }
+    this.#notify(outcome);
+    this.#arm();
+  }
+
+  /** Arms one event-loop turn that delivers what service invocations queued. */
+  #scheduleInvocations() {
+    if (this.#invocationTimer !== undefined) return;
+    this.#invocationTimer = setTimeout(() => {
+      this.#invocationTimer = undefined;
+      this.#deliverInvocations();
+    }, 0);
+  }
+
+  /**
+   * Delivers what the run's invoked services returned (events, `done`, and
+   * `communication-error` messages queued on their invoking sessions'
+   * external queues) by settling cross-session work, after the clock synced
+   * as for a page command; the page hears the outcome through `onTimer`.
+   * Nothing is delivered while an operation runs or the last call stopped
+   * at its command bound: the next command settles it.
+   */
+  #deliverInvocations() {
+    if (this.#lost || this.#status !== 'running' || this.#busy || !this.#stable) return;
+    let outcome;
+    try {
+      outcome = this.#exclusive('command', () => {
+        this.#syncClock();
+        const results = [];
+        const complete = this.#settle(results, { used: 0 });
+        this.#backlog = !complete;
+        this.#requireLive();
+        return { results, complete };
       });
     } catch (error) {
       outcome = { error };
@@ -2234,7 +2393,7 @@ export class MachineSession {
     try {
       if (!this.#lost) this.#syncClock();
       if (body !== undefined) callResult = this.#rootCall(body);
-      if (this.#run.modules !== undefined) {
+      if (this.#run.settles) {
         const results = [];
         this.#backlog = !this.#settle(results, { used: 0 });
         // The command's result: the last root call it made, counting the
@@ -2545,7 +2704,11 @@ export class MachineSession {
     let error;
     if (this.#status === 'failed' || this.#status === 'shut-down') error = new ScxmlSnapshotError('status-invalid');
     else if (this.#lost) error = new ScxmlHostError('instance-lost');
-    else if (this.#busy || !this.#stable || (this.#status === 'running' && (this.#pending.length > 0 || this.#backlog))) {
+    // A live invoked service has no representation in the document format
+    // (scxml.session-snapshot/v2), as under the Wasmtime host.
+    else if ([...this.#run.serviceInvocations].some((invocation) => invocation.state === 'live')) {
+      error = new ScxmlHostError('unavailable');
+    } else if (this.#busy || !this.#stable || (this.#status === 'running' && (this.#pending.length > 0 || this.#backlog))) {
       // Drained sends left over when the root finished are never delivered
       // (the Wasmtime drain loop drops its local batch at the end of the
       // run), so a finished session is at a checkpoint.
@@ -2702,6 +2865,7 @@ export class MachineSession {
   #shutdown() {
     this.#cancelTimer();
     this.#cancelLate();
+    this.#run.cancelServices();
     this.#call((session) => session.shutdown());
     this.#status = 'shut-down';
   }
@@ -2790,6 +2954,9 @@ async function preloadChildModules(loader, telemetry) {
  * @param {object} [options.extensionComponents] an ExtensionComponents
  *   (src/extension.js): the extension components of the namespaces the
  *   document and every document it invokes use
+ * @param {object} [options.serviceComponents] a ServiceComponents
+ *   (src/service.js): the invoked-service components bound to the types
+ *   the document's and every invoked document's service `<invoke>`s name
  * @param {{compile?: 'auto' | 'provided', fuel?: number}} [options.invoke]
  *   `<invoke>` child compilation: `auto` (default) compiles children with a
  *   dedicated bundled compiler (src/invoke.js), pre-warmed before `start`;
@@ -2871,6 +3038,7 @@ export async function createSession(options) {
     invoke,
     invokeLimits,
     extensionComponents,
+    serviceComponents,
   } = options ?? {};
   const telemetry = new Telemetry(telemetryOption);
   const isProvider = dataModel === undefined || (dataModel !== null && typeof dataModel === 'object');
@@ -2896,6 +3064,7 @@ export async function createSession(options) {
     !isHttpOption(http) ||
     !isInvokeOption(invoke) ||
     !isExtensionComponents(extensionComponents) ||
+    !isServiceComponents(serviceComponents) ||
     limits === undefined ||
     (loadCoreModule !== undefined && typeof loadCoreModule !== 'function') ||
     !isTelemetryOption(telemetryOption)
@@ -2931,7 +3100,11 @@ export async function createSession(options) {
   // each session instantiates its own instance synchronously; one that reads
   // the session snapshot needs the codec loaded too.
   let extensions;
+  // Invoked services: likewise, each binding's core modules are compiled
+  // now and its WASI imports planned against the page's grants.
+  let services;
   try {
+    services = await prepareServices(serviceComponents, pageLoader);
     extensions = await prepareExtensions(extensionComponents, pageLoader);
     if (extensions !== undefined && [...extensions.prepared.values()].some((prepared) => prepared.readsSnapshot)) {
       extensions.codec = await loadCodec(pageLoader);
@@ -3002,6 +3175,7 @@ export async function createSession(options) {
     bridge: options[BRIDGE],
     invokeLimits: limits,
     extensions,
+    services,
     // `event-loop` timers follow the page's clock: logical time 0 is the
     // wall-clock time the session was created; `manual` timers are logical
     // only and start at the fixed batch epoch, as the Wasmtime host's batch
