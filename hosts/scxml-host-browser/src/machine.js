@@ -2704,9 +2704,10 @@ export class MachineSession {
     let error;
     if (this.#status === 'failed' || this.#status === 'shut-down') error = new ScxmlSnapshotError('status-invalid');
     else if (this.#lost) error = new ScxmlHostError('instance-lost');
-    // A live invoked service has no representation in the document format
-    // (scxml.session-snapshot/v2), as under the Wasmtime host.
-    else if ([...this.#run.serviceInvocations].some((invocation) => invocation.state === 'live')) {
+    // An invoked service has no representation in the document format
+    // (scxml.session-snapshot/v2): a run holding one, live or finished but
+    // not yet cancelled, cannot be captured, as under the Wasmtime host.
+    else if (this.#run.serviceInvocations.size > 0) {
       error = new ScxmlHostError('unavailable');
     } else if (this.#busy || !this.#stable || (this.#status === 'running' && (this.#pending.length > 0 || this.#backlog))) {
       // Drained sends left over when the root finished are never delivered

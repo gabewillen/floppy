@@ -451,9 +451,10 @@ const session = await createSession({ ir, dataModel, serviceComponents: services
   rejects its start does so after `start-invocation` completed, so it
   becomes `error.communication.<id>` rather than `error.execution`; and the
   monotonic clock reads the session's logical clock while its waits fall
-  due in wall-clock time. Snapshots of a run holding a live service are
-  refused, as under the Wasmtime host. Async sessions (`async: 'auto'`) do
-  not take `serviceComponents`.
+  due in wall-clock time. Snapshots of a run holding a service (live, or
+  finished until its invoking state exits) are refused, as under the
+  Wasmtime host. Async sessions (`async: 'auto'`) do not take
+  `serviceComponents`.
 
 ### URL resources
 
