@@ -11,7 +11,7 @@ Last updated: 2026-10-26.
 
 ## Current state (2026-10-09) — resume here
 
-- **Latency hill climb: routing (2026-10-26, D258):** everything runs on
+- **Latency hill climb: routing (2026-10-26, D260):** everything runs on
   api.willen.dev (`gemma-4-26b-a4b` on `FLOPPY_BASE_URL`) except
   reflection, learning, revision and the builder, which use
   `reflection_model` (`sparks/qwen3.8-flash-next` in floppy) on
@@ -68,6 +68,14 @@ Last updated: 2026-10-26.
   instance, so it needs a WIT contract change (stateforward/scxml.rs#33,
   not scheduled: the maintainer's call). The register's
   facts come from `web/src/register.py`.
+- **Voices are remembered as people (2026-10-26, D258):** with a
+  database, the interpretation recalls the people long-term memory holds
+  before it is ready, and remembers each new voice as a person whose ref
+  is the voice's `voice:<id>` (the representative its running mean), so a
+  voice is recognized across restarts (`listening.rs`
+  `a_voice_heard_before_a_restart_is_recognized_after_it`). The body
+  passes its database through the listening. The bot's own voice is still
+  learned again each run.
 - **The prompt fits a generate call (2026-10-26, D255):** the cognition's
   prompt budget (`MAX_PROJECTION_BYTES`) is 49152, down from 262144, so
   the system channel, the schema and the prompt fit the 65536-byte event
@@ -747,11 +755,11 @@ Last updated: 2026-10-26.
   backend; every run needs `FLOPPY_BASE_URL`, and without it the builder
   ends at once in `failed` (`unconfigured`); `FLOPPY_API_KEY` is needed
   only by a keyed backend (a run without it sends no key header, D127).
-  Since D258 the default model is `gemma-4-26b-a4b` on api.willen.dev
+  Since D260 the default model is `gemma-4-26b-a4b` on api.willen.dev
   (`FLOPPY_BASE_URL=https://api.willen.dev/v1`), and reflection, revision
   and the builder use `sparks/qwen3.8-flash-next` on
   `FLOPPY_REFLECTION_BASE_URL` (CPA, `https://cpa.willen.dev/v1`).
-  Before D258, floppy's gitignored `.env` set them to the user's two DGX Sparks:
+  Before D260, floppy's gitignored `.env` set them to the user's two DGX Sparks:
   - **direct vLLM:** `FLOPPY_BASE_URL=http://192.168.2.89:8000/v1`, model
     `Qwen/Qwen3.8-Flash-Next` (then the builder's default), `FLOPPY_API_KEY` (a
     copy of the vLLM key, also kept as `VLLM_API_KEY`). Streams reasoning

@@ -73,7 +73,7 @@
   bound a streamed generation by inactivity. Invoked with reflection_model
   not null (the floppy bot's revision does), its generate calls go to
   FLOPPY_REFLECTION_BASE_URL with FLOPPY_REFLECTION_API_KEY (decision
-  D258). The simulation is bounded the same way: each test runs
+  D260). The simulation is bounded the same way: each test runs
   at most sim_test_cap_ms, and simulate-timeout fires only after
   max_tests * sim_test_cap_ms plus a margin.
 
@@ -118,7 +118,7 @@
     <data id="max_attempts" expr="8"/>
     <data id="model" expr="'gemma-4-26b-a4b'"/>
     <!-- Whether the generate calls go to FLOPPY_REFLECTION_BASE_URL
-         (decision D258): a reflection model given by the invoking
+         (decision D260): a reflection model given by the invoking
          revision; null keeps them on FLOPPY_BASE_URL. -->
     <data id="reflection_model" expr="null"/>
     <!-- A generation's inactivity bound (a streamed reply's progress starts

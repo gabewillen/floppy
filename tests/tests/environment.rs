@@ -578,27 +578,11 @@ fn a_deactivated_bot_leaves_its_environment() {
     );
 }
 
-/// Sets the environment at `environment`'s supervision (decision D158) to `supervision`,
-/// an ECMAScript object expression.
-fn supervise(environment: &Path, supervision: &str) {
-    let text = std::fs::read_to_string(environment).expect("the environment is readable");
-    let start = text
-        .find(r#"<data id="supervision" expr=""#)
-        .expect("the environment declares its supervision");
-    let end = start + text[start..].find("/>").expect("the <data> element closes");
-    let mut text = text;
-    text.replace_range(
-        start..end,
-        &format!(r#"<data id="supervision" expr="({supervision})""#),
-    );
-    std::fs::write(environment, text).expect("the environment copy is writable");
-}
-
 #[test]
 fn a_bot_sent_bot_deactivate_in_its_backoff_is_not_restarted() {
     let dir = layout(&[("processing_timeout_ms", "300")]);
     let environment = support::environment(&dir, &["floppy"], &[]);
-    supervise(
+    support::supervise(
         &environment,
         "{max_restarts: 5, backoff_initial_ms: 2000, backoff_max_ms: 2000, stable_after_ms: 600000}",
     );
@@ -626,7 +610,7 @@ fn a_bot_that_runs_stable_after_ms_has_its_attempts_reset() {
     let environment = support::environment(&dir, &["floppy"], &[]);
     // With max_restarts 2 a second failed attempt would be its last; a
     // bot active for stable_after_ms between them starts counting again.
-    supervise(
+    support::supervise(
         &environment,
         "{max_restarts: 2, backoff_initial_ms: 200, backoff_max_ms: 200, stable_after_ms: 1500}",
     );
@@ -691,7 +675,7 @@ fn an_unfocused_body_focuses_a_held_percepts_device_at_the_turns_end() {
 fn a_degraded_bot_is_restarted_after_a_backoff_until_its_budget_is_spent() {
     let dir = layout(&[("processing_timeout_ms", "300")]);
     let environment = support::environment(&dir, &["floppy"], &[]);
-    supervise(
+    support::supervise(
         &environment,
         "{max_restarts: 3, backoff_initial_ms: 200, backoff_max_ms: 300, stable_after_ms: 600000}",
     );
@@ -758,7 +742,7 @@ fn a_bot_whose_activation_fails_is_restarted() {
         ),
     ]);
     let environment = support::environment(&dir, &["floppy"], &[]);
-    supervise(
+    support::supervise(
         &environment,
         "{max_restarts: 2, backoff_initial_ms: 100, backoff_max_ms: 100, stable_after_ms: 600000}",
     );
@@ -898,10 +882,12 @@ fn a_bot_hears_its_own_speech_through_the_environment_and_withholds_it() {
     run.event("bot.ability.communication.input", &said("reply now", &[]));
     let spoken = run.until(WAIT, label_is("bot.ability.speaking.output"));
     run.event("environment.sound", &silence());
-    // The listening decodes the bot's own words, after its efference
-    // copy, and hands over no product (decision D98).
+    // The bot's own voice arrives as its efference copy predicted, so the
+    // listening never interprets it (decision D246): it reaches neither
+    // voice detection nor decoding, and no product is handed over. The
+    // silence after it is the first sound it hears.
     let mut seen = Vec::new();
-    while !backend.decoded().contains(&"ignore this".to_owned()) {
+    while backend.received_at("/vad").is_empty() {
         seen.extend(run.until(WAIT, |record| record["type"] == "call"));
     }
     let finished = run.close(WAIT);
@@ -911,6 +897,7 @@ fn a_bot_hears_its_own_speech_through_the_environment_and_withholds_it() {
         Vec::<String>::new(),
         "{seen:?}"
     );
+    assert_eq!(backend.decoded(), Vec::<String>::new(), "{seen:?}");
     let mut all = spoken;
     all.extend(seen);
     assert!(

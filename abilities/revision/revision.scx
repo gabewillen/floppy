@@ -85,7 +85,7 @@
     <data id="database" expr="null"/>
     <data id="model" expr="'gemma-4-26b-a4b'"/>
     <!-- The model this document's calls use on FLOPPY_REFLECTION_BASE_URL
-         (decision D258): null keeps them on model and FLOPPY_BASE_URL. -->
+         (decision D260): null keeps them on model and FLOPPY_BASE_URL. -->
     <data id="reflection_model" expr="null"/>
     <data id="progress_target" expr="'#_parent'"/>
     <data id="intent" expr="null"/>

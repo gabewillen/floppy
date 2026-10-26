@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- embedding-3: an embedder that does not answer within timeout_ms fails the request as timeout. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="embedding" type="scxml" src="../../../embedding.scx">
+    <param name="dimensions" expr="2"/>
+    <param name="timeout_ms" expr="1"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <onentry>
+      <send event="bot.ability.embedding.input" target="#_embedding"><content expr='{"role": "query", "items": [{"parts": [{"kind": "text", "text": "slow"}]}]}'/></send>
+    </onentry>
+    <transition event="bot.ability.embedding.failed" cond='_event.data.kind === "timeout" &amp;&amp; _event.data.message === "The embedder did not answer within 0.001s."' target="step1"/>
+  </state>
+  <state id="step1">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

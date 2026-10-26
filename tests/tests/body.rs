@@ -172,6 +172,19 @@ fn start(body: &Path) -> Run {
     start_with(body, &[])
 }
 
+/// [`start`] in an environment that never restarts the bot: a degraded
+/// bot's environment would restart it after its 1 s backoff, before or
+/// after the run closes as the host's load has it, so a trace would hold
+/// the restart or not. Its exhausted budget ends the bot at once.
+fn start_unrestarted(body: &Path) -> Run {
+    let environment = support::environment_for(body, &[]);
+    support::supervise(
+        Path::new(&environment),
+        "{max_restarts: 1, backoff_initial_ms: 1000, backoff_max_ms: 60000, stable_after_ms: 60000}",
+    );
+    Run::start(&[environment], &[])
+}
+
 /// [`start`] with `params` as the bot's activation settings (decision
 /// D107).
 fn start_with(body: &Path, params: &[(&str, &str)]) -> Run {
@@ -522,8 +535,9 @@ fn a_backlog_splits_into_turns_of_at_most_eight_percepts() {
     );
     let mut run = start(&body);
     activated(&mut run);
+    // The percepts follow at once (see
+    // a_turn_takes_at_most_thirty_two_participants).
     run.event("bot.input", &input("hang", "first"));
-    run.until(WAIT, label_is("double.participants"));
     // Ten percepts while turn 1 hangs: turn 2 takes the first eight
     // (MAX_PERCEPTS), turn 3 the other two; the participants of a turn
     // are its percepts' union, in order, once each.
@@ -534,6 +548,7 @@ fn a_backlog_splits_into_turns_of_at_most_eight_percepts() {
             &input_from("reply", &format!("p{n}"), &[&person, "caller"]),
         );
     }
+    run.until(WAIT, label_is("double.participants"));
     let records = run.until(WAIT, |record| {
         record["type"] == "log"
             && record["label"] == "floppy.output"
@@ -581,8 +596,12 @@ fn a_turn_takes_at_most_thirty_two_participants() {
     );
     let mut run = start(&body);
     activated(&mut run);
+    // The percepts follow the first input at once: scx runs each input to
+    // a stable configuration before it reads the next, so they are held
+    // by the turn the first one started, never after its 1.5 s timeout
+    // (waiting for the cognition's logs first left a window as long as
+    // the round trip, which a loaded host can stretch past the timeout).
     run.event("bot.input", &input("hang", "first"));
-    run.until(WAIT, label_is("double.participants"));
     // 15, 15 and 15 distinct participants: the first two percepts' union
     // is 30, and the third would make it 45, so it waits for turn 3.
     for n in 0..3 {
@@ -593,6 +612,7 @@ fn a_turn_takes_at_most_thirty_two_participants() {
             &input_from("reply", &format!("batch {n}"), &people),
         );
     }
+    run.until(WAIT, label_is("double.participants"));
     let records = run.until(WAIT, |record| {
         record["type"] == "log"
             && record["label"] == "floppy.output"
@@ -628,8 +648,9 @@ fn a_turn_whose_input_is_over_the_event_bound_fails() {
     );
     let mut run = start(&body);
     activated(&mut run);
+    // The percepts follow at once (see
+    // a_turn_takes_at_most_thirty_two_participants).
     run.event("bot.input", &input("hang", "first"));
-    run.until(WAIT, label_is("double.participants"));
     // Two percepts of 32000 bytes fit a turn's 65536, but not with the
     // turn's choices and environment in one 64 KiB event.
     let big = "x".repeat(32000);
@@ -825,11 +846,14 @@ fn what_is_held_when_the_bot_degrades_is_released() {
         &Cognition::Double("'ready'"),
         &[("processing_timeout_ms", "1500")],
     );
-    let mut run = start(&body);
+    let mut run = start_unrestarted(&body);
     activated(&mut run);
-    // A cancel the cognition never acknowledges degrades the bot.
+    // A cancel the cognition never acknowledges degrades the bot. The
+    // next inputs follow the turn's timeout, so they are held while the
+    // cancel waits, after its timeout in the trace however loaded the
+    // host is (sent with the first, the turn's timeout raced them).
     run.event("bot.input", &input("deaf", "first"));
-    run.until(WAIT, label_is("double.participants"));
+    run.until(WAIT, label_is("bot.processing.timed_out"));
     run.event("bot.input", &input("reply", "second"));
     run.event("bot.input", &input("reply", "third"));
     run.until(WAIT, |record| {
@@ -840,7 +864,7 @@ fn what_is_held_when_the_bot_degrades_is_released() {
         only(&records, &["floppy.released"]),
         pairs(&[("floppy.released", r#"{"count":2,"reason":"degraded"}"#)])
     );
-    run.until(WAIT, label_is("done.invoke"));
+    run.until(WAIT, label_is("supervision.exhausted"));
     close(run, "what_is_held_when_the_bot_degrades_is_released");
 }
 
@@ -879,10 +903,10 @@ fn an_unacknowledged_cancel_degrades_the_bot() {
         &Cognition::Double("'ready'"),
         &[("processing_timeout_ms", "300")],
     );
-    let mut run = start(&body);
+    let mut run = start_unrestarted(&body);
     activated(&mut run);
     run.event("bot.input", &input("deaf", "x"));
-    run.until(WAIT, label_is("done.invoke"));
+    run.until(WAIT, label_is("supervision.exhausted"));
     let finished = close(run, "an_unacknowledged_cancel_degrades_the_bot");
     let records = &finished.all;
     assert_eq!(

@@ -1,0 +1,30 @@
+{
+  "clock": "wall",
+  "answers": [
+    {
+      "path": "/embeddings",
+      "status": 200,
+      "body": {
+        "object": "list",
+        "data": [
+          {
+            "object": "embedding",
+            "index": 1,
+            "embedding": [
+              0,
+              2
+            ]
+          },
+          {
+            "object": "embedding",
+            "index": 0,
+            "embedding": [
+              3,
+              4
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

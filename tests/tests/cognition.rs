@@ -30,6 +30,7 @@
 
 mod support;
 
+use std::fmt::Write as _;
 use std::io::{BufRead as _, BufReader, Read as _, Write as _};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
@@ -348,7 +349,7 @@ fn serve(mut stream: TcpStream, log: &Arc<Mutex<Vec<Received>>>) {
         let dimensions = body["dimensions"].as_u64().unwrap_or(2);
         let data: Vec<Json> = body["input"]
             .as_array()
-            .map(|input| input.as_slice())
+            .map(Vec::as_slice)
             .unwrap_or_default()
             .iter()
             .enumerate()
@@ -1618,10 +1619,8 @@ fn an_episode_like_the_cue_is_recalled_first() {
     let bot = layout(&mock, Decision::Abstain, Generation::Respond, &[]);
     support::use_database(&bot.body, DATABASE);
     let mut text = std::fs::read_to_string(&bot.env).expect("the env file is readable");
-    text.push_str(&format!(
-        "FLOPPY_EMBEDDING_BASE_URL={}/embed/v1\n",
-        mock.origin
-    ));
+    writeln!(text, "FLOPPY_EMBEDDING_BASE_URL={}/embed/v1", mock.origin)
+        .expect("the env text is writable");
     std::fs::write(&bot.env, text).expect("the env file is writable");
     let mut run = start(&bot);
     tell(&mut run, "My favorite color is green.");
@@ -1796,6 +1795,74 @@ fn reasoning_is_told_the_bots_self() {
         "{system}"
     );
     close(run, &mock, "reasoning_is_told_the_bots_self");
+}
+
+/// The persona tells its description as its stored row (`{text, reason,
+/// traits, kind}`): the cognition keeps its text, so reasoning's self block
+/// shows it and reflection still takes each turn (its input's `self` takes
+/// the description as text; a row there was refused, and reflection never
+/// heard of a turn again).
+#[test]
+fn a_revised_description_is_the_bots_and_reflection_still_runs() {
+    let mock = Mock::start();
+    let bot = layout(&mock, Decision::Abstain, Generation::Ignore, &[]);
+    let abilities = bot
+        .body
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .expect("the scratch root")
+        .join("abilities");
+    let harness = abilities.join("harness.scx");
+    std::fs::copy(
+        workspace().join("tests/fixtures/phase4/cognition_harness.scx"),
+        &harness,
+    )
+    .expect("the harness is copyable");
+    let mut run = Run::start(
+        &[
+            "--env-file".to_owned(),
+            bot.env.display().to_string(),
+            harness.display().to_string(),
+        ],
+        &[],
+    );
+    run.until(WAIT, label_is("harness.ready"));
+    let text = "I keep asking people about their dogs.";
+    run.event(
+        "bot.ability.persona.output",
+        &json!({"traits": ["curious"], "description": {
+            "text": text, "reason": "I noticed it.", "traits": ["curious"], "kind": "fact"
+        }}),
+    );
+    run.event(
+        "bot.ability.cognition.input",
+        &json!({
+            "turn": 1,
+            "stimulus": {"event": "bot.input", "data": {"parts": [{"words": "hi"}]}, "source": "conversation"},
+            "focus": null,
+            "focus_candidates": [],
+            "choices": [
+                {"event": IGNORE, "schema": offered_schema(IGNORE), "target": "session.cognition"},
+            ],
+        }),
+    );
+    let records = until_all(&run, &["harness.output", "bot.ability.reflection.output"]);
+    assert_eq!(
+        texts(&records, "bot.ability.reflection.output"),
+        strings(&["turn 1"])
+    );
+    let system = reasoning_requests(&mock)[0].body["messages"][0]["content"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    assert!(
+        system.contains(&format!(
+            "<description written_by=\"you\">{text}</description>"
+        )),
+        "{system}"
+    );
+    drop(run.close(WAIT));
 }
 
 /// The activation settings of a bot that composes the intuition tier.

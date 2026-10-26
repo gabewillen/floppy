@@ -112,7 +112,7 @@ The environment's `<invoke>` gives the bot its activation settings as
 `<param>`s: `model` (the default is `gemma-4-26b-a4b`),
 `reflection_model` (the model of reflection, learning and the builder, on
 `FLOPPY_REFLECTION_BASE_URL`; the default is `sparks/qwen3.8-flash-next`,
-null keeps them on `model`, decision D258),
+null keeps them on `model`, decision D260),
 `database`, `environment` (the environment's id) and `bounds`, an object
 that may set the time bounds of the model-bound stages (decision D101),
 each in milliseconds:

@@ -929,6 +929,22 @@ pub fn place(environment: &Path, placements: &str) {
     .expect("the environment copy is writable");
 }
 
+/// Sets the environment at `environment`'s supervision (decision D158) to `supervision`,
+/// an ECMAScript object expression.
+pub fn supervise(environment: &Path, supervision: &str) {
+    let text = std::fs::read_to_string(environment).expect("the environment is readable");
+    let start = text
+        .find(r#"<data id="supervision" expr=""#)
+        .expect("the environment declares its supervision");
+    let end = start + text[start..].find("/>").expect("the <data> element closes");
+    let mut text = text;
+    text.replace_range(
+        start..end,
+        &format!(r#"<data id="supervision" expr="({supervision})""#),
+    );
+    std::fs::write(environment, text).expect("the environment copy is writable");
+}
+
 /// [`environment`] for the laid-out body at `body`
 /// (`<layout>/bots/floppy/floppy.scx`): the environment, with one floppy bot
 /// (`floppy`) given `params`, laid into the same layout, as the path `scx
@@ -995,9 +1011,9 @@ pub fn copy_ability(name: &str, abilities: &Path) -> PathBuf {
     abilities.join(name).join(format!("{name}.scx"))
 }
 
-/// The listening's abilities (abilities/listening/, its children and its
-/// hearing leaves).
-pub const LISTENING: [&str; 9] = [
+/// The listening's abilities (abilities/listening/, its children, its
+/// hearing leaves, and the memory the interpretation remembers voices in).
+pub const LISTENING: [&str; 10] = [
     "listening",
     "sensitivity",
     "interpretation",
@@ -1007,6 +1023,7 @@ pub const LISTENING: [&str; 9] = [
     "sound_classification",
     "speech_decoding",
     "voice_affect",
+    "memory",
 ];
 
 /// Copies the listening's abilities into the layout's `abilities`

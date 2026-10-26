@@ -59,7 +59,7 @@
   packages and the generate service package, and the revision's; env scopes
   FLOPPY_API_KEY, FLOPPY_BASE_URL and FLOPPY_STREAM to the select call, or
   FLOPPY_REFLECTION_API_KEY and FLOPPY_REFLECTION_BASE_URL in place of the
-  first two with a reflection_model (decision D258).
+  first two with a reflection_model (decision D260).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior"
@@ -74,7 +74,7 @@
     <data id="database" expr="null"/>
     <data id="model" expr="'gemma-4-26b-a4b'"/>
     <!-- The model this document's calls use on FLOPPY_REFLECTION_BASE_URL
-         (decision D258): null keeps them on model and FLOPPY_BASE_URL. -->
+         (decision D260): null keeps them on model and FLOPPY_BASE_URL. -->
     <data id="reflection_model" expr="null"/>
     <data id="bounds" expr="({})"/>
     <!-- The select call's and the revision's inactivity bounds and their

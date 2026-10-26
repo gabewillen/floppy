@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- embedding-1: by default the space is embeddinggemma-2 at 256 dimensions, a row cut to its first 256. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="embedding" type="scxml" src="../../../embedding.scx">
+    <param name="timeout_ms" expr="600000"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <onentry>
+      <send event="bot.ability.embedding.input" target="#_embedding"><content expr='{"role": "query", "items": [{"parts": [{"kind": "text", "text": "hello"}]}]}'/></send>
+    </onentry>
+    <transition event="bot.ability.embedding.output" cond="_event.data.space.model === 'embeddinggemma-2' &amp;&amp; _event.data.space.dimensions === 256 &amp;&amp; _event.data.vectors.length === 1 &amp;&amp; _event.data.vectors[0].values.length === 256 &amp;&amp; _event.data.vectors[0].values[0] === 1 &amp;&amp; _event.data.vectors[0].values[255] === 0" target="step1"/>
+  </state>
+  <state id="step1">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

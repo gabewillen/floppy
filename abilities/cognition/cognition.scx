@@ -241,7 +241,7 @@
   invoke), else the default below, and goes to reasoning; the
   intuition_model goes to intuition; the reflection_model goes, with the
   model, to reflection and learning, which use it on
-  FLOPPY_REFLECTION_BASE_URL when it is not null (decision D258).
+  FLOPPY_REFLECTION_BASE_URL when it is not null (decision D260).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition"
@@ -255,7 +255,7 @@
          tier. -->
     <data id="intuition_model" expr="null"/>
     <!-- Reflection's and learning's model on FLOPPY_REFLECTION_BASE_URL
-         (decision D258): null keeps them on model. -->
+         (decision D260): null keeps them on model. -->
     <data id="reflection_model" expr="null"/>
     <!-- The memory database file, for autonomy, reasoning, reflection and routines (null: no memory). -->
     <data id="database" expr="null"/>

@@ -264,10 +264,10 @@
   Memory: the body passes its database (a file in
   the directory the run grants the sql service at /memory, scx run's
   dir option) to the cognition, the communication, the identity, the
-  short-term register and the persona as <param name="database">;
+  listening, the short-term register and the persona as <param name="database">;
   reasoning recalls the cognitive episodes reflection stores, the identity
   its adopted names, the persona the descriptions the bot wrote of itself,
-  and the conversation its
+  the listening the voices it has heard (decision D258), and the conversation its
   relationship memories (abilities/memory/memory.scx over services/sql, one
   SQLite transaction per invocation). A run without the grant is refused
   before it starts.
@@ -288,7 +288,7 @@
          none. -->
     <data id="intuition_model" expr="null"/>
     <!-- The model reflection, learning, revision and the builder use, on
-         FLOPPY_REFLECTION_BASE_URL (decision D258): null keeps them on
+         FLOPPY_REFLECTION_BASE_URL (decision D260): null keeps them on
          model and FLOPPY_BASE_URL. -->
     <data id="reflection_model" expr="'sparks/qwen3.8-flash-next'"/>
     <!-- The time bounds for the cognition (its stages' inactivity and
@@ -416,7 +416,9 @@
       <param name="database" expr="database"/>
       <param name="bring_up_timeout_ms" expr="bringUpTimeout()"/>
     </invoke>
-    <invoke id="listening" type="scxml" src="../../abilities/listening/listening.scx"/>
+    <invoke id="listening" type="scxml" src="../../abilities/listening/listening.scx">
+      <param name="database" expr="database"/>
+    </invoke>
     <invoke id="stm" type="scxml" src="../../abilities/stm/stm.scx">
       <param name="database" expr="database"/>
     </invoke>

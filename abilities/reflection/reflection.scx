@@ -149,7 +149,7 @@
   autonomy namespace and files service packages); env scopes
   FLOPPY_API_KEY and FLOPPY_BASE_URL to the select call, or
   FLOPPY_REFLECTION_API_KEY and FLOPPY_REFLECTION_BASE_URL with a
-  reflection_model (decision D258; the builder scopes its own).
+  reflection_model (decision D260; the builder scopes its own).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior"
@@ -164,7 +164,7 @@
     <data id="database" expr="null"/>
     <data id="model" expr="'gemma-4-26b-a4b'"/>
     <!-- The model this document's calls use on FLOPPY_REFLECTION_BASE_URL
-         (decision D258): null keeps them on model and FLOPPY_BASE_URL. -->
+         (decision D260): null keeps them on model and FLOPPY_BASE_URL. -->
     <data id="reflection_model" expr="null"/>
     <!-- The select call's and the revision's inactivity bounds and their
          backstops (decision D101); bounds holds the bot's revising

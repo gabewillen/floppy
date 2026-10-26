@@ -66,7 +66,7 @@ use support::{Run, binds, logs, unique_scratch, workspace};
 /// The longest one case may run.
 const LIMIT: Duration = Duration::from_secs(180);
 /// The fake keys (not secrets).
-const FAKE_KEYS: &str = "FLOPPY_API_KEY=floppy-fake\nTYPESAFE_API_KEY=ts-floppy-fake\nFLOPPY_SPEECH_API_KEY=floppy-fake\nFLOPPY_VOICE_API_KEY=floppy-fake\nFLOPPY_EMOTION_API_KEY=floppy-fake\n";
+const FAKE_KEYS: &str = "FLOPPY_API_KEY=floppy-fake\nTYPESAFE_API_KEY=ts-floppy-fake\nFLOPPY_SPEECH_API_KEY=floppy-fake\nFLOPPY_VOICE_API_KEY=floppy-fake\nFLOPPY_EMOTION_API_KEY=floppy-fake\nFLOPPY_EMBEDDING_API_KEY=floppy-fake\n";
 
 /// Every document a suite can test: `bots/<name>/<name>.scx` and
 /// `abilities/<name>/<name>.scx`, as `(kind directory, name)`.
@@ -286,7 +286,7 @@ fn run_case(document: &Path, case: &Path, test: &str) -> Option<String> {
     std::fs::write(
         &env,
         format!(
-            "{FAKE_KEYS}FLOPPY_BASE_URL={origin}/v1\nTYPESAFE_BASE_URL={origin}\nFLOPPY_SPEECH_BASE_URL={origin}/v1\nFLOPPY_VOICE_BASE_URL={origin}/v1\nFLOPPY_EMOTION_BASE_URL={origin}/v1\n{stream}",
+            "{FAKE_KEYS}FLOPPY_BASE_URL={origin}/v1\nTYPESAFE_BASE_URL={origin}\nFLOPPY_SPEECH_BASE_URL={origin}/v1\nFLOPPY_VOICE_BASE_URL={origin}/v1\nFLOPPY_EMOTION_BASE_URL={origin}/v1\nFLOPPY_EMBEDDING_BASE_URL={origin}/v1\n{stream}",
             origin = backend.origin,
             stream = if streams { "FLOPPY_STREAM=true\n" } else { "" },
         ),

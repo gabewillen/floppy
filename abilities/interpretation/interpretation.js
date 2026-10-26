@@ -487,25 +487,128 @@ function seen(entry) {
   return entry;
 }
 
-// A new id for a print: at max_ids the least recently seen id that is not
-// own makes room (mosfet.py's InProcessStore).
-function mint(vector, own) {
+// A new id for a print, its ref voice:<id>: at max_ids the least
+// recently seen id that is not own makes room (mosfet.py's
+// InProcessStore). With a database, an id that is not own is remembered
+// as a person, the print as heard their first voice and its compact text
+// their representative.
+function mint(vector, own, voice) {
   if (registry.length >= max_ids) {
     var evicted = registry.filter(function (entry) { return !entry.own; })[0];
     registry = registry.filter(function (entry) { return entry !== evicted; });
   }
-  return seen(({id: mintedId(), vector: vector, own: own, seen_count: 1}));
+  var entry = seen(({id: 'voice:' + mintedId(), vector: vector, own: own, seen_count: 1}));
+  if (database !== null && !own) {
+    statements = statements.concat([
+      ({sql: person_insert, parameters: [entry.id]}),
+      ({sql: voice_insert, parameters: [entry.id, 'voice', JSON.stringify(voice.embedding)]}),
+      ({sql: representative_insert, parameters: [entry.id, 'voice', encodeVoice(vector)]})
+    ]);
+  }
+  return entry;
 }
 
 // A refined id's running mean, weighted by at most refine_weight_cap
-// earlier prints.
+// earlier prints; with a database, a person's representative is the
+// refined mean, its weight the prints in it.
 function refine(entry, vector) {
   var weight = Math.min(entry.seen_count, match_policy.refine_weight_cap);
   var sum = entry.vector.map(function (value, i) { return value * weight + vector[i]; });
   var refined = printVector(({embedding: sum}));
   entry.vector = refined === null ? entry.vector : refined;
   entry.seen_count = Math.min(entry.seen_count + 1, match_policy.refine_weight_cap);
+  if (database !== null && !entry.own) {
+    statements = statements.concat([({sql: representative_update, parameters: [encodeVoice(entry.vector), entry.seen_count, entry.id, 'voice']})]);
+  }
   return entry;
+}
+
+// The standard base64 alphabet of a voice's compact text, and each
+// character's place in it.
+var BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+var BASE64_INDEX = {};
+for (var place = 0; place < BASE64.length; place++) {
+  BASE64_INDEX[BASE64.charAt(place)] = place;
+}
+
+// A voice's compact text (the conversation namespace's encode_voice,
+// decision D205): i8: and the standard base64 of the unit vector's
+// components, each round(component * 127), half away from zero, as a
+// signed byte.
+function encodeVoice(vector) {
+  var bytes = vector.map(function (value) {
+    var quantized = Math.max(-127, Math.min(127, (value < 0 ? -1 : 1) * Math.round(Math.abs(value) * 127)));
+    return quantized < 0 ? quantized + 256 : quantized;
+  });
+  var text = 'i8:';
+  for (var i = 0; i < bytes.length; i += 3) {
+    var a = bytes[i];
+    var b = i + 1 < bytes.length ? bytes[i + 1] : 0;
+    var c = i + 2 < bytes.length ? bytes[i + 2] : 0;
+    var sextets = [a >> 2, ((a & 3) << 4) | (b >> 4), ((b & 15) << 2) | (c >> 6), c & 63];
+    for (var k = 0; k < 4; k++) {
+      text = text + (k <= bytes.length - i ? BASE64.charAt(sextets[k]) : '=');
+    }
+  }
+  return text;
+}
+
+// A representative's unit vector, from its compact text (the conversation
+// namespace's decode_voice); null for text of another form.
+function decodeVoice(text) {
+  if (typeof text !== 'string' || text.slice(0, 3) !== 'i8:' || text.length === 3 || (text.length - 3) % 4 !== 0) {
+    return null;
+  }
+  var components = [];
+  for (var i = 3; i < text.length; i += 4) {
+    var last = i + 4 === text.length;
+    var padding = last && text.charAt(i + 3) === '=' ? (text.charAt(i + 2) === '=' ? 2 : 1) : 0;
+    var word = 0;
+    for (var k = 0; k < 4; k++) {
+      var sextet = k < 4 - padding ? BASE64_INDEX[text.charAt(i + k)] : 0;
+      if (sextet === undefined) {
+        return null;
+      }
+      word = word * 64 + sextet;
+    }
+    var bytes = [Math.floor(word / 65536) % 256, Math.floor(word / 256) % 256, word % 256];
+    for (var b = 0; b < 3 - padding; b++) {
+      components.push((bytes[b] > 127 ? bytes[b] - 256 : bytes[b]) / 127);
+    }
+  }
+  return printVector(({embedding: components}));
+}
+
+// Recalling: one person memory holds (a row [person_id, centroid,
+// weight], the most recently seen first), placed before those already
+// recalled as an id that is not own, weighted by the prints in its
+// representative; a damaged representative is left out. One row a call,
+// so recalling many people stays within a data-model call's fuel.
+function withRecalled(row) {
+  var vector = decodeVoice(row.values[1]);
+  if (vector === null) {
+    return registry;
+  }
+  var weight = Math.max(1, Math.min(Number(row.values[2]) || 1, match_policy.refine_weight_cap));
+  return [({id: row.values[0], vector: vector, own: false, seen_count: weight})].concat(registry);
+}
+
+function recalledRows(_event) {
+  var rows = Object(Object(Object(_event.data).results)[0]).rows;
+  return Array.isArray(rows) ? rows : [];
+}
+
+function recallStatements() {
+  return [({sql: voice_select, parameters: ['voice']})];
+}
+
+function hasStatements() {
+  return statements.length > 0;
+}
+
+function memoryFailure(_event) {
+  var message = Object(_event.data).message;
+  return 'the voices heard were not remembered' + (typeof message === 'string' ? ': ' + message : '');
 }
 
 // Who each voice is (mosfet.py's Store.identify): {id, recognized, own}
@@ -518,7 +621,7 @@ function identify(voices) {
     }
     var decision = decide(vector, false);
     if (decision.kind === 'mint') {
-      return ({id: mint(vector, false).id, recognized: false, own: false});
+      return ({id: mint(vector, false, voice).id, recognized: false, own: false});
     }
     var entry = seen(decision.kind === 'refine' ? refine(decision.entry, vector) : decision.entry);
     return ({id: entry.id, recognized: true, own: entry.own});
@@ -533,7 +636,7 @@ function enrolledOwn(voice) {
   if (vector !== null) {
     var decision = decide(vector, true);
     if (decision.kind === 'mint') {
-      mint(vector, true);
+      mint(vector, true, voice);
     } else {
       seen(refine(decision.entry, vector));
     }
@@ -551,7 +654,7 @@ function hasOwnVoice() {
 function sourceIds(recognitions) {
   var refs = [];
   (Array.isArray(recognitions) ? recognitions : []).forEach(function (recognition) {
-    var ref = recognition === null || recognition.own ? null : 'voice:' + recognition.id;
+    var ref = recognition === null || recognition.own ? null : recognition.id;
     if (ref !== null && refs.indexOf(ref) < 0 && refs.length < 4) {
       refs.push(ref);
     }

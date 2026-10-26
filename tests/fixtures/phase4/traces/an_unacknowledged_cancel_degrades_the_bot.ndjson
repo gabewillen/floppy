@@ -14,3 +14,4 @@
 {"label":"bot.processing.failed","session":"session","text":"{\"message\":\"Bot processing timed out after 0.3 seconds.\",\"turn\":1}","type":"log"}
 {"label":"bot.degraded","session":"session","text":"{\"stage\":\"processing_cancel\"}","type":"log"}
 {"label":"done.invoke","session":"session","text":"{\"invokeid\":\"floppy\",\"data\":{\"reason\":\"turn 1: the cognition did not acknowledge its cancel\"}}","type":"log"}
+{"label":"supervision.exhausted","session":"session","text":"{\"participant\":\"floppy\",\"attempts\":1}","type":"log"}

@@ -10,8 +10,20 @@ ENVIRONMENT = ("environment", "_sessionid")
 _case = S.case
 
 
-def _in_the_harness(*args, params=(), **options):
-    return _case(*args, params=[ENVIRONMENT] + list(params), **options)
+# Every commit with words is also a short-term memory turn the
+# communication passes on (decision D251): a case that expects none drops
+# them.
+STM = "bot.ability.memory.stm.turn"
+
+
+def _expects(steps, event):
+    return any(isinstance(item, type(expect(event))) and item.event == event
+               for step in steps for item in (step if isinstance(step, list) else [step]))
+
+
+def _in_the_harness(test_id, number, comment, steps, params=(), ignore=(), **options):
+    ignore = list(ignore) + ([] if _expects(steps, STM) else [STM])
+    return _case(test_id, number, comment, steps, params=[ENVIRONMENT] + list(params), ignore=ignore, **options)
 
 
 S.case = _in_the_harness
@@ -136,6 +148,8 @@ S.statement(11, "A response's id is its respond's sendid (none when the sender n
 S.statement(12, "At most `held_responses_bound` (16, a `<param>`) responses are held while one is in hand; past that a respond is refused with `bot.ability.communication.failed` `{message: \"Communication is holding too many responses; this one is refused.\"}` (decision D175), and the held ones are still said, in order.")
 S.statement(13, "While a response is said (responding) it offers, read from its live session, respond (held) and the model-callable `bot.ability.communication.stop` `{}` (decision D179). A stop while a response is said sends speaking `bot.ability.speaking.stop` `{}`, which stops it: the body gets the efference copy `{duration: 0}` and `bot.ability.speaking.output` with `outcome` `stopped`, and the communication is active again.")
 S.statement(14, "Speaking's `bot.ability.speaking.progress` re-arms the response's hop timer (decision D179), and the hop timeout also sends speaking `bot.ability.speaking.stop` `{}`.")
+
+S.statement(15, "The conversation's `bot.ability.memory.stm.turn` `{id, direction, speakers, text, cut, conversation}` (each message it commits with words: a heard turn for inbound text, a said turn for a response it records, decision D251) goes on to the body unchanged, whatever the state.")
 
 # The cases that say a response wait on the real speech service; its first
 # encoding outlasts speaking's 5 s bound on a loaded test host, so they lift
@@ -274,3 +288,15 @@ S.case(221, 14, "a response whose hop times out stops speaking: its copy of noth
        [READY, send(RESPOND, respond("hello")), failed("Speaking response timed out."),
         efference("0")],
        params=[("response_timeout_ms", "100")], backend=[AUDIO], ignore=[SOUND])
+
+S.case(230, 15, "the heard input and the said response each reach the body as a short-term memory turn.",
+       [READY, send(INPUT, said("hello there")),
+        expect(STM, "_event.data.direction === 'heard' && _event.data.text === 'hello there' && _event.data.cut === false"
+                    " && JSON.stringify(_event.data.speakers) === JSON.stringify([{ref: 'gabe', role: 'source'}])"
+                    " && _event.data.conversation === 'session.communication.conversation'"),
+        expect(HANDOFF, "_event.data.stimulus.data.messages[0].content === 'hello there'"),
+        send(RESPOND, respond("hi gabe")), *spoken(1, "hi gabe"),
+        expect(STM, "_event.data.direction === 'said' && _event.data.text === 'hi gabe' && _event.data.cut === false"
+                    " && _event.data.conversation === 'session.communication.conversation'"),
+        OFFERED],
+       params=SPEECH_BOUNDS, backend=[AUDIO], clock="wall")

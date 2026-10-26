@@ -625,6 +625,32 @@ fn contains(document: &Document, ancestor: usize, element: usize) -> bool {
     false
 }
 
+/// An embeddings reply: one unit vector per input, `(event, the schema of
+/// its data, instances)`.
+fn embeddings_returned(count: &Json, usage_schema: &Json) -> (&'static str, Json, Vec<Json>) {
+    (
+        RESULT_EVENT,
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "vectors": {"type": "array", "items": {"type": "array", "items": {"type": "number"}}},
+                "request_bytes": count,
+                "usage": usage_schema,
+            },
+            "required": ["vectors", "request_bytes"],
+            "additionalProperties": false,
+        }),
+        vec![
+            serde_json::json!({ "vectors": [[0.6, 0.8]], "request_bytes": 40 }),
+            serde_json::json!({
+                "vectors": [[0.6, 0.8]],
+                "request_bytes": 40,
+                "usage": {"input_tokens": 4, "total_tokens": 4},
+            }),
+        ],
+    )
+}
+
 /// What the service returns: `(event, the schema of its data, instances)`.
 fn returned(given: Given) -> Vec<(&'static str, Json, Vec<Json>)> {
     let failed = serde_json::json!({
@@ -699,28 +725,7 @@ fn returned(given: Given) -> Vec<(&'static str, Json, Vec<Json>)> {
         "additionalProperties": false,
     });
     if given.input {
-        // An embeddings reply: one unit vector per input.
-        events.push((
-            RESULT_EVENT,
-            serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "vectors": {"type": "array", "items": {"type": "array", "items": {"type": "number"}}},
-                    "request_bytes": count,
-                    "usage": usage_schema,
-                },
-                "required": ["vectors", "request_bytes"],
-                "additionalProperties": false,
-            }),
-            vec![
-                serde_json::json!({ "vectors": [[0.6, 0.8]], "request_bytes": 40 }),
-                serde_json::json!({
-                    "vectors": [[0.6, 0.8]],
-                    "request_bytes": 40,
-                    "usage": {"input_tokens": 4, "total_tokens": 4},
-                }),
-            ],
-        ));
+        events.push(embeddings_returned(&count, &usage_schema));
         return events;
     }
     events.push((
