@@ -11,8 +11,9 @@
     {
       "steps": [
         {
-          "hear": "The delivery came again today.",
-          "instructions": "Angry. Shout harshly, seething with rage."
+          "hear": "Floppy, the delivery came again today.",
+          "instructions": "Angry. Shout harshly, seething with rage.",
+          "voice": "storyteller"
         }
       ]
     }
@@ -36,7 +37,7 @@
         0,
         0
       ],
-      "pattern": "\\b(congrat\\w*|great news|good news|amazing|wonderful|fantastic|awesome|exciting|excited|so happy|happy for you|thrilled|yay|woo|celebrat\\w*)",
+      "pattern": "\\b(congrat\\w*|great news|good news|amazing|wonderful|fantastic|awesome|exciting|excited|so happy|happy for you|thrilled|yay|woo|celebrat\\w*|nice|wow|tell me everything|so glad|that'?s great)",
       "weight": 1,
       "features": [
         "emotion"
@@ -59,7 +60,7 @@
         0
       ],
       "label": "listening.affect",
-      "pattern": "^heard ",
+      "pattern": "^heard angry ",
       "features": [
         "emotion"
       ]
