@@ -37,9 +37,10 @@ function stageFailure(message) {
   return ({stage: stage, message: message});
 }
 
-// A stage child's (or the speech service's) failure {message}.
+// A stage child's (or the speech service's) failure {message}. The
+// decoder's names its own stage: it decodes while the voices are heard.
 function childFailure(_event) {
-  return ({stage: stage, message: Object(_event.data).message});
+  return ({stage: _event.invokeid === 'speech_decoding' ? 'speech_decoding' : stage, message: Object(_event.data).message});
 }
 
 // A done.invoke that is not a stage child's failure {message}.
@@ -92,9 +93,9 @@ function hasNoRecognizeTimeout() {
 
 // Working
 
-// The current stage's failure.
+// The current stage's failure, or the decoder's while it decodes.
 function isCurrentStageFailure(_event) {
-  return _event.data.stage === stage;
+  return _event.data.stage === stage || (_event.data.stage === 'speech_decoding' && In('DecodingSpeech'));
 }
 
 function hasStage() {
@@ -238,6 +239,8 @@ function utteranceOutput() {
   return media_dir + 'floppy-utterance-' + serial + (open_wav ? '.wav' : '.pcm');
 }
 
+// Diarized while it is decoded when speech decoding is configured
+// (DecodingSpeech.Diarized), else on its own (DiarizingVoice).
 function isUtteranceToDiarize(_event) {
   return diarizer && hasAudio(_event);
 }
@@ -259,13 +262,15 @@ function diarizedOutput() {
 }
 
 // Identified before anything else only when nothing decodes: decoded
-// speech is identified after its words.
+// speech is identified while its words are decoded (Identifying).
 function isDiarizedToIdentify(_event) {
   return hasSegments(_event) && voice_classifier && !speech_decoder;
 }
 
-function isDiarizedToDecode(_event) {
-  return hasSegments(_event) && speech_decoder;
+// Diarized segments whose voices are identified while the words are
+// decoded.
+function identifiesSegments(_event) {
+  return voice_classifier && _event.data.segments.length > 0;
 }
 
 function diarizationCompletion() {
@@ -314,7 +319,8 @@ function identifyDelay() {
 }
 
 function isIdentifyTimer(_event) {
-  return _event.sendid === 'direct-identification-timer' || _event.sendid === 'voice-identification-timer';
+  return _event.sendid === 'direct-identification-timer' || _event.sendid === 'voice-identification-timer'
+    || _event.sendid === 'speech-voice-identification-timer';
 }
 
 function identifyTimedOut(count) {
@@ -333,12 +339,17 @@ function unidentifiedVoices() {
   return completion.segments.map(function () { return null; });
 }
 
+// The segments embedded: the voiced ones while decoding, else all.
+function identifiedSegments() {
+  return In('Identifying') ? voicedSegments() : completion.segments;
+}
+
 function isEmbeddingCountMismatch(_event) {
-  return hasEmbeddings(_event) && _event.data.embeddings.length !== completion.segments.length;
+  return hasEmbeddings(_event) && _event.data.embeddings.length !== identifiedSegments().length;
 }
 
 function embeddingCountMismatch(_event) {
-  return 'received ' + _event.data.embeddings.length + ' for ' + completion.segments.length + ' segments.';
+  return 'received ' + _event.data.embeddings.length + ' for ' + identifiedSegments().length + ' segments.';
 }
 
 function embeddingCountFailure() {
@@ -346,6 +357,11 @@ function embeddingCountFailure() {
 }
 
 // DecodingSpeech
+
+// The decoder's own failure, whichever stage its voices are in.
+function decodingFailure(message) {
+  return ({stage: 'speech_decoding', message: message});
+}
 
 function decodingCompletion() {
   return ({kind: 'decoding', sensed: open_sensed || detection.sensed, voice_detection: detection.voice_detection, text: result.text,
@@ -363,9 +379,22 @@ function isDecoded() {
   return result !== null && !classifying;
 }
 
-// Decoded words whose diarized voices are identified next.
-function identifiesDecoded() {
-  return isDecoded() && voice_classifier && In('Diarized') && completion.segments.length > 0;
+// The voiced segments' embeddings are in (null: nobody was identified in
+// time).
+function hasVoices() {
+  return completion !== null && completion.embeddings !== undefined;
+}
+
+// Decoded words with who spoke: each voiced segment's voice is identified
+// once the words are in, so a voice is minted or refined only for speech
+// that was decoded.
+function identifiedDecodingCompletion() {
+  var segments = voicedSegments();
+  var embeddings = completion.embeddings;
+  var decoded = decodingCompletion();
+  decoded.segments = segments;
+  decoded.recognitions = embeddings === null ? segments.map(function () { return null; }) : identify(embeddings);
+  return decoded;
 }
 
 // The voices whose tone is heard (mosfet.py's tone): the diarized
@@ -374,7 +403,7 @@ function affectSegments() {
   if (!affect_classifier) {
     return [];
   }
-  if (In('Diarized') && completion !== null && Array.isArray(completion.segments)) {
+  if (isDiarization() && Array.isArray(completion.segments)) {
     return completion.segments;
   }
   return [{audio: utterance.audio, media_type: utterance.media_type, sample_rate_hz: utterance.sample_rate_hz, channels: utterance.channels}];

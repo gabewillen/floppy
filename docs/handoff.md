@@ -11,6 +11,14 @@ Last updated: 2026-10-26.
 
 ## Current state (2026-10-09) — resume here
 
+- **Latency hill climb: hearing in parallel (2026-10-26, D261):** with
+  diarization, the interpretation decodes the utterance while it diarizes
+  it (`DecodingSpeech.Diarized { Diarizing -> Identifying }`), and hears
+  the tone and embeds the voices together; voices are identified once the
+  words are in. Same products; about 0.3 s less hearing per utterance on
+  api.willen.dev (2.04 to 1.71 to 1.86 s, 2.58 to 2.18 to 2.38 s). What
+  is left between the calls is engine time (about 0.1 s each to start a
+  child) and the two voice detections, which wait for the sounds.
 - **Latency hill climb: routing (2026-10-26, D260):** everything runs on
   api.willen.dev (`gemma-4-26b-a4b` on `FLOPPY_BASE_URL`) except
   reflection, learning, revision and the builder, which use
