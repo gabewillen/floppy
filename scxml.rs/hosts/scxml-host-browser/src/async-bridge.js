@@ -626,8 +626,8 @@ class WorkerBackend {
  * synchronous options, except that `dataModel` is a bundled data-model
  * name (`ecmascript`, `xpath`, or `null`), `now` is not accepted (a worker
  * session keeps its own clock), and `http` and `extensionComponents` are
- * not accepted (their providers and bound components cannot cross into a
- * worker), plus `workerUrl` (the module Worker entry;
+ * not accepted, nor is `serviceComponents` (their providers and bound
+ * components cannot cross into a worker), plus `workerUrl` (the module Worker entry;
  * default this package's src/async-worker.js). Static URLs in `resources`
  * are prefetched in the page under both mechanisms (src/resources.js); a
  * worker session gets the prefetched answers in `init`.
@@ -651,6 +651,7 @@ export async function createAsyncSession(options, createSyncSession, maxIrBytes)
     workerUrl,
     http,
     extensionComponents,
+    serviceComponents,
     ...rest
   } = options;
   const telemetry = new Telemetry(telemetryOption);
@@ -664,6 +665,7 @@ export async function createAsyncSession(options, createSyncSession, maxIrBytes)
     now !== undefined ||
     http !== undefined ||
     extensionComponents !== undefined ||
+    serviceComponents !== undefined ||
     !isTelemetryOption(telemetryOption) ||
     (capabilities !== undefined && (capabilities === null || typeof capabilities !== 'object')) ||
     (loadCoreModule !== undefined && typeof loadCoreModule !== 'function') ||

@@ -8,7 +8,8 @@
 #  1. builds, virtualizes, and authenticates the release machine, compiler,
 #     validator, ECMAScript, XPath, and null data-model, SCXML and BasicHTTP
 #     I/O processor, clock, optional session snapshot codec, and extension
-#     (the example namespace and `scx`) guests
+#     (the example namespace and `scx`) guests, and the invoked-service
+#     examples
 #     (scripts/verify-wasm-capabilities.sh, reproducible flags), and compiles
 #     the representative fixture to lowered IR with the CLI;
 #  2. installs the pinned npm dependencies with `npm ci` from the committed
@@ -33,6 +34,9 @@
 #     baselines (and the `env` and `event` namespace suites against theirs),
 #     the validator, the extension components (bound packages, session
 #     capabilities, fuel, retirement, executable-content snapshots), the
+#     invoked services (binding, events both ways, done and
+#     error.communication, cancel, outbound HTTP admission and references,
+#     WASI planning and in-memory directories), the
 #     cross-host parity corpus (tests/fixtures/host-parity) against the
 #     goldens `scx run` produces, plus the session snapshot API and golden
 #     parity, and the
@@ -92,9 +96,11 @@ trap 'rm -rf "$check_dist" "$tap"' EXIT HUP INT TERM
 
 # Runs node:test with the spec reporter on stdout and TAP into $tap, then
 # requires a summary with no todo, skipped, cancelled, or failed test.
+# $node_flags (default empty) are Node.js options for the run.
 run_node_tests() {
     mkdir -p "$(dirname -- "$tap")"
-    node --test --test-reporter=spec --test-reporter-destination=stdout \
+    # shellcheck disable=SC2086
+    node ${node_flags:-} --test --test-reporter=spec --test-reporter-destination=stdout \
         --test-reporter=tap --test-reporter-destination="$tap" "$@" || return 1
     summary=$(tail -n 12 "$tap")
     for counter in todo skipped cancelled fail; do
@@ -111,7 +117,7 @@ sh "$workspace/scripts/verify-wasm-capabilities.sh" --artifacts-dir "$artifacts"
     scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath \
     scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_compiler scxml_machine \
     scxml_snapshot_codec scxml_validator scxml_extension_example \
-    scxml_package_validator_example scx
+    scxml_package_validator_example scx scxml_service_example scxml_service_files
 test -f "$ir" || { echo "missing CLI-compiled lowered IR: $ir" >&2; exit 1; }
 cargo build --release --locked --manifest-path "$workspace/Cargo.toml" -p scxml-wasm-meter
 meter="$target_root/release/scxml-wasm-meter"
@@ -131,11 +137,26 @@ wasm-tools metadata add --name scxml_extension_extra "$artifacts/scxml_extension
         "$(sha256_file "$extensions/scxml_extension_extra.virtualized.wasm")"
 } > "$extensions/manifest.tsv"
 
+# The service component that imports wasi:filesystem, which the artifact
+# manifest omits (a page binds it with the directory it grants), for
+# build.mjs's --services (test/service.test.mjs).
+services="$artifacts/services"
+rm -rf "$services"
+mkdir -p "$services"
+cp "$artifacts/scxml_service_files.virtualized.wasm" "$services/"
+{
+    printf 'schema\tstateforward.wasm-artifacts/v1\n'
+    printf 'artifact\tscxml_service_files\tscxml_service_files.virtualized.wasm\t%s\t%s\n' \
+        "$(wc -c < "$services/scxml_service_files.virtualized.wasm" | tr -d ' ')" \
+        "$(sha256_file "$services/scxml_service_files.virtualized.wasm")"
+} > "$services/manifest.tsv"
+
 cd "$package"
 npm ci --ignore-scripts --no-audit --no-fund
 npm run typecheck
-node scripts/build.mjs --artifacts "$artifacts" --meter "$meter" --extensions "$extensions"
-node scripts/build.mjs --artifacts "$artifacts" --meter "$meter" --extensions "$extensions" --out "$check_dist"
+node scripts/build.mjs --artifacts "$artifacts" --meter "$meter" --extensions "$extensions" --services "$services"
+node scripts/build.mjs --artifacts "$artifacts" --meter "$meter" --extensions "$extensions" --services "$services" \
+    --out "$check_dist"
 diff -r dist "$check_dist" >/dev/null || { echo "non-deterministic jco transpile output" >&2; exit 1; }
 printf 'browser-host dist build-manifest sha256=%s\n' "$(sha256_file dist/build-manifest.json)"
 
@@ -144,6 +165,10 @@ SCXML_BROWSER_IR="$ir" SCXML_BROWSER_ARTIFACTS="$artifacts" run_node_tests test/
     test/basichttp.test.mjs test/irp-parity.test.mjs test/snapshot.test.mjs \
     test/snapshot-parity.test.mjs test/async-bridge.test.mjs test/validator.test.mjs \
     test/extension.test.mjs test/host-parity.test.mjs || exit 1
+# Invoked services run on JavaScript Promise Integration, behind a V8 flag in
+# Node.js v24 that test processes do not inherit: one process runs them.
+node_flags='--experimental-wasm-jspi --test-isolation=none' SCXML_BROWSER_ARTIFACTS="$artifacts" \
+    run_node_tests test/service.test.mjs || exit 1
 
 if [ "$skip_e2e" = 1 ]; then
     echo 'SKIPPED: headless Chromium e2e (--skip-e2e)'

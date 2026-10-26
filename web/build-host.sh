@@ -12,7 +12,10 @@
 #    scripts/verify-wasm-capabilities.sh into target/web/scxml.
 # 2. floppy's components (scripts/build-components.sh) into
 #    target/web/components; its namespace components are listed in
-#    target/web/extensions/manifest.tsv for the host build's --extensions.
+#    target/web/extensions/manifest.tsv for the host build's --extensions,
+#    and the service components a page can run in
+#    target/web/services/manifest.tsv for its --services (pgsql needs
+#    wasi:sockets, which a browser cannot grant).
 # 3. The browser host package, copied to target/web/host-package (the
 #    subtree is never written), its pinned npm dependencies installed with
 #    `npm ci`, and built with scripts/build.mjs into target/web/host/dist; its
@@ -29,7 +32,8 @@ out="$workspace/target/web"
 scxml_target="$workspace/target/scxml.rs"
 browser_components='scxml_clock scxml_data_model_ecmascript scxml_data_model_null scxml_data_model_xpath
     scxml_ioprocessor_scxml scxml_ioprocessor_basichttp scxml_compiler scxml_machine
-    scxml_snapshot_codec scxml_validator scxml_extension_example scxml_package_validator_example scx'
+    scxml_snapshot_codec scxml_validator scxml_extension_example scxml_package_validator_example scx
+    scxml_service_example'
 
 expected_node='v24.11.1'
 test "$(node --version)" = "$expected_node" || {
@@ -58,6 +62,15 @@ mkdir -p "$out/extensions"
 grep '^artifact	' "$out/extensions/manifest.tsv" | cut -f 3 | while read -r file; do
     cp "$out/components/namespaces/$file" "$out/extensions/$file"
 done
+rm -rf "$out/services"
+mkdir -p "$out/services"
+{
+    printf 'schema\tstateforward.wasm-artifacts/v1\n'
+    grep '^artifact	' "$out/components/services/components.tsv" | grep -v '^artifact	floppy_service_pgsql	\|^artifact	floppy_service_generate_validator	'
+} > "$out/services/manifest.tsv"
+grep '^artifact	' "$out/services/manifest.tsv" | cut -f 3 | while read -r file; do
+    cp "$out/components/services/$file" "$out/services/$file"
+done
 
 # 3. The browser host.
 package="$out/host-package"
@@ -69,7 +82,7 @@ rm -rf "$package/node_modules" "$package/dist"
     cd "$package"
     npm ci --ignore-scripts --no-audit --no-fund
     node scripts/build.mjs --artifacts "$out/scxml" --meter "$scxml_target/release/scxml-wasm-meter" \
-        --extensions "$out/extensions" --out "$out/host/dist"
+        --extensions "$out/extensions" --services "$out/services" --out "$out/host/dist"
 )
 cp -R "$package/src" "$out/host/src"
 cp "$workspace/scxml.rs/LICENSE-APACHE" "$workspace/scxml.rs/LICENSE-MIT" "$out/host/"

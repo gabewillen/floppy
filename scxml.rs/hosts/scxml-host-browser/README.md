@@ -66,9 +66,14 @@ The validator and `scx` components validate with the bundled, unmodified W3C
 SCXML 1.0 schema set, so the package carries its W3C notice (`NOTICE.md`,
 copied by `npm pack`).
 
-The virtualized components have no WASI imports, so the output never imports
-`@bytecodealliance/preview2-shim`. The build fails if it does. The shim is
-still locked at `0.25.0` in `package-lock.json` as a transpiler dependency.
+`--services <dir>` (repeatable) ships invoked-service components the same
+way, listed in `dist/services.js`; the build always ships the example echo
+and timer service, `components/scxml-service-example`. A service component
+may import WASI 0.2 (`wasi:filesystem`, `wasi:io`, `wasi:clocks`,
+`wasi:random`): the build copies the browser modules of the pinned
+`@bytecodealliance/preview2-shim` `0.25.0` (and its license) into
+`dist/wasi/`, and the host links them in itself. The bindings jco emits
+never import the shim; the build fails if they do.
 
 The transpiler is `@bytecodealliance/jco-transpile` `0.14.0`: the library
 that `@bytecodealliance/jco` `1.34.0`'s `jco transpile` pins. With these
@@ -225,7 +230,7 @@ the browser to the checked-in Wasmtime baselines.
 | `load-document` | a static URL `resources` prefetched (allowlisted by the page), else `capabilities.loadDocument(kind, uri)`; either answers the text or `{text, mediaType}`, the media type becoming the WIT `loaded-document` indication (kept when visible ASCII, of any length, else dropped); a document of any size; `unavailable` (error.execution) without either, detail `dynamic-url-unavailable` for a runtime URL when `resources` is set; in an `async: 'auto'` session, that runtime URL waits on `resources` (see [Async sessions](#async-sessions)) | the embedder's documents |
 | `compile-invocation` | default (`invoke.compile: 'auto'`): the session's own compiler component instance, pre-warmed with the root IR's static inline children and the `<invoke src>` documents `resources` prefetched, and cached by `(sourceName, source, eventSchemas)`; rejected documents (the compiler component's own bounds included; the host caps no source size) are `invalid-input` (error.execution), compiler faults fail the session. A page `capabilities.compileInvocation` overrides it; under `'provided'` without one, **unsupported** (`execution`, detail `unsupported-invoke`: error.execution, the invocation never starts) | compiler component, same request and outcome mapping |
 | `start-invocation` (`session`) | invoked machine, data model, I/O processor, and clock built synchronously from preloaded modules, then `start-invoked`; an invoked session invokes in turn; beyond the limits the page set in `invokeLimits` `invalid-input` (error.execution) | as browser (sessions built from compiled components) |
-| `start-invocation` (`service`) | `unavailable`: this host binds no invoked-service component, so every service `<invoke>`, literal or `typeexpr`, fails when it starts with `error.execution` (SCXML 6.4); the session start is unaffected | the service component bound to the exact type URI (`SessionHost::with_service_components`): one instance per invocation, driven through its `invoke` export; an unbound type fails its `<invoke>` when it starts |
+| `start-invocation` (`service`) | the service component the page bound to the exact type URI (`serviceComponents`; see [Invoked services](#invoked-services)): one instance per invocation, its `invoke` export driven asynchronously through JSPI; an unbound type, or a page without JSPI, gets `unavailable`, and the `<invoke>` fails when it starts with `error.execution` (SCXML 6.4) | the service component bound to the exact type URI (`SessionHost::with_service_components`): one instance per invocation, driven through its `invoke` export; an unbound type fails its `<invoke>` when it starts |
 | `cancel-invocation`, `forward-to-invocation` | the invoked session's cancellation begins (its later sends are ignored), its `cancel` runs, and it is dropped with every session below it; autoforward onto a live invoked session's external queue; when none is live, the case the WIT defines as a no-op | as browser |
 | cross-session delivery | the SCXML Event I/O Processor pushes onto the target session's external queue; the Wasmtime executor's invocation order (src/invoked-sessions.js keeps the order `scxml-scheduler`'s `InvokedSessions` keeps, with its own index structures), after every command and in every delivery pass | `scxml-scheduler` |
 | `admit-command`, `observe` | optional session budget (`maxCommands`, `capacity-exhausted`); command count and optional trace (`trace: true`) | run-wide budget and trace |
@@ -253,8 +258,8 @@ Why the unsupported ones stay unsupported:
   (`stateforward:scxml/resolver`), and jco-transpile 0.14.0 does transpile
   it, but this host does not run it: (1) a resolved component arrives at
   run time, while this host runs only the components it ships transpiled
-  and fuel-metered at build time (see [Extension components](#extension-components)),
-  and invoked services are a Wasmtime host feature; (2) its only import, WASI 0.3
+  and fuel-metered at build time (see [Extension components](#extension-components)
+  and [Invoked services](#invoked-services)); (2) its only import, WASI 0.3
   `wasi:http/client.send`, has no browser implementation (preview3-shim
   0.6.1's browser `send` throws `Todo`), and a page's `fetch` cannot stand
   in for it with the same grant: `redirect: 'manual'` hides the `Location`
@@ -372,6 +377,84 @@ const session = await createSession({ ir, dataModel, extensionComponents: extens
 - **No I/O.** An extension element is executable content: its component
   gets no `outbound-http`, no WASI, and no `env` value. Async sessions
   (`async: 'auto'`) do not take `extensionComponents`.
+
+### Invoked services
+
+A service `<invoke>` (SCXML 6.4) runs in the invoked-service component the
+page binds to its exact type URI, as under the Wasmtime host's
+`ServiceComponents` (the same names, checks, bounds, and semantics; see
+[docs/invoked-services.md](../../docs/invoked-services.md)):
+
+```js
+const pkg = { serviceUri, packageVersion, serviceArtifact, witWorld, witVersion,
+              httpOrigins, envSlots };                        // the service package manifest
+const component = await authenticateServiceComponent(bytes, sha256);
+const services = new ServiceComponents()
+  .bind(pkg, component)
+  .withValues([{ name: 'API_KEY', value, packages: [pkg.serviceUri] }])
+  .withOutboundHttp({ fetch: (url, init) => fetch(url, init) })
+  .withWasi(pkg.serviceUri, { dirs: [[tree, '/data']] });  // only for wasi:filesystem
+const session = await createSession({ ir, dataModel, serviceComponents: services });
+```
+
+- **JSPI.** A service's `invoke` is an `async func`, and its imports
+  (`outbound-http`, the monotonic clock's waits) suspend it. jco runs these
+  through JavaScript Promise Integration, so services need
+  `WebAssembly.Suspending` (Chromium 137+; Node.js 24 with
+  `--experimental-wasm-jspi`). Without it every service start is
+  `unavailable` (`error.execution`); the rest of the session is unaffected.
+- **Authentication.** `authenticateServiceComponent(bytes, sha256)` checks
+  the bytes against the trusted SHA-256 and that the digest is the release
+  artifact of a service component this build ships (see [Build](#build));
+  any other is `artifact-kind-mismatch`.
+- **Binding.** `bind(pkg, component)` checks a service type URI of at most
+  `MAX_SERVICE_TYPE_URI_BYTES` bound once, at most `MAX_BOUND_SERVICES`
+  bindings, and at most `MAX_DECLARED_ITEMS` valid `httpOrigins` and
+  `envSlots` (`service-binding` otherwise). Binding a service consents to
+  the origins its package declares.
+- **Values and references.** The page holds the values (`withValues`), each
+  granted to the type URIs it lists. A service never receives a value:
+  `env:<slot>="NAME"` on its `<invoke>` gives it a reference for a slot its
+  package declares, valid only inside its own admitted requests, where the
+  host substitutes the value. An undeclared slot or a variable not granted
+  to the type fails the `<invoke>` with `error.execution`.
+- **Outbound HTTP.** `outbound-http.fetch` and `send` admit a request as the
+  Wasmtime host does (references substituted, the WIT bounds, then the
+  package's origins or an origin a reference's value supplies entirely) and
+  call the page's transport like the WHATWG `fetch`, with
+  `redirect: 'manual'` and `credentials: 'omit'`. Without a transport every
+  request is `unavailable`. At most `MAX_REQUESTS_IN_FLIGHT` are in flight
+  per invocation.
+- **WASI.** Clocks, randomness, and `wasi:io` need no grant.
+  `wasi:filesystem` needs at least one directory (`withWasi`), each an
+  in-memory tree the page owns and can read back. `wasi:sockets` cannot be
+  granted in a browser (`wasi-resource-ungranted`), another `wasi:*`
+  interface is `unknown-import`, and a grant to an unbound type or for an
+  interface the component does not import is `wasi-grant-undeclared`; all
+  are checked when the session is created.
+- **Lifecycle.** Each invocation instantiates its own instance inside
+  `start-invocation`. Events sent to `#_<invokeid>` (and autoforwarded)
+  feed its event stream; the events it returns reach the invoking session's
+  external queue stamped with the invoke id; its result `ok` becomes
+  `done.invoke.<id>`, while `err`, a trap (fuel exhaustion included), or an
+  invalid returned event becomes `error.communication.<id>`. Cancelling the
+  invocation ends its stream, aborts its requests, clears its waits, and
+  drops whatever it returns afterwards.
+- **Bounds.** Between two inputs (its start, an event it reads, a
+  response, a wait falling due) an invocation runs at most the call fuel
+  (`withCallFuel`, default `DEFAULT_SERVICE_CALL_FUEL`) and returns at most
+  `MAX_RETURNED_EVENTS_PER_INPUT` events of at most
+  `MAX_RETURNED_BYTES_PER_INPUT` bytes in all.
+- **Browser differences.** A service runs on the event loop, so what it
+  returns reaches the session in a later turn (the page hears it through
+  `onTimer`), not at a deterministic point of the run; an `invoke` that
+  rejects its start does so after `start-invocation` completed, so it
+  becomes `error.communication.<id>` rather than `error.execution`; and the
+  monotonic clock reads the session's logical clock while its waits fall
+  due in wall-clock time. Snapshots of a run holding a service (live, or
+  finished until its invoking state exits) are refused, as under the
+  Wasmtime host. Async sessions (`async: 'auto'`) do not take
+  `serviceComponents`.
 
 ### URL resources
 
@@ -1057,10 +1140,10 @@ sources.
 | Signal | Name | Attribute or field | Values | Cardinality |
 | --- | --- | --- | --- | --- |
 | host spans | tracer `scxml-host-browser`; span name = `scxml.operation` | `scxml.module` | `host-browser` | 1 |
-| host spans and counter | | `scxml.operation` | `create-session`, `ir-source`, `command`, `capability`, `data-model`, `compile`, `load-core-module`, `delayed-send`, `invocation`, `snapshot`, `snapshot-diff`, `validate`, `extension-load`, `extension-instantiate`, `extension-execute`, `extension-shutdown`, `package-validator-validate` | 17 |
+| host spans and counter | | `scxml.operation` | `create-session`, `ir-source`, `command`, `capability`, `data-model`, `compile`, `load-core-module`, `delayed-send`, `invocation`, `snapshot`, `snapshot-diff`, `validate`, `extension-load`, `extension-instantiate`, `extension-execute`, `extension-shutdown`, `package-validator-validate`, `service-start`, `service-send`, `service-cancel`, `service-http-fetch`, `service-http-send` | 22 |
 | host spans and counter | | `scxml.outcome` | `ok`, `rejected`, `failed` | 3 |
-| host counter | `scxml.host.operations` (`{operation}`) | the three attributes above | 1 × 11 × 3 | ≤ 33 series |
-| guest spans and point signals | tracer `scxml-component-guest`; span name = `scxml.operation` | `scxml.module` | `machine-component`, `data-model-component`, `compiler-component`, `snapshot-codec-component`, `validator-component`, `executable-content-extension` | 6 |
+| host counter | `scxml.host.operations` (`{operation}`) | the three attributes above | 1 × 22 × 3 | ≤ 66 series |
+| guest spans and point signals | tracer `scxml-component-guest`; span name = `scxml.operation` | `scxml.module` | `machine-component`, `data-model-component`, `compiler-component`, `snapshot-codec-component`, `validator-component`, `executable-content-extension`, `invoked-service` | 7 |
 | guest spans | | `scxml.operation` | WIT telemetry `operation` enum (16), compiler `operation` enum (`compile`), validator `operation` enum (`validate`) | 18 |
 | guest spans | | `scxml.outcome` | WIT `outcome` enum (`ok`, `rejected`, `failed`) | 3 |
 | compiler guest spans | | `error.type` | compiler WIT `error-category` enum | 5 |
@@ -1162,6 +1245,16 @@ SCXML_BROWSER_IR=../../target/wasm-artifacts/release/packaged/representative-mac
   each static URL resolved once. It also covers the `none` fallback (static
   URLs still prefetched, the typed `dynamic-url-unavailable` error for a
   runtime one), and checks that `async: 'off'` is the synchronous session.
+- `test/service.test.mjs` runs in Node with `--experimental-wasm-jspi`
+  (in one process, `--test-isolation=none`, since test workers do not
+  inherit the flag) on `scxml_service_example` and `scxml_service_files`.
+  It checks authentication and binding, an unbound type
+  (`error.execution`), events both ways with the service's timer and
+  `done.invoke`, cancellation when the invoking state exits, outbound HTTP
+  admission (references substituted, a supplied origin, no transport),
+  undeclared env slots, WASI planning against the grants, an in-memory
+  directory the service reads and writes, a trap after the start
+  (`error.communication`), and the snapshot and async-session refusals.
 - `test/snapshot.test.mjs` runs in Node. It checks the read-only session
   snapshot API (see [Session snapshots](#session-snapshots)): argument
   validation, `codec-unavailable`, checkpoint gating (`not-stable`,

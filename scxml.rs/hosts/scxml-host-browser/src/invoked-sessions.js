@@ -328,6 +328,7 @@ export class InvokedSessions {
       children: new Map(),
       childIds: [],
       external: new Fifo(),
+      receive: undefined,
       cancelled: false,
       doneReported: false,
       finished: false,
@@ -388,6 +389,7 @@ export class InvokedSessions {
     const node = this.#nodes.get(key);
     return (
       node !== undefined &&
+      node.receive === undefined &&
       (maxInvokeDepth === undefined || node.depth < maxInvokeDepth) &&
       (maxInvokedSessions === undefined || this.#nodes.size - 1 < maxInvokedSessions)
     );
@@ -414,6 +416,19 @@ export class InvokedSessions {
     this.#nodes.set(key, InvokedSessions.#node(parent, id, node.depth + 1, open, close));
     this.#opens.set(open, key);
     this.#touched.add(key);
+    return key;
+  }
+
+  /**
+   * Registers the invoked service `id` of `parent` and returns its key: it
+   * has no external queue, and every event pushed to it goes to `receive`
+   * (the service's `events` stream); it invokes nothing.
+   */
+  registerService(parent, id, receive) {
+    const key = this.register(parent, id);
+    const node = this.#nodes.get(key);
+    node.receive = receive;
+    this.#touched.delete(key);
     return key;
   }
 
@@ -480,6 +495,10 @@ export class InvokedSessions {
   pushExternal(key, event) {
     const node = this.#nodes.get(key);
     if (node === undefined) return false;
+    if (node.receive !== undefined) {
+      node.receive(event);
+      return true;
+    }
     node.external.push({ tag: 'external', val: event });
     this.#index(key, node);
     return true;
