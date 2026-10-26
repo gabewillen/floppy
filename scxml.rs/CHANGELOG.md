@@ -62,6 +62,31 @@ hard cutover.
 
 ### Added
 
+- The browser host resolves an `<invoke src>` child's own resources as
+  the Wasmtime host does: a `resources.resolve` or
+  `capabilities.loadDocument` answer may carry `baseUri` and
+  `eventSchemas` (the embedder's `EmbeddedDocument::base_uri` and
+  `event_schemas`); the child's relative `<data src>`, `<script src>`, and
+  `<invoke src>` URIs resolve against its base URI, it is compiled with
+  its schema files, and an inline `<content>` child shares its invoker's
+  base. With `resources` and the automatic compiler, `createSession`
+  compiles each `<invoke src>` document the prefetch resolved and
+  prefetches its static URLs in turn, breadth first, for at most
+  `MAX_PREFETCHED_CHILDREN` (64) children, so a tree of documents with
+  their own scripts and schemas runs. Proven by `test/resources.test.mjs`
+  (a child's script, data, schema, and grandchild resolved against its
+  base; without its schema files it is rejected; without a base URI its
+  URIs reach the page as written).
+- The browser host's build ships more extension components:
+  `scripts/build.mjs --extensions <dir>` (repeatable) transpiles and meters
+  every artifact `<dir>/manifest.tsv` lists as an extension component of
+  the package, `dist/<name>/` with `<name>` its artifact name with `_` as
+  `-`, and fails on a name or release digest another component already
+  has; `dist/extensions.js` lists every shipped extension component, which
+  `authenticateExtensionComponent`, `ExtensionComponents.bind`, and the core
+  module loader read. Proven by `test/extension.test.mjs` (a renamed copy
+  of the example component built through `--extensions` authenticates and
+  runs; a duplicate digest and a taken name fail the build).
 - `outbound-http.send`: an invoked service's request whose response is
   streamed (`async func send(http-request) -> result<tuple<u16,
   stream<u8>, future<result<_, component-error>>>, component-error>`,

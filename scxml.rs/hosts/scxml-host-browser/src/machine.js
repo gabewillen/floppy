@@ -94,7 +94,9 @@ import {
   PREFETCHED,
   ScriptLoads,
   isResourcesOption,
+  prefetchInvoked,
   prefetchResources,
+  resolveReference,
   resolvedDocument,
 } from './resources.js';
 import { sha256Hex } from './sha256.js';
@@ -481,9 +483,24 @@ class SessionLinks {
   #irSha256;
   #dataModelName;
 
-  constructor({ run, sessionId, parent, parentLinks, dataModel, dataModelName, io, ir }) {
+  constructor({ run, sessionId, parent, parentLinks, dataModel, dataModelName, io, ir, baseUri }) {
     this.run = run;
     this.sessionId = sessionId;
+    /**
+     * The base URI of the document this session runs (its `<invoke src>`
+     * document's `baseUri`, or that of the session an inline `<content>`
+     * child runs in), which its relative URIs resolve against; `undefined`
+     * for the root, whose URIs reach the page as written.
+     */
+    this.baseUri = baseUri;
+    /**
+     * The `<invoke src>` document this session loaded last, for the child
+     * it compiles next; then the compiled child's base URI, for the
+     * session it starts next (the Wasmtime host's `loaded_bindings`,
+     * `loaded_event_schemas`, and `compiled_bindings`).
+     */
+    this.loadedDocument = undefined;
+    this.compiledBaseUri = undefined;
     /** `{sessionId, invokeId}` of the invoking parent, for an invoked session. */
     this.parent = parent;
     /** The invoking session's links, for an invoked session. */
@@ -513,7 +530,7 @@ class SessionLinks {
     /** True once the machine initialized this session's data model. */
     this.dataModelInitialized = false;
     /** This session's scripts loaded from the prefetched resources. */
-    this.scripts = run.resources === undefined ? undefined : new ScriptLoads(run.resources);
+    this.scripts = run.resources === undefined ? undefined : new ScriptLoads(run.resources, baseUri);
     /** This session's extension component instances (src/extension.js), once loaded. */
     this.namespaces = undefined;
     /**
@@ -901,8 +918,8 @@ function capabilityResource(links) {
    * `compile-invocation`: a rejected document is `invalid-input`
    * (error.execution in the invoking session); a compiler fault fails the run.
    */
-  const compiledChild = (sourceName, source) => {
-    const outcome = run.invocations.compile(sourceName, source);
+  const compiledChild = (sourceName, source, eventSchemas) => {
+    const outcome = run.invocations.compile(sourceName, source, eventSchemas);
     if (outcome.ir !== undefined) return outcome.ir;
     if (outcome.fault === undefined) throw componentFailure('invalid-input', 'the compiler rejected the child document');
     run.latch(outcome.fault);
@@ -1149,12 +1166,16 @@ function capabilityResource(links) {
     }
 
     // Documents: only what the page resolves; the host never fetches.
-    loadDocument(kind, uri) {
+    loadDocument(kind, written) {
+      // A relative URI names a document relative to the document this
+      // session runs (RFC 3986 §5.1), when its base URI is known.
+      const uri = resolveReference(links.baseUri, written);
       // --- resources (src/resources.js): a prefetched URL is answered from
       // the cache.
-      if (run.resources?.has(uri)) return observed('capability', () => run.resources.document(uri));
       let answer;
-      if (typeof run.capabilities?.loadDocument === 'function') {
+      if (run.resources?.has(uri)) {
+        answer = observed('capability', () => run.resources.document(uri));
+      } else if (typeof run.capabilities?.loadDocument === 'function') {
         answer = forward(run.capabilities, 'loadDocument', [kind, uri], (v) => resolvedDocument(v) !== undefined);
       } else if (run.bridge !== undefined) {
         // Async bridge hook: on a cache miss, a URL the page does
@@ -1170,10 +1191,14 @@ function capabilityResource(links) {
         answer = forward(run.capabilities, 'loadDocument', [kind, uri], (v) => resolvedDocument(v) !== undefined);
       }
       // --- end resources
-      // A string, or `{text, mediaType}` with the media type the page's
-      // source indicated (SCXML B.2.1), as the WIT `loaded-document`.
+      // A string, or `{text, mediaType, baseUri, eventSchemas}` with the
+      // media type the page's source indicated (SCXML B.2.1), as the WIT
+      // `loaded-document`.
       const document = resolvedDocument(answer);
       if (document === undefined) throw componentFailure('platform', 'document answer is not text');
+      // An `<invoke src>` document's base URI and schema files are kept
+      // for the child this session compiles and starts next.
+      if (kind === 'invocation') links.loadedDocument = document;
       return { text: document.text, mediaType: document.mediaType };
     }
 
@@ -1181,10 +1206,14 @@ function capabilityResource(links) {
     // automatic compiler (src/invoke.js).
     compileInvocation(sourceName, source) {
       if (run.modules === undefined) throw unsupportedInvoke();
+      // An inline `<content>` child runs in this session's document.
+      const loaded = links.loadedDocument;
+      links.loadedDocument = undefined;
+      links.compiledBaseUri = loaded === undefined ? links.baseUri : loaded.baseUri;
       const ir =
         run.invocations === undefined
           ? forward(run.capabilities, 'compileInvocation', [sourceName, source], (v) => v instanceof Uint8Array)
-          : compiledChild(sourceName, source);
+          : compiledChild(sourceName, source, loaded?.eventSchemas);
       if (ir.byteLength > MAX_MACHINE_IR_BYTES) {
         throw componentFailure('invalid-input', 'child machine IR exceeds its byte bound');
       }
@@ -1359,6 +1388,7 @@ export function requestStart(links, request) {
       dataModelName: dataModel?.name,
       io,
       ir: request.machineIr,
+      baseUri: links.compiledBaseUri,
     });
     const { imports, MachineCapabilities } = machineImports(childLinks, request.machineIr);
     meter = new FuelMeter(fuel);
@@ -2887,7 +2917,8 @@ export async function createSession(options) {
   const irCopy = ir.slice();
   // resources: resolve every statically known URL before the machine runs
   // (an async worker session gets the page's prefetch instead, PREFETCHED).
-  const resourceCache =
+  const prefetchedElsewhere = options[PREFETCHED] !== undefined;
+  let resourceCache =
     options[PREFETCHED] ??
     (resources === undefined
       ? undefined
@@ -2930,6 +2961,18 @@ export async function createSession(options) {
         };
         invocations = await InvocationCompiler.open(options);
         await invocations.prewarm(found.documents);
+        // resources: the `<invoke src>` children the prefetch resolved are
+        // compiled now, each with its own schema files, and their own
+        // static URLs prefetched against their base URIs.
+        if (resources !== undefined && !prefetchedElsewhere) {
+          resourceCache = await telemetry.within(span, () =>
+            prefetchInvoked(resourceCache, irCopy, resources, telemetry, async (src, entry) => {
+              // The machine's source name: the URI with no `file:` scheme.
+              const sourceName = src.startsWith('file:') ? src.slice('file:'.length) : src;
+              return (await invocations.prewarmOne(sourceName, entry.text, entry.eventSchemas)).ir;
+            }),
+          );
+        }
       }
     } catch (cause) {
       telemetry.end(span, 'failed');

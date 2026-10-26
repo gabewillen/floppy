@@ -8,8 +8,10 @@
 // executable-content snapshot are held to the Wasmtime host by
 // test/host-parity.test.mjs.
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -68,6 +70,41 @@ test('components are authenticated by their release SHA-256', async () => {
   await assert.rejects(authenticateExtensionComponent(other, sha256(other)), (error) => error.code === 'artifact-kind-mismatch');
   for (const [bytes, digest] of [[[1], sha256(exampleBytes)], [exampleBytes, 'ABC'], [exampleBytes, undefined]]) {
     await assert.rejects(authenticateExtensionComponent(bytes, digest), (error) => error.code === 'invalid-argument');
+  }
+});
+
+test('a build ships the extension components its --extensions name, each under its own digest', async () => {
+  // scripts/verify-browser-host.sh builds dist with --extensions naming
+  // extensions/manifest.tsv: the example component under another name and
+  // another digest (a name section of its own).
+  const extraBytes = new Uint8Array(await readFile(join(artifacts, 'extensions', 'scxml_extension_extra.virtualized.wasm')));
+  const extra = await authenticateExtensionComponent(extraBytes, sha256(extraBytes));
+  assert.equal(extra.component, 'scxml-extension-extra');
+  const { EXTENSIONS } = await import('../dist/extensions.js');
+  assert.deepEqual(Object.keys(EXTENSIONS).sort(), ['extension-example', 'scx', 'scxml-extension-extra']);
+  const { session } = await open(
+    machine('<state id="s"><onentry><example:raise event="after"/></onentry><transition event="after" target="f"/></state><final id="f"/>'),
+    new ExtensionComponents().bind(examplePackage, extra),
+  );
+  session.start();
+  assert.deepEqual(session.configuration(), ['f'], 'the added component ran the element');
+  session.dispose();
+});
+
+test('a build refuses an added extension component another component already is', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'scxml-extensions-'));
+  try {
+    await writeFile(
+      join(dir, 'manifest.tsv'),
+      `schema\tstateforward.wasm-artifacts/v1\nartifact\tscxml_extension_again\tscxml_extension_example.virtualized.wasm\t${exampleBytes.byteLength}\t${sha256(exampleBytes)}\n`,
+    );
+    const build = () =>
+      execFileSync(process.execPath, [join(packageRoot, 'scripts/build.mjs'), '--artifacts', artifacts, '--meter', join(dir, 'unused'), '--extensions', dir, '--out', join(dir, 'dist')], { stdio: 'pipe' });
+    assert.throws(build, (error) => /has the release digest of another component/.test(String(error.stderr)));
+    await writeFile(join(dir, 'manifest.tsv'), `schema\tstateforward.wasm-artifacts/v1\nartifact\tscx\tscx.virtualized.wasm\t1\t${'0'.repeat(64)}\n`);
+    assert.throws(build, (error) => /extension component scx is already built/.test(String(error.stderr)));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
 });
 

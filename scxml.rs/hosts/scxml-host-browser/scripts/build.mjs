@@ -8,6 +8,7 @@
 //
 // Usage: node scripts/build.mjs --artifacts <dir-with-manifest.tsv>
 //          --meter <scxml-wasm-meter binary> [--out dist]
+//          [--extensions <dir-with-manifest.tsv>]...
 //
 // Contract:
 // * every transpiled component is listed in `manifest.tsv` and its bytes hash
@@ -30,6 +31,15 @@
 //   validator it ships (`scxml_package_validator_example`) are built like every
 //   other component; `identity.js` also lists each component's imported
 //   interfaces;
+// * `--extensions <dir>` (repeatable) adds every artifact its `manifest.tsv`
+//   lists as an extension component the package ships, built like the
+//   others into `dist/<name>/`, `<name>` the artifact name with `_` as `-`
+//   (lowercase ASCII letters and `-` only); a name or a release digest that
+//   another component already has fails closed, so a digest authenticates
+//   exactly one component;
+// * `dist/extensions.js` lists every shipped extension component (the
+//   bundled ones and those `--extensions` adds) with the import of its
+//   bindings, which src/extension.js and src/loader.js read;
 // * the optional session snapshot codec (`scxml_snapshot_codec`) is built
 //   into `dist/snapshot-codec/` like every other component and loaded by the
 //   host only on first use (src/snapshot.js); a deployment may omit that
@@ -86,13 +96,14 @@ const COMPONENTS = [
     name: 'extension-example',
     artifact: 'scxml_extension_example',
     file: 'scxml_extension_example.virtualized.wasm',
+    extension: true,
   },
   {
     name: 'package-validator-example',
     artifact: 'scxml_package_validator_example',
     file: 'scxml_package_validator_example.virtualized.wasm',
   },
-  { name: 'scx', artifact: 'scx', file: 'scx.virtualized.wasm' },
+  { name: 'scx', artifact: 'scx', file: 'scx.virtualized.wasm', extension: true },
 ];
 // 2 GiB - 1: components ship as GitHub release assets, and "each file
 // included in a release must be under 2 GiB"
@@ -108,12 +119,15 @@ function fail(message) {
 }
 
 function parseArgs(argv) {
-  const options = { artifacts: undefined, meter: undefined, out: join(packageRoot, 'dist') };
+  const options = { artifacts: undefined, meter: undefined, out: join(packageRoot, 'dist'), extensions: [] };
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
     const value = argv[index + 1];
     if ((flag === '--artifacts' || flag === '--out' || flag === '--meter') && typeof value === 'string') {
       options[flag.slice(2)] = resolve(value);
+      index += 1;
+    } else if (flag === '--extensions' && typeof value === 'string') {
+      options.extensions.push(resolve(value));
       index += 1;
     } else {
       fail(`unknown or incomplete argument: ${flag}`);
@@ -208,6 +222,25 @@ const options = parseArgs(process.argv.slice(2));
 const transpilerVersion = pinnedTranspilerVersion();
 const manifest = readManifest(join(options.artifacts, 'manifest.tsv'));
 
+// Every component to build, with the directory and manifest entry of its
+// source: the package's own, then each `--extensions` directory's.
+const builds = COMPONENTS.map((component) => ({ ...component, dir: options.artifacts, entry: manifest.get(component.artifact) }));
+for (const dir of options.extensions) {
+  for (const [artifact, entry] of readManifest(join(dir, 'manifest.tsv'))) {
+    const name = artifact.replaceAll('_', '-');
+    if (!/^[a-z]+(-[a-z]+)*$/.test(name)) fail(`extension artifact ${artifact} is not a lowercase ASCII name`);
+    if (builds.some((other) => other.name === name)) fail(`extension component ${name} is already built`);
+    builds.push({ name, artifact, file: entry.file, extension: true, dir, entry });
+  }
+}
+const digests = new Set();
+for (const component of builds) {
+  if (component.entry !== undefined && digests.has(component.entry.digest)) {
+    fail(`${component.name} has the release digest of another component`);
+  }
+  digests.add(component.entry?.digest);
+}
+
 rmSync(options.out, { recursive: true, force: true });
 mkdirSync(options.out, { recursive: true });
 const scratch = join(options.out, '.meter');
@@ -219,12 +252,12 @@ const record = {
   components: [],
 };
 
-for (const component of COMPONENTS) {
-  const entry = manifest.get(component.artifact);
-  if (entry === undefined || entry.file !== component.file) {
+for (const component of builds) {
+  const { entry } = component;
+  if (entry === undefined || entry.file !== component.file || !safeOutputPath(entry.file) || entry.file.includes('/')) {
     fail(`artifact manifest does not list ${component.file}`);
   }
-  const source = join(options.artifacts, component.file);
+  const source = join(component.dir, component.file);
   const size = statSync(source).size;
   if (size === 0 || size > MAX_COMPONENT_BYTES || size !== entry.bytes) {
     fail(`${component.file} does not match its manifest byte length`);
@@ -284,6 +317,14 @@ writeFileSync(join(options.out, 'build-manifest.json'), `${JSON.stringify(record
 // Release identities for the snapshot's component list, keyed by dist name.
 const identities = Object.fromEntries(record.components.map((component) => [component.name, component.source_sha256]));
 const imports = Object.fromEntries(record.components.map((component) => [component.name, component.imports]));
+const extensions = builds.filter((component) => component.extension).map((component) => component.name);
+writeFileSync(
+  join(options.out, 'extensions.js'),
+  '// Generated by scripts/build.mjs: the extension components this build ships and the import of each one\'s bindings.\n' +
+    'export const EXTENSIONS = Object.freeze({\n' +
+    extensions.map((name) => `  ${JSON.stringify(name)}: () => import(${JSON.stringify(`./${name}/${name}.js`)}),\n`).join('') +
+    '});\n',
+);
 writeFileSync(
   join(options.out, 'identity.js'),
   '// Generated by scripts/build.mjs: release-artifact SHA-256 and imported interfaces of each component.\n' +
