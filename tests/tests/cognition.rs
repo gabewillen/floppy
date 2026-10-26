@@ -745,12 +745,13 @@ fn settled_order(records: &[Json]) -> Vec<Json> {
 }
 
 /// Whether `record` is of saying the reply: the communication's, the
-/// listening's (the bot's own voice heard back), or the session's
-/// speaking events.
+/// listening's (the bot's own voice heard back), the short-term memory's
+/// (what was said), or the session's speaking events.
 fn of_the_reply(record: &Json) -> bool {
     let session = record["session"].as_str().unwrap_or_default();
     session.starts_with("session.floppy.communication")
         || session.starts_with("session.floppy.listening")
+        || session == "session.floppy.stm"
         || (session == "session"
             && record["label"].as_str().is_some_and(|label| {
                 label == "environment.sound"
