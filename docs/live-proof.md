@@ -51,6 +51,13 @@ judged on the reply's wording ("Hi! Hmm, that depends..."), not on the
 decision. Two repeats are few: the arms differ by less than a run's spread on
 emotion.
 
+Held out (scenarios the change was not looked at on: `chat_basics`,
+`chat_understand`, `voice_overlap`, `voice_people`, `voice_question`,
+`name_adopt`, `reflex_greeting`, 2 repeats): main 0.865, the recent turns and
+the environment block 0.869 (conversation 0.980 to 0.985, voice 0.705 to
+0.710, name and reflex unchanged), so nothing the decision layer already did
+well got worse. `voice_people` is 0.20 to 0.30 on both arms.
+
 ## 2026-10-26, floppy hears the tone of a voice (D247), model `sparks/qwen3.8-flash-next`
 
 `eval.py run --scenario emotion` on `claude/project-thread-7d33ln` (the

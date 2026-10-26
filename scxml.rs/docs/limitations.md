@@ -151,8 +151,12 @@ disagree are in [spec-errata.md](spec-errata.md).
   (`unavailable`; `scxml.session-snapshot/v2` cannot represent one); the
   validator and compiler components' WIT requests carry no service packages,
   so the validator component reports every literal service type as unbound
-  (`PKG004`, a warning); and the browser host binds no service
-  (`start-invocation` of a service answers `unavailable`).
+  (`PKG004`, a warning); and the browser host runs only the service
+  components its build ships, and only where JavaScript Promise
+  Integration exists (otherwise `start-invocation` of a service answers
+  `unavailable`), with no `wasi:sockets`, and what a service returns
+  reaches the session in a later event-loop turn rather than at a
+  deterministic point of the run.
 - Invoked services' outbound HTTP: `outbound-http.fetch` and
   `outbound-http.send` are `async func`s that suspend only the calling
   task. A batch run performs the request through the embedder's transport

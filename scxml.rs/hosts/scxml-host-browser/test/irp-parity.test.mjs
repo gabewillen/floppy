@@ -28,7 +28,7 @@
 //   not applicable.
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, posix, resolve } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -129,8 +129,8 @@ for (const variant of ['ecmascript', 'xpath']) {
 // canonical baseline, through the same pipeline as `scx conformance run`:
 // the compiler (schema policy off) with the extension packages the suite
 // binds (the `env` suite binds the example namespace; the `event` suite
-// none) and each case's dependencies below its document's directory as its
-// `event:schema` files, keyed relative to that directory. A
+// none) and each case's dependencies as its `event:schema` files, keyed by
+// their relative path from its document's directory (`..` included). A
 // document-rejection case passes when the compiler rejects it with exactly
 // the listed error codes (the oracle compares the set of codes); every
 // other case runs like an official one. Every case must reach the
@@ -142,7 +142,7 @@ const NAMESPACE_SUITES = {
 };
 const NAMESPACE_TALLIES = {
   env: { rejections: 8, runs: 0 },
-  event: { rejections: 17, runs: 14 },
+  event: { rejections: 16, runs: 15 },
 };
 
 for (const [name, manifests] of Object.entries(NAMESPACE_SUITES)) {
@@ -163,9 +163,8 @@ for (const [name, manifests] of Object.entries(NAMESPACE_SUITES)) {
         const directory = testCase.start_uri.includes('/') ? testCase.start_uri.slice(0, testCase.start_uri.lastIndexOf('/') + 1) : '';
         const eventSchemas = await Promise.all(
           Object.entries(testCase.dependency_source_artifacts ?? {})
-            .filter(([uri]) => uri.startsWith(directory))
             .map(async ([uri, path]) => ({
-              uri: uri.slice(directory.length),
+              uri: posix.relative(directory || '.', uri),
               bytes: new Uint8Array(await readFile(join(dir, path))),
             })),
         );
