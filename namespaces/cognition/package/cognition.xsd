@@ -22,8 +22,8 @@
                    fitlocation (optional): receives fit, cut or overflow
                    when a budget is given.
                    imageslocation (optional): receives the references of
-                   the images the stimulus carries, in the order of their
-                   placeholders' refs.
+                   the images the placeholders attach (the stimulus's, then
+                   recalled episodes'), in the order of their refs.
                    stimulus, self, recent, environment, acted,
                    prior_episodes, standing_directives, feedback,
                    instructions, schema, budget, held (optional):

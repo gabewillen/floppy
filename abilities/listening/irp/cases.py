@@ -18,7 +18,7 @@ FAILED = "bot.ability.listening.failed"
 READY = expect("bot.ability.ready")
 PATIENT = [("sensitivity_timeout_ms", "600000")]
 
-VOICED = {"path": "/vad", "status": 200, "body": {"segments": [{"start": 0.0, "end": 0.1}]}}
+VOICED = {"path": "/vad", "status": 200, "body": {"segments": [{"start": 0.5, "end": 0.6}]}}
 SILENT = {"path": "/vad", "status": 200, "body": {"segments": []}}
 
 
@@ -109,7 +109,7 @@ S.case(143, 5, "a completed utterance's copy, with its audio, teaches the interp
                                    "sample_rate_hz": 16000, "channels": 1})),
         hear("voiced.wav"), hear("silence.wav"),
         expect(COGNITION, "_event.data.stimulus.data.content === 'own voice' && _event.data.stimulus.data.source_ids.length === 0")],
-       params=PATIENT, backend=[{"path": "/vad", "status": 200, "body": {"segments": [{"start": 0.0, "end": 1.5}]}}, EMBEDDED,
+       params=PATIENT, backend=[{"path": "/vad", "status": 200, "body": {"segments": [{"start": 0.5, "end": 2.0}]}}, EMBEDDED,
                                 VOICED, SILENT, *decoded("own voice")])
 
 S.case(150, 6, "sounds sent before the listening is ready, and back to back, are interpreted in order.",

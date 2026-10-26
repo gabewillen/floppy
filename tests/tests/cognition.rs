@@ -586,7 +586,7 @@ fn start(bot: &Bot) -> Run {
     start_activated(bot, &[])
 }
 
-/// [`start`] with `params` as the bot's activation settings in the room
+/// [`start`] with `params` as the bot's activation settings in the environment
 /// that invokes it (decision D107); the bot activates on joining.
 fn start_activated(bot: &Bot, params: &[(&str, &str)]) -> Run {
     let run = Run::start(
@@ -690,6 +690,44 @@ fn settle_reflection(run: &Run) {
     while run.count(reflection_settled) < outputs {
         run.until(WAIT, reflection_settled);
     }
+    settle_speech(run);
+    SETTLED.with_borrow_mut(|settled| settled.push(run.count(|_| true)));
+}
+
+thread_local! {
+    /// How many records the run had read each time it settled.
+    static SETTLED: std::cell::RefCell<Vec<usize>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Waits until every utterance said so far has played out and each one
+/// completed has reached the interpretation as the bot's own voice (its
+/// efference copy), so a run closed after a reply is cut at a fixed point.
+fn settle_speech(run: &Run) {
+    let said = run.count(label_is("floppy.say"));
+    while run.count(label_is("bot.ability.speaking.output")) < said {
+        run.until(WAIT, label_is("bot.ability.speaking.output"));
+    }
+    let completed = run.count(completed_speech);
+    while run.count(own_voice_settled) < completed {
+        run.until(WAIT, own_voice_settled);
+    }
+}
+
+/// Whether `record` is speaking's output of an utterance played out whole.
+fn completed_speech(record: &Json) -> bool {
+    label_is("bot.ability.speaking.output")(record)
+        && record["text"]
+            .as_str()
+            .is_some_and(|text| text.contains(r#""outcome":"completed""#))
+}
+
+/// Whether `record` is the interpretation's log that it could not learn the
+/// bot's own voice from a copy (no voice backend serves these runs).
+fn own_voice_settled(record: &Json) -> bool {
+    label_is("interpretation.unidentified")(record)
+        && record["text"]
+            .as_str()
+            .is_some_and(|text| text.contains("the bot's own voice"))
 }
 
 /// Closes the run and asserts its pinned trace, with every pinned request
@@ -704,8 +742,51 @@ fn close(run: Run, mock: &Mock, test: &str) -> Finished {
         .filter(|request| pinned(&request.target))
         .map(|request| (request.target, request.body))
         .collect();
-    trace::assert_trace(test, &finished.all, &requests);
+    trace::assert_trace(test, &settled_order(&finished.all), &requests);
     finished
+}
+
+/// `records` with, in each stretch from a turn's end to where the run
+/// settled after it, the reply's records moved after the rest and grouped by
+/// session (each session's own records in order): after a turn, reflection,
+/// the reply's playout and the interpretation of the bot's own voice run
+/// side by side, and which logs first depends on the load.
+fn settled_order(records: &[Json]) -> Vec<Json> {
+    let mut ordered = records.to_vec();
+    for end in SETTLED.take() {
+        let end = end.min(ordered.len());
+        let Some(start) = ordered[..end].iter().rposition(turn_ended) else {
+            continue;
+        };
+        let (mut reply, rest): (Vec<Json>, Vec<Json>) = ordered[start + 1..end]
+            .iter()
+            .cloned()
+            .partition(of_the_reply);
+        reply.sort_by(|a, b| {
+            a["session"]
+                .as_str()
+                .unwrap_or_default()
+                .cmp(b["session"].as_str().unwrap_or_default())
+        });
+        ordered.splice(start + 1..end, rest.into_iter().chain(reply));
+    }
+    ordered
+}
+
+/// Whether `record` is of saying the reply: the communication's, the
+/// listening's (the bot's own voice heard back), the short-term memory's
+/// (what was said), or the session's speaking events.
+fn of_the_reply(record: &Json) -> bool {
+    let session = record["session"].as_str().unwrap_or_default();
+    session.starts_with("session.floppy.communication")
+        || session.starts_with("session.floppy.listening")
+        || session == "session.floppy.stm"
+        || (session == "session"
+            && record["label"].as_str().is_some_and(|label| {
+                label == "environment.sound"
+                    || label.starts_with("bot.ability.speaking.")
+                    || label.starts_with("bot.ability.listening.")
+            }))
 }
 
 /// The generate requests other than reflection's select calls (reasoning's).
@@ -1489,6 +1570,7 @@ fn a_conversation_turn_carries_its_exchange_to_reasoning() {
     let mut run = start(&bot);
     tell(&mut run, "My favorite color is green.");
     run.until(WAIT, turn_ended);
+    settle_reflection(&run);
     tell(&mut run, "What is my favorite color?");
     run.until(WAIT, turn_ended);
     let prompts = prompts(&mock);
@@ -2980,7 +3062,7 @@ fn autonomy_runs_the_seeds_before_the_learned_behaviors() {
 /// Reasoning's prompt carries the environment block (decision D106): the
 /// structured environment the body sends, rendered by its prompt renderer
 /// (D99) as XML elements, values escaped. The bot holds the lamp the
-/// room runs.
+/// environment runs.
 #[test]
 fn reasonings_prompt_carries_the_environment_block() {
     let mock = Mock::start();
@@ -2992,14 +3074,14 @@ fn reasonings_prompt_carries_the_environment_block() {
         .and_then(Path::parent)
         .expect("the layout's root")
         .to_path_buf();
-    let room = support::environment_with_devices(
+    let environment = support::environment_with_devices(
         &layout_dir,
         &["floppy"],
         &["lamp"],
         &[("floppy", &["lamp"])],
         &[],
     );
-    let lamp = layout_dir.join("environments/room/lamp/lamp.scx");
+    let lamp = layout_dir.join("environments/environment/lamp/lamp.scx");
     let text = std::fs::read_to_string(&lamp).expect("the lamp copy is readable");
     std::fs::write(
         &lamp,
@@ -3013,7 +3095,7 @@ fn reasonings_prompt_carries_the_environment_block() {
         &[
             "--env-file".to_owned(),
             bot.env.display().to_string(),
-            room.display().to_string(),
+            environment.display().to_string(),
         ],
         &[],
     );

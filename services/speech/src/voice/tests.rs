@@ -279,9 +279,11 @@ fn detection_sends_sixteen_kilohertz_mono_samples() {
         request.url,
         vec![Part::Reference(3), Part::Literal("/vad".into())]
     );
+    // The clip goes between half a second of silence on each side.
+    let silence = vec!["0"; VAD_LEAD_IN_SAMPLES].join(",");
     assert_eq!(
         String::from_utf8(request.body).expect("UTF-8"),
-        r#"{"audio":[0,0.5,-1],"model":"silero-vad"}"#
+        format!(r#"{{"audio":[{silence},0,0.5,-1,{silence}],"model":"silero-vad"}}"#)
     );
     assert_eq!(
         request.headers[0],
@@ -317,17 +319,19 @@ fn a_wav_clip_declares_its_own_format_and_raw_pcm_takes_the_default_format() {
 
 #[test]
 fn detected_spans_are_clamped_into_the_clip_and_ordered() {
+    // The answer's spans are in the padded audio: half a second later than
+    // the clip's.
     let returned = detection_outcome(
         "Voice detection",
-        ok(br#"{"segments":[{"start":0.6,"end":2.5},{"start":-0.1,"end":0.3},{"start":0.4,"end":0.4}]}"#),
+        ok(br#"{"segments":[{"start":1.25,"end":3.0},{"start":0.375,"end":0.75},{"start":0.875,"end":0.875}]}"#),
         1.0,
     );
     assert_eq!(returned.name, DETECTION_OUTPUT_EVENT);
     assert_eq!(
         data(&returned),
         json!({"segments": [
-            {"start_seconds": 0.0, "end_seconds": 0.3, "confidence": null},
-            {"start_seconds": 0.6, "end_seconds": 1.0, "confidence": null}
+            {"start_seconds": 0.0, "end_seconds": 0.25, "confidence": null},
+            {"start_seconds": 0.75, "end_seconds": 1.0, "confidence": null}
         ]})
     );
     let silence = detection_outcome("Voice detection", ok(br#"{"segments":[]}"#), 1.0);

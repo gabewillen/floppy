@@ -57,10 +57,10 @@ with the phase's saved live examples.
 
 ## Running
 
-The bot runs in an environment that invokes it (decision D102): the room,
-[`environments/room/room.scx`](../../environments/room/room.scx), the root
+The bot runs in an environment that invokes it (decision D102): the environment,
+[`environments/environment/environment.scx`](../../environments/environment/environment.scx), the root
 session, invokes it as its participant `floppy` and activates it on
-joining (decision D107). Give the room inputs on standard input; it routes
+joining (decision D107). Give the environment inputs on standard input; it routes
 `bot.input` and `bot.deactivate` to every bot, and
 `bot.ability.communication.input` to the participants its `target_ids`
 names (every bot when it names none):
@@ -72,21 +72,21 @@ printf '%s\n' \
   scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
     --dir https://github.com/stateforward/floppy/services/speech=media::/media --dir https://github.com/stateforward/floppy/services/files=behaviors::/behaviors \
     --dir https://github.com/stateforward/floppy/services/vision=media::/media \
-    --fuel 9223372036854775807 environments/room/room.scx
+    --fuel 9223372036854775807 environments/environment/environment.scx
 # A conversation: text addressed to the bot, answered through floppy.say.
 printf '%s\n' \
   '{"name":"bot.ability.communication.input","data":{"source_ids":["gabe"],"target_ids":["floppy"],"content":"Hi floppy!","content_type":"text/plain"}}' |
   scx run --offline --cache-dir target/components/package-cache --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
     --dir https://github.com/stateforward/floppy/services/speech=media::/media --dir https://github.com/stateforward/floppy/services/files=behaviors::/behaviors \
     --dir https://github.com/stateforward/floppy/services/vision=media::/media \
-    --fuel 9223372036854775807 environments/room/room.scx
+    --fuel 9223372036854775807 environments/environment/environment.scx
 # floppy's latest release, once one is published (phase 7).
 printf '%s\n' \
   '{"name":"bot.input","data":{"observation":{"event":"text","data":"hello"}}}' |
   scx run --env-file .env --dir https://github.com/stateforward/floppy/services/sql=memory::/memory --dir "https://github.com/stateforward/floppy/services/generate=$PWD/media::/media" --wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network \
     --dir https://github.com/stateforward/floppy/services/speech=media::/media --dir https://github.com/stateforward/floppy/services/files=behaviors::/behaviors \
     --dir https://github.com/stateforward/floppy/services/vision=media::/media \
-    --fuel 9223372036854775807 environments/room/room.scx
+    --fuel 9223372036854775807 environments/environment/environment.scx
 ```
 
 The files service's grant is the `behaviors/` directory beside `bots/`
@@ -95,7 +95,7 @@ reflection invokes writes a learned behavior's three documents and the
 candidates and routines runners load it by its path (decision D121).
 
 `--fuel 9223372036854775807` (2^63 - 1, the most fuel Wasmtime puts into a store at
-once) gives every host call the fuel a bot's start needs. Entering the room
+once) gives every host call the fuel a bot's start needs. Entering the environment
 starts the bot and all of its abilities, about 20 sessions, on one host
 call's budget (scxml.rs docs/limits.md, "Fuel"), which two bots already
 exceed at `scx`'s default of 3 billion. It stays this high until average

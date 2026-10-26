@@ -61,7 +61,7 @@ pub const GRANTED: [&str; 13] = [
 /// The fuel of every run of an environment document (`environments/...`,
 /// where the bots run): `i64::MAX`, until average usage is measured
 /// (decision D111). One host call's budget pays for every session it
-/// starts, and entering a room starts its bots and all their abilities.
+/// starts, and entering an environment starts its bots and all their abilities.
 pub const FUEL: &str = "9223372036854775807";
 
 /// The model floppy ships (docs/defaults.md): every document's `model`
@@ -730,7 +730,7 @@ pub fn copy_tree(from: &Path, to: &Path) {
     }
 }
 
-/// The supervised bot region of `environments/room/room.scx`, which [`environment`]
+/// The supervised bot region of `environments/environment/environment.scx`, which [`environment`]
 /// replaces.
 const ROOM_BOT: &str = r#"    <!-- The bot floppy, supervised. -->
     <state id="supervising.floppy" initial="running.floppy">
@@ -750,32 +750,32 @@ const ROOM_BOT: &str = r#"    <!-- The bot floppy, supervised. -->
              once, in serving, which it enters on activation); a reboot's
              activation does not re-arm it. -->
         <state id="starting.floppy">
-          <transition event="room.activated" cond="isFor(_event, 'floppy')" target="serving.floppy"/>
+          <transition event="supervision.running" cond="isFor(_event, 'floppy')" target="serving.floppy"/>
         </state>
         <state id="serving.floppy">
           <onentry>
-            <send id="stable.floppy" event="room.stable" delayexpr="stableDelay()">
+            <send id="stable.floppy" event="supervision.stable" delayexpr="stableDelay()">
               <param name="participant" expr="'floppy'"/>
             </send>
           </onentry>
         </state>
-        <transition event="room.stable" cond="isFor(_event, 'floppy')">
+        <transition event="supervision.stable" cond="isFor(_event, 'floppy')">
           <assign location="attempts.floppy" expr="0"/>
         </transition>
-        <transition event="room.left" cond="isRestartable(_event, 'floppy')" target="recovering.floppy"/>
-        <transition event="room.left" cond="isFor(_event, 'floppy')" target="left.floppy"/>
+        <transition event="supervision.left" cond="isRestartable(_event, 'floppy')" target="recovering.floppy"/>
+        <transition event="supervision.left" cond="isFor(_event, 'floppy')" target="left.floppy"/>
       </state>
       <state id="recovering.floppy">
         <transition cond="isWithinBudget('floppy')" target="backoff.floppy">
           <assign location="attempts.floppy" expr="nextAttempt('floppy')"/>
         </transition>
         <transition target="exhausted.floppy">
-          <log label="room.exhausted" expr="exhaustedJson('floppy')"/>
+          <log label="supervision.exhausted" expr="exhaustedJson('floppy')"/>
         </transition>
       </state>
       <state id="backoff.floppy">
         <onentry>
-          <send id="restart.floppy" event="room.restart" delayexpr="backoffDelay('floppy')">
+          <send id="restart.floppy" event="supervision.restart" delayexpr="backoffDelay('floppy')">
             <param name="participant" expr="'floppy'"/>
           </send>
         </onentry>
@@ -784,8 +784,8 @@ const ROOM_BOT: &str = r#"    <!-- The bot floppy, supervised. -->
         </onexit>
         <!-- A stop while it waits: it is not restarted. -->
         <transition event="bot.deactivate" event:schema="../../bots/floppy/schemas/bot.deactivate.json" target="left.floppy"/>
-        <transition event="room.restart" cond="isFor(_event, 'floppy')" target="running.floppy">
-          <log label="room.restarted" expr="restartedJson('floppy')"/>
+        <transition event="supervision.restart" cond="isFor(_event, 'floppy')" target="running.floppy">
+          <log label="supervision.restarted" expr="restartedJson('floppy')"/>
           <assign location="activation_failed.floppy" expr="false"/>
         </transition>
       </state>
@@ -793,16 +793,16 @@ const ROOM_BOT: &str = r#"    <!-- The bot floppy, supervised. -->
       <final id="left.floppy"/>
     </state>"#;
 
-/// Where `environments/room/room.scx` sets its participants on entry.
+/// Where `environments/environment/environment.scx` sets its participants on entry.
 const ROOM_PARTICIPANTS: &str = r#"<assign location="participants" expr="['floppy']"/>"#;
 
-/// The holdings `environments/room/room.scx` declares.
+/// The holdings `environments/environment/environment.scx` declares.
 const ROOM_HOLDINGS: &str = r#"<data id="holdings" expr="({floppy: []})"/>"#;
 
-/// Lays `environments/room/` (its document and script, with the
+/// Lays `environments/environment/` (its document and script, with the
 /// `abilities/schemas/` and `bots/floppy/schemas/` files it references)
 /// into the scratch layout `dir`, whose `bots/floppy/` it invokes, and returns
-/// the path of its document. The room invokes one floppy bot per id in
+/// the path of its document. The environment invokes one floppy bot per id in
 /// `bots` (each a participant), each with `params` (`(name, ECMAScript
 /// expression)`) after its `environment` and `owned_devices`: the test's
 /// activation settings (decision D107).
@@ -811,8 +811,8 @@ pub fn environment(dir: &Path, bots: &[&str], params: &[(&str, &str)]) -> PathBu
 }
 
 /// [`environment`] with devices: each of `devices` is a fixture device
-/// (`tests/fixtures/environment/<name>/`, copied beside the room, or one
-/// the test laid out there as `<name>/<name>.scx`) the room
+/// (`tests/fixtures/environment/<name>/`, copied beside the environment, or one
+/// the test laid out there as `<name>/<name>.scx`) the environment
 /// invokes as `<name>` before its bots (a participant too), and
 /// `holdings` names the devices each bot holds (a bot not named holds
 /// none).
@@ -823,8 +823,8 @@ pub fn environment_with_devices(
     holdings: &[(&str, &[&str])],
     params: &[(&str, &str)],
 ) -> PathBuf {
-    let room = dir.join("environments/room");
-    copy_tree(&workspace().join("environments/room"), &room);
+    let environment = dir.join("environments/environment");
+    copy_tree(&workspace().join("environments/environment"), &environment);
     copy_tree(
         &workspace().join("abilities/schemas"),
         &dir.join("abilities/schemas"),
@@ -834,17 +834,17 @@ pub fn environment_with_devices(
         &dir.join("bots/floppy/schemas"),
     );
     for device in devices {
-        // A device the test laid out beside the room itself has no fixture.
+        // A device the test laid out beside the environment itself has no fixture.
         let fixture = workspace().join("tests/fixtures/environment").join(device);
         if fixture.is_dir() {
-            copy_tree(&fixture, &room.join(device));
+            copy_tree(&fixture, &environment.join(device));
         }
     }
-    let path = room.join("room.scx");
-    let text = std::fs::read_to_string(&path).expect("the room is readable");
+    let path = environment.join("environment.scx");
+    let text = std::fs::read_to_string(&path).expect("the environment is readable");
     assert!(
         text.contains(ROOM_BOT) && text.contains(ROOM_PARTICIPANTS) && text.contains(ROOM_HOLDINGS),
-        "environments/room/room.scx invokes the floppy bot"
+        "environments/environment/environment.scx invokes the floppy bot"
     );
     let mut extra = String::new();
     for (name, expr) in params {
@@ -902,30 +902,33 @@ pub fn environment_with_devices(
             &format!(r#"<data id="holdings" expr="({{{}}})"/>"#, held.join(", ")),
             1,
         );
-    std::fs::write(&path, text).expect("the room copy is writable");
+    std::fs::write(&path, text).expect("the environment copy is writable");
     path
 }
 
-/// Sets the placements of the room at `room` (as [`environment`] laid it
+/// Sets the placements of the environment at `environment` (as [`environment`] laid it
 /// out) to `placements`, an ECMAScript object expression: invoke id to
 /// `{position: {x, y, z}, threshold_db}`.
-pub fn place(room: &Path, placements: &str) {
+pub fn place(environment: &Path, placements: &str) {
     let declared = r#"<data id="placements" expr="({})"/>"#;
-    let text = std::fs::read_to_string(room).expect("the room is readable");
-    assert!(text.contains(declared), "the room declares its placements");
+    let text = std::fs::read_to_string(environment).expect("the environment is readable");
+    assert!(
+        text.contains(declared),
+        "the environment declares its placements"
+    );
     std::fs::write(
-        room,
+        environment,
         text.replacen(
             declared,
             &format!(r#"<data id="placements" expr="({{{placements}}})"/>"#),
             1,
         ),
     )
-    .expect("the room copy is writable");
+    .expect("the environment copy is writable");
 }
 
 /// [`environment`] for the laid-out body at `body`
-/// (`<layout>/bots/floppy/floppy.scx`): the room, with one floppy bot
+/// (`<layout>/bots/floppy/floppy.scx`): the environment, with one floppy bot
 /// (`floppy`) given `params`, laid into the same layout, as the path `scx
 /// run` takes.
 pub fn environment_for(body: &Path, params: &[(&str, &str)]) -> String {

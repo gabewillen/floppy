@@ -1,6 +1,6 @@
-# The room
+# The environment
 
-[`room.scx`](room.scx) is floppy's environment (decision D102): the root
+[`environment.scx`](environment.scx) is floppy's environment (decision D102): the root
 session `scx run` runs, whose invoked children are its participants. It
 invokes the floppy bot ([`bots/floppy/floppy.scx`](../../bots/floppy/floppy.scx))
 as `floppy`, which activates on joining (D107), and holds no device (floppy
@@ -30,8 +30,8 @@ What it does (decisions D103, D105, D108):
 - **Supervision** (D158): each bot runs
   in its own region of `present` (`supervising.<bot>`). A bot that leaves
   degraded, after a failed activation, or failed is invoked again after a
-  doubling backoff (`room.restarted`), until another attempt would not fit
-  `max_restarts` (`room.exhausted`); one that has run `stable_after_ms` has
+  doubling backoff (`supervision.restarted`), until another attempt would not fit
+  `max_restarts` (`supervision.exhausted`); one that has run `stable_after_ms` has
   its attempts reset, and one that leaves on `bot.deactivate` stays gone.
 - **The bots' events** (`bot.activated`, `bot.processing.completed`, ...)
   are logged as `<log label="EVENT">` with their data. A voice embedding is
@@ -39,7 +39,7 @@ What it does (decisions D103, D105, D108):
   `target_ids`, and an embedding's JSON inside a `*_ref`, are written as
   `<biometric:VoiceEmbedding>`.
 
-Each bot gets `environment` (the room's `_sessionid`, D106),
+Each bot gets `environment` (the environment's `_sessionid`, D106),
 `owned_devices` (each held device's reference to its address,
 `<_sessionid>.<invoke id>`, D110) and `placed_on` (each held device that
 sits on a known object, its reference to the object's id, D159) as

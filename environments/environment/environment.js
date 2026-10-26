@@ -1,5 +1,5 @@
-// The ECMAScript of environments/room/room.scx (SCXML 5.8): loaded by its root
-// <script src="room.js">, so every function here is a global of the
+// The ECMAScript of environments/environment/environment.scx (SCXML 5.8): loaded by its root
+// <script src="environment.js">, so every function here is a global of the
 // document's data model, callable from its cond and expr attributes.
 
 // Shared: event records and send targets.

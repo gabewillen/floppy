@@ -2,7 +2,7 @@
 utterance is synthesized on a speech backend's `/audio/speech` in the
 person's voice, and a `speaks` check transcribes the sounds floppy made on
 its `/audio/transcriptions`, so the voice path is graded on what a person
-in the room would hear.
+in the environment would hear.
 
 The backend is OpenAI-compatible: `FLOPPY_EVAL_SPEECH_BASE_URL` (default
 `https://api.willen.dev/v1`, the lab's shared model API, decision D244)
@@ -204,7 +204,7 @@ def transcripts(job_out, groups, backend):
 
 
 def media_dir(job_out, session):
-    """A session's media directory: the driver moves each session's to
+    """A session's media directory: the driver copies each session's to
     `media-<session>` when it ends (a run from before that has one `media`)."""
     path = os.path.join(job_out, f"media-{session}")
     return path if os.path.isdir(path) else os.path.join(job_out, "media")

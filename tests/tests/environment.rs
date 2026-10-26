@@ -72,10 +72,10 @@ fn double_the_identity(dir: &Path) {
     .expect("the input double is copyable");
 }
 
-/// Starts the room laid into `dir` with one floppy bot per id in `bots`.
+/// Starts the environment laid into `dir` with one floppy bot per id in `bots`.
 fn start(dir: &Path, bots: &[&str]) -> Run {
-    let room = support::environment(dir, bots, &[]);
-    Run::start(&[room.display().to_string()], &[])
+    let environment = support::environment(dir, bots, &[]);
+    Run::start(&[environment.display().to_string()], &[])
 }
 
 fn label_is(label: &'static str) -> impl Fn(&Json) -> bool {
@@ -203,7 +203,7 @@ fn a_bot_activates_on_joining_its_environment() {
 }
 
 /// A voice embedding is biometric and never reaches the run's records:
-/// the room logs a conversation output whose input's source is an
+/// the environment logs a conversation output whose input's source is an
 /// embedding with the marker `<biometric:VoiceEmbedding>` in its place, and
 /// whose message names the person memory holds for the voice.
 #[test]
@@ -212,7 +212,7 @@ fn a_voice_embedding_is_never_written_to_the_records() {
     let mut run = start(&dir, &["floppy"]);
     all_activated(&run, &["floppy"]);
     // A product that is not text is no turn: the conversation's output
-    // reaches the room, which logs it.
+    // reaches the environment, which logs it.
     run.event(
         "bot.ability.communication.input",
         &json!({"source_ids": [[0.28, 0.96]], "target_ids": ["floppy"], "content": {"a": 1}, "content_type": "application/json"}),
@@ -243,13 +243,13 @@ fn a_voice_embedding_is_never_written_to_the_records() {
 /// Decision D194: long-term memory holds people. The same voice twice is
 /// one person, a different voice another, and a person outlives the bot:
 /// the bot started again on the same database knows the voice. Each input
-/// is a product that is not text, so the room logs the conversation's
+/// is a product that is not text, so the environment logs the conversation's
 /// output, whose message names the person in the voice's place.
 #[test]
 fn a_voice_is_one_person_across_turns_and_restarts() {
     let dir = layout(&[]);
     let memory = unique_scratch("people");
-    let room = support::environment(&dir, &["floppy"], &[]);
+    let environment = support::environment(&dir, &["floppy"], &[]);
     let start_on_memory = || {
         let run = Run::start(
             &[
@@ -259,7 +259,7 @@ fn a_voice_is_one_person_across_turns_and_restarts() {
                     support::service_uri("sql"),
                     memory.display()
                 ),
-                room.display().to_string(),
+                environment.display().to_string(),
             ],
             &[],
         );
@@ -421,7 +421,7 @@ fn a_voice_is_identified_among_ninety_six_people() {
     for statement in statements {
         seed_memory(&memory, &json!([statement]));
     }
-    let room = support::environment(&dir, &["floppy"], &[]);
+    let environment = support::environment(&dir, &["floppy"], &[]);
     let mut run = Run::start(
         &[
             "--dir".to_owned(),
@@ -430,7 +430,7 @@ fn a_voice_is_identified_among_ninety_six_people() {
                 support::service_uri("sql"),
                 memory.display()
             ),
-            room.display().to_string(),
+            environment.display().to_string(),
         ],
         &[],
     );
@@ -572,37 +572,37 @@ fn a_deactivated_bot_leaves_its_environment() {
     );
     // A bot that leaves on bot.deactivate is not restarted (D158).
     assert!(
-        sessions_of(&finished.records, "room.restarted").is_empty(),
+        sessions_of(&finished.records, "supervision.restarted").is_empty(),
         "{:?}",
         finished.records
     );
 }
 
-/// Sets the room at `room`'s supervision (decision D158) to `supervision`,
+/// Sets the environment at `environment`'s supervision (decision D158) to `supervision`,
 /// an ECMAScript object expression.
-fn supervise(room: &Path, supervision: &str) {
-    let text = std::fs::read_to_string(room).expect("the room is readable");
+fn supervise(environment: &Path, supervision: &str) {
+    let text = std::fs::read_to_string(environment).expect("the environment is readable");
     let start = text
         .find(r#"<data id="supervision" expr=""#)
-        .expect("the room declares its supervision");
+        .expect("the environment declares its supervision");
     let end = start + text[start..].find("/>").expect("the <data> element closes");
     let mut text = text;
     text.replace_range(
         start..end,
         &format!(r#"<data id="supervision" expr="({supervision})""#),
     );
-    std::fs::write(room, text).expect("the room copy is writable");
+    std::fs::write(environment, text).expect("the environment copy is writable");
 }
 
 #[test]
 fn a_bot_sent_bot_deactivate_in_its_backoff_is_not_restarted() {
     let dir = layout(&[("processing_timeout_ms", "300")]);
-    let room = support::environment(&dir, &["floppy"], &[]);
+    let environment = support::environment(&dir, &["floppy"], &[]);
     supervise(
-        &room,
+        &environment,
         "{max_restarts: 5, backoff_initial_ms: 2000, backoff_max_ms: 2000, stable_after_ms: 600000}",
     );
-    let mut run = Run::start(&[room.display().to_string()], &[]);
+    let mut run = Run::start(&[environment.display().to_string()], &[]);
     all_activated(&run, &["floppy"]);
     run.event("bot.input", &input("deaf", "x"));
     let mut records = run.until(WAIT, label_is("done.invoke"));
@@ -615,7 +615,7 @@ fn a_bot_sent_bot_deactivate_in_its_backoff_is_not_restarted() {
     assert!(
         logs(&records)
             .iter()
-            .all(|(label, _)| label != "room.restarted"),
+            .all(|(label, _)| label != "supervision.restarted"),
         "{records:?}"
     );
 }
@@ -623,35 +623,37 @@ fn a_bot_sent_bot_deactivate_in_its_backoff_is_not_restarted() {
 #[test]
 fn a_bot_that_runs_stable_after_ms_has_its_attempts_reset() {
     let dir = layout(&[("processing_timeout_ms", "300")]);
-    let room = support::environment(&dir, &["floppy"], &[]);
+    let environment = support::environment(&dir, &["floppy"], &[]);
     // With max_restarts 2 a second failed attempt would be its last; a
     // bot active for stable_after_ms between them starts counting again.
     supervise(
-        &room,
+        &environment,
         "{max_restarts: 2, backoff_initial_ms: 200, backoff_max_ms: 200, stable_after_ms: 1500}",
     );
-    let mut run = Run::start(&[room.display().to_string()], &[]);
+    let mut run = Run::start(&[environment.display().to_string()], &[]);
     all_activated(&run, &["floppy"]);
     run.event("bot.input", &input("deaf", "x"));
-    let mut records = run.until(WAIT, label_is("room.restarted"));
+    let mut records = run.until(WAIT, label_is("supervision.restarted"));
     records.extend(run.until(WAIT, label_is("bot.activated")));
     std::thread::sleep(Duration::from_millis(3000));
     run.event("bot.input", &input("deaf", "x"));
-    records.extend(run.until(WAIT, label_is("room.restarted")));
+    records.extend(run.until(WAIT, label_is("supervision.restarted")));
     let finished = run.close(WAIT);
     records.extend(finished.records);
     assert_eq!(
         logs(&records)
             .into_iter()
-            .filter(|(label, _)| label.starts_with("room."))
+            .filter(
+                |(label, _)| label == "supervision.restarted" || label == "supervision.exhausted"
+            )
             .collect::<Vec<_>>(),
         support::labelled(&[
             (
-                "room.restarted",
+                "supervision.restarted",
                 r#"{"participant":"floppy","attempt":1,"delay_ms":200}"#
             ),
             (
-                "room.restarted",
+                "supervision.restarted",
                 r#"{"participant":"floppy","attempt":1,"delay_ms":200}"#
             ),
         ])
@@ -688,44 +690,49 @@ fn an_unfocused_body_focuses_a_held_percepts_device_at_the_turns_end() {
 #[test]
 fn a_degraded_bot_is_restarted_after_a_backoff_until_its_budget_is_spent() {
     let dir = layout(&[("processing_timeout_ms", "300")]);
-    let room = support::environment(&dir, &["floppy"], &[]);
+    let environment = support::environment(&dir, &["floppy"], &[]);
     supervise(
-        &room,
+        &environment,
         "{max_restarts: 3, backoff_initial_ms: 200, backoff_max_ms: 300, stable_after_ms: 600000}",
     );
-    let mut run = Run::start(&[room.display().to_string()], &[]);
+    let mut run = Run::start(&[environment.display().to_string()], &[]);
     all_activated(&run, &["floppy"]);
-    // An unacknowledged cancel degrades the bot; the room restarts it
+    // An unacknowledged cancel degrades the bot; the environment restarts it
     // after 200 ms, then 300 ms (doubled, capped), and leaves it once a
     // third failed attempt would not fit max_restarts 3.
     let mut records = Vec::new();
     for _ in 0..2 {
         run.event("bot.input", &input("deaf", "x"));
-        records.extend(run.until(WAIT, label_is("room.restarted")));
+        records.extend(run.until(WAIT, label_is("supervision.restarted")));
         records.extend(run.until(WAIT, label_is("bot.activated")));
     }
     run.event("bot.input", &input("deaf", "x"));
-    records.extend(run.until(WAIT, label_is("room.exhausted")));
+    records.extend(run.until(WAIT, label_is("supervision.exhausted")));
     let finished = run.close(WAIT);
     records.extend(finished.records);
     assert_eq!(
         logs(&records)
             .into_iter()
-            .filter(|(label, _)| label.starts_with("room.") || label == "bot.degraded")
+            .filter(|(label, _)| label == "supervision.restarted"
+                || label == "supervision.exhausted"
+                || label == "bot.degraded")
             .collect::<Vec<_>>(),
         support::labelled(&[
             ("bot.degraded", r#"{"stage":"processing_cancel"}"#),
             (
-                "room.restarted",
+                "supervision.restarted",
                 r#"{"participant":"floppy","attempt":1,"delay_ms":200}"#
             ),
             ("bot.degraded", r#"{"stage":"processing_cancel"}"#),
             (
-                "room.restarted",
+                "supervision.restarted",
                 r#"{"participant":"floppy","attempt":2,"delay_ms":300}"#
             ),
             ("bot.degraded", r#"{"stage":"processing_cancel"}"#),
-            ("room.exhausted", r#"{"participant":"floppy","attempts":3}"#),
+            (
+                "supervision.exhausted",
+                r#"{"participant":"floppy","attempts":3}"#
+            ),
         ])
     );
     // A restarted bot is a participant again: host input reached it.
@@ -742,7 +749,7 @@ fn a_degraded_bot_is_restarted_after_a_backoff_until_its_budget_is_spent() {
 #[test]
 fn a_bot_whose_activation_fails_is_restarted() {
     // An activation timeout (an expected ability never offers) fails the
-    // activation, and the room restarts the bot.
+    // activation, and the environment restarts the bot.
     let dir = layout(&[
         ("activation_timeout_ms", "200"),
         (
@@ -750,28 +757,33 @@ fn a_bot_whose_activation_fails_is_restarted() {
             "['cognition', 'communication', 'identity', 'listening', 'ghost']",
         ),
     ]);
-    let room = support::environment(&dir, &["floppy"], &[]);
+    let environment = support::environment(&dir, &["floppy"], &[]);
     supervise(
-        &room,
+        &environment,
         "{max_restarts: 2, backoff_initial_ms: 100, backoff_max_ms: 100, stable_after_ms: 600000}",
     );
-    let run = Run::start(&[room.display().to_string()], &[]);
-    let mut records = run.until(WAIT, label_is("room.restarted"));
-    records.extend(run.until(WAIT, label_is("room.exhausted")));
+    let run = Run::start(&[environment.display().to_string()], &[]);
+    let mut records = run.until(WAIT, label_is("supervision.restarted"));
+    records.extend(run.until(WAIT, label_is("supervision.exhausted")));
     drop(run.close(WAIT));
     assert_eq!(
         logs(&records)
             .into_iter()
-            .filter(|(label, _)| label.starts_with("room.") || label == "bot.activating.failed")
+            .filter(|(label, _)| label == "supervision.restarted"
+                || label == "supervision.exhausted"
+                || label == "bot.activating.failed")
             .collect::<Vec<_>>(),
         support::labelled(&[
             ("bot.activating.failed", "{}"),
             (
-                "room.restarted",
+                "supervision.restarted",
                 r#"{"participant":"floppy","attempt":1,"delay_ms":100}"#
             ),
             ("bot.activating.failed", "{}"),
-            ("room.exhausted", r#"{"participant":"floppy","attempts":2}"#),
+            (
+                "supervision.exhausted",
+                r#"{"participant":"floppy","attempts":2}"#
+            ),
         ])
     );
 }
@@ -796,7 +808,7 @@ fn the_environment_refuses_host_input_its_schemas_refuse() {
     );
 }
 
-/// Starts the room laid into `dir` with one floppy bot per id in `bots`,
+/// Starts the environment laid into `dir` with one floppy bot per id in `bots`,
 /// hearing through the fake hearing backend (`support::hearing`): the
 /// speech double's first utterance's one chunk, `media/speaking-1.0.pcm`, spells
 /// `words` (24 kHz mono PCM, as the double reports it), and
@@ -909,12 +921,12 @@ fn a_bot_hears_its_own_speech_through_the_environment_and_withholds_it() {
     );
 }
 
-/// Starts the room laid into `dir` with the lamp fixture (`lamp`) and one
+/// Starts the environment laid into `dir` with the lamp fixture (`lamp`) and one
 /// floppy bot per id in `bots`, each bot holding the devices `holdings`
 /// names.
 fn start_with_lamp(dir: &Path, bots: &[&str], holdings: &[(&str, &[&str])]) -> Run {
-    let room = support::environment_with_devices(dir, bots, &["lamp"], holdings, &[]);
-    Run::start(&[room.display().to_string()], &[])
+    let environment = support::environment_with_devices(dir, bots, &["lamp"], holdings, &[]);
+    Run::start(&[environment.display().to_string()], &[])
 }
 
 /// A `bot.input` from the host stamped with the lamp as its device.
@@ -972,7 +984,7 @@ fn texts_of(records: &[Json], session: &str, label: &str) -> Vec<String> {
         .collect()
 }
 
-/// Waits for the room's next `bot.processing.completed` and returns every
+/// Waits for the environment's next `bot.processing.completed` and returns every
 /// record until it.
 fn completed(run: &Run) -> Vec<Json> {
     run.until(WAIT, label_is("bot.processing.completed"))
@@ -1132,7 +1144,7 @@ fn any_participant_can_act_on_a_device() {
     let dir = layout(&[]);
     // A participant that holds nothing turns the lamp on by its address
     // (D110), on the first visual it sees.
-    let actor = dir.join("environments/room/actor");
+    let actor = dir.join("environments/environment/actor");
     std::fs::create_dir_all(&actor).expect("creatable");
     write(
         &actor,
@@ -1146,8 +1158,8 @@ fn any_participant_can_act_on_a_device() {
   <final id="done"/>
 </scxml>"##,
     );
-    let room = support::environment_with_devices(&dir, &[], &["lamp", "actor"], &[], &[]);
-    let mut run = Run::start(&[room.display().to_string()], &[]);
+    let environment = support::environment_with_devices(&dir, &[], &["lamp", "actor"], &[], &[]);
+    let mut run = Run::start(&[environment.display().to_string()], &[]);
     run.event("environment.visual", &json!({"image": "media/image-1"}));
     let records = run.until(WAIT, label_is("lamp.on"));
     drop(run.close(WAIT));
@@ -1188,7 +1200,7 @@ fn a_device_action_the_device_refuses_is_an_error_in_the_sender() {
     );
 }
 
-/// One placed room: the floppy bot (its identity the input double, so it
+/// One placed environment: the floppy bot (its identity the input double, so it
 /// logs `input.sound` and `input.visual` for each stimulus) holding the
 /// lamp, which clicks at `click_db`, placed per `placements` (an
 /// ECMAScript object expression). The bot focuses the lamp and turns it
@@ -1196,15 +1208,15 @@ fn a_device_action_the_device_refuses_is_an_error_in_the_sender() {
 fn click(click_db: &str, placements: &str) -> Vec<Json> {
     let dir = layout(&[("input", "['identity']")]);
     double_the_identity(&dir);
-    let room = support::environment_with_devices(
+    let environment = support::environment_with_devices(
         &dir,
         &["floppy"],
         &["lamp"],
         &[("floppy", &["lamp"])],
         &[],
     );
-    support::place(&room, placements);
-    let lamp = dir.join("environments/room/lamp/lamp.scx");
+    support::place(&environment, placements);
+    let lamp = dir.join("environments/environment/lamp/lamp.scx");
     let text = std::fs::read_to_string(&lamp).expect("the lamp copy is readable");
     std::fs::write(
         &lamp,
@@ -1214,7 +1226,7 @@ fn click(click_db: &str, placements: &str) -> Vec<Json> {
         ),
     )
     .expect("the lamp copy is writable");
-    let mut run = Run::start(&[room.display().to_string()], &[]);
+    let mut run = Run::start(&[environment.display().to_string()], &[]);
     all_activated(&run, &["floppy"]);
     run.event("bot.input", &lamp_input("focus", &json!("lamp")));
     let mut records = completed(&run);
@@ -1301,12 +1313,12 @@ fn a_sound_too_quiet_for_everyone_reaches_nobody() {
 fn speech_and_host_sounds_have_no_origin_and_reach_everyone() {
     let dir = layout(&[("input", "['identity']")]);
     double_the_identity(&dir);
-    let room = support::environment(&dir, &["floppy"], &[]);
+    let environment = support::environment(&dir, &["floppy"], &[]);
     support::place(
-        &room,
+        &environment,
         "floppy: {position: {x: 9, y: 0, z: 0}, threshold_db: 90}",
     );
-    let mut run = Run::start(&[room.display().to_string()], &[]);
+    let mut run = Run::start(&[environment.display().to_string()], &[]);
     all_activated(&run, &["floppy"]);
     // A loud host sound and a quiet one: neither has an origin, so both
     // reach the bot, its level unmeasured.
@@ -1338,12 +1350,12 @@ fn speech_and_host_sounds_have_no_origin_and_reach_everyone() {
 fn a_visual_reaches_every_participant() {
     let dir = layout(&[("input", "['identity']")]);
     double_the_identity(&dir);
-    let room = support::environment(&dir, &["a", "b"], &[]);
+    let environment = support::environment(&dir, &["a", "b"], &[]);
     support::place(
-        &room,
+        &environment,
         "a: {position: {x: 0, y: 0, z: 0}, threshold_db: 200}, b: {position: {x: 50, y: 0, z: 0}, threshold_db: 200}",
     );
-    let mut run = Run::start(&[room.display().to_string()], &[]);
+    let mut run = Run::start(&[environment.display().to_string()], &[]);
     all_activated(&run, &["a", "b"]);
     run.event(
         "environment.visual",
@@ -1365,14 +1377,14 @@ fn environments(records: &[Json]) -> Vec<Json> {
         .collect()
 }
 
-/// One turn of a bot holding `held` in a room running `devices`; returns
-/// every record. `edit` rewrites the laid-out room before it runs.
+/// One turn of a bot holding `held` in an environment running `devices`; returns
+/// every record. `edit` rewrites the laid-out environment before it runs.
 fn one_turn(held: &[&str], devices: &[&str], edit: impl FnOnce(&Path)) -> Vec<Json> {
     let dir = layout(&[]);
-    let room =
+    let environment =
         support::environment_with_devices(&dir, &["floppy"], devices, &[("floppy", held)], &[]);
-    edit(&dir.join("environments/room"));
-    let mut run = Run::start(&[room.display().to_string()], &[]);
+    edit(&dir.join("environments/environment"));
+    let mut run = Run::start(&[environment.display().to_string()], &[]);
     all_activated(&run, &["floppy"]);
     run.event("bot.input", &input("ignore", "x"));
     let mut records = completed(&run);
@@ -1392,8 +1404,8 @@ fn the_bot_sends_its_environment_to_the_cognition() {
         ]
     );
     // The lamp, with a nested object and a null in its data model.
-    let records = one_turn(&["lamp"], &["lamp"], |room| {
-        let lamp = room.join("lamp/lamp.scx");
+    let records = one_turn(&["lamp"], &["lamp"], |environment| {
+        let lamp = environment.join("lamp/lamp.scx");
         let text = std::fs::read_to_string(&lamp).expect("readable");
         std::fs::write(
             &lamp,
@@ -1433,7 +1445,7 @@ fn a_device_that_left_is_not_in_the_environment_block() {
 
 #[test]
 fn a_held_device_whose_read_fails_drops_only_that_device() {
-    // The bot holds `gone`, which the room does not run, before the lamp:
+    // The bot holds `gone`, which the environment does not run, before the lamp:
     // nothing is read of `gone`, and only `gone` is left out.
     let records = one_turn(&["gone", "lamp"], &["lamp"], |_| {});
     let sent = environments(&records);
@@ -1449,7 +1461,7 @@ fn a_held_device_whose_read_fails_drops_only_that_device() {
 #[test]
 fn a_device_on_an_object_reaches_its_bot_with_what_it_sits_on() {
     let dir = layout(&[]);
-    let room = support::environment_with_devices(
+    let environment = support::environment_with_devices(
         &dir,
         &["floppy"],
         &["lamp"],
@@ -1457,18 +1469,21 @@ fn a_device_on_an_object_reaches_its_bot_with_what_it_sits_on() {
         &[],
     );
     // The lamp sits on the desk (D159).
-    support::place(&room, "lamp: {position: {x: 0, y: 0, z: 0}, on: 'desk'}");
-    let text = std::fs::read_to_string(&room).expect("the room is readable");
+    support::place(
+        &environment,
+        "lamp: {position: {x: 0, y: 0, z: 0}, on: 'desk'}",
+    );
+    let text = std::fs::read_to_string(&environment).expect("the environment is readable");
     std::fs::write(
-        &room,
+        &environment,
         text.replacen(
             r#"<data id="objects" expr="[]"/>"#,
             r#"<data id="objects" expr="['desk']"/>"#,
             1,
         ),
     )
-    .expect("the room copy is writable");
-    let mut run = Run::start(&[room.display().to_string()], &[]);
+    .expect("the environment copy is writable");
+    let mut run = Run::start(&[environment.display().to_string()], &[]);
     all_activated(&run, &["floppy"]);
     assert_eq!(
         data_of(&mut run, "session.floppy", "placed_on"),

@@ -1,6 +1,6 @@
 //! The driver of floppy's eval (`tests/eval/`, docs/eval.md): it runs the
-//! floppy bot (`bots/floppy/floppy.scx`, in the room
-//! `environments/room/room.scx`, as `floppy_live` does) through the
+//! floppy bot (`bots/floppy/floppy.scx`, in the environment
+//! `environments/environment/environment.scx`, as `floppy_live` does) through the
 //! scenarios of one plan and writes every run's records, step by step, for
 //! `tests/eval/eval.py` to score and judge. It is ignored by default, and
 //! it asserts nothing about the bot: a scenario the bot fails is a score,
@@ -18,8 +18,8 @@
 //! `path`), and runs the scenario's sessions one after another on one
 //! memory directory, one behaviors directory and one media directory
 //! (`<out>/media`, granted to the speech, generate and vision services,
-//! and moved to `<out>/media-<session>` when the session ends), so a later
-//! session is the bot restarted with what it learned. The room
+//! and copied to `<out>/media-<session>` when the session ends), so a later
+//! session is the bot restarted with what it learned. The environment
 //! passes the bot the scenario's `params` (`{name: expr}`) beside its
 //! model. A session's steps are:
 //!
@@ -32,11 +32,11 @@
 //! - `{"hear": text, "audio": path, "source"?, "timeout_s"?, "settle"?}`:
 //!   the person's voice saying `text`, synthesized by `eval.py` into the
 //!   24 kHz mono 16-bit PCM file `audio`, copied into the media directory
-//!   and given to the room as `environment.sound` from `source`, with a
+//!   and given to the environment as `environment.sound` from `source`, with a
 //!   second of silence after it (as `scripts/talk-live.py` gives GPT-Live's
 //!   voice), waited on as a said step;
 //! - `{"show": path, "media_type"?, "source"?, "wait_s"?}`: the image
-//!   `path` copied into the media directory and given to the room as
+//!   `path` copied into the media directory and given to the environment as
 //!   `environment.visual` from `source` (default `camera`), then
 //!   `wait_s` (default 20) of wall clock;
 //! - `{"wait_s": seconds}`: the wall clock passes with no input, for
@@ -145,7 +145,7 @@ fn layout(overlay: Option<&Path>, scenario: &Json) -> PathBuf {
     dir.join("bots/floppy/floppy.scx")
 }
 
-/// Starts the room with the bot at `body`, its memory in `memory` and its
+/// Starts the environment with the bot at `body`, its memory in `memory` and its
 /// media in `media`: the job's `env_files` and `model` when it names them,
 /// else the live tests', and the scenario's `params`.
 fn start(body: &Path, memory: &Path, media: &Path, job: &Json) -> Run {
@@ -186,7 +186,7 @@ fn start(body: &Path, memory: &Path, media: &Path, job: &Json) -> Run {
         .and_then(Path::parent)
         .and_then(Path::parent)
         .expect("the body is <layout>/bots/floppy/floppy.scx");
-    let room =
+    let environment =
         support::environment_with_devices(layout, &["floppy"], &[], &[("floppy", &[])], &params);
     args.push("--dir".to_owned());
     args.push(format!(
@@ -202,8 +202,8 @@ fn start(body: &Path, memory: &Path, media: &Path, job: &Json) -> Run {
             media.display()
         ));
     }
-    args.extend(support::behaviors_grant(&room));
-    args.push(room.display().to_string());
+    args.extend(support::behaviors_grant(&environment));
+    args.push(environment.display().to_string());
     Run::start(&args, &[])
 }
 
@@ -327,7 +327,7 @@ fn millis(since: Instant) -> u64 {
 /// to say something.
 const SAID: &[&str] = &["floppy.say"];
 
-/// The length of the silence given to the room after each heard
+/// The length of the silence given to the environment after each heard
 /// utterance, as `scripts/talk-live.py` gives it (24 kHz, 16-bit mono).
 const SILENCE_BYTES: usize = 2 * 24_000;
 
@@ -353,11 +353,11 @@ struct Done {
     lessons_settled: bool,
 }
 
-/// Gives the room what a said or heard step carries.
+/// Gives the environment what a said or heard step carries.
 fn give(run: &mut Run, spec: &Json, media: &Path, name: &str) -> &'static str {
     let source = spec["source"].as_str().unwrap_or("gabe");
     if let Some(content) = spec["say"].as_str() {
-        // An empty `targets` is ambient input: the room gives it to every
+        // An empty `targets` is ambient input: the environment gives it to every
         // participant, and floppy overhears it.
         let targets = spec["targets"]
             .as_array()
@@ -472,7 +472,7 @@ fn converse(run: &mut Run, spec: &Json, media: &Path, name: &str, target: &mut u
     }
 }
 
-/// Runs one shown step: the image given to the room, then its wait.
+/// Runs one shown step: the image given to the environment, then its wait.
 fn show(run: &mut Run, spec: &Json, media: &Path, name: &str) -> Done {
     let image = Path::new(spec["show"].as_str().expect("a shown step names its image"));
     let extension = image
@@ -500,6 +500,18 @@ fn show(run: &mut Run, spec: &Json, media: &Path, name: &str) -> Done {
         completed: true,
         lessons: Tally::of(run).closed.saturating_sub(before.closed),
         lessons_settled: true,
+    }
+}
+
+/// Copies the files directly in `from` into `to`, created.
+fn copy_files(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).expect("the copy's directory is creatable");
+    for entry in std::fs::read_dir(from).expect("the media directory is readable") {
+        let path = entry.expect("a media entry is readable").path();
+        if path.is_file() {
+            let name = path.file_name().expect("a media file has a name");
+            std::fs::copy(&path, to.join(name)).expect("a media file is copyable");
+        }
     }
 }
 
@@ -582,10 +594,10 @@ fn run_job(job: &Json, clock: Instant) {
         )
         .expect("the records are writable");
         // A restarted floppy numbers its utterances from 1 again: each
-        // session's sounds are kept apart for the grade to hear.
-        std::fs::rename(&media, out.join(format!("media-{session}")))
-            .expect("the session's media directory is movable");
-        std::fs::create_dir_all(&media).expect("the media directory is creatable");
+        // session's sounds are copied apart for the grade to hear, and the
+        // media directory stays, as a restarted bot's disk does, so what an
+        // earlier session showed it is still there.
+        copy_files(&media, &out.join(format!("media-{session}")));
     }
     std::fs::write(
         out.join("steps.json"),

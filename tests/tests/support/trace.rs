@@ -12,8 +12,9 @@
 //!
 //! Values that differ per run are normalized: the test's scratch directory
 //! (`target/test-scratch/<pid>-<name>-<n>`) becomes `<scratch>`, the
-//! workspace root `<workspace>`, and a UTC timestamp
-//! (`YYYY-MM-DDTHH:MM:SSZ`) `<timestamp>`. Each record is written with its keys
+//! workspace root `<workspace>`, a UTC timestamp
+//! (`YYYY-MM-DDTHH:MM:SSZ`) `<timestamp>`, and a UTC time of day
+//! (`HH:MM:SSZ`) `<time>`. Each record is written with its keys
 //! sorted (`serde_json` without `preserve_order`).
 //!
 //! [`assert_trace`] rewrites the file instead of comparing when
@@ -57,16 +58,29 @@ fn normalized(text: &str) -> String {
 
 /// `text` with each whole-second UTC timestamp
 /// (`YYYY-MM-DDTHH:MM:SSZ`, the rows' `last_used_at` and the like, which
-/// the wall clock sets) replaced by `<timestamp>`.
+/// the wall clock sets) replaced by `<timestamp>`, then each UTC time of day
+/// (`HH:MM:SSZ`, a recent turn's `at`) by `<time>`.
 fn timestamps_normalized(text: &str) -> String {
-    const SHAPE: &[u8] = b"dddd-dd-ddTdd:dd:ddZ";
+    shapes_normalized(
+        &shapes_normalized(text, b"dddd-dd-ddTdd:dd:ddZ", "<timestamp>"),
+        b"dd:dd:ddZ",
+        "<time>",
+    )
+}
+
+/// `text` with each run of `shape` (`d` a digit, anything else itself)
+/// replaced by `replacement`.
+fn shapes_normalized(text: &str, shape: &[u8], replacement: &str) -> String {
     let bytes = text.as_bytes();
     let matches_at = |at: usize| {
-        bytes.get(at..at + SHAPE.len()).is_some_and(|window| {
-            window.iter().zip(SHAPE).all(|(byte, shape)| match shape {
-                b'd' => byte.is_ascii_digit(),
-                other => byte == other,
-            })
+        bytes.get(at..at + shape.len()).is_some_and(|window| {
+            window
+                .iter()
+                .zip(shape)
+                .all(|(byte, expected)| match expected {
+                    b'd' => byte.is_ascii_digit(),
+                    other => byte == other,
+                })
         })
     };
     let mut out = String::with_capacity(text.len());
@@ -75,8 +89,8 @@ fn timestamps_normalized(text: &str) -> String {
     while at < bytes.len() {
         if matches_at(at) {
             out.push_str(&text[copied..at]);
-            out.push_str("<timestamp>");
-            at += SHAPE.len();
+            out.push_str(replacement);
+            at += shape.len();
             copied = at;
         } else {
             at += 1;

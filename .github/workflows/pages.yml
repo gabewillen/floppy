@@ -3,7 +3,15 @@ name: pages
 on:
   push:
     branches: [main]
-    paths: ["web/**", ".github/workflows/pages.yml"]
+    paths:
+      - "web/**"
+      - "abilities/**"
+      - "bots/**"
+      - "environments/**"
+      - "namespaces/**"
+      - "scxml.rs/**"
+      - "scripts/build-components.sh"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
@@ -18,11 +26,43 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      WASI_SDK_PATH: /opt/wasi-sdk
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # The pinned Node.js of scxml.rs's browser host build.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.11.1"
+      # The toolchain rust-toolchain.toml pins (1.98, wasm32-wasip2).
+      - run: rustup show active-toolchain
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/wasm-tools
+            ~/.cargo/bin/wasi-virt
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+          key: wasm-tools-1.244.0-wasi-virt-448f6df8
+      - name: Install wasm-tools and wasi-virt
+        run: |
+          command -v wasm-tools || cargo install --locked wasm-tools@1.244.0
+          command -v wasi-virt || cargo install --locked --git https://github.com/bytecodealliance/WASI-Virt --rev 448f6df8f688cee5d6995e96b1ffc31f9bf00742 wasi-virt
+      - name: Install wasi-sdk 25
+        run: |
+          curl -fsSL -o /tmp/wasi-sdk.tar.gz https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-25/wasi-sdk-25.0-x86_64-linux.tar.gz
+          sudo mkdir -p /opt/wasi-sdk
+          sudo tar -xzf /tmp/wasi-sdk.tar.gz -C /opt/wasi-sdk --strip-components=1
+      - uses: actions/cache@v4
+        with:
+          path: target
+          key: web-target-${{ hashFiles('Cargo.lock', 'scxml.rs/Cargo.lock') }}
+          restore-keys: web-target-
+      - run: sh web/build-host.sh
       - run: python3 web/build.py
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

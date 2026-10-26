@@ -7,6 +7,27 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-26, floppy remembers what it saw (D252), model `sparks/qwen3.8-flash-next`
+
+`eval.py run` with the same setup as D250's climb below, on main with the
+memory branch (D251) merged in. The four new `seeing_recall_*` scenarios
+show an image, follow it with unrelated talk (and, in two of them, a
+restart), and only then ask about the image. With them added, the seeded
+split (`--seed 7`, `--test-share 0.34`) holds out `seeing_nametag`,
+`seeing_recall_nametag` and `seeing_recall_shape`. Only train was looked at
+while changing the bot. The baseline overlays reflection's document from
+before D252, so episodes keep no images. Every run used two repeats.
+Results are in the project's `floppy-eval/seeing/`.
+
+| Run | Bot | Split | Score |
+| --- | --- | --- | --- |
+| recall-train-baseline | before D252 | train | 0.760 (recalled only when floppy had happened to say aloud what it saw) |
+| recall-train1 | episodes keep images | train | 0.040 (the recalled-episode schema refused the new field, so every later turn failed) |
+| recall-train2 | and the schemas declare it | train | 0.500 (the driver moved the media directory at the restart, so the recalled reference was unreadable) |
+| recall-train3 | and the driver keeps the media directory across a restart, as a bot's disk does | train | 0.995 ± 0.010 |
+| recall-test-baseline | before D252 | test | 0.687 ± 0.389 (`seeing_recall_nametag` 0.04 and 0.08) |
+| recall-test1 | as recall-train3 | test | **0.987 ± 0.019** |
+
 ## 2026-10-26, floppy hears the tone of a voice (D247), model `sparks/qwen3.8-flash-next`
 
 `eval.py run --scenario emotion` on `claude/project-thread-7d33ln` (the
@@ -35,12 +56,48 @@ sound sad about that. Do you want to talk about it?"); `emotion.second`
 mostly the first, joyful turn of `emotion_contrast` (0.30), which the
 decision service ignored as ambient.
 
+Two of the five scenarios then measured the eval more than floppy. The
+speech API's synthesis varies call to call (seed 42 notwithstanding), and the
+eval caches a step's first clip: `emotion_angry`'s clip in `canvas` came out
+happy (emotion2vec 0.83), and `emotion_contrast`'s heartbroken repeat neutral
+(0.90). Both now speak in `storyteller`, which a sweep heard as asked (angry 4
+of 5, sad and happy 4 of 4), and their diagnostics name the tone expected
+(`^heard angry `). Two scenarios never address floppy ("The delivery came again
+today."); with them opening "Floppy," / "Hey Floppy," for a run (`eval-r3c`),
+the rest of this paragraph's numbers are of that wording, which the
+maintainer turned down ("Hey floppy?"): the scenarios keep their ambient
+wording, and floppy must hear it. Ambient (`eval-amb`, 3 repeats each):
+`emotion_contrast` 0.62, the joyful first turn ignored by the decision
+service every time (`bot.ability.cognition.ignore`, confidence 56 to 61) and
+the heartbroken repeat answered every time; `emotion_angry` 0.00, never a
+turn at all: silero VAD finds no voice in the shouted `storyteller` clip
+(`{"segments":[]}` on every try), so the sound is dropped as voiceless. The `says` checks also took "Oh nice!" and "you sound down" for
+misses; their patterns gained `nice`, `wow`, `tell me everything`, `so glad`,
+`that's great`, `down` and `I'm here`. On main `b35ad413` with these
+scenarios, `eval-r3c` (15 jobs): emotion **0.864 ± 0.104**, angry 0.99,
+contrast 0.95, sad 0.84, tonight 0.99, happy 0.55. What is left is
+`emotion_happy`: floppy hears the joy ("You're beaming") and still asks what
+the letter said before celebrating.
+
 A hill climb of `abilities/reasoning/reasoning.scx#instructions` (`climb1`,
 3 generations of 2 candidates, train `emotion_contrast`, `emotion_happy`,
 `emotion_sad`, held out `emotion_angry`, `emotion_tonight`, the seeded
 split) raised train from 0.490 to 0.877 while the held-out test went from
 0.860 to 0.490 (single runs): the prompt fit its own scenarios and was not
 adopted; the instructions stay empty.
+
+Voice detection now warms silero with half a second of silence on each side
+of a clip (#109; an ablation of 18 clips a kind: shouts 14 heard before, 17
+to 18 after, laughs 17 to 18, calm and crying speech and silence and noise
+unchanged). On main `f089945d`, ambient wording, `eval-vad` (15 jobs):
+emotion **0.783 ± 0.140**, happy 0.94, angry 0.73, tonight 0.76, contrast
+0.73, sad 0.75. Every angry job heard the shout (`heard angry`) and two of
+three answered it ("That's really frustrating"). The silent turns that are
+left (angry once, the joyful first turn of contrast twice) are all the
+decision service choosing `bot.ability.cognition.ignore` for speech that
+does not address floppy (confidence 59), which the confidence tuner does not
+escalate. The rest are judged misses of the tone (sad once, tonight once:
+"Honest answer? I have no idea what's within walking distance").
 
 ## 2026-10-25, memory hill climb (D251), model `sparks/qwen3.8-flash-next`
 
