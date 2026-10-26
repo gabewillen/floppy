@@ -6,8 +6,8 @@
       "body": {
         "segments": [
           {
-            "start_seconds": 0.25,
-            "end_seconds": 0.75,
+            "start_seconds": 0.75,
+            "end_seconds": 1.25,
             "score": 0.5
           }
         ]

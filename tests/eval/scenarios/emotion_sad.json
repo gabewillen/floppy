@@ -28,7 +28,7 @@
         0,
         0
       ],
-      "pattern": "\\b(sorry|sad|hard|tough|rough|upset|heavy|okay\\?|ok\\?|alright\\?|are you (ok|okay|alright|doing)|how are you|how('| a)re you (feeling|holding)|here for you|here if|with you|hug|gentle|take care|be kind)",
+      "pattern": "\\b(sorry|sad|hard|tough|rough|upset|heavy|down|okay\\?|ok\\?|alright\\?|are you (ok|okay|alright|doing)|how are you|how('| a)re you (feeling|holding)|i'?m here|here for you|here if|with you|hug|gentle|take care|be kind)",
       "weight": 2,
       "features": [
         "emotion"
@@ -40,7 +40,7 @@
         0,
         0
       ],
-      "pattern": "\\b(congrat\\w*|great news|good news|amazing|wonderful|fantastic|awesome|exciting|excited|so happy|happy for you|thrilled|yay|woo|celebrat\\w*)",
+      "pattern": "\\b(congrat\\w*|great news|good news|amazing|wonderful|fantastic|awesome|exciting|excited|so happy|happy for you|thrilled|yay|woo|celebrat\\w*|nice|wow|tell me everything|so glad|that'?s great)",
       "weight": 1,
       "features": [
         "emotion"
@@ -77,7 +77,7 @@
         0
       ],
       "label": "listening.affect",
-      "pattern": "^heard ",
+      "pattern": "^heard sad ",
       "features": [
         "emotion"
       ]
