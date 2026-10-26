@@ -199,7 +199,11 @@ fn a_heard_utterance_is_decoded_into_a_speech_product() {
     assert_eq!(detected.len(), 2, "each sound is voice-detected");
     assert_eq!(detected[0]["model"], "silero-vad");
     assert_eq!(detected[0]["keyed"], true, "the env-file key is the bearer");
-    assert_eq!(detected[0]["samples"], 19 * hearing::SAMPLES_PER_CHAR);
+    // The clip, between half a second of silence on each side.
+    assert_eq!(
+        detected[0]["samples"],
+        19 * hearing::SAMPLES_PER_CHAR + 2 * 8_000
+    );
     let decoded = backend.received_at("/audio/transcriptions");
     assert_eq!(decoded.len(), 1, "the utterance is decoded once");
     assert_eq!(decoded[0]["keyed"], true);

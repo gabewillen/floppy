@@ -10,7 +10,8 @@
 //!
 //! * `detect`: `POST {base}/vad` with the canonical JSON body
 //!   `{"audio": [f32...], "model"}` (16 kHz mono samples in `[-1, 1]`), answered
-//!   `{"segments": [{"start", "end"}]}` in seconds ([`detection_request`]);
+//!   `{"segments": [{"start", "end"}]}` in seconds ([`detection_request`]),
+//!   the clip sent between [`VAD_LEAD_IN_SAMPLES`] of silence;
 //! * `diarize`: `POST {base}/audio/diarization`, a `multipart/form-data` body
 //!   of `model`, `response_format` (`json`), and `file` (a 16-bit PCM WAV
 //!   file), answered `{"segments": [{"start", "end", ...}]}`
@@ -63,6 +64,13 @@ pub const MAX_AFFECT_CLASS_CHARS: usize = 32;
 
 /// The rate voice detection samples are sent at: Silero VAD's 16 kHz.
 pub const VAD_SAMPLE_RATE_HZ: u32 = 16_000;
+/// The silence voice detection sends before and after a clip, in samples
+/// at [`VAD_SAMPLE_RATE_HZ`] (0.5 s): each call starts Silero's recurrent
+/// state cold, where mosfet.py's stream carries it across chunks, and a
+/// clip whose voice starts at its first sample (a shout, a laugh) is then
+/// missed; the lead-in warms it as the stream would, and the spans
+/// answered are shifted back onto the clip.
+pub const VAD_LEAD_IN_SAMPLES: usize = 8_000;
 /// The channel count of raw PCM that names none: mono (voice detection
 /// also reads raw PCM that names no rate at [`VAD_SAMPLE_RATE_HZ`]).
 pub const DEFAULT_CHANNELS: u16 = 1;
@@ -780,7 +788,8 @@ fn json_post(base_url: u32, api_key: Option<u32>, path: &str, body: Vec<u8>) -> 
 }
 
 /// The voice detection request: `POST {base}/vad` with the canonical JSON
-/// body `{"audio": [samples], "model"}`.
+/// body `{"audio": [samples], "model"}`, `samples` between
+/// [`VAD_LEAD_IN_SAMPLES`] of silence.
 #[must_use]
 pub fn detection_request(
     base_url: u32,
@@ -788,9 +797,11 @@ pub fn detection_request(
     model: &str,
     samples: &[f32],
 ) -> Request {
-    let mut body = String::with_capacity(samples.len() * 10 + 64);
+    let silence = || std::iter::repeat_n(&0.0_f32, VAD_LEAD_IN_SAMPLES);
+    let padded = silence().chain(samples).chain(silence());
+    let mut body = String::with_capacity((samples.len() + 2 * VAD_LEAD_IN_SAMPLES) * 10 + 64);
     body.push_str("{\"audio\":[");
-    for (index, sample) in samples.iter().enumerate() {
+    for (index, sample) in padded.enumerate() {
         if index > 0 {
             body.push(',');
         }
@@ -1075,8 +1086,8 @@ fn duration(pcm_bytes: usize, sample_rate_hz: u32, channels: u16) -> f64 {
 }
 
 /// What a settled voice detection becomes: [`DETECTION_OUTPUT_EVENT`] with
-/// the clip-local spans (each clamped into the clip, empty ones dropped, in
-/// ascending start order), or
+/// the clip-local spans (each shifted back by the lead-in silence, clamped
+/// into the clip, empty ones dropped, in ascending start order), or
 /// [`super::FAILED_EVENT`].
 #[must_use]
 pub fn detection_outcome(
@@ -1084,6 +1095,13 @@ pub fn detection_outcome(
     answered: Result<Response, TransportFailure>,
     clip_seconds: f64,
 ) -> Returned {
+    // Shifted in whole samples, so a span answered on the sample grid
+    // lands exactly on the clip's (0.6 s answered is 0.1 s, not
+    // 0.09999999999999998).
+    let rate = f64::from(VAD_SAMPLE_RATE_HZ);
+    #[expect(clippy::cast_precision_loss, reason = "a small constant")]
+    let lead_in = VAD_LEAD_IN_SAMPLES as f64;
+    let shifted = |seconds: f64| ((seconds * rate).round() - lead_in) / rate;
     let spans = answered_body(answered).and_then(|body| answered_spans(&body));
     match spans {
         Ok(spans) => {
@@ -1091,8 +1109,8 @@ pub fn detection_outcome(
                 .into_iter()
                 .map(|(start, end, confidence)| {
                     (
-                        start.clamp(0.0, clip_seconds),
-                        end.clamp(0.0, clip_seconds),
+                        shifted(start).clamp(0.0, clip_seconds),
+                        shifted(end).clamp(0.0, clip_seconds),
                         confidence,
                     )
                 })

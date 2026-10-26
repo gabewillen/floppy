@@ -34,7 +34,7 @@ STREAMING = config(speech_decoder="false", sound_classifier="false")
 DIARIZING = config(speech_decoder="false", diarizer="true")
 VOICES = config(diarizer="true", voice_classifier="true")
 
-VOICED = {"path": "/vad", "status": 200, "body": {"segments": [{"start": 0.0, "end": 0.1}]}}
+VOICED = {"path": "/vad", "status": 200, "body": {"segments": [{"start": 0.5, "end": 0.6}]}}
 SILENT = {"path": "/vad", "status": 200, "body": {"segments": []}}
 DIARIZED = {"path": "/audio/diarization", "status": 200,
             "body": {"task": "diarize", "duration": 0.2, "num_speakers": 1,
@@ -226,7 +226,7 @@ S.case(212, 12, "a sound heard while producing with no level is interpreted.",
 S.statement(13, "With speech decoding, diarization and voice identification (the document's defaults), the decoded utterance's diarized segments of at least `min_voice_seconds` (1 s), else the longest, are embedded after its words: each voice that is not the bot's own is one of the decoded product's `source_ids` (its embedding), and the product carries no `voice_embedding`.")
 S.statement(14, "The bot's own voice is heard from speaking's copy of a completed utterance, `bot.ability.speaking.efference` with `audio` (its PCM, `media_type` `audio/pcm` with a sample rate), taken while voice identification is configured and the own voice is unknown: its voice is detected, and when at least `min_voice_seconds` (1 s) lies from its first voice to its last, that span is identified and kept as the bot's own voice; a copy with less voice is logged `interpretation.unidentified`, a copy without audio is nothing, and without voice identification the copy is ignored. A decoded voice at least `voice_similarity_threshold` (0.50) alike to the bot's own is not a source id.")
 
-LONG_VOICED = {"path": "/vad", "status": 200, "body": {"segments": [{"start": 0.0, "end": 0.05}, {"start": 0.5, "end": 1.6}]}}
+LONG_VOICED = {"path": "/vad", "status": 200, "body": {"segments": [{"start": 0.5, "end": 0.55}, {"start": 1.0, "end": 2.1}]}}
 
 
 def own_copy(audio="media/said.pcm"):
