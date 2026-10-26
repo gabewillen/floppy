@@ -53,9 +53,9 @@
     {
       "namespace_uri": "https://github.com/stateforward/floppy/namespaces/cognition",
       "package_version": "0.1.0",
-      "manifest_sha256": "46080a29be900e525c9f04d5e34ecc1ade1c0d3bbd560b762a1a3f259987656d",
-      "schema_sha256": "4083bf9777f0ad51d340380277f23cbb872729fb3d062ce71705e3f0cc52bb52",
-      "component_sha256": "d082ddb2aebc5c763f8a5d86fca604c01097035be77fec91fe86ab230548f151"
+      "manifest_sha256": "72e8f0deacfc42d9ef2097b5c651d144678b0248243aa390a32c7962a295e030",
+      "schema_sha256": "343a102e11a1ceecefc2d253d64cde39937cb1730c2ca76792e63598bfbbeb6f",
+      "component_sha256": "fddb9c71e76fe5b3532ba6a01e0aaf030bf1ff1f8ede9bcd6d37621d2499c7c0"
     }
   ],
   "ir_version": 5,
@@ -68,7 +68,7 @@
     "datamodels": [],
     "tags": []
   },
-  "identity_digest": "1d79acf0a21ac64328cbe6e58287eae1827f96c34dfa6c5abfd102ff5f0204ba",
+  "identity_digest": "7f70c955e33c4c2bf0f85a9b514673af589489c7395c9f41671d73bbd53f8115",
   "summary": {
     "total_selected": 26,
     "applicable_selected": 26,

@@ -69,6 +69,10 @@ never edits the workspace: everything goes under `target/floppy-eval/`.
 | `seeing_hours` | seeing | a shop sign with its hours, closed Sundays; floppy is asked if it opens on Sunday |
 | `seeing_nametag` | seeing | a name tag reading Priya; its wearer asks floppy to read their name |
 | `seeing_shape` | seeing | a green triangle on a card; floppy is asked its shape and color |
+| `seeing_recall_wifi` | seeing | the Wi-Fi card, then unrelated talk; floppy is asked the password it saw |
+| `seeing_recall_hours` | seeing | the shop sign, then unrelated talk and a restart; floppy is asked if it opens on Sunday |
+| `seeing_recall_nametag` | seeing | the name tag, then unrelated talk; floppy is asked the name it saw |
+| `seeing_recall_shape` | seeing | the green triangle, then unrelated talk and a restart; floppy is asked its shape and color |
 | `chat_understand` | conversation | answers never said outright: when to leave for a 7 am flight, what to grab in the rain, the day after tomorrow from Friday |
 | `recall_many` | memory | five facts in one message, two unrelated questions; three of the facts after a restart |
 | `recall_update` | memory | a favorite food, corrected later; the corrected one after a restart |

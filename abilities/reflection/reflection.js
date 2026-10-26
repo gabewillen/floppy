@@ -295,7 +295,38 @@ function cognitiveEpisode(applied) {
     episode.outcome = outcome;
     episode.failure = turn_failure;
   }
+  var images = seenImages(input.stimulus);
+  if (images.length > 0) {
+    episode.images = images;
+  }
   return episode;
+}
+
+// The images the stimulus carried, in order, each once, at most 8 (mosfet.py
+// keeps a turn's worth, media.MAX_TURN_IMAGES, in EpisodeData.parts): each
+// media object ({image, media_type}, the reference floppy passes media by)
+// read through envelopes and arrays, kept as its reference and media type,
+// so a recalled episode shows the model what the turn saw (decision D252).
+function seenImages(stimulus) {
+  var found = [];
+  function read(item, depth) {
+    if (depth > 8 || found.length >= 8 || item === null || typeof item !== 'object') {
+      return;
+    }
+    if (Array.isArray(item)) {
+      item.forEach(function (each) { read(each, depth + 1); });
+      return;
+    }
+    if (typeof item.image === 'string' && (typeof item.media_type === 'string' || item.media_type === null)) {
+      if (!found.some(function (each) { return each.image === item.image; })) {
+        found.push({image: item.image, media_type: item.media_type});
+      }
+      return;
+    }
+    Object.keys(item).forEach(function (key) { read(item[key], depth + 1); });
+  }
+  read(stimulus, 0);
+  return found;
 }
 
 // The words the stimulus carried, in order, each once (mosfet.py's
