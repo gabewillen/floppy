@@ -1107,6 +1107,71 @@ fn with_voices_decoded_speech_says_who_spoke() {
     voice_ref(&heard[0]);
 }
 
+/// The interpretation remembers the voices it hears as the people long-term
+/// memory holds (decision D258): a voice heard before a restart is heard
+/// as the same voice after it.
+#[test]
+fn a_voice_heard_before_a_restart_is_recognized_after_it() {
+    let harness = layout(&[(
+        "interpretation/interpretation.scx",
+        &[("diarizer", "true"), ("voice_classifier", "true")],
+    )]);
+    rewrite(&harness, &[("database", "'/memory/floppy.sqlite'")]);
+    let memory = unique_scratch("memory");
+    let grant = vec![
+        "--dir".to_owned(),
+        format!(
+            "{}={}::/memory",
+            support::service_uri("sql"),
+            memory.display()
+        ),
+    ];
+    let hear = |run: &mut Run| {
+        utter(
+            run,
+            &sound("weather.wav", &json!({})),
+            &sound("silence.wav", &json!({})),
+        );
+        let heard = run.until(WAIT, label_is("harness.speech"));
+        let text = texts(&heard, "harness.speech")
+            .pop()
+            .expect("a speech product");
+        voice_ref(&serde_json::from_str(&text).expect("the log is JSON"))
+    };
+    let files = [
+        ("weather.wav", spoken_wav("what is the weather")),
+        ("silence.wav", silent_wav()),
+    ];
+    let backend = Backend::start();
+    let mut args = hearing::granted("a_voice_heard_before_a_restart", &backend, &files).args;
+    args.extend(grant.clone());
+    args.push(harness.display().to_string());
+    let mut run = Run::start(&args, &[]);
+    run.until(WAIT, label_is("harness.ready"));
+    let first = hear(&mut run);
+    // Heard again in the same run, the voice is the one minted, and the
+    // new person was remembered before the second utterance was taken.
+    assert_eq!(hear(&mut run), first);
+    run.close(WAIT);
+
+    let mut args = hearing::granted(
+        "a_voice_heard_before_a_restart_is_recognized_after_it",
+        &backend,
+        &files,
+    )
+    .args;
+    args.extend(grant);
+    args.push(harness.display().to_string());
+    let mut run = Run::start(&args, &[]);
+    run.until(WAIT, label_is("harness.ready"));
+    assert_eq!(
+        hear(&mut run),
+        first,
+        "the voice is recognized after a restart"
+    );
+    close(run, "a_voice_heard_before_a_restart_is_recognized_after_it");
+}
+
 #[test]
 fn a_voice_detection_failure_is_a_listening_failure() {
     let harness = layout(&[]);
