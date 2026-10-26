@@ -62,6 +62,24 @@ hard cutover.
 
 ### Added
 
+- The browser host runs invoked services: `createSession({serviceComponents})`
+  takes a `ServiceComponents` (`bind`, `withValues`, `withOutboundHttp`,
+  `withWasi`, `withCallFuel`) of components authenticated with
+  `authenticateServiceComponent`, with the Wasmtime host's names, binding
+  checks, reference substitution, HTTP admission, WASI planning, and
+  bounds. Each invocation runs its own instance asynchronously through
+  JavaScript Promise Integration (Chromium 137+, Node.js 24 with
+  `--experimental-wasm-jspi`; without it a service start is `unavailable`).
+  Outbound HTTP goes through the page's transport (`redirect: 'manual'`,
+  `credentials: 'omit'`), `wasi:filesystem` through in-memory directories
+  the page grants, and a trap after the start, fuel exhaustion included,
+  raises `error.communication`. `scripts/build.mjs --services <dir>` ships
+  more service components and the pinned preview2-shim's browser modules
+  (`dist/wasi/`); new host operations `service-start`, `service-send`,
+  `service-cancel`, `service-http-fetch`, and `service-http-send`, guest
+  module `invoked-service`, and host error codes `unknown-import`,
+  `wasi-resource-ungranted`, and `wasi-grant-undeclared`. Proven by
+  `test/service.test.mjs`.
 - The browser host resolves an `<invoke src>` child's own resources as
   the Wasmtime host does: a `resources.resolve` or
   `capabilities.loadDocument` answer may carry `baseUri` and
@@ -262,9 +280,7 @@ hard cutover.
   warnings `PKG003` (a literal type that is a platform-specific value,
   not a URI; SCXML 6.4.1 allows it) and `PKG004` (no package binds it;
   the `<invoke>` raises `error.execution` when it runs). The example echo
-  and timer service ships as `components/scxml-service-example`. The
-  browser host binds no service, so every service `<invoke>` raises
-  `error.execution` when it runs; snapshots of a run holding a live service
+  and timer service ships as `components/scxml-service-example`. Snapshots of a run holding a live service
   are refused. See [docs/invoked-services.md](docs/invoked-services.md).
 - Asynchronous outbound HTTP for invoked services:
   `outbound-http.fetch` is an `async func`, so a service's call suspends
