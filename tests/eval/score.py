@@ -19,7 +19,7 @@ Checks, on floppy's replies:
                  step (with no input, so each is a routine's turn); scores
                  the fraction of `min` reached
   no_ticks       no reply in a wait step
-  speaks         what floppy said aloud (its sounds in the room,
+  speaks         what floppy said aloud (its sounds in the environment,
                  transcribed by tests/eval/sound.py) matches `pattern`
   replies_at_most  at most `max` replies (default 1)
 
@@ -166,7 +166,7 @@ def _decoded(text):
 
 
 def people(scenario):
-    """Every source a step of the scenario speaks or shows from: the room's
+    """Every source a step of the scenario speaks or shows from: the environment's
     sounds from anyone else are floppy's."""
     sources = {"gabe"}
     for session in scenario["sessions"]:
@@ -177,7 +177,7 @@ def people(scenario):
 
 
 def sounds(records, others):
-    """The data of each sound in the room (the room's environment.sound
+    """The data of each sound in the environment (the environment's environment.sound
     log) whose source is none of `others`: the sounds floppy made."""
     out = []
     for text in _texts(records, "environment.sound"):
@@ -498,7 +498,7 @@ def _closed(build):
 def infra_error(scenario, job):
     """Why the job measured the rig rather than floppy, or None: the driver
     crashed before it finished, no step ran, or floppy never activated in a
-    session (a backend or the room down before any input). Such a job is
+    session (a backend or the environment down before any input). Such a job is
     reported apart and kept out of every score (docs/eval.md); a step
     that never settled is floppy's (a stuck turn) and stays scored."""
     if not job["done"]:

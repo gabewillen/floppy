@@ -367,7 +367,7 @@ fn the_lifetime_check_reads_the_document_as_xml() {
 }
 
 /// A schedule sent to a literal target never reaches the routine (the
-/// Sparks builder's `#_self`, which never armed in the room, decision
+/// Sparks builder's `#_self`, which never armed in the environment, decision
 /// D147): it is a diagnostic, and a schedule with no target is not.
 #[test]
 fn a_schedule_with_a_target_is_a_lifetime_error() {

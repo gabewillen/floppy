@@ -314,7 +314,7 @@
    "parts": [
     "abilities/turn_detector",
     "abilities/interpretation",
-    "environments/room"
+    "environments/environment"
    ],
    "evidence": [],
    "tests": [
@@ -426,11 +426,11 @@
    ]
   },
   {
-   "name": "room",
-   "title": "Room and supervision",
-   "what": "The room activates floppy, routes sounds and sights, and supervises it with a restart budget.",
+   "name": "environment",
+   "title": "Environment and supervision",
+   "what": "The environment activates floppy, routes sounds and sights, and supervises it with a restart budget.",
    "parts": [
-    "environments/room",
+    "environments/environment",
     "bots/floppy/firmware"
    ],
    "evidence": [
@@ -438,11 +438,11 @@
      "label": "bot.activated"
     },
     {
-     "label": "room.restarted",
+     "label": "supervision.restarted",
      "absent": true
     },
     {
-     "label": "room.exhausted",
+     "label": "supervision.exhausted",
      "absent": true
     }
    ],

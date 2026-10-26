@@ -4,7 +4,7 @@ The eval grades every feature of the floppy bot on real input
 ([`tests/eval/features.json`](../tests/eval/features.json)): conversation,
 cognition's tiers, decisions and the ignore, ability offers, prompts,
 memory and recall, people, persona, hearing, turn taking, speaking, voices
-and diarization, rest and consolidation, seeing, failed turns, the room,
+and diarization, rest and consolidation, seeing, failed turns, the environment,
 and what it learns from what people tell it: its **name** (the identity
 ability adopts a name, answers to it, and recalls it after a restart), its
 **reflexes** (turn behaviors reflection learns and autonomy then runs on
@@ -17,7 +17,7 @@ the input it should handle; it grew to every feature on 2026-10-25 (#82).
 It has five parts:
 
 - **The driver**, `tests/tests/floppy_eval.rs`, an ignored test like
-  `floppy_live`: it runs the bot in the room on real backends through the
+  `floppy_live`: it runs the bot in the environment on real backends through the
   steps of each scenario of a plan, several at a time, and writes every
   run's records. It asserts nothing about the bot.
 - **The grade**, `tests/eval/score.py`, `tests/eval/judge.py` and
@@ -92,7 +92,7 @@ hold.
 A scenario is `{category, features, intent, bot_name, sessions, checks,
 criteria}`, with optional `criteria_features` (`{feature: [criterion]}`:
 the judges' criteria that grade a feature), `params` (`{name: expr}`,
-data the room passes the bot beside its model: `seeing_enabled`, `bounds`)
+data the environment passes the bot beside its model: `seeing_enabled`, `bounds`)
 and `edits` (`[{path, old, new}]`, each `old` found exactly once in the
 job's scratch copy of the bot).
 Each session is the bot started again on the same memory and behaviors
@@ -119,18 +119,18 @@ the wall clock passing with no input; its `lessons` counts the lessons
 closed in it, which it does not wait on (`lessons_settled` is true).
 
 A said step may name its `targets` (default `["floppy"]`; `[]` is ambient
-input the room gives everyone, which floppy overhears). A heard step,
+input the environment gives everyone, which floppy overhears). A heard step,
 `{"hear": text, "voice"?, "segments"?, "source"?, "who"?}`, is the person
 saying it out loud: `sound.py` synthesizes it on the speech backend's
 `/audio/speech` in `voice` (default `canvas`; floppy speaks in `warm`), or
 `segments` (text pieces and numbers, a pause of that many seconds), said as
 its `instructions` tell when it has them (the speech API's `instructions`:
 the tone, which the judges read beside the words), and the
-driver gives the room the 24 kHz PCM as `environment.sound` from `source`
+driver gives the environment the 24 kHz PCM as `environment.sound` from `source`
 with a second of silence, as `scripts/talk-live.py` does; `who` names the
 person for the judges when the source is a shared microphone. It is waited
 on as a said step. A shown step, `{"show": path, "describe", "wait_s"?}`,
-gives the room the image as `environment.visual` from a `camera` and waits
+gives the environment the image as `environment.visual` from a `camera` and waits
 `wait_s` (20). A said or heard step's `settle` is `turn` (the default),
 `said` (the step ends when floppy starts to speak, so the next one
 overlaps its speech; the turn's settling is waited on later) or `quiet`
@@ -154,7 +154,7 @@ the end of one (`by`), and scores 0 to 1 with a `weight`:
 | `says`, `not_says` | a reply matches (none matches) the pattern, case-insensitive |
 | `ticks` | at least `min` replies matching the pattern during a wait (no input, so each is a routine's turn); partial credit below `min` |
 | `no_ticks` | no reply during a wait |
-| `speaks` | what floppy said out loud in the step (its sounds in the room, transcribed on the speech backend's `/audio/transcriptions`, joined) matches the pattern |
+| `speaks` | what floppy said out loud in the step (its sounds in the environment, transcribed on the speech backend's `/audio/transcriptions`, joined) matches the pattern |
 | `replies_at_most` | at most `max` (1) replies in the step |
 
 What is learned shows in what floppy says: a name is the name it gives when
@@ -286,7 +286,7 @@ The eval follows the health checklist of Anthropic's eval guides (the
 
 - **The rig is not floppy.** A job the driver did not finish, in which no
   step ran, or in which floppy never activated in a session (a backend or
-  the room down before any input) has an infra error
+  the environment down before any input) has an infra error
   (`score.infra_error`): it is listed apart in `report.md` and
   `features.md` and kept out of every score. A step that never settled
   stays scored: a stuck turn is floppy's.

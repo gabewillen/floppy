@@ -6,7 +6,7 @@
     "decisions",
     "offers",
     "prompts",
-    "room"
+    "environment"
   ],
   "intent": "A person asks floppy a fact, a follow-up that only makes sense with the first question, and what they asked about. floppy should answer each correctly and briefly, follow the exchange, and recall what was asked.",
   "bot_name": null,

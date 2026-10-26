@@ -18,7 +18,7 @@ handoff's [open work](handoff.md#open-work).
 | Concept | floppy |
 | --- | --- |
 | A bot (body and cognition) | One SCXML document per bot under `bots/<name>/`, invoked by its environment, which `scx run` runs as the live root session (floppy has no runtime of its own, decision D14; the bot is a participant, decision D102) |
-| An environment (membership, holdings, placement, broadcast) | An environment document, `environments/<name>/<name>.scx` (today `environments/room/room.scx`), run as the root session; its invoked children are its participants, joining when the invoke starts and leaving when it ends; it routes host input by its payload (D108), broadcasts every `environment.sound` and `environment.visual` to the participants that perceive it (placement, the free-field law and thresholds, D103), and logs the events its bots send it (decisions D102 to D111) |
+| An environment (membership, holdings, placement, broadcast) | An environment document, `environments/<name>/<name>.scx` (today `environments/environment/environment.scx`), run as the root session; its invoked children are its participants, joining when the invoke starts and leaving when it ends; it routes host input by its payload (D108), broadcasts every `environment.sound` and `environment.visual` to the participants that perceive it (placement, the free-field law and thresholds, D103), and logs the events its bots send it (decisions D102 to D111) |
 | State machines | SCXML documents (table below) |
 | Abilities (listening, speaking, cognition, memory, ...) | Invoked children, one `.scx` per machine under `abilities/<name>/`: `<invoke id="<name>" type="scxml" src="../../abilities/<name>/<name>.scx">` from the body (a stage or sub-ability from its ability: `src="../<name>/<name>.scx"`), literal `id` and `src`, talking to the parent through `#_parent` and to the child through `#_<invokeid>` (decisions D33, D34) |
 | Attaching and detaching abilities | No attachment events: the `<invoke>` lifecycle is attach (start on state entry) and detach (cancel on state exit, `done.invoke.<id>` on completion); a group's attach is the body's parallel `<invoke>`s joined on each member's `bot.ability.ready` (decisions D6 and D242) |
@@ -460,13 +460,13 @@ written as SCXML; the decisions are D76 to D79.
 
 - **Running.** A bot runs as a participant of its environment:
   `scx run --env-file <file> --fuel 9223372036854775807
-  environments/room/room.scx` (D102, D111). The room passes each bot its
+  environments/environment/environment.scx` (D102, D111). The environment passes each bot its
   `environment` (the root's `_sessionid`, D106) and `owned_devices`
   (D105) as `<param>`s, and the bot activates on joining (D107).
 - **Broadcast.** Every `environment.sound` and `environment.visual` the
-  room receives, from a participant or the host, is logged and delivered
+  environment receives, from a participant or the host, is logged and delivered
   to every participant that perceives it, the emitter included. A bot's
-  speech reaches the room through its communication, which sends the
+  speech reaches the environment through its communication, which sends the
   sound to `#_scxml_` + the environment's id right after the efference
   copy to the body (D103, amended), so the bot's listening has the copy
   first and withholds its own words (D98). A device sends to `#_parent`.

@@ -67,7 +67,7 @@ shipped document.
 
 - `event:schema` is always a file reference, never inline (D37, D41)
   *(contracts.rs)*. Paths (D125): an ability uses `../schemas/<event>.json`;
-  the body and environments `../../abilities/schemas/<event>.json` (the room
+  the body and environments `../../abilities/schemas/<event>.json` (the environment
   uses `../../bots/floppy/schemas/<event>.json` for body events); the body
   uses `schemas/<event>.json` for its own events; the builder uses
   `schemas/<event>.json`. No schema file is copied.
