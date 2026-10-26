@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- identity-8: input that arrives while adopting is heard with the adopted name. -->
+<!-- identity-7: input that arrives while adopting is heard with the adopted name. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:decision="https://github.com/stateforward/floppy/namespaces/decision" version="1.0" datamodel="ecmascript" initial="harness">
 <datamodel>
   <data id="offers" expr="null"/>

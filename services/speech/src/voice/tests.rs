@@ -400,6 +400,32 @@ fn diarization_uploads_a_wav_and_clips_each_segment() {
             ("/media/diarized-1".to_owned(), pcm(&[3, 4])),
         ]
     );
+    // One speaker's turns are one voice: joined, first start to last end.
+    let mut written = Vec::new();
+    let returned = diarization_outcome(
+        "Voice diarization",
+        ok(br#"{"segments":[{"speaker":"SPEAKER_00","start":0.0,"end":0.25,"confidence":0.9},{"speaker":"SPEAKER_01","start":0.25,"end":0.5},{"speaker":"SPEAKER_00","start":0.75,"end":1.0,"confidence":0.7}]}"#),
+        (&utterance, 4, 1),
+        &media("media/diarized"),
+        &mut |path: &str, bytes: &[u8]| {
+            written.push((path.to_owned(), bytes.to_vec()));
+            Ok(())
+        },
+    );
+    assert_eq!(
+        data(&returned),
+        json!({"segments": [
+            {"audio": "media/diarized-0", "media_type": "audio/pcm", "sample_rate_hz": 4, "channels": 1, "start_seconds": 0.0, "end_seconds": 1.0, "confidence": 0.7},
+            {"audio": "media/diarized-1", "media_type": "audio/pcm", "sample_rate_hz": 4, "channels": 1, "start_seconds": 0.25, "end_seconds": 0.5, "confidence": null}
+        ]})
+    );
+    assert_eq!(
+        written,
+        vec![
+            ("/media/diarized-0".to_owned(), pcm(&[1, 4])),
+            ("/media/diarized-1".to_owned(), pcm(&[2])),
+        ]
+    );
     let returned = diarization_outcome(
         "Voice diarization",
         ok(br#"{"segments":[{"start":0.5,"end":1.08}]}"#),

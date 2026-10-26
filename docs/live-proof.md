@@ -7,20 +7,20 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
-## 2026-10-25, memory hill climb (D246), model `sparks/qwen3.8-flash-next`
+## 2026-10-25, memory hill climb (D251), model `sparks/qwen3.8-flash-next`
 
 `eval.py run` on the memory scenarios, split as `climb` splits them
 (seed 7, test share 0.34): train `recall_many`, `recall_people`,
 `recall_restart`; held-out test `people_overheard`, `recall_update`. Two
 repeats each, from a cloud session through the relays of docs/eval.md,
 judges `gabe-codex-0/gpt-6.1-sol` and `gemini-4-argon`. The baseline is
-the same tree with D246's documents overlaid by their earlier versions
+the same tree with D251's documents overlaid by their earlier versions
 (`--overlay`). The held-out set was run once, on the change.
 
 | Run | Train | Held-out test |
 | --- | --- | --- |
 | baseline | 0.38 (recall_many 0.07, recall_people 1.00, recall_restart 0.07) | 0.23 (people_overheard 0.46, recall_update 0.00) |
-| D246 | 0.86 (recall_many 0.99, recall_people 0.58, recall_restart 1.00) | 0.81 (people_overheard 0.72, recall_update 0.91) |
+| D251 | 0.86 (recall_many 0.99, recall_people 0.58, recall_restart 1.00) | 0.81 (people_overheard 0.72, recall_update 0.91) |
 
 Read before trusting: recall_people's two misses are not memory's. In
 one, reasoning ran past its 240 s bound on the backend; in the other,

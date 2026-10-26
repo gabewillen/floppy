@@ -1210,13 +1210,13 @@ fn a_spoken_response_reaches_listening_as_its_efference_copy_before_its_sound() 
     until_silent_copy(&run, &mut records);
     // "reply 1" is 7 characters: the double measures 0.7 s, played as two
     // pieces (0.5 s and 0.2 s), each report followed by a copy of what is
-    // still to come.
+    // still to come; the last, of a completed utterance, carries its audio.
     assert_eq!(
         texts(&records, "input.efference"),
         strings(&[
             r#"{"channels":1,"duration":0.7,"media_type":"audio/pcm","mouth":"speaking","sample_rate_hz":24000}"#,
             r#"{"channels":1,"duration":0.2,"media_type":"audio/pcm","mouth":"speaking","sample_rate_hz":24000}"#,
-            r#"{"channels":1,"duration":0,"media_type":"audio/pcm","mouth":"speaking","sample_rate_hz":24000}"#
+            r#"{"audio":"media/speaking-1.pcm","channels":1,"duration":0,"media_type":"audio/pcm","mouth":"speaking","sample_rate_hz":24000}"#
         ])
     );
     assert_eq!(
@@ -1432,7 +1432,7 @@ fn a_response_is_spoken_through_the_speech_service() {
         texts(&records, "input.efference"),
         strings(&[
             r#"{"channels":1,"duration":0.1,"media_type":"audio/pcm","mouth":"speaking","sample_rate_hz":24000}"#,
-            r#"{"channels":1,"duration":0,"media_type":"audio/pcm","mouth":"speaking","sample_rate_hz":24000}"#
+            r#"{"audio":"media/speaking-1.pcm","channels":1,"duration":0,"media_type":"audio/pcm","mouth":"speaking","sample_rate_hz":24000}"#
         ])
     );
     // The sound's source is the copy's mouth: the listening's sensitivity

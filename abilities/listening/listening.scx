@@ -50,10 +50,12 @@
   can tell its own voice apart: while the copy's window is open the
   sensitivity scores a sound whose source is the copy's mouth against the
   prediction (fully predicted its level is 0, below the interpretation's
-  threshold, so its product is withheld), and any other sound at its
-  received level. The interpretation still runs on the bot's own voice
-  (the one comparison is made at the end of the pipeline),
-  so a voice detection backend the run does not configure fails it there.
+  threshold), and any other sound at its received level. The
+  interpretation does not interpret the bot's own voice arriving as
+  predicted (#30), so it never opens an utterance or joins a person's.
+
+  The copy goes to the interpretation too, which learns the bot's own
+  voice from the audio a completed utterance's copy carries.
 
   Readiness: the entry into Perceiving sends bot.ability.ready to the
   body (decision D242); it offers nothing (the
@@ -119,6 +121,13 @@
         <send event="bot.ability.speaking.efference" target="#_sensitivity">
           <content expr="_event.data"/>
         </send>
+        <!-- A completed utterance's copy, with its audio, is the bot's own
+             voice to learn. -->
+        <if cond="typeof _event.data.audio === 'string'">
+          <send event="bot.ability.speaking.efference" target="#_interpretation">
+            <content expr="_event.data"/>
+          </send>
+        </if>
       </transition>
       <!-- The interpretation's products and failures, out through this
            ability's own. -->

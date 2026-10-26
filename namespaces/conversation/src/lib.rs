@@ -100,7 +100,7 @@
 //! [`person_for_voice`] matches it, against the representatives and the
 //! voices of the people created before it: a person scores the highest
 //! cosine of the voice with theirs, and the best at
-//! [`SIMILARITY_THRESHOLD`] or more is the voice's person unless another
+//! [`VOICE_SIMILARITY_THRESHOLD`] or more is the voice's person unless another
 //! comes within [`SIMILARITY_MARGIN`]; a voice that is no one's is a new
 //! person, `person-<n>`, numbered on after `after`. `location` (required)
 //! receives `{input, people, voices, representatives}`: `input` the input
@@ -256,6 +256,14 @@ pub const NAMESPACE_URI: &str = "https://github.com/stateforward/floppy/namespac
 /// The least cosine similarity at which two embeddings are the same
 /// participant.
 pub const SIMILARITY_THRESHOLD: f64 = 0.85;
+
+/// The least cosine similarity at which a voice is a person's
+/// ([`people::person_for_voice`]): mosfet.py's voice match policy
+/// (`identification.MatchPolicy`, threshold 0.50). The speaker embeddings
+/// floppy hears (WeSpeaker ResNet34 on api.willen.dev) put one voice's
+/// utterances at 0.60 to 0.77 of each other and different voices under
+/// 0.25, so [`SIMILARITY_THRESHOLD`] made every utterance a new person.
+pub const VOICE_SIMILARITY_THRESHOLD: f64 = 0.50;
 
 /// The least lead the best one-to-one assignment of two identity groups
 /// needs over any other.

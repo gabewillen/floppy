@@ -64,7 +64,10 @@
   the progress is followed by the copy {duration: 0}, which closes the
   listening's window; and when the next has not arrived yet the progress
   alone is sent and playing waits (starved) for it, its copy leaving
-  before its sound, or for the output, whose copy is {duration: 0}. A
+  before its sound, or for the output, whose copy is {duration: 0}. The
+  copy {duration: 0} of a completed utterance also carries audio, the
+  file the whole utterance was encoded to: what the bot commanded its
+  mouth to say, from which the listening learns its own voice (#30). A
   chunk with no measured duration has no pieces and counts as played at
   once. A vocal failure, the encoding timer or an error mid-stream sends
   the copy {duration: 0} (the mouth stops) and answers bot.ability.failed.
@@ -456,7 +459,7 @@
               <param name="spoken_seconds" expr="played_ms / 1000"/>
             </send>
             <send event="bot.ability.speaking.efference" target="#_parent">
-              <content expr="efferenceCopy(0)"/>
+              <content expr="completedCopy()"/>
             </send>
           </transition>
           <transition event="devices.audio.played" event:schema="../schemas/devices.audio.played.json"
@@ -491,7 +494,7 @@
             <assign location="unspoken" expr="''"/>
             <if cond="hasDuration()">
               <send event="bot.ability.speaking.efference" target="#_parent">
-                <content expr="efferenceCopy(0)"/>
+                <content expr="completedCopy()"/>
               </send>
             </if>
           </transition>
@@ -519,7 +522,7 @@
             <assign location="unspoken" expr="''"/>
             <if cond="hasDuration()">
               <send event="bot.ability.speaking.efference" target="#_parent">
-                <content expr="efferenceCopy(0)"/>
+                <content expr="completedCopy()"/>
               </send>
             </if>
           </transition>

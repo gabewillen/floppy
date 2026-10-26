@@ -118,8 +118,8 @@
   one-way message, so registration never blocks admitting the stimulus),
   then go to
   each input ability (input: the invoke ids
-  of the abilities that perceive raw stimuli; the identity and the
-  listening), in
+  of the abilities that perceive raw stimuli: the listening; the identity
+  hears words, as communication input, never sound, #89), in
   order, by <foreach>; never to the cognition, which hears of a stimulus
   only as an input ability's product: the listening hands its decoded
   speech or labelled non-speech over as bot.ability.cognition.input, which
@@ -337,7 +337,7 @@
     <data id="waiting" expr="[]"/>
     <!-- The input abilities each environment.* stimulus fans out to
          (as invoke ids), and the one being sent to. -->
-    <data id="input" expr="['identity', 'listening']"/>
+    <data id="input" expr="['listening']"/>
     <!-- Whether the eye perceives (decision D189): on, seeing is expected,
          takes every environment.visual and offers its look. -->
     <data id="seeing_enabled" expr="false"/>

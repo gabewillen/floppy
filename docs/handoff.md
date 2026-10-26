@@ -11,7 +11,7 @@ Last updated: 2026-10-24.
 
 ## Current state (2026-10-09) — resume here
 
-- **What is heard and said is remembered (2026-10-25, D246, #85, #87):**
+- **What is heard and said is remembered (2026-10-25, D251, #85, #87):**
   the conversation writes each message it commits with words to the
   short-term register (heard for inbound text, typed or decoded from
   speech; said for appends), so the recent turns reasoning reads are no
