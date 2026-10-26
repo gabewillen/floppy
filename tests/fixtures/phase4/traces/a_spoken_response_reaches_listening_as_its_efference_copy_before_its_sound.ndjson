@@ -19,4 +19,4 @@
 {"label":"communication.exchange","parent":"session.floppy","session":"session.floppy.communication","text":"1","type":"log"}
 {"label":"input.efference","parent":"session.floppy","session":"session.floppy.identity","text":"{\"audio\":\"media/speaking-1.pcm\",\"channels\":1,\"duration\":0,\"media_type\":\"audio/pcm\",\"mouth\":\"speaking\",\"sample_rate_hz\":24000}","type":"log"}
 {"label":"stm.turn.recorded","parent":"session.floppy","session":"session.floppy.stm","text":"said cut=false","type":"log"}
-{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
+{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"gemma-4-26b-a4b","type":"log"}

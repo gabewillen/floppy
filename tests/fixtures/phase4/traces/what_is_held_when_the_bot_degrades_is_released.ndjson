@@ -10,7 +10,7 @@
 {"label":"bot.processing.timed_out","session":"session","text":"{\"turn\":1}","type":"log"}
 {"label":"floppy.held","parent":"session","session":"session.floppy","text":"1","type":"log"}
 {"label":"floppy.held","parent":"session","session":"session.floppy","text":"2","type":"log"}
-{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
+{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"gemma-4-26b-a4b","type":"log"}
 {"label":"floppy.released","parent":"session","session":"session.floppy","text":"{\"count\":2,\"reason\":\"degraded\"}","type":"log"}
 {"label":"floppy.degraded","parent":"session","session":"session.floppy","text":"turn 1: the cognition did not acknowledge its cancel","type":"log"}
 {"label":"bot.processing.cancel.timed_out","session":"session","text":"{\"turn\":1}","type":"log"}

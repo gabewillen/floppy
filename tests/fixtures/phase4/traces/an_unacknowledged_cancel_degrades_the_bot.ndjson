@@ -8,7 +8,7 @@
 {"label":"double.environment","parent":"session.floppy","session":"session.floppy.cognition","text":"{\"id\":\"session\",\"self\":{\"held_percepts\":0,\"owned_devices\":{},\"state\":\"processing\"}}","type":"log"}
 {"label":"double.participants","parent":"session.floppy","session":"session.floppy.cognition","text":"[]","type":"log"}
 {"label":"bot.processing.timed_out","session":"session","text":"{\"turn\":1}","type":"log"}
-{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
+{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"gemma-4-26b-a4b","type":"log"}
 {"label":"floppy.degraded","parent":"session","session":"session.floppy","text":"turn 1: the cognition did not acknowledge its cancel","type":"log"}
 {"label":"bot.processing.cancel.timed_out","session":"session","text":"{\"turn\":1}","type":"log"}
 {"label":"bot.processing.failed","session":"session","text":"{\"message\":\"Bot processing timed out after 0.3 seconds.\",\"turn\":1}","type":"log"}

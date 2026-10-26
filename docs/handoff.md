@@ -11,6 +11,18 @@ Last updated: 2026-10-26.
 
 ## Current state (2026-10-09) — resume here
 
+- **Latency hill climb: routing (2026-10-26, D260):** everything runs on
+  api.willen.dev (`gemma-4-26b-a4b` on `FLOPPY_BASE_URL`) except
+  reflection, learning, revision and the builder, which use
+  `reflection_model` (`sparks/qwen3.8-flash-next` in floppy) on
+  `FLOPPY_REFLECTION_BASE_URL` / `FLOPPY_REFLECTION_API_KEY` (CPA in front
+  of the Sparks); `reflection_model` null keeps them on `model` and
+  `FLOPPY_BASE_URL`. A live spoken turn was about 10.7 s to first speech:
+  about 5 s of engine CPU (the ECMAScript data model re-parsing values and
+  events, a fresh JavaScript realm per session), 3.3 s of serial hearing
+  calls, 2 s of reasoning. Next: scxml.rs builds JSON values directly
+  (upstream first), a pre-initialized data-model snapshot, HTTPS
+  connection reuse, then the hearing calls in parallel.
 - **Recall by association (2026-10-26, D256, #86):** the Embedding
   ability (`abilities/embedding/`) embeds each episode's heard words
   (reflection, stored in `bot_memory_embedding`) and each turn's cue
@@ -743,9 +755,13 @@ Last updated: 2026-10-26.
   backend; every run needs `FLOPPY_BASE_URL`, and without it the builder
   ends at once in `failed` (`unconfigured`); `FLOPPY_API_KEY` is needed
   only by a keyed backend (a run without it sends no key header, D127).
-  floppy's gitignored `.env` sets them to the user's two DGX Sparks:
+  Since D260 the default model is `gemma-4-26b-a4b` on api.willen.dev
+  (`FLOPPY_BASE_URL=https://api.willen.dev/v1`), and reflection, revision
+  and the builder use `sparks/qwen3.8-flash-next` on
+  `FLOPPY_REFLECTION_BASE_URL` (CPA, `https://cpa.willen.dev/v1`).
+  Before D260, floppy's gitignored `.env` set them to the user's two DGX Sparks:
   - **direct vLLM:** `FLOPPY_BASE_URL=http://192.168.2.89:8000/v1`, model
-    `Qwen/Qwen3.8-Flash-Next` (the builder's default), `FLOPPY_API_KEY` (a
+    `Qwen/Qwen3.8-Flash-Next` (then the builder's default), `FLOPPY_API_KEY` (a
     copy of the vLLM key, also kept as `VLLM_API_KEY`). Streams reasoning
     immediately.
   - the gateway in front of the Sparks is no longer used: it holds

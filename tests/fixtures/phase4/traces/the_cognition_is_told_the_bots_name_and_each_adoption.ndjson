@@ -13,4 +13,4 @@
 {"label":"bot.processing.completed","session":"session","text":"{\"focus_candidates\":[],\"output\":[{\"data\":{\"name\":\"Floppy\"},\"event\":\"bot.ability.identity.adopt\",\"reason\":\"asked\",\"target\":\"session.floppy.identity\"}],\"turn\":1}","type":"log"}
 {"label":"identity.name","parent":"session.floppy","session":"session.floppy.identity","text":"adopted \"Floppy\"","type":"log"}
 {"label":"double.named","parent":"session.floppy","session":"session.floppy.cognition","text":"\"Floppy\"","type":"log"}
-{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
+{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"gemma-4-26b-a4b","type":"log"}

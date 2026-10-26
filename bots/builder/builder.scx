@@ -70,7 +70,10 @@
   sends its invoker builder.progress {stage} as it enters design, author,
   validate, each simulation run and triage, and passes on each
   generate.progress {received} of a streamed generation, so the invoker can
-  bound a streamed generation by inactivity. The simulation is bounded the same way: each test runs
+  bound a streamed generation by inactivity. Invoked with reflection_model
+  not null (the floppy bot's revision does), its generate calls go to
+  FLOPPY_REFLECTION_BASE_URL with FLOPPY_REFLECTION_API_KEY (decision
+  D260). The simulation is bounded the same way: each test runs
   at most sim_test_cap_ms, and simulate-timeout fires only after
   max_tests * sim_test_cap_ms plus a margin.
 
@@ -113,7 +116,11 @@
     <data id="name" expr="null"/>
     <!-- The failure cap (decision D133): the request's, else 8. -->
     <data id="max_attempts" expr="8"/>
-    <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <data id="model" expr="'gemma-4-26b-a4b'"/>
+    <!-- Whether the generate calls go to FLOPPY_REFLECTION_BASE_URL
+         (decision D260): a reflection model given by the invoking
+         revision; null keeps them on FLOPPY_BASE_URL. -->
+    <data id="reflection_model" expr="null"/>
     <!-- A generation's inactivity bound (a streamed reply's progress starts
          it over) and its backstop (decision D101). -->
     <data id="generate_timeout_ms" expr="30000"/>
@@ -302,7 +309,9 @@
       <cancel sendid="design-ceiling"/>
     </onexit>
     <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
-            env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL" env:stream="FLOPPY_STREAM">
+            env:apikeyexpr="reflection_model === null ? 'FLOPPY_API_KEY' : 'FLOPPY_REFLECTION_API_KEY'"
+            env:baseurlexpr="reflection_model === null ? 'FLOPPY_BASE_URL' : 'FLOPPY_REFLECTION_BASE_URL'"
+            env:stream="FLOPPY_STREAM">
       <param name="model" expr="model"/>
       <param name="system" expr="design_system"/>
       <param name="prompt" expr="request"/>
@@ -386,7 +395,9 @@
       <cancel sendid="author-ceiling"/>
     </onexit>
     <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
-            env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL" env:stream="FLOPPY_STREAM">
+            env:apikeyexpr="reflection_model === null ? 'FLOPPY_API_KEY' : 'FLOPPY_REFLECTION_API_KEY'"
+            env:baseurlexpr="reflection_model === null ? 'FLOPPY_BASE_URL' : 'FLOPPY_REFLECTION_BASE_URL'"
+            env:stream="FLOPPY_STREAM">
       <param name="model" expr="model"/>
       <param name="system" expr="authorSystem()"/>
       <param name="prompt" expr="request"/>

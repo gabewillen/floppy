@@ -65,7 +65,7 @@
     <!-- The invoker's <param>s. -->
     <data id="image" expr="null"/>
     <data id="media_type" expr="null"/>
-    <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <data id="model" expr="'gemma-4-26b-a4b'"/>
     <data id="instructions" expr="'Describe what this image shows in two or three plain sentences: the people, objects, text and activity in view. Do not guess who anyone is; describe people only by what can be seen.'"/>
     <!-- The model's reply, trimmed. -->
     <data id="said" expr="null"/>

@@ -23,7 +23,7 @@
 //! generate service has no default backend), and without a
 //! `TYPESAFE_BASE_URL` the decision service uses its package's declared
 //! origin (decision D18). The model is `FLOPPY_LIVE_MODEL`, else
-//! `Qwen/Qwen3.8-Flash-Next`. It writes the produced bot under `target/builder-live/`, and prints pass or
+//! `gemma-4-26b-a4b`. It writes the produced bot under `target/builder-live/`, and prints pass or
 //! fail and counts only; no value is ever printed.
 
 #![allow(
@@ -375,7 +375,7 @@ fn service_draft() -> String {
         "scxml": r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env" version="1.0" datamodel="ecmascript" name="asker" initial="ask">
   <state id="ask">
     <invoke type="https://github.com/stateforward/floppy/services/generate" env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
-      <param name="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+      <param name="model" expr="'gemma-4-26b-a4b'"/>
       <param name="prompt" expr="'say hello'"/>
     </invoke>
     <transition event="generate.result" target="answered"/>
@@ -1237,7 +1237,7 @@ fn env_file(
     path
 }
 
-const ALL: [&str; 13] = support::GRANTED;
+const ALL: [&str; 15] = support::GRANTED;
 
 fn run(mock: &Mock, test: &str, route: &str, env: &[&str], request: &Json) -> Vec<Json> {
     run_deciding(mock, test, route, "typesafe", env, request)

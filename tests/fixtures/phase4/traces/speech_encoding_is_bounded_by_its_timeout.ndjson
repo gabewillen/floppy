@@ -12,4 +12,4 @@
 {"label":"speech.encode","parent":"session.floppy.communication.speaking.vocal","session":"session.floppy.communication.speaking.vocal.speech","text":"encode reply 1 -> media/speaking-1.pcm","type":"log"}
 {"label":"speaking.timed_out","parent":"session.floppy.communication","session":"session.floppy.communication.speaking","text":"encoding 1 after 300 ms","type":"log"}
 {"label":"bot.ability.communication.failed","session":"session","text":"{\"message\":\"Speech encoding timed out.\"}","type":"log"}
-{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
+{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"gemma-4-26b-a4b","type":"log"}

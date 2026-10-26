@@ -15,6 +15,8 @@ values. No package has a default model endpoint (decision D31).
 | --- | --- | --- |
 | `FLOPPY_BASE_URL` | the `generate` service (`env:baseurl`): the builder's design and author stages, the floppy bot's reasoning | yes: without it a generation fails `unconfigured` |
 | `FLOPPY_API_KEY` | the `generate` service (`env:apikey`), as above | for a keyed backend: without it the request carries no key header, for a keyless one (decision D127) |
+| `FLOPPY_REFLECTION_BASE_URL` | the `generate` service (`env:baseurlexpr`): the floppy bot's reflection, learning, revision and the builder they invoke, when the bot's `reflection_model` is not null (decision D260) | for the floppy bot with its default `reflection_model`: without it reflection and learning fail `unconfigured` |
+| `FLOPPY_REFLECTION_API_KEY` | the `generate` service (`env:apikeyexpr`), as above | for a keyed backend, as `FLOPPY_API_KEY` |
 | `FLOPPY_STREAM` | the `generate` service (`env:stream`): whether the model endpoint streams; `true` or `false` | no: unset (the default), no call is streamed and each model-bound stage is bounded by its backstop alone; `true` makes reasoning's, reflection's and the builder's calls streamed and bounded by inactivity once they stream (decision D101). The CPA gateway does not stream (it answers a streamed request with keep-alive comments only), the maintainer's vLLM does |
 | `TYPESAFE_BASE_URL` | the `decision` service (`env:baseurl`): the builder's triage, the floppy bot's intuition | no: the service's declared origin, `https://api.typesafe.ai`, when a key is held; without `TYPESAFE_API_KEY` a held base URL is asked keyless, with no authorization header (decision D150) |
 | `TYPESAFE_API_KEY` | the `decision` service (`env:apikey`), as above | for the floppy bot, unless `TYPESAFE_BASE_URL` names a keyless endpoint: with neither, every turn fails (`unconfigured`); the builder triages with its fallback |
@@ -33,8 +35,8 @@ read `FLOPPY_TRACE_BLESS`. Those are test settings, not bot variables.
 
 ## Model
 
-`Qwen/Qwen3.8-Flash-Next`, the model the maintainer's DGX Sparks serve
-(direct vLLM; the CPA gateway lists it as `sparks/qwen3.8-flash-next`). It is
+`gemma-4-26b-a4b`, the model the lab's api.willen.dev serves
+(`FLOPPY_BASE_URL=https://api.willen.dev/v1`; decision D260). It is
 the `model` `<data>` of `bots/builder/builder.scx` (a `builder.request`'s
 `model` overrides it), `bots/floppy/floppy.scx` (its environment's `model`
 `<param>` overrides it), `abilities/cognition/cognition.scx`,
@@ -45,9 +47,23 @@ the `model` `<data>` of `bots/builder/builder.scx` (a `builder.request`'s
 by `<param>` to `abilities/object_detection/object_detection.scx` and
 `abilities/description/description.scx` (each carries the same `<data>`).
 
+The floppy bot's `reflection_model` `<data>` is `sparks/qwen3.8-flash-next`,
+the model the maintainer's DGX Sparks serve through the CPA gateway
+(`FLOPPY_REFLECTION_BASE_URL=https://cpa.willen.dev/v1`; decision D260): the
+cognition passes it to reflection and learning, which pass it to revision
+and the builder, and each of them calls it on `FLOPPY_REFLECTION_BASE_URL`
+and `FLOPPY_REFLECTION_API_KEY`. Each of those documents carries
+`reflection_model` `null`, which keeps it on its `model` and
+`FLOPPY_BASE_URL`; the environment's `reflection_model` `<param>` overrides
+the bot's.
+
 A bot composes the chat intuition tier only when its environment gives an
 `intuition_model` `<param>` (none by default; decision D144): the cognition
 then asks that chat model for the turn before reasoning.
+
+The embeddings floppy recalls episodes by are
+`abilities/embedding/embedding.scx`'s `model`, `embeddinggemma-2` (256
+dimensions, on `FLOPPY_EMBEDDING_BASE_URL`; decision D256).
 
 ## Speech and voice models
 

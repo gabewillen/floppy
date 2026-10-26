@@ -89,7 +89,7 @@
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="Reading" initial="Reading">
   <datamodel>
-    <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <data id="model" expr="'gemma-4-26b-a4b'"/>
     <data id="prompt" expr="'Read all visible text in this image. Return only the text.'"/>
     <data id="stage_timeout_ms" expr="30000"/>
     <!-- The operation in flight. -->

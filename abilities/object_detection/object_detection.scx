@@ -79,7 +79,7 @@
     <!-- The invoker's <param>s. -->
     <data id="image" expr="null"/>
     <data id="media_type" expr="null"/>
-    <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <data id="model" expr="'gemma-4-26b-a4b'"/>
     <data id="instructions" expr="'List the distinct objects you can see in this image with the detections tool: for each one a short label, how sure you are from 0 to 1 (or null), and its box normalized to the image, 0 to 1 measured from the top-left corner. Report no objects when you see none.'"/>
     <data id="max_objects" expr="32"/>
     <!-- The model's detections calls, and what the detector made of them. -->

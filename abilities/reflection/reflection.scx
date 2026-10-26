@@ -147,8 +147,9 @@
   Bindings: the cognition, decision, processing and behavior namespace
   packages and the generate service package, and the revision's (the
   autonomy namespace and files service packages); env scopes
-  FLOPPY_API_KEY and FLOPPY_BASE_URL to the select call (the builder
-  scopes its own).
+  FLOPPY_API_KEY and FLOPPY_BASE_URL to the select call, or
+  FLOPPY_REFLECTION_API_KEY and FLOPPY_REFLECTION_BASE_URL with a
+  reflection_model (decision D260; the builder scopes its own).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:behavior="https://github.com/stateforward/floppy/namespaces/behavior"
@@ -161,7 +162,10 @@
   <datamodel>
     <!-- The cognition's <param>s. -->
     <data id="database" expr="null"/>
-    <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <data id="model" expr="'gemma-4-26b-a4b'"/>
+    <!-- The model this document's calls use on FLOPPY_REFLECTION_BASE_URL
+         (decision D260): null keeps them on model and FLOPPY_BASE_URL. -->
+    <data id="reflection_model" expr="null"/>
     <!-- The select call's and the revision's inactivity bounds and their
          backstops (decision D101); bounds holds the bot's revising
          ones (the cognition's <param>). -->
@@ -365,8 +369,10 @@
       <cancel sendidexpr="ceiling_timer"/>
     </onexit>
     <invoke idlocation="gen_id" type="https://github.com/stateforward/floppy/services/generate"
-            env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL" env:stream="FLOPPY_STREAM">
-      <param name="model" expr="model"/>
+            env:apikeyexpr="reflection_model === null ? 'FLOPPY_API_KEY' : 'FLOPPY_REFLECTION_API_KEY'"
+            env:baseurlexpr="reflection_model === null ? 'FLOPPY_BASE_URL' : 'FLOPPY_REFLECTION_BASE_URL'"
+            env:stream="FLOPPY_STREAM">
+      <param name="model" expr="reflection_model ?? model"/>
       <param name="system" expr="select_instructions"/>
       <param name="prompt" expr="selectPrompt()"/>
       <param name="schema" expr="schema"/>
@@ -535,6 +541,7 @@
     <invoke id="revision" type="scxml" src="../revision/revision.scx">
       <param name="database" expr="database"/>
       <param name="model" expr="model"/>
+      <param name="reflection_model" expr="reflection_model"/>
       <param name="progress_target" expr="progressTarget()"/>
       <param name="intent" expr="intent"/>
       <param name="intent_event" expr="intentEvent()"/>

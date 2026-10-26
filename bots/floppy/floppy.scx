@@ -15,7 +15,7 @@
 
   Joining (decision D107): the environment's <invoke> attaches the
   body. Its <param>s are the activation settings (model,
-  intuition_model, bounds, traits, database, environment: the environment's
+  intuition_model, reflection_model, bounds, traits, database, environment: the environment's
   id), and the body starts in
   live and activates at once; nothing sends bot.activate. inactive is a
   top-level final state: a failed activation and bot.deactivate end the
@@ -283,10 +283,14 @@
   <datamodel>
     <!-- Configuration: the activation settings, which the environment's
          <invoke> may set as <param>s (decision D107). -->
-    <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <data id="model" expr="'gemma-4-26b-a4b'"/>
     <!-- The cognition's chat tier's model (decision D144): null composes
          none. -->
     <data id="intuition_model" expr="null"/>
+    <!-- The model reflection, learning, revision and the builder use, on
+         FLOPPY_REFLECTION_BASE_URL (decision D260): null keeps them on
+         model and FLOPPY_BASE_URL. -->
+    <data id="reflection_model" expr="'sparks/qwen3.8-flash-next'"/>
     <!-- The time bounds for the cognition (its stages' inactivity and
          backstop, and reflection's revising; decision D101): each absent one
          is the ability's own default. -->
@@ -400,6 +404,7 @@
     <invoke id="cognition" type="scxml" src="../../abilities/cognition/cognition.scx">
       <param name="model" expr="model"/>
       <param name="intuition_model" expr="intuition_model"/>
+      <param name="reflection_model" expr="reflection_model"/>
       <param name="bounds" expr="bounds"/>
       <param name="database" expr="database"/>
     </invoke>

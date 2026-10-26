@@ -167,7 +167,7 @@
     <data id="stimulus" expr="null"/>
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
-    <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <data id="model" expr="'gemma-4-26b-a4b'"/>
     <!-- The tier this chart thinks as (decision D144): reasoning, or
          intuition, the chat tier the cognition invokes it as. -->
     <data id="tier" expr="'reasoning'"/>

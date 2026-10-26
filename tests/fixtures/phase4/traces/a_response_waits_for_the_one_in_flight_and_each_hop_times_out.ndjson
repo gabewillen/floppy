@@ -16,4 +16,4 @@
 {"label":"deaf.input","parent":"session.floppy.communication","session":"session.floppy.communication.speaking","text":"second 1","type":"log"}
 {"label":"communication.hop.timed_out","parent":"session.floppy","session":"session.floppy.communication","text":"response 2 after 500 ms","type":"log"}
 {"label":"bot.ability.communication.failed","session":"session","text":"{\"message\":\"Speaking response timed out.\"}","type":"log"}
-{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
+{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"gemma-4-26b-a4b","type":"log"}

@@ -24,4 +24,4 @@
 {"label":"double.environment","parent":"session.floppy","session":"session.floppy.cognition","text":"{\"id\":\"session\",\"self\":{\"held_percepts\":0,\"owned_devices\":{},\"state\":\"processing\"}}","type":"log"}
 {"label":"double.participants","parent":"session.floppy","session":"session.floppy.cognition","text":"[]","type":"log"}
 {"label":"bot.processing.failed","session":"session","text":"{\"message\":\"double failed\",\"turn\":2}","type":"log"}
-{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
+{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"gemma-4-26b-a4b","type":"log"}

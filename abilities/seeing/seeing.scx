@@ -156,7 +156,7 @@
     <data id="stage_timeout_ms" expr="30000"/>
     <data id="detect" expr="false"/>
     <data id="describe" expr="false"/>
-    <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <data id="model" expr="'gemma-4-26b-a4b'"/>
     <!-- How heavy an action bot.ability.seeing.look is (decision D206),
          which the cognition holds against each tier's effort ceiling:
          mosfet.py's look is M, above its decision layer's ceiling, so the
