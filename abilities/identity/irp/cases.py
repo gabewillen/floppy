@@ -39,19 +39,14 @@ def sound(audio="media/hey.wav"):
     return js({"audio": audio, "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1})
 
 
-def transcript(text):
-    return {"path": TRANSCRIPTIONS, "status": 200, "body": {"text": text}}
-
-
 S.statement(1, "Without a database it recalls the name it was started with (the `<param>` `name`, else none) and is ready: on entering knowing it sends `bot.ability.ready` to its parent, once and with no data (decision D242). What it offers, read from its live session (`<decision:offers>`), is the one model-callable `bot.ability.identity.adopt` with its effort (`adopt_effort`, 1), its schema and the schema's description, no target.")
 S.statement(2, "With a database it recalls the last adopted name from memory (a row that does not decode as a name is skipped), else the name it was started with, and is ready with the same offer; a recall attempt that fails or does not answer within `recall_attempt_timeout_ms` is asked again after `recall_retry_delay_ms`, and when the bring-up budget (`bring_up_timeout_ms`) runs out first it answers `bot.ability.failed` `{message: \"Identity could not recall a name: memory did not answer within the bring-up budget.\"}` and then recalls the name it was started with.")
 S.statement(3, "A named identity that hears its name in `bot.ability.communication.input` text (string content of a `text/*` content_type; the name's words, split at white space, case-folded and keeping only their letters and digits, appear as a whole run of the text's) hands the body `bot.ability.cognition.input` `{stimulus}`, the stimulus `{event: \"bot.ability.identity.addressed\", data: {name}, source: \"identity\"}`.")
 S.statement(4, "Nothing else it hears produces anything: text that does not name it (the name only as part of a word included), content that is not `text/*`, and anything heard while it has no name.")
 S.statement(5, "`bot.ability.identity.adopt` `{name, reason?}` takes the name and re-enters knowing, offering it still (it is not ready again); without a database nothing is written, with one the name is written to memory before it is taken. From then on it answers to that name. A write that fails answers `bot.ability.failed` `{message: \"Identity could not remember the name it took: ...\"}` and re-enters knowing with the old name.")
-S.statement(6, "A named identity decodes each `environment.sound` through the speech decoding (the speech service) and looks for its name in the transcript: addressed, it hands the body the same `bot.ability.cognition.input` as for text; a nameless one decodes nothing.")
-S.statement(7, "A decoding that fails answers `bot.ability.failed` `{message}` (the speech decoding's failure message) and the identity goes back to listening.")
-S.statement(8, "Communication input, sounds and adopt events that arrive while it is recalling or adopting, and input and sounds that arrive while it is recognizing, are deferred and taken, in order, once it is back in knowing (or listening).")
-S.statement(9, "`bot.ability.identity.ask` `{}` while knowing is answered with `bot.ability.identity.named` `{name}` to the parent, the name it answers to or null; an ask that arrives while recalling or adopting is deferred and answered once it knows; and every adoption sends `bot.ability.identity.named` with the adopted name once it is taken.")
+S.statement(6, "It takes no sound (#89): words heard out loud reach it the way typed words do, as `bot.ability.communication.input` once the listening has decoded them and the communication has taken them, so an `environment.sound` sent to it produces nothing and is never decoded.")
+S.statement(7, "Communication input and adopt events that arrive while it is recalling or adopting are deferred and taken, in order, once it is back in knowing.")
+S.statement(8, "`bot.ability.identity.ask` `{}` while knowing is answered with `bot.ability.identity.named` `{name}` to the parent, the name it answers to or null; an ask that arrives while recalling or adopting is deferred and answered once it knows; and every adoption sends `bot.ability.identity.named` with the adopted name once it is taken.")
 
 S.case(100, 1, "a nameless identity without a database is ready with its adopt offer.", [READY, OFFERED])
 S.case(101, 1, "an identity started with a name is ready with the same offer and answers to that name.",
@@ -128,49 +123,27 @@ S.case(143, 5, "a name it cannot write down is not taken: the failure is answere
         OFFERED, send(ASK, js({})), expect(NAMED, "_event.data.name === null")],
        params=[("database", "'/nowhere/floppy.sqlite'"), ("bring_up_timeout_ms", "1500")], clock="wall")
 
-S.case(150, 6, "its name heard in a sound addresses it.",
-       [READY, send(SOUND, sound()), expect(HANDOFF, addressed("Floppy"))],
-       params=[named("Floppy")], backend=[transcript("hey floppy")], clock="wall")
-S.case(151, 6, "a sound whose transcript does not name it produces nothing.",
-       [READY, send(SOUND, sound()), wait("1s")],
-       params=[named("Floppy")], backend=[transcript("hello there")], clock="wall")
-S.case(152, 6, "a nameless identity decodes no sound (the backend would fail it).",
-       [READY, send(SOUND, sound()), wait("1s")],
-       backend=[{"path": TRANSCRIPTIONS, "status": 500, "body": {"error": {"message": "boom"}}}], clock="wall")
-
-S.case(160, 7, "a decoding the backend fails answers bot.ability.failed and the identity listens again.",
-       [READY, send(SOUND, sound()),
-        expect(FAILED, "typeof _event.data.message === 'string' && _event.data.message.length > 0"),
-        send(INPUT, said("Floppy")), expect(HANDOFF, addressed("Floppy"))],
+S.case(150, 6, "a sound produces nothing and decodes nothing; its name in text still addresses it.",
+       [READY, send(SOUND, sound()), wait("1s"), send(INPUT, said("Floppy")), expect(HANDOFF, addressed("Floppy"))],
        params=[named("Floppy")],
        backend=[{"path": TRANSCRIPTIONS, "status": 500, "body": {"error": {"message": "boom"}}}], clock="wall")
-S.case(161, 7, "a sound with no file in the media directory fails the decoding.",
-       [READY, send(SOUND, sound("media/missing.wav")),
-        expect(FAILED, "typeof _event.data.message === 'string' && _event.data.message.length > 0")],
-       params=[named("Floppy")], backend=[transcript("hey floppy")], clock="wall")
 
-S.case(170, 8, "input that arrives while recalling from memory is taken once it knows its name.",
+S.case(170, 7, "input that arrives while recalling from memory is taken once it knows its name.",
        [send(INPUT, said("Floppy?")), READY, expect(HANDOFF, addressed("Floppy"))],
        params=[DB, named("Floppy")], clock="wall")
-S.case(171, 8, "input that arrives while adopting is heard with the adopted name.",
+S.case(171, 7, "input that arrives while adopting is heard with the adopted name.",
        [READY, send(ADOPT, js({"name": "Pip"})), send(INPUT, said("Pip?")),
         expect(NAMED, "_event.data.name === 'Pip'"), OFFERED, expect(HANDOFF, addressed("Pip"))],
        params=[DB], clock="wall")
-S.case(172, 8, "text that arrives while a sound is being recognized waits for it: the sound's answer comes first.",
-       [READY, send(SOUND, sound()), send(INPUT, said("Floppy")),
-        expect(FAILED, "typeof _event.data.message === 'string'"), expect(HANDOFF, addressed("Floppy"))],
-       params=[named("Floppy")],
-       backend=[{"path": TRANSCRIPTIONS, "status": 500, "body": {"error": {"message": "boom"}}}], clock="wall")
-
-S.case(180, 9, "a nameless identity is asked and answers that it has no name.",
+S.case(180, 8, "a nameless identity is asked and answers that it has no name.",
        [READY, send(ASK, js({})), expect(NAMED, "_event.data.name === null")])
-S.case(181, 9, "a named identity is asked and answers its name.",
+S.case(181, 8, "a named identity is asked and answers its name.",
        [READY, send(ASK, js({})), expect(NAMED, "_event.data.name === 'Floppy'")],
        params=[named("Floppy")])
-S.case(182, 9, "an ask that arrives while recalling is answered with the recalled name once it knows.",
+S.case(182, 8, "an ask that arrives while recalling is answered with the recalled name once it knows.",
        [send(ASK, js({})), READY, expect(NAMED, "_event.data.name === 'Floppy'")],
        params=[DB, named("Floppy")], clock="wall")
-S.case(183, 9, "an adoption tells the name; an ask that arrived while adopting is answered with it.",
+S.case(183, 8, "an adoption tells the name; an ask that arrived while adopting is answered with it.",
        [READY, send(ADOPT, js({"name": "Pip"})), send(ASK, js({})),
         expect(NAMED, "_event.data.name === 'Pip'"), OFFERED, expect(NAMED, "_event.data.name === 'Pip'")],
        params=[DB], clock="wall")

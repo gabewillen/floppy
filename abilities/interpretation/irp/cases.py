@@ -2,12 +2,14 @@
 #
 # Each case's audio is in its sources/<id>/media/ (16 kHz mono 16-bit:
 # voiced*.wav 0.1 s of constant non-zero samples, silence.wav 0.1 s of
-# zeros, *.pcm the same samples raw); the fake backend answers what each
+# zeros, *.pcm the same samples raw, said.pcm 2 s of them); the fake backend answers what each
 # stage asks, in order.
+
+import json
 
 S = suite
 S.media({"voiced.wav": wav(1000), "voiced2.wav": wav(1000), "silence.wav": wav(), "ring.wav": wav(), "hum.wav": wav(),
-         "voiced.pcm": pcm(1000), "silence.pcm": pcm()})
+         "voiced.pcm": pcm(1000), "silence.pcm": pcm(), "said.pcm": pcm(1000, seconds=2.0)})
 SCORED = "bot.ability.listening.sensitivity.output"
 SPEECH = "bot.ability.listening.speech.output"
 COGNITION = "bot.ability.cognition.input"
@@ -15,10 +17,22 @@ FAILED = "bot.ability.listening.failed"
 READY = expect("bot.ability.ready")
 # Stages under a loaded host can outlast the default 30 s bound: cases
 # that reach the backend wait longer (statement 11 tests the bound itself).
-PATIENT = [("stage_timeout_ms", "600000")]
-NO_DECODER = PATIENT + [("speech_decoder", "false")]
-STREAMING = NO_DECODER + [("sound_classifier", "false")]
-DIARIZING = NO_DECODER + [("diarizer", "true")]
+# Each case names the stages it configures: the document's defaults
+# diarize and identify voices (statement 13), which only the cases about
+# them reach.
+
+
+def config(**overrides):
+    stages = {"stage_timeout_ms": "600000", "diarizer": "false", "voice_classifier": "false"}
+    stages.update(overrides)
+    return list(stages.items())
+
+
+PATIENT = config()
+NO_DECODER = config(speech_decoder="false")
+STREAMING = config(speech_decoder="false", sound_classifier="false")
+DIARIZING = config(speech_decoder="false", diarizer="true")
+VOICES = config(diarizer="true", voice_classifier="true")
 
 VOICED = {"path": "/vad", "status": 200, "body": {"segments": [{"start": 0.0, "end": 0.1}]}}
 SILENT = {"path": "/vad", "status": 200, "body": {"segments": []}}
@@ -26,6 +40,7 @@ DIARIZED = {"path": "/audio/diarization", "status": 200,
             "body": {"task": "diarize", "duration": 0.2, "num_speakers": 1,
                      "segments": [{"id": 0, "speaker": "SPEAKER_00", "label": "SPEAKER_00", "start": 0.0, "end": 0.1}]}}
 EMBEDDED = {"path": "/voice/embed", "status": 200, "body": {"embedding": [0.5, -0.25], "dim": 2, "model": "voice-detect-wespeaker-resnet34"}}
+OTHER_EMBEDDED = {"path": "/voice/embed", "status": 200, "body": {"embedding": [0.25, 0.5], "dim": 2, "model": "voice-detect-wespeaker-resnet34"}}
 
 
 def decoded(text):
@@ -87,7 +102,7 @@ def stimulus(cond):
 
 
 S.statement(1, "On start it sends `bot.ability.ready` to its parent (decision D242), with no data: it offers nothing.")
-S.statement(2, "The configuration's refusals (decision D177): voice identification (`voice_classifier`) with speech decoding (`speech_decoder`), a negative `product_threshold_db`, and a `recognize_timeout_ms` that is not positive each end the interpretation in its final state `degraded` without offering.")
+S.statement(2, "The configuration's refusals (decision D177): a negative `product_threshold_db` and a `recognize_timeout_ms` that is not positive each end the interpretation in its final state `degraded` without offering; voice identification (`voice_classifier`) with speech decoding (`speech_decoder`) is no refusal.")
 S.statement(3, "With the default configuration (voice detection, sound classification, speech decoding), a voiced scored sound opens the open-speech window, each further voiced sound joins it, and the first sound without voice closes it; the utterance is joined into a WAV file, decoded, and answered as `bot.ability.listening.speech.output` `{content: <words>, content_type: \"text/plain\", voice_detection, sample_rate_hz, channels, media_type: \"audio/pcm\", source_ids: [], parent}`, its parent the loudest frame's (the first with a level when none is louder).")
 S.statement(4, "A sound without voice is classified: a labelled one (a non-blank kind) is handed to the parent as `bot.ability.cognition.input` `{stimulus}`, the stimulus `{event: \"environment.sound\", data: <the sound as voice detection normalized it, its PCM written beside it as floppy-sound-<n>.pcm>, source: \"listening\"}`; an unlabelled one is dropped while speech decoding is configured.")
 S.statement(5, "A product is handed off only when audible: its `perceived_level_db` null or at least `product_threshold_db` (3 dB); a quieter one is dropped.")
@@ -100,8 +115,8 @@ S.statement(11, "Each stage but identification (statement 8) is bounded by `stag
 
 S.case(100, 1, "the interpretation is ready on start.", [READY])
 
-S.case(110, 2, "voice identification with speech decoding degrades the interpretation.",
-       [expect("done.invoke.interpretation")], params=[("voice_classifier", "true")])
+S.case(110, 2, "voice identification with speech decoding is no refusal: the interpretation is ready.",
+       [READY], params=[("voice_classifier", "true")])
 S.case(111, 2, "a negative product threshold degrades the interpretation.",
        [expect("done.invoke.interpretation")], params=[("product_threshold_db", "-1")])
 S.case(112, 2, "a recognize timeout that is not positive degrades the interpretation.",
@@ -154,20 +169,20 @@ S.case(160, 7, "a diarized utterance is one speech product per segment.",
 S.case(161, 7, "diarized segments are identified by their voice embedding.",
        [READY] + utterance() + [expect(SPEECH, "JSON.stringify(_event.data.source_ids) === '[[0.5,-0.25]]'"
                                                " && JSON.stringify(_event.data.voice_embedding.embedding) === '[0.5,-0.25]'" + SEGMENT)],
-       params=DIARIZING + [("voice_classifier", "true")], backend=[VOICED, SILENT, DIARIZED, EMBEDDED])
+       params=config(speech_decoder="false", diarizer="true", voice_classifier="true"), backend=[VOICED, SILENT, DIARIZED, EMBEDDED])
 S.case(162, 7, "with speech decoding too, the diarized utterance is decoded.",
        [READY] + utterance() + [words("hello")],
-       params=PATIENT + [("diarizer", "true")], backend=[VOICED, SILENT, DIARIZED, decoded("hello")])
+       params=config(diarizer="true"), backend=[VOICED, SILENT, DIARIZED, decoded("hello")])
 
 IDENTIFIED = (" && JSON.stringify(_event.data.source_ids) === '[[0.5,-0.25]]'"
               " && JSON.stringify(_event.data.voice_embedding.embedding) === '[0.5,-0.25]'")
 S.case(170, 8, "the opening voice is identified directly and every streamed frame carries its identity.",
        [READY] + utterance() + [frame(1, 1, "voiced.wav", IDENTIFIED), frame(2, 0, "silence.wav", IDENTIFIED)],
-       params=NO_DECODER + [("voice_classifier", "true")], backend=[VOICED, EMBEDDED, SILENT])
+       params=config(speech_decoder="false", voice_classifier="true"), backend=[VOICED, EMBEDDED, SILENT])
 S.case(171, 8, "a voiced sound with no sample rate cannot be identified.",
        [READY, hear(raw("voiced.pcm", media_type="audio/pcm")),
         failed("voice_identification", "Voice identification opening segment conversion failed: voice identification requires audio/pcm with sample rate and channels.")],
-       params=NO_DECODER + [("voice_classifier", "true")], backend=[VOICED])
+       params=config(speech_decoder="false", voice_classifier="true"), backend=[VOICED])
 
 S.case(180, 9, "audio that cannot be read fails voice detection; the next sound is interpreted.",
        [READY, hear(wav("missing.wav")), failed("voice_detection", ends="failed: the audio cannot be read."),
@@ -189,3 +204,56 @@ S.case(190, 10, "utterances sent together are interpreted in order.",
 S.case(200, 11, "a stage that outlasts stage_timeout_ms times out.",
        [READY, hear(wav("voiced.wav")), failed("voice_detection", "Listening voice_detection timed out.")],
        params=[("stage_timeout_ms", "1")], backend=[VOICED], clock="wall")
+
+S.statement(12, "The bot's own voice arriving as predicted (a scored sound that is `producing` with a `perceived_level_db` below `product_threshold_db`) is not interpreted (#30): it opens no utterance and does not join the open one, so the person's words around it are one utterance of their own. A sound heard while producing with no level, or at least at the threshold, is interpreted as usual.")
+
+
+def producing(scored):
+    return dict(scored, producing=True)
+
+
+S.case(210, 12, "the bot's predicted own voice opens no utterance; the person's next utterance is decoded alone.",
+       [READY, hear(producing(wav("voiced2.wav", 0))), hear(producing(wav("silence.wav", 0)))] + utterance() + [words("hello")],
+       params=PATIENT, backend=[VOICED, SILENT, decoded("hello")])
+S.case(211, 12, "the bot's predicted own voice does not join the person's open utterance.",
+       [READY, hear(wav("voiced.wav")), hear(producing(wav("voiced2.wav", 0))), hear(wav("silence.wav")), words("hello")],
+       params=PATIENT, backend=[VOICED, SILENT, decoded("hello")])
+S.case(212, 12, "a sound heard while producing with no level is interpreted.",
+       [READY, hear(producing(wav("voiced.wav"))), hear(producing(wav("silence.wav"))), words("hello")],
+       params=PATIENT, backend=[VOICED, SILENT, decoded("hello")])
+
+
+S.statement(13, "With speech decoding, diarization and voice identification (the document's defaults), the decoded utterance's diarized segments of at least `min_voice_seconds` (1 s), else the longest, are embedded after its words: each voice that is not the bot's own is one of the decoded product's `source_ids` (its embedding), and the product carries no `voice_embedding`.")
+S.statement(14, "The bot's own voice is heard from speaking's copy of a completed utterance, `bot.ability.speaking.efference` with `audio` (its PCM, `media_type` `audio/pcm` with a sample rate), taken while voice identification is configured and the own voice is unknown: its voice is detected, and when at least `min_voice_seconds` (1 s) lies from its first voice to its last, that span is identified and kept as the bot's own voice; a copy with less voice is logged `interpretation.unidentified`, a copy without audio is nothing, and without voice identification the copy is ignored. A decoded voice at least `voice_similarity_threshold` (0.50) alike to the bot's own is not a source id.")
+
+LONG_VOICED = {"path": "/vad", "status": 200, "body": {"segments": [{"start": 0.0, "end": 0.05}, {"start": 0.5, "end": 1.6}]}}
+
+
+def own_copy(audio="media/said.pcm"):
+    return send("bot.ability.speaking.efference", js({"mouth": "speaking", "duration": 0, "audio": audio,
+        "media_type": "audio/pcm", "sample_rate_hz": 16000, "channels": 1}))
+
+
+def heard(text, sources):
+    """Decoded speech and who spoke in it."""
+    return expect(SPEECH, f"_event.data.content === {js(text)} && _event.data.content_type === 'text/plain'"
+                  f" && JSON.stringify(_event.data.source_ids) === {js(json.dumps(sources, separators=(',', ':')))}"
+                  " && !('voice_embedding' in _event.data)")
+
+
+S.case(220, 13, "decoded speech says who spoke: the voice's embedding is its source id.",
+       [READY] + utterance() + [heard("hello", [[0.5, -0.25]])],
+       params=VOICES, backend=[VOICED, SILENT, DIARIZED, decoded("hello"), EMBEDDED])
+S.case(230, 14, "decoded speech in the bot's own voice, learned from speaking's copy, has no source id.",
+       [READY, own_copy()] + utterance() + [heard("hello", [])],
+       params=VOICES, backend=[LONG_VOICED, EMBEDDED, VOICED, SILENT, DIARIZED, decoded("hello"), EMBEDDED])
+S.case(231, 14, "another voice is a source id even once the bot's own voice is known.",
+       [READY, own_copy()] + utterance() + [heard("hello", [[0.25, 0.5]])],
+       params=VOICES, backend=[LONG_VOICED, EMBEDDED, VOICED, SILENT, DIARIZED, decoded("hello"), OTHER_EMBEDDED])
+S.case(232, 14, "a copy with too little voice teaches nothing: the bot's voice stays a source id.",
+       [READY, own_copy()] + utterance() + [heard("hello", [[0.5, -0.25]])],
+       params=VOICES, backend=[VOICED, VOICED, SILENT, DIARIZED, decoded("hello"), EMBEDDED],
+       logs={"interpretation.unidentified": ["too little of the bot's own voice"]})
+S.case(233, 14, "without voice identification the copy is ignored.",
+       [READY, own_copy()] + utterance() + [words("hello")],
+       params=PATIENT, backend=[VOICED, SILENT, decoded("hello")])

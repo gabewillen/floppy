@@ -262,3 +262,19 @@ S.case(202, 12, "the default encoder (provider null, the lab's voice) streams th
        [READY, say("one two three four"), efference("0.5"), sound(1), sound(1, chunk=1), sound(1, chunk=2), sound(1, chunk=3),
         efference("0"), appended("one two three four", 1), output("one two three four")],
        ignore=[EFFERENCE, PROGRESS], params=PATIENT, backend=[STREAMED_PCM])
+
+S.statement(13, "The efference copy `{duration: 0}` of a completed utterance also carries `audio`, the file the whole utterance was encoded to (`media/speaking-<n>.pcm`): the bot's own voice as it commanded it, for the listening to learn; a copy before the utterance completed, or of a stopped one, carries none.")
+
+
+def completed_copy(n):
+    return expect(EFFERENCE, f"_event.data.duration === 0 && _event.data.audio === 'media/speaking-{n}.pcm'"
+                  " && _event.data.media_type === 'audio/pcm' && _event.data.sample_rate_hz === 24000")
+
+
+def copy_without_audio(duration):
+    return expect(EFFERENCE, f"_event.data.duration === {duration} && !('audio' in _event.data)")
+
+
+S.case(210, 13, "a played-out utterance's last copy carries its audio.",
+       [READY, say("hi"), copy_without_audio("0.1"), completed_copy(1), output("hi")],
+       ignore=[PROGRESS, SOUND, APPEND], params=PATIENT, backend=[PCM])

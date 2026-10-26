@@ -21,18 +21,12 @@
       }
     },
     {
-      "path": "/audio/transcriptions",
-      "status": 200,
-      "body": {
-        "text": "own voice"
-      }
-    },
-    {
-      "path": "/vad",
+      "path": "/audio/diarization",
       "status": 200,
       "body": {
         "segments": [
           {
+            "speaker": "SPEAKER_00",
             "start": 0.0,
             "end": 0.1
           }
@@ -40,17 +34,20 @@
       }
     },
     {
-      "path": "/vad",
-      "status": 200,
-      "body": {
-        "segments": []
-      }
-    },
-    {
       "path": "/audio/transcriptions",
       "status": 200,
       "body": {
         "text": "cut in"
+      }
+    },
+    {
+      "path": "/voice/embed",
+      "status": 200,
+      "body": {
+        "embedding": [
+          0.5,
+          -0.25
+        ]
       }
     }
   ]

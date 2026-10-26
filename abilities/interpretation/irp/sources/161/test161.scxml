@@ -4,9 +4,9 @@
 <state id="harness" initial="boot">
   <invoke id="interpretation" type="scxml" src="../../../interpretation.scx">
     <param name="stage_timeout_ms" expr="600000"/>
-    <param name="speech_decoder" expr="false"/>
     <param name="diarizer" expr="true"/>
     <param name="voice_classifier" expr="true"/>
+    <param name="speech_decoder" expr="false"/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>

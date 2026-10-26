@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- interpretation-12: the bot's predicted own voice does not join the person's open utterance. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="interpretation" type="scxml" src="../../../interpretation.scx">
+    <param name="stage_timeout_ms" expr="600000"/>
+    <param name="diarizer" expr="false"/>
+    <param name="voice_classifier" expr="false"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.ready" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.listening.sensitivity.output" target="#_interpretation"><content expr='{"sound": {"audio": "media/voiced.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}, "parent": {"event": "environment.sound", "data": {"audio": "media/voiced.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}}, "perceived_level_db": null}'/></send>
+      <send event="bot.ability.listening.sensitivity.output" target="#_interpretation"><content expr='{"sound": {"audio": "media/voiced2.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}, "parent": {"event": "environment.sound", "data": {"audio": "media/voiced2.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}}, "perceived_level_db": 0, "producing": true}'/></send>
+      <send event="bot.ability.listening.sensitivity.output" target="#_interpretation"><content expr='{"sound": {"audio": "media/silence.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}, "parent": {"event": "environment.sound", "data": {"audio": "media/silence.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}}, "perceived_level_db": null}'/></send>
+    </onentry>
+    <transition event="bot.ability.listening.speech.output" cond="_event.data.content === &quot;hello&quot; &amp;&amp; _event.data.content_type === 'text/plain' &amp;&amp; _event.data.sample_rate_hz === 16000 &amp;&amp; _event.data.channels === 1 &amp;&amp; _event.data.media_type === 'audio/pcm' &amp;&amp; _event.data.voice_detection.segments.length === 0 &amp;&amp; _event.data.source_ids.length === 0 &amp;&amp; !('voice_embedding' in _event.data) &amp;&amp; _event.data.parent.event === 'environment.sound' &amp;&amp; _event.data.parent.data.audio === 'media/voiced.wav'" target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

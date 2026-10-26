@@ -127,7 +127,9 @@ function chunkFormat(_event) {
 
 // The encoded speech's format, from its output.
 function encodedFormat(_event) {
-  return soundFormat(_event.data);
+  var format = soundFormat(_event.data);
+  format.audio = typeof _event.data.audio === 'string' ? _event.data.audio : null;
+  return format;
 }
 
 // A chunk's measured length in ms, 0 when it has none (decision D203).
@@ -189,6 +191,16 @@ function efferenceCopy(seconds) {
   var format = audioFormat();
   return ({mouth: mouth, duration: seconds, media_type: format.media_type,
     sample_rate_hz: format.sample_rate_hz, channels: format.channels});
+}
+
+// The copy once a completed utterance has played: nothing left, and the
+// audio it commanded, whole (the bot's own voice, heard by listening).
+function completedCopy() {
+  var copy = efferenceCopy(0);
+  if (encoded_all && encoded !== null && encoded.audio !== null) {
+    copy.audio = encoded.audio;
+  }
+  return copy;
 }
 
 // The seconds of measured audio received and not yet played.
