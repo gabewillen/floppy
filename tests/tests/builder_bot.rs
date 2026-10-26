@@ -205,6 +205,10 @@ const PLAN: &str = r#"{"name":"traffic_light","summary":"A vehicle light that cy
 /// that generation by then, so it never reaches the report.
 const LATE_PLAN: &str = r#"{"name":"late_plan","summary":"Answered after the timeout.","states":[],"events":[],"transitions":[]}"#;
 
+/// The first event of the slow route's streamed first plan, after which it
+/// stalls: the start of an assistant message, with nothing in it yet.
+const STALLED_EVENT: &str = "data: {\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\n";
+
 /// The longest the slow route holds its first plan answer while it waits
 /// for the builder to ask for the redesign: a hang guard only. The answer is
 /// released by the redesign request, so no assertion depends on time.
@@ -1151,6 +1155,7 @@ fn serve(mut stream: std::net::TcpStream, log: &Mutex<Vec<Received>>, arrived: &
             .filter(|seen| seen.path == path && seen.schema_name() == Some(schema))
             .count()
     };
+    let mut started = false;
     let (authors, plans) = {
         let mut log = log.lock().expect("the log lock");
         log.push(request.clone());
@@ -1160,6 +1165,16 @@ fn serve(mut stream: std::net::TcpStream, log: &Mutex<Vec<Received>>, arrived: &
             && request.schema_name() == Some("topology_plan")
             && counts.1 == 1
         {
+            // A streamed first plan starts (one event, the generation's
+            // first progress) and then stalls.
+            if request.body["stream"] == true {
+                started = write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n{STALLED_EVENT}"
+                )
+                .and_then(|()| stream.flush())
+                .is_ok();
+            }
             // Hold the first plan until the builder asks for the redesign:
             // its timeout has preempted this generation by then.
             drop(
@@ -1181,11 +1196,15 @@ fn serve(mut stream: std::net::TcpStream, log: &Mutex<Vec<Received>>, arrived: &
     let (status, reply) = reply.map_or(("404 Not Found", "{}".to_owned()), |reply| {
         ("200 OK", reply)
     });
-    let _ = write!(
-        stream,
-        "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{reply}",
-        reply.len()
-    );
+    let _ = if started {
+        write!(stream, "{reply}")
+    } else {
+        write!(
+            stream,
+            "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{reply}",
+            reply.len()
+        )
+    };
     *request.answered.lock().expect("the answered lock") = Some(Instant::now());
 }
 
@@ -1617,13 +1636,20 @@ fn assert_repair_requests(received: &[Received]) {
 }
 
 /// A `builder.timeout` fires while the design generation is in flight (the
-/// slow route holds its answer): it preempts the call, leaving design
-/// cancels the invocation, and the late answer reaches no one. The builder
-/// redesigns and finishes with the second plan. Runs on the wall clock.
+/// slow route's streamed first plan starts and then stalls): it preempts
+/// the call, leaving design cancels the invocation, and the late answer
+/// reaches no one. The builder redesigns and finishes with the second plan.
+/// Runs on the wall clock.
 #[test]
 fn a_builder_timeout_preempts_a_generation_in_flight_and_cancels_it() {
     let mock = Mock::start();
     let env = env_file("timeout", &mock, "slow", "redesign", &ALL);
+    // Streamed replies, so the stall is bounded by inactivity (decision
+    // D101): a whole-call ceiling would bound the redesign too, and a
+    // loaded host can take longer than it to start and finish that call.
+    let mut text = std::fs::read_to_string(&env).expect("the env file is readable");
+    text.push_str("FLOPPY_STREAM=true\n");
+    std::fs::write(&env, text).expect("the env file is writable");
     let mut args = builder_args(&builder_document(), "wall");
     args.extend(["--env-file".to_owned(), env.display().to_string()]);
     let mut run = Run::start(&args, &[]);
@@ -1632,11 +1658,9 @@ fn a_builder_timeout_preempts_a_generation_in_flight_and_cancels_it() {
     });
     run.event(
         "builder.request",
-        // Long enough that the redesign answers in time on a loaded
-        // machine (the held first plan times out whatever the bound).
-        // The backstop, since a reply that is not streamed has no
-        // inactivity bound (decision D101).
-        &json!({"spec": SPEC, "generate_ceiling_ms": 5000}),
+        // The redesign streams whole at once, so only the stalled first
+        // plan goes this long without progress.
+        &json!({"spec": SPEC, "generate_timeout_ms": 5000}),
     );
     run.end_input();
     records.extend(run.finish(Duration::from_mins(3)).records);

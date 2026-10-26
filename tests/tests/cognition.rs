@@ -1857,7 +1857,9 @@ fn a_revised_description_is_the_bots_and_reflection_still_runs() {
         .unwrap_or_default()
         .to_owned();
     assert!(
-        system.contains(&format!("<description written_by=\"you\">{text}</description>")),
+        system.contains(&format!(
+            "<description written_by=\"you\">{text}</description>"
+        )),
         "{system}"
     );
     drop(run.close(WAIT));
