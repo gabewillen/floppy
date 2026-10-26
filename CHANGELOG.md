@@ -62,6 +62,16 @@ hard cutover.
 
 ### Added
 
+- The browser host's build ships more extension components:
+  `scripts/build.mjs --extensions <dir>` (repeatable) transpiles and meters
+  every artifact `<dir>/manifest.tsv` lists as an extension component of
+  the package, `dist/<name>/` with `<name>` its artifact name with `_` as
+  `-`, and fails on a name or release digest another component already
+  has; `dist/extensions.js` lists every shipped extension component, which
+  `authenticateExtensionComponent`, `ExtensionComponents.bind`, and the core
+  module loader read. Proven by `test/extension.test.mjs` (a renamed copy
+  of the example component built through `--extensions` authenticates and
+  runs; a duplicate digest and a taken name fail the build).
 - `outbound-http.send`: an invoked service's request whose response is
   streamed (`async func send(http-request) -> result<tuple<u16,
   stream<u8>, future<result<_, component-error>>>, component-error>`,
