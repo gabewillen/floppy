@@ -7,6 +7,30 @@ Each variable was granted only to its own package by the document's `env`
 attributes. Entries are dated and keep the names of their day: the product
 was named nemobot before decision D23.
 
+## 2026-10-26, hearing in parallel (D261), no model
+
+The listening (`tests/fixtures/phase6/listening_harness.scx` over
+`abilities/listening/`, the interpretation's defaults: diarization, voice
+identification, the affect classifier and speech decoding) run by `scx run`
+from a cloud session, with every speech, voice and emotion variable naming
+one local relay to `https://api.willen.dev` (docs/eval.md). Two recorded
+utterances (24 kHz mono WAV: "Hi Floppy, I'm Gabe", 2.8 s; "Hello Floppy, my
+name is Anna.", 6.0 s), each followed by 0.1 s of silence, three times in one
+run; the time is from sending the closing silence to the speech product.
+
+| Clip | Before (serial) | After (D261) |
+| --- | --- | --- |
+| 2.8 s | 3.72 (first), 2.04, 2.04 s | 3.39 (first), 1.86, 1.71 s |
+| 6.0 s | 2.58, 2.58, 2.59 s | 2.48, 2.18, 2.38 s |
+
+Both runs heard the same words, a voice ref for each speaker that was the
+same ref on each repetition, and the same tone (happy, surprised). The relay
+shows the change: before, voice detection (twice), diarization (0.47 s),
+transcription (0.26 s, with the emotion call beside it) and the voice
+embedding (0.25 s) ran one after another; after, transcription starts with
+diarization and finishes inside it, and the emotion and embedding calls run
+together once diarization ends.
+
 ## 2026-10-26, recall by association (D256), model `sparks/qwen3.8-flash-next`
 
 `eval.py run` from a cloud session through the relays of docs/eval.md

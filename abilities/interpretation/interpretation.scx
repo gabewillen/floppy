@@ -15,7 +15,8 @@
         DiarizingVoice -> IdentifyingVoice | DecodingSpeech.Diarized | HandingOff
         IdentifyingVoiceDirect -> HearingSpeech
         IdentifyingVoice -> HandingOff
-        DecodingSpeech { Detected, Diarized } -> IdentifyingVoice | HandingOff
+        DecodingSpeech { Detected, Diarized { Diarizing -> Identifying | Detected } }
+          -> HandingOff
         HandingOff -> Idle }
       Idle -bot.ability.speaking.efference {audio}-> Working.DetectingOwnVoice
         -> IdentifyingOwnVoice -> Idle
@@ -75,7 +76,8 @@
     spans, and the identity direct identification found), when audible.
   * SpeechEnded joins the open speech into one utterance file with the
     speech service's append step when diarization or decoding will read
-    it, then diarizes, else decodes, else returns to Idle. The utterance
+    it, then diarizes while it decodes (DecodingSpeech.Diarized), else
+    diarizes (DiarizingVoice), else decodes, else returns to Idle. The utterance
     is a WAV container (floppy-utterance-<n>.wav) whenever its rate is
     known: floppy hands the decoder a file, and transcription APIs read a
     container, not raw PCM. Without a rate it stays raw PCM
@@ -130,15 +132,23 @@
     remembered: it is learned again each run.
   * DecodingSpeech invokes abilities/speech_decoding/speech_decoding.scx (the speech
     service) on the utterance: decoding rewrites the observation into
-    words. After diarization with voice identification configured, the
-    words then go to IdentifyingVoice, which embeds the diarized segments
-    of at least min_voice_seconds (1 s, mosfet.py's shortest new voice),
-    or the longest when none is that long: decoded speech says who spoke
-    (mosfet.py's streaming hearing does the same for each turn).
+    words. With diarization, the decoder is invoked on DecodingSpeech
+    while its child Diarized diarizes the utterance (Diarizing), so the
+    words and the voices are heard concurrently, each stage bounded by its
+    own timer and failing as its own stage. With voice identification
+    configured and segments diarized, Identifying embeds the diarized
+    segments of at least min_voice_seconds (1 s, mosfet.py's shortest new
+    voice), or the longest when none is that long, and hears their tone
+    alongside; the embeddings wait for the words, and each voice is
+    identified once the words are in (a voice is minted or refined only
+    for decoded speech): decoded speech says who spoke (mosfet.py's
+    streaming hearing does the same for each turn). Otherwise the
+    diarized segments' tone is heard in Detected.
   * DecodingSpeech also hears the utterance's tone, with affect_classifier
     (true; mosfet.py's Listening(affect_classifier=)): it invokes
     abilities/voice_affect/voice_affect.scx beside the decoder, on the
-    utterance or, after diarization, its diarized segments (the longest of
+    utterance (Detected) or, once diarized, its diarized segments
+    (Identifying, or Detected when nobody is identified) (the longest of
     at least 0.3 s is heard, within 3 s), and leaves once the words are
     decoded and the tone is heard or not (mosfet.py's tone, heard
     alongside decoding). A tone not heard never fails the stage.
@@ -534,6 +544,10 @@
             <content expr="childFailure(_event)"/>
           </send>
         </transition>
+        <transition event="done.invoke.open_speech" cond="isUtteranceToDiarize(_event) &amp;&amp; speech_decoder" target="Diarizing">
+          <assign location="utterance" expr="_event.data"/>
+          <assign location="completion" expr="null"/>
+        </transition>
         <transition event="done.invoke.open_speech" cond="isUtteranceToDiarize(_event)" target="DiarizingVoice">
           <assign location="utterance" expr="_event.data"/>
         </transition>
@@ -595,11 +609,6 @@
         </invoke>
         <transition event="done.invoke.voice_diarization" cond="isDiarizedToIdentify(_event)"
                     target="IdentifyingVoice">
-          <assign location="completion" expr="diarizationCompletion()"/>
-          <assign location="completion.segments" expr="_event.data.segments"/>
-        </transition>
-        <transition event="done.invoke.voice_diarization" cond="isDiarizedToDecode(_event)"
-                    target="Diarized">
           <assign location="completion" expr="diarizationCompletion()"/>
           <assign location="completion.segments" expr="_event.data.segments"/>
         </transition>
@@ -702,7 +711,9 @@
         </transition>
       </state>
 
-      <!-- Speech decoding rewrites the observation into words. -->
+      <!-- Speech decoding rewrites the observation into words; after
+           diarization its voices are heard and identified while the words
+           are decoded. -->
       <state id="DecodingSpeech" initial="Detected">
         <onentry>
           <assign location="stage" expr="'speech_decoding'"/>
@@ -720,11 +731,7 @@
           <param name="audio" expr="utterance.audio"/>
           <param name="media_type" expr="utterance.media_type"/>
         </invoke>
-        <!-- The tone, heard alongside the words (mosfet.py's tone). -->
-        <invoke id="voice_affect" type="scxml" src="../voice_affect/voice_affect.scx">
-          <param name="segments" expr="affectSegments()"/>
-        </invoke>
-        <transition event="done.invoke.voice_affect">
+        <transition event="done.invoke.voice_affect done.invoke.speech_voice_affect">
           <assign location="affect" expr="heardAffect(_event)"/>
           <assign location="classifying" expr="false"/>
         </transition>
@@ -733,20 +740,98 @@
         </transition>
         <transition event="done.invoke.speech_decoding" cond="isNotChildFailure(_event)">
           <send event="bot.ability.listening.stage.failed" target="#_internal">
-            <content expr="stageFailure('Speech decoding child produced a non-bytes terminal.')"/>
+            <content expr="decodingFailure('Speech decoding child produced a non-bytes terminal.')"/>
           </send>
         </transition>
-        <!-- The words and their tone are both in hand. -->
-        <transition cond="identifiesDecoded()" target="IdentifyingVoice">
-          <assign location="completion" expr="decodingCompletion()"/>
-          <assign location="completion.segments" expr="voicedSegments()"/>
+        <!-- The words, their tone, and who spoke are all in hand. -->
+        <transition cond="isDecoded() &amp;&amp; In('Identifying') &amp;&amp; hasVoices()" target="HandingOff">
+          <assign location="completion" expr="identifiedDecodingCompletion()"/>
         </transition>
-        <transition cond="isDecoded()" target="HandingOff">
+        <transition cond="isDecoded() &amp;&amp; In('Detected')" target="HandingOff">
           <assign location="completion" expr="decodingCompletion()"/>
         </transition>
-        <!-- From the window directly, or after diarization. -->
-        <state id="Detected"/>
-        <state id="Diarized"/>
+        <!-- The tone of the utterance, or of its diarized segments when
+             nobody is identified (mosfet.py's tone, heard alongside
+             decoding). -->
+        <state id="Detected">
+          <invoke id="voice_affect" type="scxml" src="../voice_affect/voice_affect.scx">
+            <param name="segments" expr="affectSegments()"/>
+          </invoke>
+        </state>
+        <!-- Who spoke when, while the words are decoded. -->
+        <state id="Diarized" initial="Diarizing">
+          <state id="Diarizing">
+            <onentry>
+              <assign location="stage" expr="'voice_diarization'"/>
+              <send id="speech-voice-diarization-timer" event="bot.ability.listening.stage.failed" delayexpr="stageDelay()">
+                <content expr="stageTimeout()"/>
+              </send>
+            </onentry>
+            <onexit>
+              <cancel sendid="speech-voice-diarization-timer"/>
+            </onexit>
+            <invoke id="speech_voice_diarization" type="scxml" src="../voice_diarization/voice_diarization.scx">
+              <param name="audio" expr="utterance.audio"/>
+              <param name="media_type" expr="utterance.media_type"/>
+              <param name="sample_rate_hz" expr="utterance.sample_rate_hz"/>
+              <param name="channels" expr="utterance.channels"/>
+              <param name="output" expr="diarizedOutput()"/>
+            </invoke>
+            <transition event="done.invoke.speech_voice_diarization" cond="hasSegments(_event) &amp;&amp; identifiesSegments(_event)"
+                        target="Identifying">
+              <assign location="completion" expr="diarizationCompletion()"/>
+              <assign location="completion.segments" expr="_event.data.segments"/>
+            </transition>
+            <transition event="done.invoke.speech_voice_diarization" cond="hasSegments(_event)" target="Detected">
+              <assign location="completion" expr="diarizationCompletion()"/>
+              <assign location="completion.segments" expr="_event.data.segments"/>
+            </transition>
+            <transition event="done.invoke.speech_voice_diarization" cond="isNotChildFailure(_event)">
+              <send event="bot.ability.listening.stage.failed" target="#_internal">
+                <content expr="stageFailure('Voice diarization child produced invalid output.')"/>
+              </send>
+            </transition>
+          </state>
+          <!-- The tone of the diarized segments, and one embedding per
+               voiced segment. -->
+          <state id="Identifying">
+            <onentry>
+              <assign location="stage" expr="'voice_identification'"/>
+              <send id="speech-voice-identification-timer" event="IdentifyingVoice.after" delayexpr="identifyDelay()"/>
+            </onentry>
+            <onexit>
+              <cancel sendid="speech-voice-identification-timer"/>
+            </onexit>
+            <invoke id="speech_voice_affect" type="scxml" src="../voice_affect/voice_affect.scx">
+              <param name="segments" expr="affectSegments()"/>
+            </invoke>
+            <invoke id="speech_voice_identification" type="scxml" src="../voice_identification/voice_identification.scx">
+              <param name="segments" expr="voicedSegments()"/>
+            </invoke>
+            <transition event="done.invoke.speech_voice_identification"
+                        cond="isEmbeddingCountMismatch(_event)">
+              <assign location="mismatch" expr="embeddingCountMismatch(_event)"/>
+              <send event="bot.ability.listening.stage.failed" target="#_internal">
+                <content expr="embeddingCountFailure()"/>
+              </send>
+            </transition>
+            <!-- The embeddings wait for the words: a voice is identified
+                 only once its speech is decoded. -->
+            <transition event="done.invoke.speech_voice_identification" cond="hasEmbeddings(_event) &amp;&amp; !hasVoices()">
+              <assign location="completion.embeddings" expr="_event.data.embeddings"/>
+            </transition>
+            <!-- Nobody identified in time (decision D177). -->
+            <transition event="IdentifyingVoice.after" cond="isIdentifyTimer(_event) &amp;&amp; !hasVoices()">
+              <log label="interpretation.unidentified" expr="identifyTimedOut(voicedSegments().length)"/>
+              <assign location="completion.embeddings" expr="null"/>
+            </transition>
+            <transition event="done.invoke.speech_voice_identification" cond="isNotChildFailure(_event) &amp;&amp; !hasVoices()">
+              <send event="bot.ability.listening.stage.failed" target="#_internal">
+                <content expr="stageFailure('Voice identification child produced invalid output.')"/>
+              </send>
+            </transition>
+          </state>
+        </state>
       </state>
 
       <!-- The bot's own voice, from speaking's copy of what it said. -->

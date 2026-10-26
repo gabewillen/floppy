@@ -117,7 +117,7 @@
     </test>
   </assert>
   <assert id="interpretation-13" specnum="13" specid="#interpretation-13">
-    <![CDATA[With speech decoding, diarization and voice identification (the document's defaults), the decoded utterance's diarized segments of at least `min_voice_seconds` (1 s), else the longest, are embedded after its words: each voice that is not the bot's own is one of the decoded product's `source_ids` by its ref `voice:<id>`, and the product carries no embedding.]]>
+    <![CDATA[With speech decoding, diarization and voice identification (the document's defaults), the decoded utterance's diarized segments of at least `min_voice_seconds` (1 s), else the longest, are embedded while its words are decoded (alongside diarization, decoding starts when the utterance is joined) and identified once the words are in: each voice that is not the bot's own is one of the decoded product's `source_ids` by its ref `voice:<id>`, and the product carries no embedding.]]>
     <test id="220" conformance="mandatory" manual="false">
       <start uri="220/test220.scxml"/>
     </test>
