@@ -46,7 +46,7 @@ const WAIT: Duration = Duration::from_secs(300);
 /// requests as complete.
 const SETTLE: Duration = Duration::from_secs(1);
 /// The fake keys (not secrets).
-const FAKE_KEYS: &str = "FLOPPY_API_KEY=floppy-fake\nTYPESAFE_API_KEY=ts-floppy-fake\n";
+const FAKE_KEYS: &str = "FLOPPY_API_KEY=floppy-fake\nTYPESAFE_API_KEY=ts-floppy-fake\nFLOPPY_REFLECTION_API_KEY=floppy-fake\n";
 const IGNORE: &str = "bot.ability.cognition.ignore";
 const RESPOND: &str = "bot.ability.communication.respond";
 /// The deliberative handoff the intuition tier is offered (decision D144).
@@ -555,7 +555,7 @@ fn layout(
     std::fs::write(
         &env,
         format!(
-            "{FAKE_KEYS}FLOPPY_BASE_URL={origin}/{generation}/v1\nTYPESAFE_BASE_URL={origin}/{decision}\n",
+            "{FAKE_KEYS}FLOPPY_BASE_URL={origin}/{generation}/v1\nFLOPPY_REFLECTION_BASE_URL={origin}/{generation}/v1\nTYPESAFE_BASE_URL={origin}/{decision}\n",
             origin = mock.origin,
             generation = generation.path(),
             decision = decision.path(),
