@@ -94,7 +94,8 @@
 //!    />` still over; nothing when none is held;
 //! 3. the rest of what the bot has in mind: `<cognition:recalled>` holding
 //!    `prior_episodes` (an array of cognitive episodes: `focus`,
-//!    `focus_candidates`, `stimulus_name`, a failed or cancelled turn's
+//!    `focus_candidates`, `stimulus_name`, `heard` (the words its stimulus
+//!    carried, as `item`s, when it carried any), a failed or cancelled turn's
 //!    `outcome` and `failure` (decision D139), `output` as
 //!    `cognition:event`s and `behavior` as a `behavior:create`,
 //!    `behavior:change` or `behavior:break`) and `standing_directives` (an
@@ -2271,6 +2272,7 @@ fn models(
 }
 
 /// A cognitive episode: `focus`, `focus_candidates`, `stimulus_name`,
+/// `heard` (the words its stimulus carried, when it carried any),
 /// `outcome` and `failure` (a failed or cancelled turn's, decision D139),
 /// `output` (as `cognition:event`s), `behavior`.
 fn episode(
@@ -2294,6 +2296,8 @@ fn episode(
         field("stimulus_name"),
         budget,
     )?;
+    // The words the stimulus carried (none: nothing).
+    fill_field(&mut element, "heard", field("heard"), budget)?;
     // A failed or cancelled turn's (decision D139); a completed turn's
     // episode has neither.
     fill_field(&mut element, "outcome", field("outcome"), budget)?;
