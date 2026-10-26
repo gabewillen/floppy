@@ -117,6 +117,50 @@
             "title": "Heard",
             "type": "array"
           },
+          "images": {
+            "description": "The images the turn's stimulus carried, in the order it carried them, each once, at most 8: each its reference and media type, as the stimulus carried it (decision D252); left out when it carried none [floppy field].",
+            "examples": [
+              [
+                {
+                  "image": "media/image-1",
+                  "media_type": "image/png"
+                }
+              ]
+            ],
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "image": {
+                  "description": "Reference (a URI reference) to the image; floppy passes media by reference, never as bytes [floppy field].",
+                  "format": "uri-reference",
+                  "minLength": 1,
+                  "title": "Image",
+                  "type": "string"
+                },
+                "media_type": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "The image's media type, such as image/png, or null when the stimulus gave none.",
+                  "title": "Media Type"
+                }
+              },
+              "required": [
+                "image",
+                "media_type"
+              ],
+              "type": "object"
+            },
+            "maxItems": 8,
+            "title": "Images",
+            "type": "array"
+          },
           "outcome": {
             "description": "How a failed or cancelled turn ended (decision D139); a completed turn's episode has none [floppy field].",
             "enum": [
