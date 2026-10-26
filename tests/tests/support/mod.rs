@@ -993,9 +993,9 @@ pub fn copy_ability(name: &str, abilities: &Path) -> PathBuf {
     abilities.join(name).join(format!("{name}.scx"))
 }
 
-/// The listening's abilities (abilities/listening/, its children and its
-/// hearing leaves).
-pub const LISTENING: [&str; 9] = [
+/// The listening's abilities (abilities/listening/, its children, its
+/// hearing leaves, and the memory the interpretation remembers voices in).
+pub const LISTENING: [&str; 10] = [
     "listening",
     "sensitivity",
     "interpretation",
@@ -1005,6 +1005,7 @@ pub const LISTENING: [&str; 9] = [
     "sound_classification",
     "speech_decoding",
     "voice_affect",
+    "memory",
 ];
 
 /// Copies the listening's abilities into the layout's `abilities`

@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- identity-7: input that arrives while recalling from memory is taken once it knows its name. -->
-<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:device="https://github.com/stateforward/floppy/namespaces/device" version="1.0" datamodel="ecmascript" initial="harness">
+<datamodel>
+  <data id="snapshot" expr="null"/>
+</datamodel>
 <state id="harness" initial="boot">
   <invoke id="identity" type="scxml" src="../../../identity.scx">
     <param name="database" expr="'/memory/floppy.sqlite'"/>
@@ -16,8 +19,23 @@
     </onentry>
     <transition event="bot.ability.ready" target="step1"/>
   </state>
-  <state id="step1">
-    <transition event="bot.ability.cognition.input" cond="_event.data.stimulus.event === 'bot.ability.identity.addressed' &amp;&amp; _event.data.stimulus.data.name === &quot;Floppy&quot; &amp;&amp; _event.data.stimulus.source === 'identity'" target="step2"/>
+  <state id="step1" initial="step1_read">
+    <onentry>
+      <send event="harness.snapshot.deadline" id="step1_deadline" delay="30s"/>
+    </onentry>
+    <onexit><cancel sendid="step1_deadline"/></onexit>
+    <transition event="harness.snapshot.deadline" target="fail"><log label="unexpected" expr="'snapshot ' + JSON.stringify(snapshot)"/></transition>
+    <state id="step1_read">
+      <onentry>
+        <device:snapshot location="snapshot" target="'#_identity'"/>
+      </onentry>
+      <transition cond="snapshot.attributes.addressed === true &amp;&amp; snapshot.attributes.name === &quot;Floppy&quot; &amp;&amp; snapshot.state === 'listening'" target="step2"/>
+      <transition target="step1_again"/>
+    </state>
+    <state id="step1_again">
+      <onentry><send event="harness.waited" delay="100ms"/></onentry>
+      <transition event="harness.waited" target="step1_read"/>
+    </state>
   </state>
   <state id="step2">
     <transition target="pass"/>

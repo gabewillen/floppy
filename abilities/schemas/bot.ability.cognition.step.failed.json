@@ -32,16 +32,80 @@
     "stimulus": {
       "anyOf": [
         {
-          "type": "string"
+          "additionalProperties": false,
+          "description": "The stimulus the failed turn was taken up for, as an envelope: its name, its data, and optionally its id, source and target [floppy field].",
+          "properties": {
+            "event": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "data": {},
+            "id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "target": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "event",
+            "data"
+          ],
+          "type": "object"
         },
         {
           "type": "null"
         }
       ],
       "default": null,
-      "description": "Name of the stimulus the failed turn was taken up for, when it has one.",
+      "description": "The stimulus the failed turn was taken up for, when it has one: what was perceived and went unanswered because the turn failed (a message someone said, with who said it) [floppy field: mosfet.py names only its event].",
       "examples": [
-        "bot.input"
+        {
+          "event": "bot.ability.conversation.output",
+          "data": {
+            "messages": [
+              {
+                "content": "Can you explain how a bicycle's gears work?",
+                "content_type": "text/plain",
+                "direction": "heard",
+                "participants": [
+                  {
+                    "ref": "gabe",
+                    "role": "source"
+                  }
+                ]
+              }
+            ]
+          },
+          "source": "conversation"
+        }
       ],
       "title": "Stimulus"
     }
@@ -57,7 +121,13 @@
       "message": "Cognition's reasoning step failed, so the turn failed: Provider request failed.",
       "stage": "reasoning",
       "turn": 3,
-      "stimulus": "bot.input"
+      "stimulus": {
+        "event": "bot.input",
+        "data": {
+          "text": "How do a bicycle's gears work?"
+        },
+        "source": "conversation"
+      }
     }
   ]
 }

@@ -66,13 +66,21 @@
   so its name and the state it arrives in route it: no cond asks who sent
   it.
 
+  Memory: the <param> database (the memory database file, or null) goes
+  to the interpretation, which remembers the voices heard as the people
+  long-term memory holds (decision D258).
+
   Bindings: none of its own (the interpretation and its hearing leaves
-  bind the speech service).
+  bind the speech service, and the interpretation's memory the sql and
+  pgsql services).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="listening" initial="live">
   <datamodel>
+    <!-- The memory database (the invoker's <param>), which the
+         interpretation remembers the voices heard in; null: none. -->
+    <data id="database" expr="null"/>
     <data id="sensitivity_timeout_ms" expr="30000"/>
     <data id="children" expr="['sensitivity', 'interpretation']"/>
     <data id="ready" expr="({})"/>
@@ -85,7 +93,9 @@
 
   <state id="live" initial="initializing">
     <invoke id="sensitivity" type="scxml" src="../sensitivity/sensitivity.scx"/>
-    <invoke id="interpretation" type="scxml" src="../interpretation/interpretation.scx"/>
+    <invoke id="interpretation" type="scxml" src="../interpretation/interpretation.scx">
+      <param name="database" expr="database"/>
+    </invoke>
 
     <!-- A child's readiness, once (decision D242), named by its invoke id. -->
     <transition event="bot.ability.ready" event:schema="../schemas/bot.ability.ready.json">

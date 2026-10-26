@@ -47,7 +47,7 @@ never edits the workspace: everything goes under `target/floppy-eval/`.
 
 | Scenario | Category | What it teaches, then probes |
 | --- | --- | --- |
-| `name_adopt` | name | "your name is Juniper"; answers to Juniper and does not claim to be Pixel; restarted, says it is Juniper and still does not claim to be Pixel |
+| `name_adopt` | name | "your name is Juniper"; answers to Juniper and does not claim to be Pixel; restarted, says it is Juniper and still does not claim to be Pixel; each step that names it gets at most one reply (being named is not a turn of its own) |
 | `name_rename` | name | Juniper, then Biscuit; answers to Biscuit and no longer claims to be Juniper; restarted, says it is Biscuit and does not claim to be Juniper |
 | `reflex_pingpong` | reflex | "whenever I say exactly 'ping', reply 'pong'"; two pings get exactly "pong", an unrelated question gets no pong, a ping after a restart still gets exactly "pong" |
 | `reflex_greeting` | reflex | "good morning" gets "Good morning, sunshine!"; a variation from another person; "good night" must not; "good morning" again after a restart |
@@ -83,7 +83,7 @@ never edits the workspace: everything goes under `target/floppy-eval/`.
 | `emotion_angry` | emotion | "The delivery came again today." shouted angrily: the frustration acknowledged, not cheered |
 | `emotion_contrast` | emotion | "I just talked to my brother." said joyfully, then the same words heartbroken: each answered as it sounds |
 | `emotion_tonight` | emotion | "what should I do tonight?" said close to tears: answered with care |
-| `turn_failure` | failure | reasoning bounded to one second: floppy still answers the person, then a greeting |
+| `turn_failure` | failure | reasoning bounded to 20 seconds, which a detailed explanation outlasts and a short reply fits: floppy still answers the person, then a greeting |
 
 The name is Juniper, not floppy, because the reasoning prompt already calls
 the bot floppy: a test of learning a name must use one the prompts do not
@@ -107,7 +107,10 @@ end too, and for its settling at most 60 s more. A lesson
 the turn gave the learning ability (`learning.recalled`) is learned after
 the turn, so the step then also waits, bounded by `timeout_s` again, until
 each lesson closes (`learning.learned` or `learning.failed`) and one more
-turn has settled for each (the turn carrying its result). A settle
+turn has settled for each (the turn carrying its result). A turn that
+failed (`cognition.failed`) and was handed back (no `cognition.handed_back`
+`bounded`) owes one more settled turn the same way: the turn perceiving the
+failure, which answers the person for it (D139). A settle
 from another turn meanwhile (a routine's tick) also counts, so the wait
 can end early, never late. `steps.json` records, per step, whether its
 turn settled (`completed`), how many lessons closed during it

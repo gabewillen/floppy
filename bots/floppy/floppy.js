@@ -298,7 +298,8 @@ function cognitionInput() {
 // and on, the object it sits on (decision D159), a device that is not
 // running left out; held_percepts, how many percepts wait for a later
 // turn; firmware, the owner's firmware read this turn, under the
-// reference firmware, when it has one).
+// reference firmware, when it has one; identity, read this turn, when the
+// bot has a name: the name and whether what it last recognized named it).
 function environmentField() {
   var owned = {};
   devices.forEach(function (reference) {
@@ -313,6 +314,9 @@ function environmentField() {
   var own = {state: 'processing', owned_devices: owned, held_percepts: held.length};
   if (firmware_snapshot !== null) {
     own.firmware = {ref: 'firmware', id: firmware_snapshot.id, state: firmware_snapshot.state, attributes: firmware_snapshot.attributes};
+  }
+  if (identity_snapshot !== null && typeof identity_snapshot.attributes.name === 'string') {
+    own.identity = {name: identity_snapshot.attributes.name, addressed: identity_snapshot.attributes.addressed === true};
   }
   return {id: environment, self: own};
 }

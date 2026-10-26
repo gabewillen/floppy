@@ -1162,6 +1162,40 @@ fn a_turn_carries_its_parents_participants_after_its_own_once_each() {
 }
 
 #[test]
+fn a_target_its_producer_stamped_own_is_the_bot_itself() {
+    // The environment delivers an input addressed to the bot with the bot as its
+    // own target: the stamped target is that one, own, not a second one.
+    let parent = json!({"event": "bot.ability.communication.input", "data": {
+        "source_ids": ["gabe"], "target_ids": ["floppy"],
+        "participants": [{"ref": "floppy", "role": "target", "own": true}],
+    }});
+    assert_eq!(
+        stamped(
+            &json!({"source_ids": ["gabe"], "target_ids": ["floppy"]}),
+            Some(&parent)
+        ),
+        json!([
+            {"ref": "gabe", "role": "source"},
+            {"ref": "floppy", "role": "target", "own": true},
+        ])
+    );
+    // own false is no stamp, and an own that is not a boolean is malformed.
+    let not_own = json!({"event": "bot.ability.communication.input", "data": {
+        "participants": [{"ref": "floppy", "role": "target", "own": false}],
+    }});
+    assert_eq!(
+        stamped(
+            &json!({"source_ids": ["gabe"], "target_ids": []}),
+            Some(&not_own)
+        ),
+        json!([
+            {"ref": "gabe", "role": "source"},
+            {"ref": "floppy", "role": "target"},
+        ])
+    );
+}
+
+#[test]
 fn a_ref_over_200_characters_is_not_stamped_and_the_list_is_bounded_at_32() {
     let long = "é".repeat(201);
     let names: Vec<String> = (0..40).map(|index| format!("p{index:02}")).collect();

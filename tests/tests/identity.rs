@@ -175,8 +175,9 @@ fn the_identity_is_ready_with_its_adopt_offer() {
 #[test]
 fn a_named_bot_is_addressed_by_its_name() {
     let (mut run, _) = started(&layout(Some("'Floppy'")));
-    // The conversation's product is a turn too (the double ignores it:
-    // the text's first word); the addressed turn answers.
+    // The conversation's product is the one turn: the identity sends
+    // nothing, and the body reads its state into the turn's environment,
+    // so the double answers the text's turn as addressed.
     run.event(
         "bot.ability.communication.input",
         &said("ignore Floppy, what's your name?"),
@@ -187,6 +188,14 @@ fn a_named_bot_is_addressed_by_its_name() {
         strings(&["addressed as Floppy"])
     );
     assert_eq!(texts(&records, "floppy.say"), strings(&["I am Floppy"]));
+    // The turn's environment carries the identity's state, read this turn.
+    let environment: Json = serde_json::from_str(&texts(&records, "double.environment")[0])
+        .expect("the environment is JSON");
+    assert_eq!(
+        environment["self"]["identity"],
+        json!({"name": "Floppy", "addressed": true}),
+        "{environment}"
+    );
     let all = close(run, "a_named_bot_is_addressed_by_its_name");
     let mut turns: Vec<String> = texts(&all, "double.input")
         .into_iter()
@@ -197,7 +206,7 @@ fn a_named_bot_is_addressed_by_its_name() {
         })
         .collect();
     turns.sort();
-    assert_eq!(turns, strings(&[r#"addressed "Floppy""#, "ignore 1"]));
+    assert_eq!(turns, strings(&[r#"addressed "Floppy""#]));
 }
 
 #[test]
@@ -356,8 +365,15 @@ fn the_cognition_is_told_the_bots_name_and_each_adoption() {
     }
     assert_eq!(texts(&records, "double.named"), strings(&["null"]));
     run.event("bot.input", &input("adopt", "Floppy"));
-    let records = run.until(WAIT, label_is("double.named"));
-    assert_eq!(texts(&records, "double.named"), strings(&[r#""Floppy""#]));
+    // The turn's own ask (the body reads the identity's state once it
+    // answers) is told too, before the adoption.
+    let records = run.until(WAIT, |record| {
+        label_is("double.named")(record) && record["text"] == r#""Floppy""#
+    });
+    assert_eq!(
+        texts(&records, "double.named"),
+        strings(&["null", r#""Floppy""#])
+    );
     close(run, "the_cognition_is_told_the_bots_name_and_each_adoption");
 }
 

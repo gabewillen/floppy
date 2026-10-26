@@ -372,8 +372,9 @@ fn exchange_carrying_turns(body: &Path) -> Run {
     );
     assert_eq!(texts(&all, "communication.exchange"), strings(&["2", "2"]));
     // The conversation's handoff stamps the turn's names as participants
-    // (decision D119), and the body copies them into the turn.
-    let stamped = r#"[{"ref":"gabe","role":"source"},{"ref":"floppy","role":"target"}]"#;
+    // (decision D119), and the body copies them into the turn; the environment,
+    // which delivered the input to floppy, stamped floppy its own target.
+    let stamped = r#"[{"ref":"gabe","role":"source"},{"own":true,"ref":"floppy","role":"target"}]"#;
     assert_eq!(
         texts(&all, "double.participants"),
         strings(&[stamped, stamped])
