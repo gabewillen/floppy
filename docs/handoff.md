@@ -37,6 +37,14 @@ Last updated: 2026-10-24.
   instance, so it needs a WIT contract change (stateforward/scxml.rs#33,
   not scheduled: the maintainer's call). The register's
   facts come from `web/src/register.py`.
+- **Voices are remembered as people (2026-10-26, D256):** with a
+  database, the interpretation recalls the people long-term memory holds
+  before it is ready, and remembers each new voice as a person whose ref
+  is the voice's `voice:<id>` (the representative its running mean), so a
+  voice is recognized across restarts (`listening.rs`
+  `a_voice_heard_before_a_restart_is_recognized_after_it`). The body
+  passes its database through the listening. The bot's own voice is still
+  learned again each run.
 - **The prompt fits a generate call (2026-10-26, D255):** the cognition's
   prompt budget (`MAX_PROJECTION_BYTES`) is 49152, down from 262144, so
   the system channel, the schema and the prompt fit the 65536-byte event

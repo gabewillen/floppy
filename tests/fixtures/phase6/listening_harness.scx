@@ -8,11 +8,17 @@
   harness.sound (the data of a bot.ability.cognition.input stimulus that
   carries a bot.ability.listening.speech.output or a passed-through
   environment.sound) and harness.failed (bot.ability.listening.failed),
-  each with its data as JSON.
+  each with its data as JSON. It passes the listening its database
+  (null: none).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="harness" initial="run">
+  <datamodel>
+    <data id="database" expr="null"/>
+  </datamodel>
   <state id="run">
-    <invoke id="listening" type="scxml" src="listening/listening.scx"/>
+    <invoke id="listening" type="scxml" src="listening/listening.scx">
+      <param name="database" expr="database"/>
+    </invoke>
     <transition event="bot.ability.ready" cond="_event.invokeid === 'listening'">
       <log label="harness.ready" expr="'listening'"/>
     </transition>
