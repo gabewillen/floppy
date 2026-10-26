@@ -176,7 +176,11 @@ Voice detection, diarization and voice identification call
 `/audio/diarization` and `/voice/embed`, with its `silero-vad`,
 `pyannote-diarization` and `voice-detect-wespeaker-resnet34` models), and
 speech decoding calls `FLOPPY_SPEECH_BASE_URL` with `FLOPPY_SPEECH_API_KEY`;
-neither has a default backend. A sound that cannot be heard is logged as
+neither has a default backend. Beside decoding, the tone of the utterance's
+longest voice is heard on `FLOPPY_EMOTION_BASE_URL` with
+`FLOPPY_EMOTION_API_KEY` (a speech server's `/emotion`, emotion2vec+), and
+the decoded stimulus carries it as `affect` `{label, scores, valence,
+confidence}` (decision D247); without that backend it carries none. A sound that cannot be heard is logged as
 `bot.ability.listening.failed`.
 
 Sight (D185 to D189): the body's `seeing_enabled` `<data>` (`false` by

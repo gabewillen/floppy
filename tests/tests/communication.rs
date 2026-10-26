@@ -399,6 +399,17 @@ fn exchange_carrying_turns(body: &Path) -> Run {
         strings(&["input-1:turn:gabe", "input-2:turn:gabe"])
     );
     assert_eq!(texts(&all, "floppy.say"), strings(&["reply 1", "reply 2"]));
+    // Each message the conversation commits with words is a short-term
+    // turn, so the next turn reads what was heard and said before its
+    // exchange (#85): the first turn its own words, the second the first
+    // exchange too.
+    assert_eq!(
+        texts(&all, "double.recent"),
+        strings(&[
+            r#"[["heard",["gabe"],"reply"]]"#,
+            r#"[["heard",["gabe"],"reply"],["said",[],"reply 1"],["heard",["gabe"],"reply"]]"#,
+        ])
+    );
     run
 }
 

@@ -260,7 +260,7 @@ pub const SIMILARITY_THRESHOLD: f64 = 0.85;
 /// The least cosine similarity at which a voice is a person's
 /// ([`people::person_for_voice`]): mosfet.py's voice match policy
 /// (`identification.MatchPolicy`, threshold 0.50). The speaker embeddings
-/// floppy hears (WeSpeaker ResNet34 on api.willen.dev) put one voice's
+/// floppy hears (`WeSpeaker` `ResNet34` on api.willen.dev) put one voice's
 /// utterances at 0.60 to 0.77 of each other and different voices under
 /// 0.25, so [`SIMILARITY_THRESHOLD`] made every utterance a new person.
 pub const VOICE_SIMILARITY_THRESHOLD: f64 = 0.50;

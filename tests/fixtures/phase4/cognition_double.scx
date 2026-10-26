@@ -60,7 +60,8 @@
   It logs double.input per turn (turn, behavior, observation data),
   double.choices (the turn's choices as JSON), double.environment (the
   turn's environment as JSON), double.participants (the turn's
-  participants as JSON), double.ignore when a
+  participants as JSON), double.recent (the recent turns the body sent
+  ahead of the turn, each [direction, speaker refs, text]), double.ignore when a
   bot.ability.cognition.ignore reaches it, and double.exit when it is
   cancelled.
 -->
@@ -90,6 +91,11 @@
     <onexit>
       <log label="double.exit" expr="model"/>
     </onexit>
+    <!-- The short-term register's recent turns, which the body sends
+         ahead of each turn. -->
+    <transition event="bot.ability.memory.stm.recent_turns.output">
+      <log label="double.recent" expr="JSON.stringify(_event.data.turns.map(function (t) { return [t.direction, t.speakers.map(function (s) { return s.ref; }), t.text]; }))"/>
+    </transition>
     <state id="idle">
       <transition event="bot.ability.cognition.input" target="working">
         <assign location="turn" expr="_event.data.turn"/>

@@ -19,6 +19,16 @@
 //!   JSON body `{"audio": <base64 WAV>, "model"}`, answered
 //!   `{"embedding": [...]}` ([`embedding_request`]).
 //!
+//! `classify` hears the affect (tone) of one voice segment on a speech
+//! server's emotion API (emotion2vec+, as mosfet.py's speech-server
+//! `AffectClassifier`): `POST {base}/emotion?sample_rate=R` with the
+//! segment's raw signed 16-bit mono PCM as the body, answered `{"label",
+//! "scores", "valence", "confidence", ...}` ([`affect_request`]). The
+//! server takes 16, 24 and 48 kHz as they are, so mono PCM at one of those
+//! rates is sent unchanged (other channel counts mixed to mono at the same
+//! rate) and any other rate is resampled to 16 kHz ([`affect_pcm`]). It
+//! takes no model: the server serves one.
+//!
 //! The media steps (`normalize`, `append`, `clip`) call no backend: they read
 //! and write files in the granted directory and complete with done data.
 
@@ -37,6 +47,19 @@ pub const VAD_PATH: &str = "/vad";
 pub const DIARIZATION_PATH: &str = "/audio/diarization";
 /// The voice embedding path appended to the base URL.
 pub const EMBED_PATH: &str = "/voice/embed";
+/// The affect classification path appended to the base URL (a speech
+/// server's `/v1/emotion`).
+pub const EMOTION_PATH: &str = "/emotion";
+
+/// The rates the emotion API takes as they are; any other is resampled to
+/// [`VAD_SAMPLE_RATE_HZ`].
+pub const AFFECT_RATES_HZ: [u32; 3] = [16_000, 24_000, 48_000];
+/// Upper bound on the affect classes an answer scores (mosfet.py's
+/// `voice.Affect`).
+pub const MAX_AFFECT_CLASSES: usize = 16;
+/// Upper bound on an affect class's characters (mosfet.py's
+/// `voice.Affect`).
+pub const MAX_AFFECT_CLASS_CHARS: usize = 32;
 
 /// The rate voice detection samples are sent at: Silero VAD's 16 kHz.
 pub const VAD_SAMPLE_RATE_HZ: u32 = 16_000;
@@ -50,6 +73,8 @@ pub const DETECTION_OUTPUT_EVENT: &str = "bot.ability.hearing.voice.detection.ou
 pub const DIARIZATION_OUTPUT_EVENT: &str = "bot.ability.hearing.voice.diarization.output";
 /// The voice embeddings.
 pub const IDENTIFICATION_OUTPUT_EVENT: &str = "bot.ability.hearing.voice.identification.output";
+/// The affect of one voice segment (mosfet.py's `Classifying` output).
+pub const CLASSIFICATION_OUTPUT_EVENT: &str = "bot.ability.classifying.output";
 
 /// Upper bound on the frames an `append` joins and the segments an
 /// `identify` embeds (wasm builds only).
@@ -120,6 +145,15 @@ pub struct Identification {
     pub model: String,
     /// The segments.
     pub segments: Vec<Segment>,
+}
+
+/// A validated affect classification: one voice segment and its format.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Classification {
+    /// The segment: a WAV file, or raw 16-bit PCM.
+    pub audio: Media,
+    /// Its raw PCM format, when given.
+    pub format: Format,
 }
 
 /// A validated normalization: the sound and where its PCM is written when
@@ -450,6 +484,26 @@ pub(crate) fn identification(given: &Given<'_>) -> Result<Identification, &'stat
     Ok(Identification {
         model: checked_model(given.model()?)?,
         segments,
+    })
+}
+
+/// `classify`: `audio`, and optionally `media_type`, `sample_rate_hz`, and
+/// `channels`; takes no model (the emotion API serves one).
+pub(crate) fn classification(given: &Given<'_>) -> Result<Classification, &'static str> {
+    given.only(
+        &["audio", "media_type", "sample_rate_hz", "channels"],
+        "speech classify takes audio, media_type, sample_rate_hz, and channels only",
+    )?;
+    if given.model.is_some() {
+        return Err("speech classify takes no model parameter");
+    }
+    optional_media_type(given.media_type)?;
+    Ok(Classification {
+        audio: audio(given, "speech classify requires an audio parameter")?,
+        format: Format {
+            sample_rate_hz: rate(given.sample_rate_hz)?,
+            channels: channel_count(given.channels)?,
+        },
     })
 }
 
@@ -831,6 +885,153 @@ pub fn base64(bytes: &[u8]) -> String {
 pub fn embedding_request(base_url: u32, api_key: Option<u32>, model: &str, wav: &[u8]) -> Request {
     let body = canonical_json(&json!({"audio": base64(wav), "model": model}));
     json_post(base_url, api_key, EMBED_PATH, body.into_bytes())
+}
+
+/// The affect classification request: `POST {base}/emotion?sample_rate=R`
+/// with the raw signed 16-bit mono PCM as the body.
+#[must_use]
+pub fn affect_request(
+    base_url: u32,
+    api_key: Option<u32>,
+    sample_rate_hz: u32,
+    pcm: Vec<u8>,
+) -> Request {
+    Request {
+        url: vec![
+            Part::Reference(base_url),
+            Part::Literal(format!("{EMOTION_PATH}?sample_rate={sample_rate_hz}")),
+        ],
+        headers: bearer(api_key)
+            .into_iter()
+            .chain([
+                (
+                    "content-type".into(),
+                    vec![Part::Literal("application/octet-stream".into())],
+                ),
+                (
+                    "accept".into(),
+                    vec![Part::Literal("application/json".into())],
+                ),
+            ])
+            .collect(),
+        body: pcm,
+    }
+}
+
+/// The segment a classification sends and its rate: mono 16-bit PCM at
+/// the segment's own rate when the emotion API takes it as it is
+/// ([`AFFECT_RATES_HZ`]; channels averaged), else resampled to
+/// [`VAD_SAMPLE_RATE_HZ`] mono. A WAV container declares its own format;
+/// raw PCM needs its rate (mono when it names no channels).
+///
+/// # Errors
+///
+/// [`FailureCode::Format`] when the audio is not readable 16-bit PCM, and
+/// [`FailureCode::Empty`] when it holds no frame.
+pub fn affect_pcm(
+    classification: &Classification,
+    audio: Vec<u8>,
+) -> Result<(u32, Vec<u8>), FailureCode> {
+    let (rate, channels, pcm) = pcm_of(audio, classification.format, None)?;
+    if pcm.len() < 2 * usize::from(channels) {
+        return Err(FailureCode::Empty);
+    }
+    if AFFECT_RATES_HZ.contains(&rate) {
+        if channels == 1 {
+            return Ok((rate, pcm));
+        }
+        let mono = pcm
+            .chunks_exact(2 * usize::from(channels))
+            .flat_map(|frame| {
+                let sum: i32 = frame
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|sample| i32::from(i16::from_le_bytes(*sample)))
+                    .sum();
+                let mean = sum / i32::from(channels);
+                i16::try_from(mean).unwrap_or_default().to_le_bytes()
+            })
+            .collect();
+        return Ok((rate, mono));
+    }
+    let mono = vad_samples(&pcm, rate, channels)
+        .into_iter()
+        .flat_map(|sample| {
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "clamped into the i16 range first"
+            )]
+            let value = (sample * 32_768.0).round().clamp(-32_768.0, 32_767.0) as i16;
+            value.to_le_bytes()
+        })
+        .collect();
+    Ok((VAD_SAMPLE_RATE_HZ, mono))
+}
+
+/// One answered affect: `{label, scores, valence, confidence}` (mosfet.py's
+/// `voice.Affect`), the server's other fields (`snr_db`, `model`, timings)
+/// dropped. The label is 1 to [`MAX_AFFECT_CLASS_CHARS`] characters; the
+/// scores, at most [`MAX_AFFECT_CLASSES`], are each from 0 to 1, keyed by
+/// classes as long; the valence (from -1 to 1) and the confidence (from 0
+/// to 1) are `null` when the server names none.
+fn answered_affect(body: &[u8]) -> Result<Json, FailureCode> {
+    let answer: Json = serde_json::from_slice(body).map_err(|_| FailureCode::Malformed)?;
+    let class = |text: &str| {
+        let count = text.chars().count();
+        (1..=MAX_AFFECT_CLASS_CHARS).contains(&count)
+    };
+    let label = match answer.get("label") {
+        Some(Json::String(label)) if class(label) => label.clone(),
+        _ => return Err(FailureCode::Malformed),
+    };
+    let scores = match answer.get("scores") {
+        None | Some(Json::Null) => serde_json::Map::new(),
+        Some(Json::Object(scores)) if scores.len() <= MAX_AFFECT_CLASSES => scores
+            .iter()
+            .map(|(name, score)| {
+                let score = json_number(score)
+                    .filter(|score| (0.0..=1.0).contains(score))
+                    .ok_or(FailureCode::Malformed)?;
+                if class(name) {
+                    Ok((name.clone(), json!(score)))
+                } else {
+                    Err(FailureCode::Malformed)
+                }
+            })
+            .collect::<Result<_, _>>()?,
+        Some(_) => return Err(FailureCode::Malformed),
+    };
+    let bounded = |name: &str, low: f64| match answer.get(name) {
+        None | Some(Json::Null) => Ok(Json::Null),
+        Some(value) => json_number(value)
+            .filter(|value| (low..=1.0).contains(value))
+            .map(|value| json!(value))
+            .ok_or(FailureCode::Malformed),
+    };
+    Ok(json!({
+        "label": label,
+        "scores": scores,
+        "valence": bounded("valence", -1.0)?,
+        "confidence": bounded("confidence", 0.0)?,
+    }))
+}
+
+/// What a settled affect classification becomes:
+/// [`CLASSIFICATION_OUTPUT_EVENT`] with the affect, or
+/// [`super::FAILED_EVENT`].
+#[must_use]
+pub fn affect_outcome(
+    direction: &'static str,
+    answered: Result<Response, TransportFailure>,
+) -> Returned {
+    match answered_body(answered).and_then(|body| answered_affect(&body)) {
+        Ok(affect) => Returned {
+            name: CLASSIFICATION_OUTPUT_EVENT,
+            data: canonical_json(&affect),
+        },
+        Err(code) => Returned::failed_named(direction, code),
+    }
 }
 
 /// Spans of an answer's `segments` (`start`/`end`, or

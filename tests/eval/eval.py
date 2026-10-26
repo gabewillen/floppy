@@ -820,7 +820,8 @@ def null_transcripts(scenario):
             if "say" in step:
                 said = f"{head} {who} says: {step['say']!r}"
             elif "hear" in step:
-                said = f"{head} {who} says out loud: {step['hear']!r}"
+                how = f" ({step['instructions']})" if step.get("instructions") else ""
+                said = f"{head} {who} says out loud{how}: {step['hear']!r}"
             elif "show" in step:
                 said = f"{head} {step.get('source', 'camera')} shows floppy an image: {step.get('describe', 'an image')}"
             else:

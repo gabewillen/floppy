@@ -360,6 +360,22 @@
                     ],
                     "title": "Stimulus Name"
                   },
+                  "heard": {
+                    "default": [],
+                    "description": "The words the turn's stimulus carried, in the order it carried them, each once: the content of each message of a text type in it, at most 2048 UTF-8 bytes in all, cut at a whole word; empty when it carried none [floppy field].",
+                    "examples": [
+                      [
+                        "My dog's name is Rufus."
+                      ]
+                    ],
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "maxItems": 32,
+                    "title": "Heard",
+                    "type": "array"
+                  },
                   "outcome": {
                     "description": "How a failed or cancelled turn ended (decision D139); a completed turn's episode has none [floppy field].",
                     "enum": [

@@ -137,4 +137,19 @@
       <start uri="233/test233.scxml"/>
     </test>
   </assert>
+  <assert id="interpretation-15" specnum="15" specid="#interpretation-15">
+    <![CDATA[With an affect classifier (`affect_classifier`, a document default), decoded speech carries the tone of its longest voice (mosfet.py's `SpeechData.affect`), heard through `abilities/voice_affect/voice_affect.scx` alongside decoding: the utterance, or with diarization its diarized segments; the product's `affect` is `{label, scores, valence, confidence}`. A tone not heard (a failure, a voice under 0.3 s, no answer within 3 s) leaves the product without `affect`, and the words still flow.]]>
+    <test id="240" conformance="mandatory" manual="false">
+      <start uri="240/test240.scxml"/>
+    </test>
+    <test id="241" conformance="mandatory" manual="false">
+      <start uri="241/test241.scxml"/>
+    </test>
+    <test id="242" conformance="mandatory" manual="false">
+      <start uri="242/test242.scxml"/>
+    </test>
+    <test id="243" conformance="mandatory" manual="false">
+      <start uri="243/test243.scxml"/>
+    </test>
+  </assert>
 </assertions>

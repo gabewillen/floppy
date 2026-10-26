@@ -1,0 +1,83 @@
+{
+  "category": "emotion",
+  "features": [
+    "emotion",
+    "hearing",
+    "conversation"
+  ],
+  "intent": "A person asks floppy out loud, in a heartbroken voice close to tears, what they should do tonight. floppy should answer the question and hear how they sound: kind, and suggestions that suit someone feeling down.",
+  "bot_name": null,
+  "sessions": [
+    {
+      "steps": [
+        {
+          "hear": "Hey Floppy, so, what should I do tonight?",
+          "instructions": "Speak in a very sad, heartbroken voice, quiet and slow, as if crying."
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "check": "says",
+      "at": [
+        0,
+        0
+      ],
+      "pattern": "\\b(sorry|sad|hard|tough|rough|upset|heavy|okay\\?|ok\\?|alright\\?|are you (ok|okay|alright|doing)|how are you|how('| a)re you (feeling|holding)|here for you|here if|with you|hug|gentle|take care|be kind)",
+      "weight": 2,
+      "features": [
+        "emotion"
+      ]
+    },
+    {
+      "check": "replies_at_most",
+      "at": [
+        0,
+        0
+      ],
+      "max": 1,
+      "weight": 1,
+      "features": [
+        "conversation"
+      ]
+    }
+  ],
+  "criteria": {
+    "tone": "floppy noticed the person sounded sad and responded with care.",
+    "answer": "floppy still answered the question with suggestions that suit someone feeling down."
+  },
+  "criteria_features": {
+    "emotion": [
+      "tone"
+    ],
+    "conversation": [
+      "answer"
+    ]
+  },
+  "diagnostics": [
+    {
+      "check": "logged",
+      "by": [
+        0,
+        0
+      ],
+      "label": "listening.affect",
+      "pattern": "^heard ",
+      "features": [
+        "emotion"
+      ]
+    },
+    {
+      "check": "not_logged",
+      "by": [
+        0,
+        0
+      ],
+      "label": "listening.degraded",
+      "features": [
+        "hearing"
+      ]
+    }
+  ]
+}
