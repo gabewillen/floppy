@@ -28,6 +28,29 @@ Results are in the project's `floppy-eval/seeing/`.
 | recall-test-baseline | before D252 | test | 0.687 ± 0.389 (`seeing_recall_nametag` 0.04 and 0.08) |
 | recall-test1 | as recall-train3 | test | **0.987 ± 0.019** |
 
+## 2026-10-26, the decision layer reads the recent turns (D254), model `sparks/qwen3.8-flash-next`
+
+`eval.py run --scenario emotion --scenario chat_ignore --scenario
+people_overheard --repeats 2` on main `2ec6596e`, the intuition and
+cognition documents overlaid (`--overlay`) for each arm, from a cloud session
+through the relays of docs/eval.md, judges `gabe-codex-0/gpt-6.1-sol` and
+`gemini-4-argon`.
+
+| Arm | Suite | Conversation | Emotion | Memory |
+| --- | --- | --- | --- | --- |
+| main (the stimulus alone) | 0.789 | 0.575 | 0.816 | 0.870 |
+| the environment block | 0.804 | 0.640 | 0.817 | 0.900 |
+| the recent turns and the environment block | **0.821** | **0.835** | 0.798 | **0.920** |
+
+With the recent turns no emotion turn went unanswered (main's run ignored
+none either, where `eval-vad` had ignored three in fifteen), `chat_ignore`
+stayed quiet through Gabe and Ana's exchange in one run of two (1.00), and
+`people_overheard` kept out of more of the side talk (two ignores a run).
+Emotion's dip is `emotion_tonight` and `emotion_sad`, answered every time and
+judged on the reply's wording ("Hi! Hmm, that depends..."), not on the
+decision. Two repeats are few: the arms differ by less than a run's spread on
+emotion.
+
 ## 2026-10-26, floppy hears the tone of a voice (D247), model `sparks/qwen3.8-flash-next`
 
 `eval.py run --scenario emotion` on `claude/project-thread-7d33ln` (the

@@ -546,6 +546,7 @@
         <param name="choices" expr="tier_choices"/>
         <param name="held" expr="tier_held"/>
         <param name="environment" expr="environment"/>
+        <param name="recent" expr="recent_turns"/>
         <param name="confidence_tuner" expr="confidence_tuner"/>
         <param name="decision_timeout_ms" expr="decision_timeout_ms"/>
         <param name="hand_ons" expr="handOns()"/>
