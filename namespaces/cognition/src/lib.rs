@@ -162,12 +162,12 @@
 //! every child element on its own line, indented two spaces per level:
 //! attributes in order, an empty element as `<name />`.
 //!
-//! The budgets hold: 262144 encoded bytes, 4096 nodes, 4096 collection items
+//! The budgets hold: 49152 encoded bytes, 4096 nodes, 4096 collection items
 //! and 65536 characters per scalar for each block, and 65536 characters for the
 //! system channel, the situation and the feedback. The system channel and the
 //! tool's schema (`schema`, optional, its compact JSON) are reserved first; the
 //! situation and the feedback are never trimmed, and the stimulus renders into
-//! the bytes they leave of the prompt's 262144.
+//! the bytes they leave of the prompt's 49152.
 //!
 //! What the bot has in mind never makes the projection fail (decision
 //! D117): its stable part, then its rest, each render into the bytes
@@ -258,8 +258,10 @@ pub const NAMESPACE_NAME: &str = "cognition";
 /// it too.
 pub const NAMESPACE_URI: &str = "https://github.com/stateforward/floppy/namespaces/cognition";
 
-/// The projection's encoded byte budget, and the prompt's.
-pub const MAX_PROJECTION_BYTES: usize = 262_144;
+/// The projection's encoded byte budget, and the prompt's: a generate call's
+/// `messages` is one event value, at most 65536 bytes (scxml.rs), and the
+/// 16384 left over covers the JSON escaping and framing it adds (decision D255).
+pub const MAX_PROJECTION_BYTES: usize = 49_152;
 
 /// The projection's node budget.
 pub const MAX_PROJECTION_NODES: usize = 4_096;

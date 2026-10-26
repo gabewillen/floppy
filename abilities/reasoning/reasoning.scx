@@ -33,7 +33,7 @@
   logs <log label="memory" expr="'absent'"> and sends its event with
   memory_consulted false and nothing recalled.
 
-  Recall by association (decision D255, mosfet.py's Associative): with a
+  Recall by association (decision D256, mosfet.py's Associative): with a
   database, recalling first embeds the cue, the words the stimulus
   carries (each message of a text type's content once, at most 2048
   bytes), as a query with the Embedding ability
@@ -74,11 +74,11 @@
   sees (decision D250). The stimulus's data is JSON here,
   so it renders as plain data: a content field, an object as entry elements, an array as item elements,
   each object or array item filled as one (decision D99), indented by two
-  spaces, an empty element written as <name />. The budgets hold: 262144 encoded bytes, 4096
+  spaces, an empty element written as <name />. The budgets hold: 49152 encoded bytes, 4096
   nodes, 4096 collection items and 65536 characters per scalar for the
   projection; the system channel and the dispatch schema are reserved
   first, and the projection renders into the bytes they leave of the
-  prompt's 262144. Recalled context never fails the turn: prior_episodes
+  prompt's 49152. Recalled context never fails the turn: prior_episodes
   and standing_directives keep their newest items that fit and count the
   rest as omitted="<n>". Over a budget otherwise (the stimulus alone
   overflows), the element writes the budget's message to prompt_failure and the stage fails without a model call with
@@ -246,7 +246,7 @@
     <data id="behaviors" expr="[]"/>
     <data id="behavior_select" expr="'SELECT name, lifetime, description FROM bot_behavior WHERE status = \'ACTIVE\' ORDER BY name LIMIT 32'"/>
     <data id="statements" expr="[]"/>
-    <!-- Recall by association (decision D255, mosfet.py's Associative):
+    <!-- Recall by association (decision D256, mosfet.py's Associative):
          the cue's vector, the candidates' select (the 64 newest episodes,
          each with its id, created_at, content length and vector, if
          any), how each is scored (similarity times the cosine with the
@@ -272,7 +272,7 @@
       <transition cond="hasNoDatabase()" target="recalling_nothing"/>
       <transition target="recalling_embedding"/>
     </state>
-    <!-- The cue (decision D255): the stimulus's words embedded as a query.
+    <!-- The cue (decision D256): the stimulus's words embedded as a query.
          The request goes once the embedding has started (the next
          macrostep); a stimulus without words, or a cue that cannot be
          embedded, recalls by recency alone. -->

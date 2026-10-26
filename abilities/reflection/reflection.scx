@@ -128,7 +128,7 @@
   query_tags cognitive_episode, then bot.ability.reflection.output.
   Before it is inserted, the episode's words (what was heard, its heard
   one message per line) are embedded as a document by the
-  Embedding ability (abilities/embedding/embedding.scx; decision D255),
+  Embedding ability (abilities/embedding/embedding.scx; decision D256),
   and its vector is stored with it in bot_memory_embedding (kind text,
   the vector's compact text: i8: and the base64 of its components as
   signed bytes, as a person's representative voice is kept), so
@@ -564,7 +564,7 @@
   </state>
 
   <!-- This turn's episode: its words embedded, then the episode stored
-       with its vector (decision D255). -->
+       with its vector (decision D256). -->
   <state id="storing" initial="storing_embedding">
     <transition event="bot.ability.reflection.input" event:schema="../schemas/bot.ability.reflection.input.json">
       <assign location="deferred" expr="deferred.concat([_event.data])"/>

@@ -3,7 +3,7 @@
   floppy's Embedding ability (mosfet.py's Embedding): a bot's capacity to
   embed text into one declared vector space. Reflection embeds a turn's
   episode when it stores it, and reasoning the turn's cue when it recalls
-  (decision D255); each invokes it from the state that needs it.
+  (decision D256); each invokes it from the state that needs it.
 
     Embedding { idle -bot.ability.embedding.input-> embedding -> idle }
 

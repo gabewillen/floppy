@@ -402,7 +402,7 @@ function insertEpisodeStatements() {
   return vector === null ? statements : statements.concat([{sql: insert_embedding, parameters: [vector]}]);
 }
 
-// The episode's words (decision D255): what was heard, one message per
+// The episode's words (decision D256): what was heard, one message per
 // line.
 function episodeWords() {
   return episode.heard.join('\n');
