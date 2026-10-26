@@ -109,7 +109,10 @@ is optional, `https://api.typesafe.ai` without it). Without the TypeSafe key
 every turn fails with `the decision failed (unconfigured)`; without the model endpoint a turn that reaches reasoning
 fails with `the reasoning failed (unconfigured)`.
 The environment's `<invoke>` gives the bot its activation settings as
-`<param>`s: `model` (the default is `Qwen/Qwen3.8-Flash-Next`),
+`<param>`s: `model` (the default is `gemma-4-26b-a4b`),
+`reflection_model` (the model of reflection, learning and the builder, on
+`FLOPPY_REFLECTION_BASE_URL`; the default is `sparks/qwen3.8-flash-next`,
+null keeps them on `model`, decision D258),
 `database`, `environment` (the environment's id) and `bounds`, an object
 that may set the time bounds of the model-bound stages (decision D101),
 each in milliseconds:

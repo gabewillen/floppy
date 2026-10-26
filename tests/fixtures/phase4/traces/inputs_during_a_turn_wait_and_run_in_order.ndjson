@@ -47,4 +47,4 @@
 {"label":"communication.history","parent":"session.floppy","session":"session.floppy.communication","text":"2","type":"log"}
 {"label":"bot.ability.listening.failed","session":"session","text":"{\"message\":\"Voice detection failed: the backend is not configured.\",\"stage\":\"voice_detection\"}","type":"log"}
 {"label":"bot.ability.listening.failed","session":"session","text":"{\"message\":\"Voice detection failed: the backend is not configured.\",\"stage\":\"voice_detection\"}","type":"log"}
-{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
+{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"gemma-4-26b-a4b","type":"log"}

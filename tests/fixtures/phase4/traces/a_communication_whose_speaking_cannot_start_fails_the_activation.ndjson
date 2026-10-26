@@ -1,29 +1,29 @@
 {"label":"communication.degraded","parent":"session.floppy","session":"session.floppy.communication","text":"a child could not start (error.execution)","type":"log"}
-{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
+{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"gemma-4-26b-a4b","type":"log"}
 {"label":"floppy.diagnostic","parent":"session","session":"session.floppy","text":"the ability communication ended while activating","type":"log"}
 {"label":"bot.activating.failed","session":"session","text":"{}","type":"log"}
 {"label":"done.invoke","session":"session","text":"{\"invokeid\":\"floppy\"}","type":"log"}
 {"label":"supervision.restarted","session":"session","text":"{\"participant\":\"floppy\",\"attempt\":1,\"delay_ms\":1000}","type":"log"}
 {"label":"communication.degraded","parent":"session.floppy","session":"session.floppy.communication","text":"a child could not start (error.execution)","type":"log"}
-{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
+{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"gemma-4-26b-a4b","type":"log"}
 {"label":"floppy.diagnostic","parent":"session","session":"session.floppy","text":"the ability communication ended while activating","type":"log"}
 {"label":"bot.activating.failed","session":"session","text":"{}","type":"log"}
 {"label":"done.invoke","session":"session","text":"{\"invokeid\":\"floppy\"}","type":"log"}
 {"label":"supervision.restarted","session":"session","text":"{\"participant\":\"floppy\",\"attempt\":2,\"delay_ms\":2000}","type":"log"}
 {"label":"communication.degraded","parent":"session.floppy","session":"session.floppy.communication","text":"a child could not start (error.execution)","type":"log"}
-{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
+{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"gemma-4-26b-a4b","type":"log"}
 {"label":"floppy.diagnostic","parent":"session","session":"session.floppy","text":"the ability communication ended while activating","type":"log"}
 {"label":"bot.activating.failed","session":"session","text":"{}","type":"log"}
 {"label":"done.invoke","session":"session","text":"{\"invokeid\":\"floppy\"}","type":"log"}
 {"label":"supervision.restarted","session":"session","text":"{\"participant\":\"floppy\",\"attempt\":3,\"delay_ms\":4000}","type":"log"}
 {"label":"communication.degraded","parent":"session.floppy","session":"session.floppy.communication","text":"a child could not start (error.execution)","type":"log"}
-{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
+{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"gemma-4-26b-a4b","type":"log"}
 {"label":"floppy.diagnostic","parent":"session","session":"session.floppy","text":"the ability communication ended while activating","type":"log"}
 {"label":"bot.activating.failed","session":"session","text":"{}","type":"log"}
 {"label":"done.invoke","session":"session","text":"{\"invokeid\":\"floppy\"}","type":"log"}
 {"label":"supervision.restarted","session":"session","text":"{\"participant\":\"floppy\",\"attempt\":4,\"delay_ms\":8000}","type":"log"}
 {"label":"communication.degraded","parent":"session.floppy","session":"session.floppy.communication","text":"a child could not start (error.execution)","type":"log"}
-{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
+{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"gemma-4-26b-a4b","type":"log"}
 {"label":"floppy.diagnostic","parent":"session","session":"session.floppy","text":"the ability communication ended while activating","type":"log"}
 {"label":"bot.activating.failed","session":"session","text":"{}","type":"log"}
 {"label":"done.invoke","session":"session","text":"{\"invokeid\":\"floppy\"}","type":"log"}

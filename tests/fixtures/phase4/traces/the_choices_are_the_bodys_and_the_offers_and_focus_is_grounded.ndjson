@@ -28,4 +28,4 @@
 {"label":"floppy.focus","parent":"session","session":"session.floppy","text":"fan","type":"log"}
 {"label":"floppy.output","parent":"session","session":"session.floppy","text":"{\"turn\":3,\"output\":[{\"data\":{\"device\":\"fan\"},\"event\":\"bot.focus_device\",\"reason\":\"look\",\"target\":\"session.floppy\"}]}","type":"log"}
 {"label":"bot.processing.completed","session":"session","text":"{\"focus_candidates\":[\"lamp\",\"fan\"],\"output\":[{\"data\":{\"device\":\"fan\"},\"event\":\"bot.focus_device\",\"reason\":\"look\",\"target\":\"session.floppy\"}],\"turn\":3}","type":"log"}
-{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
+{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"gemma-4-26b-a4b","type":"log"}

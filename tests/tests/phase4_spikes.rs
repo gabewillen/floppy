@@ -28,7 +28,7 @@
 //! spike (a) against a real backend: `FLOPPY_LIVE_ENV_FILE=<paths>
 //! cargo test -p floppy-tests --test phase4_spikes -- --ignored`. The files
 //! must set `FLOPPY_API_KEY` and `FLOPPY_BASE_URL`; the model is
-//! `FLOPPY_LIVE_MODEL`, else `Qwen/Qwen3.8-Flash-Next`. It prints pass or
+//! `FLOPPY_LIVE_MODEL`, else `gemma-4-26b-a4b`. It prints pass or
 //! fail only.
 
 #![allow(

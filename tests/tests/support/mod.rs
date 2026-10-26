@@ -42,9 +42,11 @@ use sha2::{Digest as _, Sha256};
 /// The variables the bots' documents name. The child process never inherits
 /// them, so a test supplies values only through its env file (or an
 /// explicit `--env NAME=VALUE`).
-pub const GRANTED: [&str; 13] = [
+pub const GRANTED: [&str; 15] = [
     "FLOPPY_API_KEY",
     "FLOPPY_BASE_URL",
+    "FLOPPY_REFLECTION_API_KEY",
+    "FLOPPY_REFLECTION_BASE_URL",
     "FLOPPY_STREAM",
     "TYPESAFE_API_KEY",
     "TYPESAFE_BASE_URL",
@@ -66,7 +68,7 @@ pub const FUEL: &str = "9223372036854775807";
 
 /// The model floppy ships (docs/defaults.md): every document's `model`
 /// `<data>`, checked by `tests/tests/defaults.rs`.
-pub const DEFAULT_MODEL: &str = "Qwen/Qwen3.8-Flash-Next";
+pub const DEFAULT_MODEL: &str = "gemma-4-26b-a4b";
 
 /// The model of a live test: `FLOPPY_LIVE_MODEL`, else [`DEFAULT_MODEL`].
 pub fn live_model() -> String {

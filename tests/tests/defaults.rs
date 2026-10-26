@@ -98,7 +98,13 @@ fn env_names(text: &str) -> BTreeSet<String> {
             && let Some(value) = rest[slot_end..].strip_prefix("=\"")
             && let Some(end) = value.find('"')
         {
-            names.insert(value[..end].to_owned());
+            if rest[..slot_end].ends_with("expr") {
+                // An `env:<slot>expr` names its variables as quoted
+                // strings in its expression.
+                names.extend(value[..end].split('\'').skip(1).step_by(2).map(str::to_owned));
+            } else {
+                names.insert(value[..end].to_owned());
+            }
         }
     }
     names
@@ -106,10 +112,11 @@ fn env_names(text: &str) -> BTreeSet<String> {
 
 /// The documents whose `model` is the speech service's (an audio or voice
 /// model: the speech decoder's, speech encoder's or voice classifier's
-/// own), not the generation model: each `model` `<data>` is `null` (the
-/// service's request names none of floppy's) or a model docs/defaults.md's
-/// "Speech and voice models" names.
-const SPEECH_DOCUMENTS: [&str; 6] = [
+/// own), and the embedding's (an embedding model), not the generation
+/// model: each `model` `<data>` is `null` (the service's request names none
+/// of floppy's) or a model docs/defaults.md names.
+const SPEECH_DOCUMENTS: [&str; 7] = [
+    "abilities/embedding/embedding.scx",
     "abilities/speaking/speaking.scx",
     "abilities/vocal/vocal.scx",
     "abilities/speech_decoding/speech_decoding.scx",

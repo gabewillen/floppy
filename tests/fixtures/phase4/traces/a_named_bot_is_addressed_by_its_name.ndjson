@@ -22,4 +22,4 @@
 {"label":"communication.exchange","parent":"session.floppy","session":"session.floppy.communication","text":"2","type":"log"}
 {"label":"interpretation.unidentified","parent":"session.floppy.listening","session":"session.floppy.listening.interpretation","text":"the bot's own voice could not be detected: Voice detection failed: the backend is not configured.","type":"log"}
 {"label":"stm.turn.recorded","parent":"session.floppy","session":"session.floppy.stm","text":"said cut=false","type":"log"}
-{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
+{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"gemma-4-26b-a4b","type":"log"}

@@ -1,4 +1,4 @@
 {"label":"identity.name","parent":"session.floppy","session":"session.floppy.identity","text":"recalled null","type":"log"}
 {"label":"persona.description","parent":"session.floppy","session":"session.floppy.persona","text":"recalled null","type":"log"}
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
-{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
+{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"gemma-4-26b-a4b","type":"log"}

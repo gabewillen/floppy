@@ -73,7 +73,7 @@ function changeWriteInputWithIntent() {
 // builder, which checks the document it builds against the lifetime bounds
 // (min_every, turn_after_bound).
 function builderRequest() {
-  return ({spec: change_instructions, context: write, name: intent.name, model: model, min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms, apply: liveTurn()});
+  return ({spec: change_instructions, context: write, name: intent.name, model: reflection_model === null ? model : reflection_model, min_every_ms: min_every_ms, turn_after_bound_ms: turn_after_bound_ms, apply: liveTurn()});
 }
 
 // Whether the lesson's intent carries an example and this turn's input

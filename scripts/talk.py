@@ -16,8 +16,10 @@ Runs the environment (environments/environment/environment.scx) under `scx run` 
   utterance (24 kHz mono 16-bit PCM or WAV) instead of the microphone.
 
 Speech goes to whatever the env file names: FLOPPY_SPEECH_BASE_URL and
-FLOPPY_VOICE_BASE_URL (the lab's https://api.willen.dev/v1), FLOPPY_BASE_URL (chat),
-TYPESAFE_BASE_URL (decisions). Standard library only; needs ffmpeg (ffmpeg
+FLOPPY_VOICE_BASE_URL (the lab's https://api.willen.dev/v1), FLOPPY_BASE_URL (chat,
+the lab's https://api.willen.dev/v1), FLOPPY_REFLECTION_BASE_URL (reflection and
+the builder, the lab's https://cpa.willen.dev/v1), TYPESAFE_BASE_URL (decisions,
+the lab's https://api.willen.dev/decide). Standard library only; needs ffmpeg (ffmpeg
 for the microphone, ffplay for the speaker).
 
 Usage:

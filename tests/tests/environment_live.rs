@@ -10,7 +10,7 @@
 //! and speech decoding) and `FLOPPY_VOICE_BASE_URL` and
 //! `FLOPPY_VOICE_API_KEY` (voice detection: without it the listening fails
 //! `voice_detection` and hands over no product, decision D98); the model
-//! is `FLOPPY_LIVE_MODEL`, else `Qwen/Qwen3.8-Flash-Next`, given to both
+//! is `FLOPPY_LIVE_MODEL`, else `gemma-4-26b-a4b`, given to both
 //! bots as their `model` param. Both bots' speech services share one media
 //! grant, so `b` reads the audio `a` wrote, and the files service the
 //! layout's behaviors directory, where the builder reflection invokes

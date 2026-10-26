@@ -14,7 +14,7 @@
 //! ```xml
 //! <invoke idlocation="gen" type="https://github.com/stateforward/floppy/services/generate"
 //!         env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL">
-//!   <param name="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+//!   <param name="model" expr="'gemma-4-26b-a4b'"/>
 //!   <param name="prompt" expr="'Say hello.'"/>
 //! </invoke>
 //! ```

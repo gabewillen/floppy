@@ -286,7 +286,7 @@ fn deactivate_cancels_the_abilities() {
     assert_eq!(
         only(&records, &["double.exit", "bot.deactivated", "done.invoke"]),
         pairs(&[
-            ("double.exit", "Qwen/Qwen3.8-Flash-Next"),
+            ("double.exit", "gemma-4-26b-a4b"),
             ("bot.deactivated", "{}"),
             ("done.invoke", r#"{"invokeid":"floppy"}"#),
         ]),
@@ -327,7 +327,7 @@ fn deactivate_while_activating_is_answered_and_cancels_the_abilities() {
             ]
         ),
         pairs(&[
-            ("double.exit", "Qwen/Qwen3.8-Flash-Next"),
+            ("double.exit", "gemma-4-26b-a4b"),
             ("bot.deactivated", "{}"),
             ("done.invoke", r#"{"invokeid":"floppy"}"#),
         ]),
@@ -369,7 +369,7 @@ fn a_reboot_re_enters_live() {
         ),
         pairs(&[
             ("double.input", r#"1 reboot "please""#),
-            ("double.exit", "Qwen/Qwen3.8-Flash-Next"),
+            ("double.exit", "gemma-4-26b-a4b"),
             (
                 "bot.reboot",
                 r#"{"reason":"cognition_child_teardown_failed"}"#

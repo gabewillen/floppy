@@ -239,7 +239,9 @@
   TYPESAFE_BASE_URL; reasoning: generate with FLOPPY_API_KEY and
   FLOPPY_BASE_URL). The model is the body's (a <param> of the body's
   invoke), else the default below, and goes to reasoning; the
-  intuition_model goes to intuition.
+  intuition_model goes to intuition; the reflection_model goes, with the
+  model, to reflection and learning, which use it on
+  FLOPPY_REFLECTION_BASE_URL when it is not null (decision D258).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition"
@@ -248,10 +250,13 @@
        xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
        version="1.0" datamodel="ecmascript" name="cognition" initial="alive">
   <datamodel>
-    <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <data id="model" expr="'gemma-4-26b-a4b'"/>
     <!-- The chat tier's model (decision D144): null composes no intuition
          tier. -->
     <data id="intuition_model" expr="null"/>
+    <!-- Reflection's and learning's model on FLOPPY_REFLECTION_BASE_URL
+         (decision D258): null keeps them on model. -->
+    <data id="reflection_model" expr="null"/>
     <!-- The memory database file, for autonomy, reasoning, reflection and routines (null: no memory). -->
     <data id="database" expr="null"/>
     <!-- A stage's inactivity bound and its backstop (decision D101). -->
@@ -827,6 +832,7 @@
       <invoke id="reflection" type="scxml" src="../reflection/reflection.scx">
         <param name="database" expr="database"/>
         <param name="model" expr="model"/>
+        <param name="reflection_model" expr="reflection_model"/>
         <param name="bounds" expr="bounds"/>
       </invoke>
       <transition event="bot.ability.reflection.output" event:schema="../schemas/bot.ability.reflection.output.json">
@@ -867,6 +873,7 @@
       <invoke id="learning" type="scxml" src="../learning/learning.scx">
         <param name="database" expr="database"/>
         <param name="model" expr="model"/>
+        <param name="reflection_model" expr="reflection_model"/>
         <param name="bounds" expr="bounds"/>
       </invoke>
       <transition event="bot.ability.learning.output" event:schema="../schemas/bot.ability.learning.output.json">

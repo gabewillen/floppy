@@ -231,7 +231,7 @@ fn an_image_is_read_by_the_vision_model() {
     );
     assert_eq!(
         texts(&finished, "double.model"),
-        strings(&["Qwen/Qwen3.8-Flash-Next"])
+        strings(&["gemma-4-26b-a4b"])
     );
     assert_eq!(
         texts(&finished, "double.messages"),

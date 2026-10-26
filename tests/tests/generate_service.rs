@@ -15,7 +15,7 @@
 //! `FLOPPY_LIVE_ENV_FILE=<path> cargo test -p floppy-tests --test
 //! generate_service -- --ignored`. The files must set `FLOPPY_API_KEY` and
 //! `FLOPPY_BASE_URL` (the service has no default backend). The model is
-//! `FLOPPY_LIVE_MODEL`, else `Qwen/Qwen3.8-Flash-Next`. It reports pass
+//! `FLOPPY_LIVE_MODEL`, else `gemma-4-26b-a4b`. It reports pass
 //! or fail only; no value is ever printed.
 
 #![allow(
@@ -938,7 +938,7 @@ fn leaving_the_invoking_state_closes_the_streaming_model_call() {
 
 /// One real structured generation through an env file
 /// (`FLOPPY_LIVE_ENV_FILE`; `FLOPPY_LIVE_MODEL`, default
-/// `Qwen/Qwen3.8-Flash-Next`).
+/// `gemma-4-26b-a4b`).
 /// Prints nothing but pass or fail.
 #[test]
 #[ignore = "makes one real model call; needs FLOPPY_LIVE_ENV_FILE"]
@@ -984,7 +984,7 @@ fn live_image_reading_through_an_env_file() {
         .collect();
     args.extend(media(&support::workspace().join("tests/fixtures")));
     let model =
-        std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "Qwen/Qwen3.8-Flash-Next".into());
+        std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "gemma-4-26b-a4b".into());
     let params = image_params("media/total-due.png").replace("'mock-model'", &format!("'{model}'"));
     let finished = open_with(
         &args,

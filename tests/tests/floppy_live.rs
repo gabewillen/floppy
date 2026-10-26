@@ -7,7 +7,7 @@
 //! The env files must hold `FLOPPY_BASE_URL` and `FLOPPY_API_KEY` (the
 //! generate service has no default backend) and `TYPESAFE_API_KEY` (the
 //! intuition's decision service); the model is
-//! `FLOPPY_LIVE_MODEL`, else `Qwen/Qwen3.8-Flash-Next`, given to the bot
+//! `FLOPPY_LIVE_MODEL`, else `gemma-4-26b-a4b`, given to the bot
 //! as its `model` param by the environment that invokes it
 //! (`environments/environment/environment.scx`, laid out beside a scratch copy of the
 //! bot, the files service granted the layout's `behaviors/`, where the

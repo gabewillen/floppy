@@ -9,7 +9,7 @@
 {"label":"double.participants","parent":"session.floppy","session":"session.floppy.cognition","text":"[]","type":"log"}
 {"label":"floppy.held","parent":"session","session":"session.floppy","text":"1","type":"log"}
 {"label":"floppy.held","parent":"session","session":"session.floppy","text":"2","type":"log"}
-{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"Qwen/Qwen3.8-Flash-Next","type":"log"}
+{"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"gemma-4-26b-a4b","type":"log"}
 {"label":"floppy.released","parent":"session","session":"session.floppy","text":"{\"count\":2,\"reason\":\"deactivated\"}","type":"log"}
 {"label":"bot.deactivated","session":"session","text":"{}","type":"log"}
 {"label":"done.invoke","session":"session","text":"{\"invokeid\":\"floppy\"}","type":"log"}

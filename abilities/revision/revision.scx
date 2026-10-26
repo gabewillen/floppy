@@ -83,7 +83,10 @@
   <datamodel>
     <!-- The invoker's <param>s. -->
     <data id="database" expr="null"/>
-    <data id="model" expr="'Qwen/Qwen3.8-Flash-Next'"/>
+    <data id="model" expr="'gemma-4-26b-a4b'"/>
+    <!-- The model this document's calls use on FLOPPY_REFLECTION_BASE_URL
+         (decision D258): null keeps them on model and FLOPPY_BASE_URL. -->
+    <data id="reflection_model" expr="null"/>
     <data id="progress_target" expr="'#_parent'"/>
     <data id="intent" expr="null"/>
     <data id="intent_event" expr="'bot.behavior.change'"/>
@@ -244,6 +247,7 @@
     </onentry>
     <invoke id="builder" type="scxml" src="../../bots/builder/builder.scx">
       <param name="progress_target" expr="progress_target"/>
+      <param name="reflection_model" expr="reflection_model"/>
     </invoke>
     <transition event="revision.unknown" target="failed"/>
     <transition event="revision.requested">
