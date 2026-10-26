@@ -198,7 +198,7 @@ def transcripts(job_out, groups, backend):
 
 
 def media_dir(job_out, session):
-    """A session's media directory: the driver moves each session's to
+    """A session's media directory: the driver copies each session's to
     `media-<session>` when it ends (a run from before that has one `media`)."""
     path = os.path.join(job_out, f"media-{session}")
     return path if os.path.isdir(path) else os.path.join(job_out, "media")
