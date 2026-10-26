@@ -13,7 +13,7 @@ function isPostgresDatabase() {
 
 // floppy's revisions in the database engine's dialect, oldest first.
 function engineRevisions() {
-  return postgres ? [postgresql_0001] : [sqlite_0001];
+  return postgres ? [postgresql_0001, postgresql_0002] : [sqlite_0001, sqlite_0002];
 }
 
 // busy

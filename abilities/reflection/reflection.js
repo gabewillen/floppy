@@ -396,9 +396,45 @@ function isEpisodeUnstored() {
   return episode === null;
 }
 
-// The episode's insert.
+// The episode's insert, and its vector's when it has one.
 function insertEpisodeStatements() {
-  return [{sql: insert_episode, parameters: [cognition_input.focus, JSON.stringify(episode)]}];
+  var statements = [{sql: insert_episode, parameters: [cognition_input.focus, JSON.stringify(episode)]}];
+  return vector === null ? statements : statements.concat([{sql: insert_embedding, parameters: [vector]}]);
+}
+
+// The episode's words (decision D256): what was heard, one message per
+// line.
+function episodeWords() {
+  return episode.heard.join('\n');
+}
+
+function hasEpisodeWords() {
+  return episodeWords() !== '';
+}
+
+function hasNoEpisodeWords() {
+  return !hasEpisodeWords();
+}
+
+// The episode's words as one document to embed.
+function episodeEmbeddingInput() {
+  return ({role: 'document', items: [{parts: [{kind: 'text', text: episodeWords()}]}]});
+}
+
+// A unit vector's compact text, as a person's representative voice is
+// kept (namespaces/conversation encode_voice): i8: and the standard
+// base64 of each component times 127, rounded, as a signed byte.
+function compactVector(values) {
+  var alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  var bytes = values.map(function (value) { return (Math.max(-127, Math.min(127, Math.round(value * 127))) + 256) % 256; });
+  var text = 'i8:';
+  for (var i = 0; i < bytes.length; i += 3) {
+    var a = bytes[i], b = i + 1 < bytes.length ? bytes[i + 1] : 0, c = i + 2 < bytes.length ? bytes[i + 2] : 0;
+    text += alphabet.charAt(a >> 2) + alphabet.charAt(((a & 3) << 4) | (b >> 4));
+    text += i + 1 < bytes.length ? alphabet.charAt(((b & 15) << 2) | (c >> 6)) : '=';
+    text += i + 2 < bytes.length ? alphabet.charAt(c & 63) : '=';
+  }
+  return text;
 }
 
 function storedLog() {

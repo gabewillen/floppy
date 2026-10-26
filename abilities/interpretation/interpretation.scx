@@ -107,7 +107,7 @@
     least recently seen id that is not own makes room. A product names a
     voice by its ref, voice:<id>. Without a database the registry lives in
     the session, as mosfet.py's InProcessStore: a restart forgets it.
-  * Memory (decisions D194 and D256): with a database (the <param>
+  * Memory (decisions D194 and D257): with a database (the <param>
     database, the memory database file), the voices heard are the people
     long-term memory holds (bot_person, bot_person_embedding and
     bot_person_centroid, kind voice), each id that is not own a person

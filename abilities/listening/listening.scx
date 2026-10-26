@@ -68,7 +68,7 @@
 
   Memory: the <param> database (the memory database file, or null) goes
   to the interpretation, which remembers the voices heard as the people
-  long-term memory holds (decision D256).
+  long-term memory holds (decision D257).
 
   Bindings: none of its own (the interpretation and its hearing leaves
   bind the speech service, and the interpretation's memory the sql and
