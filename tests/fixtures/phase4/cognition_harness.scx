@@ -6,7 +6,8 @@
   sent on to the cognition, invoked as the child "cognition" with no
   memory, and each turn's answer is logged whole (harness.output, the JSON
   of a bot.ability.cognition.output; harness.failed, of a
-  bot.ability.failed). harness.ready logs each of its offers, and
+  bot.ability.failed). An external bot.ability.persona.output is sent on
+  too, as the body relays the persona's. harness.ready logs each of its offers, and
   harness.sent the data of each bot.ability.communication.respond a stage
   sends it (the turn's choices tag respond with the harness's own session
   id).
@@ -18,6 +19,11 @@
     </invoke>
     <transition event="bot.ability.cognition.input" cond="_event.invokeid === undefined">
       <send event="bot.ability.cognition.input" target="#_cognition">
+        <content expr="_event.data"/>
+      </send>
+    </transition>
+    <transition event="bot.ability.persona.output" cond="_event.invokeid === undefined">
+      <send event="bot.ability.persona.output" target="#_cognition">
         <content expr="_event.data"/>
       </send>
     </transition>
