@@ -53,6 +53,15 @@ compiles and exports the fuel global. It records the metering parameters and
 every output digest in `dist/build-manifest.json`, and each component's
 release digest and imported interfaces in `dist/identity.js`.
 
+`--extensions <dir>` (repeatable) ships more extension components: every
+artifact `<dir>/manifest.tsv` lists (the same `stateforward.wasm-artifacts/v1`
+rows, virtualized components with no WASI import) is authenticated and
+transpiled like the others into `dist/<name>/`, `<name>` its artifact name
+with `_` as `-` (lowercase ASCII letters and `-` only). A name or release
+digest another component already has fails the build, so a digest
+authenticates exactly one component. `dist/extensions.js` lists every
+extension component the build ships.
+
 The validator and `scx` components validate with the bundled, unmodified W3C
 SCXML 1.0 schema set, so the package carries its W3C notice (`NOTICE.md`,
 copied by `npm pack`).
@@ -321,7 +330,8 @@ const session = await createSession({ ir, dataModel, extensionComponents: extens
   digest is the release artifact of an extension component this package
   ships transpiled and fuel-metered at build time (`dist/`: the example
   namespace, `components/scxml-extension-example`, and `scx`,
-  `namespaces/scx`). A component this package does not ship is
+  `namespaces/scx`, plus any the build's `--extensions` added; see
+  [Build](#build)). A component this build does not ship is
   `artifact-kind-mismatch`: browsers run only components built with the
   package (a component resolved at run time needs a build of its own).
 - **Binding.** `bind(pkg, component)` checks what the Wasmtime host checks:

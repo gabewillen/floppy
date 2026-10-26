@@ -13,7 +13,8 @@ import { Telemetry, isTelemetryOption } from './telemetry.js';
  * only by the first session snapshot or snapshot diff; `validator` only by
  * createValidator; and the extension components (`extension-example`, the
  * example namespace, and `scx`, the `scx` namespace) only when a page binds
- * one.
+ * one. A build may ship more extension components (`--extensions`, listed
+ * in `dist/extensions.js`); the loader accepts those names too.
  */
 export const COMPONENTS = Object.freeze([
   'machine',
@@ -32,6 +33,22 @@ export const COMPONENTS = Object.freeze([
 ]);
 
 const CORE_FILE = /^[a-z-]+\.core[0-9]*\.wasm$/;
+
+/**
+ * The extension components this build ships (`dist/extensions.js`, written
+ * by scripts/build.mjs): `{name: () => import(bindings)}`, frozen; empty
+ * when `dist/` is not built.
+ * @returns {Promise<Readonly<Record<string, () => Promise<object>>>>}
+ */
+export function shippedExtensions() {
+  return import('../dist/extensions.js').then(
+    (module) => module.EXTENSIONS,
+    () => Object.freeze({}),
+  );
+}
+
+/** The extension components named at build time (`--extensions` included). */
+const EXTENSION_COMPONENTS = Object.keys(await shippedExtensions());
 
 /**
  * Loader that fetches `<baseUrl>/<component>/<file>` and compiles it with
@@ -70,7 +87,7 @@ export function cachedCoreModules(source, options) {
   }
   const cache = new Map();
   return (component, file) => {
-    if (!COMPONENTS.includes(component) || !CORE_FILE.test(file)) {
+    if (!(COMPONENTS.includes(component) || EXTENSION_COMPONENTS.includes(component)) || !CORE_FILE.test(file)) {
       telemetry.observe('load-core-module', 'rejected');
       return Promise.reject(new TypeError('unknown core module request'));
     }
