@@ -518,7 +518,11 @@ export type BundledDataModel = Required<DataModelProvider> & {
  *   URL is `unavailable` (detail
  *   RESOURCE_DETAILS.*), which the machine raises as error.execution (for
  *   `<invoke>`, the invocation fails). An `<invoke src>` document is passed
- *   to `capabilities.compileInvocation(sourceName, source)` unchanged.
+ *   to the child compiler unchanged. With the host's automatic compiler,
+ *   each `<invoke src>` document resolved is compiled before the machine
+ *   runs, and its IR's static URLs, resolved against its `baseUri`, are
+ *   prefetched the same way, breadth first, for at most
+ *   MAX_PREFETCHED_CHILDREN children.
  * - `<script src>` (loaded while createSession builds the session): text
  *   in the ECMAScript data model's language, of any size the data model
  *   accepts (the host sets no bound, as under Wasmtime), any number of
@@ -558,10 +562,19 @@ export interface ResourceProviders {
  * passed on, and the machine component reads one of at most 256 bytes, a
  * longer one indicating nothing.
  * A script resource's media type is ignored.
+ *
+ * For an `<invoke src>` document, `baseUri` and `eventSchemas` are the
+ * Wasmtime embedder's `EmbeddedDocument` fields: the absolute URI the
+ * child's own relative URIs resolve against (RFC 3986 §5.1; one that is
+ * not an absolute URL fails the answer), and the `event:schema` files the
+ * child is compiled with (as CompileOptions `eventSchemas`). The root
+ * session has no base URI.
  */
 export interface LoadedDocumentAnswer {
   text: string;
   mediaType?: string;
+  baseUri?: string;
+  eventSchemas?: { uri: string; bytes: Uint8Array }[];
 }
 
 
@@ -708,6 +721,8 @@ export const FUEL_EXPORT: string;
  * script URI bound); a longer one is `unavailable` (RESOURCE_DETAILS.limit).
  */
 export const MAX_RESOURCE_URL_BYTES: number;
+/** Most `<invoke src>` children one session's prefetch compiles (64). */
+export const MAX_PREFETCHED_CHILDREN: number;
 /** `component-error.detail` values of `resources` failures. */
 export const RESOURCE_DETAILS: Readonly<{
   denied: 'resource-denied';
