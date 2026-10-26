@@ -81,11 +81,20 @@ export class Run {
       extensionComponents: rt.extensions,
       capabilities: { log: ({ label, text }) => say("log", label ? `${label}: ${text}` : text) },
       // The documents and scripts the bot loads come from this site only. A
-      // relative name reaches the page as the document wrote it, and names a
-      // file beside the document (compiled.base), as under `scx run`.
+      // relative name of the bot reaches the page as the document wrote it,
+      // and names a file beside the document (compiled.base), as under `scx
+      // run`. Each document answers with its own URL as its base, so an
+      // invoked child's names arrive resolved against the child, and with
+      // the event:schema files it is compiled with.
       resources: {
         allow: url => { try { return new URL(url, compiled.base).origin === origin; } catch { return false; } },
-        resolve: async url => { const r = await fetch(new URL(url, compiled.base), { credentials: "omit", redirect: "error" }); if (!r.ok) throw new Error(`HTTP ${r.status}`); return { text: await r.text(), mediaType: r.headers.get("content-type") ?? undefined }; },
+        resolve: async url => {
+          const at = new URL(url, compiled.base);
+          const r = await fetch(at, { credentials: "omit", redirect: "error" });
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const text = await r.text();
+          return { text, mediaType: r.headers.get("content-type") ?? undefined, baseUri: at.href, eventSchemas: text.includes("event:schema=") ? await eventSchemas(text, at) : undefined };
+        },
       },
       timers: "event-loop",
       onTimer: outcome => { if (outcome.error) run.fail(outcome.error); else run.changed(); },

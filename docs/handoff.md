@@ -18,13 +18,18 @@ Last updated: 2026-10-24.
   scxml.rs's browser host build takes `--extensions <dir>` so it ships
   floppy's namespace components (scxml.rs `claude/project-thread-npb42b`),
   `web/build-host.sh` builds it into `target/web`, and the Pages workflow
-  runs it. Every bot, ability and environment opens, compiles and starts in
-  the page; what the browser host cannot do yet is browser parity slice 2:
-  a service `<invoke>` raises `error.execution` (no service binding), and an
-  `<invoke src>` child's own scripts and schema files are not resolved (the
-  host prefetches only the root's URLs and compiles children without their
-  schemas), so children fail too. The register's facts come from
-  `web/src/register.py`.
+  runs it. The browser host resolves an `<invoke src>` child's own scripts,
+  data, schema files and children against the child's base URI (the page
+  answers each document with `baseUri` and `eventSchemas`, as the Wasmtime
+  embedder's `EmbeddedDocument`), so 38 of the 40 documents run with their
+  children in the page. Not yet (browser parity slice 2): a service
+  `<invoke>` raises `error.execution` (no service binding), and the floppy
+  bot and the room exceed Chromium's limit of about 125 live Wasm memories
+  per page (each session's machine, data model, I/O processor, clock and
+  namespaces hold 2 or 3 memories per component, so a tree of more than a
+  handful of sessions fails with `instance-lost`); sharing component
+  instances across a run's sessions upstream is the fix. The register's
+  facts come from `web/src/register.py`.
 - **Speech on api.willen.dev (2026-10-25, D244):** both speech variables
   name `https://api.willen.dev/v1` (its openapi.json is the contract), with
   the documents' models unchanged; the GPT-Live harness ran on it with

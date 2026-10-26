@@ -21,9 +21,12 @@ no bundler step for the pages themselves.
   delayed sends and invocations); the page selects no transition. A
   document's scripts, schemas and invoked children load from the site by
   the same relative URIs as under `scx run`, so the workshop opens any bot or
-  ability of this repository, or a `.scx` file of your own. The browser host
+  ability of this repository, or a `.scx` file of your own; each document
+  answers with its own URL as its base and with its `event:schema` files,
+  so an invoked child resolves its names against itself. The browser host
   binds no invoked service, so a service `<invoke>` raises `error.execution`
-  in the page.
+  in the page, and a run of more than a handful of sessions (the floppy
+  bot) exceeds the browser's limit on live Wasm memories.
 - `src/critter.bundle.js`: the animated robot (`<floppy-bot>`), an esbuild
   0.24.0 bundle with hsm.ts kept external.
 
