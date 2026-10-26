@@ -1067,7 +1067,10 @@ fn a_negative_product_threshold_degrades_the_listening() {
     .args;
     args.push(harness.display().to_string());
     let run = Run::start(&args, &[]);
-    run.until(WAIT, label_is("interpretation.degraded"));
+    // The listening degrades on the interpretation's end, a step after
+    // the interpretation's log: the run closes once it has, or the trace
+    // holds it only when the close is slow enough.
+    run.until(WAIT, label_is("listening.degraded"));
     let finished = close(run, "a_negative_product_threshold_degrades_the_listening");
     assert_eq!(
         texts(&finished.all, "interpretation.degraded"),
