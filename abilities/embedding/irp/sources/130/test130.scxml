@@ -12,23 +12,29 @@
   </state>
   <state id="step0">
     <onentry>
-      <send event="bot.ability.embedding.input" target="#_embedding"><content expr='{"role": "query", "items": []}'/></send>
+      <send event="bot.ability.embedding.input" target="#_embedding"><content expr='{"id": "embedding-1", "role": "query", "items": []}'/></send>
     </onentry>
     <transition event="error.execution" target="step1"/>
   </state>
   <state id="step1">
     <onentry>
-      <send event="bot.ability.embedding.input" target="#_embedding"><content expr='{"role": "query", "items": [{"parts": [{"kind": "text"}]}]}'/></send>
+      <send event="bot.ability.embedding.input" target="#_embedding"><content expr='{"id": "embedding-1", "role": "query", "items": [{"parts": [{"kind": "text"}]}]}'/></send>
     </onentry>
     <transition event="error.execution" target="step2"/>
   </state>
   <state id="step2">
     <onentry>
-      <send event="bot.ability.embedding.input" target="#_embedding"><content expr='{"role": "query", "items": [{"parts": [{"kind": "text", "text": "fine"}]}]}'/></send>
+      <send event="bot.ability.embedding.input" target="#_embedding"><content expr='{"role": "query", "items": [{"parts": [{"kind": "text", "text": "no id"}]}]}'/></send>
     </onentry>
-    <transition event="bot.ability.embedding.output" cond='_event.data.role === "query" &amp;&amp; _event.data.space.model === "embeddinggemma-2" &amp;&amp; _event.data.space.dimensions === 2 &amp;&amp; JSON.stringify(_event.data.vectors.map(function (v) { return v.values; })) === "[[1,0]]"' target="step3"/>
+    <transition event="error.execution" target="step3"/>
   </state>
   <state id="step3">
+    <onentry>
+      <send event="bot.ability.embedding.input" target="#_embedding"><content expr='{"id": "embedding-1", "role": "query", "items": [{"parts": [{"kind": "text", "text": "fine"}]}]}'/></send>
+    </onentry>
+    <transition event="bot.ability.embedding.output" cond='_event.data.id === "embedding-1" &amp;&amp; _event.data.role === "query" &amp;&amp; _event.data.space.model === "embeddinggemma-2" &amp;&amp; _event.data.space.dimensions === 2 &amp;&amp; JSON.stringify(_event.data.vectors.map(function (v) { return v.values; })) === "[[1,0]]"' target="step4"/>
+  </state>
+  <state id="step4">
     <transition target="pass"/>
   </state>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>

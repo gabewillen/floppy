@@ -3,11 +3,15 @@
   floppy's Embedding ability (mosfet.py's Embedding): a bot's capacity to
   embed text into one declared vector space. Reflection embeds a turn's
   episode when it stores it, and reasoning the turn's cue when it recalls
-  (decision D256); each invokes it from the state that needs it.
+  (decision D256). The body invokes it once, in floppy.scx's live, beside
+  the memory (mosfet.py's Embedding holds its embedder), and abilities
+  address it as they address the memory (decision D266): its address is
+  their <param> embedding, and each request carries an id its reply
+  echoes.
 
     Embedding { idle -bot.ability.embedding.input-> embedding -> idle }
 
-  Input: bot.ability.embedding.input {role, items}: role query (a cue that
+  Input: bot.ability.embedding.input {id, role, items}: role query (a cue that
   searches) or document (content being indexed), and the items, each an
   ordered run of text parts that yields one vector. Each item's text is
   its parts joined, with the model's task prefix for the role applied
@@ -16,10 +20,10 @@
   title, or untitled without one).
 
   embedding invokes the generate service in its embeddings mode (input,
-  model and dimensions; POST {base}/embeddings) and answers the parent
-  with bot.ability.embedding.output {space: {model, dimensions}, role,
-  vectors: [{values}]}, one unit vector per item in order, or
-  bot.ability.embedding.failed {message, kind}: unavailable for an
+  model and dimensions; POST {base}/embeddings) and answers the request's
+  sender (_event.origin) with bot.ability.embedding.output {id, space:
+  {model, dimensions}, role, vectors: [{values}]}, one unit vector per
+  item in order, or bot.ability.embedding.failed {id, message, kind}: unavailable for an
   unconfigured or unreachable embedder, invalid_response for a reply that
   is not one vector per item, embed_failed for another answer of the
   service, invalid_input for a request it refuses, and timeout when the
@@ -43,8 +47,11 @@
     <!-- EmbeddingGemma's task prefixes. -->
     <data id="instructions" expr="({query: 'task: search result | query: ', document: 'title: {title} | text: ', untitled: 'none'})"/>
     <data id="timeout_ms" expr="10000"/>
-    <!-- The request in flight. -->
+    <!-- The request in flight, with its sender (_event.origin), and the
+         generate call's generated invoke id: a cancelled call's late
+         events (still delivered, SCXML 6.4) are not the next request's. -->
     <data id="input" expr="null"/>
+    <data id="generate" expr="null"/>
     <data id="vectors" expr="null"/>
     <data id="failure" expr="null"/>
   </datamodel>
@@ -53,7 +60,7 @@
   <state id="idle">
     <transition event="bot.ability.embedding.input" event:schema="../schemas/bot.ability.embedding.input.json"
                 target="embedding">
-      <assign location="input" expr="_event.data"/>
+      <assign location="input" expr="inputOf(_event)"/>
     </transition>
   </state>
 
@@ -67,7 +74,7 @@
     <onexit>
       <cancel sendid="embedding-after"/>
     </onexit>
-    <invoke id="generate" type="https://github.com/stateforward/floppy/services/generate"
+    <invoke idlocation="generate" type="https://github.com/stateforward/floppy/services/generate"
             env:apikey="FLOPPY_EMBEDDING_API_KEY" env:baseurl="FLOPPY_EMBEDDING_BASE_URL">
       <param name="model" expr="model"/>
       <param name="input" expr="texts()"/>
@@ -76,29 +83,29 @@
     <transition event="bot.ability.embedding.input" event:schema="../schemas/bot.ability.embedding.input.json">
       <event:defer/>
     </transition>
-    <transition event="generate.result">
+    <transition event="generate.result" cond="isCurrent(_event)">
       <assign location="vectors" expr="resultVectors(_event)"/>
     </transition>
-    <transition event="generate.failed">
+    <transition event="generate.failed" cond="isCurrent(_event)">
       <assign location="failure" expr="generateFailure(_event)"/>
     </transition>
-    <transition event="done.invoke.generate" cond="hasVectors()" target="idle">
-      <send event="bot.ability.embedding.output" target="#_parent">
+    <transition event="done.invoke" cond="isCurrent(_event) &amp;&amp; hasVectors()" target="idle">
+      <send event="bot.ability.embedding.output" targetexpr="input.origin">
         <content expr="output()"/>
       </send>
     </transition>
-    <transition event="done.invoke.generate" target="idle">
-      <send event="bot.ability.embedding.failed" target="#_parent">
+    <transition event="done.invoke" cond="isCurrent(_event)" target="idle">
+      <send event="bot.ability.embedding.failed" targetexpr="input.origin">
         <content expr="failed()"/>
       </send>
     </transition>
     <transition event="embedding.after" target="idle">
-      <send event="bot.ability.embedding.failed" target="#_parent">
+      <send event="bot.ability.embedding.failed" targetexpr="input.origin">
         <content expr="timedOut()"/>
       </send>
     </transition>
     <transition event="error.*" target="idle">
-      <send event="bot.ability.embedding.failed" target="#_parent">
+      <send event="bot.ability.embedding.failed" targetexpr="input.origin">
         <content expr="couldNotRun(_event)"/>
       </send>
     </transition>

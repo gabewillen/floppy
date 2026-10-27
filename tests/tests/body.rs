@@ -126,6 +126,7 @@ fn layout(cognition: &Cognition, data: &[(&str, &str)]) -> PathBuf {
         "identity",
         "memory",
         "stm",
+        "embedding",
         "persona",
         "seeing",
     ] {

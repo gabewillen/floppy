@@ -395,3 +395,8 @@ function selectionData(s) {
 function memoryAddress() {
   return database === null ? null : '#_scxml_' + _sessionid + '.memory';
 }
+
+// The address of the bot's Embedding ability, the child "embedding".
+function embeddingAddress() {
+  return '#_scxml_' + _sessionid + '.embedding';
+}
