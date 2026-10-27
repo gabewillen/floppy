@@ -41,6 +41,8 @@ http = [
     "dep:http-body-util",
     "dep:httparse",
     "dep:rustls",
+    "dep:rustls-platform-verifier",
+    "dep:tungstenite",
     "dep:ureq",
     "dep:wasmtime-wasi-http",
 ]
@@ -55,6 +57,8 @@ opentelemetry.workspace = true
 opentelemetry_sdk.workspace = true
 rayon = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }
+rustls-platform-verifier = { workspace = true, optional = true }
+tungstenite = { workspace = true, optional = true }
 scxml-scheduler = { workspace = true, optional = true }
 scxml-script = { workspace = true, optional = true }
 scxml-snapshot = { workspace = true, optional = true }
@@ -94,6 +98,7 @@ scxml-types.workspace = true
 scxml-validator-core.workspace = true
 scxml-validator-xsd.workspace = true
 serde_json.workspace = true
+tungstenite.workspace = true
 wasm-encoder.workspace = true
 
 [lints]

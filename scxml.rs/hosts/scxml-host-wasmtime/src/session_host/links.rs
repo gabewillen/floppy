@@ -3,7 +3,7 @@
 //! run budget and trace. Every decision is a component's; this module
 //! forwards calls and executes the decisions it gets back.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::rc::Rc;
 
 use opentelemetry::Context;
@@ -28,8 +28,8 @@ use crate::bindings::stateforward::scxml::machine_capability_types::{
 };
 use crate::bindings::stateforward::scxml::types::InvokeRequest;
 use crate::bindings::stateforward::scxml::types::{
-    BaggagePolicy, BasichttpSend, ComponentError, DataValue as WitDataValue, ErrorCode,
-    Event as WitEvent, InvocationAddress, SendRequest, SendTarget, Sender,
+    BaggagePolicy, ComponentError, DataValue as WitDataValue, ErrorCode, Event as WitEvent,
+    InvocationAddress, ProcessorSend, SendRequest, SendTarget, Sender,
     TraceContext as WitTraceContext,
 };
 use crate::capability_graph::{ClockStoreData, IoRuntime, IoStoreData};
@@ -82,10 +82,66 @@ pub(crate) struct SessionLinks {
     /// The bindings of the child this session compiled last, for the
     /// session it starts next.
     compiled_bindings: Option<Rc<DocumentBindings>>,
+    /// The Event I/O Processor instances this session opened, by exact type
+    /// URI: each opened by the session's first `<send>` of its type, and
+    /// closed when the session ends.
+    processors: BTreeMap<String, Processor>,
+    /// The ids of this session's accepted processor `<send>`s that failed
+    /// later, each owed one `error.communication` (SCXML 6.2.4, 5.10.1),
+    /// which the run raises once the current call returned.
+    owed: VecDeque<String>,
+}
+
+/// One open Event I/O Processor instance of a session.
+struct Processor {
+    handle: crate::service::ServiceHandle,
+    /// Its run-unique id.
+    instance: u64,
+    /// Its accepted calls still pending, by call number, with their send
+    /// ids.
+    pending: BTreeMap<u64, String>,
+}
+
+/// What one call of a processor instance decided about its `<send>`.
+enum Called {
+    /// The call resolved before the instance was idle.
+    Resolved(Result<(), ComponentError>),
+    /// The call is still pending: the `<send>` is accepted.
+    Pending,
+    /// No instance could be opened, or it ended without resolving the call.
+    Unavailable,
+}
+
+/// The disposition of a `<send>` whose processor call resolved with
+/// `outcome`: `invalid-input` (and a bound the instance reached) and
+/// `payload-too-large` raise `error.execution`; any other failure is a
+/// send that cannot be dispatched (`error.communication`, SCXML 6.2.4).
+fn processor_disposition(
+    outcome: Result<(), ComponentError>,
+) -> Result<SendDisposition, ComponentError> {
+    match outcome {
+        Ok(()) => Ok(SendDisposition::Routed),
+        Err(error) => match error.code {
+            ErrorCode::InvalidInput | ErrorCode::CapacityExhausted => {
+                Err(invalid_input("the Event I/O Processor refused the send"))
+            }
+            ErrorCode::PayloadTooLarge => Err(component_error(
+                ErrorCode::PayloadTooLarge,
+                "the send exceeds the Event I/O Processor's byte bound",
+            )),
+            _ => Ok(SendDisposition::Undeliverable),
+        },
+    }
 }
 
 pub(crate) fn invalid_input(detail: &'static str) -> ComponentError {
     component_error(ErrorCode::InvalidInput, detail)
+}
+
+/// Whether a send's type names the `BasicHTTP` Event I/O Processor (its
+/// type URI or alias, SCXML C.2).
+fn is_basichttp(processor_type: &str) -> bool {
+    scxml_types::classify_processor_type(processor_type) == scxml_types::ProcessorKind::BasicHttp
 }
 
 /// Where one session sits among the root session and its invoked sessions.
@@ -132,6 +188,8 @@ impl SessionLinks {
             loaded_bindings: None,
             loaded_event_schemas: None,
             compiled_bindings: None,
+            processors: BTreeMap::new(),
+            owed: VecDeque::new(),
         }
     }
 
@@ -570,20 +628,293 @@ impl SessionLinks {
             .ok_or_else(|| HostError::Component("basichttp-sender-unavailable".into()))
     }
 
+    /// Sends one `<send>` through the Event I/O Processor its type names:
+    /// `BasicHTTP`, or a processor component bound to the type
+    /// ([`Self::send_bound`]). A type no processor answers is
+    /// `error.execution` (SCXML 6.2.5: `invalid-input`).
+    pub(crate) fn send_processor(
+        &mut self,
+        request: ProcessorSend,
+    ) -> Result<SendDisposition, ComponentError> {
+        if is_basichttp(&request.processor_type) {
+            return self.send_basichttp(request);
+        }
+        let Some(uri) = self
+            .core
+            .processor_uri(&request.processor_type)
+            .map(str::to_owned)
+        else {
+            return Err(invalid_input(
+                "no Event I/O Processor answers the send type",
+            ));
+        };
+        self.send_bound(&uri, request)
+    }
+
+    /// Sends one `<send>` through this session's instance of the processor
+    /// component bound to `uri`: at once when it has no delay, else checked
+    /// by the instance now (SCXML 6.2: every argument is evaluated, and so
+    /// validated, when the `<send>` is) and held on the session clock by
+    /// the SCXML processor until it falls due
+    /// ([`Self::dispatch_due_processor`]).
+    fn send_bound(
+        &mut self,
+        uri: &str,
+        request: ProcessorSend,
+    ) -> Result<SendDisposition, ComponentError> {
+        if request.delay_ms == 0 {
+            return match self.call_processor(uri, request, crate::service::SendCall::Send)? {
+                Called::Resolved(outcome) => processor_disposition(outcome),
+                Called::Pending => Ok(SendDisposition::Routed),
+                Called::Unavailable => Ok(SendDisposition::Undeliverable),
+            };
+        }
+        match self.call_processor(uri, request.clone(), crate::service::SendCall::Check)? {
+            Called::Resolved(Ok(())) | Called::Pending => {}
+            Called::Resolved(outcome) => return processor_disposition(outcome),
+            Called::Unavailable => return Ok(SendDisposition::Undeliverable),
+        }
+        self.io_call(|api, store| api.call_schedule_processor(store, &request))
+            .map_err(|error| fatal(&self.shared, error.into()))?
+            .map(|()| SendDisposition::Scheduled)
+    }
+
+    /// How this run carries out its processor instances' requests and
+    /// connections.
+    fn processor_modes(&self) -> crate::service::NetworkModes {
+        crate::service::NetworkModes {
+            http: self
+                .shared
+                .http
+                .service_requests(self.core.processor_http.as_ref()),
+            websocket: self
+                .shared
+                .http
+                .socket_mode(self.core.processor_websocket.as_ref()),
+        }
+    }
+
+    /// Opens this session's instance of the processor bound to `uri`;
+    /// `false` when it cannot be opened (its component does not link, or
+    /// its `open` failed).
+    fn open_processor(
+        &mut self,
+        uri: &str,
+        now: u64,
+        modes: &crate::service::NetworkModes,
+        trace_context: Option<WitTraceContext>,
+    ) -> Result<bool, ComponentError> {
+        let span =
+            scxml_telemetry::observe(Module::HostWasmtime, Operation::HostWasmtimeProcessorOpen);
+        let instance = self.shared.next_instance();
+        let opened = self.core.open_processor(
+            uri,
+            &self.session_id,
+            modes,
+            now,
+            instance,
+            (&self.execution_context, trace_context),
+        );
+        let (mut handle, report) = match opened {
+            Ok(Some(Ok(opened))) => opened,
+            Ok(Some(Err(_)) | None) => {
+                span.event(SignalEvent::InputRejected);
+                span.fail(ErrorCategory::Execution);
+                return Ok(false);
+            }
+            Err(error) => {
+                span.fail(ErrorCategory::Platform);
+                return Err(fatal(&self.shared, RunFailure::Host(error)));
+            }
+        };
+        let step = handle.settle(Some(report), now, &modes.http);
+        self.push_processor_events(step.events);
+        if !matches!(step.state, crate::service::ReportState::Running) {
+            span.event(SignalEvent::InputRejected);
+            span.fail(ErrorCategory::Execution);
+            return Ok(false);
+        }
+        span.event(SignalEvent::TransformationCompleted);
+        self.shared
+            .processor_owners
+            .borrow_mut()
+            .insert(instance, (self.key, uri.to_owned()));
+        self.processors.insert(
+            uri.to_owned(),
+            Processor {
+                handle,
+                instance,
+                pending: BTreeMap::new(),
+            },
+        );
+        Ok(true)
+    }
+
+    /// Hands one `<send>` to this session's instance of the processor bound
+    /// to `uri` (opened on first use) as `call`, and waits until the
+    /// instance is idle.
+    fn call_processor(
+        &mut self,
+        uri: &str,
+        request: ProcessorSend,
+        call: crate::service::SendCall,
+    ) -> Result<Called, ComponentError> {
+        let span =
+            scxml_telemetry::observe(Module::HostWasmtime, Operation::HostWasmtimeProcessorSend);
+        let now = self.time.load(std::sync::atomic::Ordering::Relaxed);
+        let modes = self.processor_modes();
+        if !self.processors.contains_key(uri)
+            && !self.open_processor(uri, now, &modes, request.trace_context.clone())?
+        {
+            span.event(SignalEvent::InputRejected);
+            span.fail(ErrorCategory::Execution);
+            return Ok(Called::Unavailable);
+        }
+        let Some(processor) = self.processors.get_mut(uri) else {
+            return Ok(Called::Unavailable);
+        };
+        let send_id = request.send_id.clone();
+        let check = matches!(call, crate::service::SendCall::Check);
+        let (id, step) = processor.handle.call(request, call, now, &modes.http);
+        let mut own = None;
+        let mut sends = step.sends;
+        if let Some(index) = sends.iter().position(|(call, _)| *call == id) {
+            own = Some(sends.remove(index).1);
+        }
+        let running = matches!(step.state, crate::service::ReportState::Running);
+        if own.is_none() && !check && running {
+            processor.pending.insert(id, send_id);
+        }
+        self.settle_late(uri, sends);
+        self.push_processor_events(step.events);
+        if !running {
+            self.close_processor(uri);
+        }
+        let called = match own {
+            Some(outcome) => Called::Resolved(outcome),
+            None if running => Called::Pending,
+            None => Called::Unavailable,
+        };
+        if matches!(called, Called::Resolved(Ok(())) | Called::Pending) {
+            span.event(SignalEvent::TransformationCompleted);
+        } else {
+            span.event(SignalEvent::InputRejected);
+            span.fail(ErrorCategory::Execution);
+        }
+        Ok(called)
+    }
+
+    /// Settles the calls of the instance bound to `uri` that resolved late:
+    /// each accepted `<send>` that failed is owed `error.communication`.
+    fn settle_late(&mut self, uri: &str, sends: Vec<(u64, Result<(), ComponentError>)>) {
+        let Some(processor) = self.processors.get_mut(uri) else {
+            return;
+        };
+        for (call, outcome) in sends {
+            if let Some(send_id) = processor.pending.remove(&call)
+                && outcome.is_err()
+            {
+                self.owed.push_back(send_id);
+            }
+        }
+    }
+
+    /// Queues what a processor instance returned on this session's external
+    /// queue, in order.
+    fn push_processor_events(&self, events: Vec<WitEvent>) {
+        let mut invoked_sessions = self.shared.invoked_sessions.borrow_mut();
+        for event in events {
+            invoked_sessions.push_external(self.key, event);
+        }
+    }
+
+    /// Closes this session's instance of the processor bound to `uri`:
+    /// its connections close, and each of its accepted `<send>`s still
+    /// pending is owed `error.communication`.
+    fn close_processor(&mut self, uri: &str) {
+        if let Some(processor) = self.processors.remove(uri) {
+            self.shared
+                .processor_owners
+                .borrow_mut()
+                .remove(&processor.instance);
+            self.owed.extend(processor.pending.into_values());
+        }
+    }
+
+    /// Closes every processor instance of this session (its end): nothing
+    /// is owed any more.
+    pub(crate) fn close_processors(&mut self) {
+        let uris: Vec<String> = self.processors.keys().cloned().collect();
+        for uri in uris {
+            self.close_processor(&uri);
+        }
+        self.owed.clear();
+    }
+
+    /// The next `error.communication` owed to one of this session's
+    /// processor `<send>`s.
+    pub(crate) fn take_owed(&mut self) -> Option<String> {
+        self.owed.pop_front()
+    }
+
+    /// Whether one of this session's processor instances holds an open
+    /// connection or a request in flight.
+    pub(crate) fn processors_connected(&self) -> bool {
+        self.processors
+            .values()
+            .any(|processor| processor.handle.connected())
+    }
+
+    /// Whether one of this session's processor instances waits for the
+    /// response of a request in flight (or awaited from the record).
+    pub(crate) fn processors_awaiting(&self) -> bool {
+        self.processors
+            .values()
+            .any(|processor| processor.handle.awaiting())
+    }
+
+    /// Delivers one answer a transport (or the record) gave the request or
+    /// connection `request` of this session's instance of the processor
+    /// bound to `uri`: what it returns joins this session's external queue,
+    /// and its late failures are owed. `false` when no open instance waits
+    /// for it.
+    pub(crate) fn processor_respond(
+        &mut self,
+        uri: &str,
+        request: u64,
+        answer: crate::service::Answer,
+    ) -> bool {
+        let now = self.time.load(std::sync::atomic::Ordering::Relaxed);
+        let modes = self.processor_modes();
+        let Some(processor) = self.processors.get_mut(uri) else {
+            return false;
+        };
+        let Some(step) = processor.handle.respond(request, answer, now, &modes.http) else {
+            return false;
+        };
+        let running = matches!(step.state, crate::service::ReportState::Running);
+        self.settle_late(uri, step.sends);
+        self.push_processor_events(step.events);
+        if !running {
+            self.close_processor(uri);
+        }
+        true
+    }
+
     /// Sends one `<send>` through the `BasicHTTP` processor: at once when
     /// it has no delay ([`Self::post_basichttp`]), else checked by the
     /// processor and held on the session clock by the SCXML processor until
     /// it falls due (SCXML 6.2: "It MUST dispatch the message only when the
     /// delay interval elapses."), then posted by
-    /// [`Self::dispatch_due_basichttp`].
-    pub(crate) fn send_basichttp(
+    /// [`Self::dispatch_due_processor`].
+    fn send_basichttp(
         &mut self,
-        request: BasichttpSend,
+        request: ProcessorSend,
     ) -> Result<SendDisposition, ComponentError> {
         if request.delay_ms == 0 {
             self.post_basichttp(request)
         } else {
-            self.schedule_basichttp(&request)
+            self.schedule_processor(&request)
         }
     }
 
@@ -592,9 +923,9 @@ impl SessionLinks {
     /// "The Processor MUST evaluate all arguments to `<send>` when the `<send>`
     /// element is evaluated, and not when the message is actually
     /// dispatched.") and schedules it through the SCXML processor.
-    fn schedule_basichttp(
+    fn schedule_processor(
         &mut self,
-        request: &BasichttpSend,
+        request: &ProcessorSend,
     ) -> Result<SendDisposition, ComponentError> {
         let fuel = self.core.config.store.fuel;
         let outbound = outbound_send(request);
@@ -621,12 +952,14 @@ impl SessionLinks {
                 ),
             });
         }
-        self.io_call(|api, store| api.call_schedule_basichttp(store, request))
+        self.io_call(|api, store| api.call_schedule_processor(store, request))
             .map_err(|error| fatal(&self.shared, error.into()))?
             .map(|()| SendDisposition::Scheduled)
     }
 
-    /// Posts one due delayed `BasicHTTP` send (SCXML 6.2) and maps its
+    /// Dispatches one due delayed processor send: hands one of a bound
+    /// processor to its instance (undeliverable when its call fails), or
+    /// posts a `BasicHTTP` one (SCXML 6.2) and maps its
     /// outcome onto the scheduler's due route: nothing left to route when
     /// the recipient accepted it (a loopback POST already reached the
     /// session it addresses), the sender's own external queue for its own
@@ -636,11 +969,35 @@ impl SessionLinks {
     /// error.communication on the internal event queue"; C.2). A failure
     /// the live outbound transport reports later arrives through the
     /// session's late-failure path with the same id.
-    pub(crate) fn dispatch_due_basichttp(
+    pub(crate) fn dispatch_due_processor(
         &mut self,
-        request: BasichttpSend,
+        request: ProcessorSend,
     ) -> Result<SchedulerDueRoute<String, WitEvent, Option<String>>, RunFailure> {
         let send_id = request.send_id.clone();
+        if !is_basichttp(&request.processor_type) {
+            // Only a checked send was scheduled, so its type names a bound
+            // processor.
+            let Some(uri) = self
+                .core
+                .processor_uri(&request.processor_type)
+                .map(str::to_owned)
+            else {
+                return Err(RunFailure::Harness {
+                    code: "processor-due-invariant",
+                    message: "a due delayed send names no linked Event I/O Processor".into(),
+                });
+            };
+            let called = self.call_processor(&uri, request, crate::service::SendCall::Send);
+            if let Some(failure) = self.shared.take_fault() {
+                return Err(failure);
+            }
+            return Ok(match called {
+                Ok(Called::Resolved(Ok(())) | Called::Pending) => SchedulerDueRoute::Dispatched,
+                Ok(Called::Resolved(Err(_)) | Called::Unavailable) | Err(_) => {
+                    SchedulerDueRoute::Undeliverable(Some(send_id))
+                }
+            });
+        }
         let posted = self.post_basichttp(request);
         if let Some(failure) = self.shared.take_fault() {
             return Err(failure);
@@ -663,7 +1020,7 @@ impl SessionLinks {
     /// outbound transport) and maps its outcome onto a disposition.
     fn post_basichttp(
         &mut self,
-        request: BasichttpSend,
+        request: ProcessorSend,
     ) -> Result<SendDisposition, ComponentError> {
         let routes = self.routes();
         let fuel = self.core.config.store.fuel;
@@ -1167,8 +1524,8 @@ impl SessionLinks {
     }
 }
 
-/// The `BasicHTTP` processor's view of one machine `basichttp-send`.
-fn outbound_send(request: &BasichttpSend) -> OutboundSend {
+/// The `BasicHTTP` processor's view of one machine `processor-send`.
+fn outbound_send(request: &ProcessorSend) -> OutboundSend {
     OutboundSend {
         event_name: request.event_name.clone(),
         target: request.target.clone(),

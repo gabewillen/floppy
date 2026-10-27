@@ -1,0 +1,26 @@
+[package]
+name = "scxml-ioprocessor-websocket"
+description = "WebSocket Event I/O Processor Wasm component: sends and receives SCXML events over WebSocket connections"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+scxml-types.workspace = true
+serde_json.workspace = true
+# The WASI 0.3 async ABI: `open`, `check`, and `send` are `async func`s, and
+# the instance's connections run on as tasks of their own.
+wit-bindgen = { workspace = true, features = ["async", "async-spawn"] }
+
+[lints]
+workspace = true

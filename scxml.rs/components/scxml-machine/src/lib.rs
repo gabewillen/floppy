@@ -731,9 +731,9 @@ mod guest {
     };
     use scxml_compiler_core::XmlNodeIr;
     use scxml_engine::interpret::{
-        self, BasicHttpSend, CapabilityErrorKind, DocumentKind, ExtensionExecution,
-        ExtensionSnapshot, FailureCategory, ForeachItems, InlineBody, InterpretFailure,
-        Interpreter, Invocation, InvocationContext as Invoked, InvocationProgress,
+        self, CapabilityErrorKind, DocumentKind, ExtensionExecution, ExtensionSnapshot,
+        FailureCategory, ForeachItems, InlineBody, InterpretFailure, Interpreter, Invocation,
+        InvocationContext as Invoked, InvocationProgress, ProcessorSend,
         SendTarget as NativeSendTarget, SessionCapabilities, SessionState,
     };
     use scxml_engine::{BatchEnd, Command, EngineStatus};
@@ -765,11 +765,12 @@ mod guest {
     use stateforward::scxml::types::InvokeRequest as WitInvokeRequest;
     use stateforward::scxml::types::{
         AssignPlacement as WitAssignPlacement, AssignSource as WitAssignSource,
-        BaggagePolicy as WitBaggagePolicy, BasichttpSend as WitBasichttpSend, ComponentError,
-        DataInitializer as WitDataInitializer, DataValue as WitDataValue, ErrorCode, ErrorVersion,
-        Event as WitEvent, EventType as WitEventType, ExtensionOutcome, ForeachResult,
-        InlineBody as WitInlineBody, NamedValue as WitNamedValue, PinnedScript, ScriptReference,
-        SendMessage as WitSendMessage, SendRequest as WitSendRequest, SendTarget as WitSendTarget,
+        BaggagePolicy as WitBaggagePolicy, ComponentError, DataInitializer as WitDataInitializer,
+        DataValue as WitDataValue, ErrorCode, ErrorVersion, Event as WitEvent,
+        EventType as WitEventType, ExtensionOutcome, ForeachResult, InlineBody as WitInlineBody,
+        NamedValue as WitNamedValue, PinnedScript, ProcessorSend as WitProcessorSend,
+        ScriptReference, SendMessage as WitSendMessage, SendRequest as WitSendRequest,
+        SendTarget as WitSendTarget,
     };
 
     struct Component;
@@ -1858,11 +1859,12 @@ mod guest {
             native_disposition(self.capabilities.send(&request)?)
         }
 
-        fn send_basichttp(
+        fn send_processor(
             &mut self,
-            request: BasicHttpSend,
+            request: ProcessorSend,
         ) -> Result<interpret::SendDisposition, ComponentError> {
-            let request = WitBasichttpSend {
+            let request = WitProcessorSend {
+                processor_type: request.processor_type,
                 send_id: request.send_id.as_str().to_owned(),
                 event_name: request.event_name,
                 target: request.target,
@@ -1871,7 +1873,7 @@ mod guest {
                 delay_ms: request.delay_ms,
                 trace_context: request.trace_context.as_ref().map(to_wit_trace_context),
             };
-            native_disposition(self.capabilities.send_basichttp(&request)?)
+            native_disposition(self.capabilities.send_processor(&request)?)
         }
 
         fn cancel(

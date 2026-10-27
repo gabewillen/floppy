@@ -225,17 +225,17 @@ mod guest {
                 Ok(snap::PendingSend {
                     sendid,
                     event: Some(event_from(request.event)),
-                    basichttp: None,
+                    message: None,
                     target: request.target,
                     send_type: request.processor_type,
                     delay_ms: request.delay_ms,
                     deadline_ms: pending.deadline_ms,
                 })
             }
-            io::DelayedSend::Basichttp(send) => Ok(snap::PendingSend {
+            io::DelayedSend::Processor(send) => Ok(snap::PendingSend {
                 sendid: send.send_id,
                 event: None,
-                basichttp: Some(snap::BasicHttpMessage {
+                message: Some(snap::ProcessorMessage {
                     event: send.event_name,
                     params: send
                         .params
@@ -249,7 +249,7 @@ mod guest {
                     trace_context: send.trace_context.map(carrier_from),
                 }),
                 target: send.target,
-                send_type: None,
+                send_type: Some(send.processor_type),
                 delay_ms: send.delay_ms,
                 deadline_ms: pending.deadline_ms,
             }),

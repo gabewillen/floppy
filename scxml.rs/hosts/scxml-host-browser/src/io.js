@@ -167,9 +167,9 @@ export class IoLink {
   routeDue(request, sender) {
     return this.#call(() => this.#io.routeDue(request, sender));
   }
-  /** Holds one checked delayed BasicHTTP send on the clock (`schedule-basichttp`). */
-  scheduleBasichttp(request) {
-    this.#call(() => this.#io.scheduleBasichttp(request));
+  /** Holds one checked delayed BasicHTTP send on the clock (`schedule-processor`). */
+  scheduleProcessor(request) {
+    this.#call(() => this.#io.scheduleProcessor(request));
   }
   cancel(sendId, context) {
     this.#call(() => this.#io.cancel(sendId, context));

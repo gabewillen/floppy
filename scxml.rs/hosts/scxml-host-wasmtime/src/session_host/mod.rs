@@ -541,10 +541,24 @@ pub(crate) struct HostCore {
     services: Vec<ServiceEntry>,
     /// The transport admitted service requests go through (none: refused).
     pub(crate) service_http: Option<Arc<dyn crate::outbound_http::ExtensionHttp>>,
+    /// The transport admitted service connections go through (none:
+    /// refused).
+    pub(crate) service_websocket: Option<Arc<dyn crate::WebSocketTransport>>,
     /// The fuel an invocation may run between two inputs.
     service_call_fuel: u64,
     /// The values services' `env` slots may reference.
     service_values: crate::ExtensionEnvironment,
+    /// Event I/O Processor components keyed by exact type URI and alias,
+    /// compiled on first use; each session opens its own instance of each
+    /// one it sends through.
+    processors: Vec<ProcessorEntry>,
+    /// The transport admitted processor requests go through (none: refused).
+    pub(crate) processor_http: Option<Arc<dyn crate::outbound_http::ExtensionHttp>>,
+    /// The transport admitted processor connections go through (none:
+    /// refused).
+    pub(crate) processor_websocket: Option<Arc<dyn crate::WebSocketTransport>>,
+    /// The fuel a processor instance may run between two inputs.
+    processor_call_fuel: u64,
     /// Release digests session snapshots record as provenance.
     pub(crate) digests: snapshot::ComponentDigests,
     /// The fuel budget of one host call, shared by every store of every
@@ -554,16 +568,22 @@ pub(crate) struct HostCore {
     pub(crate) invoke_limits: InvokeLimits,
 }
 
-/// One answer an invoked service's request received, as a live session
-/// records it ([`InputRecord::HttpResponse`], [`InputRecord::HttpResponsePart`]).
+/// One answer an invoked service's or processor instance's request or
+/// connection received, as a live session records it
+/// ([`InputRecord::HttpResponse`], [`InputRecord::HttpResponsePart`],
+/// [`InputRecord::WebSocket`]).
 pub(crate) struct RecordedResponse {
     /// The invoke ids from the root to the invocation.
     pub(crate) path: Vec<String>,
     /// The request's number within its invocation.
     pub(crate) request: u64,
+    /// The type URI of the Event I/O Processor whose instance in the
+    /// session at `path` made the request or connection; `None` for an
+    /// invoked service at `path`.
+    pub(crate) processor: Option<String>,
     /// A `fetch`'s response or one part of a `send`'s, or the transport's
-    /// failure.
-    pub(crate) answer: crate::ExtensionHttpAnswer,
+    /// failure; or one answer of a processor's connection.
+    pub(crate) answer: crate::service::Answer,
 }
 
 /// A started invocation and the report of its start, or the component's
@@ -581,6 +601,14 @@ pub(crate) struct ServiceEntry {
     component: LazyComponent,
     wasi: crate::wasi::WasiPlan,
     pre: OnceCell<crate::service::ServicePre>,
+}
+
+/// One bound Event I/O Processor: its package, its component (compiled on
+/// first use), and its pre-instantiation (built on first use).
+pub(crate) struct ProcessorEntry {
+    package: crate::ProcessorPackage,
+    component: LazyComponent,
+    pre: OnceCell<crate::service::ProcessorPre>,
 }
 
 /// The bindings an `<invoke src>` document carries ([`EmbeddedDocument`]):
@@ -905,7 +933,7 @@ impl HostCore {
         request: crate::bindings::stateforward::scxml::types::InvokeRequest,
         now_ms: u64,
         invocation: u64,
-        http_offered: bool,
+        network: &crate::service::NetworkModes,
         execution_context: &opentelemetry::Context,
         scope: Option<&DocumentBindings>,
     ) -> Result<Option<ServiceStart>, HostError> {
@@ -937,7 +965,8 @@ impl HostCore {
             providers: &self.providers,
             package: &entry.package,
             wasi: &entry.wasi,
-            http_offered,
+            http_offered: network.http.offered(),
+            websocket: network.websocket.clone(),
             values: &self.service_values,
             call_fuel: self.service_call_fuel,
         };
@@ -949,6 +978,81 @@ impl HostCore {
             execution_context,
         )
         .map(Some)
+    }
+
+    /// The exact type URI of the processor bound to `processor_type` (its
+    /// URI or one of its aliases); `None` when none is.
+    pub(crate) fn processor_uri(&self, processor_type: &str) -> Option<&str> {
+        self.processors
+            .iter()
+            .find(|entry| entry.package.answers(processor_type))
+            .map(|entry| entry.package.processor_uri.as_str())
+    }
+
+    /// Opens one instance of the processor bound to exactly `processor_uri`
+    /// for the session `session_id` (its component pre-instantiated on
+    /// first use); `None` when no processor is bound to it. The inner error
+    /// is a component that does not compile or link against its world.
+    ///
+    /// # Errors
+    ///
+    /// A host failure (a thread that cannot start).
+    pub(crate) fn open_processor(
+        &self,
+        processor_uri: &str,
+        session_id: &str,
+        modes: &crate::service::NetworkModes,
+        now_ms: u64,
+        instance: u64,
+        context: (
+            &opentelemetry::Context,
+            Option<crate::bindings::stateforward::scxml::types::TraceContext>,
+        ),
+    ) -> Result<Option<ServiceStart>, HostError> {
+        let Some(entry) = self
+            .processors
+            .iter()
+            .find(|entry| entry.package.processor_uri == processor_uri)
+        else {
+            return Ok(None);
+        };
+        let rejected = || {
+            crate::component::component_error(
+                crate::bindings::stateforward::scxml::types::ErrorCode::InvalidInput,
+                "the Event I/O Processor's component does not link",
+            )
+        };
+        let pre = if let Some(pre) = entry.pre.get() {
+            pre
+        } else {
+            let Ok(component) = entry.component.get(&self.shared) else {
+                return Ok(Some(Err(rejected())));
+            };
+            let pre = crate::service::processor_linker(&self.engine)
+                .and_then(|linker| crate::service::processor_pre(&linker, component));
+            match pre {
+                Ok(pre) => entry.pre.get_or_init(|| pre),
+                Err(_) => return Ok(Some(Err(rejected()))),
+            }
+        };
+        let runtime = crate::service::ProcessorRuntime {
+            pre,
+            config: &self.config,
+            providers: &self.providers,
+            package: &entry.package,
+            call_fuel: self.processor_call_fuel,
+        };
+        let (execution_context, trace_context) = context;
+        crate::service::ServiceHandle::open_processor(
+            &runtime,
+            session_id,
+            modes,
+            now_ms,
+            instance,
+            execution_context,
+            trace_context,
+        )
+        .map(|opened| Some(Ok(opened)))
     }
 
     /// The data model named exactly `name`, compiled on first use; `None`
@@ -1123,8 +1227,13 @@ impl SessionHost {
             namespace_call_fuel: crate::extension::DEFAULT_EXTENSION_CALL_FUEL,
             services: Vec::new(),
             service_http: None,
+            service_websocket: None,
             service_call_fuel: crate::DEFAULT_EXTENSION_CALL_FUEL,
             service_values: crate::ExtensionEnvironment::none(),
+            processors: Vec::new(),
+            processor_http: None,
+            processor_websocket: None,
+            processor_call_fuel: crate::DEFAULT_EXTENSION_CALL_FUEL,
             digests: snapshot::ComponentDigests {
                 machine: components.machine.sha256(),
                 clock: components.clock.sha256(),
@@ -1285,6 +1394,7 @@ impl SessionHost {
         let crate::service::ServiceParts {
             bindings,
             http,
+            websocket,
             values,
             call_fuel,
         } = services.into_parts()?;
@@ -1301,8 +1411,57 @@ impl SessionHost {
             })
             .collect();
         core.service_http = http;
+        core.service_websocket = websocket;
         core.service_call_fuel = call_fuel;
         core.service_values = values;
+        Ok(self)
+    }
+
+    /// Binds Event I/O Processor components to their exact type URIs and
+    /// aliases for every session this host runs (root and invoked
+    /// children; see [`crate::ProcessorComponents`]).
+    ///
+    /// Each component compiles on first use through the process-wide cache.
+    /// A session's first `<send>` of a bound type opens its own instance of
+    /// that component, in its own store on a thread of its own, which lives
+    /// as long as the session; every `<send>` of that type is one call of
+    /// it, and what it returns reaches the session's external queue. A
+    /// `<send>` of a type no processor binds raises `error.execution`
+    /// (SCXML 6.2.5). Its requests and connections go through the
+    /// embedder's transports (none by default), admitted only to an origin
+    /// its package declares.
+    ///
+    /// # Errors
+    ///
+    /// A component over the host's byte bound or of the wrong kind, or
+    /// [`HostError::Component`] (`session-host-shared`) when a run of this
+    /// host is in progress.
+    pub fn with_processor_components(
+        mut self,
+        processors: crate::ProcessorComponents,
+    ) -> Result<Self, HostError> {
+        let core = Rc::get_mut(&mut self.core)
+            .ok_or_else(|| HostError::Component("session-host-shared".into()))?;
+        let crate::processor::ProcessorParts {
+            bindings,
+            http,
+            websocket,
+            call_fuel,
+        } = processors.into_parts();
+        for (_, component) in &bindings {
+            crate::capability_graph::validate_component(component, component.kind(), &core.config)?;
+        }
+        core.processors = bindings
+            .into_iter()
+            .map(|(package, component)| ProcessorEntry {
+                component: LazyComponent::new(&component),
+                package,
+                pre: OnceCell::new(),
+            })
+            .collect();
+        core.processor_http = http;
+        core.processor_websocket = websocket;
+        core.processor_call_fuel = call_fuel;
         Ok(self)
     }
 

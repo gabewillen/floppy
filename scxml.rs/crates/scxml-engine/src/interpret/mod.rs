@@ -34,9 +34,9 @@ mod invoke;
 mod send;
 
 pub use capabilities::{
-    BasicHttpSend, CapabilityErrorKind, DocumentKind, ExtensionExecution, ExtensionSnapshot,
-    ForeachItems, InlineBody, Invocation, InvocationProgress, InvokeRequest, InvokedSession,
-    LoadedDocument, Observation, SendDisposition, SendTarget, SessionCapabilities,
+    CapabilityErrorKind, DocumentKind, ExtensionExecution, ExtensionSnapshot, ForeachItems,
+    InlineBody, Invocation, InvocationProgress, InvokeRequest, InvokedSession, LoadedDocument,
+    Observation, ProcessorSend, SendDisposition, SendTarget, SessionCapabilities,
 };
 pub use data::{bind_initial_data, load_extensions, requires_data_model};
 

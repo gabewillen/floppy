@@ -418,6 +418,27 @@ impl RunHttp {
         }
     }
 
+    /// How this run carries out the connections of its processor instances
+    /// or invoked services through `transport`: a live session runs each on
+    /// a thread of its own, a replay answers them from its record, and a
+    /// batch run (or no transport) refuses them.
+    pub(crate) fn socket_mode(
+        &self,
+        transport: Option<&Arc<dyn crate::WebSocketTransport>>,
+    ) -> crate::service::SocketMode {
+        use crate::service::SocketMode;
+        if self.live && matches!(*self.journal.borrow(), OutboundJournal::Replaying(_)) {
+            return SocketMode::Recorded;
+        }
+        match (transport, &self.http_responses) {
+            (Some(transport), Some(responses)) => SocketMode::Threaded {
+                transport: Arc::clone(transport),
+                responses: Arc::clone(responses),
+            },
+            _ => SocketMode::None,
+        }
+    }
+
     /// The next recorded decision of a replaying session (`None` when it
     /// does not replay).
     pub(crate) fn replayed_decision(&self) -> Option<Result<OutboundDecision, ReplayExhausted>> {

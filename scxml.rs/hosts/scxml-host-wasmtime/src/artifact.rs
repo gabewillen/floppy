@@ -73,6 +73,11 @@ pub enum ArtifactKind {
     /// SHA-256 through [`authenticate_service_component`]. Never listed in a
     /// release manifest.
     ServiceComponent,
+    /// A caller's Event I/O Processor component
+    /// (`stateforward:scxml/event-processor`), authenticated by its exact
+    /// SHA-256 through [`authenticate_processor_component`]. Never listed in
+    /// a release manifest.
+    ProcessorComponent,
     /// A package's validator component
     /// (`stateforward:scxml-validator/package-validator`), authenticated by
     /// its exact SHA-256 through [`authenticate_package_validator_component`].
@@ -111,6 +116,7 @@ impl ArtifactKind {
             Self::Scx => "scx namespace",
             Self::ExtensionComponent => "extension component",
             Self::ServiceComponent => "invoked-service component",
+            Self::ProcessorComponent => "Event I/O Processor component",
             Self::PackageValidatorComponent => "package validator component",
             Self::DataModelComponent => "data-model component",
         }
@@ -147,6 +153,7 @@ impl ArtifactKind {
             Self::ExtensionComponent => "scxml_extension",
             // Never parsed from a manifest either.
             Self::ServiceComponent => "scxml_service",
+            Self::ProcessorComponent => "scxml_processor",
             Self::PackageValidatorComponent => "scxml_package_validator",
             Self::DataModelComponent => "scxml_data_model",
         }
@@ -297,6 +304,27 @@ pub fn authenticate_service_component(
         component_bytes,
         trusted_digest,
         ArtifactKind::ServiceComponent,
+    )
+}
+
+/// Authenticates one caller-supplied Event I/O Processor component
+/// (`stateforward:scxml/event-processor`) without invoking Wasmtime, exactly
+/// as [`authenticate_extension_component`]. The result has kind
+/// [`ArtifactKind::ProcessorComponent`]; the session host additionally checks
+/// the component's world when it opens an instance for a session.
+///
+/// # Errors
+///
+/// Fails closed with [`HostError::Artifact`] for oversized, empty, or
+/// digest-mismatched bytes.
+pub fn authenticate_processor_component(
+    component_bytes: &[u8],
+    trusted_digest: TrustedComponentDigest,
+) -> Result<AuthenticatedComponent, HostError> {
+    authenticate_by_digest(
+        component_bytes,
+        trusted_digest,
+        ArtifactKind::ProcessorComponent,
     )
 }
 

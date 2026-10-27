@@ -16,9 +16,9 @@ use crate::bindings::stateforward::scxml::machine_capability_types::{
 };
 use crate::bindings::stateforward::scxml::telemetry;
 use crate::bindings::stateforward::scxml::types::{
-    AssignPlacement, AssignSource, BaggagePolicy, BasichttpSend, ComponentError, DataInitializer,
-    DataValue, ErrorCode, ErrorVersion, Event, ExecutableContentExtension, ForeachResult,
-    InlineBody, NamedValue, ScriptReference, SendRequest, SendTarget,
+    AssignPlacement, AssignSource, BaggagePolicy, ComponentError, DataInitializer, DataValue,
+    ErrorCode, ErrorVersion, Event, ExecutableContentExtension, ForeachResult, InlineBody,
+    NamedValue, ProcessorSend, ScriptReference, SendRequest, SendTarget,
     TraceContext as WitTraceContext,
 };
 use opentelemetry::Context;
@@ -923,13 +923,13 @@ impl machine_capability_types::HostMachineCapabilities for MachineStoreData {
         }
     }
 
-    fn send_basichttp(
+    fn send_processor(
         &mut self,
         _capabilities: Resource<MachineCapabilities>,
-        request: BasichttpSend,
+        request: ProcessorSend,
     ) -> Result<SendDisposition, ComponentError> {
         match self.links_mut() {
-            Some(links) => links.send_basichttp(request),
+            Some(links) => links.send_processor(request),
             None => Err(unavailable()),
         }
     }
@@ -1751,7 +1751,7 @@ pub(crate) const fn operation_name(operation: telemetry::Operation) -> &'static 
         telemetry::Operation::Encode => "encode",
         telemetry::Operation::Diff => "diff",
         telemetry::Operation::CommunicationError => "communication-error",
-        telemetry::Operation::ScheduleBasichttp => "schedule-basichttp",
+        telemetry::Operation::ScheduleProcessor => "schedule-processor",
     }
 }
 
