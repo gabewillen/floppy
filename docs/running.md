@@ -141,7 +141,7 @@ of two engines with the same contract, picked by the `database` it is given
 | a connection URI, `postgresql://USER@IP:PORT/DBNAME` | [`services/pgsql`](../services/pgsql/README.md), Postgres over its wire protocol: PGlite served beside `scx` (pglite-socket) or any Postgres that accepts the user without a password | `--wasi https://github.com/stateforward/floppy/services/pgsql=inherit-network` |
 
 `scx` binds every service a document names, so a run that binds the memory
-ability grants both, as the floppy bot's command does. Before its statements,
+ability grants both, as the floppy bot's command does. Once, when the bot starts,
 the memory ability brings the database to the head revision through the
 migration ability
 ([`abilities/migration/migration.scx`](../abilities/migration/migration.scx),

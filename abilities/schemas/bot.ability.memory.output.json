@@ -1,9 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "bot.ability.memory.output",
-  "description": "Memory apply output after a committed transaction. results align 1:1 with input statements. On rollback the ability fails and this payload is not emitted.",
+  "description": "Memory's reply to a bot.ability.memory.input request after a committed transaction: the request's id and one result per statement. On rollback the memory answers bot.ability.failed with the id and this payload is not emitted.",
   "additionalProperties": false,
   "properties": {
+    "id": {
+      "description": "The id of the bot.ability.memory.input request this answers.",
+      "title": "Id",
+      "type": "string"
+    },
     "results": {
       "description": "One StatementResult per InputData.statements entry, same order.",
       "items": {
@@ -78,11 +83,13 @@
     }
   },
   "required": [
+    "id",
     "results"
   ],
   "type": "object",
   "examples": [
     {
+      "id": "memory-request-1",
       "results": [
         {
           "rowcount": 1,

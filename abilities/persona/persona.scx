@@ -13,13 +13,13 @@
   of at most 200 characters once the white space around it is stripped,
   in the owner's order). Traits come from composition and nowhere else: the
   bot never writes them, memory never stores them as their own row, and no
-  revision changes them. database, the <param> (the memory database file;
+  revision changes them. memory, the <param> (the address of the bot's memory;
   null: no memory). bring_up_timeout_ms, recall_attempt_timeout_ms and
   recall_retry_delay_ms, <param>s with the defaults below.
   bot.ability.persona.revise {text, reason}, which the bot selects.
 
-  recalling: with a database it invokes the
-  memory ability (abilities/memory/memory.scx) to select the descriptions
+  recalling: with a memory it asks the
+  bot's memory (abilities/memory/memory.scx, decision D266) to select the descriptions
   the bot wrote (query_tags self_persona, subject_ref self, the 50 most
   recent, oldest first) and sends bot.ability.persona.recalled
   {description} to #_internal with the most recent one that decodes as a
@@ -35,7 +35,7 @@
   activation_timeout_ms) runs out
   first, it sends bot.ability.failed {message: "Persona could not recall
   a description: memory did not answer within the bring-up budget."} to
-  the parent and wakes with none. Without a database it logs <log label="memory" expr="'absent'">
+  the parent and wakes with none. Without a memory it logs <log label="memory" expr="'absent'">
   and wakes with none: a bot with no memory wakes with no description
   every time.
 
@@ -60,7 +60,7 @@
 
   revising writes the description down before it becomes the bot's: the
   description {text, reason, traits, kind: "fact"}, the owner's traits it was written under
-  included. With a database it inserts it as a self-fact (scope long_term,
+  included. With a memory it inserts it as a self-fact (scope long_term,
   kind fact, sensitivity standard, retention retain, content_format
   application/json, query_tags self_persona, subject_ref self; the recall
   orders ties in created_at by memory_id, so two revisions in one second
@@ -73,7 +73,7 @@
   bot.ability.persona.recall.failed is sent: the memory's own
   bot.ability.failed is taken where it arrives (and a private event named
   under bot.ability.persona.revise would be matched, and its data judged,
-  by the revise transitions' schema). Without a database
+  by the revise transitions' schema). Without a memory
   it logs <log label="memory" expr="'absent'"> and sends revised.
   Revision is append-only: the current description is the most recent row.
 
@@ -93,8 +93,8 @@
   outside the session that does not is refused, so no cond rechecks a
   payload.
 
-  Bindings: the memory ability's sql service package (a run grants it its directory: scx run's
-  dir option).
+  Bindings: none of its own (the bot's memory, which the body invokes,
+  binds the sql service).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
@@ -122,14 +122,17 @@
          (once). -->
     <data id="offerable" expr="({'bot.ability.persona.revise': {effort: revise_effort}})"/>
     <data id="ready" expr="false"/>
-    <!-- Memory: the database file (null: no memory) and its self-fact
+    <!-- Memory: the address of the bot's memory (null: no memory) and its self-fact
          statements. The SQL runs on both engines (SQLite and Postgres). A
          memory id is the next row count as 32 zero-padded digits (neither
          engine's randomness is unique across invocations in Wasm); JSON
          rows are told by their content_format, the 50 most recent by
          created_at, then memory_id (the insertion order), read oldest
          first. -->
-    <data id="database" expr="null"/>
+    <data id="memory" expr="null"/>
+    <!-- The id of each request this document last sent the memory, by
+         the state that sent it (decision D266). -->
+    <data id="memory_requests" expr="({})"/>
     <data id="description_select" expr="'SELECT content FROM (SELECT content, created_at, memory_id FROM bot_memory WHERE query_tags = ?1 AND subject_ref = ?2 AND content_format = \'application/json\' ORDER BY created_at DESC, memory_id DESC LIMIT 50) AS recent ORDER BY created_at, memory_id'"/>
     <data id="description_insert" expr="'INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT substr(\'00000000000000000000000000000000\', 1, 32 - length(n)) || n FROM (SELECT CAST(COUNT(*) + 1 AS TEXT) AS n FROM bot_memory) AS c), ?1, NULL, ?2, ?3, ?4, ?5, ?6, ?7, ?8)'"/>
     <data id="description_parameters" expr="[]"/>
@@ -150,7 +153,7 @@
       <assign location="traits" expr="ownerTraits()"/>
     </onentry>
     <state id="recalling_from">
-      <transition cond="hasNoDatabase()" target="recalling_nothing"/>
+      <transition cond="hasNoMemory()" target="recalling_nothing"/>
       <transition target="recalling_memory"/>
     </state>
     <state id="recalling_nothing">
@@ -178,16 +181,18 @@
         <onexit>
           <cancel sendid="asking-after"/>
         </onexit>
-        <invoke id="recall" type="scxml" src="../memory/memory.scx">
-          <param name="database" expr="database"/>
-          <param name="statements" expr="descriptionSelectStatements()"/>
-        </invoke>
-        <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json">
+        <onentry>
+          <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.recall">
+            <param name="id" expr="memory_requests.recall"/>
+            <param name="statements" expr="descriptionSelectStatements()"/>
+          </send>
+        </onentry>
+        <transition event="bot.ability.memory.output" cond="isMemoryReply('recall')" event:schema="../schemas/bot.ability.memory.output.json">
           <send event="bot.ability.persona.recalled" target="#_internal">
             <param name="description" expr="latestDescription(_event)"/>
           </send>
         </transition>
-        <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="waiting">
+        <transition event="bot.ability.failed" cond="isMemoryReply('recall')" event:schema="../schemas/bot.ability.failed.json" target="waiting">
           <log label="persona.recall.failed" expr="recallFailedMessage(_event)"/>
         </transition>
         <transition event="asking.after" target="waiting">
@@ -257,7 +262,7 @@
        the bot did not take). -->
   <state id="revising" initial="revising_from">
     <state id="revising_from">
-      <transition cond="hasNoDatabase()" target="revising_nothing"/>
+      <transition cond="hasNoMemory()" target="revising_nothing"/>
       <transition target="revising_memory"/>
     </state>
     <state id="revising_nothing">
@@ -272,19 +277,19 @@
       <onentry>
         <assign location="description_parameters" expr="descriptionInsertParameters()"/>
         <assign location="description_parameters" expr="descriptionInsertParametersCompleted()"/>
+        <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.remember">
+          <param name="id" expr="memory_requests.remember"/>
+          <param name="statements" expr="descriptionInsertStatements()"/>
+        </send>
       </onentry>
-      <invoke id="remember" type="scxml" src="../memory/memory.scx">
-        <param name="database" expr="database"/>
-        <param name="statements" expr="descriptionInsertStatements()"/>
-      </invoke>
-      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json">
+      <transition event="bot.ability.memory.output" cond="isMemoryReply('remember')" event:schema="../schemas/bot.ability.memory.output.json">
         <send event="bot.ability.persona.revised" target="#_internal">
           <param name="description" expr="revisedDescription()"/>
         </send>
       </transition>
       <!-- Not taken: the bot keeps the
            description it had and may select a revision again. -->
-      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="knowing">
+      <transition event="bot.ability.failed" cond="isMemoryReply('remember')" event:schema="../schemas/bot.ability.failed.json" target="knowing">
         <log label="persona.revise.failed" expr="reviseFailedMessage(_event)"/>
         <send event="bot.ability.failed" target="#_parent">
           <param name="message" expr="reviseFailedMessage(_event)"/>

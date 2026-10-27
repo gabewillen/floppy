@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/consolidation/irp/sources">
   <assert id="consolidation-1" specnum="1" specid="#consolidation-1">
-    <![CDATA[With no `database` `<param>` (null) it logs `memory` `absent` and ends at once, its donedata `{folded: 0, merged: 0, steps: 0, failed: false, reason: "absent"}`.]]>
+    <![CDATA[With no `memory` `<param>` (null) it logs `memory` `absent` and ends at once, its donedata `{folded: 0, merged: 0, steps: 0, failed: false, reason: "absent"}`.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>

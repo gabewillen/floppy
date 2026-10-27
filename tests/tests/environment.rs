@@ -345,18 +345,24 @@ fn seed_memory(memory: &Path, statements: &Json) {
     let dir = unique_scratch("seed");
     support::copy_ability("memory", &dir);
     let document = format!(
-        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="applying">
+        r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="applying">
   <datamodel><data id="statements" expr="{}"/></datamodel>
   <state id="applying">
+    <onentry><send event="started"/></onentry>
     <invoke id="memory" type="scxml" src="memory/memory.scx">
       <param name="database" expr="'/memory/floppy.sqlite'"/>
-      <param name="statements" expr="statements"/>
     </invoke>
+    <transition event="started">
+      <send event="bot.ability.memory.input" target="#_memory">
+        <param name="id" expr="'seed'"/>
+        <param name="statements" expr="statements"/>
+      </send>
+    </transition>
     <transition event="bot.ability.memory.output" target="done"><log label="output" expr="'seeded'"/></transition>
     <transition event="*" target="done"><log label="failed" expr="_event.name"/></transition>
   </state>
   <final id="done"/>
-</scxml>"#,
+</scxml>"##,
         statements
             .to_string()
             .replace('&', "&amp;")

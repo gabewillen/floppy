@@ -2,9 +2,12 @@
 <!-- persona-2: a database it cannot open fails every recall attempt until the bring-up budget runs out, then it tells no description. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
+  <invoke id="memory" type="scxml" src="../../../../../abilities/memory/memory.scx">
+    <param name="database" expr="'/nowhere/floppy.sqlite'"/>
+  </invoke>
   <invoke id="persona" type="scxml" src="../../../persona.scx">
     <param name="traits" expr='["curious", "  patient with children "]'/>
-    <param name="database" expr="'/nowhere/floppy.sqlite'"/>
+    <param name="memory" expr="'#_scxml_' + _sessionid + '.memory'"/>
     <param name="bring_up_timeout_ms" expr="1500"/>
   </invoke>
   <state id="boot">

@@ -11,7 +11,7 @@
     accepting -> revised (bot.ability.reflection.revision.output) -> done
     any failure -> failed (bot.ability.failed {message}) -> done
 
-  Inputs, its invoker's <param>s: database (the memory database), model
+  Inputs, its invoker's <param>s: memory (the address of the bot's memory), model
   (the builder's), progress_target (where the builder sends its
   builder.progress and passes on its generate.progress; '#_parent' by
   default), intent (the selected bot.behavior.create or change data),
@@ -82,7 +82,10 @@
        version="1.0" datamodel="ecmascript" name="revision" initial="preparing">
   <datamodel>
     <!-- The invoker's <param>s. -->
-    <data id="database" expr="null"/>
+    <data id="memory" expr="null"/>
+    <!-- The id of each request this document last sent the memory, by
+         the state that sent it (decision D266). -->
+    <data id="memory_requests" expr="({})"/>
     <data id="model" expr="'gemma-4-26b-a4b'"/>
     <!-- The model this document's calls use on FLOPPY_REFLECTION_BASE_URL
          (decision D260): null keeps them on model and FLOPPY_BASE_URL. -->
@@ -179,17 +182,17 @@
         <behavior:replace_behavior_clauses location="statements" instance="draftInstance()"/>
       </if>
       <assign location="statements" expr="intentBehaviorSelectStatements()"/>
+      <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.preparing_memory">
+        <param name="id" expr="memory_requests.preparing_memory"/>
+        <param name="statements" expr="statements"/>
+      </send>
     </onentry>
-    <invoke id="preparing_memory" type="scxml" src="../memory/memory.scx">
-      <param name="database" expr="database"/>
-      <param name="statements" expr="statements"/>
-    </invoke>
-    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="reading">
+    <transition event="bot.ability.memory.output" cond="isMemoryReply('preparing_memory')" event:schema="../schemas/bot.ability.memory.output.json" target="reading">
       <behavior:instances_from_behavior_results location="prepared"
           behaviors="_event.data.results.at(-2)" triggers="_event.data.results.at(-1)"/>
       <assign location="existing_behavior" expr="preparedBehavior()"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failed">
+    <transition event="bot.ability.failed" cond="isMemoryReply('preparing_memory')" event:schema="../schemas/bot.ability.failed.json" target="failed">
       <assign location="failure" expr="revisionFailedMessage(_event.data.message)"/>
     </transition>
     <transition event="error.*" target="failed">
@@ -306,15 +309,15 @@
       <assign location="behavior" expr="appliedBehavior()"/>
       <assign location="behavior" expr="appliedBehaviorWithSource()"/>
       <behavior:replace_behavior_clauses location="statements" instance="acceptedInstance()"/>
+      <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.accepting_memory">
+        <param name="id" expr="memory_requests.accepting_memory"/>
+        <param name="statements" expr="statements"/>
+      </send>
     </onentry>
-    <invoke id="accepting_memory" type="scxml" src="../memory/memory.scx">
-      <param name="database" expr="database"/>
-      <param name="statements" expr="statements"/>
-    </invoke>
-    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="revised">
+    <transition event="bot.ability.memory.output" cond="isMemoryReply('accepting_memory')" event:schema="../schemas/bot.ability.memory.output.json" target="revised">
       <log label="reflection.inventory" expr="acceptedLog()"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failed">
+    <transition event="bot.ability.failed" cond="isMemoryReply('accepting_memory')" event:schema="../schemas/bot.ability.failed.json" target="failed">
       <assign location="failure" expr="revisionFailedMessage(_event.data.message)"/>
     </transition>
     <transition event="error.*" target="failed">
@@ -357,15 +360,15 @@
   <state id="abandoning">
     <onentry>
       <assign location="statements" expr="draftBehaviorStatements()"/>
+      <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.abandoning_memory">
+        <param name="id" expr="memory_requests.abandoning_memory"/>
+        <param name="statements" expr="statements"/>
+      </send>
     </onentry>
-    <invoke id="abandoning_memory" type="scxml" src="../memory/memory.scx">
-      <param name="database" expr="database"/>
-      <param name="statements" expr="statements"/>
-    </invoke>
-    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="failed">
+    <transition event="bot.ability.memory.output" cond="isMemoryReply('abandoning_memory')" event:schema="../schemas/bot.ability.memory.output.json" target="failed">
       <log label="reflection.inventory" expr="draftLog()"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failed"/>
+    <transition event="bot.ability.failed" cond="isMemoryReply('abandoning_memory')" event:schema="../schemas/bot.ability.failed.json" target="failed"/>
     <transition event="error.*" target="failed"/>
   </state>
   <!-- The revision's answer. -->

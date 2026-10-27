@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/routines/irp/sources">
   <assert id="routines-1" specnum="1" specid="#routines-1">
-    <![CDATA[With no `database` `<param>` (null) it reconciles to nothing: it runs no routine and sends its parent nothing; it is long-lived and never reaches a final state.]]>
+    <![CDATA[With no `memory` `<param>` (null) it reconciles to nothing: it runs no routine and sends its parent nothing; it is long-lived and never reaches a final state.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>

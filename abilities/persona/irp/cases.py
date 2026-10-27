@@ -7,8 +7,8 @@ OUTPUT = "bot.ability.persona.output"
 REVISE = "bot.ability.persona.revise"
 FAILED = "bot.ability.failed"
 GAVE_UP = "Persona could not recall a description: memory did not answer within the bring-up budget."
-DB = ("database", "'/memory/floppy.sqlite'")
-NOWHERE = ("database", "'/nowhere/floppy.sqlite'")
+DB = memory("'/memory/floppy.sqlite'")
+NOWHERE = memory("'/nowhere/floppy.sqlite'")
 GIVEN = ["curious", "patient with children"]
 TRAITS = ("traits", js(["curious", "  patient with children "]))
 

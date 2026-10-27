@@ -4,19 +4,18 @@
 <state id="harness" initial="boot">
   <invoke id="memory" type="scxml" src="../../../memory.scx">
     <param name="database" expr="'/memory/floppy.sqlite'"/>
-    <param name="statements" expr='[{"sql": "INSERT INTO bot_memory (memory_id, content) VALUES (?, ?)", "parameters": ["m1", "A"]}, {"sql": "INSERT INTO bot_memory (memory_id, content) VALUES (?, ?)", "parameters": ["m1", "B"]}]'/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.failed" cond="typeof _event.data.message === 'string' &amp;&amp; _event.data.message === 'UNIQUE constraint failed: bot_memory.memory_id' &amp;&amp; _event.data.kind === 'store_failed'" target="step1"/>
+    <onentry>
+      <send event="bot.ability.memory.input" target="#_memory"><content expr='{"id": "r1", "statements": [{"sql": "INSERT INTO bot_memory (memory_id, content) VALUES (?, ?)", "parameters": ["m1", "A"]}, {"sql": "INSERT INTO bot_memory (memory_id, content) VALUES (?, ?)", "parameters": ["m1", "B"]}]}'/></send>
+    </onentry>
+    <transition event="bot.ability.failed" cond="_event.data.id === 'r1' &amp;&amp; typeof _event.data.message === 'string' &amp;&amp; _event.data.message === 'UNIQUE constraint failed: bot_memory.memory_id' &amp;&amp; _event.data.kind === 'store_failed'" target="step1"/>
   </state>
   <state id="step1">
-    <transition event="done.invoke.memory" target="step2"/>
-  </state>
-  <state id="step2">
     <transition target="pass"/>
   </state>
   <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>

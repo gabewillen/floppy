@@ -918,18 +918,24 @@ fn attribute(text: &str) -> String {
 /// `grant`'s directory, or a Postgres connection URI); returns its output.
 fn transact(grant: &[String], database: &str, statements: &Json) -> Json {
     let document = format!(
-        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="applying">
+        r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="applying">
   <datamodel><data id="statements" expr="{}"/></datamodel>
   <state id="applying">
+    <onentry><send event="started"/></onentry>
     <invoke id="memory" type="scxml" src="memory/memory.scx">
       <param name="database" expr="'{database}'"/>
-      <param name="statements" expr="statements"/>
     </invoke>
+    <transition event="started">
+      <send event="bot.ability.memory.input" target="#_memory">
+        <param name="id" expr="'transact'"/>
+        <param name="statements" expr="statements"/>
+      </send>
+    </transition>
     <transition event="bot.ability.memory.output" target="done"><log label="output" expr="JSON.stringify(_event.data)"/></transition>
     <transition event="*" target="done"><log label="failed" expr="_event.name"/></transition>
   </state>
   <final id="done"/>
-</scxml>"#,
+</scxml>"##,
         attribute(&statements.to_string()),
     );
     let dir = unique_scratch("inventory");
@@ -1060,7 +1066,7 @@ fn reasoning_is_told_the_bots_learned_behaviors() {
         Decision::Abstain,
         Generation::Ignore,
         &[(
-            "abilities/cognition/cognition.scx",
+            "bots/floppy/floppy.scx",
             &[("database", format!("'{DATABASE}'").as_str())],
         )],
     );
@@ -1128,7 +1134,7 @@ fn runs_the_learned_behaviors(database: &str, test: Option<&str>) {
         Decision::Fail,
         Generation::Fail,
         &[(
-            "abilities/cognition/cognition.scx",
+            "bots/floppy/floppy.scx",
             &[("database", format!("'{database}'").as_str())],
         )],
     );
@@ -1236,10 +1242,7 @@ fn a_learned_behavior_whose_selection_cannot_be_sent_fails_the_turn() {
         &mock,
         Decision::Fail,
         Generation::Fail,
-        &[(
-            "abilities/cognition/cognition.scx",
-            &[("database", memory.as_str())],
-        )],
+        &[("bots/floppy/floppy.scx", &[("database", memory.as_str())])],
     );
     let grant = inventory(
         DATABASE,
@@ -1298,10 +1301,7 @@ fn when_no_learned_behavior_handles_the_turn_the_decision_layer_runs() {
         &mock,
         Decision::Ignore,
         Generation::Fail,
-        &[(
-            "abilities/cognition/cognition.scx",
-            &[("database", memory.as_str())],
-        )],
+        &[("bots/floppy/floppy.scx", &[("database", memory.as_str())])],
     );
     let grant = inventory(
         DATABASE,

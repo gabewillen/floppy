@@ -2,8 +2,11 @@
 <!-- stm-3: a record older than the recency window is not read. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
-  <invoke id="stm" type="scxml" src="../../../stm.scx">
+  <invoke id="memory" type="scxml" src="../../../../../abilities/memory/memory.scx">
     <param name="database" expr="'/memory/floppy.sqlite'"/>
+  </invoke>
+  <invoke id="stm" type="scxml" src="../../../stm.scx">
+    <param name="memory" expr="'#_scxml_' + _sessionid + '.memory'"/>
     <param name="recency_window_ms" expr="1000"/>
   </invoke>
   <state id="boot">

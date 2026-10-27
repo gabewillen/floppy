@@ -139,3 +139,11 @@ function passedOutput() {
 function selectionData(s) {
   return s.data !== null && typeof s.data === 'object' && !Array.isArray(s.data) ? s.data : ({});
 }
+
+// memory
+
+// Whether the event answers the request the state `name` last sent the
+// memory (decision D266): its id is that request's.
+function isMemoryReply(name) {
+  return memory_requests[name] !== undefined && _event.data.id === memory_requests[name];
+}

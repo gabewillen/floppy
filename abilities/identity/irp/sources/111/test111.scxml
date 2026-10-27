@@ -5,8 +5,11 @@
   <data id="snapshot" expr="null"/>
 </datamodel>
 <state id="harness" initial="boot">
-  <invoke id="identity" type="scxml" src="../../../identity.scx">
+  <invoke id="memory" type="scxml" src="../../../../../abilities/memory/memory.scx">
     <param name="database" expr="'/nowhere/floppy.sqlite'"/>
+  </invoke>
+  <invoke id="identity" type="scxml" src="../../../identity.scx">
+    <param name="memory" expr="'#_scxml_' + _sessionid + '.memory'"/>
     <param name="name" expr='"Floppy"'/>
     <param name="bring_up_timeout_ms" expr="1500"/>
   </invoke>

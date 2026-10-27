@@ -11,7 +11,7 @@ TURN = "bot.ability.memory.stm.turn"
 RECENT_TURNS = "bot.ability.memory.stm.recent_turns"
 RECENT_TURNS_OUTPUT = "bot.ability.memory.stm.recent_turns.output"
 FAILED = "bot.ability.failed"
-DB = ("database", "'/memory/floppy.sqlite'")
+DB = memory("'/memory/floppy.sqlite'")
 
 READY = expect("bot.ability.ready")
 
@@ -158,4 +158,4 @@ S.case(190, 10, "a database it cannot open degrades it: it says so, refuses requ
         record("environment.sound"), recent(),
         expect(FAILED, "_event.data.message === 'unavailable: short-term memory is degraded.'"),
         recent_turns(), expect(FAILED, "_event.data.message === 'unavailable: short-term memory is degraded.'")],
-       params=[("database", "'/nowhere/floppy.sqlite'")], clock="wall")
+       params=[memory("'/nowhere/floppy.sqlite'")], clock="wall")

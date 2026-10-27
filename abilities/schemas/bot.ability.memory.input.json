@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.memory.input",
+  "description": "A request to the bot's memory: statements to run in one transaction, answered to the requester with bot.ability.memory.output or bot.ability.failed carrying the same id.",
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "description": "The requester's id for this request, echoed by the reply.",
+      "title": "Id",
+      "type": "string",
+      "minLength": 1
+    },
+    "statements": {
+      "description": "The statements, in order, run in one transaction.",
+      "items": {
+        "description": "One parameterized statement, passed to the engine unchanged: the engine refuses one it cannot run.",
+        "properties": {
+          "sql": {
+            "title": "Sql",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sql"
+        ],
+        "title": "Statement",
+        "type": "object"
+      },
+      "minItems": 1,
+      "title": "Statements",
+      "type": "array"
+    }
+  },
+  "required": [
+    "id",
+    "statements"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "id": "memory-request-1",
+      "statements": [
+        {
+          "sql": "SELECT content FROM bot_memory WHERE id = ?",
+          "parameters": [
+            "m1"
+          ]
+        }
+      ]
+    }
+  ]
+}

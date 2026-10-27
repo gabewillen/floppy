@@ -61,13 +61,19 @@ fn harness_on(database: &str, engine: &str, before: Option<&str>, statements: &s
         )
     });
     format!(
-        r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="{initial}">
+        r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="{initial}">
   {aging}
   <state id="remembering">
+    <onentry><send event="started"/></onentry>
     <invoke id="memory" type="scxml" src="memory/memory.scx">
       <param name="database" expr="'{database}'"/>
-      <param name="statements" expr="{statements}"/>
     </invoke>
+    <transition event="started">
+      <send event="bot.ability.memory.input" target="#_memory">
+        <param name="id" expr="'request'"/>
+        <param name="statements" expr="{statements}"/>
+      </send>
+    </transition>
     <transition event="bot.ability.memory.output" target="done">
       <log label="output" expr="JSON.stringify(_event.data)"/>
     </transition>
@@ -77,7 +83,7 @@ fn harness_on(database: &str, engine: &str, before: Option<&str>, statements: &s
     </transition>
   </state>
   <final id="done"/>
-</scxml>"#
+</scxml>"##
     )
 }
 
@@ -126,7 +132,7 @@ fn a_fresh_database_is_migrated_to_the_head_schema() {
         [(
             "output".to_owned(),
             format!(
-                r#"{{"results":[{{"rowcount":1,"rows":[{{"columns":["group_concat(name)"],"values":["{columns}"]}}]}},{{"rowcount":1,"rows":[{{"columns":["name"],"values":["lifetime"]}}]}},{{"rowcount":1,"rows":[{{"columns":["version_num"],"values":["0002"]}}]}}]}}"#
+                r#"{{"id":"request","results":[{{"rowcount":1,"rows":[{{"columns":["group_concat(name)"],"values":["{columns}"]}}]}},{{"rowcount":1,"rows":[{{"columns":["name"],"values":["lifetime"]}}]}},{{"rowcount":1,"rows":[{{"columns":["version_num"],"values":["0002"]}}]}}]}}"#
             )
         )],
         "{}",
@@ -142,7 +148,7 @@ fn a_fresh_database_is_migrated_to_the_head_schema() {
         logs(&again.records),
         [(
             "output".to_owned(),
-            r#"{"results":[{"rowcount":1,"rows":[{"columns":["n"],"values":[0]}]}]}"#.to_owned()
+            r#"{"id":"request","results":[{"rowcount":1,"rows":[{"columns":["n"],"values":[0]}]}]}"#.to_owned()
         )],
         "{}",
         again.stderr
@@ -269,7 +275,7 @@ fn a_failing_statement_fails_the_memory_and_commits_nothing() {
         logs(&counted.records),
         [(
             "output".to_owned(),
-            r#"{"results":[{"rowcount":1,"rows":[{"columns":["n"],"values":[0]}]}]}"#.to_owned()
+            r#"{"id":"request","results":[{"rowcount":1,"rows":[{"columns":["n"],"values":[0]}]}]}"#.to_owned()
         )]
     );
 }
@@ -290,7 +296,10 @@ fn statements_the_service_refuses_fail_as_invalid_input() {
 
 /// One output record whose results are `results` (JSON text).
 fn output(results: &str) -> Vec<(String, String)> {
-    vec![("output".to_owned(), format!(r#"{{"results":{results}}}"#))]
+    vec![(
+        "output".to_owned(),
+        format!(r#"{{"id":"request","results":{results}}}"#),
+    )]
 }
 
 #[test]
@@ -312,18 +321,18 @@ fn an_operation_over_its_timeout_fails_as_timeout() {
   <state id="waiting"/>
 </scxml>"#,
     );
-    let statements = r#"<param name="statements" expr="[{sql: 'SELECT 1'}]"/>"#;
+    let database = r#"<param name="database" expr="'/memory/floppy.sqlite'"/>"#;
     let document = harness(None, "[{sql: 'SELECT 1'}]");
     assert!(
-        document.contains(statements),
-        "the harness passes statements"
+        document.contains(database),
+        "the harness passes the database"
     );
     let path = support::write(
         &dir,
         "harness.scx",
         &document.replacen(
-            statements,
-            &format!(r#"{statements}<param name="operation_timeout_ms" expr="200"/>"#),
+            database,
+            &format!(r#"{database}<param name="operation_timeout_ms" expr="200"/>"#),
             1,
         ),
     );
@@ -605,7 +614,7 @@ fn every_recall_reads_the_most_recent_window_oldest_first() {
     }
 }
 
-/// A harness that invokes the short-term register with `database` (an
+/// A harness that invokes the short-term register with a memory on `database` (an
 /// ECMAScript expression) and `params` (more `<param>`s, or none), runs
 /// `stages[0]` once it is ready (`bot.ability.ready`) and `stages[n]` on
 /// `harness.stage<n>` (a delayed `<send>` an earlier stage arms), and logs
@@ -615,6 +624,21 @@ fn every_recall_reads_the_most_recent_window_oldest_first() {
 /// cut, conversation and whether its time is UTC) and `failed`, ending
 /// after `answers` reads answered or failed.
 fn stm_harness(database: &str, params: &str, stages: &[String], answers: usize) -> String {
+    // The memory the register sends its requests to, the harness's child
+    // "memory" on `database`, or none.
+    let (memory, address) = if database == "null" {
+        (String::new(), "null")
+    } else {
+        (
+            format!(
+                r#"
+    <invoke id="memory" type="scxml" src="memory/memory.scx">
+      <param name="database" expr="{database}"/>
+    </invoke>"#
+            ),
+            "'#_scxml_' + _sessionid + '.memory'",
+        )
+    };
     let mut transitions = String::new();
     for (n, stage) in stages.iter().enumerate() {
         let event = if n == 0 {
@@ -638,9 +662,9 @@ fn stm_harness(database: &str, params: &str, stages: &[String], answers: usize) 
   <datamodel>
     <data id="answers" expr="0"/>
   </datamodel>
-  <state id="running">
+  <state id="running">{memory}
     <invoke id="stm" type="scxml" src="stm/stm.scx">
-      <param name="database" expr="{database}"/>{params}
+      <param name="memory" expr="{address}"/>{params}
     </invoke>{transitions}
     <transition event="bot.ability.memory.stm.recent.output">
       <log label="recent" expr="JSON.stringify(_event.data.entries.map((e) =&gt; [e.stimulus_name, e.payload, e.event_id, e.source, e.target, e.stm_id.length, e.last_accessed_at !== null]))"/>
@@ -696,7 +720,12 @@ fn run_stm(document: &str, clock: &str) -> Finished {
     support::copy_ability("stm", &dir);
     support::copy_ability("memory", &dir);
     let path = support::write(&dir, "harness.scx", document);
-    let mut args = support::memory_grant();
+    // A register without a memory binds no sql service to grant.
+    let mut args = if document.contains("memory/memory.scx") {
+        support::memory_grant()
+    } else {
+        Vec::new()
+    };
     args.extend([
         "--clock".to_owned(),
         clock.to_owned(),

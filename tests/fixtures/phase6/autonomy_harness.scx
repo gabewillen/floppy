@@ -4,16 +4,21 @@
   SpeechHeard seed's tests): it stands in for the cognition, which invokes
   autonomy first in each turn. Each external bot.ability.cognition.input
   {turn, stimulus, focus, focus_candidates} becomes one autonomy run as the
-  child "autonomy" with the cognition's <param>s (database is its <data>,
-  null unless the test rewrites it), and its <donedata> is logged whole
+  child "autonomy" with the cognition's <param>s (memory is the address of
+  its child "memory", the memory ability on its <data> database, null
+  unless the test rewrites it), and its <donedata> is logged whole
   (harness.output, its JSON). The stimulus doubles the body's envelope of
   a listening product the body cannot take yet.
 -->
-<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="harness" initial="waiting">
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="harness" initial="harness">
   <datamodel>
     <data id="database" expr="null"/>
     <data id="request" expr="null"/>
   </datamodel>
+  <state id="harness" initial="waiting">
+  <invoke id="memory" type="scxml" src="memory/memory.scx">
+    <param name="database" expr="database"/>
+  </invoke>
   <state id="waiting">
     <transition event="bot.ability.cognition.input" cond="_event.invokeid === undefined" target="running">
       <assign location="request" expr="_event.data"/>
@@ -24,7 +29,7 @@
       <param name="turn" expr="request.turn"/>
       <param name="input" expr="({focus: request.focus, focus_candidates: request.focus_candidates})"/>
       <param name="stimulus" expr="request.stimulus"/>
-      <param name="database" expr="database"/>
+      <param name="memory" expr="database === null ? null : '#_scxml_' + _sessionid + '.memory'"/>
     </invoke>
     <transition event="done.invoke.autonomy" target="waiting">
       <log label="harness.output" expr="JSON.stringify(_event.data)"/>
@@ -32,5 +37,6 @@
     <transition event="error.*" target="waiting">
       <log label="harness.error" expr="_event.name"/>
     </transition>
+  </state>
   </state>
 </scxml>

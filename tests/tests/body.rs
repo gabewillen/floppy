@@ -217,8 +217,24 @@ fn activated(run: &mut Run) -> Vec<Json> {
     run.until(WAIT, label_is("bot.activated"))
 }
 
-/// Closes the run and asserts its pinned trace.
+/// Waits until every reply the bot started saying has finished: its
+/// playback outlasts the turn that said it, so an input or a close sooner
+/// would pin a race between the two in the trace.
+fn settle(run: &Run) {
+    while run.count(label_is("floppy.say")) > run.count(label_is("bot.ability.speaking.output")) {
+        run.until(WAIT, label_is("bot.ability.speaking.output"));
+    }
+}
+
+/// Sends the run the event `name` with `data` once the bot has settled.
+fn event(run: &mut Run, name: &str, data: &Json) {
+    settle(run);
+    run.event(name, data);
+}
+
+/// Closes the run, once the bot has settled, and asserts its pinned trace.
 fn close(run: Run, test: &str) -> Finished {
+    settle(&run);
     let finished = run.close(WAIT);
     trace::assert_trace(test, &finished.all, &[]);
     finished
@@ -294,7 +310,7 @@ fn deactivate_cancels_the_abilities() {
     let body = layout(&Cognition::Double("'ready'"), &[]);
     let mut run = start(&body);
     activated(&mut run);
-    run.event("bot.deactivate", &json!({}));
+    event(&mut run, "bot.deactivate", &json!({}));
     let records = run.until(WAIT, label_is("done.invoke"));
     assert_eq!(
         only(&records, &["double.exit", "bot.deactivated", "done.invoke"]),
@@ -306,7 +322,7 @@ fn deactivate_cancels_the_abilities() {
         "the child's exit handler runs before the body reports, and the session ends in inactive"
     );
     // The bot left: nothing takes a turn any more.
-    run.event("bot.input", &input("reply", "ignored"));
+    event(&mut run, "bot.input", &input("reply", "ignored"));
     let finished = close(run, "deactivate_cancels_the_abilities");
     assert!(
         only(&finished.records, &["double.input"]).is_empty(),
@@ -323,7 +339,7 @@ fn deactivate_while_activating_is_answered_and_cancels_the_abilities() {
     );
     let mut run = start(&body);
     // The silent cognition is never ready, so the bot is still activating.
-    run.event("bot.deactivate", &json!({}));
+    event(&mut run, "bot.deactivate", &json!({}));
     let records = run.until(WAIT, label_is("done.invoke"));
     // Every accepted bot.deactivate is answered (decision D118): never
     // activated, the bot still reports bot.deactivated once its abilities
@@ -357,7 +373,7 @@ fn the_activation_passes_its_model_to_the_cognition() {
     let body = layout(&Cognition::Double("'ready'"), &[]);
     let mut run = start_with(&body, &[("model", "'some/model'")]);
     run.until(WAIT, label_is("bot.activated"));
-    run.event("bot.deactivate", &json!({}));
+    event(&mut run, "bot.deactivate", &json!({}));
     let records = run.until(WAIT, label_is("bot.deactivated"));
     assert_eq!(
         only(&records, &["double.exit"]),
@@ -373,7 +389,7 @@ fn a_reboot_re_enters_live() {
     activated(&mut run);
     // From the cognition: live is re-entered, the cognition restarts and
     // the bot activates again.
-    run.event("bot.input", &input("reboot", "please"));
+    event(&mut run, "bot.input", &input("reboot", "please"));
     let records = run.until(WAIT, label_is("bot.activated"));
     assert_eq!(
         only(
@@ -391,7 +407,7 @@ fn a_reboot_re_enters_live() {
         ])
     );
     // The restarted cognition takes the next turn.
-    run.event("bot.input", &input("reply", "again"));
+    event(&mut run, "bot.input", &input("reply", "again"));
     let records = run.until(WAIT, label_is("floppy.output"));
     assert_eq!(
         only(&records, &["double.input"]),
@@ -405,7 +421,7 @@ fn a_turn_completes_with_the_cognitions_output() {
     let body = layout(&Cognition::Double("'ready'"), &[]);
     let mut run = start(&body);
     activated(&mut run);
-    run.event("bot.input", &input("reply", "hello"));
+    event(&mut run, "bot.input", &input("reply", "hello"));
     let records = run.until(WAIT, label_is("bot.processing.completed"));
     let output = r#"[{"data":{"parts":[{"words":"reply 1"}]},"event":"bot.ability.communication.respond","target":"session.floppy.communication"}]"#;
     assert_eq!(
@@ -433,7 +449,7 @@ fn a_turn_completes_with_the_cognitions_output() {
         ])
     );
     // A failed turn ends the turn too.
-    run.event("bot.input", &input("fail", "x"));
+    event(&mut run, "bot.input", &input("fail", "x"));
     let records = run.until(WAIT, label_is("bot.processing.failed"));
     assert_eq!(
         only(&records, &["bot.processing.failed"]),
@@ -450,7 +466,7 @@ fn a_reply_for_another_turn_is_ignored() {
     let body = layout(&Cognition::Double("'ready'"), &[]);
     let mut run = start(&body);
     activated(&mut run);
-    run.event("bot.input", &input("stale", "s"));
+    event(&mut run, "bot.input", &input("stale", "s"));
     let records = run.until(WAIT, label_is("floppy.output"));
     assert_eq!(
         only(&records, &["floppy.stale", "floppy.output"]),
@@ -476,10 +492,10 @@ fn inputs_during_a_turn_are_held_and_perceived_together_by_the_next() {
     );
     let mut run = start(&body);
     activated(&mut run);
-    run.event("bot.input", &input("hang", "first"));
+    event(&mut run, "bot.input", &input("hang", "first"));
     run.until(WAIT, label_is("double.input"));
-    run.event("bot.input", &input("reply", "second"));
-    run.event("bot.input", &input("reply", "third"));
+    event(&mut run, "bot.input", &input("reply", "second"));
+    event(&mut run, "bot.input", &input("reply", "third"));
     let records = run.until(WAIT, |record| {
         record["type"] == "log"
             && record["label"] == "floppy.output"
@@ -537,13 +553,14 @@ fn a_backlog_splits_into_turns_of_at_most_eight_percepts() {
     activated(&mut run);
     // The percepts follow at once (see
     // a_turn_takes_at_most_thirty_two_participants).
-    run.event("bot.input", &input("hang", "first"));
+    event(&mut run, "bot.input", &input("hang", "first"));
     // Ten percepts while turn 1 hangs: turn 2 takes the first eight
     // (MAX_PERCEPTS), turn 3 the other two; the participants of a turn
     // are its percepts' union, in order, once each.
     for n in 1..=10 {
         let person = format!("person-{}", n % 3);
-        run.event(
+        event(
+            &mut run,
             "bot.input",
             &input_from("reply", &format!("p{n}"), &[&person, "caller"]),
         );
@@ -601,13 +618,14 @@ fn a_turn_takes_at_most_thirty_two_participants() {
     // by the turn the first one started, never after its 1.5 s timeout
     // (waiting for the cognition's logs first left a window as long as
     // the round trip, which a loaded host can stretch past the timeout).
-    run.event("bot.input", &input("hang", "first"));
+    event(&mut run, "bot.input", &input("hang", "first"));
     // 15, 15 and 15 distinct participants: the first two percepts' union
     // is 30, and the third would make it 45, so it waits for turn 3.
     for n in 0..3 {
         let people: Vec<String> = (0..15).map(|k| format!("p{n}-{k}")).collect();
         let people: Vec<&str> = people.iter().map(String::as_str).collect();
-        run.event(
+        event(
+            &mut run,
             "bot.input",
             &input_from("reply", &format!("batch {n}"), &people),
         );
@@ -650,12 +668,12 @@ fn a_turn_whose_input_is_over_the_event_bound_fails() {
     activated(&mut run);
     // The percepts follow at once (see
     // a_turn_takes_at_most_thirty_two_participants).
-    run.event("bot.input", &input("hang", "first"));
+    event(&mut run, "bot.input", &input("hang", "first"));
     // Two percepts of 32000 bytes fit a turn's 65536, but not with the
     // turn's choices and environment in one 64 KiB event.
     let big = "x".repeat(32000);
-    run.event("bot.input", &input("reply", &big));
-    run.event("bot.input", &input("reply", &big));
+    event(&mut run, "bot.input", &input("reply", &big));
+    event(&mut run, "bot.input", &input("reply", &big));
     let records = run.until(WAIT, |record| {
         label_is("bot.processing.failed")(record)
             && record["text"]
@@ -674,7 +692,7 @@ fn a_turn_whose_input_is_over_the_event_bound_fails() {
         "{failed:?}"
     );
     // The bot is not stuck: it takes the next turn.
-    run.event("bot.input", &input("reply", "next"));
+    event(&mut run, "bot.input", &input("reply", "next"));
     run.until(WAIT, label_is("floppy.output"));
     close(run, "a_turn_whose_input_is_over_the_event_bound_fails");
 }
@@ -684,14 +702,14 @@ fn what_is_held_when_the_bot_leaves_active_is_released() {
     let body = layout(&Cognition::Double("'ready'"), &[]);
     let mut run = start(&body);
     activated(&mut run);
-    run.event("bot.input", &input("hang", "first"));
+    event(&mut run, "bot.input", &input("hang", "first"));
     run.until(WAIT, label_is("double.input"));
-    run.event("bot.input", &input("reply", "second"));
-    run.event("bot.input", &input("reply", "third"));
+    event(&mut run, "bot.input", &input("reply", "second"));
+    event(&mut run, "bot.input", &input("reply", "third"));
     run.until(WAIT, |record| {
         label_is("floppy.held")(record) && record["text"] == "2"
     });
-    run.event("bot.deactivate", &json!({}));
+    event(&mut run, "bot.deactivate", &json!({}));
     let records = run.until(WAIT, label_is("done.invoke"));
     assert_eq!(
         only(
@@ -730,7 +748,8 @@ fn the_firmware_is_offered_shown_and_reports_like_an_ability() {
     with_firmware(&body);
     let mut run = start(&body);
     activated(&mut run);
-    run.event(
+    event(
+        &mut run,
         "bot.input",
         &json!({"observation": {"event": "act", "data": {"event": "timer.set", "data": {"minutes": 3}}}}),
     );
@@ -830,7 +849,7 @@ fn without_firmware_src_the_body_shows_no_firmware() {
     let body = layout(&Cognition::Double("'ready'"), &[]);
     let mut run = start(&body);
     activated(&mut run);
-    run.event("bot.input", &input("reply", "hello"));
+    event(&mut run, "bot.input", &input("reply", "hello"));
     let records = run.until(WAIT, label_is("floppy.output"));
     let environment: Json =
         serde_json::from_str(&only(&records, &["double.environment"])[0].1).expect("JSON");
@@ -852,10 +871,10 @@ fn what_is_held_when_the_bot_degrades_is_released() {
     // next inputs follow the turn's timeout, so they are held while the
     // cancel waits, after its timeout in the trace however loaded the
     // host is (sent with the first, the turn's timeout raced them).
-    run.event("bot.input", &input("deaf", "first"));
+    event(&mut run, "bot.input", &input("deaf", "first"));
     run.until(WAIT, label_is("bot.processing.timed_out"));
-    run.event("bot.input", &input("reply", "second"));
-    run.event("bot.input", &input("reply", "third"));
+    event(&mut run, "bot.input", &input("reply", "second"));
+    event(&mut run, "bot.input", &input("reply", "third"));
     run.until(WAIT, |record| {
         label_is("floppy.held")(record) && record["text"] == "2"
     });
@@ -876,7 +895,7 @@ fn a_turn_that_times_out_is_cancelled_and_fails() {
     );
     let mut run = start(&body);
     activated(&mut run);
-    run.event("bot.input", &input("hang", "slow"));
+    event(&mut run, "bot.input", &input("hang", "slow"));
     let records = run.until(WAIT, label_is("bot.processing.failed"));
     assert_eq!(
         only(
@@ -892,7 +911,7 @@ fn a_turn_that_times_out_is_cancelled_and_fails() {
         ])
     );
     // The bot is back in attention and takes the next turn.
-    run.event("bot.input", &input("reply", "next"));
+    event(&mut run, "bot.input", &input("reply", "next"));
     run.until(WAIT, label_is("floppy.output"));
     close(run, "a_turn_that_times_out_is_cancelled_and_fails");
 }
@@ -905,7 +924,7 @@ fn an_unacknowledged_cancel_degrades_the_bot() {
     );
     let mut run = start_unrestarted(&body);
     activated(&mut run);
-    run.event("bot.input", &input("deaf", "x"));
+    event(&mut run, "bot.input", &input("deaf", "x"));
     run.until(WAIT, label_is("supervision.exhausted"));
     let finished = close(run, "an_unacknowledged_cancel_degrades_the_bot");
     let records = &finished.all;
@@ -951,7 +970,7 @@ fn without_a_backend_the_real_cognitions_turns_fail_unconfigured() {
     let body = layout(&Cognition::Real, &[]);
     let mut run = start(&body);
     activated(&mut run);
-    run.event("bot.input", &input("text", "hello"));
+    event(&mut run, "bot.input", &input("text", "hello"));
     let mut records = run.until(WAIT, label_is("bot.processing.failed"));
     records.extend(run.until(WAIT, label_is("bot.processing.failed")));
     assert_eq!(
@@ -1113,7 +1132,11 @@ fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
     // Unfocused, the input names the lamp: the body turns to it
     // (decision D155), its only candidate. The body offers
     // bot.focus_device, then the double's offer, compacted and tagged.
-    run.event("bot.input", &device_input("focus", "lamp", "lamp"));
+    event(
+        &mut run,
+        "bot.input",
+        &device_input("focus", "lamp", "lamp"),
+    );
     let mut records = run.until(WAIT, label_is("floppy.focus"));
     // The environment logs the turn's outcome after the body's step.
     records.extend(run.until(WAIT, label_is("bot.processing.completed")));
@@ -1130,7 +1153,7 @@ fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
     // (nothing clears the focus). A focus on the fan, outside the turn's
     // candidates, is not taken: the body's guard takes a focus only on one
     // of the turn's candidates.
-    run.event("bot.input", &device_input("focus", "fan", "lamp"));
+    event(&mut run, "bot.input", &device_input("focus", "fan", "lamp"));
     let records = run.until(WAIT, label_is("bot.processing.completed"));
     assert_eq!(
         last_json(&records, "double.choices"),
@@ -1141,7 +1164,7 @@ fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
         pairs(&[])
     );
     // Still focused on the lamp: the next turn's candidates include it.
-    run.event("bot.input", &device_input("focus", "fan", "fan"));
+    event(&mut run, "bot.input", &device_input("focus", "fan", "fan"));
     let records = run.until(WAIT, label_is("floppy.focus"));
     assert_eq!(last_json(&records, "double.choices")[0], focus_choice());
     assert_eq!(
@@ -1161,7 +1184,7 @@ fn an_ignore_selection_goes_to_the_cognition_and_ends_the_turn() {
     activated(&mut run);
     // An ignore selection goes to the cognition that offers it, and the
     // turn completes with it as its output.
-    run.event("bot.input", &input("ignore", "noise"));
+    event(&mut run, "bot.input", &input("ignore", "noise"));
     // The double logs the ignore it sent itself and the environment the
     // outcome, in either order.
     let mut records = run.until(WAIT, label_is("bot.processing.completed"));
@@ -1183,7 +1206,7 @@ fn an_ignore_selection_goes_to_the_cognition_and_ends_the_turn() {
         pairs(&[("double.ignore", "{}")])
     );
     // The bot is back in attention and takes the next turn.
-    run.event("bot.input", &input("reply", "next"));
+    event(&mut run, "bot.input", &input("reply", "next"));
     let records = run.until(WAIT, label_is("double.input"));
     assert_eq!(
         only(&records, &["double.input", "double.ignore"]),
@@ -1200,7 +1223,7 @@ fn an_offer_over_the_budget_is_dropped_from_the_turn() {
     let body = layout(&Cognition::Double("'huge'"), &[]);
     let mut run = start(&body);
     activated(&mut run);
-    run.event("bot.input", &input("reply", "x"));
+    event(&mut run, "bot.input", &input("reply", "x"));
     let records = run.until(WAIT, label_is("bot.processing.completed"));
     // The double's offer is over 32 KiB even without its descriptions, so
     // the body drops it whole (decision D242) and the turn goes on with
@@ -1246,11 +1269,11 @@ fn environment_stimuli_fan_out_to_the_input_abilities_and_not_the_cognition() {
     activated(&mut run);
     let sound = json!({"audio": "media/audio-1", "kind": "knock"});
     let visual = json!({"image": "media/image-1", "media_type": "image/png"});
-    run.event("environment.sound", &sound);
-    run.event("environment.visual", &visual);
+    event(&mut run, "environment.sound", &sound);
+    event(&mut run, "environment.visual", &visual);
     run.until(WAIT, label_is("input.visual"));
     // The stimuli start no turn: the next turn is the first.
-    run.event("bot.input", &input("reply", "after"));
+    event(&mut run, "bot.input", &input("reply", "after"));
     run.until(WAIT, label_is("bot.processing.completed"));
     // The reply is played out into the environment, where the bot hears
     // it too.
@@ -1301,13 +1324,13 @@ fn the_listenings_products_are_turn_stimuli() {
     // Decoded speech: a turn whose stimulus is
     // bot.ability.listening.speech.output.
     let speech = json!({"audio": "media/reply-to-me.wav", "media_type": "audio/wav"});
-    run.event("environment.sound", &speech);
+    event(&mut run, "environment.sound", &speech);
     let silence = json!({"audio": "media/silence.wav", "media_type": "audio/wav"});
-    run.event("environment.sound", &silence);
+    event(&mut run, "environment.sound", &silence);
     run.until(WAIT, label_is("bot.processing.completed"));
     // Labelled non-speech: a turn whose stimulus is the environment.sound.
     let ring = json!({"audio": "media/ring.wav", "kind": "phone.ringing"});
-    run.event("environment.sound", &ring);
+    event(&mut run, "environment.sound", &ring);
     run.until(WAIT, label_is("bot.processing.completed"));
     let finished = close(run, "the_listenings_products_are_turn_stimuli");
     assert_eq!(
@@ -1352,9 +1375,9 @@ fn a_selected_communication_input_reaches_the_communication() {
     // sends it to itself and relays it to the communication, whose
     // conversation product is the next turn's stimulus.
     let speech = json!({"audio": "media/admit.wav", "media_type": "audio/wav"});
-    run.event("environment.sound", &speech);
+    event(&mut run, "environment.sound", &speech);
     let silence = json!({"audio": "media/silence.wav", "media_type": "audio/wav"});
-    run.event("environment.sound", &silence);
+    event(&mut run, "environment.sound", &silence);
     run.until(WAIT, label_is("bot.ability.speaking.output"));
     let finished = close(
         run,

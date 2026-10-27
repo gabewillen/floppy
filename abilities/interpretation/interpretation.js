@@ -542,7 +542,7 @@ function seen(entry) {
 
 // A new id for a print, its ref voice:<id>: at max_ids the least
 // recently seen id that is not own makes room (mosfet.py's
-// InProcessStore). With a database, an id that is not own is remembered
+// InProcessStore). With a memory, an id that is not own is remembered
 // as a person, the print as heard their first voice and its compact text
 // their representative.
 function mint(vector, own, voice) {
@@ -551,7 +551,7 @@ function mint(vector, own, voice) {
     registry = registry.filter(function (entry) { return entry !== evicted; });
   }
   var entry = seen(({id: 'voice:' + mintedId(), vector: vector, own: own, seen_count: 1}));
-  if (database !== null && !own) {
+  if (memory !== null && !own) {
     statements = statements.concat([
       ({sql: person_insert, parameters: [entry.id]}),
       ({sql: voice_insert, parameters: [entry.id, 'voice', JSON.stringify(voice.embedding)]}),
@@ -562,7 +562,7 @@ function mint(vector, own, voice) {
 }
 
 // A refined id's running mean, weighted by at most refine_weight_cap
-// earlier prints; with a database, a person's representative is the
+// earlier prints; with a memory, a person's representative is the
 // refined mean, its weight the prints in it.
 function refine(entry, vector) {
   var weight = Math.min(entry.seen_count, match_policy.refine_weight_cap);
@@ -570,7 +570,7 @@ function refine(entry, vector) {
   var refined = printVector(({embedding: sum}));
   entry.vector = refined === null ? entry.vector : refined;
   entry.seen_count = Math.min(entry.seen_count + 1, match_policy.refine_weight_cap);
-  if (database !== null && !entry.own) {
+  if (memory !== null && !entry.own) {
     statements = statements.concat([({sql: representative_update, parameters: [encodeVoice(entry.vector), entry.seen_count, entry.id, 'voice']})]);
   }
   return entry;
@@ -840,4 +840,17 @@ function soundParticipants(scored) {
 // Not yet in the ordered union, which holds at most 32.
 function isNewParticipant(p) {
   return active_participants.length < 32 && !active_participants.some(function (q) { return q.ref === p.ref && q.role === p.role; });
+}
+
+// memory
+
+// Whether the event answers the request the state `name` last sent the
+// memory (decision D266): its id is that request's.
+function isMemoryReply(name) {
+  return memory_requests[name] !== undefined && _event.data.id === memory_requests[name];
+}
+
+// Whether the interpretation has a memory to recall from and remember in.
+function hasMemory() {
+  return memory !== null;
 }

@@ -2,8 +2,11 @@
 <!-- revision-2: a change of a name the inventory does not hold fails. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
-  <invoke id="revision" type="scxml" src="../../../revision.scx">
+  <invoke id="memory" type="scxml" src="../../../../../abilities/memory/memory.scx">
     <param name="database" expr="'/memory/floppy.sqlite'"/>
+  </invoke>
+  <invoke id="revision" type="scxml" src="../../../revision.scx">
+    <param name="memory" expr="'#_scxml_' + _sessionid + '.memory'"/>
     <param name="intent" expr='({"event": "bot.behavior.change", "name": "Nobody", "triggers": ["environment.sound"], "description": "Say hello when a knock sound arrives.", "reason": "The user asked for it.", "source": null})'/>
     <param name="intent_event" expr="'bot.behavior.change'"/>
     <param name="turn" expr="1"/>

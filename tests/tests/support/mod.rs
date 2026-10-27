@@ -661,15 +661,19 @@ pub fn speech_grant(media: &Path) -> Vec<String> {
     ]
 }
 
-/// Whether the `.scx` document at `path`, or a document it loads by a
-/// literal relative `<invoke src>` (recursively), names the service `name`'s
-/// URI. Anything that is not a readable `.scx` file names none.
+/// Whether the `.scx` document (or `.scxml` test document) at `path`, or a
+/// document it loads by a literal relative `<invoke src>` (recursively),
+/// names the service `name`'s URI. Anything else names none.
 pub fn binds(path: &Path, name: &str) -> bool {
     fn visit(path: &Path, uri: &str, seen: &mut Vec<PathBuf>) -> bool {
         let Ok(path) = path.canonicalize() else {
             return false;
         };
-        if path.extension().is_none_or(|extension| extension != "scx") || seen.contains(&path) {
+        if path
+            .extension()
+            .is_none_or(|extension| extension != "scx" && extension != "scxml")
+            || seen.contains(&path)
+        {
             return false;
         }
         seen.push(path.clone());

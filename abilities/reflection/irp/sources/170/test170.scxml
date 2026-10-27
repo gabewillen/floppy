@@ -2,8 +2,11 @@
 <!-- reflection-8: a recall on a database the run does not grant fails the turn, and the next input is taken. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
-  <invoke id="reflection" type="scxml" src="../../../reflection.scx">
+  <invoke id="memory" type="scxml" src="../../../../../abilities/memory/memory.scx">
     <param name="database" expr="'/nowhere/floppy.sqlite'"/>
+  </invoke>
+  <invoke id="reflection" type="scxml" src="../../../reflection.scx">
+    <param name="memory" expr="'#_scxml_' + _sessionid + '.memory'"/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>

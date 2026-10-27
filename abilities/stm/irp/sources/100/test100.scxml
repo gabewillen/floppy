@@ -2,8 +2,11 @@
 <!-- stm-1: with a database it is ready with no choices. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
-  <invoke id="stm" type="scxml" src="../../../stm.scx">
+  <invoke id="memory" type="scxml" src="../../../../../abilities/memory/memory.scx">
     <param name="database" expr="'/memory/floppy.sqlite'"/>
+  </invoke>
+  <invoke id="stm" type="scxml" src="../../../stm.scx">
+    <param name="memory" expr="'#_scxml_' + _sessionid + '.memory'"/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>

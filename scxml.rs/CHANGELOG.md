@@ -722,6 +722,16 @@ hard cutover.
   member, a lone surrogate, deep nesting, or a number `serde_json` might
   not read exactly) is still evaluated, so every value is the one its
   literal gives.
+- The ECMAScript data model makes a bound `_event` read-only natively: the
+  value it just built gets the same read-only proxies, in the same maps,
+  with the same properties redefined and the same objects frozen as the
+  adapter's `guard` helper gives it (SCXML 5.10), without interpreting the
+  helper's loops over every property. A 30 KB event with three 256-number
+  arrays binds in 1.9 ms instead of 10.6 ms (release, natively, 200
+  events); in a live session that starts about twenty invoked sessions on
+  one event, binding `_event` was about a quarter of that step's time. A
+  value holding any object other than an ordinary object or an array still
+  goes through the helper.
 - An `event:schema` reference resolves against the document's base URI as
   every other relative URI does (`<script src>`, `<invoke src>`; RFC 3986
   §5): its `.` and `..` segments resolve, so `../schemas/order.json` names

@@ -217,11 +217,13 @@ D33 to D43.
   `<cancel>` on exit, and a sendid or turn cond. They have no document of
   their own.
 - **Memory.** Each memory step is a compound state whose first child
-  picks by `database` (the `<param>` the body passes, null without
-  memory): with a database it invokes the memory ability
-  (`abilities/memory/memory.scx`, over `services/sql`) with its statements as
-  SQL `<data>` and takes `bot.ability.memory.output` (its `event:schema`)
-  or `bot.ability.failed` by invoke id; without one it
+  picks by `memory` (the `<param>` the body passes, the address of the
+  bot's one memory, null without memory): with a memory it sends the
+  memory (`abilities/memory/memory.scx`, the body's long-lived child over
+  `services/sql`, decision D266) a `bot.ability.memory.input {id,
+  statements}` request with its statements as SQL `<data>` and takes
+  `bot.ability.memory.output` (its `event:schema`) or `bot.ability.failed`
+  by the request's id; without one it
   answers itself at once through `#_internal` with
   the same event and logs `<log label="memory" expr="'absent'">`. Either
   way the step ends with its event (`bot.ability.reasoning.recalled`,
@@ -277,7 +279,7 @@ D33 to D43.
 | Persona (the owner's traits, the bot's description) | `abilities/persona/persona.scx`, the body's child: the owner's traits are its `traits` `<param>`, the self-written description is recalled and revised as a self-fact through `abilities/memory/memory.scx`, and `bot.ability.persona.output` goes to the body on waking and after each revision | ability `.scx` child |
 | Reflection, Learning, Routines | `abilities/reflection/reflection.scx` and `abilities/learning/learning.scx` (each revising through `abilities/revision/revision.scx`, which invokes `bots/builder/builder.scx`, D148 and D149), `abilities/routines/routines.scx` over the chain `abilities/routines_runner/routines_runner.scx`; long-lived children of every cognition (D80) | ability `.scx` child |
 | Learned behaviors | builder-built `.scx` documents | generated `.scx` |
-| Memory and its engines | `abilities/memory/memory.scx` over `services/sql` (SQLite, phase 3) or `services/pgsql` (Postgres, phase 7), migrated by `abilities/migration/migration.scx` with `<migration:plan>` | ability `.scx` child + service |
+| Memory and its engines | `abilities/memory/memory.scx`, the body's one long-lived memory (decision D266), over `services/sql` (SQLite, phase 3) or `services/pgsql` (Postgres, phase 7), migrated once by `abilities/migration/migration.scx` with `<migration:plan>` | ability `.scx` child + service |
 | Listening (`Perceiving{Listening, Sensing}`) | `abilities/listening/listening.scx`, the body's input ability | ability `.scx` child |
 | Sensitivity, interpretation | `abilities/sensitivity/sensitivity.scx`, `abilities/interpretation/interpretation.scx` (listening's children) | ability `.scx` child |
 | Hearing: speech decoding, sound classification, voice detection, diarization and identification | `abilities/speech_decoding/`, `sound_classification/`, `voice_detection/`, `voice_diarization/`, `voice_identification/` (the interpretation's children; all but sound classification invoke `services/speech`) | stage `.scx` child and service |

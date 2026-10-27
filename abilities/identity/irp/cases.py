@@ -10,7 +10,7 @@ FAILED = "bot.ability.failed"
 ASK = "bot.ability.identity.ask"
 NAMED = "bot.ability.identity.named"
 GAVE_UP = "Identity could not recall a name: memory did not answer within the bring-up budget."
-DB = ("database", "'/memory/floppy.sqlite'")
+DB = memory("'/memory/floppy.sqlite'")
 TRANSCRIPTIONS = "/audio/transcriptions"
 
 READY = expect("bot.ability.ready")
@@ -62,7 +62,7 @@ S.case(110, 2, "with a fresh database it recalls nothing and is ready; the start
 S.case(111, 2, "a database it cannot open fails every recall attempt until the bring-up budget runs out, then the started name is recalled.",
        [expect(FAILED, f"_event.data.message === {js(GAVE_UP)}"),
         READY, send(INPUT, said("hey floppy")), heard("Floppy")],
-       params=[("database", "'/nowhere/floppy.sqlite'"), named("Floppy"), ("bring_up_timeout_ms", "1500")], clock="wall")
+       params=[memory("'/nowhere/floppy.sqlite'"), named("Floppy"), ("bring_up_timeout_ms", "1500")], clock="wall")
 # Stored rows stand in for memory's, oldest first: a good name, then rows
 # that are not JSON, hold an empty name, or carry a key a name has not.
 DAMAGED = ("name_select", js('SELECT content FROM (SELECT 1 AS n, \'{"text": "Pip", "kind": "fact"}\' AS content UNION ALL SELECT 2, \'{"text": "\' UNION ALL SELECT 3, \'{"text": "", "kind": "fact"}\' UNION ALL SELECT 4, \'{"text": "Bo", "kind": "fact", "reason": "x"}\') AS stored WHERE ?1 = \'self_name\' AND ?2 = \'self\' ORDER BY n'))
@@ -124,7 +124,7 @@ S.case(143, 5, "a name it cannot write down is not taken: the failure is answere
         send(ADOPT, js({"name": "Pip"})),
         expect(FAILED, "_event.data.message.indexOf('Identity could not remember the name it took: ') === 0"),
         OFFERED, send(ASK, js({})), expect(NAMED, "_event.data.name === null")],
-       params=[("database", "'/nowhere/floppy.sqlite'"), ("bring_up_timeout_ms", "1500")], clock="wall")
+       params=[memory("'/nowhere/floppy.sqlite'"), ("bring_up_timeout_ms", "1500")], clock="wall")
 
 S.case(150, 6, "a sound produces nothing and decodes nothing; its name in text still addresses it.",
        [READY, send(SOUND, sound()), wait("1s"), send(INPUT, said("Floppy")), heard("Floppy")],

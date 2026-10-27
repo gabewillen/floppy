@@ -6,7 +6,7 @@ S = suite
 INPUT = "bot.ability.reflection.input"
 OUTPUT = "bot.ability.reflection.output"
 FAILED = "bot.ability.failed"
-DB = ("database", "'/memory/floppy.sqlite'")
+DB = memory("'/memory/floppy.sqlite'")
 # Generous bounds for the wall-clock cases, so a loaded machine does not time them out.
 SLOW_SELECT = ("select_timeout_ms", "300000")
 SLOW_REVISING = ("revising_timeout_ms", "300000")
@@ -152,7 +152,7 @@ def failed_prefix(text):
     return expect(FAILED, f"_event.data.message.indexOf({js(text)}) === 0")
 
 
-S.statement(1, "Without a database (the `<param>` `database` null, its default) it offers nothing on start and answers each `bot.ability.reflection.input` `{turn, cognition_input, cognition_output}` at once with `bot.ability.reflection.output` (no data), asking no model.")
+S.statement(1, "Without memory (the `<param>` `memory` null, its default) it offers nothing on start and answers each `bot.ability.reflection.input` `{turn, cognition_input, cognition_output}` at once with `bot.ability.reflection.output` (no data), asking no model.")
 S.statement(2, "With a database, `recalling` reads the prior episodes and the behavior inventory in one memory transaction and `processing` asks the generate service (schema `dispatch`, its `events` at most one) to select at most one of `bot.behavior.create`, `bot.behavior.change` or `bot.behavior.break`, each offered by the reflection's own session (a change's and a break's `name` pinned to the inventory's names, and neither offered when the inventory is empty; decision D100); the selection is sent to the reflection's own session, and an empty selection goes to `storing`, which stores the turn's episode and answers `bot.ability.reflection.output`.")
 S.statement(3, "A select call the generate service refuses (`not-json`, or `schema-mismatch` such as more than one selected event, which the dispatch tool does not admit) is asked again with the repair feedback (`selection_feedback`) carrying its rejection, at most twice (decision D130); the same rejection as the one being repaired, or a third rejection, fails the select with `bot.ability.failed` `{message: \"Selection rejected: <message>\"}`; any other failed select call fails it with `Reflection select failed (<code>)`; a select call whose streamed reply makes no progress for `select_timeout_ms` (its first `generate.progress` arms it, each later one re-arms it) or that runs `select_ceiling_ms` in all fails it with `Reflection child cancellation timed out.` (decision D101).")
 S.statement(4, "A selected `bot.behavior.break` (`breaking`) marks the named behavior BROKEN with its trimmed reason and keeps the row, then stores the episode and answers `bot.ability.reflection.output`; a break of a name the inventory does not hold is not offered, so a model that selects one is refused twice and fails the select with `Selection rejected: <message>`.")
@@ -241,7 +241,7 @@ S.case(160, 7, "a revision that outlasts revising_ceiling_ms fails the turn.",
 S.case(170, 8, "a recall on a database the run does not grant fails the turn, and the next input is taken.",
        [send(INPUT, turn(1)), failed_prefix("Reflection memory recall failed: "),
         send(INPUT, turn(2)), expect(FAILED)],
-       params=[("database", "'/nowhere/floppy.sqlite'")])
+       params=[memory("'/nowhere/floppy.sqlite'")])
 
 S.case(180, 9, "a second input sent while the first is in hand runs after it: the first's failure, then the second's output.",
        [send(INPUT, turn(1)), send(INPUT, turn(2)),

@@ -3,8 +3,8 @@
   floppy's Consolidation ability (decisions D195 and D205): what memory
   does while the cognition rests. The cognition
   (abilities/cognition/cognition.scx) invokes it as its child
-  "consolidation" on entering rest, with the <param> database (the memory
-  database; null: no memory), and leaving rest (any input) cancels it. It
+  "consolidation" on entering rest, with the <param> memory (the address of
+  the bot's memory; null: no memory), and leaving rest (any input) cancels it. It
   never identifies anyone (the conversation does, live, D194): it
   reinforces the people memory holds.
 
@@ -14,10 +14,11 @@
       -> merging_pause -> merging_reading -> merging_from -> merging_refs
          -> merging_writing -> merging_pause ... }
       -> done (final) | failed (final)
-    consolidating_from -no database-> done
+    consolidating_from -no memory-> done
 
-  Each step is one transaction of the memory ability
-  (abilities/memory/memory.scx): a read, then a write guarded so that it
+  Each step is one transaction of the bot's memory
+  (abilities/memory/memory.scx, a request answered by its id, decision
+  D266): a read, then a write guarded so that it
   commits only on the rows it read (a statement with an expected
   rowcount, which the sql and pgsql services check: a write whose guard
   does not hold fails and commits nothing). A step cancelled meanwhile
@@ -81,16 +82,19 @@
   merged, the writes made, and whether and why it failed (reason null when
   it did not, 'absent' when there is no memory). Logs: memory ('absent').
 
-  Bindings: the conversation namespace package, and the memory ability's
-  sql and pgsql service packages.
+  Bindings: the conversation namespace package (the bot's memory, which
+  the body invokes, binds the sql and pgsql service packages).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:conversation="https://github.com/stateforward/floppy/namespaces/conversation"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        version="1.0" datamodel="ecmascript" name="consolidation" initial="consolidating">
   <datamodel>
-    <!-- The invoker's <param>: the memory database (null: no memory). -->
-    <data id="database" expr="null"/>
+    <!-- The invoker's <param>: the address of the bot's memory (null: no memory). -->
+    <data id="memory" expr="null"/>
+    <!-- The id of each request this document last sent the memory, by
+         the state that sent it (decision D266). -->
+    <data id="memory_requests" expr="({})"/>
     <!-- The embeddings' kind consolidated (faces are D188's seam). -->
     <data id="kind" expr="'voice'"/>
     <!-- The voices one fold step reads (a voice's JSON text is about 5 KiB
@@ -178,11 +182,13 @@
       <onexit>
         <cancel sendid="fold-read-after"/>
       </onexit>
-      <invoke id="fold_read" type="scxml" src="../memory/memory.scx">
-        <param name="database" expr="database"/>
-        <param name="statements" expr="foldReadStatements()"/>
-      </invoke>
-      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="folding_from">
+      <onentry>
+        <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.fold_read">
+          <param name="id" expr="memory_requests.fold_read"/>
+          <param name="statements" expr="foldReadStatements()"/>
+        </send>
+      </onentry>
+      <transition event="bot.ability.memory.output" cond="isMemoryReply('fold_read')" event:schema="../schemas/bot.ability.memory.output.json" target="folding_from">
         <assign location="rows" expr="resultRows(_event, 0)"/>
       </transition>
     </state>
@@ -200,11 +206,13 @@
       <onexit>
         <cancel sendid="fold-write-after"/>
       </onexit>
-      <invoke id="fold_write" type="scxml" src="../memory/memory.scx">
-        <param name="database" expr="database"/>
-        <param name="statements" expr="foldWriteStatements()"/>
-      </invoke>
-      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="folding_pause">
+      <onentry>
+        <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.fold_write">
+          <param name="id" expr="memory_requests.fold_write"/>
+          <param name="statements" expr="foldWriteStatements()"/>
+        </send>
+      </onentry>
+      <transition event="bot.ability.memory.output" cond="isMemoryReply('fold_write')" event:schema="../schemas/bot.ability.memory.output.json" target="folding_pause">
         <assign location="folded" expr="foldedAfter()"/>
         <assign location="steps" expr="stepsAfter()"/>
       </transition>
@@ -228,11 +236,13 @@
       <onexit>
         <cancel sendid="people-read-after"/>
       </onexit>
-      <invoke id="people_read" type="scxml" src="../memory/memory.scx">
-        <param name="database" expr="database"/>
-        <param name="statements" expr="peopleReadStatements()"/>
-      </invoke>
-      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="merging_from">
+      <onentry>
+        <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.people_read">
+          <param name="id" expr="memory_requests.people_read"/>
+          <param name="statements" expr="peopleReadStatements()"/>
+        </send>
+      </onentry>
+      <transition event="bot.ability.memory.output" cond="isMemoryReply('people_read')" event:schema="../schemas/bot.ability.memory.output.json" target="merging_from">
         <assign location="rows" expr="resultRows(_event, 0)"/>
         <conversation:people_to_merge location="merge" people="peopleRows()"/>
       </transition>
@@ -249,11 +259,13 @@
       <onexit>
         <cancel sendid="refs-read-after"/>
       </onexit>
-      <invoke id="refs_read" type="scxml" src="../memory/memory.scx">
-        <param name="database" expr="database"/>
-        <param name="statements" expr="refsReadStatements()"/>
-      </invoke>
-      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="merging_writing">
+      <onentry>
+        <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.refs_read">
+          <param name="id" expr="memory_requests.refs_read"/>
+          <param name="statements" expr="refsReadStatements()"/>
+        </send>
+      </onentry>
+      <transition event="bot.ability.memory.output" cond="isMemoryReply('refs_read')" event:schema="../schemas/bot.ability.memory.output.json" target="merging_writing">
         <conversation:merged_context_refs location="refs" refs="contextRefs(_event)" from="merge.from" into="merge.into"/>
       </transition>
     </state>
@@ -264,11 +276,13 @@
       <onexit>
         <cancel sendid="merge-write-after"/>
       </onexit>
-      <invoke id="merge_write" type="scxml" src="../memory/memory.scx">
-        <param name="database" expr="database"/>
-        <param name="statements" expr="mergeWriteStatements()"/>
-      </invoke>
-      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="merging_pause">
+      <onentry>
+        <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.merge_write">
+          <param name="id" expr="memory_requests.merge_write"/>
+          <param name="statements" expr="mergeWriteStatements()"/>
+        </send>
+      </onentry>
+      <transition event="bot.ability.memory.output" cond="isMemoryReply('merge_write')" event:schema="../schemas/bot.ability.memory.output.json" target="merging_pause">
         <assign location="merged" expr="mergedAfter()"/>
         <assign location="steps" expr="stepsAfter()"/>
       </transition>

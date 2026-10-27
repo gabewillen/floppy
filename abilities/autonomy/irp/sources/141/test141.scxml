@@ -2,11 +2,14 @@
 <!-- autonomy-5: a load that outlasts memory_timeout_ms matches nothing, and the turn goes on. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
+  <invoke id="memory" type="scxml" src="../../../../../abilities/memory/memory.scx">
+    <param name="database" expr="'/memory/floppy.sqlite'"/>
+  </invoke>
   <invoke id="autonomy" type="scxml" src="../../../autonomy.scx">
     <param name="turn" expr="8"/>
     <param name="input" expr='{"focus": null, "focus_candidates": []}'/>
     <param name="stimulus" expr='{"event": "bot.ability.listening.speech.output", "data": {"content": "what is the weather like?", "content_type": "text/plain", "voice_detection": {"segments": [{"start_seconds": 0.0, "end_seconds": 0.4, "confidence": 0.9}]}, "media_type": "audio/pcm", "sample_rate_hz": 48000, "channels": 1, "source_ids": []}, "source": "listening"}'/>
-    <param name="database" expr="'/memory/floppy.sqlite'"/>
+    <param name="memory" expr="'#_scxml_' + _sessionid + '.memory'"/>
     <param name="memory_timeout_ms" expr="0"/>
   </invoke>
   <state id="boot">
