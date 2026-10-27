@@ -299,6 +299,34 @@ function selectedResult() {
   return handed_on ? ({turn: turn, handled: false, reason: 'handoff', acted: selected}) : ({turn: turn, handled: true, selected: selected});
 }
 
+// Drafts (decision D262)
+
+// The draft markers of the choices, by event: what the streamed call
+// drafts while the model writes it ({} when no choice declares one).
+function drafts() {
+  var markers = {};
+  choices.forEach(function (choice) {
+    if (choice.draft !== undefined && choice.draft !== null) {
+      markers[choice.event] = choice.draft;
+    }
+  });
+  return markers;
+}
+
+// The one target that offers the drafted event, or null.
+function draftTarget(_event) {
+  var drafted = Object(_event.data).event;
+  var targets = choices.filter(function (choice) {
+    return choice.event === drafted && choice.draft !== undefined && choice.draft !== null && typeof choice.target === 'string';
+  }).map(function (choice) { return choice.target; });
+  return targets.length === 1 ? targets[0] : null;
+}
+
+// A draft the call returned for an offered event one target offers.
+function isDraft(_event) {
+  return _event.invokeid === 'generate' && draftTarget(_event) !== null;
+}
+
 // The data a selection is sent with (decision D113): its data object, else {} (no data, null, or a non-object).
 function selectionData(s) {
   return s.data !== null && typeof s.data === 'object' && !Array.isArray(s.data) ? s.data : ({});

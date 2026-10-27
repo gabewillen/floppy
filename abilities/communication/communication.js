@@ -95,14 +95,58 @@ function responseId(_event) {
 // admitting_response (decision D242: active's one respond transition has
 // no cond, so its parent reads it as an offer)
 
-// The respond being admitted is for a response that already finished.
+// The respond being admitted is for a response that already finished, or
+// is the whole of a drafted response that ended without it (decision
+// D262).
 function isClosedAdmission() {
-  return response_id !== null && closed_responses.indexOf(response_id) >= 0;
+  return (response_id !== null && closed_responses.indexOf(response_id) >= 0)
+    || (abandoned !== null && response_origin === abandoned);
 }
 
 // The respond being admitted says something.
 function isSpokenAdmission() {
   return isSpokenReply(response);
+}
+
+// Drafts (decision D262)
+
+// A draft of a respond's part that opens a drafted response: not from the
+// sender of one that ended without its respond.
+function isOpeningDraft(_event) {
+  return _event.data.event === 'bot.ability.communication.respond' && isSpeakableDraft(_event)
+    && !(abandoned !== null && _event.origin === abandoned);
+}
+
+// A draft of the drafted response in hand, before its respond.
+function isDraftOfResponse(_event) {
+  return isDraftedResponse(_event) && isSpeakableDraft(_event);
+}
+
+// A draft speaking's contract takes: one of a reply's 64 parts, its new
+// words at most a part's 2000 characters.
+function isSpeakableDraft(_event) {
+  return typeof _event.data.part === 'number' && _event.data.part < 64 && _event.data.text.length <= 2000;
+}
+
+// From the sender of the drafted response in hand, before its respond.
+function isDraftedResponse(_event) {
+  return drafting !== null && response === null && _event.origin === drafting;
+}
+
+// The drafted response in hand ended without its respond.
+function isUnsettledDraft() {
+  return drafting !== null && response === null;
+}
+
+// A respond's draft as speaking's: the part, its new words and where they
+// start, and the part's expression on its first draft.
+function speakingDraft(_event) {
+  var draft = ({part: _event.data.part, words: _event.data.text, offset: _event.data.offset});
+  var expression = Object(_event.data.leading).expression;
+  if (expression !== null && typeof expression === 'object' && !Array.isArray(expression)) {
+    draft.expression = expression;
+  }
+  return draft;
 }
 
 // preparing_response

@@ -100,6 +100,26 @@ function isSet(value) {
   return value !== undefined && value !== null;
 }
 
+// A drafted utterance whose whole reply has not arrived yet (decision
+// D262).
+function isDrafting() {
+  return drafted && parts === null;
+}
+
+// The draft timer in hand (a bot.ability.speaking.apply.failed send).
+function isDraftTimer(_event) {
+  return draft_timer !== null && _event.sendid === draft_timer;
+}
+
+// Something was drafted to record.
+function hasDraftedWords() {
+  return /\S/.test(text);
+}
+
+function draftTimedOutLog() {
+  return 'drafted ' + operation + ' after ' + draft_timeout_ms + ' ms without its whole';
+}
+
 // encoding
 
 function nextOperation() {

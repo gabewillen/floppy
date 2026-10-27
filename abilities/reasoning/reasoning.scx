@@ -83,10 +83,18 @@
   rest as omitted="<n>". Over a budget otherwise (the stimulus alone
   overflows), the element writes the budget's message to prompt_failure and the stage fails without a model call with
   it (for example "prompt projection encoded byte budget exceeded").
-  applying ends on the generate service's done.invoke. The call streams its reply when the run's FLOPPY_STREAM
-  says the backend does (env:stream), and each generate.progress the
+  applying ends on the generate service's done.invoke. The call streams its reply (its stream <data>, true by
+  default, decision D262; with it false, when the run's FLOPPY_STREAM
+  says the backend does, env:stream), and each generate.progress the
   service returns while the reply arrives is sent on to the parent
   cognition, whose stage bound is then one of inactivity (decision D101).
+  Drafts (decision D262): the call also carries the draft markers of the
+  choices that declare one (generate's drafts, {} for none), so a streamed
+  call returns, before its result, an event per marked field's new words,
+  named by its marker; each goes on, as it arrives, to the one target that
+  offers the drafted event (_event.data.event), so a reply can be said
+  while it is written. A draft whose event more than one target offers is
+  dropped; the result is the selection of record.
 
   Choices: the body's collected choices for the turn (the <param>
   choices: the body's own and each ability's offers, each tagged with the
@@ -168,6 +176,10 @@
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
     <data id="model" expr="'gemma-4-26b-a4b'"/>
+    <!-- Whether the call asks for a streamed reply itself (decision D262:
+         on by default, so a reply can be said while it is written); false
+         leaves it to the run's FLOPPY_STREAM (decision D101). -->
+    <data id="stream" expr="true"/>
     <!-- The tier this chart thinks as (decision D144): reasoning, or
          intuition, the chat tier the cognition invokes it as. -->
     <data id="tier" expr="'reasoning'"/>
@@ -409,6 +421,8 @@
       <param name="messages" expr="messages()"/>
       <param name="schema" expr="schema"/>
       <param name="schemaname" expr="'dispatch'"/>
+      <param name="drafts" expr="drafts()"/>
+      <param name="stream" expr="stream"/>
     </invoke>
 
     <!-- A streamed reply's progress goes to the cognition, which bounds this
@@ -460,6 +474,15 @@
     </transition>
     <transition event="error.*" target="done">
       <assign location="result" expr="couldNotRunResult(_event)"/>
+    </transition>
+    <!-- A draft of a selection still being written (decision D262): any
+         other event the call returns is one, named by its event's marker,
+         and goes to the one target that offers the drafted event; a draft
+         whose event more than one target offers is dropped. -->
+    <transition event="*" cond="isDraft(_event)">
+      <send eventexpr="_event.name" targetexpr="'#_scxml_' + draftTarget(_event)">
+        <content expr="_event.data"/>
+      </send>
     </transition>
   </state>
 

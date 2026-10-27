@@ -568,6 +568,11 @@ fn layout(
     }
 }
 
+/// Reasoning that does not ask for a stream itself (its `stream` `<data>`
+/// false, decision D262), so the run's `FLOPPY_STREAM` decides.
+const NOT_STREAMED: &[(&str, &[(&str, &str)])] =
+    &[("abilities/reasoning/reasoning.scx", &[("stream", "false")])];
+
 /// Sets the run's `FLOPPY_STREAM` to `true`: the backend streams, so each
 /// model call asks for a streamed reply (decision D101).
 fn streaming(bot: &Bot) {
@@ -2532,14 +2537,14 @@ fn a_reasoning_reply_that_keeps_streaming_outlasts_the_inactivity_bound() {
     drop(run.close(WAIT));
 }
 
-/// A reply that is not streamed (the run's `FLOPPY_STREAM` is unset, the
-/// default) reports no progress, so no inactivity bound applies to it: a
+/// A reply that is not streamed (reasoning leaves it to the run, whose
+/// `FLOPPY_STREAM` is unset) reports no progress, so no inactivity bound applies to it: a
 /// sixteen-second reply outlasts the 8 s bound and the turn is reasoned,
 /// bounded by the stage's backstop alone (decision D101).
 #[test]
 fn a_reasoning_reply_that_is_not_streamed_is_bounded_by_the_backstop_alone() {
     let mock = Mock::start();
-    let bot = layout(&mock, Decision::Abstain, Generation::Slow, &[]);
+    let bot = layout(&mock, Decision::Abstain, Generation::Slow, NOT_STREAMED);
     let mut run = start_activated(&bot, &[("bounds", STALLED_REASONING_BOUNDS)]);
     say(&mut run, "hello");
     let records = run.until(WAIT, turn_ended);
@@ -2564,7 +2569,7 @@ fn a_reasoning_reply_that_is_not_streamed_is_bounded_by_the_backstop_alone() {
 #[test]
 fn a_reasoning_reply_the_run_does_not_stream_is_bounded_by_the_backstop_alone() {
     let mock = Mock::start();
-    let bot = layout(&mock, Decision::Abstain, Generation::Slow, &[]);
+    let bot = layout(&mock, Decision::Abstain, Generation::Slow, NOT_STREAMED);
     set_stream(&bot, "false");
     let mut run = start_activated(&bot, &[("bounds", STALLED_REASONING_BOUNDS)]);
     say(&mut run, "hello");

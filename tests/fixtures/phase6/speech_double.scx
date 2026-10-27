@@ -23,9 +23,16 @@
     'silent'  no answer, ever (a request that hangs)
   then it ends (final), as the service does, except 'silent'. It logs
   speech.encode with the words of the parts it was given, joined.
+
+  Without parts (a drafted encoding, decision D262) it answers as the
+  service does: bot.ability.ready first, then for each
+  bot.ability.speaking.draft it is sent with words, a chunk of the words'
+  length / 10 seconds (logging speech.draft and the words), and on the
+  bot.ability.vocal.speech.encoding.input that follows (logging
+  speech.final and its words) the output, whose duration is the chunks'.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
-       version="1.0" datamodel="ecmascript" name="speech_double" initial="answering">
+       version="1.0" datamodel="ecmascript" name="speech_double" initial="starting">
   <datamodel>
     <data id="mode" expr="'encode'"/>
     <data id="stream_delay" expr="'3s'"/>
@@ -36,7 +43,43 @@
     <data id="voice" expr="null"/>
     <data id="output" expr="null"/>
     <data id="media_type" expr="null"/>
+    <data id="sequence" expr="0"/>
+    <data id="drafted_seconds" expr="0"/>
   </datamodel>
+
+  <state id="starting">
+    <transition cond="parts === null" target="drafted"/>
+    <transition target="answering"/>
+  </state>
+
+  <state id="drafted">
+    <onentry>
+      <send event="bot.ability.ready" target="#_parent"/>
+    </onentry>
+    <transition event="bot.ability.speaking.draft" cond="_event.data.words.length &gt; 0">
+      <log label="speech.draft" expr="_event.data.words"/>
+      <send event="bot.ability.vocal.speech.encoding.chunk" target="#_parent">
+        <param name="audio" expr="output.replace(/(\.[^./]+)?$/, '.' + sequence + '$&amp;')"/>
+        <param name="sequence" expr="sequence"/>
+        <param name="media_type" expr="media_type"/>
+        <param name="sample_rate_hz" expr="24000"/>
+        <param name="channels" expr="1"/>
+        <param name="duration" expr="_event.data.words.length / 10"/>
+      </send>
+      <assign location="sequence" expr="sequence + 1"/>
+      <assign location="drafted_seconds" expr="drafted_seconds + _event.data.words.length / 10"/>
+    </transition>
+    <transition event="bot.ability.vocal.speech.encoding.input" target="done">
+      <log label="speech.final" expr="_event.data.parts.map(function (part) { return part.words || ''; }).join('')"/>
+      <send event="bot.ability.vocal.speech.encoding.output" target="#_parent">
+        <param name="audio" expr="output"/>
+        <param name="media_type" expr="media_type"/>
+        <param name="sample_rate_hz" expr="24000"/>
+        <param name="channels" expr="1"/>
+        <param name="duration" expr="drafted_seconds"/>
+      </send>
+    </transition>
+  </state>
 
   <state id="answering">
     <onentry>
