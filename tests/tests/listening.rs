@@ -516,6 +516,35 @@ fn a_quiet_utterance_is_dropped_and_sounds_are_interpreted_in_order() {
     );
 }
 
+/// The sound that arrives while one is in hand has its voice detection
+/// asked at once, so the closing silence is detected while the utterance
+/// still is.
+#[test]
+fn the_next_sound_is_detected_while_the_one_in_hand_is() {
+    let harness = layout(&[]);
+    let (mut run, backend) = started(
+        &harness,
+        "the_next_sound_is_detected_while_the_one_in_hand_is",
+        &[("slow.wav", spoken_wav("slow")), ("silence.wav", silent_wav())],
+    );
+    let slow = sound("slow.wav", &json!({"received_level_db": 54}));
+    let silent = sound("silence.wav", &json!({"received_level_db": 54}));
+    utter(&mut run, &slow, &silent);
+    run.until(WAIT, label_is("harness.speech"));
+    let finished = close(run, "the_next_sound_is_detected_while_the_one_in_hand_is");
+    let detected: Vec<Json> = backend
+        .received_at("/vad")
+        .into_iter()
+        .filter(|request| request["heard"] == "slow")
+        .collect();
+    assert_eq!(detected.len(), 1, "{detected:?}");
+    assert_eq!(detected[0]["overlapped"], true, "{detected:?}");
+    assert_eq!(
+        json_texts(&finished.all, "harness.speech"),
+        vec![speech("slow", &slow)]
+    );
+}
+
 #[test]
 fn the_efference_copy_opens_a_window_that_closes_itself() {
     let harness = layout(&[]);
