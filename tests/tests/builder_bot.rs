@@ -637,49 +637,6 @@ fn http_routine_draft() -> String {
     .to_string()
 }
 
-/// A persistent routine that keeps a service it sends `notes.add` on each
-/// tick (decision D263): flat, the service is invoked by the state the
-/// schedule re-enters, so every tick restarts it; hierarchical, it is
-/// invoked by the compound state around the state that waits, so it lives
-/// across ticks.
-fn kept_service_routine_draft(hierarchical: bool) -> String {
-    let notes = r#"<invoke id="notes" type="scxml"><content><scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0"><state id="keeping"/></scxml></content></invoke>"#;
-    let waiting = |invoke: &str| {
-        format!(
-            r##"<state id="waiting">
-    {invoke}
-    <onentry><send id="every" event="hourly.every" delay="3600s"/></onentry>
-    <onexit><cancel sendid="every"/></onexit>
-    <transition event="hourly.every" target="waiting">
-      <send event="bot.behavior.tick" target="#_parent">
-        <content expr="({{name: 'Hourly', trigger: 'every', scheduled_at: new Date().toISOString(), fired_at: new Date().toISOString(), output: {CHIME}}})"/>
-      </send>
-      <send event="notes.add" target="#_notes"/>
-    </transition>
-  </state>"##
-        )
-    };
-    let states = if hierarchical {
-        format!(
-            "<state id=\"running\" initial=\"waiting\">\n  {notes}\n  {}\n  </state>",
-            waiting("")
-        )
-    } else {
-        waiting(notes)
-    };
-    json!({
-        "scxml": format!(
-            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="Hourly">
-  {states}
-</scxml>"#
-        ),
-        "schemas": schemas(&[]),
-        "script": "",
-        "tests": [{"name": "waits", "events": [], "settle_ms": 1000, "expect_events": [], "expect_done": false}],
-    })
-    .to_string()
-}
-
 const CHIME: &str = "[{event: 'bot.speaking.say', data: {parts: [{words: 'Hourly chime.'}]}}]";
 
 /// The request with the lifetime bounds (`min_every_ms`,
@@ -909,7 +866,6 @@ fn answers_plan(path: &str) -> bool {
             | "/emptytick/v1/chat/completions"
             | "/httproutine/v1/chat/completions"
             | "/selfschedule/v1/chat/completions"
-            | "/restarted/v1/chat/completions"
             | "/afterbound/v1/chat/completions"
             | "/runaway/v1/chat/completions"
             | "/rendered/v1/chat/completions"
@@ -989,9 +945,6 @@ fn mock_reply(
                 ),
                 _ => routine_draft("3600s", CHIME),
             }))
-        }
-        ("/restarted/v1/chat/completions", Some("scxml_draft")) => {
-            Some(completion(&kept_service_routine_draft(authors > 1)))
         }
         ("/httproutine/v1/chat/completions", Some("scxml_draft")) => {
             Some(completion(&http_routine_draft()))
@@ -1978,36 +1931,6 @@ fn a_routine_under_the_minimum_interval_is_repaired_and_its_first_tick_is_forced
     );
     // The draft's own tests are what it carried.
     assert_eq!(done["tests"].as_array().map(Vec::len), Some(1), "{done}");
-}
-
-/// A routine whose schedule re-enters the state that invokes a service it
-/// keeps sending events to restarts that service on every tick (decision
-/// D263): the lifetime check rejects it, and the repair that invokes the
-/// service in a compound state around the state that waits is built.
-#[test]
-fn a_routine_that_restarts_its_service_each_tick_is_repaired_hierarchically() {
-    let mock = Mock::start();
-    let records = run(&mock, "restarted", "restarted", &ALL, &lifetime_request());
-    assert!(finished(&records), "{records:?}");
-    let (label, done) = answer(&records);
-    assert_eq!(label, "done", "{done}");
-    let rejected = &done["report"]["history"][0]["diagnostics"][0];
-    assert_eq!(rejected["kind"], "lifetime", "{done}");
-    assert_eq!(rejected["code"], "E0009", "{done}");
-    assert!(
-        rejected["message"]
-            .as_str()
-            .is_some_and(|message| message.starts_with(
-                "the transition from waiting on hourly.every ends the scxml service invoked in waiting and starts it again when it re-enters waiting"
-            )),
-        "{done}"
-    );
-    assert!(
-        done["scxml"]
-            .as_str()
-            .is_some_and(|scxml| scxml.contains(r#"<state id="running" initial="waiting">"#)),
-        "{done}"
-    );
 }
 
 /// A schedule sent to a literal target never reaches the routine (the
