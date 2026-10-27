@@ -2,17 +2,16 @@
 <!-- voice_diarization-1: spans with start_seconds/end_seconds and a probability are read too. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
-  <invoke id="voice_diarization" type="scxml" src="../../../voice_diarization.scx">
-    <param name="audio" expr="'media/utterance.wav'"/>
-    <param name="media_type" expr="'audio/wav'"/>
-    <param name="output" expr="'media/segment'"/>
-  </invoke>
+  <invoke id="voice_diarization" type="scxml" src="../../../voice_diarization.scx"/>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.voice_diarization" cond='JSON.stringify(_event.data) === "{\"segments\":[{\"audio\":\"media/segment-0\",\"channels\":1,\"confidence\":0.25,\"end_seconds\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":8000,\"start_seconds\":0}]}"' target="step1"/>
+    <onentry>
+      <send event="bot.ability.hearing.voice.diarization.input" target="#_voice_diarization"><content expr="({id: &quot;r1&quot;, audio: 'media/utterance.wav', media_type: 'audio/wav', output: 'media/segment'})"/></send>
+    </onentry>
+    <transition event="bot.ability.hearing.voice.diarization.output" cond='_event.data.id === "r1" &amp;&amp; (function (_event) { return JSON.stringify(_event.data) === "{\"segments\":[{\"audio\":\"media/segment-0\",\"channels\":1,\"confidence\":0.25,\"end_seconds\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":8000,\"start_seconds\":0}]}"; })({name: _event.name, data: (function (data) { var copy = JSON.parse(JSON.stringify(data)); delete copy.id; return copy; })(_event.data)})' target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

@@ -94,7 +94,7 @@ const BODY_EVENTS: [&str; 12] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 112] = [
+const ABILITY_EVENTS: [&str; 124] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -200,6 +200,19 @@ const ABILITY_EVENTS: [&str; 112] = [
     "bot.ability.reading.image.decoded",
     "bot.ability.reading.unreadable.output.ready",
     "bot.ability.reading.output.encoded",
+    // The interpretation's long-lived stages: their requests and answers.
+    "bot.ability.hearing.voice.detection.input",
+    "bot.ability.hearing.voice.detection.output",
+    "bot.ability.hearing.sound.classification.input",
+    "bot.ability.hearing.sound.classification.output",
+    "bot.ability.hearing.voice.diarization.input",
+    "bot.ability.hearing.voice.diarization.output",
+    "bot.ability.hearing.voice.identification.input",
+    "bot.ability.hearing.voice.identification.output",
+    "bot.ability.hearing.speech.decoding.input",
+    "bot.ability.hearing.speech.decoding.output",
+    "bot.ability.classifying.input",
+    "bot.ability.classifying.output",
     // The turn detector (the conversation's turn_detector stage).
     "bot.ability.turn_detector.turn.start",
     "bot.ability.turn_detector.turn.update",

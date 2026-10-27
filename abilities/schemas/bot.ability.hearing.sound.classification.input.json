@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.hearing.sound.classification.input",
+  "additionalProperties": false,
+  "description": "One sound for SoundClassification to label (mosfet.py's SoundClassification input).",
+  "properties": {
+    "id": {
+      "description": "The requester's id for this request, echoed by the reply.",
+      "title": "Id",
+      "type": "string",
+      "minLength": 1
+    },
+    "audio": {
+      "description": "Reference (a URI reference) to the audio this stimulus carries; floppy passes media by reference, never as bytes [floppy field].",
+      "examples": [
+        "media/audio-1"
+      ],
+      "format": "uri-reference",
+      "minLength": 1,
+      "title": "Audio",
+      "type": "string"
+    },
+    "media_type": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional media type or codec label, such as audio/pcm or audio/opus.",
+      "examples": [
+        "audio/pcm",
+        "audio/opus"
+      ],
+      "title": "Media Type"
+    },
+    "kind": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional low-cardinality acoustic provenance hint. Prefer domain-qualified labels when the source is clear (for example phone.ringing, phone.call, ambient, knock) so models do not confuse bare tokens like ring. Not a linguistic interpretation.",
+      "examples": [
+        "phone.ringing",
+        "phone.call",
+        "ambient",
+        "knock"
+      ],
+      "title": "Kind"
+    }
+  },
+  "required": [
+    "id",
+    "audio"
+  ],
+  "type": "object"
+}

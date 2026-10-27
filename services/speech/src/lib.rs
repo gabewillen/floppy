@@ -152,8 +152,7 @@
 //! data, except that a media step that succeeds writes no event and
 //! resolves with its result as the done data, and that an encoding writes
 //! each of its chunks first, as it is cut (decision D203). The names and
-//! data are those of the event schemas (`services/speech/schemas/` and
-//! `abilities/schemas/`):
+//! data are those of the event schemas (`abilities/schemas/`):
 //!
 //! * [`chunks::CHUNK_EVENT`] `{"audio": R, "sequence": S, "media_type": M,
 //!   "sample_rate_hz": N, "channels": C, "duration": D}`, before the

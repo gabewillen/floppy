@@ -2,15 +2,16 @@
 <!-- speech_decoding-1: the default decoder's transcription text comes back trimmed as the done data. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
-  <invoke id="speech_decoding" type="scxml" src="../../../speech_decoding.scx">
-    <param name="audio" expr="'media/speech.wav'"/>
-  </invoke>
+  <invoke id="speech_decoding" type="scxml" src="../../../speech_decoding.scx"/>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.speech_decoding" cond='_event.data.text === "hello there" &amp;&amp; Object.keys(_event.data).length === 1' target="step1"/>
+    <onentry>
+      <send event="bot.ability.hearing.speech.decoding.input" target="#_speech_decoding"><content expr="({id: &quot;r1&quot;, audio: 'media/speech.wav'})"/></send>
+    </onentry>
+    <transition event="bot.ability.hearing.speech.decoding.output" cond='_event.data.id === "r1" &amp;&amp; (function (_event) { return _event.data.text === "hello there" &amp;&amp; Object.keys(_event.data).length === 1; })({name: _event.name, data: (function (data) { var copy = JSON.parse(JSON.stringify(data)); delete copy.id; return copy; })(_event.data)})' target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

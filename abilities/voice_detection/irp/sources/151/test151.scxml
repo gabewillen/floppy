@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- voice_detection-6: a request that arrives while one is in flight replaces it. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="voice_detection" type="scxml" src="../../../voice_detection.scx"/>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <onentry>
+      <send event="bot.ability.hearing.voice.detection.input" target="#_voice_detection"><content expr="({id: &quot;r1&quot;, audio: 'media/sound.wav', media_type: 'audio/wav', output: 'media/sound.pcm'})"/></send>
+      <send event="bot.ability.hearing.voice.detection.input" target="#_voice_detection"><content expr="({id: &quot;r2&quot;, audio: 'media/sound.raw', sample_rate_hz: 8000, channels: 1, output: 'media/sound.pcm'})"/></send>
+    </onentry>
+    <transition event="bot.ability.hearing.voice.detection.output" cond='_event.data.id === "r2" &amp;&amp; Object.keys(_event.data).sort().join() === "id,segments,sound"' target="step1"/>
+  </state>
+  <state id="step1">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

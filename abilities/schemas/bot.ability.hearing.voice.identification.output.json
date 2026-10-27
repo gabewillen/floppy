@@ -1,0 +1,227 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.hearing.voice.identification.output",
+  "description": "Voice embeddings identified from segmented voice audio.",
+  "properties": {
+    "id": {
+      "description": "The requester's id, echoed when the answer is the long-lived stage's reply to a request [floppy field].",
+      "title": "Id",
+      "type": "string",
+      "minLength": 1
+    },
+    "segments": {
+      "description": "The segments embedded.",
+      "items": {
+        "description": "One voice segment: a reference to its clipped PCM with its format and span [floppy field].",
+        "properties": {
+          "audio": {
+            "description": "Reference (a URI reference) to the audio this stimulus carries; floppy passes media by reference, never as bytes [floppy field].",
+            "examples": [
+              "media/audio-1"
+            ],
+            "format": "uri-reference",
+            "minLength": 1,
+            "title": "Audio",
+            "type": "string"
+          },
+          "media_type": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional media type or codec label, such as audio/pcm or audio/opus.",
+            "examples": [
+              "audio/pcm",
+              "audio/opus"
+            ],
+            "title": "Media Type"
+          },
+          "sample_rate_hz": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional sample rate for raw or decoded audio, measured in hertz.",
+            "examples": [
+              48000
+            ],
+            "title": "Sample Rate Hz"
+          },
+          "channels": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional number of audio channels represented by the chunk.",
+            "examples": [
+              1,
+              2
+            ],
+            "title": "Channels"
+          },
+          "start_seconds": {
+            "description": "Start of the segment, in seconds from the start of the utterance.",
+            "minimum": 0.0,
+            "title": "Start Seconds",
+            "type": "number"
+          },
+          "end_seconds": {
+            "description": "End of the segment, in seconds from the start of the utterance.",
+            "minimum": 0.0,
+            "title": "End Seconds",
+            "type": "number"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional provider confidence for this segment, from 0 to 1.",
+            "title": "Confidence"
+          }
+        },
+        "required": [
+          "audio"
+        ],
+        "title": "VoiceSegment",
+        "type": "object"
+      },
+      "title": "Segments",
+      "type": "array"
+    },
+    "embeddings": {
+      "description": "Voice embeddings identified for the input voice segments, in input order. Empty means none, and an opening voice is then heard unidentified (decision D177).",
+      "examples": [
+        [
+          {
+            "confidence": 0.91,
+            "embedding": [
+              0.12,
+              -0.08,
+              0.31
+            ],
+            "model": "voice-embedding-v1"
+          }
+        ]
+      ],
+      "items": {
+        "description": "Provider-neutral embedding value returned for an identified voice segment.",
+        "examples": [
+          {
+            "confidence": 0.91,
+            "embedding": [
+              0.12,
+              -0.08,
+              0.31
+            ],
+            "model": "voice-embedding-v1"
+          }
+        ],
+        "properties": {
+          "embedding": {
+            "description": "Provider-neutral numeric voice embedding produced by the classifier. Providers decide how to index and compare the vector; it is not a human-readable speaker label.",
+            "examples": [
+              [
+                0.12,
+                -0.08,
+                0.31
+              ]
+            ],
+            "items": {
+              "type": "number"
+            },
+            "minItems": 1,
+            "title": "Embedding",
+            "type": "array"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional embedding model identifier that produced this voice embedding.",
+            "examples": [
+              "voice-embedding-v1"
+            ],
+            "title": "Model"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional provider confidence that the voice embedding represents this speaker, normalized from 0.0 to 1.0.",
+            "examples": [
+              0.91
+            ],
+            "title": "Confidence"
+          }
+        },
+        "required": [
+          "embedding"
+        ],
+        "title": "VoiceEmbedding",
+        "type": "object"
+      },
+      "title": "Embeddings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "embeddings"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "embeddings": [
+        {
+          "confidence": 0.91,
+          "embedding": [
+            0.12,
+            -0.08,
+            0.31
+          ],
+          "model": "voice-embedding-v1"
+        }
+      ]
+    }
+  ]
+}

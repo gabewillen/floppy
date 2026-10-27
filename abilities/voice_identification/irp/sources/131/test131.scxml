@@ -2,20 +2,16 @@
 <!-- voice_identification-4: a sound that is not there cannot be clipped. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
-  <invoke id="voice_identification" type="scxml" src="../../../voice_identification.scx">
-    <param name="audio" expr="'media/missing.raw'"/>
-    <param name="sample_rate_hz" expr="8000"/>
-    <param name="channels" expr="1"/>
-    <param name="start_seconds" expr="0"/>
-    <param name="end_seconds" expr="1"/>
-    <param name="output" expr="'media/clip'"/>
-  </invoke>
+  <invoke id="voice_identification" type="scxml" src="../../../voice_identification.scx"/>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.voice_identification" cond='_event.data.message === "Voice identification opening segment conversion failed: Voice segment clipping failed: the audio cannot be read." &amp;&amp; Object.keys(_event.data).length === 1' target="step1"/>
+    <onentry>
+      <send event="bot.ability.hearing.voice.identification.input" target="#_voice_identification"><content expr="({id: &quot;r1&quot;, audio: 'media/missing.raw', sample_rate_hz: 8000, channels: 1, start_seconds: 0, end_seconds: 1, output: 'media/clip'})"/></send>
+    </onentry>
+    <transition event="bot.ability.failed" cond='_event.data.id === "r1" &amp;&amp; (function (_event) { return _event.data.message === "Voice identification opening segment conversion failed: Voice segment clipping failed: the audio cannot be read." &amp;&amp; Object.keys(_event.data).length === 1; })({name: _event.name, data: (function (data) { var copy = JSON.parse(JSON.stringify(data)); delete copy.id; return copy; })(_event.data)})' target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

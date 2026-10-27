@@ -3,7 +3,6 @@
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="speech_decoding" type="scxml" src="../../../speech_decoding.scx">
-    <param name="audio" expr="'media/speech.wav'"/>
     <param name="provider" expr="null"/>
     <param name="model" expr="'whisper-1'"/>
   </invoke>
@@ -12,7 +11,10 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.speech_decoding" cond="_event.data.message === &quot;Speech decoding failed: the backend's answer is malformed.&quot; &amp;&amp; Object.keys(_event.data).length === 1" target="step1"/>
+    <onentry>
+      <send event="bot.ability.hearing.speech.decoding.input" target="#_speech_decoding"><content expr="({id: &quot;r1&quot;, audio: 'media/speech.wav'})"/></send>
+    </onentry>
+    <transition event="bot.ability.failed" cond="_event.data.id === &quot;r1&quot; &amp;&amp; (function (_event) { return _event.data.message === &quot;Speech decoding failed: the backend's answer is malformed.&quot; &amp;&amp; Object.keys(_event.data).length === 1; })({name: _event.name, data: (function (data) { var copy = JSON.parse(JSON.stringify(data)); delete copy.id; return copy; })(_event.data)})" target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

@@ -11,6 +11,14 @@ Last updated: 2026-10-26.
 
 ## Current state (2026-10-09) — resume here
 
+- **Latency hill climb: long-lived hearing (2026-10-27, D264):** the
+  interpretation invokes its six hearing stages once and sends each a
+  request per sound (`<name>.input {id, ...}`, answered by `<name>.output`
+  or `bot.ability.failed` with the id), as mosfet.py's Interpretation holds
+  them. Still restarted per turn and next in line
+  (`/mnt/project-files/floppy-perf/long-lived-invokes.md`): cognition's
+  autonomy, decision, intuition and reasoning, embedding, vocal; then the
+  turn detector and the candidate loop folded into states.
 - **Latency hill climb: speech out (2026-10-27, D262):** a reply is
   said while the model is still writing it (mosfet.py's drafts).
   Communication's respond offer declares a draft marker; reasoning passes
