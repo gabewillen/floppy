@@ -434,6 +434,113 @@ fn a_schedule_with_a_schema_is_a_lifetime_error() {
     assert_eq!(taken.errors, Vec::<Json>::new());
 }
 
+/// A service the machine sends events to lives as long as the state that
+/// invokes it: a routine whose schedule re-enters the state that invokes
+/// it restarts the service on every tick, and the same routine invoking it
+/// in a compound state around the waiting state keeps it across ticks.
+#[test]
+fn a_service_a_transition_restarts_is_a_lifetime_error() {
+    let routine = |states: &str| {
+        format!(
+            r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="running">
+{states}
+</scxml>"#
+        )
+    };
+    let flat = routine(
+        r##"  <state id="running">
+    <invoke id="notes" type="scxml" src="notes.scx"/>
+    <onentry><send event="tick.every" delay="60s" id="t"/></onentry>
+    <onexit><cancel sendid="t"/></onexit>
+    <transition event="tick.every" target="running">
+      <send event="bot.behavior.tick" target="#_parent"/>
+      <send event="notes.add" target="#_notes"/>
+    </transition>
+  </state>"##,
+    );
+    let restarted = lifetime_errors(&flat, Some(60000.0), Some(1000.0));
+    assert_eq!(restarted.errors.len(), 1, "{:?}", restarted.errors);
+    assert_eq!(restarted.errors[0]["code"], "E0009");
+    assert!(
+        restarted.errors[0]["message"].as_str().is_some_and(|message| message.starts_with(
+            "the transition from running on tick.every ends the notes.scx service invoked in running and starts it again when it re-enters running"
+        )),
+        "{:?}",
+        restarted.errors
+    );
+    // Without bounds the service is still checked.
+    assert_eq!(lifetime_errors(&flat, None, None).errors.len(), 1);
+    let hierarchical = routine(
+        r##"  <state id="running" initial="waiting">
+    <invoke id="notes" type="scxml" src="notes.scx"/>
+    <state id="waiting">
+      <onentry><send event="tick.every" delay="60s" id="t"/></onentry>
+      <onexit><cancel sendid="t"/></onexit>
+      <transition event="tick.every" target="waiting">
+        <send event="bot.behavior.tick" target="#_parent"/>
+        <send event="notes.add" target="#_notes"/>
+      </transition>
+    </state>
+  </state>"##,
+    );
+    assert_eq!(
+        lifetime_errors(&hierarchical, Some(60000.0), Some(1000.0)).errors,
+        Vec::<Json>::new()
+    );
+    // A service that answers one request with done.invoke, which the
+    // machine never sends to, may be invoked again for each request.
+    let request = flat.replace(r##"<send event="notes.add" target="#_notes"/>"##, "");
+    assert_eq!(
+        lifetime_errors(&request, Some(60000.0), Some(1000.0)).errors,
+        Vec::<Json>::new()
+    );
+}
+
+/// One service invoked by each of two steps ends when the machine leaves
+/// the first and starts again in the second; an internal transition inside
+/// the compound state that invokes it never leaves it.
+#[test]
+fn a_service_invoked_again_by_the_next_step_is_a_lifetime_error() {
+    let steps = r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+  <state id="asking">
+    <invoke id="a" src="notes.scx"/>
+    <onentry><send event="notes.add" target="#_a"/></onentry>
+    <transition event="next" target="answering"/>
+  </state>
+  <state id="answering">
+    <invoke id="b" src="notes.scx"/>
+    <onentry><send event="notes.read" target="#_b"/></onentry>
+  </state>
+</scxml>"##;
+    let checked = lifetime_errors(steps, None, None);
+    assert_eq!(checked.errors.len(), 1, "{:?}", checked.errors);
+    assert!(
+        checked.errors[0]["message"].as_str().is_some_and(|message| message.starts_with(
+            "the transition from asking on next ends the notes.scx service invoked in asking and starts it again in answering"
+        )),
+        "{:?}",
+        checked.errors
+    );
+    let internal = r#"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+  <state id="talking" initial="asking">
+    <invoke id="a" src="notes.scx" autoforward="true"/>
+    <transition event="again" type="internal" target="asking"/>
+    <state id="asking"><transition event="next" target="answering"/></state>
+    <state id="answering"><transition event="next" target="talking"/></state>
+  </state>
+</scxml>"#;
+    let checked = lifetime_errors(internal, None, None);
+    // answering's external transition to talking leaves and re-enters it.
+    assert_eq!(checked.errors.len(), 1, "{:?}", checked.errors);
+    assert!(
+        checked.errors[0]["message"].as_str().is_some_and(|message| message.starts_with(
+            "the transition from answering on next ends the notes.scx service invoked in talking and starts it again when it re-enters talking"
+        )),
+        "{:?}",
+        checked.errors
+    );
+}
+
 #[test]
 fn malformed_lifetime_checks_raise_error_execution_and_assign_nothing() {
     assert_eq!(
