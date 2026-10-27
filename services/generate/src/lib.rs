@@ -79,6 +79,11 @@
 //! * `thinking_token_budget` (optional, a whole number from 1 to
 //!   [`MAX_COMPLETION_TOKENS`]): sent as `thinking_token_budget`, the
 //!   extra body key with which vLLM bounds a reasoning model's thinking.
+//! * `drafts` (optional, requiring a schema; a JSON object, or a string
+//!   holding one, of draft markers by offered event, `{field, event,
+//!   within?, leading?}` each, mosfet.py's `Draft`, decision D262): what a
+//!   streamed call drafts while the model writes it (see "Drafts"). An
+//!   empty object drafts nothing.
 //!
 //! Any other parameter, a parameter given twice, or a malformed value
 //! rejects the start: the `<invoke>` raises `error.execution` and nothing is
@@ -177,6 +182,23 @@
 //! armed by the first progress event and re-armed by each later one) rather
 //! than by its whole duration. A reply that is not streamed (one
 //! completion, whenever its head arrives) returns none.
+//!
+//! # Drafts
+//!
+//! With `drafts`, a streamed call also returns, before its result, the
+//! words of each marked field while the model is still writing them
+//! ([`drafts`], decision D262, mosfet.py's `DraftParser`): an event named
+//! by the marker's `event`, `{"text": T, "offset": O, "event": E, "item":
+//! I, "part": P, "seq": S, "leading": L}` (mosfet.py's `DraftData`), `T`
+//! the field's newly written text after its first `O` characters, of
+//! offered event `E` (item `I` of the call's `events`, part `P` of the
+//! marker's `within` array when it names one), `S` its order among the
+//! call's drafts, and `L` the marker's leading fields on a field's first
+//! draft. The drafts are returned at most once every [`drafts::DRAFT_INTERVAL_NS`]
+//! of the session's logical clock (what one interval wrote is one draft),
+//! and only for the call's first marked item. They are never checked: the
+//! result is the selection of record. A reply that is not streamed, or not
+//! a success, returns none.
 //!
 //! The invoking document describes both with `event:schema` on the
 //! transitions that take them (`bots/builder/builder.scxml`). The service
@@ -307,6 +329,8 @@
 use scxml_event_schema::{CompiledSchema, canonical_json};
 use scxml_types::{DataValue as Data, FiniteNumber, exceeds_wasm_bound, wasm_bound};
 use serde_json::{Map, Value as Json};
+
+pub mod drafts;
 
 /// The service's name: the last path segment of its repository service URI
 /// before the tag.
@@ -590,6 +614,10 @@ pub struct Generation {
     /// The embeddings asked for in place of a completion (`input`); the
     /// conversation is empty then.
     pub embeddings: Option<Embeddings>,
+    /// The draft markers of the offered events (`drafts`): a streamed
+    /// call's marked fields are returned as drafts while they are written
+    /// ([`drafts`]). Empty without the parameter.
+    pub drafts: std::collections::BTreeMap<String, drafts::Marker>,
 }
 
 /// The closed failure codes of [`FAILED_EVENT`].
@@ -1209,6 +1237,7 @@ pub fn parse_parameters<'a>(
     let mut thinking_token_budget = None;
     let mut input = None;
     let mut dimensions = None;
+    let mut drafts = None;
     for (name, value) in parameters {
         let slot = match name {
             "model" => &mut model,
@@ -1225,6 +1254,7 @@ pub fn parse_parameters<'a>(
             "thinking_token_budget" => &mut thinking_token_budget,
             "input" => &mut input,
             "dimensions" => &mut dimensions,
+            "drafts" => &mut drafts,
             _ => return Err("generate takes no parameter of that name"),
         };
         if slot.replace(value).is_some() {
@@ -1253,6 +1283,7 @@ pub fn parse_parameters<'a>(
             tool_choice,
             temperature,
             thinking_token_budget,
+            drafts,
         ];
         if conversation.iter().any(Option::is_some) {
             return Err("generate input takes only model and dimensions");
@@ -1276,6 +1307,10 @@ pub fn parse_parameters<'a>(
     )?;
     let temperature = temperature_parameter(temperature)?;
     let schema = tool_parameter(schema, schema_name, tool_choice_parameter(tool_choice)?)?;
+    let drafts = drafts_parameter(drafts)?;
+    if !drafts.is_empty() && schema.is_none() {
+        return Err("generate drafts requires a schema");
+    }
     Ok(Generation {
         model,
         messages: conversation,
@@ -1286,7 +1321,23 @@ pub fn parse_parameters<'a>(
         temperature,
         thinking_token_budget,
         embeddings: None,
+        drafts,
     })
+}
+
+/// `drafts`: absent, or a JSON object of draft markers ([`drafts::markers`]).
+fn drafts_parameter(
+    value: Option<&Data>,
+) -> Result<std::collections::BTreeMap<String, drafts::Marker>, &'static str> {
+    match value {
+        None => Ok(std::collections::BTreeMap::new()),
+        Some(Data::JsonObject(text) | Data::String(text)) => {
+            let declared: Json = serde_json::from_str(text)
+                .map_err(|_| "generate drafts must be a JSON object of markers")?;
+            drafts::markers(&declared)
+        }
+        Some(_) => Err("generate drafts must be a JSON object of markers"),
+    }
 }
 
 /// The embeddings generation of `input` (see [`parse_parameters`]).
@@ -1308,6 +1359,7 @@ fn embeddings_generation(
             input: input_parameter(input)?,
             dimensions: dimensions_parameter(dimensions)?,
         }),
+        drafts: std::collections::BTreeMap::new(),
     })
 }
 
@@ -2720,6 +2772,21 @@ mod guest {
         }
     }
 
+    /// A draft, returned as its marker's event.
+    fn draft_event(draft: &super::drafts::Draft) -> Event {
+        Event {
+            name: draft.name.clone(),
+            event_type: EventType::External,
+            send_id: None,
+            origin: None,
+            origin_type: None,
+            invoke_id: None,
+            data: DataValue::JsonObject(super::canonical_json(&draft.data())),
+            raw: None,
+            trace_context: None,
+        }
+    }
+
     fn slot(references: &[SlotReference], name: &str) -> Option<u32> {
         references
             .iter()
@@ -2755,7 +2822,7 @@ mod guest {
     /// to make first.
     enum Plan {
         Return(Returned),
-        Fetch(Generation, HttpRequest, bool, usize),
+        Fetch(Box<Generation>, HttpRequest, bool, usize),
     }
 
     fn plan(request: InvokeRequest) -> Result<Plan, ComponentError> {
@@ -2810,7 +2877,12 @@ mod guest {
                 })
                 .collect(),
         };
-        Ok(Plan::Fetch(generation, http, streamed, built.request_bytes))
+        Ok(Plan::Fetch(
+            Box::new(generation),
+            http,
+            streamed,
+            built.request_bytes,
+        ))
     }
 
     #[allow(
@@ -2843,7 +2915,7 @@ mod guest {
                     // Suspends only this task, never the invoking session.
                     Plan::Fetch(generation, http, streamed, request_bytes) => {
                         let answered = if streamed {
-                            match receive(http, &mut returned).await {
+                            match receive(http, drafter(&generation), &mut returned).await {
                                 Some(answered) => answered,
                                 // The invoking session stopped reading.
                                 None => return,
@@ -2896,8 +2968,24 @@ mod guest {
     /// as it arrives, returning [`super::PROGRESS_EVENT`] on `returned` as
     /// [`super::Progress`] says; the whole reply once its body ended, or
     /// `None` when the invoking session stopped reading `returned`.
+    /// The call's draft reader: its markers, and the data keys that tell a
+    /// marked event before its name is written (the dispatch schema's).
+    fn drafter(generation: &super::Generation) -> Option<super::drafts::DraftParser> {
+        if generation.drafts.is_empty() {
+            return None;
+        }
+        let shapes = generation
+            .schema
+            .as_ref()
+            .map_or_else(Default::default, |schema| {
+                super::drafts::shapes(&schema.parameters, &generation.drafts)
+            });
+        Some(super::drafts::DraftParser::new(generation.drafts.clone()).with_shapes(shapes))
+    }
+
     async fn receive(
         http: HttpRequest,
+        parser: Option<super::drafts::DraftParser>,
         returned: &mut wit_bindgen::StreamWriter<Event>,
     ) -> Option<Result<Response, TransportFailure>> {
         let (status, mut body, end) = match outbound_http::send(http).await {
@@ -2906,8 +2994,12 @@ mod guest {
         };
         let mut bytes = Vec::new();
         let mut progress = super::Progress::default();
+        let mut parser = parser.filter(|_| (200..300).contains(&status));
+        let mut arguments = super::drafts::Arguments::default();
+        let mut pending = super::drafts::Pending::default();
         loop {
             let (result, read) = body.read(Vec::with_capacity(READ_BYTES)).await;
+            let ended = !matches!(result, wit_bindgen::StreamResult::Complete(_));
             if !read.is_empty() {
                 bytes.extend_from_slice(&read);
                 if progress.read(&bytes, monotonic_clock::now())
@@ -2918,8 +3010,18 @@ mod guest {
                 {
                     return None;
                 }
+                if let Some(parser) = &mut parser {
+                    pending.extend(parser.feed(&arguments.read(&bytes)));
+                }
             }
-            if !matches!(result, wit_bindgen::StreamResult::Complete(_)) {
+            // The drafts written so far, at most once an interval of the
+            // logical clock, and whatever is left once the body ends.
+            for draft in pending.due(monotonic_clock::now(), ended) {
+                if returned.write_one(draft_event(&draft)).await.is_some() {
+                    return None;
+                }
+            }
+            if ended {
                 break;
             }
         }

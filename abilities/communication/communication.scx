@@ -73,6 +73,23 @@
   one utterance at a time), and re-enters waiting; speaking's output
   (outcome "stopped") ends the response as any other.
 
+  Drafts (decision D262, mosfet.py's drafts): respond's offer declares a
+  draft marker, so while the model is still writing a respond's parts the
+  generate service returns bot.ability.communication.draft {text, offset,
+  event, item, part, seq, leading} for the words of each part, which the
+  reasoning sends here. A draft of a respond in active opens a drafted
+  response, from the draft's sender (_event.origin): it is numbered, and
+  it and each later draft from that sender go to speaking as
+  bot.ability.speaking.draft {part, words, offset, expression?} (the
+  expression is the part's leading one), so speaking says each sentence as
+  soon as it is written. The respond that follows from the same sender is
+  the response of record: it is the response in hand (its id is its
+  sendid), and it goes to speaking as bot.ability.speaking.input. A
+  drafted response that ends without its respond (speaking stopped or
+  abandoned it, or it timed out) closes its sender: a later draft or
+  respond from it is dropped (communication.late), as is a draft from any
+  other sender while a response is in hand.
+
   Speaking's routes: speaking records the words it said as an outbound
   bot.ability.conversation.append, which the communication passes to the
   conversation (a sibling is out of speaking's reach), and its playout,
@@ -130,6 +147,13 @@
     <data id="response" expr="null"/>
     <data id="response_id" expr="null"/>
     <data id="hop_timer" expr="null"/>
+    <!-- A drafted response (decision D262): the sender of its drafts (null
+         when the response in hand is not drafted), the sender of the last
+         one that ended without its respond, and the sender of the respond
+         being admitted. -->
+    <data id="drafting" expr="null"/>
+    <data id="abandoned" expr="null"/>
+    <data id="response_origin" expr="null"/>
     <!-- The ids of the last closed_responses_bound responses that finished,
          so a late copy of one never reopens it, and how many other
          responses are held while one is said (decision D175). -->
@@ -139,10 +163,14 @@
     <data id="held" expr="0"/>
     <data id="held_ids" expr="[]"/>
     <data id="failure" expr="null"/>
+    <!-- respond's draft marker (decision D262, mosfet.py's Draft): each
+         part's words, with its expression, drafted as
+         bot.ability.communication.draft while the model writes them. -->
+    <data id="respond_draft" expr="({field: 'words', within: 'parts', leading: ['expression'], event: 'bot.ability.communication.draft'})"/>
     <!-- What it offers its parent (decision D242), which reads it from its
          live session with <decision:offers>: respond in active and
          responding, stop in responding, both of no effort. -->
-    <data id="offerable" expr="({'bot.ability.communication.respond': {}, 'bot.ability.communication.stop': {}})"/>
+    <data id="offerable" expr="({'bot.ability.communication.respond': {draft: respond_draft}, 'bot.ability.communication.stop': {}})"/>
     <!-- The children. -->
     <data id="children" expr="['conversation', 'speaking']"/>
   </datamodel>
@@ -263,6 +291,22 @@
                   target="admitting_response">
         <assign location="response" expr="_event.data.parts"/>
         <assign location="response_id" expr="responseId(_event)"/>
+        <assign location="response_origin" expr="_event.origin"/>
+      </transition>
+      <!-- A respond still being written: a drafted response, said as it
+           is written (decision D262). -->
+      <transition event="bot.ability.communication.draft" event:schema="../schemas/bot.ability.communication.draft.json"
+                  cond="isOpeningDraft(_event)" target="responding">
+        <assign location="operation" expr="nextOperation()"/>
+        <assign location="response" expr="null"/>
+        <assign location="response_id" expr="null"/>
+        <assign location="drafting" expr="_event.origin"/>
+        <send event="bot.ability.speaking.draft" target="#_speaking">
+          <content expr="speakingDraft(_event)"/>
+        </send>
+      </transition>
+      <transition event="bot.ability.communication.draft" event:schema="../schemas/bot.ability.communication.draft.json">
+        <log label="communication.late" expr="_event.name"/>
       </transition>
     </state>
 
@@ -307,6 +351,10 @@
          progress. -->
     <state id="responding" initial="waiting">
       <onexit>
+        <if cond="isUnsettledDraft()">
+          <assign location="abandoned" expr="drafting"/>
+        </if>
+        <assign location="drafting" expr="null"/>
         <assign location="closed_responses" expr="closedResponses()"/>
         <assign location="response_id" expr="null"/>
         <assign location="held" expr="0"/>
@@ -327,19 +375,39 @@
            held, up to held_responses_bound. One transition without a cond,
            so the parent reads it as an offer (decision D242). -->
       <transition event="bot.ability.communication.respond" event:schema="../schemas/bot.ability.communication.respond.json">
-        <if cond="isLateResponse(_event)">
-          <log label="communication.late" expr="_event.sendid"/>
-        <elseif cond="canHold()"/>
-          <event:defer/>
-          <assign location="held" expr="held + 1"/>
-          <assign location="held_ids" expr="heldIds(_event)"/>
-          <log label="communication.deferred" expr="_event.name"/>
-        <else/>
-          <log label="communication.rejected" expr="heldOverMessage()"/>
-          <send event="bot.ability.communication.failed" target="#_parent">
-            <param name="message" expr="'Communication is holding too many responses; this one is refused.'"/>
+        <if cond="isDraftedResponse(_event)">
+          <assign location="response" expr="_event.data.parts"/>
+          <assign location="response_id" expr="responseId(_event)"/>
+          <send event="bot.ability.speaking.input" target="#_speaking">
+            <param name="parts" expr="response"/>
           </send>
+        <else/>
+          <if cond="isLateResponse(_event)">
+            <log label="communication.late" expr="_event.sendid"/>
+          <elseif cond="canHold()"/>
+            <event:defer/>
+            <assign location="held" expr="held + 1"/>
+            <assign location="held_ids" expr="heldIds(_event)"/>
+            <log label="communication.deferred" expr="_event.name"/>
+          <else/>
+            <log label="communication.rejected" expr="heldOverMessage()"/>
+            <send event="bot.ability.communication.failed" target="#_parent">
+              <param name="message" expr="'Communication is holding too many responses; this one is refused.'"/>
+            </send>
+          </if>
         </if>
+      </transition>
+
+      <!-- The drafted response's next words go on to speaking; any other
+           draft is late. -->
+      <transition event="bot.ability.communication.draft" event:schema="../schemas/bot.ability.communication.draft.json"
+                  cond="isDraftOfResponse(_event)">
+        <send event="bot.ability.speaking.draft" target="#_speaking">
+          <content expr="speakingDraft(_event)"/>
+        </send>
+      </transition>
+      <transition event="bot.ability.communication.draft" event:schema="../schemas/bot.ability.communication.draft.json">
+        <log label="communication.late" expr="_event.name"/>
       </transition>
 
       <!-- A stop while the response is said (taken here, not in waiting, so

@@ -38,8 +38,10 @@
 //! * `choices` (required): a JSON array of objects with `event`, an event
 //!   name, `schema`, a self-contained JSON Schema, and an optional
 //!   `description` string, as `<decision:choice>` writes it, and an optional
-//!   `target` string, as `<processing:collect_offered_events>` tags it; an
-//!   event is listed once, or once per target with the same schema, and is
+//!   `target` string, as `<processing:collect_offered_events>` tags it (a
+//!   `draft`, an event's draft marker for the generate service, is taken
+//!   and ignored: a decision is not written as it streams); an event is
+//!   listed once, or once per target with the same schema, and is
 //!   one candidate; no event is named a reserved pass criterion.
 //! * `instructions` (optional, a non-empty string): what to decide; the
 //!   selection's default without one.
@@ -463,10 +465,12 @@ pub fn choices_from_json(value: &Json) -> Result<Vec<Candidate>, &'static str> {
     let mut listings: Vec<(&Json, Vec<&str>)> = Vec::new();
     for item in items {
         let members = item.as_object().ok_or(INVALID)?;
-        if members
-            .keys()
-            .any(|key| !matches!(key.as_str(), "event" | "schema" | "description" | "target"))
-        {
+        if members.keys().any(|key| {
+            !matches!(
+                key.as_str(),
+                "event" | "schema" | "description" | "target" | "draft"
+            )
+        }) {
             return Err(INVALID);
         }
         let event = members

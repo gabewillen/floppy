@@ -4,6 +4,12 @@
 
 // applying
 
+// The reply in hand is drafted (D262): it has no parts, and the speech
+// service reads it from the events sent on to it.
+function isDrafted() {
+  return parts === null;
+}
+
 // A chunk of the streamed encoding (D203), when it has an audio reference
 // and a sequence number (D41: its events are unchecked).
 function isChunk(_event) {

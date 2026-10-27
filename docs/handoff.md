@@ -11,6 +11,19 @@ Last updated: 2026-10-26.
 
 ## Current state (2026-10-09) — resume here
 
+- **Latency hill climb: speech out (2026-10-27, D262):** a reply is
+  said while the model is still writing it (mosfet.py's drafts).
+  Communication's respond offer declares a draft marker; reasoning passes
+  the choices' markers to the generate service (`drafts`), which returns
+  `bot.ability.communication.draft` as the streamed dispatch call's words
+  arrive (`services/generate/src/drafts.rs`, mosfet.py's DraftParser);
+  communication sends `bot.ability.speaking.draft` on to speaking, vocal
+  invokes the speech service's `encode` without `parts`, and the service
+  says each finished sentence as soon as it is written
+  (`services/speech/src/drafting.rs`). Reasoning streams by default (its
+  `stream` `<data>`; no env flag). Hearing streaming in (api.willen.dev's
+  WebSocket `/v1/audio/stream`) waits on Gabe: scxml.rs's outbound-http
+  has no WebSocket call yet.
 - **Latency hill climb: hearing in parallel (2026-10-26, D261):** with
   diarization, the interpretation decodes the utterance while it diarizes
   it (`DecodingSpeech.Diarized { Diarizing -> Identifying }`), and hears

@@ -1050,10 +1050,17 @@ fn offered_choice(target: &str, event: &str) -> Json {
 /// The communication's offers, then the identity's.
 fn ability_choices() -> [Json; 2] {
     [
-        offered_choice(
-            "session.floppy.communication",
-            "bot.ability.communication.respond",
-        ),
+        // The communication declares respond's draft marker (decision
+        // D262), which the body passes on with the offer.
+        {
+            let mut respond = offered_choice(
+                "session.floppy.communication",
+                "bot.ability.communication.respond",
+            );
+            respond["draft"] = json!({"event": "bot.ability.communication.draft", "field": "words",
+                "leading": ["expression"], "within": "parts"});
+            respond
+        },
         // The identity declares adopt's effort (decision D206), which the
         // body passes on with the offer.
         {

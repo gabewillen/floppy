@@ -983,8 +983,7 @@ fn live_image_reading_through_an_env_file() {
         .flat_map(|path| args(path))
         .collect();
     args.extend(media(&support::workspace().join("tests/fixtures")));
-    let model =
-        std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "gemma-4-26b-a4b".into());
+    let model = std::env::var("FLOPPY_LIVE_MODEL").unwrap_or_else(|_| "gemma-4-26b-a4b".into());
     let params = image_params("media/total-due.png").replace("'mock-model'", &format!("'{model}'"));
     let finished = open_with(
         &args,

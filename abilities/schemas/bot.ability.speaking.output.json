@@ -19,10 +19,11 @@
       "type": "string"
     },
     "outcome": {
-      "description": "How the utterance ended: completed (every piece played) or stopped (cut short on request). A failure answers bot.ability.failed instead.",
+      "description": "How the utterance ended: completed (every piece played), stopped (cut short on request), or abandoned (a drafted reply whose whole never arrived in time: text is what was drafted). A failure answers bot.ability.failed instead.",
       "enum": [
         "completed",
-        "stopped"
+        "stopped",
+        "abandoned"
       ],
       "examples": [
         "completed"

@@ -29,6 +29,16 @@
   run. An input that arrives while applying is logged and dropped: its
   invoker sends one per invocation.
 
+  Drafts (decision D262): a reply can also arrive while it is still
+  being written. bot.ability.speaking.draft {part, words, offset,
+  expression?} in idle starts applying with no parts, so the speech
+  service reads the reply from its events (a drafted encoding): once the
+  service returns bot.ability.ready, each draft received so far, and
+  each one after, is sent on to it (#_speech), and so is the reply of
+  record, the bot.ability.vocal.speech.encoding.input that follows them.
+  The service says each sentence as soon as it is written, and its chunks
+  and answer come back as for any encoding.
+
   The service's events are not checked by scxml.rs (D41), so applying
   keeps only an answer of the right shape, one transition per event.
 
@@ -55,6 +65,13 @@
     <data id="parts" expr="null"/>
     <data id="encoded" expr="null"/>
     <data id="failure" expr="null"/>
+    <!-- A drafted reply (D262): the drafts and the reply of record held
+         until the service is ready, whether it is, and the draft being
+         sent on (the <foreach> item). -->
+    <data id="drafts" expr="[]"/>
+    <data id="drafted_parts" expr="null"/>
+    <data id="speech_ready" expr="false"/>
+    <data id="draft" expr="null"/>
   </datamodel>
   <script src="vocal.js"/>
 
@@ -71,6 +88,13 @@
     <transition event="bot.ability.vocal.speech.encoding.input" event:schema="../schemas/bot.ability.vocal.speech.encoding.input.json"
                 target="applying">
       <assign location="parts" expr="_event.data.parts"/>
+      <assign location="drafts" expr="[]"/>
+    </transition>
+    <!-- A reply still being written: the service reads it as it comes. -->
+    <transition event="bot.ability.speaking.draft" event:schema="../schemas/bot.ability.speaking.draft.json"
+                target="applying">
+      <assign location="parts" expr="null"/>
+      <assign location="drafts" expr="[_event.data]"/>
     </transition>
   </state>
 
@@ -78,6 +102,8 @@
     <onentry>
       <assign location="encoded" expr="null"/>
       <assign location="failure" expr="null"/>
+      <assign location="drafted_parts" expr="null"/>
+      <assign location="speech_ready" expr="false"/>
     </onentry>
     <invoke id="speech" type="https://github.com/stateforward/floppy/services/speech"
             env:apikey="FLOPPY_SPEECH_API_KEY" env:baseurl="FLOPPY_SPEECH_BASE_URL">
@@ -121,6 +147,45 @@
       <send event="bot.ability.failed" target="#_parent">
         <param name="message" expr="speechRunFailure(_event)"/>
       </send>
+    </transition>
+    <!-- A drafted encoding is ready for its events: what was held goes
+         to it, in order. -->
+    <transition event="bot.ability.ready" event:schema="../schemas/bot.ability.ready.json" cond="isDrafted()">
+      <foreach array="drafts" item="draft">
+        <send event="bot.ability.speaking.draft" target="#_speech">
+          <content expr="draft"/>
+        </send>
+      </foreach>
+      <assign location="drafts" expr="[]"/>
+      <if cond="drafted_parts !== null">
+        <send event="bot.ability.vocal.speech.encoding.input" target="#_speech">
+          <param name="parts" expr="drafted_parts"/>
+        </send>
+      </if>
+      <assign location="speech_ready" expr="true"/>
+    </transition>
+    <transition event="bot.ability.speaking.draft" event:schema="../schemas/bot.ability.speaking.draft.json" cond="isDrafted()">
+      <if cond="speech_ready">
+        <send event="bot.ability.speaking.draft" target="#_speech">
+          <content expr="_event.data"/>
+        </send>
+      <else/>
+        <assign location="drafts[drafts.length]" expr="_event.data"/>
+      </if>
+    </transition>
+    <transition event="bot.ability.speaking.draft" event:schema="../schemas/bot.ability.speaking.draft.json">
+      <log label="vocal.dropped" expr="_event.name"/>
+    </transition>
+    <!-- The drafted reply of record. -->
+    <transition event="bot.ability.vocal.speech.encoding.input" event:schema="../schemas/bot.ability.vocal.speech.encoding.input.json"
+                cond="isDrafted()">
+      <if cond="speech_ready">
+        <send event="bot.ability.vocal.speech.encoding.input" target="#_speech">
+          <param name="parts" expr="_event.data.parts"/>
+        </send>
+      <else/>
+        <assign location="drafted_parts" expr="_event.data.parts"/>
+      </if>
     </transition>
     <transition event="bot.ability.vocal.speech.encoding.input" event:schema="../schemas/bot.ability.vocal.speech.encoding.input.json">
       <log label="vocal.dropped" expr="_event.name"/>
