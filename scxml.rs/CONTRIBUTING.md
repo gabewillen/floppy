@@ -485,7 +485,17 @@ raw ECMAScript component with the declarative constant-seed provider
 [`components/scxml-data-model-ecmascript/wasi-insecure-seed.wat`](components/scxml-data-model-ecmascript/wasi-insecure-seed.wat)
 (`wasm-tools compose`), because Boa's hash tables read
 `wasi:random/insecure-seed` once through std's `RandomState` and wasi-virt
-denies randomness. The validator component gets the same treatment: the
+denies randomness. Before that composition, the script pre-initializes the
+raw component with the Wasmtime host's Wizer tool (`cargo build --release -p
+scxml-host-wasmtime --features wizer --bin wizer`, at the locked Wasmtime):
+it calls the component's `wizer-initialize` export once, which creates the
+Boa realm every session would otherwise create in `initialize` (bootstrap,
+built-in guard, DOM builder, helpers, natives, captured built-ins), with
+the same constant seed answering `insecure-seed` and every other import
+trapping, and records the memory it leaves as the component's initial
+memory, the export removed. Each instance's first session then starts from
+that realm instead of building it; the script runs Wizer twice and fails
+on any difference. The validator component gets the same treatment: the
 script composes the fixed `wasi:random` provider
 [`components/scxml-validator/wasi-random.wat`](components/scxml-validator/wasi-random.wat)
 into it before virtualization, because the XML Schema backend's `ahash`
@@ -664,6 +674,7 @@ Boundaries per crate, which new code follows:
 | `scxml-ioprocessor-basichttp` | `send`, `receive` |
 | `scxml-conformance` | `run-corpus`, `run-suite`, `run-case`, `run-case-wasm`, and file/process/network I/O |
 | `scxml-wasm-meter` | `scxml.wasm-meter.instrument` once per `meter()` call and `scxml.wasm-meter.cli` once per CLI run; nothing per function, loop head, re-encoder hook, or `MeterError` format |
+| `scxml-host-wasmtime` `wizer` feature | `scxml.host-wasmtime.wizen` once per `wizen_component` call (the build-time `wizer` binary's one call); nothing per snapshot read or re-encoded section |
 | `scxml-xpath` | none (pure) |
 | `scxml-scheduler` | none (pure; runs inside the session host's run span) |
 | `scxml-snapshot` | none (pure; the host's `session-snapshot` span, the codec's observations, and the CLI spans cover it) |
@@ -771,6 +782,7 @@ Allowed indexed dimensions:
 | native function-call metric `scxml.function.calls` | `scxml.outcome` | `completed`, `failed` | 2 |
 | native event metric `scxml.events` | `scxml.event.name` | static `SignalEvent` enum | bounded |
 | `scxml-wasm-meter` | `scxml.module`, `scxml.operation`, `error.type`, event name | `wasm-meter`; `scxml.wasm-meter.instrument` (one per `meter()` call), `scxml.wasm-meter.cli` (one per CLI run); `invalid-input`, `packaging` (instrument) plus `input-read`, `harness`, `report` (CLI); `scxml.transformation.completed`, `scxml.input.rejected` | 1; 2; ≤ 5; 2 |
+| `scxml-host-wasmtime` `wizer` feature | `scxml.module`, `scxml.operation`, `error.type`, event name | `host-wasmtime`; `scxml.host-wasmtime.wizen` (one per `wizen_component` call); `packaging`; `scxml.transformation.completed`, `scxml.input.rejected` | 1; 1; 1; 2 |
 | machine guest | telemetry operation/outcome | WIT enums | bounded |
 | clock guest | operation/outcome/event | WIT enums | bounded |
 | Wasmtime host | tracer name | `scxml-host-wasmtime`, `scxml-component-guest`, `scxml-capability-guest`, `scxml-guest` | 4 |

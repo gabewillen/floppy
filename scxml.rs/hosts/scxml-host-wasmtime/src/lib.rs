@@ -113,8 +113,12 @@ mod codec_bindings {
 
 #[cfg(feature = "wasmtime")]
 mod call_budget;
+#[cfg(feature = "wizer")]
+mod wizer;
 #[cfg(feature = "wasmtime")]
 pub use call_budget::CallFuel;
+#[cfg(feature = "wizer")]
+pub use wizer::{WIZEN_FUEL, wizen_component};
 #[cfg(feature = "wasmtime")]
 mod component;
 #[cfg(feature = "wasmtime")]

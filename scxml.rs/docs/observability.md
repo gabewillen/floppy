@@ -76,7 +76,9 @@ The compiler and validator guest spans record `scxml.outcome` `ok` or
 also `lowering` and `packaging`). The build-time `scxml-wasm-meter` tool uses
 module `wasm-meter` and one span per boundary: `scxml.wasm-meter.instrument`
 per `meter()` call and `scxml.wasm-meter.cli` per command-line run, never one
-per function or loop head.
+per function or loop head. The build-time `wizer` tool of the Wasmtime host
+(`wizer` feature) opens one `scxml.host-wasmtime.wizen` span per
+`wizen_component` call, never one per snapshot read.
 
 The browser host emits through the OpenTelemetry JS API. Its host spans use
 the tracer `scxml-host-browser`, `scxml.module` `host-browser`, the nine

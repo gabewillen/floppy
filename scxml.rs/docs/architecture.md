@@ -311,7 +311,10 @@ composes a declarative constant seed for the one
 host links a data-model component as a session's data model through
 `ComponentDataModel` (fresh fuel per call; a trap fails the session). Each
 instance creates one Boa realm at `initialize` and keeps it for the whole
-session, as one ECMAScript program would run: values keep their identity,
+session (the released component is pre-initialized with Wizer at build
+time, so an instance's first session takes the realm its initial memory
+already holds, built exactly as `initialize` would build it, and only adds
+the system variables), as one ECMAScript program would run: values keep their identity,
 closures their scopes, and objects their prototypes, and a script's changes
 to the global object or to built-ins persist; a script that fails keeps
 what it did before the failure, as ECMAScript defines

@@ -1091,6 +1091,7 @@ Allowed indexed attributes are closed and bounded:
 | Wasmtime compiler and validator guest span event | WIT `signal-event`: `input-rejected`, `artifact-produced` | 2 |
 | Wasmtime compiler and validator guest `error.type` | WIT `error-category`: validator `invalid-input`, `validation`, `report`; compiler `invalid-input`, `validation`, `lowering`, `report`, `packaging` | ≤ 5 |
 | `scxml-wasm-meter` `scxml.module`, `scxml.operation`, `error.type`, event name | `wasm-meter`; `scxml.wasm-meter.instrument` (one per `meter()` call), `scxml.wasm-meter.cli` (one per CLI run); `invalid-input`, `packaging` (instrument) plus `input-read`, `harness`, `report` (CLI); `scxml.transformation.completed`, `scxml.input.rejected` | 1; 2; ≤ 5; 2 |
+| `scxml-host-wasmtime` `wizer` feature `scxml.module`, `scxml.operation`, `error.type`, event name | `host-wasmtime`; `scxml.host-wasmtime.wizen` (one per `wizen_component` call); `packaging`; `scxml.transformation.completed`, `scxml.input.rejected` | 1; 1; 1; 2 |
 | browser host spans and counter | `scxml.module` `host-browser`; 9 closed host operations; `ok`/`rejected`/`failed` | ≤ 27 series |
 
 Measurement units and instruments are fixed by the host: effects use

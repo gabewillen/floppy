@@ -324,6 +324,15 @@ for component in $components; do
         artifact_count=$((artifact_count + 1))
     fi
 done
+# The ECMAScript data model is pre-initialized with the Wasmtime host's
+# Wizer tool (hosts/scxml-host-wasmtime/src/wizer.rs), built once from this
+# workspace at its locked Wasmtime.
+wizer="$target_root/release/wizer"
+case " $components " in
+    *" scxml_data_model_ecmascript "*)
+        (unset SCXML_WASM_ARTIFACTS_DIR; cargo build --locked --release -p scxml-host-wasmtime --features wizer --bin wizer)
+        ;;
+esac
 # One cargo invocation per component: building several packages together
 # unifies dependency features across them, so a component's bytes would
 # depend on which other components were requested alongside it.
@@ -357,7 +366,18 @@ for component in $components; do
         seed="$proof_dir/wasi-insecure-seed.wasm"
         seeded="$proof_dir/$component.seeded.wasm"
         wasm-tools parse "$workspace/components/scxml-data-model-ecmascript/wasi-insecure-seed.wat" -o "$seed"
-        wasm-tools compose "$raw" -d "$seed" -o "$seeded" 2>/dev/null
+        # Every instance's first session starts from the realm
+        # `wizer-initialize` creates: Wizer runs it once, with the same seed
+        # answering insecure-seed and every other import trapping, and
+        # records the memory it leaves as the component's initial memory
+        # (its export removed). Wizer accepts only the flat component, so
+        # it runs before the seed provider is composed in.
+        wizened="$proof_dir/$component.wizened.wasm"
+        wizened_repeat="$proof_dir/$component.wizened.determinism-check.wasm"
+        "$wizer" --insecure-seed "$seed" "$raw" "$wizened"
+        "$wizer" --insecure-seed "$seed" "$raw" "$wizened_repeat"
+        cmp -s "$wizened" "$wizened_repeat" || { echo "non-deterministic Wizer output: $component" >&2; exit 1; }
+        wasm-tools compose "$wizened" -d "$seed" -o "$seeded" 2>/dev/null
         virt_input=$seeded
     fi
     if [ "$component" = scxml_validator ] || [ "$component" = scxml_compiler ] || [ "$component" = scx ] || [ "$component" = scxml_machine ]; then

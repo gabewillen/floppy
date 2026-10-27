@@ -492,6 +492,19 @@ impl EcmaScriptDataModel {
         Ok(())
     }
 
+    /// Creates the realm the next [`Self::initialize`] starts its session
+    /// from, ahead of any session (`wizer-initialize`; see
+    /// `session::Engine::prepare`).
+    ///
+    /// # Errors
+    ///
+    /// [`DataModelError::Execution`] when the realm cannot be created; no
+    /// realm is kept.
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn prepare(&self) -> Result<(), DataModelError> {
+        self.engine.prepare()
+    }
+
     /// Values one declared `<data>` variable (WIT
     /// `data-model-api.initialize-data`; SCXML 5.2-5.3). An expression is
     /// evaluated with no current event, so a function is a legal initial
