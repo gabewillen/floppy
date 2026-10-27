@@ -5,6 +5,7 @@
   "description": "One embedding request (mosfet.py's Embedding InputData): a task role and the items to embed, one vector per item.",
   "examples": [
     {
+      "id": "embedding-1",
       "role": "query",
       "items": [
         {
@@ -19,6 +20,12 @@
     }
   ],
   "properties": {
+    "id": {
+      "description": "The requester's id for this request, echoed by the reply.",
+      "title": "Id",
+      "type": "string",
+      "minLength": 1
+    },
     "role": {
       "description": "Whether the items search ('query') or are being indexed ('document').",
       "enum": [
@@ -96,6 +103,7 @@
     }
   },
   "required": [
+    "id",
     "role",
     "items"
   ],

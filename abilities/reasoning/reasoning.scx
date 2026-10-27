@@ -252,6 +252,11 @@
     <!-- The id of each request this document last sent the memory, by
          the state that sent it (decision D266). -->
     <data id="memory_requests" expr="({})"/>
+    <!-- The address of the bot's Embedding ability (null: none, so
+         recalling is by recency alone) and the id of each request this
+         document last sent it, by the state that sent it. -->
+    <data id="embedding" expr="null"/>
+    <data id="embedding_requests" expr="({})"/>
     <data id="context_ref" expr="null"/>
     <data id="prior_episodes" expr="[]"/>
     <data id="standing_directives" expr="[]"/>
@@ -290,18 +295,17 @@
     <!-- The cue (decision D256): the stimulus's words embedded as a query,
          while the candidates, the newest episodes with their vectors, are
          selected; once both are in, the candidates are ranked against the
-         cue and the episodes recalled are the best that fit. The request
-         goes once the embedding has started (the next macrostep); a
-         stimulus without words, or a cue that cannot be embedded, recalls
-         by recency alone. -->
+         cue and the episodes recalled are the best that fit. A stimulus
+         without words, a bot without an Embedding ability, or a cue that
+         cannot be embedded, recalls by recency alone. -->
     <state id="recalling_embedding">
       <onentry>
         <assign location="cue" expr="null"/>
         <assign location="found" expr="null"/>
         <assign location="episode_ids" expr="null"/>
         <assign location="statements" expr="candidateSelectStatements()"/>
-        <if cond="hasCueWords()">
-          <send event="bot.ability.embedding.input">
+        <if cond="hasCueWords() &amp;&amp; embedding !== null">
+          <send event="bot.ability.embedding.input" targetexpr="embedding" idlocation="embedding_requests.recalling_embedding">
             <content expr="cueEmbeddingInput()"/>
           </send>
           <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.candidates">
@@ -310,14 +314,8 @@
           </send>
         </if>
       </onentry>
-      <transition cond="hasNoCueWords()" target="recalling_memory"/>
-      <invoke id="embedding" type="scxml" src="../embedding/embedding.scx"/>
-      <transition event="bot.ability.embedding.input" event:schema="../schemas/bot.ability.embedding.input.json">
-        <send event="bot.ability.embedding.input" target="#_embedding">
-          <content expr="_event.data"/>
-        </send>
-      </transition>
-      <transition event="bot.ability.embedding.output" event:schema="../schemas/bot.ability.embedding.output.json">
+      <transition cond="hasNoCueWords() || embedding === null" target="recalling_memory"/>
+      <transition event="bot.ability.embedding.output" cond="isEmbeddingReply('recalling_embedding')" event:schema="../schemas/bot.ability.embedding.output.json">
         <assign location="cue" expr="_event.data.vectors[0].values"/>
       </transition>
       <transition event="bot.ability.memory.output" cond="isMemoryReply('candidates')" event:schema="../schemas/bot.ability.memory.output.json">
@@ -327,7 +325,7 @@
         <assign location="episode_ids" expr="rankedEpisodeIds(found)"/>
         <log label="reasoning.recall" expr="recallLog(found)"/>
       </transition>
-      <transition event="bot.ability.embedding.failed" event:schema="../schemas/bot.ability.embedding.failed.json"
+      <transition event="bot.ability.embedding.failed" cond="isEmbeddingReply('recalling_embedding')" event:schema="../schemas/bot.ability.embedding.failed.json"
                   target="recalling_memory">
         <log label="reasoning.embedding" expr="_event.data.kind"/>
       </transition>

@@ -2,10 +2,11 @@
 <!--
   Test harness of the Reflection ability (abilities/reflection/reflection.scx), laid
   out beside it in a scratch copy of abilities/ (tests/tests/reflection.rs).
-  It invokes the memory ability on the database as its child "memory",
-  seeds it with the statements in seed (none by default), invokes the
-  reflection as the cognition does (the <param>s memory, the child's
-  address, and model), forwards each bot.ability.reflection.input from standard input
+  It invokes the memory ability on the database as its child "memory"
+  and the Embedding ability as its child "embedding", seeds the memory
+  with the statements in seed (none by default), invokes the reflection
+  as the cognition does (the <param>s memory and embedding, the
+  children's addresses, and model), forwards each bot.ability.reflection.input from standard input
   to it, and after each answer logs it (harness.output or
   harness.failed) and then the inventory and the stored episodes
   (inventory, episodes), each as one JSON value, and logs each persona
@@ -30,6 +31,7 @@
   <invoke id="memory" type="scxml" src="memory/memory.scx">
     <param name="database" expr="database"/>
   </invoke>
+  <invoke id="embedding" type="scxml" src="embedding/embedding.scx"/>
 
   <state id="seeding">
     <transition cond="seed.length === 0" target="running"/>
@@ -47,6 +49,7 @@
   <state id="running" initial="waiting">
     <invoke id="reflection" type="scxml" src="reflection/reflection.scx">
       <param name="memory" expr="'#_scxml_' + _sessionid + '.memory'"/>
+      <param name="embedding" expr="'#_scxml_' + _sessionid + '.embedding'"/>
       <param name="model" expr="'fake-model'"/>
     </invoke>
     <transition event="bot.ability.reflection.input" event:schema="schemas/bot.ability.reflection.input.json">

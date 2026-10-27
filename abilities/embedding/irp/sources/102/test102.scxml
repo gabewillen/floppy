@@ -11,9 +11,9 @@
   </state>
   <state id="step0">
     <onentry>
-      <send event="bot.ability.embedding.input" target="#_embedding"><content expr='{"role": "query", "items": [{"parts": [{"kind": "text", "text": "hello"}]}]}'/></send>
+      <send event="bot.ability.embedding.input" target="#_embedding"><content expr='{"id": "embedding-1", "role": "query", "items": [{"parts": [{"kind": "text", "text": "hello"}]}]}'/></send>
     </onentry>
-    <transition event="bot.ability.embedding.output" cond="_event.data.space.model === 'embeddinggemma-2' &amp;&amp; _event.data.space.dimensions === 256 &amp;&amp; _event.data.vectors.length === 1 &amp;&amp; _event.data.vectors[0].values.length === 256 &amp;&amp; _event.data.vectors[0].values[0] === 1 &amp;&amp; _event.data.vectors[0].values[255] === 0" target="step1"/>
+    <transition event="bot.ability.embedding.output" cond="_event.data.id === 'embedding-1' &amp;&amp; _event.data.space.model === 'embeddinggemma-2' &amp;&amp; _event.data.space.dimensions === 256 &amp;&amp; _event.data.vectors.length === 1 &amp;&amp; _event.data.vectors[0].values.length === 256 &amp;&amp; _event.data.vectors[0].values[0] === 1 &amp;&amp; _event.data.vectors[0].values[255] === 0" target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

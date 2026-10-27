@@ -5,11 +5,18 @@
   "description": "An embedding request failed (mosfet.py's Embedding FailureData); kind says how an operator should respond.",
   "examples": [
     {
+      "id": "embedding-1",
       "message": "The embedder is not configured (unconfigured).",
       "kind": "unavailable"
     }
   ],
   "properties": {
+    "id": {
+      "description": "The requester's id for this request, echoed by the reply.",
+      "title": "Id",
+      "type": "string",
+      "minLength": 1
+    },
     "message": {
       "description": "Human-readable failure message.",
       "examples": [
@@ -39,6 +46,7 @@
     }
   },
   "required": [
+    "id",
     "message",
     "kind"
   ],

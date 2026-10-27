@@ -12,15 +12,15 @@
   </state>
   <state id="step0">
     <onentry>
-      <send event="bot.ability.embedding.input" target="#_embedding"><content expr='{"role": "query", "items": [{"parts": [{"kind": "text", "text": "boom"}]}]}'/></send>
+      <send event="bot.ability.embedding.input" target="#_embedding"><content expr='{"id": "embedding-1", "role": "query", "items": [{"parts": [{"kind": "text", "text": "boom"}]}]}'/></send>
     </onentry>
-    <transition event="bot.ability.embedding.failed" cond='_event.data.kind === "embed_failed" &amp;&amp; _event.data.message === "The embedder failed (status)."' target="step1"/>
+    <transition event="bot.ability.embedding.failed" cond='_event.data.id === "embedding-1" &amp;&amp; _event.data.kind === "embed_failed" &amp;&amp; _event.data.message === "The embedder failed (status)."' target="step1"/>
   </state>
   <state id="step1">
     <onentry>
-      <send event="bot.ability.embedding.input" target="#_embedding"><content expr='{"role": "query", "items": [{"parts": [{"kind": "text", "text": "again"}]}]}'/></send>
+      <send event="bot.ability.embedding.input" target="#_embedding"><content expr='{"id": "embedding-1", "role": "query", "items": [{"parts": [{"kind": "text", "text": "again"}]}]}'/></send>
     </onentry>
-    <transition event="bot.ability.embedding.output" cond='_event.data.role === "query" &amp;&amp; _event.data.space.model === "embeddinggemma-2" &amp;&amp; _event.data.space.dimensions === 2 &amp;&amp; JSON.stringify(_event.data.vectors.map(function (v) { return v.values; })) === "[[0,1]]"' target="step2"/>
+    <transition event="bot.ability.embedding.output" cond='_event.data.id === "embedding-1" &amp;&amp; _event.data.role === "query" &amp;&amp; _event.data.space.model === "embeddinggemma-2" &amp;&amp; _event.data.space.dimensions === 2 &amp;&amp; JSON.stringify(_event.data.vectors.map(function (v) { return v.values; })) === "[[0,1]]"' target="step2"/>
   </state>
   <state id="step2">
     <transition target="pass"/>

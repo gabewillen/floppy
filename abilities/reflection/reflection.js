@@ -418,7 +418,7 @@ function hasNoEpisodeWords() {
 
 // The episode's words as one document to embed.
 function episodeEmbeddingInput() {
-  return ({role: 'document', items: [{parts: [{kind: 'text', text: episodeWords()}]}]});
+  return ({id: embedding_requests.storing_embedding, role: 'document', items: [{parts: [{kind: 'text', text: episodeWords()}]}]});
 }
 
 // A unit vector's compact text, as a person's representative voice is
@@ -489,4 +489,9 @@ function selectionData(s) {
 // memory (decision D266): its id is that request's.
 function isMemoryReply(name) {
   return memory_requests[name] !== undefined && _event.data.id === memory_requests[name];
+}
+
+// A reply of the Embedding ability to the request the state name last sent.
+function isEmbeddingReply(name) {
+  return embedding_requests[name] !== undefined && _event.data.id === embedding_requests[name];
 }

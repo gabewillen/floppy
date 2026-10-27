@@ -2,7 +2,19 @@
 // <script src="embedding.js">, so every function here is a global of the
 // document's data model, callable from its cond and expr attributes.
 
+// idle
+
+// The request, with its sender, the address its reply goes to.
+function inputOf(_event) {
+  return ({id: _event.data.id, origin: _event.origin, role: _event.data.role, items: _event.data.items});
+}
+
 // embedding
+
+// An event of the generate call in hand, not of a cancelled one.
+function isCurrent(_event) {
+  return _event.invokeid === generate;
+}
 
 function timeoutDelay() {
   return timeout_ms + 'ms';
@@ -36,17 +48,17 @@ function generateFailure(_event) {
 }
 
 function output() {
-  return ({space: {model: model, dimensions: dimensions}, role: input.role, vectors: vectors.map(function (values) { return {values: values}; })});
+  return ({id: input.id, space: {model: model, dimensions: dimensions}, role: input.role, vectors: vectors.map(function (values) { return {values: values}; })});
 }
 
 function failed() {
-  return failure !== null ? failure : ({kind: 'invalid_response', message: 'The embedder answered no vector per item.'});
+  return failure !== null ? ({id: input.id, kind: failure.kind, message: failure.message}) : ({id: input.id, kind: 'invalid_response', message: 'The embedder answered no vector per item.'});
 }
 
 function timedOut() {
-  return ({kind: 'timeout', message: 'The embedder did not answer within ' + timeout_ms / 1000 + 's.'});
+  return ({id: input.id, kind: 'timeout', message: 'The embedder did not answer within ' + timeout_ms / 1000 + 's.'});
 }
 
 function couldNotRun(_event) {
-  return ({kind: 'invalid_input', message: 'The embedder could not run (' + _event.name + ').'});
+  return ({id: input.id, kind: 'invalid_input', message: 'The embedder could not run (' + _event.name + ').'});
 }
