@@ -75,7 +75,7 @@
     </test>
   </assert>
   <assert id="candidates_runner-8" specnum="8" specid="#candidates_runner-8">
-    <![CDATA[Each persistence is one transaction of the Memory ability at the `memory` <param> (decision D262); one that fails or outlasts `memory_timeout_ms` takes the same effect as one persisted.]]>
+    <![CDATA[Each persistence is one transaction of the Memory ability at the `memory` <param> (decision D265); one that fails or outlasts `memory_timeout_ms` takes the same effect as one persisted.]]>
     <test id="170" conformance="mandatory" manual="false">
       <start uri="170/test170.scxml"/>
     </test>

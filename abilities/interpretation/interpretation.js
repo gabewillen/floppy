@@ -40,32 +40,31 @@ function stageFailure(message) {
 // A stage child's (or the speech service's) failure {message}. The
 // decoder's names its own stage: it decodes while the voices are heard.
 function childFailure(_event) {
-  return ({stage: _event.invokeid === 'speech_decoding' ? 'speech_decoding' : stage, message: Object(_event.data).message});
+  return ({stage: stage, message: Object(_event.data).message});
 }
 
-// A done.invoke that is not a stage child's failure {message}.
-function isNotChildFailure(_event) {
-  return typeof Object(_event.data).message !== 'string';
+// A stage's request id: the stage, then the serial of the sound in hand,
+// so a stage's answer about an earlier sound is never taken for this one.
+function requestId(child) {
+  return child + '.' + serial;
 }
 
-function hasLabels(_event) {
-  return Array.isArray(Object(_event.data).labels);
+function isReply(_event, child) {
+  return _event.data.id === requestId(child);
 }
 
-function hasSegments(_event) {
-  return Array.isArray(Object(_event.data).segments);
+// A failure of a stage that fails the interpretation's work.
+function isStageReply(_event) {
+  return ['voice_detection', 'voice_diarization', 'voice_identification', 'speech_decoding']
+    .some(function (child) { return isReply(_event, child); });
 }
 
-function hasEmbeddings(_event) {
-  return Array.isArray(Object(_event.data).embeddings);
+function stageReplyFailure(_event) {
+  return ({stage: _event.data.id.slice(0, _event.data.id.lastIndexOf('.')), message: _event.data.message});
 }
 
 function hasAudio(_event) {
   return typeof Object(_event.data).audio === 'string';
-}
-
-function hasText(_event) {
-  return typeof Object(_event.data).text === 'string';
 }
 
 // A speech product of a scored sound.
@@ -106,9 +105,6 @@ function stageErrorFailure(_event) {
   return ({stage: stage, message: 'Listening ' + stage + ' could not run (' + _event.name + ')'});
 }
 
-function isStageChildFailure(_event) {
-  return stage !== null && typeof Object(_event.data).message === 'string';
-}
 
 // Idle, HearingSpeech
 
@@ -133,13 +129,19 @@ function soundOutput() {
   return media_dir + 'floppy-sound-' + serial + '.pcm';
 }
 
-// The voice detection child's ApplyData {sound, voice_detection}.
-function isApplyData(_event) {
-  return Array.isArray(Object(Object(_event.data).voice_detection).segments) && Object(_event.data).sound;
+// The request for the sound in hand to the voice detection.
+function detectionInput(sound) {
+  return ({id: requestId('voice_detection'), audio: sound.audio, media_type: orNull(sound.media_type),
+    sample_rate_hz: orNull(sound.sample_rate_hz), channels: orNull(sound.channels), output: soundOutput()});
+}
+
+// The sound's voice spans, as the products carry them.
+function detectedVoice(_event) {
+  return ({segments: _event.data.segments});
 }
 
 function detectionRecord() {
-  return ({sensed: sensed, voice_detection: result.voice_detection});
+  return ({sensed: sensed, voice_detection: {segments: result.segments}});
 }
 
 // The child normalized the sound to other audio.
@@ -247,12 +249,13 @@ function isUtteranceToDiarize(_event) {
 
 // ClassifyingSound
 
-function hasAnyLabel(_event) {
-  return hasLabels(_event) && _event.data.labels.length > 0;
+function classificationInput() {
+  return ({id: requestId('sound_classification'), audio: detection.sensed.sound.audio,
+    media_type: orNull(detection.sensed.sound.media_type), kind: orNull(detection.sensed.sound.kind)});
 }
 
-function isUnlabelledForDecoder(_event) {
-  return hasLabels(_event) && speech_decoder;
+function hasAnyLabel(_event) {
+  return _event.data.labels.length > 0;
 }
 
 // DiarizingVoice
@@ -263,8 +266,13 @@ function diarizedOutput() {
 
 // Identified before anything else only when nothing decodes: decoded
 // speech is identified while its words are decoded (Identifying).
-function isDiarizedToIdentify(_event) {
-  return hasSegments(_event) && voice_classifier && !speech_decoder;
+function diarizationInput() {
+  return ({id: requestId('voice_diarization'), audio: utterance.audio, media_type: utterance.media_type,
+    sample_rate_hz: utterance.sample_rate_hz, channels: utterance.channels, output: diarizedOutput()});
+}
+
+function isDiarizedToIdentify() {
+  return voice_classifier && !speech_decoder;
 }
 
 // Diarized segments whose voices are identified while the words are
@@ -299,8 +307,18 @@ function voiceOutput() {
   return media_dir + 'floppy-voice-' + serial + '.pcm';
 }
 
+function openingIdentificationInput() {
+  return ({id: requestId('voice_identification'), audio: detection.sensed.sound.audio,
+    sample_rate_hz: detection.sensed.sound.sample_rate_hz, channels: soundChannels(detection.sensed.sound),
+    start_seconds: openingStart(), end_seconds: openingEnd(), output: voiceOutput()});
+}
+
+function identificationInput(segments) {
+  return ({id: requestId('voice_identification'), segments: segments});
+}
+
 function hasNoEmbedding(_event) {
-  return hasEmbeddings(_event) && _event.data.embeddings.length === 0;
+  return _event.data.embeddings.length === 0;
 }
 
 function firstEmbedding(_event) {
@@ -345,7 +363,7 @@ function identifiedSegments() {
 }
 
 function isEmbeddingCountMismatch(_event) {
-  return hasEmbeddings(_event) && _event.data.embeddings.length !== identifiedSegments().length;
+  return _event.data.embeddings.length !== identifiedSegments().length;
 }
 
 function embeddingCountMismatch(_event) {
@@ -357,11 +375,6 @@ function embeddingCountFailure() {
 }
 
 // DecodingSpeech
-
-// The decoder's own failure, whichever stage its voices are in.
-function decodingFailure(message) {
-  return ({stage: 'speech_decoding', message: message});
-}
 
 function decodingCompletion() {
   return ({kind: 'decoding', sensed: open_sensed || detection.sensed, voice_detection: detection.voice_detection, text: result.text,
@@ -409,10 +422,21 @@ function affectSegments() {
   return [{audio: utterance.audio, media_type: utterance.media_type, sample_rate_hz: utterance.sample_rate_hz, channels: utterance.channels}];
 }
 
-// The tone voice_affect heard, or null.
+// The requests of DecodingSpeech: the utterance to decode, and its voices
+// whose tone is heard.
+function decodingInput() {
+  return ({id: requestId('speech_decoding'), audio: utterance.audio, media_type: utterance.media_type});
+}
+
+function affectInput() {
+  return ({id: requestId('voice_affect'), segments: affectSegments()});
+}
+
+// The tone voice_affect heard (mosfet.py's voice.Affect), without the
+// request's id.
 function heardAffect(_event) {
-  var heard = Object(_event.data).affect;
-  return heard !== null && typeof Object(heard).label === 'string' ? heard : null;
+  var data = _event.data;
+  return ({label: data.label, scores: data.scores, valence: data.valence, confidence: data.confidence});
 }
 
 // The diarized segments embedded for decoded speech: those of at least
@@ -722,8 +746,8 @@ function ownUtterance(_event) {
 
 // At least min_voice_seconds from the copy's first voice to its last.
 function isOwnVoiceLongEnough(_event) {
-  return isApplyData(_event) && _event.data.voice_detection.segments.length > 0
-    && spanEnd(_event.data.voice_detection.segments) - _event.data.voice_detection.segments[0].start_seconds >= min_voice_seconds;
+  return _event.data.segments.length > 0
+    && spanEnd(_event.data.segments) - _event.data.segments[0].start_seconds >= min_voice_seconds;
 }
 
 function spanEnd(segments) {
@@ -738,8 +762,13 @@ function ownVoiceEnd() {
   return spanEnd(utterance.voice_detection.segments);
 }
 
+function ownIdentificationInput() {
+  return ({id: requestId('voice_identification'), audio: utterance.audio, sample_rate_hz: utterance.sample_rate_hz,
+    channels: utterance.channels, start_seconds: ownVoiceStart(), end_seconds: ownVoiceEnd(), output: voiceOutput()});
+}
+
 function hasOneEmbedding(_event) {
-  return hasEmbeddings(_event) && _event.data.embeddings.length === 1 && _event.data.embeddings[0] !== null
+  return _event.data.embeddings.length === 1 && _event.data.embeddings[0] !== null
     && Array.isArray(_event.data.embeddings[0].embedding);
 }
 
@@ -816,7 +845,7 @@ function isNewParticipant(p) {
 // memory
 
 // Whether the event answers the request the state `name` last sent the
-// memory (decision D262): its id is that request's.
+// memory (decision D265): its id is that request's.
 function isMemoryReply(name) {
   return memory_requests[name] !== undefined && _event.data.id === memory_requests[name];
 }

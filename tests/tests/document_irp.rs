@@ -305,7 +305,7 @@ fn run_case(document: &Path, case: &Path, test: &str) -> Option<String> {
         args.extend(["--fuel".to_owned(), support::FUEL.to_owned()]);
     }
     // A case binds what its harness and the document under test bind (the
-    // harness may serve the document's memory, decision D262).
+    // harness may serve the document's memory, decision D265).
     let harness = start.clone();
     // The builder writes a draft's documents into the layout's behaviors
     // directory: a layout of the case's own.

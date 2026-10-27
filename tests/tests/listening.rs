@@ -983,24 +983,18 @@ fn diarized_segments_nobody_identifies_in_time_are_heard_unidentified() {
 /// A voice identification that stands in for the real one and answers no
 /// embedding: the real one answers one per segment or fails, so only a
 /// child that answers `embeddings: []` reaches this branch.
-const NO_EMBEDDING_IDENTIFICATION: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
-<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="voice_identification" initial="applied">
-  <datamodel>
-    <data id="segments" expr="null"/>
-    <data id="audio" expr="null"/>
-    <data id="sample_rate_hz" expr="null"/>
-    <data id="channels" expr="null"/>
-    <data id="start_seconds" expr="null"/>
-    <data id="end_seconds" expr="null"/>
-    <data id="output" expr="null"/>
-  </datamodel>
-  <final id="applied">
-    <donedata>
-      <content expr="({segments: [], embeddings: []})"/>
-    </donedata>
-  </final>
+const NO_EMBEDDING_IDENTIFICATION: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event" version="1.0" datamodel="ecmascript" name="voice_identification" initial="idle">
+  <state id="idle">
+    <transition event="bot.ability.hearing.voice.identification.input"
+                event:schema="../schemas/bot.ability.hearing.voice.identification.input.json">
+      <send event="bot.ability.hearing.voice.identification.output" target="#_parent">
+        <content expr="({id: _event.data.id, segments: [], embeddings: []})"/>
+      </send>
+    </transition>
+  </state>
 </scxml>
-"#;
+"##;
 
 /// An opening voice identified with no embedding opens the window with
 /// nobody identified, and no stage fails (decision D177).

@@ -135,8 +135,8 @@ function createdAtMs(text) {
 // The candidates scored (mosfet.py's Associative: similarity times the
 // cosine plus recency times 0.5^(age / half-life), the age before the
 // newest candidate), best first, ties newer first.
-function scoredCandidates(_event) {
-  var rows = _event.data.results[0].rows;
+function scoredCandidates(output) {
+  var rows = output.results[0].rows;
   var newest = rows.reduce(function (most, r) { return Math.max(most, createdAtMs(r.values[1])); }, 0);
   return rows.map(function (r, order) {
     var similarity = cueSimilarity(r.values[3]);
@@ -147,10 +147,10 @@ function scoredCandidates(_event) {
 
 // The ids of the best candidates that hold at most 24576 characters of
 // content in all.
-function rankedEpisodeIds(_event) {
+function rankedEpisodeIds(output) {
   var room = 24576;
   var ids = [];
-  scoredCandidates(_event).forEach(function (row) {
+  scoredCandidates(output).forEach(function (row) {
     if (row.length <= room) {
       ids.push(row.id);
       room -= row.length;
@@ -159,8 +159,8 @@ function rankedEpisodeIds(_event) {
   return ids;
 }
 
-function recallLog(_event) {
-  return scoredCandidates(_event).slice(0, 3).map(function (row) { return row.id.replace(/^0+/, '') + ':' + row.similarity.toFixed(3); }).join(' ');
+function recallLog(output) {
+  return scoredCandidates(output).slice(0, 3).map(function (row) { return row.id.replace(/^0+/, '') + ':' + row.similarity.toFixed(3); }).join(' ');
 }
 
 // The standing directives appended.
@@ -299,6 +299,34 @@ function selectedResult() {
   return handed_on ? ({turn: turn, handled: false, reason: 'handoff', acted: selected}) : ({turn: turn, handled: true, selected: selected});
 }
 
+// Drafts (decision D262)
+
+// The draft markers of the choices, by event: what the streamed call
+// drafts while the model writes it ({} when no choice declares one).
+function drafts() {
+  var markers = {};
+  choices.forEach(function (choice) {
+    if (choice.draft !== undefined && choice.draft !== null) {
+      markers[choice.event] = choice.draft;
+    }
+  });
+  return markers;
+}
+
+// The one target that offers the drafted event, or null.
+function draftTarget(_event) {
+  var drafted = Object(_event.data).event;
+  var targets = choices.filter(function (choice) {
+    return choice.event === drafted && choice.draft !== undefined && choice.draft !== null && typeof choice.target === 'string';
+  }).map(function (choice) { return choice.target; });
+  return targets.length === 1 ? targets[0] : null;
+}
+
+// A draft the call returned for an offered event one target offers.
+function isDraft(_event) {
+  return _event.invokeid === 'generate' && draftTarget(_event) !== null;
+}
+
 // The data a selection is sent with (decision D113): its data object, else {} (no data, null, or a non-object).
 function selectionData(s) {
   return s.data !== null && typeof s.data === 'object' && !Array.isArray(s.data) ? s.data : ({});
@@ -330,7 +358,7 @@ function withFit(done) {
 // memory
 
 // Whether the event answers the request the state `name` last sent the
-// memory (decision D262): its id is that request's.
+// memory (decision D265): its id is that request's.
 function isMemoryReply(name) {
   return memory_requests[name] !== undefined && _event.data.id === memory_requests[name];
 }

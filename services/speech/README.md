@@ -27,7 +27,7 @@ telemetry.
 A failure answers `bot.ability.failed {message}`.
 A malformed or missing parameter rejects the start: the `<invoke>` raises
 `error.execution` and nothing is read, sent, or written. The event schemas
-are in [schemas/](schemas/).
+are in [abilities/schemas/](../../abilities/schemas/).
 
 ## Streamed encoding
 

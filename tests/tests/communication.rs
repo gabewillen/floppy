@@ -59,7 +59,8 @@ const DEAF_SPEAKING: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
 /// A parent of the communication alone (`abilities/harness.scx`): it
 /// sends each `harness.<id>` as a `bot.ability.communication.respond`
 /// whose sendid is `<id>` (an SCXML `<send id>` is literal), and
-/// `harness.stop` as `bot.ability.communication.stop`, forwards outside
+/// `harness.stop` as `bot.ability.communication.stop`, `harness.draft` as
+/// `bot.ability.communication.draft` (its data), forwards outside
 /// `bot.ability.communication.input`, and logs what the communication
 /// answers (`harness.<event>`, its JSON) and each efference copy's duration
 /// (`harness.efference`). It is the environment speaking's sound goes into.
@@ -91,6 +92,9 @@ const COMMUNICATION_HARNESS: &str = r##"<?xml version="1.0" encoding="UTF-8"?>
       <send event="bot.ability.communication.input" target="#_communication">
         <content expr="_event.data"/>
       </send>
+    </transition>
+    <transition event="harness.draft" cond="_event.invokeid === undefined">
+      <send event="bot.ability.communication.draft" target="#_communication"><content expr="_event.data"/></send>
     </transition>
     <transition event="harness.r1" cond="_event.invokeid === undefined">
       <send id="r1" event="bot.ability.communication.respond" target="#_communication"><content expr="_event.data"/></send>
@@ -1506,4 +1510,73 @@ fn a_reply_whose_synthesis_takes_seconds_is_spoken_with_the_default_bounds() {
         run,
         "a_reply_whose_synthesis_takes_seconds_is_spoken_with_the_default_bounds",
     );
+}
+
+/// A respond's draft (decision D262) of part 0, `text` after `offset`
+/// characters.
+fn respond_draft(text: &str, offset: usize, seq: usize) -> Json {
+    json!({"text": text, "offset": offset, "event": "bot.ability.communication.respond",
+        "item": 0, "part": 0, "seq": seq, "leading": {}})
+}
+
+/// A drafted response is said as it is written (decision D262): each
+/// draft goes through speaking and vocal to the speech service (its
+/// double), whose chunk for it plays at once, and the respond that follows
+/// from the same sender is the response of record: its words are the text
+/// said and recorded.
+#[test]
+fn a_drafted_response_is_said_as_it_is_written() {
+    let harness = communication_speaking(&[], &[]);
+    let mut run = Run::start(&[harness.display().to_string()], &[]);
+    let mut all = run.until(WAIT, label_is("harness.ready"));
+    run.event("harness.draft", &respond_draft("Hello there. ", 0, 0));
+    all.extend(run.until(WAIT, label_is("harness.sound")));
+    run.event("harness.draft", &respond_draft("How are you?", 13, 1));
+    let text = "Hello there. How are you?";
+    run.event("harness.r1", &json!({"parts": [{"words": text}]}));
+    all.extend(run.until(WAIT, label_is("harness.answer")));
+    assert_eq!(
+        texts(&all, "speech.draft"),
+        strings(&["Hello there. ", "How are you?"])
+    );
+    assert_eq!(texts(&all, "speech.final"), strings(&[text]));
+    assert!(texts(&all, "speech.encode").is_empty());
+    assert_eq!(
+        texts(&all, "harness.sound"),
+        strings(&["media/speaking-1.0.pcm", "media/speaking-1.1.pcm"])
+    );
+    assert_eq!(texts(&all, "floppy.say"), strings(&[text]));
+    assert_eq!(
+        texts(&all, "harness.answer"),
+        strings(&[
+            r#"bot.ability.speaking.output {"channels":1,"media_type":"audio/pcm","outcome":"completed","sample_rate_hz":24000,"spoken":"Hello there. How are you?","text":"Hello there. How are you?","unspoken":"","voice_id":null}"#
+        ])
+    );
+    close(run, "a_drafted_response_is_said_as_it_is_written");
+}
+
+/// A drafted response whose respond never comes is abandoned once
+/// speaking's draft timer runs out (decision D262): what was drafted is
+/// its text, what played its spoken words, and the respond that arrives
+/// after is late.
+#[test]
+fn a_drafted_response_without_its_respond_is_abandoned() {
+    let harness = communication_speaking(&[], &[("draft_timeout_ms", "300")]);
+    let mut run = Run::start(&[harness.display().to_string()], &[]);
+    let mut all = run.until(WAIT, label_is("harness.ready"));
+    run.event("harness.draft", &respond_draft("Hello there. ", 0, 0));
+    all.extend(run.until(WAIT, label_is("harness.answer")));
+    assert_eq!(
+        texts(&all, "harness.answer"),
+        strings(&[
+            r#"bot.ability.speaking.output {"channels":1,"media_type":"audio/pcm","outcome":"abandoned","sample_rate_hz":24000,"spoken":"","text":"Hello there. ","unspoken":"Hello there. ","voice_id":null}"#
+        ])
+    );
+    run.event(
+        "harness.r1",
+        &json!({"parts": [{"words": "Hello there. Bye."}]}),
+    );
+    all.extend(run.until(WAIT, label_is("communication.late")));
+    assert!(texts(&all, "speech.final").is_empty());
+    close(run, "a_drafted_response_without_its_respond_is_abandoned");
 }

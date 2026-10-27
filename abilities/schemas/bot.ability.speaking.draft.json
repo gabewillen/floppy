@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.speaking.draft",
+  "additionalProperties": false,
+  "description": "Words of a reply still being written, to say as they arrive (mosfet.py's speaking draft, decision D262): words newly written into part part after offset characters of it, and, on the part's first draft, its expression. The bot.ability.speaking.input that follows is the reply of record.",
+  "properties": {
+    "part": {
+      "description": "The index of the part in the reply's parts.",
+      "maximum": 63,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "words": {
+      "description": "The words newly written into the part; empty for a part that has no words yet.",
+      "maxLength": 2000,
+      "type": "string"
+    },
+    "offset": {
+      "description": "How many characters of the part's words were written before words.",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "expression": {
+      "description": "How to say the part (an Expression of bot.ability.speaking.input), on its first draft only.",
+      "type": "object"
+    }
+  },
+  "required": [
+    "part",
+    "words",
+    "offset"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "part": 0,
+      "words": "Hello there. ",
+      "offset": 0
+    }
+  ]
+}

@@ -821,13 +821,13 @@ fn every_voice_event_satisfies_its_published_schema() {
         CompiledSchema::new(&canonical_json(&value)).expect("the schema compiles")
     };
     let detected = compile(include_str!(
-        "../../schemas/bot.ability.hearing.voice.detection.output.json"
+        "../../../../abilities/schemas/bot.ability.hearing.voice.detection.output.json"
     ));
     let diarized = compile(include_str!(
-        "../../schemas/bot.ability.hearing.voice.diarization.output.json"
+        "../../../../abilities/schemas/bot.ability.hearing.voice.diarization.output.json"
     ));
     let identified = compile(include_str!(
-        "../../schemas/bot.ability.hearing.voice.identification.output.json"
+        "../../../../abilities/schemas/bot.ability.hearing.voice.identification.output.json"
     ));
     let returned = detection_outcome(
         "Voice detection",
@@ -851,7 +851,7 @@ fn every_voice_event_satisfies_its_published_schema() {
     let returned = identification_returned(&[embedding]);
     assert!(identified.admits(&Data::JsonObject(returned.data)));
     let classified = compile(include_str!(
-        "../../schemas/bot.ability.classifying.output.json"
+        "../../../../abilities/schemas/bot.ability.classifying.output.json"
     ));
     for body in [
         &br#"{"label":"sad","scores":{"sad":0.8,"neutral":0.2},"valence":-0.7,"confidence":0.8}"#[..],

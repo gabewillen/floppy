@@ -54,12 +54,14 @@
 //!   `content-type`, `application/octet-stream` without it, or as Gemini's
 //!   `mime_type`, `audio/wav` without it), and `provider` (optional,
 //!   exactly `gemini`: the Gemini API).
-//! * encode: `parts` (required, the reply to say, a JSON array of 1 to
-//!   [`MAX_PARTS`] parts; see "Parts"), `voice` (required,
+//! * encode: `parts` (the reply to say, a JSON array of 1 to
+//!   [`MAX_PARTS`] parts; see "Parts"; without it the reply is drafted:
+//!   it arrives as events, see "Drafts"), `voice` (required,
 //!   `[A-Za-z0-9_.-]{1,128}`), `output` (required, a reference to the file
 //!   the audio is written to, created or replaced), `media_type` (optional,
 //!   one of [`FORMATS`], `audio/mpeg` without it, the default of both
-//!   backends; a reply with a pause needs `audio/pcm` or `audio/wav`), and
+//!   backends; a reply with a pause, and a drafted one, needs `audio/pcm`
+//!   or `audio/wav`), and
 //!   `provider` (optional, `elevenlabs` or `gemini`: the backend of that
 //!   name instead of the `OpenAI`-compatible API; Gemini encodes
 //!   only `audio/pcm` and `audio/wav`).
@@ -95,6 +97,23 @@
 //! [`Stretch`], the pause before its words; the words within a stretch are
 //! joined verbatim with nothing added.
 //!
+//! # Drafts
+//!
+//! An `encode` without `parts` is drafted (decision D262, [`drafting`]):
+//! the reply is said while it is still being written. The service first
+//! returns [`drafting::READY_EVENT`] `{}`, then reads the events the
+//! invoking session sends it: [`drafting::DRAFT_EVENT`] `{part, words,
+//! offset, expression?}`, the words newly written into a part, and then
+//! [`drafting::FINAL_EVENT`] `{parts}`, the whole reply. Each request says
+//! what is ready as soon as it is: the words through the last sentence
+//! written, a part that pauses opening a request of its own, and the rest
+//! once the whole reply is in. The whole reply is authoritative: when it
+//! diverges from what was said, nothing more is said. The answers are
+//! joined into the output as a reply with a pause is, and the chunks are
+//! returned as they are cut, numbered across every request. When the
+//! invoking session stops sending before the whole reply, the invocation
+//! ends with no result.
+//!
 //! # The requests
 //!
 //! * decode: `POST {base}/audio/transcriptions` with
@@ -113,7 +132,8 @@
 //!   the audio as it is synthesized, and the service reads each answer as
 //!   it arrives (`outbound-http.send`), returning its chunks
 //!   ([`chunks`]) before the answer ends. A reply without a pause
-//!   is one request, and its answer is written as it is. With a pause, the
+//!   is one request, and its answer is written as it is. With a pause (or
+//!   drafted and said in more than one request), the
 //!   answers are joined as signed 16-bit little-endian PCM (raw `pcm` at
 //!   [`PCM_SAMPLE_RATE_HZ`] mono, a WAV answer at its own rate and
 //!   channels, which every stretch shares, Gemini's PCM), each pause is its
@@ -132,8 +152,7 @@
 //! data, except that a media step that succeeds writes no event and
 //! resolves with its result as the done data, and that an encoding writes
 //! each of its chunks first, as it is cut (decision D203). The names and
-//! data are those of the event schemas (`services/speech/schemas/` and
-//! `abilities/schemas/`):
+//! data are those of the event schemas (`abilities/schemas/`):
 //!
 //! * [`chunks::CHUNK_EVENT`] `{"audio": R, "sequence": S, "media_type": M,
 //!   "sample_rate_hz": N, "channels": C, "duration": D}`, before the
@@ -159,7 +178,8 @@
 //! * [`FAILED_EVENT`] `{"message": M}`, `M` one closed message per
 //!   [`FailureCode`] and direction.
 //!
-//! The service reads no event: it drops the event stream `invoke` receives.
+//! Only a drafted encoding reads events (see "Drafts"); every other
+//! operation drops the event stream `invoke` receives.
 //!
 //! # Bounds
 //!
@@ -196,6 +216,7 @@
 use std::io::Read as _;
 
 pub mod chunks;
+pub mod drafting;
 pub mod gemini;
 pub mod voice;
 
@@ -458,8 +479,12 @@ pub struct Stretch {
 pub struct Encoding {
     /// The model name.
     pub model: String,
-    /// The reply's stretches, in order: one unless a part pauses.
+    /// The reply's stretches, in order: one unless a part pauses. None
+    /// when drafted: they arrive as events ([`drafting`]).
     pub stretches: Vec<Stretch>,
+    /// Whether the reply is drafted: no `parts`, read from the events the
+    /// invoking session sends ([`drafting`]).
+    pub drafted: bool,
     /// The voice.
     pub voice: String,
     /// Where the audio is written.
@@ -995,7 +1020,9 @@ fn encoding(
     media_type: Option<&Data>,
     provider: Option<&Data>,
 ) -> Result<Encoding, &'static str> {
-    let stretches = stretches(parts.ok_or("speech encode requires a parts parameter")?)?;
+    // Without parts, the reply is drafted: it arrives as events.
+    let stretches = parts.map(stretches).transpose()?.unwrap_or_default();
+    let drafted = parts.is_none();
     let voice = match voice.ok_or("speech encode requires a voice parameter")? {
         Data::String(voice)
             if !voice.is_empty()
@@ -1037,9 +1064,13 @@ fn encoding(
     {
         return Err("speech pauses need audio/pcm or audio/wav");
     }
+    if drafted && !matches!(format.response_format, "pcm" | "wav") {
+        return Err("speech drafts need audio/pcm or audio/wav");
+    }
     Ok(Encoding {
         model,
         stretches,
+        drafted,
         voice,
         output,
         format,
@@ -1461,7 +1492,8 @@ fn answered_pcm(
     Ok((rate, channels, pcm))
 }
 
-/// The audio of a reply with a pause: the stretches' answers in order as
+/// The audio of a reply with a pause, or said in more than one request:
+/// the stretches' answers in order as
 /// one PCM, each pause its silence at its place, raw for `audio/pcm` or in
 /// a WAV container for `audio/wav`.
 fn assembled(
@@ -1529,7 +1561,7 @@ pub fn encoding_outcome(
     let Operation::Encode(encoding) = operation else {
         return Returned::failed(operation, FailureCode::Malformed);
     };
-    let audio = if encoding.pauses() {
+    let audio = if encoding.pauses() || encoding.said().nth(1).is_some() {
         assembled(encoding, answered)
     } else {
         answered
@@ -1716,6 +1748,7 @@ mod guest {
     async fn run(
         operation: Operation,
         endpoint: Option<(u32, Option<u32>)>,
+        events: Option<wit_bindgen::StreamReader<Event>>,
         returned: &mut wit_bindgen::StreamWriter<Event>,
     ) -> Option<super::Finished> {
         use super::{Finished, voice};
@@ -1762,6 +1795,12 @@ mod guest {
                 super::decoding_outcome(&operation, answered)
             }
             Operation::Encode(encoding) => {
+                if let Some(events) = events {
+                    return encode_drafted(
+                        &operation, encoding, base_url, api_key, events, returned,
+                    )
+                    .await;
+                }
                 return encode(&operation, encoding, base_url, api_key, returned).await;
             }
             _ => return Some(run_voice(&operation, base_url, api_key).await),
@@ -1918,6 +1957,117 @@ mod guest {
         )))
     }
 
+    /// Runs a drafted encoding ([`super::drafting`]): reads the drafts and
+    /// then the whole reply from `events`, and says each part as soon as it
+    /// is ready, one request at a time, returning each chunk as it is cut;
+    /// then its outcome, the requests' answers joined. `None` when the
+    /// invoking session stopped reading, or stopped sending before the
+    /// whole reply.
+    async fn encode_drafted(
+        operation: &Operation,
+        encoding: &super::Encoding,
+        base_url: u32,
+        api_key: Option<u32>,
+        mut events: wit_bindgen::StreamReader<Event>,
+        returned: &mut wit_bindgen::StreamWriter<Event>,
+    ) -> Option<super::Finished> {
+        use super::Finished;
+        use super::drafting::{DRAFT_EVENT, Drafting, FINAL_EVENT, READY_EVENT};
+        let ready = Returned {
+            name: READY_EVENT,
+            data: "{}".into(),
+        };
+        if returned.write_one(event(&ready)).await.is_some() {
+            return None;
+        }
+        let mut chunker = super::chunks::Chunker::new(encoding);
+        let mut drafting = Drafting::default();
+        let mut said = Vec::new();
+        let mut answered = Vec::new();
+        let mut held = 0_usize;
+        let mut settled = true;
+        'saying: loop {
+            while let Some(each) = drafting.next_request() {
+                let streamed = async {
+                    emit(encoding, chunker.open(each.pause), returned).await?;
+                    if each.words.trim().is_empty() {
+                        return Ok(None);
+                    }
+                    let built = super::encoding_request(base_url, api_key, encoding, &each.words);
+                    stretch(encoding, built, &mut chunker, returned, &mut held)
+                        .await
+                        .map(Some)
+                }
+                .await;
+                let answer = match streamed {
+                    Ok(Some(answer)) => answer,
+                    Ok(None) => {
+                        said.push(each);
+                        continue;
+                    }
+                    Err(Stopped::Gone) => return None,
+                    Err(Stopped::Failed(code)) => {
+                        return Some(Finished::event(Returned::failed(operation, code)));
+                    }
+                };
+                settled = matches!(&answer, Ok(response) if (200..300).contains(&response.status));
+                said.push(each);
+                answered.push(answer);
+                if !settled {
+                    break 'saying;
+                }
+            }
+            if drafting.finished() {
+                break;
+            }
+            let event = events.next().await?;
+            let Ok(data) = native_value(event.data) else {
+                continue;
+            };
+            let data = match data {
+                scxml_types::DataValue::JsonObject(object) => {
+                    serde_json::from_str::<serde_json::Value>(&object).unwrap_or_default()
+                }
+                _ => continue,
+            };
+            match event.name.as_str() {
+                DRAFT_EVENT => drafting.draft(&data),
+                FINAL_EVENT => {
+                    let parts = data.get("parts").cloned().unwrap_or_default();
+                    let checked = scxml_types::DataValue::canonical_json_array(
+                        &serde_json::to_string(&parts).unwrap_or_default(),
+                    )
+                    .ok()
+                    .and_then(|parts| super::stretches(&parts).ok());
+                    match (checked, parts.as_array()) {
+                        (Some(_), Some(parts)) => drafting.settle(parts),
+                        _ => drafting.settle(&[]),
+                    }
+                }
+                _ => {}
+            }
+        }
+        drop(events);
+        if settled {
+            match emit(encoding, chunker.close(), returned).await {
+                Ok(()) => {}
+                Err(Stopped::Gone) => return None,
+                Err(Stopped::Failed(code)) => {
+                    return Some(Finished::event(Returned::failed(operation, code)));
+                }
+            }
+        }
+        let said = Operation::Encode(super::Encoding {
+            stretches: said,
+            ..encoding.clone()
+        });
+        Some(Finished::event(super::encoding_outcome(
+            &said,
+            answered,
+            super::write_audio,
+        )))
+    }
+
     /// What a transport failure is for the answer.
     fn transport_failure(failure: &ComponentError) -> TransportFailure {
         match failure.code {
@@ -2018,7 +2168,7 @@ mod guest {
     impl Guest for Component {
         async fn invoke(
             request: InvokeRequest,
-            _events: wit_bindgen::StreamReader<Event>,
+            events: wit_bindgen::StreamReader<Event>,
         ) -> Result<
             (
                 wit_bindgen::StreamReader<Event>,
@@ -2026,8 +2176,13 @@ mod guest {
             ),
             ComponentError,
         > {
-            // The service accepts no event: its input stream is dropped.
+            // Only a drafted encoding reads events; any other drops its
+            // input stream.
             let (operation, endpoint) = observed(Op::Start, || plan(request))?;
+            let events = match &operation {
+                Operation::Encode(encoding) if encoding.drafted => Some(events),
+                _ => None,
+            };
             let (mut returned, returned_reader) = wit_stream::new::<Event>();
             let (done, done_reader) = wit_future::new::<Done>(|| {
                 Err(error(
@@ -2036,7 +2191,7 @@ mod guest {
                 ))
             });
             wit_bindgen::spawn(async move {
-                let Some(finished) = run(operation, endpoint, &mut returned).await else {
+                let Some(finished) = run(operation, endpoint, events, &mut returned).await else {
                     // The invoking session stopped reading.
                     return;
                 };

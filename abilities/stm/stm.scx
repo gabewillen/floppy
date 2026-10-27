@@ -11,12 +11,12 @@
     opening -open failed or timed out-> degraded
 
   Input: the <param>s memory (the address of the bot's memory, decision
-  D262; none: absent), and its bounds:
+  D265; none: absent), and its bounds:
   capacity (64 stimuli), recency_window_ms (5 min), turn_capacity (32
   turns), turn_window_ms (10 min), open_timeout_ms (30 s).
 
   opening asks the bot's memory (abilities/memory/memory.scx, decision
-  D262, which migrated the database to floppy's head revision, 0001,
+  D265, which migrated the database to floppy's head revision, 0001,
   which holds bot_stm_memory and bot_stm_turn) for one read of
   bot_stm_turn, then
   sends bot.ability.ready to the parent once (decision D242): the
@@ -108,7 +108,7 @@
          bounds. -->
     <data id="memory" expr="null"/>
     <!-- The id of each request this document last sent the memory, by
-         the state that sent it (decision D262). -->
+         the state that sent it (decision D265). -->
     <data id="memory_requests" expr="({})"/>
     <data id="capacity" expr="64"/>
     <data id="recency_window_ms" expr="300000"/>

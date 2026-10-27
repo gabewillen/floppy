@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.communication.draft",
+  "additionalProperties": false,
+  "description": "Words of a response the model is still writing (mosfet.py's DraftData, decision D262): text newly written into the words of part part of a bot.ability.communication.respond, after offset characters of it. The generate service returns it while the dispatch call streams, before the selection; the respond that follows is the response of record.",
+  "properties": {
+    "text": {
+      "description": "The words newly written into the part; empty only for a part that ended with no words, which still opens it in order.",
+      "type": "string"
+    },
+    "offset": {
+      "description": "How many characters of the part's words were written before text.",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "event": {
+      "description": "The event being drafted.",
+      "minLength": 1,
+      "type": "string"
+    },
+    "item": {
+      "description": "The drafted event's index in the dispatch call's events.",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "part": {
+      "description": "The index of the part in the response's parts.",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "seq": {
+      "description": "The draft's order among the call's drafts, from 0.",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "leading": {
+      "description": "On a part's first draft, the fields written before its words (its expression); else empty.",
+      "type": "object"
+    }
+  },
+  "required": [
+    "text",
+    "offset",
+    "event",
+    "item",
+    "seq",
+    "leading"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "text": "Hello there. ",
+      "offset": 0,
+      "event": "bot.ability.communication.respond",
+      "item": 0,
+      "part": 0,
+      "seq": 0,
+      "leading": {}
+    }
+  ]
+}

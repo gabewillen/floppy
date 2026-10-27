@@ -15,6 +15,12 @@
     }
   ],
   "properties": {
+    "id": {
+      "description": "The requester's id, echoed when the answer is the long-lived classifier's reply to a request [floppy field].",
+      "title": "Id",
+      "type": "string",
+      "minLength": 1
+    },
     "label": {
       "description": "The affect class the voice sounded most like, as the classifier names it.",
       "examples": [

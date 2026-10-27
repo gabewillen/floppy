@@ -19,7 +19,7 @@
 
   Memory: with a
   memory (the <param> memory, the address of the bot's memory), recalling
-  asks the bot's memory (abilities/memory/memory.scx, decision D262) with one
+  asks the bot's memory (abilities/memory/memory.scx, decision D265) with one
   transaction of two selects, prior cognitive episodes
   (query_tags cognitive_episode) and standing directives (query_tags
   standing_directive), each for the turn's context or none, oldest first,
@@ -37,7 +37,7 @@
   memory, recalling first embeds the cue, the words the stimulus
   carries (each message of a text type's content once, at most 2048
   bytes), as a query with the Embedding ability
-  (abilities/embedding/embedding.scx), then selects the candidates, the
+  (abilities/embedding/embedding.scx), while it selects the candidates, the
   64 newest prior episodes with their vectors (bot_memory_embedding, kind
   text, which reflection stores), and scores each as mosfet.py's
   Associative does: similarity (1) times its cosine with the cue plus
@@ -83,10 +83,18 @@
   rest as omitted="<n>". Over a budget otherwise (the stimulus alone
   overflows), the element writes the budget's message to prompt_failure and the stage fails without a model call with
   it (for example "prompt projection encoded byte budget exceeded").
-  applying ends on the generate service's done.invoke. The call streams its reply when the run's FLOPPY_STREAM
-  says the backend does (env:stream), and each generate.progress the
+  applying ends on the generate service's done.invoke. The call streams its reply (its stream <data>, true by
+  default, decision D262; with it false, when the run's FLOPPY_STREAM
+  says the backend does, env:stream), and each generate.progress the
   service returns while the reply arrives is sent on to the parent
   cognition, whose stage bound is then one of inactivity (decision D101).
+  Drafts (decision D262): the call also carries the draft markers of the
+  choices that declare one (generate's drafts, {} for none), so a streamed
+  call returns, before its result, an event per marked field's new words,
+  named by its marker; each goes on, as it arrives, to the one target that
+  offers the drafted event (_event.data.event), so a reply can be said
+  while it is written. A draft whose event more than one target offers is
+  dropped; the result is the selection of record.
 
   Choices: the body's collected choices for the turn (the <param>
   choices: the body's own and each ability's offers, each tagged with the
@@ -167,6 +175,10 @@
     <data id="focus" expr="null"/>
     <data id="focus_candidates" expr="[]"/>
     <data id="model" expr="'gemma-4-26b-a4b'"/>
+    <!-- Whether the call asks for a streamed reply itself (decision D262:
+         on by default, so a reply can be said while it is written); false
+         leaves it to the run's FLOPPY_STREAM (decision D101). -->
+    <data id="stream" expr="true"/>
     <!-- The tier this chart thinks as (decision D144): reasoning, or
          intuition, the chat tier the cognition invokes it as. -->
     <data id="tier" expr="'reasoning'"/>
@@ -238,7 +250,7 @@
          first. -->
     <data id="memory" expr="null"/>
     <!-- The id of each request this document last sent the memory, by
-         the state that sent it (decision D262). -->
+         the state that sent it (decision D265). -->
     <data id="memory_requests" expr="({})"/>
     <data id="context_ref" expr="null"/>
     <data id="prior_episodes" expr="[]"/>
@@ -249,14 +261,15 @@
     <data id="behavior_select" expr="'SELECT name, lifetime, description FROM bot_behavior WHERE status = \'ACTIVE\' ORDER BY name LIMIT 32'"/>
     <data id="statements" expr="[]"/>
     <!-- Recall by association (decision D256, mosfet.py's Associative):
-         the cue's vector, the candidates' select (the 64 newest episodes,
-         each with its id, created_at, content length and vector, if
-         any), how each is scored (similarity times the cosine with the
+         the cue's vector, what the candidates' select found (the 64
+         newest episodes, each with its id, created_at, content length and
+         vector, if any; mosfet.py's found), how each is scored (similarity times the cosine with the
          cue plus recency times 0.5 to the power of its age before the
          newest over the half-life, mosfet.py's Weights), and the ids of
          the best that hold at most 24576 characters of content in all,
          null to recall the newest instead. -->
     <data id="cue" expr="null"/>
+    <data id="found" expr="null"/>
     <data id="weights" expr="({similarity: 1, recency: 0.35, recency_half_life_ms: 172800000})"/>
     <data id="episode_ids" expr="null"/>
     <data id="candidate_select" expr="'SELECT m.memory_id, CAST(m.created_at AS TEXT), LENGTH(m.content), e.embedding FROM bot_memory m LEFT JOIN bot_memory_embedding e ON e.memory_id = m.memory_id AND e.kind = \'text\' WHERE m.query_tags = ?1 AND (CAST(?2 AS TEXT) IS NULL OR m.context_ref IS NULL OR m.context_ref = ?2) AND m.content_format = \'application/json\' ORDER BY m.created_at DESC, m.memory_id DESC LIMIT 64'"/>
@@ -274,17 +287,26 @@
       <transition cond="hasNoMemory()" target="recalling_nothing"/>
       <transition target="recalling_embedding"/>
     </state>
-    <!-- The cue (decision D256): the stimulus's words embedded as a query.
-         The request goes once the embedding has started (the next
-         macrostep); a stimulus without words, or a cue that cannot be
-         embedded, recalls by recency alone. -->
+    <!-- The cue (decision D256): the stimulus's words embedded as a query,
+         while the candidates, the newest episodes with their vectors, are
+         selected; once both are in, the candidates are ranked against the
+         cue and the episodes recalled are the best that fit. The request
+         goes once the embedding has started (the next macrostep); a
+         stimulus without words, or a cue that cannot be embedded, recalls
+         by recency alone. -->
     <state id="recalling_embedding">
       <onentry>
         <assign location="cue" expr="null"/>
+        <assign location="found" expr="null"/>
         <assign location="episode_ids" expr="null"/>
+        <assign location="statements" expr="candidateSelectStatements()"/>
         <if cond="hasCueWords()">
           <send event="bot.ability.embedding.input">
             <content expr="cueEmbeddingInput()"/>
+          </send>
+          <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.candidates">
+            <param name="id" expr="memory_requests.candidates"/>
+            <param name="statements" expr="statements"/>
           </send>
         </if>
       </onentry>
@@ -295,38 +317,25 @@
           <content expr="_event.data"/>
         </send>
       </transition>
-      <transition event="bot.ability.embedding.output" event:schema="../schemas/bot.ability.embedding.output.json"
-                  target="recalling_candidates">
+      <transition event="bot.ability.embedding.output" event:schema="../schemas/bot.ability.embedding.output.json">
         <assign location="cue" expr="_event.data.vectors[0].values"/>
+      </transition>
+      <transition event="bot.ability.memory.output" cond="isMemoryReply('candidates')" event:schema="../schemas/bot.ability.memory.output.json">
+        <assign location="found" expr="_event.data"/>
+      </transition>
+      <transition cond="cue !== null &amp;&amp; found !== null" target="recalling_memory">
+        <assign location="episode_ids" expr="rankedEpisodeIds(found)"/>
+        <log label="reasoning.recall" expr="recallLog(found)"/>
       </transition>
       <transition event="bot.ability.embedding.failed" event:schema="../schemas/bot.ability.embedding.failed.json"
                   target="recalling_memory">
         <log label="reasoning.embedding" expr="_event.data.kind"/>
       </transition>
-      <transition event="error.*" target="recalling_memory">
-        <log label="reasoning.embedding" expr="_event.name"/>
-      </transition>
-    </state>
-    <!-- The candidates, the newest episodes with their vectors, ranked
-         against the cue: the episodes recalled are the best that fit. -->
-    <state id="recalling_candidates">
-      <onentry>
-        <assign location="statements" expr="candidateSelectStatements()"/>
-        <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.candidates">
-          <param name="id" expr="memory_requests.candidates"/>
-          <param name="statements" expr="statements"/>
-        </send>
-      </onentry>
-      <transition event="bot.ability.memory.output" cond="isMemoryReply('candidates')" event:schema="../schemas/bot.ability.memory.output.json"
-                  target="recalling_memory">
-        <assign location="episode_ids" expr="rankedEpisodeIds(_event)"/>
-        <log label="reasoning.recall" expr="recallLog(_event)"/>
-      </transition>
       <transition event="bot.ability.failed" cond="isMemoryReply('candidates')" event:schema="../schemas/bot.ability.failed.json" target="done">
         <assign location="result" expr="recallFailedResult(_event.data.message)"/>
       </transition>
-      <transition event="error.*" target="done">
-        <assign location="result" expr="recallFailedResult(_event.name)"/>
+      <transition event="error.*" target="recalling_memory">
+        <log label="reasoning.embedding" expr="_event.name"/>
       </transition>
     </state>
     <state id="recalling_nothing">
@@ -411,6 +420,8 @@
       <param name="messages" expr="messages()"/>
       <param name="schema" expr="schema"/>
       <param name="schemaname" expr="'dispatch'"/>
+      <param name="drafts" expr="drafts()"/>
+      <param name="stream" expr="stream"/>
     </invoke>
 
     <!-- A streamed reply's progress goes to the cognition, which bounds this
@@ -462,6 +473,15 @@
     </transition>
     <transition event="error.*" target="done">
       <assign location="result" expr="couldNotRunResult(_event)"/>
+    </transition>
+    <!-- A draft of a selection still being written (decision D262): any
+         other event the call returns is one, named by its event's marker,
+         and goes to the one target that offers the drafted event; a draft
+         whose event more than one target offers is dropped. -->
+    <transition event="*" cond="isDraft(_event)">
+      <send eventexpr="_event.name" targetexpr="'#_scxml_' + draftTarget(_event)">
+        <content expr="_event.data"/>
+      </send>
     </transition>
   </state>
 

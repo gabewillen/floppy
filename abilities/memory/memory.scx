@@ -7,7 +7,7 @@
   once, as <invoke id="memory"> in floppy.scx's live, and passes its
   address (#_scxml_ + its session id) to every ability as the <param>
   memory; an ability that remembers sends it requests from the state that
-  needs memory (decision D262).
+  needs memory (decision D265).
 
     opening -> migrating -> serving { idle <-> applying }
                          -> unavailable

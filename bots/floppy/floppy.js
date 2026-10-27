@@ -390,7 +390,7 @@ function selectionData(s) {
 
 // live
 
-// The address of the bot's memory, the child "memory" (decision D262):
+// The address of the bot's memory, the child "memory" (decision D265):
 // null without a database.
 function memoryAddress() {
   return database === null ? null : '#_scxml_' + _sessionid + '.memory';

@@ -2,17 +2,16 @@
 <!-- voice_detection-4: a sound that is not there is unchanged by the normalization, and the detection cannot read it. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
-  <invoke id="voice_detection" type="scxml" src="../../../voice_detection.scx">
-    <param name="audio" expr="'media/missing.wav'"/>
-    <param name="media_type" expr="'audio/wav'"/>
-    <param name="output" expr="'media/sound.pcm'"/>
-  </invoke>
+  <invoke id="voice_detection" type="scxml" src="../../../voice_detection.scx"/>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.voice_detection" cond='_event.data.message === "Voice detection failed: the audio cannot be read." &amp;&amp; Object.keys(_event.data).sort().join() === "message"' target="step1"/>
+    <onentry>
+      <send event="bot.ability.hearing.voice.detection.input" target="#_voice_detection"><content expr="({id: &quot;r1&quot;, audio: 'media/missing.wav', media_type: 'audio/wav', output: 'media/sound.pcm'})"/></send>
+    </onentry>
+    <transition event="bot.ability.failed" cond="_event.data.message === &quot;Voice detection failed: the audio cannot be read.&quot; &amp;&amp; _event.data.id === 'r1' &amp;&amp; Object.keys(_event.data).sort().join() === &quot;id,message&quot;" target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

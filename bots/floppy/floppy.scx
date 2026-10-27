@@ -262,7 +262,7 @@
   (docs/defaults.md).
 
   Memory: live holds the bot's one memory, <invoke id="memory">
-  (abilities/memory/memory.scx over services/sql, decision D262), on the
+  (abilities/memory/memory.scx over services/sql, decision D265), on the
   body's database (a file in the directory the run grants the sql service
   at /memory, scx run's dir option). It migrates the database once and
   serves transactions for as long as the bot lives. The body passes its

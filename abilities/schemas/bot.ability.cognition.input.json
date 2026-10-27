@@ -118,6 +118,10 @@
             "minimum": 0,
             "maximum": 1000,
             "description": "How heavy an action the event is, as its offering ability declares it (its offerable data, decisions D206 and D242); 0 when absent. A tier is offered only the choices within its effort ceiling [floppy field]."
+          },
+          "draft": {
+            "type": "object",
+            "description": "The event's draft marker, as its offering ability declares it (its offerable data, decision D262; mosfet.py's Draft {field, event, within?, leading?}): what a streamed call drafts while the model writes the event."
           }
         },
         "required": [

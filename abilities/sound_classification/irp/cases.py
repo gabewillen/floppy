@@ -1,7 +1,19 @@
 # The sound_classification's statements and cases (tests/irp/harness.py writes them).
 
 S = suite
-DONE = "done.invoke.sound_classification"
+INPUT = "bot.ability.hearing.sound.classification.input"
+OUTPUT = "bot.ability.hearing.sound.classification.output"
+CONFIG = ()
+
+
+def asked(params, event, cond):
+    """A case that asks the long-lived child once: its params that are not
+    the child's configuration (CONFIG) are the request's fields, and the
+    child answers `event` of which `cond` holds."""
+    return dict(steps=[request(INPUT, [param for param in params if param[0] not in CONFIG]), expect(event, answered(cond))],
+                params=[param for param in params if param[0] in CONFIG])
+
+
 SOUND = [("audio", "'media/bark.wav'"), ("media_type", "'audio/wav'")]
 
 
@@ -18,19 +30,17 @@ def labeled(label):
             " && _event.data.confidence === 1")
 
 
-S.statement(1, "It takes the sound as the `<param>`s `audio`, `media_type` and `kind`, labels it once in `applying` and reaches its final `applied` at once; the label is its `<donedata>`, received by the invoker as `done.invoke.sound_classification`. It sends nothing else.")
-S.statement(2, "A kind that is a string with text is trimmed and is the one label, with confidence 1.0: `{labels: [kind], confidence: 1.0}`.")
-S.statement(3, "A kind that is null, absent or blank is unlabeled: `{labels: []}`, with no confidence. A kind that is no string is unlabeled too (the code takes only a string; the header names null and blank).")
+S.statement(1, "It is long-lived: it takes each sound as a request `bot.ability.hearing.sound.classification.input` `{id, audio, media_type?, kind?}` and answers its parent at once with `bot.ability.hearing.sound.classification.output`, the request's `id` and the label. It sends nothing else.")
+S.statement(2, "A kind that is a string with text is trimmed and is the one label, with confidence 1.0: `{id, labels: [kind], confidence: 1.0}`.")
+S.statement(3, "A kind that is null, absent or blank is unlabeled: `{id, labels: []}`, with no confidence.")
 
-S.case(100, 1, "with a kind, the classification is done at once with its label as donedata.",
-       [expect(DONE, labeled("dog bark"))], params=kind("'dog bark'"))
-S.case(101, 1, "with no params at all, it is still done at once, unlabeled.",
-       [expect(DONE, unlabeled())])
+S.case(100, 1, "with a kind, the sound is answered at once with its label.",
+       **asked(kind("'dog bark'"), OUTPUT, labeled("dog bark")))
+S.case(101, 1, "with no kind, it is still answered at once, unlabeled.",
+       **asked(SOUND, OUTPUT, unlabeled()))
 S.case(110, 2, "the kind is trimmed into the one label with confidence 1.0.",
-       [expect(DONE, labeled("doorbell"))], params=kind("'  doorbell\\t'"))
+       **asked(kind("'  doorbell\\t'"), OUTPUT, labeled("doorbell")))
 S.case(120, 3, "a null kind is unlabeled.",
-       [expect(DONE, unlabeled())], params=kind("null"))
+       **asked(kind("null"), OUTPUT, unlabeled()))
 S.case(121, 3, "a blank kind is unlabeled.",
-       [expect(DONE, unlabeled())], params=kind("'   '"))
-S.case(122, 3, "a kind that is no string is unlabeled.",
-       [expect(DONE, unlabeled())], params=kind("42"))
+       **asked(kind("'   '"), OUTPUT, unlabeled()))

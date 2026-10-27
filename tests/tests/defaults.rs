@@ -390,7 +390,9 @@ fn every_inactivity_bound_has_a_backstop_and_the_stages_nest_in_the_turn() {
 /// Streaming is per backend (decision D101): every model call that is bounded
 /// by inactivity lets the run's `FLOPPY_STREAM` decide (the generate
 /// package's `stream` slot), and no document asks for a stream itself, so a
-/// run that does not set it streams nothing (the default docs/defaults.md states).
+/// run that does not set it streams nothing (the default docs/defaults.md
+/// states); but reasoning, whose reply is said while it is written, asks
+/// for one by its `stream` `<data>`, true by default (decision D262).
 #[test]
 fn the_runs_stream_setting_alone_decides_whether_a_call_streams() {
     let manifest = read(Path::new("services/generate/package/generate.service.json"));
@@ -414,15 +416,23 @@ fn the_runs_stream_setting_alone_decides_whether_a_call_streams() {
             invokes,
             "{document}: every model call lets the run decide"
         );
-        assert!(
-            !text.contains(r#"<param name="stream""#),
-            "{document} never asks for a stream itself"
-        );
+        if document == "abilities/reasoning/reasoning.scx" {
+            assert!(
+                text.contains(r#"<param name="stream" expr="stream"/>"#)
+                    && text.contains(r#"<data id="stream" expr="true"/>"#),
+                "{document} asks for a stream by default"
+            );
+        } else {
+            assert!(
+                !text.contains(r#"<param name="stream""#),
+                "{document} never asks for a stream itself"
+            );
+        }
     }
     let page = read(Path::new("docs/defaults.md"));
     assert!(
         page.contains("| `FLOPPY_STREAM` |")
-            && page.contains("unset (the default), no call is streamed"),
+            && page.contains("unset (the default), no call but reasoning's is streamed"),
         "docs/defaults.md states the default"
     );
 }

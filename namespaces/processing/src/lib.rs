@@ -28,17 +28,19 @@
 //!
 //! A choice entry is an object with a non-empty string `event`, a `schema`,
 //! optionally a string `description`, a non-empty string `target` (the
-//! session id of the session that offers it) and an `effort` (a whole number
-//! from 0 to 1000, how heavy an action it is, decision D206), and nothing
-//! else, as `<decision:choice>` writes it and
+//! session id of the session that offers it), an `effort` (a whole number
+//! from 0 to 1000, how heavy an action it is, decision D206) and a `draft`
+//! (an object, the event's draft marker that the generate service's
+//! `drafts` reads), and nothing else, as `<decision:choice>` writes it and
 //! `<processing:collect_offered_events>` tags it. Every element keeps an
-//! entry's `effort` as it is; the dispatch tool never shows it.
+//! entry's `effort` and `draft` as they are; the dispatch tool never shows
+//! them.
 //!
 //! # `<processing:model_facing_schema location="L" bound="N" overlocation="O"/>`
 //!
 //! Rewrites the choice array at `location` (required) in place to what a
 //! model needs to fill each event (under floppy's offer bound, decision
-//! D35): every entry becomes `{event, schema, description?, target?, effort?}`,
+//! D35): every entry becomes `{event, schema, description?, target?, effort?, draft?}`,
 //! canonical JSON, in order, and every schema loses `$schema`, `title` and
 //! `examples` at every level, keeping property names (the members of
 //! `properties`, `patternProperties`, `$defs` and `definitions` are names,
@@ -1155,8 +1157,8 @@ const SEND_ENTRIES: [&str; 3] = [
 
 /// The entries of `choices`, each checked to be a choice entry: an object
 /// with a non-empty string `event`, a `schema`, optionally a string
-/// `description`, a non-empty string `target` and an `effort` (a whole
-/// number from 0 to [`MAX_EFFORT`]), and nothing else;
+/// `description`, a non-empty string `target`, an `effort` (a whole
+/// number from 0 to [`MAX_EFFORT`]) and a `draft` object, and nothing else;
 /// `details` are the failures: not an array, an entry not an object, a
 /// malformed entry.
 fn checked_entries<'a>(
@@ -1174,12 +1176,22 @@ fn checked_entries<'a>(
             })
         };
         if entry.keys().any(|key| {
-            !["event", "schema", "description", "target", "effort"].contains(&key.as_str())
-        }) || entry.get("effort").is_some_and(|effort| {
-            effort
-                .as_u64()
-                .is_none_or(|effort| effort > u64::from(MAX_EFFORT))
-        }) || text("event").flatten().is_none()
+            ![
+                "event",
+                "schema",
+                "description",
+                "target",
+                "effort",
+                "draft",
+            ]
+            .contains(&key.as_str())
+        }) || entry.get("draft").is_some_and(|draft| !draft.is_object())
+            || entry.get("effort").is_some_and(|effort| {
+                effort
+                    .as_u64()
+                    .is_none_or(|effort| effort > u64::from(MAX_EFFORT))
+            })
+            || text("event").flatten().is_none()
             || !entry.contains_key("schema")
             || matches!(text("description"), Some(None))
             || matches!(text("target"), Some(None))

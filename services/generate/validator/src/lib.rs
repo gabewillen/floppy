@@ -14,7 +14,7 @@
 //!   parameter strictly closest to it within two edits ([`PARAMETERS`]).
 //! * `duplicate_param` (error): a parameter given twice.
 //! * `missing_param` (error): no `model`, or not exactly one of `prompt` and
-//!   `messages`; `schemaname` or `tool_choice` without `schema`; with
+//!   `messages`; `schemaname`, `tool_choice` or `drafts` without `schema`; with
 //!   `input` (an embeddings call), any parameter but `model` and
 //!   `dimensions`; `dimensions` without `input`.
 //! * `invalid_value` (error, ECMAScript documents, literal `expr` only): a
@@ -59,7 +59,7 @@ use serde_json::Value as Json;
 /// The service's exact type URI.
 pub const SERVICE_URI: &str = "https://github.com/stateforward/floppy/services/generate";
 /// The parameters the service takes.
-pub const PARAMETERS: [&str; 14] = [
+pub const PARAMETERS: [&str; 15] = [
     "model",
     "prompt",
     "messages",
@@ -74,6 +74,7 @@ pub const PARAMETERS: [&str; 14] = [
     "thinking_token_budget",
     "input",
     "dimensions",
+    "drafts",
 ];
 /// The `tool_choice` values the service accepts.
 pub const TOOL_CHOICES: [&str; 2] = ["required", "auto"];
@@ -391,7 +392,7 @@ fn parameters(document: &Document, invoke: &Element, findings: &mut Vec<Finding>
             "add the `input` parameter, or remove `dimensions`",
         ));
     }
-    for name in ["schemaname", "tool_choice"] {
+    for name in ["schemaname", "tool_choice", "drafts"] {
         if !has("schema") && has(name) {
             findings.push(missing(
                 &format!("`{name}` requires a `schema` parameter"),

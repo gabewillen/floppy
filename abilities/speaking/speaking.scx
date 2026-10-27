@@ -126,6 +126,22 @@
   error.execution in the sender (scxml.rs session.accepts-event-data).
   vocal's events are checked where vocal creates them.
 
+  Drafts (decision D262, mosfet.py's speaking drafts): a reply can be
+  said while it is still being written. bot.ability.speaking.draft {part,
+  words, offset, expression?} in idle opens a drafted utterance: its text
+  grows with each draft's words, the drafts go to vocal (held until it is
+  ready) and on to the speech service, which says each sentence as soon as
+  it is written, so the first sound can play before the reply is whole.
+  The bot.ability.speaking.input that follows is the reply of record: it
+  goes to vocal after the drafts, and its words become the utterance's
+  text (floppy.say is logged once it is whole and sounding). A drafted
+  utterance whose whole reply does not arrive within draft_timeout_ms
+  (10 s, mosfet.py's draft_timeout) of its last draft is abandoned: the
+  mouth stops, and it is recorded with outcome "abandoned", text what was
+  drafted (with nothing drafted, it fails). A draft for no drafted
+  utterance in hand, and a reply of record for one already stopped or
+  abandoned, is dropped (speaking.late).
+
   Readiness: its start (starting, which goes on to idle) sends
   bot.ability.ready to the parent once (decision D242); it offers nothing.
 
@@ -151,6 +167,9 @@
          the listening can tell its own voice apart. -->
     <data id="mouth" expr="'speaking'"/>
     <data id="encoding_timeout_ms" expr="30000"/>
+    <!-- How long a drafted reply may go without a draft before its whole
+         arrives (decision D262, mosfet.py's draft_timeout). -->
+    <data id="draft_timeout_ms" expr="10000"/>
     <data id="recording_timeout_ms" expr="5000"/>
     <!-- The most unplayed audio commanded ahead of the mouth: a piece is
          at most half of it (decision D179). -->
@@ -164,6 +183,14 @@
     <data id="encoded" expr="null"/>
     <data id="message" expr="null"/>
     <data id="timer" expr="null"/>
+    <!-- A drafted utterance (decision D262): whether the one in hand is,
+         the drafts held until vocal is ready, whether it is, the draft
+         timer, and the draft being sent on (the <foreach> item). -->
+    <data id="drafted" expr="false"/>
+    <data id="drafts" expr="[]"/>
+    <data id="vocal_ready" expr="false"/>
+    <data id="draft_timer" expr="null"/>
+    <data id="draft" expr="null"/>
     <!-- The playout in hand (decision D203): the chunks received and not
          yet sounding, the chunk sounding, whether the whole utterance is
          encoded, the measured audio received and what of it (and of the
@@ -222,6 +249,17 @@
       <assign location="parts" expr="_event.data.parts"/>
       <assign location="text" expr="said(parts)"/>
       <assign location="utterance_id" expr="utteranceId(_event)"/>
+      <assign location="drafted" expr="false"/>
+      <assign location="drafts" expr="[]"/>
+    </transition>
+    <!-- A reply still being written: a drafted utterance (decision D262). -->
+    <transition event="bot.ability.speaking.draft" event:schema="../schemas/bot.ability.speaking.draft.json"
+                target="encoding">
+      <assign location="parts" expr="null"/>
+      <assign location="text" expr="_event.data.words"/>
+      <assign location="utterance_id" expr="null"/>
+      <assign location="drafted" expr="true"/>
+      <assign location="drafts" expr="[_event.data]"/>
     </transition>
     <!-- Nothing in hand to stop. -->
     <transition event="bot.ability.speaking.stop" event:schema="../schemas/bot.ability.speaking.stop.json">
@@ -253,7 +291,16 @@
     </onexit>
     <!-- A late copy of a finished utterance, or another copy of this one or
          of a held one, is dropped; another utterance waits its turn, up to
-         held_utterances_bound, and past that is refused (decision D175). -->
+         held_utterances_bound, and past that is refused (decision D175).
+         The whole of a drafted reply already stopped or abandoned is late,
+         as is a draft for no drafted utterance in hand (decision D262). -->
+    <transition event="bot.ability.speaking.input" event:schema="../schemas/bot.ability.speaking.input.json"
+                cond="isDrafting()">
+      <log label="speaking.late" expr="_event.name"/>
+    </transition>
+    <transition event="bot.ability.speaking.draft" event:schema="../schemas/bot.ability.speaking.draft.json">
+      <log label="speaking.late" expr="_event.name"/>
+    </transition>
     <transition event="bot.ability.speaking.input" event:schema="../schemas/bot.ability.speaking.input.json"
                 cond="isLateUtterance(_event)">
       <log label="speaking.late" expr="_event.sendid"/>
@@ -277,12 +324,22 @@
     <state id="voicing" initial="encoding">
       <onentry>
         <assign location="operation" expr="nextOperation()"/>
+        <assign location="vocal_ready" expr="false"/>
         <send idlocation="timer" event="bot.ability.speaking.apply.failed" delayexpr="delay(encoding_timeout_ms)">
           <param name="message" expr="'Speech encoding timed out.'"/>
         </send>
+        <if cond="isDrafting()">
+          <send idlocation="draft_timer" event="bot.ability.speaking.apply.failed" delayexpr="delay(draft_timeout_ms)">
+            <param name="message" expr="'The drafted reply never arrived whole.'"/>
+          </send>
+        </if>
       </onentry>
       <onexit>
         <cancel sendidexpr="timer"/>
+        <if cond="draft_timer !== null">
+          <cancel sendidexpr="draft_timer"/>
+          <assign location="draft_timer" expr="null"/>
+        </if>
       </onexit>
       <invoke id="vocal" type="scxml" src="../vocal/vocal.scx">
         <param name="output" expr="outputPath()"/>
@@ -292,12 +349,78 @@
         <param name="media_type" expr="media_type"/>
       </invoke>
 
-      <!-- Synthesis: no sound exists yet. -->
-      <state id="encoding">
-        <transition event="bot.ability.ready" event:schema="../schemas/bot.ability.ready.json">
+      <!-- A drafted utterance (decision D262): each draft goes on to
+           vocal (held until it is ready) and re-arms the draft timer; the
+           whole reply follows the drafts, and its words are the text. -->
+      <transition event="bot.ability.speaking.draft" event:schema="../schemas/bot.ability.speaking.draft.json"
+                  cond="isDrafting()">
+        <assign location="text" expr="text + _event.data.words"/>
+        <cancel sendidexpr="draft_timer"/>
+        <send idlocation="draft_timer" event="bot.ability.speaking.apply.failed" delayexpr="delay(draft_timeout_ms)">
+          <param name="message" expr="'The drafted reply never arrived whole.'"/>
+        </send>
+        <if cond="vocal_ready">
+          <send event="bot.ability.speaking.draft" target="#_vocal">
+            <content expr="_event.data"/>
+          </send>
+        <else/>
+          <assign location="drafts[drafts.length]" expr="_event.data"/>
+        </if>
+      </transition>
+      <transition event="bot.ability.speaking.input" event:schema="../schemas/bot.ability.speaking.input.json"
+                  cond="isDrafting()">
+        <assign location="parts" expr="_event.data.parts"/>
+        <assign location="text" expr="said(parts)"/>
+        <assign location="utterance_id" expr="utteranceId(_event)"/>
+        <cancel sendidexpr="draft_timer"/>
+        <assign location="draft_timer" expr="null"/>
+        <if cond="vocal_ready">
           <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal">
             <param name="parts" expr="parts"/>
           </send>
+        </if>
+        <if cond="In('playing')">
+          <log label="floppy.say" expr="text"/>
+        </if>
+      </transition>
+      <!-- The whole never arrived: the utterance is abandoned with what
+           was drafted, or fails when nothing was. -->
+      <transition event="bot.ability.speaking.apply.failed" event:schema="../schemas/bot.ability.speaking.apply.failed.json"
+                  cond="isDraftTimer(_event) &amp;&amp; hasDraftedWords()" target="recording">
+        <log label="speaking.timed_out" expr="draftTimedOutLog()"/>
+        <assign location="outcome" expr="'abandoned'"/>
+        <assign location="spoken" expr="spokenWords()"/>
+        <assign location="unspoken" expr="text.slice(spoken.length)"/>
+        <send event="bot.ability.speaking.efference" target="#_parent">
+          <content expr="efferenceCopy(0)"/>
+        </send>
+      </transition>
+      <transition event="bot.ability.speaking.apply.failed" event:schema="../schemas/bot.ability.speaking.apply.failed.json"
+                  cond="isDraftTimer(_event)" target="idle">
+        <log label="speaking.timed_out" expr="draftTimedOutLog()"/>
+        <send event="bot.ability.speaking.efference" target="#_parent">
+          <content expr="efferenceCopy(0)"/>
+        </send>
+        <send event="bot.ability.failed" target="#_parent">
+          <param name="message" expr="_event.data.message"/>
+        </send>
+      </transition>
+
+      <!-- Synthesis: no sound exists yet. -->
+      <state id="encoding">
+        <transition event="bot.ability.ready" event:schema="../schemas/bot.ability.ready.json">
+          <foreach array="drafts" item="draft">
+            <send event="bot.ability.speaking.draft" target="#_vocal">
+              <content expr="draft"/>
+            </send>
+          </foreach>
+          <assign location="drafts" expr="[]"/>
+          <if cond="parts !== null">
+            <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal">
+              <param name="parts" expr="parts"/>
+            </send>
+          </if>
+          <assign location="vocal_ready" expr="true"/>
         </transition>
         <!-- The first chunk: the sound starts. -->
         <transition event="bot.ability.vocal.speech.encoding.chunk" event:schema="../schemas/bot.ability.vocal.speech.encoding.chunk.json"
@@ -351,7 +474,9 @@
               <content expr="efferenceCopy(remainingSeconds())"/>
             </send>
           </if>
-          <log label="floppy.say" expr="text"/>
+          <if cond="!isDrafting()">
+            <log label="floppy.say" expr="text"/>
+          </if>
         </onentry>
         <!-- More of the utterance: queued behind the chunk in hand. -->
         <transition event="bot.ability.vocal.speech.encoding.chunk" event:schema="../schemas/bot.ability.vocal.speech.encoding.chunk.json">

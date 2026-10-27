@@ -3,6 +3,86 @@
   "title": "bot.ability.hearing.voice.detection.output",
   "description": "Private apply result: clip-local voice spans from the voice-activity classifier (not a public product).\n\nEmpty ``segments`` means no voice in this clip. Used only to decide Start/End boundaries.\nDownstream turn assembly may still receive segment lists via Listening products, not this event.",
   "properties": {
+    "id": {
+      "description": "The requester's id, echoed when the answer is the long-lived stage's reply to a request [floppy field].",
+      "title": "Id",
+      "type": "string",
+      "minLength": 1
+    },
+    "sound": {
+      "additionalProperties": false,
+      "description": "The sound as normalized: a WAV container's PCM, or the sound unchanged [floppy field].",
+      "properties": {
+        "audio": {
+          "description": "Reference (a URI reference) to the audio this stimulus carries; floppy passes media by reference, never as bytes [floppy field].",
+          "examples": [
+            "media/audio-1"
+          ],
+          "format": "uri-reference",
+          "minLength": 1,
+          "title": "Audio",
+          "type": "string"
+        },
+        "media_type": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional media type or codec label, such as audio/pcm or audio/opus.",
+          "examples": [
+            "audio/pcm",
+            "audio/opus"
+          ],
+          "title": "Media Type"
+        },
+        "sample_rate_hz": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional sample rate for raw or decoded audio, measured in hertz.",
+          "examples": [
+            48000
+          ],
+          "title": "Sample Rate Hz"
+        },
+        "channels": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional number of audio channels represented by the chunk.",
+          "examples": [
+            1,
+            2
+          ],
+          "title": "Channels"
+        }
+      },
+      "required": [
+        "audio"
+      ],
+      "title": "Sound",
+      "type": "object"
+    },
     "segments": {
       "default": [],
       "description": "Voice spans in the inspected audio, ordered by ascending start_seconds. Empty means no voice.",

@@ -4,24 +4,28 @@
   the speech service's diarize operation (LocalAI's POST
   {base}/audio/diarization, which serves pyannote segmentation and
   Sortformer models). The interpretation
-  (abilities/interpretation/interpretation.scx) invokes it once per utterance from
-  DiarizingVoice; the interpretation's stage timer bounds it, and leaving
-  DiarizingVoice cancels it and the service call (SCXML 6.4).
+  (abilities/interpretation/interpretation.scx) invokes it once, as its
+  long-lived child voice_diarization (mosfet.py's Interpretation holds
+  its VoiceDiarization), and sends it each utterance from DiarizingVoice
+  and Diarizing; the interpretation's stage timer bounds each request.
 
-    applying (an invoked speech service) -> applied (final)
+    idle -bot.ability.hearing.voice.diarization.input-> applying -> idle
 
-  Input: the <param>s audio (a reference to the utterance: raw 16-bit PCM,
-  or a WAV container), media_type, sample_rate_hz and channels (its
-  format), output (the reference each segment's file extends,
-  <output>-<index>), and model (LocalAI's pyannote-diarization by default).
+  Configuration: the <param> model (LocalAI's pyannote-diarization by
+  default).
 
-  Output: <donedata>, received by the interpretation as
-  done.invoke.voice_diarization: {segments} (clipped PCM
-  segments, each a reference with its format, span and optional
-  confidence, ascending by start; raw speaker labels never enter) when the
-  service answers bot.ability.hearing.voice.diarization.output, or
-  {message} when it answers bot.ability.failed,
-  answers something else, or cannot run.
+  Requests: bot.ability.hearing.voice.diarization.input {id, audio,
+  media_type?, sample_rate_hz?, channels?, output}: a reference to the
+  utterance (raw 16-bit PCM, or a WAV container), its format, and the
+  reference each segment's file extends (<output>-<index>). It answers its
+  parent with bot.ability.hearing.voice.diarization.output {id, segments}
+  (clipped PCM segments, each a reference with its format, span and
+  optional confidence, ascending by start; raw speaker labels never enter)
+  when the service answers bot.ability.hearing.voice.diarization.output,
+  or bot.ability.failed {id, message} when it answers bot.ability.failed,
+  answers something else, or cannot run. One utterance is diarized at a
+  time; a request that arrives while one is in flight replaces it
+  (leaving applying cancels its service call, SCXML 6.4).
 
   Bindings: the speech service package; env scopes FLOPPY_VOICE_BASE_URL
   and FLOPPY_VOICE_API_KEY to the service's <invoke> (no default backend,
@@ -33,53 +37,67 @@
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
-       version="1.0" datamodel="ecmascript" name="voice_diarization" initial="applying">
+       version="1.0" datamodel="ecmascript" name="voice_diarization" initial="idle">
   <datamodel>
-    <!-- The invoker's <param>s. -->
-    <data id="audio" expr="null"/>
-    <data id="media_type" expr="null"/>
-    <data id="sample_rate_hz" expr="null"/>
-    <data id="channels" expr="null"/>
-    <data id="output" expr="null"/>
+    <!-- The invoker's <param>. -->
     <data id="model" expr="'pyannote-diarization'"/>
-    <!-- The result. -->
-    <data id="result" expr="null"/>
+    <!-- The request being diarized. -->
+    <data id="request" expr="null"/>
+    <!-- The current service call's generated invoke ids: a cancelled call's
+         late events (still delivered, SCXML 6.4) are not this request's. -->
+    <data id="diarizer" expr="null"/>
   </datamodel>
   <script src="voice_diarization.js"/>
 
-  <state id="applying">
-    <invoke id="diarizer" type="https://github.com/stateforward/floppy/services/speech"
-            env:baseurl="FLOPPY_VOICE_BASE_URL" env:apikey="FLOPPY_VOICE_API_KEY">
-      <param name="operation" expr="'diarize'"/>
-      <param name="model" expr="model"/>
-      <param name="audio" expr="audio"/>
-      <param name="media_type" expr="media_type"/>
-      <param name="sample_rate_hz" expr="sample_rate_hz"/>
-      <param name="channels" expr="channels"/>
-      <param name="output" expr="output"/>
-    </invoke>
-    <transition event="bot.ability.hearing.voice.diarization.output"
-                cond="hasSegments(_event)" target="applied">
-      <assign location="result" expr="diarizedResult(_event)"/>
-    </transition>
-    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="applied">
-      <assign location="result" expr="failedResult(_event)"/>
-    </transition>
-    <transition event="done.invoke.diarizer" target="applied">
-      <assign location="result" expr="undiarizedResult()"/>
-    </transition>
-    <transition event="error.*" target="applied">
-      <assign location="result" expr="errorResult(_event)"/>
-    </transition>
-    <!-- Anything else the diarizer sends (the transitions above come first). -->
-    <transition event="*" target="applied">
-      <assign location="result" expr="mismatchedResult()"/>
+  <state id="idle">
+    <transition event="bot.ability.hearing.voice.diarization.input"
+                event:schema="../schemas/bot.ability.hearing.voice.diarization.input.json" target="applying">
+      <assign location="request" expr="_event.data"/>
     </transition>
   </state>
 
-  <final id="applied">
-    <donedata>
-      <content expr="result"/>
-    </donedata>
-  </final>
+  <state id="applying">
+    <invoke idlocation="diarizer" type="https://github.com/stateforward/floppy/services/speech"
+            env:baseurl="FLOPPY_VOICE_BASE_URL" env:apikey="FLOPPY_VOICE_API_KEY">
+      <param name="operation" expr="'diarize'"/>
+      <param name="model" expr="model"/>
+      <param name="audio" expr="request.audio"/>
+      <param name="media_type" expr="requested('media_type')"/>
+      <param name="sample_rate_hz" expr="requested('sample_rate_hz')"/>
+      <param name="channels" expr="requested('channels')"/>
+      <param name="output" expr="request.output"/>
+    </invoke>
+    <!-- A newer utterance replaces this one. -->
+    <transition event="bot.ability.hearing.voice.diarization.input"
+                event:schema="../schemas/bot.ability.hearing.voice.diarization.input.json" target="applying">
+      <assign location="request" expr="_event.data"/>
+    </transition>
+    <transition event="bot.ability.hearing.voice.diarization.output" event:schema="../schemas/bot.ability.hearing.voice.diarization.output.json"
+                cond="_event.invokeid === diarizer &amp;&amp; hasSegments(_event)" target="idle">
+      <send event="bot.ability.hearing.voice.diarization.output" target="#_parent">
+        <content expr="diarizedResult(_event)"/>
+      </send>
+    </transition>
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" cond="_event.invokeid === diarizer" target="idle">
+      <send event="bot.ability.failed" target="#_parent">
+        <content expr="failedResult(_event)"/>
+      </send>
+    </transition>
+    <transition event="done.invoke" cond="_event.invokeid === diarizer" target="idle">
+      <send event="bot.ability.failed" target="#_parent">
+        <content expr="undiarizedResult()"/>
+      </send>
+    </transition>
+    <transition event="error.*" target="idle">
+      <send event="bot.ability.failed" target="#_parent">
+        <content expr="errorResult(_event)"/>
+      </send>
+    </transition>
+    <!-- Anything else the diarizer sends (the transitions above come first). -->
+    <transition event="*" cond="_event.invokeid === diarizer" target="idle">
+      <send event="bot.ability.failed" target="#_parent">
+        <content expr="mismatchedResult()"/>
+      </send>
+    </transition>
+  </state>
 </scxml>
