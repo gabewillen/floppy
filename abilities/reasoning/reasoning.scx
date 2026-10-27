@@ -37,7 +37,7 @@
   database, recalling first embeds the cue, the words the stimulus
   carries (each message of a text type's content once, at most 2048
   bytes), as a query with the Embedding ability
-  (abilities/embedding/embedding.scx), then selects the candidates, the
+  (abilities/embedding/embedding.scx), while it selects the candidates, the
   64 newest prior episodes with their vectors (bot_memory_embedding, kind
   text, which reflection stores), and scores each as mosfet.py's
   Associative does: similarity (1) times its cosine with the cue plus
@@ -247,14 +247,15 @@
     <data id="behavior_select" expr="'SELECT name, lifetime, description FROM bot_behavior WHERE status = \'ACTIVE\' ORDER BY name LIMIT 32'"/>
     <data id="statements" expr="[]"/>
     <!-- Recall by association (decision D256, mosfet.py's Associative):
-         the cue's vector, the candidates' select (the 64 newest episodes,
-         each with its id, created_at, content length and vector, if
-         any), how each is scored (similarity times the cosine with the
+         the cue's vector, what the candidates' select found (the 64
+         newest episodes, each with its id, created_at, content length and
+         vector, if any; mosfet.py's found), how each is scored (similarity times the cosine with the
          cue plus recency times 0.5 to the power of its age before the
          newest over the half-life, mosfet.py's Weights), and the ids of
          the best that hold at most 24576 characters of content in all,
          null to recall the newest instead. -->
     <data id="cue" expr="null"/>
+    <data id="found" expr="null"/>
     <data id="weights" expr="({similarity: 1, recency: 0.35, recency_half_life_ms: 172800000})"/>
     <data id="episode_ids" expr="null"/>
     <data id="candidate_select" expr="'SELECT m.memory_id, CAST(m.created_at AS TEXT), LENGTH(m.content), e.embedding FROM bot_memory m LEFT JOIN bot_memory_embedding e ON e.memory_id = m.memory_id AND e.kind = \'text\' WHERE m.query_tags = ?1 AND (CAST(?2 AS TEXT) IS NULL OR m.context_ref IS NULL OR m.context_ref = ?2) AND m.content_format = \'application/json\' ORDER BY m.created_at DESC, m.memory_id DESC LIMIT 64'"/>
@@ -272,14 +273,19 @@
       <transition cond="hasNoDatabase()" target="recalling_nothing"/>
       <transition target="recalling_embedding"/>
     </state>
-    <!-- The cue (decision D256): the stimulus's words embedded as a query.
-         The request goes once the embedding has started (the next
-         macrostep); a stimulus without words, or a cue that cannot be
-         embedded, recalls by recency alone. -->
+    <!-- The cue (decision D256): the stimulus's words embedded as a query,
+         while the candidates, the newest episodes with their vectors, are
+         selected; once both are in, the candidates are ranked against the
+         cue and the episodes recalled are the best that fit. The request
+         goes once the embedding has started (the next macrostep); a
+         stimulus without words, or a cue that cannot be embedded, recalls
+         by recency alone. -->
     <state id="recalling_embedding">
       <onentry>
         <assign location="cue" expr="null"/>
+        <assign location="found" expr="null"/>
         <assign location="episode_ids" expr="null"/>
+        <assign location="statements" expr="candidateSelectStatements()"/>
         <if cond="hasCueWords()">
           <send event="bot.ability.embedding.input">
             <content expr="cueEmbeddingInput()"/>
@@ -288,43 +294,34 @@
       </onentry>
       <transition cond="hasNoCueWords()" target="recalling_memory"/>
       <invoke id="embedding" type="scxml" src="../embedding/embedding.scx"/>
+      <invoke id="candidates" type="scxml" src="../memory/memory.scx">
+        <param name="database" expr="database"/>
+        <param name="statements" expr="statements"/>
+      </invoke>
       <transition event="bot.ability.embedding.input" event:schema="../schemas/bot.ability.embedding.input.json">
         <send event="bot.ability.embedding.input" target="#_embedding">
           <content expr="_event.data"/>
         </send>
       </transition>
-      <transition event="bot.ability.embedding.output" event:schema="../schemas/bot.ability.embedding.output.json"
-                  target="recalling_candidates">
+      <transition event="bot.ability.embedding.output" event:schema="../schemas/bot.ability.embedding.output.json">
         <assign location="cue" expr="_event.data.vectors[0].values"/>
+      </transition>
+      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json">
+        <assign location="found" expr="_event.data"/>
+      </transition>
+      <transition cond="cue !== null &amp;&amp; found !== null" target="recalling_memory">
+        <assign location="episode_ids" expr="rankedEpisodeIds(found)"/>
+        <log label="reasoning.recall" expr="recallLog(found)"/>
       </transition>
       <transition event="bot.ability.embedding.failed" event:schema="../schemas/bot.ability.embedding.failed.json"
                   target="recalling_memory">
         <log label="reasoning.embedding" expr="_event.data.kind"/>
       </transition>
-      <transition event="error.*" target="recalling_memory">
-        <log label="reasoning.embedding" expr="_event.name"/>
-      </transition>
-    </state>
-    <!-- The candidates, the newest episodes with their vectors, ranked
-         against the cue: the episodes recalled are the best that fit. -->
-    <state id="recalling_candidates">
-      <onentry>
-        <assign location="statements" expr="candidateSelectStatements()"/>
-      </onentry>
-      <invoke id="candidates" type="scxml" src="../memory/memory.scx">
-        <param name="database" expr="database"/>
-        <param name="statements" expr="statements"/>
-      </invoke>
-      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json"
-                  target="recalling_memory">
-        <assign location="episode_ids" expr="rankedEpisodeIds(_event)"/>
-        <log label="reasoning.recall" expr="recallLog(_event)"/>
-      </transition>
       <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="done">
         <assign location="result" expr="recallFailedResult(_event.data.message)"/>
       </transition>
-      <transition event="error.*" target="done">
-        <assign location="result" expr="recallFailedResult(_event.name)"/>
+      <transition event="error.*" target="recalling_memory">
+        <log label="reasoning.embedding" expr="_event.name"/>
       </transition>
     </state>
     <state id="recalling_nothing">

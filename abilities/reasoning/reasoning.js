@@ -135,8 +135,8 @@ function createdAtMs(text) {
 // The candidates scored (mosfet.py's Associative: similarity times the
 // cosine plus recency times 0.5^(age / half-life), the age before the
 // newest candidate), best first, ties newer first.
-function scoredCandidates(_event) {
-  var rows = _event.data.results[0].rows;
+function scoredCandidates(output) {
+  var rows = output.results[0].rows;
   var newest = rows.reduce(function (most, r) { return Math.max(most, createdAtMs(r.values[1])); }, 0);
   return rows.map(function (r, order) {
     var similarity = cueSimilarity(r.values[3]);
@@ -147,10 +147,10 @@ function scoredCandidates(_event) {
 
 // The ids of the best candidates that hold at most 24576 characters of
 // content in all.
-function rankedEpisodeIds(_event) {
+function rankedEpisodeIds(output) {
   var room = 24576;
   var ids = [];
-  scoredCandidates(_event).forEach(function (row) {
+  scoredCandidates(output).forEach(function (row) {
     if (row.length <= room) {
       ids.push(row.id);
       room -= row.length;
@@ -159,8 +159,8 @@ function rankedEpisodeIds(_event) {
   return ids;
 }
 
-function recallLog(_event) {
-  return scoredCandidates(_event).slice(0, 3).map(function (row) { return row.id.replace(/^0+/, '') + ':' + row.similarity.toFixed(3); }).join(' ');
+function recallLog(output) {
+  return scoredCandidates(output).slice(0, 3).map(function (row) { return row.id.replace(/^0+/, '') + ':' + row.similarity.toFixed(3); }).join(' ');
 }
 
 // The standing directives appended.
