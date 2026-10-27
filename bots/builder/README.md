@@ -174,6 +174,14 @@ text.
   decision D147), a persistent routine without a schedule is rejected, and in a turn behavior (any other draft)
   a literal `delay` longer than `turn_after_bound_ms` is rejected, since
   autonomy silences a turn behavior then. A `delayexpr` is not judged.
+  The design and author prompts ask the model to judge, from each
+  service's type, whether restarting it is right (decision D263): an
+  `<invoke>` lives as long as its state, so a service whose state must
+  survive between the steps that use it is invoked once, in the compound
+  or parallel state that holds every state that uses it, while one whose
+  type holds nothing worth keeping may restart whenever its state is
+  entered again. No check enforces it: whether a restart is right is the
+  service's, not the document's.
 * `simulate`: each test script runs the draft as a fresh invoked child
   (`<invoke idlocation="candidate_id" type="scxml" srcexpr="draftPath()"/>`,
   loaded from its path with its schema file and script,
