@@ -2767,6 +2767,7 @@ dependencies = [
  "scxml-telemetry",
  "scxml-types",
  "scxml-xpath",
+ "serde",
  "serde_json",
  "wit-bindgen 0.51.0",
 ]
