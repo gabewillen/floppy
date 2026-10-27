@@ -134,11 +134,13 @@ Admission, in detail:
 - **The transport sends.** The `http` feature's `ExtensionHttpClient`
   follows no redirect (a 3xx is returned as the response) and uses no
   cookie, credential, or environment proxy; TLS is rustls against the
-  operating system's trust store. A response head of at most 16 KiB and a
+  operating system's trust store. Connections are kept alive and pooled
+  per origin, so consecutive requests to one origin reuse one connection
+  and its TLS session. A response head of at most 16 KiB and a
   response body of at most 16 MiB (`payload-too-large` beyond it) apply on
   every build. A request has no time limit of its own: the invocation bounds
   it, since leaving the invoking state cancels the invocation and closes
-  the connection (SCXML 6.4), so a document's timeout is a `<send delay>`
+  the connection the request holds, new or pooled (SCXML 6.4), so a document's timeout is a `<send delay>`
   armed in the invoking state; an unreachable host fails when the operating
   system gives up connecting.
 

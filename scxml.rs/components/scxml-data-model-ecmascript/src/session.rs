@@ -15,6 +15,11 @@
 //!   then the system variables. Everything the adapter calls later was
 //!   captured before any user code ran, so a script that replaces a global
 //!   or a built-in never runs inside the adapter's own work.
+//! * Everything before the system variables depends on no session, so the
+//!   Wasm component creates it ahead of time (`Engine::prepare`, run once
+//!   by Wizer at build time through `wizer-initialize`), and the first
+//!   `initialize` of each instance adds the system variables to that realm
+//!   instead of creating one; every later `initialize` creates its own.
 //! * Each system variable (`_sessionid`, `_name`, `_ioprocessors`,
 //!   `_event`) is a non-enumerable, non-configurable accessor whose setter
 //!   throws a `TypeError` (SCXML 5.10, B.2.8); its getter returns a value
@@ -717,6 +722,12 @@ impl Session {
     /// Creates the realm of a session with system variables `system`; see
     /// the module contract for the order.
     fn create(system: &SystemContext) -> Result<Self, DataModelError> {
+        Self::prepare()?.started(system)
+    }
+
+    /// Creates a realm with everything of the module contract's order but
+    /// the system variables: it depends on no session.
+    fn prepare() -> Result<Self, DataModelError> {
         let mut context = ContextBuilder::new()
             .host_hooks(Rc::new(BoundedHostHooks))
             .clock(Rc::new(SessionClock))
@@ -763,7 +774,7 @@ impl Session {
         let helpers = Helpers::install(&mut context, &xml_text)?;
         install_natives(&mut context)?;
         let pristine = Pristine::capture(&mut context)?;
-        let mut session = Self {
+        Ok(Self {
             scripts: BTreeMap::new(),
             script_bytes: 0,
             helpers,
@@ -772,12 +783,18 @@ impl Session {
             xml_text,
             pristine,
             event: None,
-            random: RandomPosition::of(&system.session_id),
+            random: RandomPosition::default(),
             foreach: Vec::new(),
             context,
-        };
-        session.register_system(system)?;
-        Ok(session)
+        })
+    }
+
+    /// This prepared realm (see [`Self::prepare`]) as the realm of the
+    /// session with system variables `system`.
+    fn started(mut self, system: &SystemContext) -> Result<Self, DataModelError> {
+        self.random = RandomPosition::of(&system.session_id);
+        self.register_system(system)?;
+        Ok(self)
     }
 
     /// Binds `_event` for an operation: the event built from its source
@@ -1778,6 +1795,10 @@ fn run_in<T>(
 pub(crate) struct Engine {
     #[cfg(target_arch = "wasm32")]
     slot: RefCell<Option<Session>>,
+    /// A realm [`Self::prepare`] created ahead of the first session, which
+    /// [`Self::start`] takes instead of creating one.
+    #[cfg(target_arch = "wasm32")]
+    prepared: RefCell<Option<Session>>,
     #[cfg(not(target_arch = "wasm32"))]
     worker: RefCell<Option<worker::Worker>>,
 }
@@ -1791,10 +1812,22 @@ impl Engine {
         declarations: Vec<(String, DataValue)>,
     ) -> Result<(), DataModelError> {
         let system = system.clone();
+        #[cfg(target_arch = "wasm32")]
+        let prepared = self
+            .prepared
+            .try_borrow_mut()
+            .map_err(|_| DataModelError::Execution)?
+            .take();
         self.dispatch(
             &mut crate::NoHost,
             move |slot: &mut Option<Session>, _answerer: Answerer| {
                 *slot = None;
+                #[cfg(target_arch = "wasm32")]
+                let mut session = match prepared {
+                    Some(session) => session.started(&system)?,
+                    None => Session::create(&system)?,
+                };
+                #[cfg(not(target_arch = "wasm32"))]
                 let mut session = Session::create(&system)?;
                 for (name, value) in &declarations {
                     let value = session.value_of(value)?;
@@ -1804,6 +1837,22 @@ impl Engine {
                 Ok(())
             },
         )
+    }
+
+    /// Creates the realm the next [`Self::start`] takes (Wasm only: a
+    /// native realm lives on its worker thread), so a component
+    /// pre-initialized by this call (`wizer-initialize`) starts each
+    /// instance's first session from it. Every realm is created the same
+    /// way from no input, so a session started from a prepared realm sees
+    /// exactly what one created by `start` would.
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn prepare(&self) -> Result<(), DataModelError> {
+        let session = Session::prepare()?;
+        *self
+            .prepared
+            .try_borrow_mut()
+            .map_err(|_| DataModelError::Execution)? = Some(session);
+        Ok(())
     }
 
     /// Runs `work` in the realm with `_event` bound to `event`, asking
