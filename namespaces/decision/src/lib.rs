@@ -89,10 +89,13 @@
 //!   `event:schema`, that no earlier transition of its chain matches.
 //! * **The declaration.** The target declares what it offers in its
 //!   `<data id="offerable">` ([`OFFERABLE_DATA_ID`]): a JSON object mapping
-//!   each offered event name to `{effort?}`, the effort a whole number from
-//!   0 to [`MAX_EFFORT`] (decision D206), so an invoker's `<param>` can set
-//!   it. Only the declared events are offered, each with its declared
-//!   effort, and a session that declares none offers nothing.
+//!   each offered event name to `{effort?, draft?}`, the effort a whole
+//!   number from 0 to [`MAX_EFFORT`] (decision D206), so an invoker's
+//!   `<param>` can set it, and the draft an object, the event's draft
+//!   marker (mosfet.py's `Draft` `{field, event, within?, leading?}`),
+//!   carried into its choice for the generate service's `drafts`. Only the
+//!   declared events are offered, each with its declared effort and draft,
+//!   and a session that declares none offers nothing.
 //!   `undeclared="all"` (the default is `none`) offers every event the walk
 //!   finds instead, with the effort of those declared: it is for a document
 //!   that declares nothing, such as the owner's firmware. A declaration
@@ -319,10 +322,14 @@ pub struct Choice {
     /// How heavy an action it is (decision D206), when the offering document's
     /// `offerable` declares it (decision D242).
     pub effort: Option<u32>,
+    /// The event's draft marker (mosfet.py's `Draft`), when the offering
+    /// document's `offerable` declares one: `{field, event, within?,
+    /// leading?}`, what the generate service drafts while a model writes it.
+    pub draft: Option<Json>,
 }
 
 /// The canonical choices document of `entries`: a JSON array of
-/// `{"description"?, "effort"?, "event", "schema"}` objects in order,
+/// `{"description"?, "draft"?, "effort"?, "event", "schema"}` objects in order,
 /// canonical JSON.
 #[must_use]
 pub fn choices_json(entries: &[Choice]) -> String {
@@ -338,6 +345,9 @@ pub fn choices_json(entries: &[Choice]) -> String {
                 }
                 if let Some(effort) = entry.effort {
                     object.insert("effort".into(), effort.into());
+                }
+                if let Some(draft) = &entry.draft {
+                    object.insert("draft".into(), draft.clone());
                 }
                 Json::Object(object)
             })
@@ -588,7 +598,10 @@ pub fn session_offers<E>(
         .into_iter()
         .filter_map(|mut entry| {
             match (declared.get(&entry.event), undeclared) {
-                (Some(effort), _) => entry.effort = *effort,
+                (Some(declaration), _) => {
+                    entry.effort = declaration.effort;
+                    entry.draft.clone_from(&declaration.draft);
+                }
                 (None, Undeclared::All) => {}
                 (None, Undeclared::None) => return None,
             }
@@ -598,12 +611,22 @@ pub fn session_offers<E>(
 }
 
 /// A malformed `offerable` declaration's failure.
-const MALFORMED_OFFERABLE: &str = "the target's offerable is not an object of {effort?} entries";
+const MALFORMED_OFFERABLE: &str =
+    "the target's offerable is not an object of {effort?, draft?} entries";
 
-/// The `offerable` declaration of one session object: each declared event
-/// and its effort, when it declares one. A session without the variable
-/// (or with no data model image yet) declares nothing.
-fn offerable<E>(root: &Json) -> Result<BTreeMap<String, Option<u32>>, Failure<E>> {
+/// What a session declares of one event it offers: its effort and its
+/// draft marker, each when it declares one.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct Declaration {
+    effort: Option<u32>,
+    draft: Option<Json>,
+}
+
+/// The `offerable` declaration of one session object: each declared event,
+/// with its effort and its draft marker (an object, checked by the generate
+/// service that reads it), when it declares them. A session without the
+/// variable (or with no data model image yet) declares nothing.
+fn offerable<E>(root: &Json) -> Result<BTreeMap<String, Declaration>, Failure<E>> {
     let mut declared = BTreeMap::new();
     let Some(data_model) = root.get("data_model") else {
         return Ok(declared);
@@ -631,13 +654,26 @@ fn offerable<E>(root: &Json) -> Result<BTreeMap<String, Option<u32>>, Failure<E>
     {
         let declaration = declaration
             .as_object()
-            .filter(|declaration| declaration.keys().all(|key| key == "effort"))
+            .filter(|declaration| {
+                declaration
+                    .keys()
+                    .all(|key| key == "effort" || key == "draft")
+            })
             .ok_or(Failure::Execution(MALFORMED_OFFERABLE))?;
         let effort = declaration
             .get("effort")
             .map(|effort| effort_of(effort).ok_or(Failure::Execution(MALFORMED_OFFERABLE)))
             .transpose()?;
-        declared.insert(event.clone(), effort);
+        let draft = declaration
+            .get("draft")
+            .map(|draft| {
+                draft
+                    .is_object()
+                    .then(|| draft.clone())
+                    .ok_or(Failure::Execution(MALFORMED_OFFERABLE))
+            })
+            .transpose()?;
+        declared.insert(event.clone(), Declaration { effort, draft });
     }
     Ok(declared)
 }
@@ -844,6 +880,7 @@ pub fn selection_walk<E>(
                     event: event.to_owned(),
                     description: description_of(&schema),
                     effort: None,
+                    draft: None,
                     schema: schema.clone(),
                 });
             }

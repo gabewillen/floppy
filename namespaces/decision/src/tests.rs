@@ -835,10 +835,27 @@ fn offers_writes_the_declared_events_of_the_unguarded_schema_transitions() {
             schema: cancel_schema(),
             description: Some("Cancel the order".into()),
             effort: Some(2),
+            draft: None,
         }]))
         .expect("JSON"),
         "the canonical choices"
     );
+}
+
+/// A declared draft marker rides its event's choice, as declared.
+#[test]
+fn offers_carry_each_declared_draft_marker_into_its_choice() {
+    let draft = json!({"field": "words", "event": "order.cancel.draft", "within": "parts"});
+    let offerable = json!({"order.cancel": {"draft": draft}});
+    let offers = executed_offers(
+        &offers_attributes(None),
+        SnapshotRead::Document(offers_snapshot(Some(&offerable))),
+    )
+    .expect("handled")
+    .expect("assigned");
+    assert_eq!(offers[0]["event"], "order.cancel");
+    assert_eq!(offers[0]["draft"], draft);
+    assert!(offers[0].get("effort").is_none());
 }
 
 /// `undeclared="all"` offers every event the walk finds, with the efforts
@@ -927,7 +944,7 @@ fn a_host_failure_of_the_read_is_passed_on() {
     assert!(host.assigned.is_empty());
 }
 
-/// A declaration that is not an object of `{effort?}` entries is
+/// A declaration that is not an object of `{effort?, draft?}` entries is
 /// `error.execution`.
 #[test]
 fn a_malformed_offerable_raises_error_execution() {
@@ -937,6 +954,7 @@ fn a_malformed_offerable_raises_error_execution() {
         json!({"order.cancel": {"effort": -1}}),
         json!({"order.cancel": {"effort": 1.5}}),
         json!({"order.cancel": {"cost": 1}}),
+        json!({"order.cancel": {"draft": "words"}}),
     ] {
         assert_eq!(
             executed_offers(
