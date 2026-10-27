@@ -3,6 +3,12 @@
   "title": "bot.ability.hearing.voice.diarization.output",
   "description": "Provider-neutral diarization result for voice input.",
   "properties": {
+    "id": {
+      "description": "The requester's id, echoed when the answer is the long-lived stage's reply to a request [floppy field].",
+      "title": "Id",
+      "type": "string",
+      "minLength": 1
+    },
     "segments": {
       "description": "Clipped audio segments ordered by ascending start time in the voice input. Each segment retains its timing and optional diarization confidence.",
       "examples": [

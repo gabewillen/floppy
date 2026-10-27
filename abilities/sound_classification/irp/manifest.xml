@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/sound_classification/irp/sources">
   <assert id="sound_classification-1" specnum="1" specid="#sound_classification-1">
-    <![CDATA[It takes the sound as the `<param>`s `audio`, `media_type` and `kind`, labels it once in `applying` and reaches its final `applied` at once; the label is its `<donedata>`, received by the invoker as `done.invoke.sound_classification`. It sends nothing else.]]>
+    <![CDATA[It is long-lived: it takes each sound as a request `bot.ability.hearing.sound.classification.input` `{id, audio, media_type?, kind?}` and answers its parent at once with `bot.ability.hearing.sound.classification.output`, the request's `id` and the label. It sends nothing else.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -12,21 +12,18 @@
     </test>
   </assert>
   <assert id="sound_classification-2" specnum="2" specid="#sound_classification-2">
-    <![CDATA[A kind that is a string with text is trimmed and is the one label, with confidence 1.0: `{labels: [kind], confidence: 1.0}`.]]>
+    <![CDATA[A kind that is a string with text is trimmed and is the one label, with confidence 1.0: `{id, labels: [kind], confidence: 1.0}`.]]>
     <test id="110" conformance="mandatory" manual="false">
       <start uri="110/test110.scxml"/>
     </test>
   </assert>
   <assert id="sound_classification-3" specnum="3" specid="#sound_classification-3">
-    <![CDATA[A kind that is null, absent or blank is unlabeled: `{labels: []}`, with no confidence. A kind that is no string is unlabeled too (the code takes only a string; the header names null and blank).]]>
+    <![CDATA[A kind that is null, absent or blank is unlabeled: `{id, labels: []}`, with no confidence.]]>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>
     <test id="121" conformance="mandatory" manual="false">
       <start uri="121/test121.scxml"/>
-    </test>
-    <test id="122" conformance="mandatory" manual="false">
-      <start uri="122/test122.scxml"/>
     </test>
   </assert>
 </assertions>

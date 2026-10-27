@@ -3,7 +3,6 @@
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="voice_affect" type="scxml" src="../../../voice_affect.scx">
-    <param name="segments" expr='[{"audio": "media/long.pcm", "media_type": "audio/pcm", "sample_rate_hz": 16000, "channels": 1, "start_seconds": 0.0, "end_seconds": 1.0}]'/>
     <param name="timeout_ms" expr="1"/>
   </invoke>
   <state id="boot">
@@ -11,7 +10,10 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.voice_affect" cond='JSON.stringify(_event.data) === "{\"affect\":null}"' target="step1"/>
+    <onentry>
+      <send event="bot.ability.classifying.input" target="#_voice_affect"><content expr='({id: "r1", segments: [{"audio": "media/long.pcm", "media_type": "audio/pcm", "sample_rate_hz": 16000, "channels": 1, "start_seconds": 0.0, "end_seconds": 1.0}]})'/></send>
+    </onentry>
+    <transition event="bot.ability.failed" cond='_event.data.id === "r1" &amp;&amp; (function (_event) { return _event.data.message === "failed: not heard within 1 ms" &amp;&amp; Object.keys(_event.data).length === 1; })({name: _event.name, data: (function (data) { var copy = JSON.parse(JSON.stringify(data)); delete copy.id; return copy; })(_event.data)})' target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

@@ -2,19 +2,16 @@
 <!-- voice_detection-2: audio/l16 with a rate and channels is audio/pcm in place. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
-  <invoke id="voice_detection" type="scxml" src="../../../voice_detection.scx">
-    <param name="audio" expr="'media/sound.raw'"/>
-    <param name="sample_rate_hz" expr="8000"/>
-    <param name="channels" expr="1"/>
-    <param name="output" expr="'media/sound.pcm'"/>
-    <param name="media_type" expr="'audio/l16'"/>
-  </invoke>
+  <invoke id="voice_detection" type="scxml" src="../../../voice_detection.scx"/>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.voice_detection" cond='Object.keys(_event.data).sort().join() === "sound,voice_detection" &amp;&amp; JSON.stringify(_event.data.sound) === "{\"audio\":\"media/sound.raw\",\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":8000}" &amp;&amp; JSON.stringify(_event.data.voice_detection) === "{\"segments\":[]}"' target="step1"/>
+    <onentry>
+      <send event="bot.ability.hearing.voice.detection.input" target="#_voice_detection"><content expr="({id: &quot;r1&quot;, audio: 'media/sound.raw', sample_rate_hz: 8000, channels: 1, output: 'media/sound.pcm', media_type: 'audio/l16'})"/></send>
+    </onentry>
+    <transition event="bot.ability.hearing.voice.detection.output" cond="_event.data.id === 'r1' &amp;&amp; Object.keys(_event.data).sort().join() === &quot;id,segments,sound&quot; &amp;&amp; JSON.stringify(_event.data.sound) === &quot;{\&quot;audio\&quot;:\&quot;media/sound.raw\&quot;,\&quot;channels\&quot;:1,\&quot;media_type\&quot;:\&quot;audio/pcm\&quot;,\&quot;sample_rate_hz\&quot;:8000}&quot; &amp;&amp; JSON.stringify(_event.data.segments) === &quot;[]&quot;" target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

@@ -5,11 +5,11 @@
 // identifying: any failure ends the identification with {message}.
 
 function failedResult(_event) {
-  return ({message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'VoiceIdentification failed.'});
+  return ({id: request.id, message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'VoiceIdentification failed.'});
 }
 
 function errorResult(_event) {
-  return ({message: 'VoiceIdentification could not run (' + _event.name + ')'});
+  return ({id: request.id, message: 'VoiceIdentification could not run (' + _event.name + ')'});
 }
 
 // clipping
@@ -20,7 +20,7 @@ function hasSegments() {
 }
 
 function clipFailedResult(_event) {
-  return ({message: 'Voice identification opening segment conversion failed: ' + Object(_event.data).message});
+  return ({id: request.id, message: 'Voice identification opening segment conversion failed: ' + Object(_event.data).message});
 }
 
 // The clipper's done data is a segment when it carries an audio reference.
@@ -34,7 +34,7 @@ function clippedSegments(_event) {
 }
 
 function unclippedResult() {
-  return ({message: 'Voice identification requires a first voiced VAD segment.'});
+  return ({id: request.id, message: 'Voice identification requires a first voiced VAD segment.'});
 }
 
 // applying
@@ -47,13 +47,25 @@ function hasEmbeddings(_event) {
 
 // The segments and their embeddings.
 function identifiedResult(_event) {
-  return ({segments: segments, embeddings: _event.data.embeddings});
+  return ({id: request.id, segments: segments, embeddings: _event.data.embeddings});
 }
 
 function mismatchedResult() {
-  return ({message: 'VoiceIdentification produced output that does not match its output schema.'});
+  return ({id: request.id, message: 'VoiceIdentification produced output that does not match its output schema.'});
 }
 
 function unidentifiedResult() {
-  return ({message: 'VoiceIdentification ended without identifying.'});
+  return ({id: request.id, message: 'VoiceIdentification ended without identifying.'});
+}
+
+// identifying
+
+// The segments the request names, or null for direct identification.
+function requestedSegments() {
+  return Array.isArray(request.segments) ? request.segments : null;
+}
+
+// A request's optional field, or null.
+function requested(name) {
+  return request[name] === undefined ? null : request[name];
 }

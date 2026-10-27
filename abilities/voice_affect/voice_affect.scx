@@ -4,28 +4,35 @@
   Classifying over a voice segment (hearing/voice/affect.py and
   listening/tone.py), through the speech service's classify operation (a
   speech server's POST {base}/emotion, emotion2vec+). The interpretation
-  (abilities/interpretation/interpretation.scx) invokes it once per
-  decoded utterance from DecodingSpeech, alongside speech decoding.
+  (abilities/interpretation/interpretation.scx) invokes it once, as its
+  long-lived child voice_affect (mosfet.py's Listening holds its affect
+  classifier), and sends it each decoded utterance's voices from
+  DecodingSpeech, alongside speech decoding.
 
-    applying (an invoked speech service) -> applied (final)
+    idle -bot.ability.classifying.input-> applying -> idle
 
-  Input: the <param> segments, the voices of the utterance (each
-  {audio, media_type, sample_rate_hz, channels, start_seconds?,
-  end_seconds?}: the whole utterance, or its diarized segments), and
-  timeout_ms (3 s, mosfet.py's bound on hearing a tone). The classifier
-  hears one segment: the longest (the first of equals), a segment with no
-  span counting as long enough; a segment shorter than
-  min_segment_seconds (0.3 s, mosfet.py's speech server's shortest) is
-  never sent. With no such segment nothing is asked.
+  Configuration: the <param> timeout_ms (3 s, mosfet.py's bound on hearing
+  a tone).
 
-  Output: <donedata>, received by the interpretation as
-  done.invoke.voice_affect: {affect} when the service answers
-  bot.ability.classifying.output (mosfet.py's voice.Affect: {label, scores,
-  valence, confidence}), else {affect: null}: a tone not heard in time, not
-  heard at all, or nothing to hear. A tone is a perception, so its failure
-  never fails the utterance; each is logged (listening.affect, the name of
-  mosfet.py's bot.listening.affect.count), with no label, score or audio
-  beyond the label heard.
+  Requests: bot.ability.classifying.input {id, segments}: the voices of
+  the utterance (each {audio, media_type, sample_rate_hz, channels,
+  start_seconds?, end_seconds?}: the whole utterance, or its diarized
+  segments). The classifier hears one segment: the longest (the first of
+  equals), a segment with no span counting as long enough; a segment
+  shorter than min_segment_seconds (0.3 s, mosfet.py's speech server's
+  shortest) is never sent. With no such segment nothing is asked.
+
+  It answers its parent with bot.ability.classifying.output {id, label,
+  scores, valence, confidence} when the service answers
+  bot.ability.classifying.output (mosfet.py's voice.Affect), else with
+  bot.ability.failed {id, message}: a tone not heard in time, not heard at
+  all, or nothing to hear (mosfet.py's classify answers None). A tone is a
+  perception, so the interpretation never fails the utterance for it; each
+  outcome is logged (listening.affect, the name of mosfet.py's
+  bot.listening.affect.count), with no label, score or audio beyond the
+  label heard. One request is heard at a time; a request that arrives
+  while one is in flight replaces it (leaving applying cancels its
+  service call, SCXML 6.4).
 
   Bindings: the speech service package; env scopes FLOPPY_EMOTION_BASE_URL
   and FLOPPY_EMOTION_API_KEY to the service's <invoke> (no default
@@ -37,33 +44,46 @@
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
-       version="1.0" datamodel="ecmascript" name="voice_affect" initial="applying">
+       version="1.0" datamodel="ecmascript" name="voice_affect" initial="idle">
   <datamodel>
-    <!-- The invoker's <param>s. -->
-    <data id="segments" expr="[]"/>
+    <!-- The invoker's <param>. -->
     <data id="timeout_ms" expr="3000"/>
     <!-- The shortest segment sent (mosfet.py's MIN_SEGMENT_SECONDS). -->
     <data id="min_segment_seconds" expr="0.3"/>
-    <!-- The segment heard, and the result. -->
+    <!-- The request, the segment heard, and the result. -->
+    <data id="request" expr="null"/>
     <data id="segment" expr="null"/>
     <data id="result" expr="null"/>
+    <!-- Why no tone was heard, when none was. -->
+    <data id="reason" expr="null"/>
+    <!-- The current service call's generated invoke ids: a cancelled call's
+         late events (still delivered, SCXML 6.4) are not this request's. -->
+    <data id="classifier" expr="null"/>
   </datamodel>
   <script src="voice_affect.js"/>
+
+  <state id="idle">
+    <transition event="bot.ability.classifying.input"
+                event:schema="../schemas/bot.ability.classifying.input.json" target="applying">
+      <assign location="request" expr="_event.data"/>
+    </transition>
+  </state>
 
   <state id="applying">
     <onentry>
       <assign location="segment" expr="longestSegment()"/>
-      <assign location="result" expr="unheardResult()"/>
+      <assign location="result" expr="null"/>
       <send id="affect-timer" event="applying.after" delayexpr="timeoutDelay()"/>
     </onentry>
     <onexit>
       <cancel sendid="affect-timer"/>
     </onexit>
     <!-- Nothing to hear: the classifier is never asked. -->
-    <transition cond="hasNoSegment()" target="applied">
-      <log label="listening.affect" expr="skippedLog()"/>
+    <transition cond="hasNoSegment()" target="answering">
+      <assign location="reason" expr="skippedLog()"/>
+      <log label="listening.affect" expr="reason"/>
     </transition>
-    <invoke id="classifier" type="https://github.com/stateforward/floppy/services/speech"
+    <invoke idlocation="classifier" type="https://github.com/stateforward/floppy/services/speech"
             env:baseurl="FLOPPY_EMOTION_BASE_URL" env:apikey="FLOPPY_EMOTION_API_KEY">
       <param name="operation" expr="'classify'"/>
       <param name="audio" expr="segment.audio"/>
@@ -71,31 +91,51 @@
       <param name="sample_rate_hz" expr="segmentRate()"/>
       <param name="channels" expr="segmentChannels()"/>
     </invoke>
-    <transition event="bot.ability.classifying.output" cond="isAffect(_event)" target="applied">
+    <!-- A newer request replaces this one. -->
+    <transition event="bot.ability.classifying.input"
+                event:schema="../schemas/bot.ability.classifying.input.json" target="applying">
+      <assign location="request" expr="_event.data"/>
+    </transition>
+    <transition event="bot.ability.classifying.output" event:schema="../schemas/bot.ability.classifying.output.json" cond="_event.invokeid === classifier &amp;&amp; isAffect(_event)" target="answering">
       <assign location="result" expr="heardResult(_event)"/>
       <log label="listening.affect" expr="heardLog()"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="applied">
-      <log label="listening.affect" expr="failedLog(_event)"/>
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" cond="_event.invokeid === classifier" target="answering">
+      <assign location="reason" expr="failedLog(_event)"/>
+      <log label="listening.affect" expr="reason"/>
     </transition>
-    <transition event="applying.after" target="applied">
-      <log label="listening.affect" expr="timedOutLog()"/>
+    <transition event="applying.after" target="answering">
+      <assign location="reason" expr="timedOutLog()"/>
+      <log label="listening.affect" expr="reason"/>
     </transition>
-    <transition event="done.invoke.classifier" target="applied">
-      <log label="listening.affect" expr="endedLog()"/>
+    <transition event="done.invoke" cond="_event.invokeid === classifier" target="answering">
+      <assign location="reason" expr="endedLog()"/>
+      <log label="listening.affect" expr="reason"/>
     </transition>
-    <transition event="error.*" target="applied">
-      <log label="listening.affect" expr="errorLog(_event)"/>
+    <transition event="error.*" target="answering">
+      <assign location="reason" expr="errorLog(_event)"/>
+      <log label="listening.affect" expr="reason"/>
     </transition>
     <!-- Anything else the classifier sends (the transitions above come first). -->
-    <transition event="*" target="applied">
-      <log label="listening.affect" expr="mismatchedLog()"/>
+    <transition event="*" cond="_event.invokeid === classifier" target="answering">
+      <assign location="reason" expr="mismatchedLog()"/>
+      <log label="listening.affect" expr="reason"/>
     </transition>
   </state>
 
-  <final id="applied">
-    <donedata>
-      <content expr="result"/>
-    </donedata>
-  </final>
+  <!-- The tone heard, or why none was. -->
+  <state id="answering">
+    <onentry>
+      <if cond="isHeard()">
+        <send event="bot.ability.classifying.output" target="#_parent">
+          <content expr="result"/>
+        </send>
+      <else/>
+        <send event="bot.ability.failed" target="#_parent">
+          <content expr="unheardFailure()"/>
+        </send>
+      </if>
+    </onentry>
+    <transition target="idle"/>
+  </state>
 </scxml>

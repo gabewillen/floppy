@@ -2,14 +2,19 @@
 // <script src="voice_detection.js">, so every function here is a global of the
 // document's data model, callable from its cond and expr attributes.
 
-// detecting: any failure ends the detection with {message}.
+// A request's optional field, or null.
+function requested(name) {
+  return request[name] === undefined ? null : request[name];
+}
+
+// detecting: any failure answers {id, message}.
 
 function failedResult(_event) {
-  return ({message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'VoiceDetection failed.'});
+  return ({id: request.id, message: typeof Object(_event.data).message === 'string' ? _event.data.message : 'VoiceDetection failed.'});
 }
 
 function errorResult(_event) {
-  return ({message: 'VoiceDetection could not run (' + _event.name + ')'});
+  return ({id: request.id, message: 'VoiceDetection could not run (' + _event.name + ')'});
 }
 
 // normalizing
@@ -20,7 +25,7 @@ function isNormalizedSound(_event) {
 }
 
 function unnormalizedResult() {
-  return ({message: 'VoiceDetection could not normalize the sound.'});
+  return ({id: request.id, message: 'VoiceDetection could not normalize the sound.'});
 }
 
 // applying
@@ -33,13 +38,13 @@ function hasSegments(_event) {
 
 // The normalized sound and its voice spans.
 function detectedResult(_event) {
-  return ({sound: sound, voice_detection: {segments: _event.data.segments}});
+  return ({id: request.id, sound: sound, segments: _event.data.segments});
 }
 
 function mismatchedResult() {
-  return ({message: 'Voice detection produced output that does not match its apply schema.'});
+  return ({id: request.id, message: 'Voice detection produced output that does not match its apply schema.'});
 }
 
 function undetectedResult() {
-  return ({message: 'VoiceDetection ended without detecting.'});
+  return ({id: request.id, message: 'VoiceDetection ended without detecting.'});
 }

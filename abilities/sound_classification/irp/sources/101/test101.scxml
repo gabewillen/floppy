@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- sound_classification-1: with no params at all, it is still done at once, unlabeled. -->
+<!-- sound_classification-1: with no kind, it is still answered at once, unlabeled. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="sound_classification" type="scxml" src="../../../sound_classification.scx"/>
@@ -8,7 +8,10 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.sound_classification" cond="_event.data.labels.length === 0 &amp;&amp; !('confidence' in _event.data)" target="step1"/>
+    <onentry>
+      <send event="bot.ability.hearing.sound.classification.input" target="#_sound_classification"><content expr="({id: &quot;r1&quot;, audio: 'media/bark.wav', media_type: 'audio/wav'})"/></send>
+    </onentry>
+    <transition event="bot.ability.hearing.sound.classification.output" cond="_event.data.id === &quot;r1&quot; &amp;&amp; (function (_event) { return _event.data.labels.length === 0 &amp;&amp; !('confidence' in _event.data); })({name: _event.name, data: (function (data) { var copy = JSON.parse(JSON.stringify(data)); delete copy.id; return copy; })(_event.data)})" target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

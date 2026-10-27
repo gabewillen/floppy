@@ -2,16 +2,16 @@
 <!-- voice_diarization-3: an utterance that is not there cannot be read. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
-  <invoke id="voice_diarization" type="scxml" src="../../../voice_diarization.scx">
-    <param name="audio" expr="'media/missing.wav'"/>
-    <param name="output" expr="'media/segment'"/>
-  </invoke>
+  <invoke id="voice_diarization" type="scxml" src="../../../voice_diarization.scx"/>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.voice_diarization" cond='_event.data.message === "Voice diarization failed: the audio cannot be read." &amp;&amp; Object.keys(_event.data).length === 1' target="step1"/>
+    <onentry>
+      <send event="bot.ability.hearing.voice.diarization.input" target="#_voice_diarization"><content expr="({id: &quot;r1&quot;, audio: 'media/missing.wav', output: 'media/segment'})"/></send>
+    </onentry>
+    <transition event="bot.ability.failed" cond='_event.data.id === "r1" &amp;&amp; (function (_event) { return _event.data.message === "Voice diarization failed: the audio cannot be read." &amp;&amp; Object.keys(_event.data).length === 1; })({name: _event.name, data: (function (data) { var copy = JSON.parse(JSON.stringify(data)); delete copy.id; return copy; })(_event.data)})' target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

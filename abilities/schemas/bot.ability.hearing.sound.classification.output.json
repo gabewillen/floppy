@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.hearing.sound.classification.output",
+  "additionalProperties": false,
+  "description": "SoundClassification's ApplyData for one sound: its labels, empty when unlabeled.",
+  "properties": {
+    "id": {
+      "description": "The requester's id for this request, echoed by the reply.",
+      "title": "Id",
+      "type": "string",
+      "minLength": 1
+    },
+    "labels": {
+      "description": "The sound's labels; empty when it is unlabeled.",
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Labels",
+      "type": "array"
+    },
+    "confidence": {
+      "description": "The labels' confidence, from 0 to 1.",
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Confidence",
+      "type": "number"
+    }
+  },
+  "required": [
+    "id",
+    "labels"
+  ],
+  "type": "object"
+}
