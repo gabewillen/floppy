@@ -33,7 +33,7 @@
     </test>
   </assert>
   <assert id="candidates_runner-4" specnum="4" specid="#candidates_runner-4">
-    <![CDATA[When its candidate does not handle the turn and candidates are left, the runner invokes itself for the rest (with the same turn, input, database and bounds) and ends with the rest's donedata, its own candidate first in `tried`.]]>
+    <![CDATA[When its candidate does not handle the turn and candidates are left, the runner invokes itself for the rest (with the same turn, input, memory and bounds) and ends with the rest's donedata, its own candidate first in `tried`.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>
@@ -75,7 +75,7 @@
     </test>
   </assert>
   <assert id="candidates_runner-8" specnum="8" specid="#candidates_runner-8">
-    <![CDATA[Each persistence is one transaction of the Memory ability on the `database` <param>; one that fails or outlasts `memory_timeout_ms` takes the same effect as one persisted.]]>
+    <![CDATA[Each persistence is one transaction of the Memory ability at the `memory` <param> (decision D262); one that fails or outlasts `memory_timeout_ms` takes the same effect as one persisted.]]>
     <test id="170" conformance="mandatory" manual="false">
       <start uri="170/test170.scxml"/>
     </test>

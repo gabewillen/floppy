@@ -304,9 +304,12 @@ fn run_case(document: &Path, case: &Path, test: &str) -> Option<String> {
     {
         args.extend(["--fuel".to_owned(), support::FUEL.to_owned()]);
     }
+    // A case binds what its harness and the document under test bind (the
+    // harness may serve the document's memory, decision D262).
+    let harness = start.clone();
     // The builder writes a draft's documents into the layout's behaviors
     // directory: a layout of the case's own.
-    let start = if binds(document, "files") {
+    let start = if binds(&harness, "files") {
         let root = unique_scratch("irp-layout");
         for kind in ["bots", "abilities", "environments"] {
             support::copy_tree(&workspace().join(kind), &root.join(kind));
@@ -317,17 +320,17 @@ fn run_case(document: &Path, case: &Path, test: &str) -> Option<String> {
     } else {
         start
     };
-    if binds(document, "sql") {
+    if binds(&harness, "sql") {
         args.extend(support::memory_grant());
     }
-    if binds(document, "pgsql") {
+    if binds(&harness, "pgsql") {
         args.extend(support::pgsql_grant());
     }
     // The generate, speech and vision services read and write media at
     // /media: a fresh copy of the case's media/ directory, else an empty
     // directory.
     for name in ["generate", "speech", "vision"] {
-        if binds(document, name) {
+        if binds(&harness, name) {
             let media = unique_scratch("irp-media");
             if case.join("media").is_dir() {
                 support::copy_tree(&case.join("media"), &media);

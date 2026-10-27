@@ -559,7 +559,8 @@ fn a_backlog_splits_into_turns_of_at_most_eight_percepts() {
     // are its percepts' union, in order, once each.
     for n in 1..=10 {
         let person = format!("person-{}", n % 3);
-        event(&mut run, 
+        event(
+            &mut run,
             "bot.input",
             &input_from("reply", &format!("p{n}"), &[&person, "caller"]),
         );
@@ -623,7 +624,8 @@ fn a_turn_takes_at_most_thirty_two_participants() {
     for n in 0..3 {
         let people: Vec<String> = (0..15).map(|k| format!("p{n}-{k}")).collect();
         let people: Vec<&str> = people.iter().map(String::as_str).collect();
-        event(&mut run, 
+        event(
+            &mut run,
             "bot.input",
             &input_from("reply", &format!("batch {n}"), &people),
         );
@@ -746,7 +748,8 @@ fn the_firmware_is_offered_shown_and_reports_like_an_ability() {
     with_firmware(&body);
     let mut run = start(&body);
     activated(&mut run);
-    event(&mut run, 
+    event(
+        &mut run,
         "bot.input",
         &json!({"observation": {"event": "act", "data": {"event": "timer.set", "data": {"minutes": 3}}}}),
     );
@@ -1122,7 +1125,11 @@ fn the_choices_are_the_bodys_and_the_offers_and_focus_is_grounded() {
     // Unfocused, the input names the lamp: the body turns to it
     // (decision D155), its only candidate. The body offers
     // bot.focus_device, then the double's offer, compacted and tagged.
-    event(&mut run, "bot.input", &device_input("focus", "lamp", "lamp"));
+    event(
+        &mut run,
+        "bot.input",
+        &device_input("focus", "lamp", "lamp"),
+    );
     let mut records = run.until(WAIT, label_is("floppy.focus"));
     // The environment logs the turn's outcome after the body's step.
     records.extend(run.until(WAIT, label_is("bot.processing.completed")));

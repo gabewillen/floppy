@@ -2,11 +2,14 @@
 <!-- candidates_runner-2: selections are sent in order. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
+  <invoke id="memory" type="scxml" src="../../../../../abilities/memory/memory.scx">
+    <param name="database" expr="'/memory/floppy.sqlite'"/>
+  </invoke>
   <invoke id="candidates_runner" type="scxml" src="../../../candidates_runner.scx">
     <param name="turn" expr="3"/>
     <param name="input" expr='{"text": "hello", "focus": null, "focus_candidates": []}'/>
     <param name="candidates" expr='[{"name": "Focus", "source": "irp/behaviors/9f20112ad9350f64.scxml"}]'/>
-    <param name="database" expr="'/memory/floppy.sqlite'"/>
+    <param name="memory" expr="'#_scxml_' + _sessionid + '.memory'"/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>

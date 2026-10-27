@@ -5,8 +5,11 @@
   <data id="offers" expr="null"/>
 </datamodel>
 <state id="harness" initial="boot">
-  <invoke id="identity" type="scxml" src="../../../identity.scx">
+  <invoke id="memory" type="scxml" src="../../../../../abilities/memory/memory.scx">
     <param name="database" expr="'/memory/floppy.sqlite'"/>
+  </invoke>
+  <invoke id="identity" type="scxml" src="../../../identity.scx">
+    <param name="memory" expr="'#_scxml_' + _sessionid + '.memory'"/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>

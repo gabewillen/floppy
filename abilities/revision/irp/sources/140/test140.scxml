@@ -2,8 +2,11 @@
 <!-- revision-5: a lesson's draft that answers its example is accepted. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
-  <invoke id="revision" type="scxml" src="../../../revision.scx">
+  <invoke id="memory" type="scxml" src="../../../../../abilities/memory/memory.scx">
     <param name="database" expr="'/memory/floppy.sqlite'"/>
+  </invoke>
+  <invoke id="revision" type="scxml" src="../../../revision.scx">
+    <param name="memory" expr="'#_scxml_' + _sessionid + '.memory'"/>
     <param name="intent" expr='({"event": "bot.behavior.create", "name": "PingPong", "triggers": ["bot.ability.conversation.output"], "description": "Say pong when the user says ping.", "reason": "The user taught it.", "source": null, "example": "ping", "counterexample": "pin"})'/>
     <param name="intent_event" expr="'bot.behavior.create'"/>
     <param name="create" expr="true"/>

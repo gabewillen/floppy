@@ -101,7 +101,13 @@ fn env_names(text: &str) -> BTreeSet<String> {
             if rest[..slot_end].ends_with("expr") {
                 // An `env:<slot>expr` names its variables as quoted
                 // strings in its expression.
-                names.extend(value[..end].split('\'').skip(1).step_by(2).map(str::to_owned));
+                names.extend(
+                    value[..end]
+                        .split('\'')
+                        .skip(1)
+                        .step_by(2)
+                        .map(str::to_owned),
+                );
             } else {
                 names.insert(value[..end].to_owned());
             }

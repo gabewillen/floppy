@@ -296,7 +296,10 @@ fn statements_the_service_refuses_fail_as_invalid_input() {
 
 /// One output record whose results are `results` (JSON text).
 fn output(results: &str) -> Vec<(String, String)> {
-    vec![("output".to_owned(), format!(r#"{{"id":"request","results":{results}}}"#))]
+    vec![(
+        "output".to_owned(),
+        format!(r#"{{"id":"request","results":{results}}}"#),
+    )]
 }
 
 #[test]
@@ -320,7 +323,10 @@ fn an_operation_over_its_timeout_fails_as_timeout() {
     );
     let database = r#"<param name="database" expr="'/memory/floppy.sqlite'"/>"#;
     let document = harness(None, "[{sql: 'SELECT 1'}]");
-    assert!(document.contains(database), "the harness passes the database");
+    assert!(
+        document.contains(database),
+        "the harness passes the database"
+    );
     let path = support::write(
         &dir,
         "harness.scx",

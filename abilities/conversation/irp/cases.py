@@ -13,7 +13,7 @@ READY = expect("bot.ability.ready")
 DB = "'/memory/floppy.sqlite'"
 # Memory under a loaded host can outlast the default 5 s bound: cases
 # that reach the sql service wait longer (the bound itself loses every race to an in-process child: no case can make it fire).
-MEMORY = [("database", DB), ("memory_timeout_ms", "600000")]
+MEMORY = [memory(DB), ("memory_timeout_ms", "600000")]
 
 AMBIENT = 'relationship-{"identity_groups":[[],["alice"]]}'
 ALICE_BOT = 'relationship-{"identity_groups":[["alice"],["bot"]]}'
@@ -95,7 +95,7 @@ S.statement(5, "`bot.ability.conversation.snapshot.request` `{request_ref}`, in 
 S.statement(6, "`bot.ability.conversation.append` `{message}` with an outbound message joins the current exchange and is answered `bot.ability.conversation.output` `{parent, messages}`; one whose provenance id (non-empty), source and target match a message's in the current exchange is not committed again but is answered all the same; an inbound one is not taken (nothing is committed or answered).")
 S.statement(7, "Input that arrives while one is in hand is held (`<event:defer/>`) and taken, in order, on the return to `waiting`.")
 S.statement(8, "A turn the detector cannot close (`bot.ability.turn_detector.failed`) or cannot take (an `error.*`: a start its schema refuses) answers `bot.ability.conversation.failed` `{stage: \"turn_detector\", message}` and commits nothing.")
-S.statement(9, "With a `database` param it recalls the relationship's memories before the turns and remembers the input after them through the memory ability, then commits as without one; a memory failure answers `bot.ability.conversation.failed` `{stage: \"memory\", message}` and commits nothing.")
+S.statement(9, "With a `memory` param (decision D262) it recalls the relationship's memories before the turns and remembers the input after them through the memory ability, then commits as without one; a memory failure answers `bot.ability.conversation.failed` `{stage: \"memory\", message}` and commits nothing.")
 S.statement(10, "An input its schema refuses is never routed here: the send raises `error.execution` in the sender, and nothing is committed.")
 S.statement(11, "Every output is the current exchange (decision D176), never the cumulative history: an inbound commit opens a new exchange, `[the inbound message]`, its input the exchange's `parent`; each outbound commit joins it; the next inbound replaces it, and nothing earlier is carried.")
 S.statement(12, "Every message carries `participants`, stamped by its producer and never inferred: an inbound message the turn's participants as `<conversation:turn_participants>` stamps them (its string source ids as `{ref, role: \"source\"}`, then its string target ids as `{ref, role: \"target\"}`; an embedding is no ref), which the cognition handoff carries too; an outbound message those its append carries (`[]` when it carries none).")
@@ -187,7 +187,7 @@ S.case(180, 9, "with a database the input is recalled, remembered and committed.
 S.case(181, 9, "a database the memory cannot open fails the input at the memory stage.",
        [READY, say("hello"), expect(FAILED, "_event.data.stage === 'memory' && typeof _event.data.message === 'string' && _event.data.message.length > 0")]
        + snapshot([]),
-       params=[("database", "'/nowhere/floppy.sqlite'"), ("memory_timeout_ms", "600000")], clock="wall")
+       params=[memory("'/nowhere/floppy.sqlite'"), ("memory_timeout_ms", "600000")], clock="wall")
 S.case(190, 10, "an input without source identities is refused at the send; the next is committed first.",
        [READY, send(INPUT, js({"source_ids": [], "target_ids": [], "content": "x", "content_type": "text/plain"})),
         expect("error.execution"), say("next"), committed("next")])
@@ -234,7 +234,7 @@ def by(person):
             + " && " + participants("_event.data.participants", [{"ref": person, "role": "source"}]))
 
 
-S.statement(13, "With a `database` param, an input with a voice embedding among its identities is identified through long-term memory first (decision D194): each embedding is the person memory holds whose voice it matches (cosine at 0.85, margin 0.05, as relationships match), else a new person `person-<n>`, and the person's ref takes the embedding's place, so the relationship, the turns, the participants and the committed message key on the person; every voice heard is stored for its person. Without one an embedding is its own participant, its track `track-` and its unit vector. A memory failure there answers `bot.ability.conversation.failed` `{stage: \"memory\", message}` and commits nothing.")
+S.statement(13, "With a `memory` param, an input with a voice embedding among its identities is identified through long-term memory first (decision D194): each embedding is the person memory holds whose voice it matches (cosine at 0.85, margin 0.05, as relationships match), else a new person `person-<n>`, and the person's ref takes the embedding's place, so the relationship, the turns, the participants and the committed message key on the person; every voice heard is stored for its person. Without one an embedding is its own participant, its track `track-` and its unit vector. A memory failure there answers `bot.ability.conversation.failed` `{stage: \"memory\", message}` and commits nothing.")
 
 S.case(220, 13, "the same voice twice is one person, across inputs.",
        [READY, heard("hi", VOICE_A), committed("hi", turn_ref="input-1:turn:person-1", session_ref=PERSON_1, extra=by("person-1")),
@@ -255,4 +255,4 @@ S.case(223, 13, "a database the memory cannot open fails a voice at the memory s
        [READY, heard("hi", VOICE_A),
         expect(FAILED, "_event.data.stage === 'memory' && typeof _event.data.message === 'string' && _event.data.message.length > 0")]
        + snapshot([]),
-       params=[("database", "'/nowhere/floppy.sqlite'"), ("memory_timeout_ms", "600000")], clock="wall")
+       params=[memory("'/nowhere/floppy.sqlite'"), ("memory_timeout_ms", "600000")], clock="wall")

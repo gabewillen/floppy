@@ -2,8 +2,11 @@
 <!-- consolidation-3: a relative database path the Memory ability refuses fails the consolidation. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
-  <invoke id="consolidation" type="scxml" src="../../../consolidation.scx">
+  <invoke id="memory" type="scxml" src="../../../../../abilities/memory/memory.scx">
     <param name="database" expr="'relative.sqlite'"/>
+  </invoke>
+  <invoke id="consolidation" type="scxml" src="../../../consolidation.scx">
+    <param name="memory" expr="'#_scxml_' + _sessionid + '.memory'"/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>

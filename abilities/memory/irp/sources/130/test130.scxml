@@ -1,20 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- memory-4: a database outside the granted directory fails in the migration, with its message. -->
+<!-- memory-4: a database outside the granted directory fails in the migration: each request is answered with its message. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="memory" type="scxml" src="../../../memory.scx">
     <param name="database" expr="'/elsewhere/floppy.sqlite'"/>
-    <param name="statements" expr='[{"sql": "SELECT 1"}]'/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="bot.ability.failed" cond="typeof _event.data.message === 'string' &amp;&amp; _event.data.message.indexOf('unable to open database file') &gt;= 0 &amp;&amp; _event.data.kind === 'unavailable'" target="step1"/>
+    <onentry>
+      <send event="bot.ability.memory.input" target="#_memory"><content expr='{"id": "r1", "statements": [{"sql": "SELECT 1"}]}'/></send>
+    </onentry>
+    <transition event="bot.ability.failed" cond="_event.data.id === 'r1' &amp;&amp; typeof _event.data.message === 'string' &amp;&amp; _event.data.message.indexOf('unable to open database file') &gt;= 0 &amp;&amp; _event.data.kind === 'unavailable'" target="step1"/>
   </state>
   <state id="step1">
-    <transition event="done.invoke.memory" target="step2"/>
+    <onentry>
+      <send event="bot.ability.memory.input" target="#_memory"><content expr='{"id": "r2", "statements": [{"sql": "SELECT 1"}]}'/></send>
+    </onentry>
+    <transition event="bot.ability.failed" cond="_event.data.id === 'r2' &amp;&amp; typeof _event.data.message === 'string' &amp;&amp; _event.data.message.indexOf('unable to open database file') &gt;= 0 &amp;&amp; _event.data.kind === 'unavailable'" target="step2"/>
   </state>
   <state id="step2">
     <transition target="pass"/>

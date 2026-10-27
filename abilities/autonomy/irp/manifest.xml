@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/autonomy/irp/sources">
   <assert id="autonomy-1" specnum="1" specid="#autonomy-1">
-    <![CDATA[Without memory (`database` `null`), a stimulus no seed triggers runs nothing: it ends with donedata `{turn, handled: false, candidates: [], reason: "no-behaviors"}`. Its donedata is its only answer: it sends its parent no event.]]>
+    <![CDATA[Without memory (`memory` `null`), a stimulus no seed triggers runs nothing: it ends with donedata `{turn, handled: false, candidates: [], reason: "no-behaviors"}`. Its donedata is its only answer: it sends its parent no event.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -27,7 +27,7 @@
     </test>
   </assert>
   <assert id="autonomy-4" specnum="4" specid="#autonomy-4">
-    <![CDATA[With memory, one transaction of the Memory ability on the `database` <param> loads the ACTIVE `turn` behaviors whose trigger is the stimulus's event; when none matches, the turn is `no-behaviors`, or `unhandled` with the seed in `candidates` when a seed ran.]]>
+    <![CDATA[With memory, one transaction of the Memory ability at the `memory` <param> (decision D262) loads the ACTIVE `turn` behaviors whose trigger is the stimulus's event; when none matches, the turn is `no-behaviors`, or `unhandled` with the seed in `candidates` when a seed ran.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>

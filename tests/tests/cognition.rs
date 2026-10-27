@@ -1237,10 +1237,7 @@ fn a_learned_behavior_whose_selection_cannot_be_sent_fails_the_turn() {
         &mock,
         Decision::Fail,
         Generation::Fail,
-        &[(
-            "bots/floppy/floppy.scx",
-            &[("database", memory.as_str())],
-        )],
+        &[("bots/floppy/floppy.scx", &[("database", memory.as_str())])],
     );
     let grant = inventory(
         DATABASE,
@@ -1299,10 +1296,7 @@ fn when_no_learned_behavior_handles_the_turn_the_decision_layer_runs() {
         &mock,
         Decision::Ignore,
         Generation::Fail,
-        &[(
-            "bots/floppy/floppy.scx",
-            &[("database", memory.as_str())],
-        )],
+        &[("bots/floppy/floppy.scx", &[("database", memory.as_str())])],
     );
     let grant = inventory(
         DATABASE,

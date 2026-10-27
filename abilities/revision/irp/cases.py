@@ -5,7 +5,7 @@ import json
 S = suite
 OUTPUT = "bot.ability.reflection.revision.output"
 FAILED = "bot.ability.failed"
-DB = ("database", "'/memory/floppy.sqlite'")
+DB = memory("'/memory/floppy.sqlite'")
 CHAT = "/v1/chat/completions"
 # The builder's progress, which a revision sends its invoker by default.
 PROGRESS = ["builder.progress", "generate.progress"]
@@ -106,7 +106,7 @@ S.case(121, 3, "a build whose 8 draft generations all fail fails with no draft."
 
 S.case(130, 4, "a memory transaction on a database the run does not grant fails.",
        [failed("Reflection revision failed: unable to open database file: /nowhere/floppy.sqlite")],
-       params=[("database", "'/nowhere/floppy.sqlite'")] + CREATE[1:], ignore=PROGRESS)
+       params=[memory("'/nowhere/floppy.sqlite'")] + CREATE[1:], ignore=PROGRESS)
 
 
 LESSON_TEXT = "When I say ping, say pong."

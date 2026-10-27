@@ -87,7 +87,7 @@
     </test>
   </assert>
   <assert id="conversation-9" specnum="9" specid="#conversation-9">
-    <![CDATA[With a `database` param it recalls the relationship's memories before the turns and remembers the input after them through the memory ability, then commits as without one; a memory failure answers `bot.ability.conversation.failed` `{stage: "memory", message}` and commits nothing.]]>
+    <![CDATA[With a `memory` param (decision D262) it recalls the relationship's memories before the turns and remembers the input after them through the memory ability, then commits as without one; a memory failure answers `bot.ability.conversation.failed` `{stage: "memory", message}` and commits nothing.]]>
     <test id="180" conformance="mandatory" manual="false">
       <start uri="180/test180.scxml"/>
     </test>
@@ -126,7 +126,7 @@
     </test>
   </assert>
   <assert id="conversation-13" specnum="13" specid="#conversation-13">
-    <![CDATA[With a `database` param, an input with a voice embedding among its identities is identified through long-term memory first (decision D194): each embedding is the person memory holds whose voice it matches (cosine at 0.85, margin 0.05, as relationships match), else a new person `person-<n>`, and the person's ref takes the embedding's place, so the relationship, the turns, the participants and the committed message key on the person; every voice heard is stored for its person. Without one an embedding is its own participant, its track `track-` and its unit vector. A memory failure there answers `bot.ability.conversation.failed` `{stage: "memory", message}` and commits nothing.]]>
+    <![CDATA[With a `memory` param, an input with a voice embedding among its identities is identified through long-term memory first (decision D194): each embedding is the person memory holds whose voice it matches (cosine at 0.85, margin 0.05, as relationships match), else a new person `person-<n>`, and the person's ref takes the embedding's place, so the relationship, the turns, the participants and the committed message key on the person; every voice heard is stored for its person. Without one an embedding is its own participant, its track `track-` and its unit vector. A memory failure there answers `bot.ability.conversation.failed` `{stage: "memory", message}` and commits nothing.]]>
     <test id="220" conformance="mandatory" manual="false">
       <start uri="220/test220.scxml"/>
     </test>

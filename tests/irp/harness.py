@@ -39,6 +39,12 @@ step is one of
                                     the case fails, logging it
   ignore(event)                     drops `event` wherever it arrives
 
+A case's params name the child's <param>s as (name, expr); memory(database)
+in a param's place is the child's `memory` <param> (decision D262): the
+harness invokes the long-lived memory ability (id `memory`) on the
+`database` expr before the child and passes the child its address, or null
+when `database` is "null".
+
 and the case passes when every expect was met in order. Any other event
 the harness receives (error.* included) fails it, logging the event.
 A case's `logs={label: [text, ...]}` (written as irp/sources/<id>/logs.json)
@@ -112,6 +118,16 @@ class Snapshot:
 def snapshot(cond, within="30s"):
     """A step that reads the child's live state until `cond` holds of it, for at most `within`."""
     return Snapshot(cond, within)
+
+
+class Memory:
+    def __init__(self, database):
+        self.database = database
+
+
+def memory(database):
+    """The child's `memory` <param>: the address of a memory ability the harness serves on `database`."""
+    return ("memory", Memory(database))
 
 
 def js(value):
@@ -189,10 +205,22 @@ class Suite:
                 lines.append(f"  <data id={quoteattr(location)} expr={quoteattr(expr)}/>")
             lines.append("</datamodel>")
         lines.append('<state id="harness" initial="boot">')
+        params = []
+        for pname, expr in case["params"]:
+            if isinstance(expr, Memory):
+                if expr.database == "null":
+                    expr = "null"
+                else:
+                    depth = "../" * (len(self.kind.split("/")) + 4)
+                    lines.append(f'  <invoke id="memory" type="scxml" src="{depth}abilities/memory/memory.scx">')
+                    lines.append(f"    <param name=\"database\" expr={quoteattr(expr.database)}/>")
+                    lines.append("  </invoke>")
+                    expr = "'#_scxml_' + _sessionid + '.memory'"
+            params.append((pname, expr))
         invoke = f'  <invoke id="{name}" type="scxml" src="../../../{name}.scx"'
-        if case["params"]:
+        if params:
             lines.append(invoke + ">")
-            for pname, expr in case["params"]:
+            for pname, expr in params:
                 lines.append(f"    <param name={quoteattr(pname)} expr={quoteattr(expr)}/>")
             lines.append("  </invoke>")
         else:
@@ -385,7 +413,7 @@ class Suite:
 def load(kind, name):
     path = os.path.join(ROOT, kind, name, "irp", "cases.py")
     suite = Suite(kind, name)
-    runpy.run_path(path, init_globals=dict(suite=suite, send=send, expect=expect, offers=offers, snapshot=snapshot, wait=wait, js=js, wav=wav,
+    runpy.run_path(path, init_globals=dict(suite=suite, send=send, expect=expect, offers=offers, snapshot=snapshot, wait=wait, js=js, memory=memory, wav=wav,
                                            pcm=pcm, png=png))
     return suite
 
