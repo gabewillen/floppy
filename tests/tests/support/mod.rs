@@ -1035,7 +1035,7 @@ pub fn copy_listening(abilities: &Path) {
 }
 
 /// The speech service `<invoke>` opening tag in `abilities/vocal/vocal.scx`.
-const SPEECH_INVOKE: &str = r#"<invoke id="speech" type="https://github.com/stateforward/floppy/services/speech"
+const SPEECH_INVOKE: &str = r#"<invoke idlocation="speech" type="https://github.com/stateforward/floppy/services/speech"
             env:apikey="FLOPPY_SPEECH_API_KEY" env:baseurl="FLOPPY_SPEECH_BASE_URL">"#;
 
 /// Copies the vocal ability into the laid-out `abilities` directory
@@ -1054,7 +1054,7 @@ pub fn double_speech(abilities: &Path, mode: &str) {
         &path,
         vocal.replacen(
             SPEECH_INVOKE,
-            r#"<invoke id="speech" type="scxml" src="speech_double.scx">"#,
+            r#"<invoke idlocation="speech" type="scxml" src="speech_double.scx">"#,
             1,
         ),
     )

@@ -9,7 +9,7 @@
     </test>
   </assert>
   <assert id="vocal-2" specnum="2" specid="#vocal-2">
-    <![CDATA[`bot.ability.vocal.speech.encoding.input` `{parts}` (1 to 64 parts `{expression?, words?}`) in `idle` is encoded by the speech service's `encode` with the `<param>`s `parts`, `model`, `voice`, `output` and `media_type` (`audio/pcm` by default); with provider `null` (the default) that is the OpenAI-compatible `POST {base}/audio/speech`. The service's answer is sent to the parent as `bot.ability.vocal.speech.encoding.output` `{audio, media_type, sample_rate_hz, channels, duration}` (the audio as the `output` reference; raw PCM is 24 kHz mono, its duration measured from its bytes; a format the service cannot measure has `null`s), and it returns to `idle`.]]>
+    <![CDATA[`bot.ability.vocal.speech.encoding.input` `{parts}` (1 to 64 parts `{expression?, words?}`) in `idle` is encoded by the speech service's `encode` with the `<param>`s `parts`, `model`, `voice`, `output` (the `<param>` `output_prefix`, the utterance's number counted from 1, and `.` and the media subtype) and `media_type` (`audio/pcm` by default); with provider `null` (the default) that is the OpenAI-compatible `POST {base}/audio/speech`. The service's answer is sent to the parent as `bot.ability.vocal.speech.encoding.output` `{audio, media_type, sample_rate_hz, channels, duration}` (the audio as the `output` reference; raw PCM is 24 kHz mono, its duration measured from its bytes; a format the service cannot measure has `null`s), and it returns to `idle`.]]>
     <test id="110" conformance="mandatory" manual="false">
       <start uri="110/test110.scxml"/>
     </test>
@@ -75,6 +75,15 @@
     </test>
     <test id="174" conformance="mandatory" manual="false">
       <start uri="174/test174.scxml"/>
+    </test>
+  </assert>
+  <assert id="vocal-10" specnum="10" specid="#vocal-10">
+    <![CDATA[It is long-lived: `bot.ability.processing.cancel` `{}` while `applying` cancels the utterance in hand (the service call with it) and answers nothing; in `idle` it is dropped. The cancelled call's late events are not the next utterance's, which is encoded and answered as any.]]>
+    <test id="190" conformance="mandatory" manual="false">
+      <start uri="190/test190.scxml"/>
+    </test>
+    <test id="191" conformance="mandatory" manual="false">
+      <start uri="191/test191.scxml"/>
     </test>
   </assert>
   <assert id="vocal-9" specnum="9" specid="#vocal-9">

@@ -94,7 +94,7 @@ const BODY_EVENTS: [&str; 12] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 124] = [
+const ABILITY_EVENTS: [&str; 125] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -107,6 +107,8 @@ const ABILITY_EVENTS: [&str; 124] = [
     "bot.ability.cognition.step.failed",
     "bot.ability.cognition.step.timed_out",
     "bot.ability.processing.cancelled",
+    // Speaking's cancel of an utterance its long-lived vocal is encoding.
+    "bot.ability.processing.cancel",
     "bot.ability.autonomy.input",
     "bot.ability.autonomy.output",
     "bot.ability.intuition.input",

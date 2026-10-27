@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.processing.cancel",
+  "additionalProperties": false,
+  "description": "Request cancellation of the processing operation in hand. It names no operation, since the child it is sent to holds one at a time [floppy: mosfet.py's operation_id and token are runtime-only].",
+  "properties": {},
+  "type": "object",
+  "examples": [
+    {}
+  ]
+}
