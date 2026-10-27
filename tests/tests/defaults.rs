@@ -432,7 +432,7 @@ fn the_runs_stream_setting_alone_decides_whether_a_call_streams() {
     let page = read(Path::new("docs/defaults.md"));
     assert!(
         page.contains("| `FLOPPY_STREAM` |")
-            && page.contains("unset (the default), no call is streamed"),
+            && page.contains("unset (the default), no call but reasoning's is streamed"),
         "docs/defaults.md states the default"
     );
 }
