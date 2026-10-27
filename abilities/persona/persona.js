@@ -4,8 +4,8 @@
 
 // Shared by recalling and revising.
 
-function hasNoDatabase() {
-  return database === null;
+function hasNoMemory() {
+  return memory === null;
 }
 
 function delay(ms) {
@@ -112,4 +112,12 @@ function revisedLog() {
 
 function failedMessage(_event) {
   return 'Persona could not tell what it knows of itself (' + _event.name + '), as when its traits are not 1 to 24 traits of at most 200 characters.';
+}
+
+// memory
+
+// Whether the event answers the request the state `name` last sent the
+// memory (decision D262): its id is that request's.
+function isMemoryReply(name) {
+  return memory_requests[name] !== undefined && _event.data.id === memory_requests[name];
 }

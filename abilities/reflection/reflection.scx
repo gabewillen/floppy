@@ -6,7 +6,7 @@
   bot.behavior.break, applies it, and stores the turn's cognitive episode.
   The cognition (abilities/cognition/cognition.scx) invokes it as its long-lived
   child "reflection", with the <param>s
-  database (the memory database; null: no memory) and
+  memory (the address of the bot's memory; null: no memory) and
   model, and sends it bot.ability.reflection.input {turn,
   cognition_input, cognition_output, self} after each turn's output, and
   {turn, cognition_input, cognition_output: [], outcome, failure, self}
@@ -28,13 +28,14 @@
       (every busy state defers it)
 
   Memory: each step that reads or writes the inventory or the episodes is
-  one transaction of the memory ability (abilities/memory/memory.scx, a child per
-  transaction answering bot.ability.memory.output or bot.ability.failed)
-  on the database the <param> database names; the SQL lives in the <data>
+  one transaction of the bot's memory (abilities/memory/memory.scx, decision
+  D262: a bot.ability.memory.input request answered with
+  bot.ability.memory.output or bot.ability.failed carrying its id)
+  at the address the <param> memory names; the SQL lives in the <data>
   below, SQL both engines (SQLite and Postgres) run: the rows come back plain and the
   datamodel assembles the episodes and behaviors from them, and a
   timestamp is UTC in the form YYYY-MM-DDTHH:MM:SSZ. With
-  database null, recalling logs <log label="reflection" expr="'absent'"> and
+  memory null, recalling logs <log label="reflection" expr="'absent'"> and
   answers at once.
 
   recalling: the prior
@@ -161,7 +162,10 @@
        version="1.0" datamodel="ecmascript" name="reflection" initial="idle">
   <datamodel>
     <!-- The cognition's <param>s. -->
-    <data id="database" expr="null"/>
+    <data id="memory" expr="null"/>
+    <!-- The id of each request this document last sent the memory, by
+         the state that sent it (decision D262). -->
+    <data id="memory_requests" expr="({})"/>
     <data id="model" expr="'gemma-4-26b-a4b'"/>
     <!-- The model this document's calls use on FLOPPY_REFLECTION_BASE_URL
          (decision D260): null keeps them on model and FLOPPY_BASE_URL. -->
@@ -303,35 +307,35 @@
       <assign location="deferred" expr="deferred.concat([_event.data])"/>
     </transition>
     <onentry>
-      <if cond="hasNoDatabase()">
+      <if cond="hasNoMemory()">
         <log label="reflection" expr="'absent'"/>
         <send event="bot.ability.reflection.output" target="#_parent"/>
       <else/>
         <assign location="results" expr="null"/>
         <assign location="statements" expr="episodeSelectStatements()"/>
         <assign location="statements" expr="behaviorSelectStatements()"/>
+        <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.recalling_memory">
+          <param name="id" expr="memory_requests.recalling_memory"/>
+          <param name="statements" expr="statements"/>
+        </send>
       </if>
     </onentry>
-    <transition cond="hasNoDatabase()" target="idle"/>
-    <invoke id="recalling_memory" type="scxml" src="../memory/memory.scx">
-      <param name="database" expr="database"/>
-      <param name="statements" expr="statements"/>
-    </invoke>
+    <transition cond="hasNoMemory()" target="idle"/>
     <!-- A failed or cancelled turn is only remembered (decision D139), and
          so is a turn that taught the learning a lesson, which learns it
          itself (decision D149), and a turn of a routine's tick or a
          lesson's result, which no one's input caused (decision D151). -->
     <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json"
-                cond="isOnlyRemembered()" target="storing">
+                cond="isMemoryReply('recalling_memory') &amp;&amp; isOnlyRemembered()" target="storing">
       <log label="reflection" expr="unreflectedLog()"/>
     </transition>
-    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="processing">
+    <transition event="bot.ability.memory.output" cond="isMemoryReply('recalling_memory')" event:schema="../schemas/bot.ability.memory.output.json" target="processing">
       <assign location="prior_episodes" expr="recalledEpisodes(_event)"/>
       <behavior:instances_from_behavior_results location="behaviors"
           behaviors="_event.data.results[1]" triggers="_event.data.results[2]"/>
       <log label="reflection" expr="recalledLog()"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failing">
+    <transition event="bot.ability.failed" cond="isMemoryReply('recalling_memory')" event:schema="../schemas/bot.ability.failed.json" target="failing">
       <assign location="failure" expr="recallFailedMessage(_event.data.message)"/>
     </transition>
     <transition event="error.*" target="failing">
@@ -486,19 +490,19 @@
     </transition>
     <onentry>
       <assign location="statements" expr="breakBehaviorStatements()"/>
+      <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.breaking_memory">
+        <param name="id" expr="memory_requests.breaking_memory"/>
+        <param name="statements" expr="statements"/>
+      </send>
     </onentry>
-    <invoke id="breaking_memory" type="scxml" src="../memory/memory.scx">
-      <param name="database" expr="database"/>
-      <param name="statements" expr="statements"/>
-    </invoke>
     <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json"
-                cond="hasBrokenBehavior(_event)" target="storing">
+                cond="isMemoryReply('breaking_memory') &amp;&amp; hasBrokenBehavior(_event)" target="storing">
       <log label="reflection.inventory" expr="brokenLog()"/>
     </transition>
-    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="failing">
+    <transition event="bot.ability.memory.output" cond="isMemoryReply('breaking_memory')" event:schema="../schemas/bot.ability.memory.output.json" target="failing">
       <assign location="failure" expr="unknownBreakMessage()"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failing">
+    <transition event="bot.ability.failed" cond="isMemoryReply('breaking_memory')" event:schema="../schemas/bot.ability.failed.json" target="failing">
       <assign location="failure" expr="breakFailedMessage(_event.data.message)"/>
     </transition>
     <transition event="error.*" target="failing">
@@ -539,7 +543,7 @@
     </transition>
     <!-- The revision (decision D148), its answer the applied behavior. -->
     <invoke id="revision" type="scxml" src="../revision/revision.scx">
-      <param name="database" expr="database"/>
+      <param name="memory" expr="memory"/>
       <param name="model" expr="model"/>
       <param name="reflection_model" expr="reflection_model"/>
       <param name="progress_target" expr="progressTarget()"/>
@@ -614,16 +618,16 @@
     <state id="storing_episode">
       <onentry>
         <assign location="statements" expr="insertEpisodeStatements()"/>
+        <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.storing_memory">
+          <param name="id" expr="memory_requests.storing_memory"/>
+          <param name="statements" expr="statements"/>
+        </send>
       </onentry>
-      <invoke id="storing_memory" type="scxml" src="../memory/memory.scx">
-        <param name="database" expr="database"/>
-        <param name="statements" expr="statements"/>
-      </invoke>
-      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="idle">
+      <transition event="bot.ability.memory.output" cond="isMemoryReply('storing_memory')" event:schema="../schemas/bot.ability.memory.output.json" target="idle">
         <log label="reflection.stored" expr="storedLog()"/>
         <send event="bot.ability.reflection.output" target="#_parent"/>
       </transition>
-      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failing">
+      <transition event="bot.ability.failed" cond="isMemoryReply('storing_memory')" event:schema="../schemas/bot.ability.failed.json" target="failing">
         <assign location="failure" expr="episodeStoreFailedMessage(_event.data.message)"/>
       </transition>
       <transition event="error.*" target="failing">
@@ -648,15 +652,15 @@
         <assign location="episode" expr="cognitiveEpisode(null)"/>
         <assign location="vector" expr="null"/>
         <assign location="statements" expr="insertEpisodeStatements()"/>
+        <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.failing_memory">
+          <param name="id" expr="memory_requests.failing_memory"/>
+          <param name="statements" expr="statements"/>
+        </send>
       </onentry>
-      <invoke id="failing_memory" type="scxml" src="../memory/memory.scx">
-        <param name="database" expr="database"/>
-        <param name="statements" expr="statements"/>
-      </invoke>
-      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="failing_reported">
+      <transition event="bot.ability.memory.output" cond="isMemoryReply('failing_memory')" event:schema="../schemas/bot.ability.memory.output.json" target="failing_reported">
         <log label="reflection.stored" expr="storedLog()"/>
       </transition>
-      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="failing_reported"/>
+      <transition event="bot.ability.failed" cond="isMemoryReply('failing_memory')" event:schema="../schemas/bot.ability.failed.json" target="failing_reported"/>
       <transition event="error.*" target="failing_reported"/>
     </state>
     <state id="failing_reported">

@@ -4,8 +4,8 @@
 //! cognition.
 //!
 //! The harness stores behavior inventory rows through the Memory ability in
-//! a directory the run grants, invokes the routines with the database path
-//! as `<param name="database">`, changes the inventory and asks for a
+//! a directory the run grants, invokes the routines with the memory's address
+//! as `<param name="memory">`, changes the inventory and asks for a
 //! reconcile. The routines log `bot.ability.routines.reconciled` (the
 //! running set's names) and `bot.ability.routines.reconcile.failed`; the
 //! harness logs `harness.tick` (the first tick of each routine revision),
@@ -142,20 +142,20 @@ fn routines_run_the_active_persistent_rows_and_reconcile_their_changes() {
     );
 }
 
-/// An inventory the Memory ability cannot open keeps the running set
+/// An inventory load no memory answers keeps the running set
 /// (empty here) and logs `bot.ability.routines.reconcile.failed`.
 #[test]
 fn a_failed_inventory_load_keeps_the_running_set() {
     let harness = layout("'/memory/floppy.sqlite'");
     let text = std::fs::read_to_string(&harness).expect("the harness is readable");
-    // The routines get a database path the service refuses.
+    // The routines get a memory no session answers at.
     std::fs::write(
         &harness,
         text.replace(
             r#"src="routines/routines.scx">
-        <param name="database" expr="database"/>"#,
+        <param name="memory" expr="'#_scxml_' + _sessionid + '.memory'"/>"#,
             r#"src="routines/routines.scx">
-        <param name="database" expr="'relative.sqlite'"/>"#,
+        <param name="memory" expr="'#_scxml_nowhere'"/>"#,
         ),
     )
     .expect("the harness is writable");

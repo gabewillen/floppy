@@ -16,7 +16,15 @@ function engineRevisions() {
   return postgres ? [postgresql_0001, postgresql_0002] : [sqlite_0001, sqlite_0002];
 }
 
-// busy
+// idle
+
+// The request to apply: its id, its sender (the reply's target) and its
+// statements.
+function requestOf(_event) {
+  return { id: _event.data.id, origin: _event.origin, statements: _event.data.statements };
+}
+
+// applying
 
 function operationTimeoutDelay() {
   return operation_timeout_ms + 'ms';
@@ -28,6 +36,8 @@ function timeoutFailure() {
 }
 
 // migrating and applying
+
+// The failure of a migration or a service that could not run.
 
 function couldNotRunFailure(_event) {
   return 'Memory could not run (' + _event.name + ')';

@@ -15,8 +15,8 @@ function delay(ms) {
 
 // opening
 
-function hasNoDatabase() {
-  return database === null;
+function hasNoMemory() {
+  return memory === null;
 }
 
 function openStatements() {
@@ -187,4 +187,12 @@ function failureText(_event) {
 // The failure message for a request it could not serve.
 function operationFailedMessage(name, _event) {
   return 'short-term memory ' + name + ' failed: ' + failureText(_event);
+}
+
+// memory
+
+// Whether the event answers the request the state `name` last sent the
+// memory (decision D262): its id is that request's.
+function isMemoryReply(name) {
+  return memory_requests[name] !== undefined && _event.data.id === memory_requests[name];
 }

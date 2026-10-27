@@ -261,16 +261,19 @@
   <param name="bounds">, and each one absent is the ability's default
   (docs/defaults.md).
 
-  Memory: the body passes its database (a file in
-  the directory the run grants the sql service at /memory, scx run's
-  dir option) to the cognition, the communication, the identity, the
-  listening, the short-term register and the persona as <param name="database">;
-  reasoning recalls the cognitive episodes reflection stores, the identity
-  its adopted names, the persona the descriptions the bot wrote of itself,
-  the listening the voices it has heard (decision D258), and the conversation its
-  relationship memories (abilities/memory/memory.scx over services/sql, one
-  SQLite transaction per invocation). A run without the grant is refused
-  before it starts.
+  Memory: live holds the bot's one memory, <invoke id="memory">
+  (abilities/memory/memory.scx over services/sql, decision D262), on the
+  body's database (a file in the directory the run grants the sql service
+  at /memory, scx run's dir option). It migrates the database once and
+  serves transactions for as long as the bot lives. The body passes its
+  address (#_scxml_ + its session id) to the cognition, the communication,
+  the identity, the listening, the short-term register and the persona as
+  <param name="memory">, and each sends it requests: reasoning recalls the
+  cognitive episodes reflection stores, the identity its adopted names,
+  the persona the descriptions the bot wrote of itself, the listening the
+  voices it has heard (decision D258), and the conversation its
+  relationship memories. A run without the grant is refused before it
+  starts.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition"
@@ -401,29 +404,33 @@
       <!-- Every reboot and deactivate clears the focus. -->
       <assign location="focused_device" expr="null"/>
     </onexit>
+    <!-- The bot's memory, before the abilities that send it requests. -->
+    <invoke id="memory" type="scxml" src="../../abilities/memory/memory.scx">
+      <param name="database" expr="database"/>
+    </invoke>
     <invoke id="cognition" type="scxml" src="../../abilities/cognition/cognition.scx">
       <param name="model" expr="model"/>
       <param name="intuition_model" expr="intuition_model"/>
       <param name="reflection_model" expr="reflection_model"/>
       <param name="bounds" expr="bounds"/>
-      <param name="database" expr="database"/>
+      <param name="memory" expr="memoryAddress()"/>
     </invoke>
     <invoke id="communication" type="scxml" src="../../abilities/communication/communication.scx">
-      <param name="database" expr="database"/>
+      <param name="memory" expr="memoryAddress()"/>
       <param name="environment" expr="environment"/>
     </invoke>
     <invoke id="identity" type="scxml" src="../../abilities/identity/identity.scx">
-      <param name="database" expr="database"/>
+      <param name="memory" expr="memoryAddress()"/>
       <param name="bring_up_timeout_ms" expr="bringUpTimeout()"/>
     </invoke>
     <invoke id="listening" type="scxml" src="../../abilities/listening/listening.scx">
-      <param name="database" expr="database"/>
+      <param name="memory" expr="memoryAddress()"/>
     </invoke>
     <invoke id="stm" type="scxml" src="../../abilities/stm/stm.scx">
-      <param name="database" expr="database"/>
+      <param name="memory" expr="memoryAddress()"/>
     </invoke>
     <invoke id="persona" type="scxml" src="../../abilities/persona/persona.scx">
-      <param name="database" expr="database"/>
+      <param name="memory" expr="memoryAddress()"/>
       <param name="bring_up_timeout_ms" expr="bringUpTimeout()"/>
       <param name="traits" expr="traits"/>
     </invoke>

@@ -133,7 +133,7 @@ its own path, so `FLOPPY_EMOTION_BASE_URL` is
 | `abilities/identity/identity.scx` | `bring_up_timeout_ms` | `30000` | recalling the name until memory answers, then the identity wakes with the session's name and says so (the body passes half its `activation_timeout_ms`) |
 | `abilities/persona/persona.scx` | `recall_attempt_timeout_ms` | `1000` | one attempt to recall the self-written description from memory, asked again after `recall_retry_delay_ms` |
 | `abilities/persona/persona.scx` | `bring_up_timeout_ms` | `30000` | recalling the description until memory answers, then the persona wakes with none and says so (the body passes half its `activation_timeout_ms`) |
-| `abilities/memory/memory.scx` | `operation_timeout_ms` | `60000` | one memory operation, its migration and transaction together, which then fails with kind `timeout` |
+| `abilities/memory/memory.scx` | `operation_timeout_ms` | `60000` | the memory's migration, after which every request fails with kind `timeout`, and each request's transaction, which then fails with kind `timeout` |
 | `abilities/stm/stm.scx` | `open_timeout_ms` | `30000` | opening the short-term register (its database migrated), after which it is degraded |
 | `abilities/reading/reading.scx` | `stage_timeout_ms` | `30000` | each reading stage |
 | `abilities/conversation/conversation.scx` | `turn_timeout_ms` | `5000` | a turn detector's readiness, and then its turn, for each source of an input |

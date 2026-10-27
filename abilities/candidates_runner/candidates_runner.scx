@@ -19,7 +19,7 @@
 
   Input: the <param>s turn, input (the candidate's input, as
   <autonomy:behavior_input_payload> builds it), candidates (the behaviors left to try, in inventory
-  order: [{name, source}], at least one), database, silence_ms and
+  order: [{name, source}], at least one), memory, silence_ms and
   memory_timeout_ms.
 
   Candidates: as Autonomy describes; the candidate's source is the path
@@ -53,7 +53,10 @@
     <data id="turn" expr="0"/>
     <data id="input" expr="null"/>
     <data id="candidates" expr="[]"/>
-    <data id="database" expr="null"/>
+    <data id="memory" expr="null"/>
+    <!-- The id of each request this document last sent the memory, by
+         the state that sent it (decision D262). -->
+    <data id="memory_requests" expr="({})"/>
     <data id="silence_ms" expr="1000"/>
     <data id="memory_timeout_ms" expr="10000"/>
     <data id="answer" expr="null"/>
@@ -120,16 +123,15 @@
   <state id="using">
     <onentry>
       <send event="bot.ability.autonomy.behavior_usage.persistence_failed" delayexpr="memoryTimeoutDelay()"/>
+      <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.usage">
+        <param name="id" expr="memory_requests.usage"/>
+        <param name="statements" expr="usedPersistenceStatements()"/>
+      </send>
     </onentry>
-    <invoke id="usage" type="scxml" src="../memory/memory.scx">
-      <param name="database" expr="database"/>
-      <param name="statements" expr="usedPersistenceStatements()"/>
-    </invoke>
     <!-- The update's results: nothing to keep. -->
-    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json"/>
-    <transition event="done.invoke.usage" target="answered"/>
+    <transition event="bot.ability.memory.output" cond="isMemoryReply('usage')" event:schema="../schemas/bot.ability.memory.output.json" target="answered"/>
     <!-- A failed persistence takes the same effect as one persisted. -->
-    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="answered">
+    <transition event="bot.ability.failed" cond="isMemoryReply('usage')" event:schema="../schemas/bot.ability.failed.json" target="answered">
       <log label="autonomy.behavior_usage.persistence_failed" expr="usageFailedReason(_event.data.message)"/>
     </transition>
     <transition event="error.*" target="answered">
@@ -145,15 +147,14 @@
   <state id="recording_failure">
     <onentry>
       <send event="bot.ability.autonomy.behavior_usage.persistence_failed" delayexpr="memoryTimeoutDelay()"/>
+      <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.failure">
+        <param name="id" expr="memory_requests.failure"/>
+        <param name="statements" expr="failedPersistenceStatements()"/>
+      </send>
     </onentry>
-    <invoke id="failure" type="scxml" src="../memory/memory.scx">
-      <param name="database" expr="database"/>
-      <param name="statements" expr="failedPersistenceStatements()"/>
-    </invoke>
-    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json"/>
-    <transition event="done.invoke.failure" target="recorded_failure"/>
+    <transition event="bot.ability.memory.output" cond="isMemoryReply('failure')" event:schema="../schemas/bot.ability.memory.output.json" target="recorded_failure"/>
     <!-- A failed persistence takes the same effect as one persisted. -->
-    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="recorded_failure">
+    <transition event="bot.ability.failed" cond="isMemoryReply('failure')" event:schema="../schemas/bot.ability.failed.json" target="recorded_failure">
       <log label="autonomy.behavior_usage.persistence_failed" expr="usageFailedReason(_event.data.message)"/>
     </transition>
     <transition event="error.*" target="recorded_failure">
@@ -180,7 +181,7 @@
       <param name="turn" expr="turn"/>
       <param name="input" expr="input"/>
       <param name="candidates" expr="restCandidates()"/>
-      <param name="database" expr="database"/>
+      <param name="memory" expr="memory"/>
       <param name="silence_ms" expr="silence_ms"/>
       <param name="memory_timeout_ms" expr="memory_timeout_ms"/>
     </invoke>

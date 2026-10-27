@@ -15,7 +15,7 @@
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" name="harness" initial="running">
   <state id="running">
     <invoke id="cognition" type="scxml" src="cognition/cognition.scx">
-      <param name="database" expr="null"/>
+      <param name="memory" expr="null"/>
     </invoke>
     <transition event="bot.ability.cognition.input" cond="_event.invokeid === undefined">
       <send event="bot.ability.cognition.input" target="#_cognition">

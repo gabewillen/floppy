@@ -94,7 +94,7 @@ const BODY_EVENTS: [&str; 12] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 110] = [
+const ABILITY_EVENTS: [&str; 111] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -171,8 +171,9 @@ const ABILITY_EVENTS: [&str; 110] = [
     "bot.ability.learning.output",
     "bot.ability.routines.reconcile",
     "bot.ability.ready",
-    // Phase 3: the memory service's committed transaction, described where
-    // the abilities take it.
+    // Phase 3: a request to the bot's memory and its committed transaction
+    // (decision D262), described where the memory and the abilities take them.
+    "bot.ability.memory.input",
     "bot.ability.memory.output",
     // The migration ability's reached revision (Alembic's upgrade or
     // downgrade), described where the memory ability takes it.

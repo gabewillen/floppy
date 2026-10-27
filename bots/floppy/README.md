@@ -121,8 +121,10 @@ streamed reasoning reply's progress starts it over),
 `child_operation_ceiling_ms` (a stage in all), `revising_timeout_ms`
 (a revision through the builder without progress, reflection's or a
 lesson's) and `revising_ceiling_ms` (a revision in all); absent, each is the ability's
-default ([docs/defaults.md](../../docs/defaults.md#timeouts-and-bounds)). The memory ability
-(`abilities/memory/memory.scx`) keeps the bot's database,
+default ([docs/defaults.md](../../docs/defaults.md#timeouts-and-bounds)). The bot's one memory
+(`abilities/memory/memory.scx`, the body's long-lived child `memory`,
+decision D262) migrates the bot's database once and serves every
+ability's transactions for as long as the bot lives; it keeps the database,
 `/memory/floppy.sqlite`, through the sql
 service (`services/sql`, SQLite), in the directory the run grants that
 service: `--dir

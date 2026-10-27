@@ -31,7 +31,7 @@
 
   Input: the <param>s turn, input (focus and focus_candidates,
   bot.ability.autonomy.input, schemas/bot.ability.autonomy.input.json),
-  stimulus (the turn's stimulus envelope) and database (the memory database; null means no learned inventory,
+  stimulus (the turn's stimulus envelope) and memory (the address of the bot's memory; null means no learned inventory,
   and only the seeds run).
 
   Seeds (the seeded behaviors run before the learned inventory, with or
@@ -80,7 +80,7 @@
   "unhandled"}. candidates names the behaviors tried, in order.
 
   Memory: each transaction invokes the Memory ability (abilities/memory/memory.scx)
-  with the database and its statements. A transaction that fails or
+  with its statements. A transaction that fails or
   outlasts memory_timeout_ms is logged and the turn goes on: a failed
   load matches no inventory rows, and a failed usage or failure record
   (the runner's) takes the same effect as a persisted one.
@@ -104,7 +104,10 @@
     <data id="turn" expr="0"/>
     <data id="input" expr="null"/>
     <data id="stimulus" expr="null"/>
-    <data id="database" expr="null"/>
+    <data id="memory" expr="null"/>
+    <!-- The id of each request this document last sent the memory, by
+         the state that sent it (decision D262). -->
+    <data id="memory_requests" expr="({})"/>
     <data id="silence_ms" expr="1000"/>
     <data id="memory_timeout_ms" expr="10000"/>
     <data id="rows" expr="[]"/>
@@ -186,16 +189,17 @@
       <onexit>
         <cancel sendid="load-timeout"/>
       </onexit>
-      <invoke id="load" type="scxml" src="../memory/memory.scx">
-        <param name="database" expr="database"/>
-        <param name="statements" expr="behaviorSelectStatements()"/>
-      </invoke>
-      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json">
+      <onentry>
+        <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.load">
+          <param name="id" expr="memory_requests.load"/>
+          <param name="statements" expr="behaviorSelectStatements()"/>
+        </send>
+      </onentry>
+      <transition event="bot.ability.memory.output" cond="isMemoryReply('load')" event:schema="../schemas/bot.ability.memory.output.json" target="matched">
         <assign location="rows" expr="behaviorsFromMemoryOutput(_event)"/>
       </transition>
-      <transition event="done.invoke.load" target="matched"/>
       <!-- A failed load is a warning, and the turn goes on with no inventory rows. -->
-      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="matched">
+      <transition event="bot.ability.failed" cond="isMemoryReply('load')" event:schema="../schemas/bot.ability.failed.json" target="matched">
         <log label="autonomy.behaviors.load.failed" expr="loadFailedReason(_event.data.message)"/>
         <assign location="rows" expr="[]"/>
       </transition>
@@ -227,7 +231,7 @@
         <param name="turn" expr="turn"/>
         <param name="input" expr="behavior_input"/>
         <param name="candidates" expr="candidateRows()"/>
-        <param name="database" expr="database"/>
+        <param name="memory" expr="memory"/>
         <param name="silence_ms" expr="silence_ms"/>
         <param name="memory_timeout_ms" expr="memory_timeout_ms"/>
       </invoke>

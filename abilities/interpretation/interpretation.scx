@@ -108,17 +108,17 @@
     first, as mosfet.py mints uuid4().hex), and at max_ids (500, decision
     D259; mosfet.py's 1000 prints of 256 dimensions are past a data-model
     call's fuel) the least recently seen id that is not own leaves the
-    session's registry, as mosfet.py evicts it; with a database it stays
+    session's registry, as mosfet.py evicts it; with a memory it stays
     a person in memory. A product names a
-    voice by its ref, voice:<id>. Without a database the registry lives in
+    voice by its ref, voice:<id>. Without a memory the registry lives in
     the session, as mosfet.py's InProcessStore: a restart forgets it.
-  * Memory (decisions D194 and D258): with a database (the <param>
-    database, the memory database file), the voices heard are the people
+  * Memory (decisions D194 and D258): with a memory (the <param>
+    memory, the address of the bot's memory), the voices heard are the people
     long-term memory holds (bot_person, bot_person_embedding and
     bot_person_centroid, kind voice), each id that is not own a person
     whose ref is the id's, so a voice is recognized across restarts.
-    Recalling, before Interpretation is ready, invokes the memory ability
-    (abilities/memory/memory.scx) with one read, the representatives of the
+    Recalling, before Interpretation is ready, asks the bot's memory
+    (abilities/memory/memory.scx, decision D262) with one read, the representatives of the
     96 people seen most recently (one compact row a person; about 100 fit
     the memory ability's output, decision D205), as ids weighted by their representative's
     weight; a failure is logged (memory) and the registry starts empty. A
@@ -210,7 +210,7 @@
   cond.
 
   Bindings: the speech service for the append step (no backend); the
-  stages bind their own services, and the memory ability its own.
+  stages bind their own services, and the bot's memory its own.
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
@@ -241,10 +241,13 @@
     <data id="max_ids" expr="500"/>
     <data id="registry" expr="[]"/>
     <data id="minted" expr="0"/>
-    <!-- The memory database (the invoker's <param>; null: the registry
+    <!-- The address of the bot's memory (the invoker's <param>; null: the registry
          lives in the session), the statements waiting to be written, and
          the people memory holds and remembers. -->
-    <data id="database" expr="null"/>
+    <data id="memory" expr="null"/>
+    <!-- The id of each request this document last sent the memory, by
+         the state that sent it (decision D262). -->
+    <data id="memory_requests" expr="({})"/>
     <data id="statements" expr="[]"/>
     <data id="voice_select" expr="'SELECT person_id, centroid, weight FROM bot_person_centroid WHERE kind = ?1 ORDER BY updated_at DESC, person_id LIMIT 96'"/>
     <data id="person_insert" expr="'INSERT INTO bot_person (person_id) VALUES (?1)'"/>
@@ -290,22 +293,24 @@
     <transition cond="hasNoRecognizeTimeout()" target="degraded">
       <log label="interpretation.degraded" expr="'recognize_timeout must be positive'"/>
     </transition>
-    <transition cond="database !== null" target="Recalling"/>
+    <transition cond="hasMemory()" target="Recalling"/>
     <transition target="Interpretation"/>
   </state>
 
   <!-- The people memory holds, before the first voice is identified. -->
   <state id="Recalling">
-    <invoke id="recall" type="scxml" src="../memory/memory.scx">
-      <param name="database" expr="database"/>
-      <param name="statements" expr="recallStatements()"/>
-    </invoke>
-    <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="Interpretation">
+    <onentry>
+      <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.recall">
+        <param name="id" expr="memory_requests.recall"/>
+        <param name="statements" expr="recallStatements()"/>
+      </send>
+    </onentry>
+    <transition event="bot.ability.memory.output" cond="isMemoryReply('recall')" event:schema="../schemas/bot.ability.memory.output.json" target="Interpretation">
       <foreach array="recalledRows(_event)" item="result">
         <assign location="registry" expr="withRecalled(result)"/>
       </foreach>
     </transition>
-    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="Interpretation">
+    <transition event="bot.ability.failed" cond="isMemoryReply('recall')" event:schema="../schemas/bot.ability.failed.json" target="Interpretation">
       <log label="memory" expr="memoryFailure(_event)"/>
     </transition>
     <transition event="error.*" target="Interpretation">
@@ -899,14 +904,16 @@
 
       <!-- The voices heard, written to memory in one transaction. -->
       <state id="Remembering">
-        <invoke id="remember" type="scxml" src="../memory/memory.scx">
-          <param name="database" expr="database"/>
-          <param name="statements" expr="statements"/>
-        </invoke>
-        <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json" target="Idle">
+        <onentry>
+          <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.remember">
+            <param name="id" expr="memory_requests.remember"/>
+            <param name="statements" expr="statements"/>
+          </send>
+        </onentry>
+        <transition event="bot.ability.memory.output" cond="isMemoryReply('remember')" event:schema="../schemas/bot.ability.memory.output.json" target="Idle">
           <assign location="statements" expr="[]"/>
         </transition>
-        <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="Idle">
+        <transition event="bot.ability.failed" cond="isMemoryReply('remember')" event:schema="../schemas/bot.ability.failed.json" target="Idle">
           <log label="memory" expr="memoryFailure(_event)"/>
           <assign location="statements" expr="[]"/>
         </transition>

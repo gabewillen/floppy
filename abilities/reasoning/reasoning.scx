@@ -18,8 +18,8 @@
     recalling -> applying (an invoked generate service) -> done
 
   Memory: with a
-  database (the <param> database, the memory database file), recalling
-  invokes the memory ability (abilities/memory/memory.scx) with one
+  memory (the <param> memory, the address of the bot's memory), recalling
+  asks the bot's memory (abilities/memory/memory.scx, decision D262) with one
   transaction of two selects, prior cognitive episodes
   (query_tags cognitive_episode) and standing directives (query_tags
   standing_directive), each for the turn's context or none, oldest first,
@@ -29,12 +29,12 @@
   context is the stimulus's target_device. The recalled rows are read
   with <memory:contents>: a row that is not a JSON object is skipped. A
   memory failure fails the stage ("Reasoning memory recall
-  failed: ..."). Without a database recalling
+  failed: ..."). Without a memory recalling
   logs <log label="memory" expr="'absent'"> and sends its event with
   memory_consulted false and nothing recalled.
 
   Recall by association (decision D256, mosfet.py's Associative): with a
-  database, recalling first embeds the cue, the words the stimulus
+  memory, recalling first embeds the cue, the words the stimulus
   carries (each message of a text type's content once, at most 2048
   bytes), as a query with the Embedding ability
   (abilities/embedding/embedding.scx), then selects the candidates, the
@@ -131,7 +131,7 @@
   cognition, which passes it to the next turn's reasoning.
 
   Input: the <param>s turn, stimulus, focus, focus_candidates, choices,
-  held, tier, model, database, environment, self, recent, acted, max_context_tokens,
+  held, tier, model, memory, environment, self, recent, acted, max_context_tokens,
   completion_reserve_tokens and bytes_per_token. Output: <donedata>, received by the cognition as
   done.invoke.reasoning:
 
@@ -146,9 +146,8 @@
   (<processing:send> builds the dispatch tool) and the cognition namespace
   (<cognition:model_facing_content> builds the prompt) and the memory
   namespace (<memory:contents> reads the recalled rows), resolved from their
-  repository URIs, and the
-  memory ability's sql service package (a run grants it its directory,
-  scx run's dir option); env scopes FLOPPY_API_KEY and
+  repository URIs (the bot's memory, which the body invokes, binds the sql
+  service); env scopes FLOPPY_API_KEY and
   FLOPPY_BASE_URL to the service's <invoke> (no default backend: without
   a base URL it answers generate.failed unconfigured, and without a key it
   asks a keyless backend with no key header, decision D127). The generate
@@ -229,7 +228,7 @@
          items). -->
     <data id="call" expr="null"/>
     <data id="s" expr="null"/>
-    <!-- Memory: the database file (null: no memory) and the episode and
+    <!-- Memory: the address of the bot's memory (null: no memory) and the episode and
          directive select, with ?2 the context. The SQL runs on both
          engines (SQLite and Postgres); JSON rows are told by their
          content_format, the 50 most recent by created_at,
@@ -237,7 +236,10 @@
          hold at most 24576 characters of content in all (so the memory
          ability's answer stays inside its event bound), read oldest
          first. -->
-    <data id="database" expr="null"/>
+    <data id="memory" expr="null"/>
+    <!-- The id of each request this document last sent the memory, by
+         the state that sent it (decision D262). -->
+    <data id="memory_requests" expr="({})"/>
     <data id="context_ref" expr="null"/>
     <data id="prior_episodes" expr="[]"/>
     <data id="standing_directives" expr="[]"/>
@@ -263,13 +265,13 @@
   <script src="reasoning.js"/>
 
   <!-- Recall prior episodes and standing directives, or nothing without
-       a database. -->
+       a memory. -->
   <state id="recalling" initial="recalling_from">
     <onentry>
       <assign location="context_ref" expr="contextRefFromInput()"/>
     </onentry>
     <state id="recalling_from">
-      <transition cond="hasNoDatabase()" target="recalling_nothing"/>
+      <transition cond="hasNoMemory()" target="recalling_nothing"/>
       <transition target="recalling_embedding"/>
     </state>
     <!-- The cue (decision D256): the stimulus's words embedded as a query.
@@ -310,17 +312,17 @@
     <state id="recalling_candidates">
       <onentry>
         <assign location="statements" expr="candidateSelectStatements()"/>
+        <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.candidates">
+          <param name="id" expr="memory_requests.candidates"/>
+          <param name="statements" expr="statements"/>
+        </send>
       </onentry>
-      <invoke id="candidates" type="scxml" src="../memory/memory.scx">
-        <param name="database" expr="database"/>
-        <param name="statements" expr="statements"/>
-      </invoke>
-      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json"
+      <transition event="bot.ability.memory.output" cond="isMemoryReply('candidates')" event:schema="../schemas/bot.ability.memory.output.json"
                   target="recalling_memory">
         <assign location="episode_ids" expr="rankedEpisodeIds(_event)"/>
         <log label="reasoning.recall" expr="recallLog(_event)"/>
       </transition>
-      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="done">
+      <transition event="bot.ability.failed" cond="isMemoryReply('candidates')" event:schema="../schemas/bot.ability.failed.json" target="done">
         <assign location="result" expr="recallFailedResult(_event.data.message)"/>
       </transition>
       <transition event="error.*" target="done">
@@ -344,12 +346,12 @@
         <assign location="statements" expr="episodeSelectStatements()"/>
         <assign location="statements" expr="directiveSelectStatements()"/>
         <assign location="statements" expr="behaviorSelectStatements()"/>
+        <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.recall">
+          <param name="id" expr="memory_requests.recall"/>
+          <param name="statements" expr="statements"/>
+        </send>
       </onentry>
-      <invoke id="recall" type="scxml" src="../memory/memory.scx">
-        <param name="database" expr="database"/>
-        <param name="statements" expr="statements"/>
-      </invoke>
-      <transition event="bot.ability.memory.output" event:schema="../schemas/bot.ability.memory.output.json">
+      <transition event="bot.ability.memory.output" cond="isMemoryReply('recall')" event:schema="../schemas/bot.ability.memory.output.json">
         <memory:contents location="prior_episodes" result="_event.data.results[0]"/>
         <memory:contents location="standing_directives" result="_event.data.results[1]"/>
         <assign location="behaviors" expr="recalledBehaviors(_event)"/>
@@ -362,7 +364,7 @@
           <param name="input" expr="focusInput()"/>
         </send>
       </transition>
-      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" target="done">
+      <transition event="bot.ability.failed" cond="isMemoryReply('recall')" event:schema="../schemas/bot.ability.failed.json" target="done">
         <assign location="result" expr="recallFailedResult(_event.data.message)"/>
       </transition>
       <transition event="error.*" target="done">

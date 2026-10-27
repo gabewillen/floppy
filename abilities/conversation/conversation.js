@@ -79,7 +79,7 @@ function hasAllTurns() {
 // Nothing to identify: no memory, or no embedding among the input's
 // identities.
 function isUnidentified() {
-  return database === null || !input.source_ids.concat(input.target_ids).some(Array.isArray);
+  return memory === null || !input.source_ids.concat(input.target_ids).some(Array.isArray);
 }
 
 // Every person's representative voice (decision D205).
@@ -131,7 +131,7 @@ function identifyErrorMessage(_event) {
 // recalling_from and remembering_from
 
 function isMemoryAbsent() {
-  return database === null;
+  return memory === null;
 }
 
 function memoryTimeoutDelay() {
@@ -233,4 +233,12 @@ function alreadyCommittedLog(_event) {
 
 function rejectedLog(_event) {
   return _event.name + ' does not satisfy its schema';
+}
+
+// memory
+
+// Whether the event answers the request the state `name` last sent the
+// memory (decision D262): its id is that request's.
+function isMemoryReply(name) {
+  return memory_requests[name] !== undefined && _event.data.id === memory_requests[name];
 }
