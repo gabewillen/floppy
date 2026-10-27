@@ -30,7 +30,7 @@ S.statement(2, "A `bot.ability.memory.input` `{id, statements}` runs its `statem
 S.statement(3, "A statement that fails (the engine refuses it, or its `rowcount` is not the one it expects) answers its sender `bot.ability.failed` `{id, message, kind}`, the engine's message and kind `store_failed`, and no `bot.ability.memory.output`.")
 S.statement(4, "When the migration cannot bring the database to head, every request is answered `bot.ability.failed` `{id, message, kind}` with the migration's message and kind `unavailable`, and its statements never run.")
 S.statement(5, "The database names the engine: a `postgresql://` (or `postgres://`) URI is a Postgres database reached through the pgsql service, anything else a SQLite file through the sql service.")
-S.statement(6, "It is long-lived (decision D265): it answers each request once, one at a time and in the order they arrive, and goes on serving after an answer, `bot.ability.memory.output` or `bot.ability.failed`, until its invoker ends it.")
+S.statement(6, "It is long-lived (decision D266): it answers each request once, one at a time and in the order they arrive, and goes on serving after an answer, `bot.ability.memory.output` or `bot.ability.failed`, until its invoker ends it.")
 
 S.case(100, 1, "a fresh database is at the head, 0002, with the tables before the statements run.",
        [request([{"sql": "SELECT version_num FROM alembic_version"},

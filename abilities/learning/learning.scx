@@ -73,7 +73,7 @@
     <!-- The cognition's <param>s. -->
     <data id="memory" expr="null"/>
     <!-- The id of each request this document last sent the memory, by
-         the state that sent it (decision D265). -->
+         the state that sent it (decision D266). -->
     <data id="memory_requests" expr="({})"/>
     <data id="model" expr="'gemma-4-26b-a4b'"/>
     <!-- The model this document's calls use on FLOPPY_REFLECTION_BASE_URL

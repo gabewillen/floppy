@@ -18,7 +18,7 @@
 
   Each step is one transaction of the bot's memory
   (abilities/memory/memory.scx, a request answered by its id, decision
-  D265): a read, then a write guarded so that it
+  D266): a read, then a write guarded so that it
   commits only on the rows it read (a statement with an expected
   rowcount, which the sql and pgsql services check: a write whose guard
   does not hold fails and commits nothing). A step cancelled meanwhile
@@ -93,7 +93,7 @@
     <!-- The invoker's <param>: the address of the bot's memory (null: no memory). -->
     <data id="memory" expr="null"/>
     <!-- The id of each request this document last sent the memory, by
-         the state that sent it (decision D265). -->
+         the state that sent it (decision D266). -->
     <data id="memory_requests" expr="({})"/>
     <!-- The embeddings' kind consolidated (faces are D188's seam). -->
     <data id="kind" expr="'voice'"/>

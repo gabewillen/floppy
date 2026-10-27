@@ -145,7 +145,7 @@ function mergedAfter() {
 // memory
 
 // Whether the event answers the request the state `name` last sent the
-// memory (decision D265): its id is that request's.
+// memory (decision D266): its id is that request's.
 function isMemoryReply(name) {
   return memory_requests[name] !== undefined && _event.data.id === memory_requests[name];
 }

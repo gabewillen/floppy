@@ -47,7 +47,7 @@
     <!-- The address of the bot's memory (the cognition's), or null. -->
     <data id="memory" expr="null"/>
     <!-- The id of each request this document last sent the memory, by
-         the state that sent it (decision D265). -->
+         the state that sent it (decision D266). -->
     <data id="memory_requests" expr="({})"/>
     <!-- The behaviors of one status and lifetime: plain rows, portable to both engines. -->
     <data id="select_routines">SELECT name, source, updated_at FROM bot_behavior WHERE status = ? AND lifetime = ? ORDER BY name</data>

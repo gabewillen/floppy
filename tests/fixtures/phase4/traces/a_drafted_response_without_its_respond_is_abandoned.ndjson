@@ -1,5 +1,5 @@
 {"label":"harness.ready","session":"session","text":"communication","type":"log"}
-{"label":"speech.draft","parent":"session.communication.speaking.vocal","session":"session.communication.speaking.vocal.speech","text":"Hello there. ","type":"log"}
+{"label":"speech.draft","parent":"session.communication.speaking.vocal","session":"session.communication.speaking.vocal.applying.0","text":"Hello there. ","type":"log"}
 {"label":"harness.efference","session":"session","text":"1.3","type":"log"}
 {"label":"harness.sound","session":"session","text":"media/speaking-1.0.pcm","type":"log"}
 {"label":"speaking.timed_out","parent":"session.communication","session":"session.communication.speaking","text":"drafted 1 after 300 ms without its whole","type":"log"}

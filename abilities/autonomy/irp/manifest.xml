@@ -27,7 +27,7 @@
     </test>
   </assert>
   <assert id="autonomy-4" specnum="4" specid="#autonomy-4">
-    <![CDATA[With memory, one transaction of the Memory ability at the `memory` <param> (decision D265) loads the ACTIVE `turn` behaviors whose trigger is the stimulus's event; when none matches, the turn is `no-behaviors`, or `unhandled` with the seed in `candidates` when a seed ran.]]>
+    <![CDATA[With memory, one transaction of the Memory ability at the `memory` <param> (decision D266) loads the ACTIVE `turn` behaviors whose trigger is the stimulus's event; when none matches, the turn is `no-behaviors`, or `unhandled` with the seed in `candidates` when a seed ran.]]>
     <test id="130" conformance="mandatory" manual="false">
       <start uri="130/test130.scxml"/>
     </test>

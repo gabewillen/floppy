@@ -46,7 +46,7 @@ step is one of
   ignore(event)                     drops `event` wherever it arrives
 
 A case's params name the child's <param>s as (name, expr); memory(database)
-in a param's place is the child's `memory` <param> (decision D265): the
+in a param's place is the child's `memory` <param> (decision D266): the
 harness invokes the long-lived memory ability (id `memory`) on the
 `database` expr before the child and passes the child its address, or null
 when `database` is "null".
@@ -141,7 +141,7 @@ def js(value):
 
 
 def request(event, fields=(), request_id="r1"):
-    """A step that sends a long-lived child one request (decision D265):
+    """A step that sends a long-lived child one request (decision D266):
     `event` with data {id: request_id} and each (name, expr) of `fields`."""
     return Send(event, "({" + ", ".join([f"id: {js(request_id)}"] + [f"{name}: {expr}" for name, expr in fields]) + "})")
 

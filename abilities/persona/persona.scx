@@ -19,7 +19,7 @@
   bot.ability.persona.revise {text, reason}, which the bot selects.
 
   recalling: with a memory it asks the
-  bot's memory (abilities/memory/memory.scx, decision D265) to select the descriptions
+  bot's memory (abilities/memory/memory.scx, decision D266) to select the descriptions
   the bot wrote (query_tags self_persona, subject_ref self, the 50 most
   recent, oldest first) and sends bot.ability.persona.recalled
   {description} to #_internal with the most recent one that decodes as a
@@ -131,7 +131,7 @@
          first. -->
     <data id="memory" expr="null"/>
     <!-- The id of each request this document last sent the memory, by
-         the state that sent it (decision D265). -->
+         the state that sent it (decision D266). -->
     <data id="memory_requests" expr="({})"/>
     <data id="description_select" expr="'SELECT content FROM (SELECT content, created_at, memory_id FROM bot_memory WHERE query_tags = ?1 AND subject_ref = ?2 AND content_format = \'application/json\' ORDER BY created_at DESC, memory_id DESC LIMIT 50) AS recent ORDER BY created_at, memory_id'"/>
     <data id="description_insert" expr="'INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT substr(\'00000000000000000000000000000000\', 1, 32 - length(n)) || n FROM (SELECT CAST(COUNT(*) + 1 AS TEXT) AS n FROM bot_memory) AS c), ?1, NULL, ?2, ?3, ?4, ?5, ?6, ?7, ?8)'"/>

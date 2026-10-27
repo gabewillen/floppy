@@ -107,6 +107,8 @@ const ABILITY_EVENTS: [&str; 125] = [
     "bot.ability.cognition.step.failed",
     "bot.ability.cognition.step.timed_out",
     "bot.ability.processing.cancelled",
+    // Speaking's cancel of an utterance its long-lived vocal is encoding.
+    "bot.ability.processing.cancel",
     "bot.ability.autonomy.input",
     "bot.ability.autonomy.output",
     "bot.ability.intuition.input",
@@ -174,7 +176,7 @@ const ABILITY_EVENTS: [&str; 125] = [
     "bot.ability.routines.reconcile",
     "bot.ability.ready",
     // Phase 3: a request to the bot's memory and its committed transaction
-    // (decision D265), described where the memory and the abilities take them.
+    // (decision D266), described where the memory and the abilities take them.
     "bot.ability.memory.input",
     "bot.ability.memory.output",
     // The migration ability's reached revision (Alembic's upgrade or

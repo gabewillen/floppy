@@ -87,7 +87,7 @@
     </test>
   </assert>
   <assert id="conversation-9" specnum="9" specid="#conversation-9">
-    <![CDATA[With a `memory` param (decision D265) it recalls the relationship's memories before the turns and remembers the input after them through the memory ability, then commits as without one; a memory failure answers `bot.ability.conversation.failed` `{stage: "memory", message}` and commits nothing.]]>
+    <![CDATA[With a `memory` param (decision D266) it recalls the relationship's memories before the turns and remembers the input after them through the memory ability, then commits as without one; a memory failure answers `bot.ability.conversation.failed` `{stage: "memory", message}` and commits nothing.]]>
     <test id="180" conformance="mandatory" manual="false">
       <start uri="180/test180.scxml"/>
     </test>

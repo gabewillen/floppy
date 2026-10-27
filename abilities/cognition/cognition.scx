@@ -257,7 +257,7 @@
     <!-- Reflection's and learning's model on FLOPPY_REFLECTION_BASE_URL
          (decision D260): null keeps them on model. -->
     <data id="reflection_model" expr="null"/>
-    <!-- The address of the bot's memory (decision D265), for autonomy, reasoning, reflection and routines (null: no memory). -->
+    <!-- The address of the bot's memory (decision D266), for autonomy, reasoning, reflection and routines (null: no memory). -->
     <data id="memory" expr="null"/>
     <!-- A stage's inactivity bound and its backstop (decision D101). -->
     <data id="child_operation_timeout_ms" expr="30000"/>

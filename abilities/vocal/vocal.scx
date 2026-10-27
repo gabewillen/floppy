@@ -3,10 +3,16 @@
   floppy's vocal speech encoding ability:
   a reply's parts to speech through the speech service
   (services/speech, operation encode). Speaking
-  (abilities/speaking/speaking.scx) invokes it as its child "vocal" from
-  its encoding state, so leaving encoding (an answer, a failure or
-  its encoding_timeout_ms bound) cancels it and the service request with it (SCXML
-  6.4).
+  (abilities/speaking/speaking.scx) invokes it once, as its long-lived
+  child "vocal" (mosfet.py's Speaking holds its encoder), and sends it
+  each utterance. Speaking cancels an utterance it stops hearing out
+  (its stop, a failure or its encoding_timeout_ms bound) with
+  bot.ability.processing.cancel {} (mosfet.py's processing cancel; it
+  names no utterance, since vocal holds one at a time): applying then goes
+  back to idle, which cancels the service request (SCXML 6.4), and nothing
+  is answered; in idle it is dropped. Each
+  service call takes a generated invoke id that its transitions match, as
+  scxml.rs still delivers a cancelled call's late events.
 
     starting -> idle -bot.ability.vocal.speech.encoding.input-> applying -> idle
 
@@ -16,8 +22,9 @@
   OpenAI-compatible API), model and voice (the speech service requires
   both: the invoker names them), parts (the service says each pause as
   silence and applies no other cue, decision D178), output (where the
-  service writes the audio: a path in the media directory the run grants
-  it, which the invoker names) and media_type. The service streams its
+  service writes the audio: output_prefix, a path in the media directory
+  the run grants it, which the invoker names, + the utterance's number,
+  counted from 1, + "." + the media subtype) and media_type. The service streams its
   encoding (decision D203): each bot.ability.vocal.speech.encoding.chunk
   {audio, sequence, media_type, sample_rate_hz, channels, duration} it
   returns is sent on to the parent at once, as it arrives, so playout can
@@ -27,7 +34,7 @@
   bytes; a measured duration, when the service gives one, rides along), or
   bot.ability.failed {message} when the service fails, ends without an answer, or cannot
   run. An input that arrives while applying is logged and dropped: its
-  invoker sends one per invocation.
+  invoker sends one per utterance.
 
   Drafts (decision D262): a reply can also arrive while it is still
   being written. bot.ability.speaking.draft {part, words, offset,
@@ -59,8 +66,14 @@
     <data id="provider" expr="null"/>
     <data id="model" expr="null"/>
     <data id="voice" expr="null"/>
-    <data id="output" expr="null"/>
+    <data id="output_prefix" expr="'media/vocal-'"/>
     <data id="media_type" expr="'audio/pcm'"/>
+    <!-- The utterance's number (the audio is written to output_prefix +
+         operation + "." + the media subtype) and the speech service call's
+         generated invoke id: a cancelled call's late events (still
+         delivered, SCXML 6.4) are not this utterance's. -->
+    <data id="operation" expr="0"/>
+    <data id="speech" expr="null"/>
     <!-- The utterance in hand and the service's answer. -->
     <data id="parts" expr="null"/>
     <data id="encoded" expr="null"/>
@@ -100,45 +113,48 @@
 
   <state id="applying">
     <onentry>
+      <assign location="operation" expr="operation + 1"/>
       <assign location="encoded" expr="null"/>
       <assign location="failure" expr="null"/>
       <assign location="drafted_parts" expr="null"/>
       <assign location="speech_ready" expr="false"/>
     </onentry>
-    <invoke id="speech" type="https://github.com/stateforward/floppy/services/speech"
+    <invoke idlocation="speech" type="https://github.com/stateforward/floppy/services/speech"
             env:apikey="FLOPPY_SPEECH_API_KEY" env:baseurl="FLOPPY_SPEECH_BASE_URL">
       <param name="operation" expr="'encode'"/>
       <param name="provider" expr="provider"/>
       <param name="model" expr="model"/>
       <param name="parts" expr="parts"/>
       <param name="voice" expr="voice"/>
-      <param name="output" expr="output"/>
+      <param name="output" expr="outputPath()"/>
       <param name="media_type" expr="media_type"/>
     </invoke>
 
     <!-- Each chunk of the streamed encoding, sent on as it arrives. -->
     <transition event="bot.ability.vocal.speech.encoding.chunk" event:schema="../schemas/bot.ability.vocal.speech.encoding.chunk.json"
-                cond="isChunk(_event)">
+                cond="isCurrent(_event) &amp;&amp; isChunk(_event)">
       <send event="bot.ability.vocal.speech.encoding.chunk" target="#_parent">
         <content expr="_event.data"/>
       </send>
     </transition>
-    <transition event="bot.ability.vocal.speech.encoding.chunk" event:schema="../schemas/bot.ability.vocal.speech.encoding.chunk.json">
+    <transition event="bot.ability.vocal.speech.encoding.chunk" event:schema="../schemas/bot.ability.vocal.speech.encoding.chunk.json"
+                cond="isCurrent(_event)">
       <log label="vocal.dropped" expr="_event.name"/>
     </transition>
     <!-- The speech service's answer, kept until it ends. -->
-    <transition event="bot.ability.vocal.speech.encoding.output" event:schema="../schemas/bot.ability.vocal.speech.encoding.output.json">
+    <transition event="bot.ability.vocal.speech.encoding.output" event:schema="../schemas/bot.ability.vocal.speech.encoding.output.json"
+                cond="isCurrent(_event)">
       <assign location="encoded" expr="encodedAnswer(_event)"/>
     </transition>
-    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json">
+    <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json" cond="isCurrent(_event)">
       <assign location="failure" expr="failureAnswer(_event)"/>
     </transition>
-    <transition event="done.invoke.speech" cond="hasEncoded()" target="idle">
+    <transition event="done.invoke" cond="isCurrent(_event) &amp;&amp; hasEncoded()" target="idle">
       <send event="bot.ability.vocal.speech.encoding.output" target="#_parent">
         <content expr="encoded"/>
       </send>
     </transition>
-    <transition event="done.invoke.speech" target="idle">
+    <transition event="done.invoke" cond="isCurrent(_event)" target="idle">
       <send event="bot.ability.failed" target="#_parent">
         <param name="message" expr="failureMessage()"/>
       </send>
@@ -148,17 +164,22 @@
         <param name="message" expr="speechRunFailure(_event)"/>
       </send>
     </transition>
+    <!-- The utterance is cancelled (mosfet.py's processing cancel): leaving
+         applying cancels the service call and its request (SCXML 6.4), and
+         nothing is answered. -->
+    <transition event="bot.ability.processing.cancel" event:schema="../schemas/bot.ability.processing.cancel.json"
+                target="idle"/>
     <!-- A drafted encoding is ready for its events: what was held goes
          to it, in order. -->
-    <transition event="bot.ability.ready" event:schema="../schemas/bot.ability.ready.json" cond="isDrafted()">
+    <transition event="bot.ability.ready" event:schema="../schemas/bot.ability.ready.json" cond="isCurrent(_event) &amp;&amp; isDrafted()">
       <foreach array="drafts" item="draft">
-        <send event="bot.ability.speaking.draft" target="#_speech">
+        <send event="bot.ability.speaking.draft" targetexpr="speechTarget()">
           <content expr="draft"/>
         </send>
       </foreach>
       <assign location="drafts" expr="[]"/>
       <if cond="drafted_parts !== null">
-        <send event="bot.ability.vocal.speech.encoding.input" target="#_speech">
+        <send event="bot.ability.vocal.speech.encoding.input" targetexpr="speechTarget()">
           <param name="parts" expr="drafted_parts"/>
         </send>
       </if>
@@ -166,7 +187,7 @@
     </transition>
     <transition event="bot.ability.speaking.draft" event:schema="../schemas/bot.ability.speaking.draft.json" cond="isDrafted()">
       <if cond="speech_ready">
-        <send event="bot.ability.speaking.draft" target="#_speech">
+        <send event="bot.ability.speaking.draft" targetexpr="speechTarget()">
           <content expr="_event.data"/>
         </send>
       <else/>
@@ -180,7 +201,7 @@
     <transition event="bot.ability.vocal.speech.encoding.input" event:schema="../schemas/bot.ability.vocal.speech.encoding.input.json"
                 cond="isDrafted()">
       <if cond="speech_ready">
-        <send event="bot.ability.vocal.speech.encoding.input" target="#_speech">
+        <send event="bot.ability.vocal.speech.encoding.input" targetexpr="speechTarget()">
           <param name="parts" expr="_event.data.parts"/>
         </send>
       <else/>

@@ -73,7 +73,7 @@
 
   Memory (before and after the turns):
   with a memory (the <param> memory, the address of the bot's memory) it
-  asks the bot's memory (abilities/memory/memory.scx, decision D265) as "recall",
+  asks the bot's memory (abilities/memory/memory.scx, decision D266) as "recall",
   before the turns, with the relationship's memories (content where
   query_tags conversation_memory and context_ref is the relationship's
   context_ref, oldest first, at most 50), and as "remember", after them,
@@ -236,7 +236,7 @@
          count recalled, for the log. -->
     <data id="memory" expr="null"/>
     <!-- The id of each request this document last sent the memory, by
-         the state that sent it (decision D265). -->
+         the state that sent it (decision D266). -->
     <data id="memory_requests" expr="({})"/>
     <data id="memory_select" expr="'SELECT content FROM (SELECT content, created_at, memory_id FROM bot_memory WHERE query_tags = ?1 AND context_ref = ?2 ORDER BY created_at DESC, memory_id DESC LIMIT 50) AS recent ORDER BY created_at, memory_id'"/>
     <data id="memory_insert" expr="'INSERT INTO bot_memory (memory_id, scope, context_ref, subject_ref, kind, sensitivity, retention, content, content_format, query_tags) VALUES ((SELECT substr(\'00000000000000000000000000000000\', 1, 32 - length(n)) || n FROM (SELECT CAST(COUNT(*) + 1 AS TEXT) AS n FROM bot_memory) AS c), ?1, ?2, NULL, ?3, ?4, ?5, ?6, ?7, ?8)'"/>

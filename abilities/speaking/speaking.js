@@ -126,12 +126,6 @@ function nextOperation() {
   return operation + 1;
 }
 
-// Where the speech service writes the audio: output_prefix + operation +
-// "." + the media subtype.
-function outputPath() {
-  return output_prefix + operation + '.' + media_type.split('/')[1];
-}
-
 // The sound fields of vocal's chunk or output: a rate, channel count or
 // media type it leaves null is speaking's own.
 function soundFormat(data) {

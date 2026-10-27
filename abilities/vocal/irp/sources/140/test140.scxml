@@ -4,7 +4,7 @@
 <state id="harness" initial="boot">
   <invoke id="vocal" type="scxml" src="../../../vocal.scx">
     <param name="model" expr="'tts-1'"/>
-    <param name="output" expr="'media/reply.pcm'"/>
+    <param name="output_prefix" expr="'media/reply-'"/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>

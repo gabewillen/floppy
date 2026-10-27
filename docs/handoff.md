@@ -15,9 +15,12 @@ Last updated: 2026-10-26.
   interpretation invokes its six hearing stages once and sends each a
   request per sound (`<name>.input {id, ...}`, answered by `<name>.output`
   or `bot.ability.failed` with the id), as mosfet.py's Interpretation holds
-  them. Still restarted per turn and next in line
-  (`/mnt/project-files/floppy-perf/long-lived-invokes.md`): cognition's
-  autonomy, decision, intuition and reasoning, embedding, vocal; then the
+  them. Speaking's vocal is long-lived too (D265, cancelled by
+  `bot.ability.processing.cancel`). First speech on the release probe:
+  13.9 / 9.1 / 9.1 s before, 12.9 / 8.9 / 8.4 s after D264. Still
+  restarted per turn (`/mnt/project-files/floppy-perf/long-lived-invokes.md`):
+  cognition's autonomy, decision, intuition and reasoning, and embedding,
+  which build on the long-lived memory's addressing (PR #130); then the
   turn detector and the candidate loop folded into states.
 - **Latency hill climb: speech out (2026-10-27, D262):** a reply is
   said while the model is still writing it (mosfet.py's drafts).

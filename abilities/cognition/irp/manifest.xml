@@ -21,7 +21,7 @@
     </test>
   </assert>
   <assert id="cognition-3" specnum="3" specid="#cognition-3">
-    <![CDATA[When the decision layer leaves the turn unhandled (its decision abstains), reasoning (the generate service, schema `dispatch`) handles it, and the output is reasoning's selections; with memory (the `<param>` `memory`, decision D265) autonomy and reasoning use the memory and the turn is answered the same way.]]>
+    <![CDATA[When the decision layer leaves the turn unhandled (its decision abstains), reasoning (the generate service, schema `dispatch`) handles it, and the output is reasoning's selections; with memory (the `<param>` `memory`, decision D266) autonomy and reasoning use the memory and the turn is answered the same way.]]>
     <test id="120" conformance="mandatory" manual="false">
       <start uri="120/test120.scxml"/>
     </test>

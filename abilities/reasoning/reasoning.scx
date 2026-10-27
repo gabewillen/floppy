@@ -19,7 +19,7 @@
 
   Memory: with a
   memory (the <param> memory, the address of the bot's memory), recalling
-  asks the bot's memory (abilities/memory/memory.scx, decision D265) with one
+  asks the bot's memory (abilities/memory/memory.scx, decision D266) with one
   transaction of two selects, prior cognitive episodes
   (query_tags cognitive_episode) and standing directives (query_tags
   standing_directive), each for the turn's context or none, oldest first,
@@ -250,7 +250,7 @@
          first. -->
     <data id="memory" expr="null"/>
     <!-- The id of each request this document last sent the memory, by
-         the state that sent it (decision D265). -->
+         the state that sent it (decision D266). -->
     <data id="memory_requests" expr="({})"/>
     <data id="context_ref" expr="null"/>
     <data id="prior_episodes" expr="[]"/>
