@@ -1502,6 +1502,12 @@ pub(crate) fn request_cancel() -> Option<Arc<CancelSignal>> {
     REQUEST_CANCEL.with_borrow(Option::clone)
 }
 
+/// Makes `cancel` the cancellation of the request this thread performs.
+#[cfg(all(feature = "http", test))]
+pub(crate) fn set_request_cancel(cancel: Option<Arc<CancelSignal>>) {
+    REQUEST_CANCEL.with_borrow_mut(|slot| *slot = cancel);
+}
+
 /// One settled request of a live run, waiting for delivery on the session
 /// thread.
 pub(crate) struct Settled {

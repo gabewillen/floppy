@@ -365,6 +365,8 @@ pub enum Operation {
     ExtensionExampleExecute,
     /// Constructs a Wasmtime component engine.
     HostWasmtimeComponentEngine,
+    /// Pre-initializes one component with Wizer at build time.
+    HostWasmtimeWizen,
     /// Starts one authenticated machine component and runs its lifecycle.
     HostWasmtimeComponentExecute,
     /// Runs one Wasmtime machine session over an external event sequence.
@@ -640,6 +642,7 @@ impl Operation {
             Self::CliSnapshotDiff => "scxml.cli.snapshot-diff",
             Self::ExtensionExampleExecute => "scxml.extension-example.execute",
             Self::HostWasmtimeComponentEngine => "scxml.host-wasmtime.component-engine",
+            Self::HostWasmtimeWizen => "scxml.host-wasmtime.wizen",
             Self::HostWasmtimeComponentExecute => "scxml.host-wasmtime.component-execute",
             Self::HostWasmtimeMachineSession => "scxml.host-wasmtime.machine-session",
             Self::HostWasmtimeCapabilityGraphExecute => {

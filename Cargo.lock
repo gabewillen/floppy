@@ -2864,6 +2864,7 @@ dependencies = [
  "wasmtime",
  "wasmtime-wasi",
  "wasmtime-wasi-http",
+ "wasmtime-wizer",
 ]
 
 [[package]]
@@ -4053,6 +4054,7 @@ version = "49.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2053fd1d90080e502ca4ea39d86c3528587a40220b9572a874c8b742c219a00c"
 dependencies = [
+ "anyhow",
  "hashbrown 0.17.1",
  "libm",
  "serde",
@@ -4212,6 +4214,18 @@ dependencies = [
  "bytes",
  "futures",
  "tracing",
+ "wasmtime",
+]
+
+[[package]]
+name = "wasmtime-wizer"
+version = "49.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0cc3dc92c7ed0bfa08995a0c3900169730bca033860ae8912a95330ec02b711a"
+dependencies = [
+ "log",
+ "wasm-encoder 0.258.3",
+ "wasmparser 0.258.3",
  "wasmtime",
 ]
 

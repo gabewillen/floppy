@@ -7,15 +7,26 @@
 
 use std::cell::RefCell;
 
+// The `data-model` world plus Wizer's initialization export, which the
+// build runs once and removes (scripts/verify-wasm-capabilities.sh): the
+// released component exports exactly the `data-model` world.
 wit_bindgen::generate!({
-    world: "data-model",
+    inline: "
+        package stateforward:scxml-data-model-ecmascript;
+        world data-model {
+            include stateforward:scxml/data-model@0.2.0;
+            export wizer-initialize: func();
+        }
+    ",
+    world: "stateforward:scxml-data-model-ecmascript/data-model",
     path: "../../crates/scxml-wit/wit/scxml",
+    generate_all,
 });
 
 use exports::stateforward::scxml::data_model_api::{
     DataModelSnapshot, EffectCause as WitEffectCause, EffectFinding as WitEffectFinding,
     EffectFragment as WitEffectFragment, EffectKind as WitEffectKind, EffectRole as WitEffectRole,
-    EffectSpan as WitEffectSpan, ExternalScripts as WitExternalScripts, Guest,
+    EffectSpan as WitEffectSpan, ExternalScripts as WitExternalScripts, Guest as DataModelApi,
     SyntaxIssue as WitSyntaxIssue, SyntaxKind as WitSyntaxKind, SystemValues,
     Variable as WitVariable, VariableText as WitVariableText, VariableValue as WitVariableValue,
 };
@@ -78,6 +89,20 @@ impl ExecutionHost for Host {
 struct Component;
 
 impl Guest for Component {
+    /// Wizer's initialization function: creates the realm the first
+    /// session starts from (`EcmaScriptDataModel::prepare`), so the
+    /// snapshot the build takes after it holds that realm. A failure
+    /// leaves no realm, and `initialize` then creates one.
+    fn wizer_initialize() {
+        MODEL.with_borrow(|model| {
+            if model.prepare().is_err() {
+                // No realm is kept; `initialize` creates its own.
+            }
+        });
+    }
+}
+
+impl DataModelApi for Component {
     fn name() -> String {
         "ecmascript".into()
     }
