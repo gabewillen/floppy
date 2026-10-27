@@ -216,7 +216,7 @@ fn malformed_encoding_parameters_reject_the_start() {
     refuses(vec![
         (
             with("encode", &[("voice", text("alloy")), ("output", text("o"))]),
-            "speech encode requires a parts parameter",
+            "speech drafts need audio/pcm or audio/wav",
         ),
         (
             with(
@@ -1181,4 +1181,75 @@ fn a_failed_stretch_ends_the_reply_and_writes_nothing() {
             format!("Speech encoding failed: {reason}.")
         );
     }
+}
+
+#[test]
+fn an_encoding_without_parts_is_drafted_and_needs_linear_pcm() {
+    let drafted = parse(&with(
+        "encode",
+        &[
+            ("voice", text("alloy")),
+            ("output", text("o.pcm")),
+            ("media_type", text("audio/pcm")),
+        ],
+    ));
+    let Ok(Operation::Encode(encoding)) = drafted else {
+        panic!("a drafted encoding: {drafted:?}");
+    };
+    assert!(encoding.drafted && encoding.stretches.is_empty());
+    let Ok(Operation::Encode(whole)) = parse(&with(
+        "encode",
+        &[
+            ("parts", hello()),
+            ("voice", text("alloy")),
+            ("output", text("o.mp3")),
+        ],
+    )) else {
+        panic!("an encoding");
+    };
+    assert!(!whole.drafted);
+}
+
+#[test]
+fn a_reply_said_in_several_requests_is_joined_without_a_pause() {
+    let Ok(Operation::Encode(encoding)) = parse(&with(
+        "encode",
+        &[
+            ("voice", text("alloy")),
+            ("output", text("o.pcm")),
+            ("media_type", text("audio/pcm")),
+        ],
+    )) else {
+        panic!("a drafted encoding");
+    };
+    let said = Operation::Encode(Encoding {
+        stretches: vec![
+            Stretch {
+                pause: None,
+                words: "One. ".into(),
+            },
+            Stretch {
+                pause: None,
+                words: "Two.".into(),
+            },
+        ],
+        ..encoding
+    });
+    let answer = |bytes: &[u8]| {
+        Ok(Response {
+            status: 200,
+            body: bytes.to_vec(),
+        })
+    };
+    let mut written = Vec::new();
+    let returned = encoding_outcome(
+        &said,
+        [answer(&[1, 0]), answer(&[2, 0, 3, 0])],
+        |_, audio| {
+            written = audio.to_vec();
+            Ok(())
+        },
+    );
+    assert_eq!(returned.name, ENCODING_OUTPUT_EVENT);
+    assert_eq!(written, [1, 0, 2, 0, 3, 0]);
 }
