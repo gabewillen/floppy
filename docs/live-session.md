@@ -384,7 +384,8 @@ the single-threaded session loop. Elsewhere the platform default applies.
 
 `namespaces` and `services` list each bound extension and invoked service
 by URI with the SHA-256 its component is authenticated under, sorted by
-URI. `http_public_url` is the advertised BasicHTTP base of a `--http-listen`
+URI; `processors`, present only when `--processor-package` binds one, lists
+each bound Event I/O Processor the same way. `http_public_url` is the advertised BasicHTTP base of a `--http-listen`
 run (else `null`). One line per input follows: `start` (`epoch_ms`, always
 first), `event` (`at_ms`, `name`,
 `data`/`xml`), `advance` (`to_ms`), `idle`, `snapshot` (`options`), `http`
@@ -398,15 +399,26 @@ decoded `event`: `name`, optional
 or `failure`: `not-allowed`, `transport`, or `response-too-large`), or
 `http-response-part` (`at_ms`, `path`, `request`, and exactly one of
 `status`, `body` (UTF-8) or `body_hex`, `end` (`true`), or `failure`: one
-delivered part of an `outbound-http.send` response). A final
+delivered part of an `outbound-http.send` response); an `http-response` or
+`http-response-part` a processor instance's request answers also names the
+processor's type URI as `processor`. `websocket` (`at_ms`, the invoke-id
+`path` of the session whose processor instance opened the connection, with
+the `processor` type URI, or of the invoked service that opened it, without
+one; the instance's or invocation's `connection` id,
+and exactly one of `opened` (`true`, with the server's `protocol` when it
+chose one), `text`, `binary_hex`, `closed` (`true`, with the peer's `code`
+and `reason` when it sent them), or `failure`: `not-allowed`, `handshake`,
+`transport`, or `message-too-large`) is one answer of a processor
+instance's or an invoked service's WebSocket connection. A final
 `{"type":"close","reason":…}` line marks the end. The log holds every
 input's payload, including each inbound message's data, raw text, and W3C
 carrier as received, and each service response's body, so it needs the
 same access and retention protection as those messages.
 
 `--replay FILE` checks the header against the document's Machine IR, the
-component release, the namespace bindings, and the service bindings (a
-different service component digest, or a service bound or unbound). Any
+component release, the namespace bindings, the service bindings (a
+different service component digest, or a service bound or unbound), and the
+processor bindings. Any
 mismatch fails with
 `[replay-identity-mismatch]`. The session id, fuel, and command budget come
 from the log, so `--replay` refuses every flag that would change them. So

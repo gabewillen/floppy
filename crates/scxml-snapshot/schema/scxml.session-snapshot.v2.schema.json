@@ -446,8 +446,8 @@
         "event": {
           "$ref": "#/$defs/event"
         },
-        "basichttp": {
-          "$ref": "#/$defs/basichttpMessage"
+        "message": {
+          "$ref": "#/$defs/processorMessage"
         },
         "target": {
           "type": "string",
@@ -477,12 +477,12 @@
         },
         {
           "required": [
-            "basichttp"
+            "message"
           ]
         }
       ]
     },
-    "basichttpMessage": {
+    "processorMessage": {
       "type": "object",
       "additionalProperties": false,
       "properties": {

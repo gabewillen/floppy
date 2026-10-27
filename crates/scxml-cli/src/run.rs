@@ -37,6 +37,10 @@ pub const RUN_OPTIONS: &[&str] = &[
     "--service-package",
     "--service-component",
     "--service-component-sha256",
+    "--processor-package",
+    "--processor-component",
+    "--processor-component-sha256",
+    "--websocket-proxy",
     "--data-model-package",
     "--data-model-component",
     "--data-model-component-sha256",
@@ -112,6 +116,8 @@ pub struct RunArgs {
     pub(crate) namespaces: crate::extensions::RunFlags,
     /// Invoked-service packages and their components.
     pub(crate) services: crate::services::ServiceFlags,
+    /// Event I/O Processor packages and their components.
+    pub(crate) processors: crate::processors::ProcessorFlags,
     /// Data-model packages and their components.
     pub(crate) data_models: crate::datamodels::DataModelFlags,
     /// Store fuel of every host call.
@@ -204,10 +210,15 @@ pub fn parse(args: &[String]) -> Result<RunArgs, String> {
         &|flag| match flag {
             "--components" => "DIR",
             "--components-manifest-sha256" => "HEX",
-            "--extension-package" | "--service-package" | "--data-model-package" => "MANIFEST.json",
+            "--extension-package"
+            | "--service-package"
+            | "--processor-package"
+            | "--data-model-package" => "MANIFEST.json",
             "--extension-component-sha256"
             | "--service-component-sha256"
+            | "--processor-component-sha256"
             | "--data-model-component-sha256" => "URI=HEX",
+            "--websocket-proxy" => "http://HOST:PORT",
             "--dir" => "URI=HOST::GUEST",
             "--wasi" => "URI=inherit-network or URI=allow-ip-name-lookup",
             "--env" => "NAME or NAME=VALUE",
@@ -234,6 +245,7 @@ pub fn parse(args: &[String]) -> Result<RunArgs, String> {
     let mut manifest = None;
     let mut namespaces = crate::extensions::RunFlags::default();
     let mut services = crate::services::ServiceFlags::default();
+    let mut processors = crate::processors::ProcessorFlags::default();
     let mut data_models = crate::datamodels::DataModelFlags::default();
     let mut fuel = None;
     let mut max_commands = None;
@@ -302,6 +314,9 @@ pub fn parse(args: &[String]) -> Result<RunArgs, String> {
             service if crate::services::ServiceFlags::FLAGS.contains(&service) => {
                 services.accept(service, value)?;
             }
+            processor if crate::processors::ProcessorFlags::FLAGS.contains(&processor) => {
+                processors.accept(processor, value)?;
+            }
             data_model if crate::datamodels::DataModelFlags::FLAGS.contains(&data_model) => {
                 data_models.accept(data_model, value)?;
             }
@@ -354,6 +369,7 @@ pub fn parse(args: &[String]) -> Result<RunArgs, String> {
         components,
         namespaces,
         services,
+        processors,
         data_models,
         fuel: fuel.unwrap_or(DEFAULT_FUEL),
         // Without `--max-commands` a call has no command budget: resource
@@ -484,7 +500,8 @@ mod live {
         Applied, BasicHttpListener, CommunicationSender, HttpAllowlist, HttpClientConfig,
         InboundHttp, InputRecord, ListenerConfig, ListenerHandle, LiveCallResult, LiveClock,
         LiveHttp, LiveSession, LiveStatus, NetworkClient, PublicUrl, RunFailure, ScriptedEvent,
-        SessionHostError, SessionOpen, SessionOutput, WallClock,
+        SessionHostError, SessionOpen, SessionOutput, WallClock, WebSocketAnswer, WebSocketClose,
+        WebSocketFailure, WebSocketMessage,
     };
     use scxml_snapshot::Options;
     use scxml_types::{
@@ -797,6 +814,10 @@ mod live {
     }
 
     /// One recorded input as a log line.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "one match over the closed record types"
+    )]
     fn log_line(record: &InputRecord) -> Result<String, Box<dyn std::error::Error>> {
         Ok(match record {
             InputRecord::Start { epoch_ms } => Object::record("start")
@@ -852,12 +873,16 @@ mod live {
                 at_ms,
                 path,
                 request,
+                processor,
                 response,
             } => {
-                let object = Object::record("http-response")
-                    .number("at_ms", *at_ms)
-                    .raw("path", &json::strings(path))
-                    .number("request", *request);
+                let object = with_processor(
+                    Object::record("http-response")
+                        .number("at_ms", *at_ms)
+                        .raw("path", &json::strings(path)),
+                    processor.as_deref(),
+                )
+                .number("request", *request);
                 match response {
                     Ok(response) => {
                         let object = object.number("status", u64::from(response.status));
@@ -875,12 +900,16 @@ mod live {
                 at_ms,
                 path,
                 request,
+                processor,
                 part,
             } => {
-                let object = Object::record("http-response-part")
-                    .number("at_ms", *at_ms)
-                    .raw("path", &json::strings(path))
-                    .number("request", *request);
+                let object = with_processor(
+                    Object::record("http-response-part")
+                        .number("at_ms", *at_ms)
+                        .raw("path", &json::strings(path)),
+                    processor.as_deref(),
+                )
+                .number("request", *request);
                 match part {
                     Ok(scxml_host_wasmtime::ExtensionHttpPart::Status(status)) => {
                         object.number("status", u64::from(*status)).finish()
@@ -899,6 +928,81 @@ mod live {
                     Err(failure) => object.string("failure", failure_name(*failure)).finish(),
                 }
             }
+            InputRecord::WebSocket {
+                at_ms,
+                path,
+                processor,
+                connection,
+                answer,
+            } => {
+                let object = with_processor(
+                    Object::record("websocket")
+                        .number("at_ms", *at_ms)
+                        .raw("path", &json::strings(path)),
+                    processor.as_deref(),
+                )
+                .number("connection", *connection);
+                match answer {
+                    WebSocketAnswer::Opened(protocol) => {
+                        let object = object.boolean("opened", true);
+                        match protocol {
+                            Some(protocol) => object.string("protocol", protocol),
+                            None => object,
+                        }
+                        .finish()
+                    }
+                    // A text message is written as text, a binary one as hex.
+                    WebSocketAnswer::Message(WebSocketMessage::Text(text)) => {
+                        object.string("text", text).finish()
+                    }
+                    WebSocketAnswer::Message(WebSocketMessage::Binary(bytes)) => {
+                        object.string("binary_hex", &hex_encode(bytes)).finish()
+                    }
+                    WebSocketAnswer::Closed(frame) => {
+                        let object = object.boolean("closed", true);
+                        match frame {
+                            Some(frame) => object
+                                .number("code", u64::from(frame.code))
+                                .string("reason", &frame.reason),
+                            None => object,
+                        }
+                        .finish()
+                    }
+                    WebSocketAnswer::Failed(failure) => object
+                        .string("failure", socket_failure_name(*failure))
+                        .finish(),
+                }
+            }
+        })
+    }
+
+    /// `object` with the `processor` whose instance made a request, when
+    /// one did.
+    fn with_processor(object: Object, processor: Option<&str>) -> Object {
+        match processor {
+            Some(processor) => object.string("processor", processor),
+            None => object,
+        }
+    }
+
+    /// The record name of a WebSocket failure.
+    const fn socket_failure_name(failure: WebSocketFailure) -> &'static str {
+        match failure {
+            WebSocketFailure::NotAllowed => "not-allowed",
+            WebSocketFailure::Handshake => "handshake",
+            WebSocketFailure::Transport => "transport",
+            WebSocketFailure::MessageTooLarge => "message-too-large",
+        }
+    }
+
+    /// The WebSocket failure a record names.
+    fn read_socket_failure(failure: &str) -> Result<WebSocketFailure, String> {
+        Ok(match failure {
+            "not-allowed" => WebSocketFailure::NotAllowed,
+            "handshake" => WebSocketFailure::Handshake,
+            "transport" => WebSocketFailure::Transport,
+            "message-too-large" => WebSocketFailure::MessageTooLarge,
+            _ => return Err(format!("unknown WebSocket failure `{failure}`")),
         })
     }
 
@@ -1072,6 +1176,15 @@ mod live {
     /// session it names (its lineage; empty for the root), each a valid
     /// invoke id. Replay delivers only to a session of exactly this
     /// lineage.
+    /// The `processor` of a record: absent, or a type URI.
+    fn read_processor(value: Option<&serde_json::Value>) -> Result<Option<String>, String> {
+        match value {
+            None => Ok(None),
+            Some(serde_json::Value::String(uri)) if !uri.is_empty() => Ok(Some(uri.clone())),
+            Some(_) => Err("`processor` must be a non-empty string".into()),
+        }
+    }
+
     fn read_path(value: Option<&serde_json::Value>) -> Result<Vec<String>, String> {
         let Some(serde_json::Value::Array(path)) = value else {
             return Err("a session needs a `path` array".into());
@@ -1217,7 +1330,15 @@ mod live {
             }
             Some("http-response") => {
                 only(&[
-                    "type", "at_ms", "path", "request", "status", "body", "body_hex", "failure",
+                    "type",
+                    "at_ms",
+                    "path",
+                    "processor",
+                    "request",
+                    "status",
+                    "body",
+                    "body_hex",
+                    "failure",
                 ])?;
                 let path = read_path(fields.get("path"))?;
                 let response = match (fields.get("failure"), fields.get("status")) {
@@ -1251,12 +1372,21 @@ mod live {
                     at_ms: number("at_ms")?,
                     path,
                     request: number("request")?,
+                    processor: read_processor(fields.get("processor"))?,
                     response,
                 }))
             }
             Some("http-response-part") => {
                 only(&[
-                    "type", "at_ms", "path", "request", "status", "body", "body_hex", "end",
+                    "type",
+                    "at_ms",
+                    "path",
+                    "processor",
+                    "request",
+                    "status",
+                    "body",
+                    "body_hex",
+                    "end",
                     "failure",
                 ])?;
                 let path = read_path(fields.get("path"))?;
@@ -1299,7 +1429,88 @@ mod live {
                     at_ms: number("at_ms")?,
                     path,
                     request: number("request")?,
+                    processor: read_processor(fields.get("processor"))?,
                     part,
+                }))
+            }
+            Some("websocket") => {
+                only(&[
+                    "type",
+                    "at_ms",
+                    "path",
+                    "processor",
+                    "connection",
+                    "opened",
+                    "protocol",
+                    "text",
+                    "binary_hex",
+                    "closed",
+                    "code",
+                    "reason",
+                    "failure",
+                ])?;
+                let path = read_path(fields.get("path"))?;
+                let processor = read_processor(fields.get("processor"))?;
+                let text = |key: &str| match fields.get(key) {
+                    None => Ok(None),
+                    Some(serde_json::Value::String(text)) => Ok(Some(text.clone())),
+                    Some(_) => Err(format!("`{key}` must be a string")),
+                };
+                let answer = match (
+                    fields.get("opened"),
+                    text("text")?,
+                    text("binary_hex")?,
+                    fields.get("closed"),
+                    text("failure")?,
+                ) {
+                    (Some(serde_json::Value::Bool(true)), None, None, None, None)
+                        if !fields.contains_key("code") && !fields.contains_key("reason") =>
+                    {
+                        WebSocketAnswer::Opened(text("protocol")?)
+                    }
+                    (None, Some(message), None, None, None) => {
+                        WebSocketAnswer::Message(WebSocketMessage::Text(message))
+                    }
+                    (None, None, Some(bytes), None, None) => {
+                        WebSocketAnswer::Message(WebSocketMessage::Binary(
+                            hex_decode(&bytes).ok_or("a websocket `binary_hex` is not hex")?,
+                        ))
+                    }
+                    (None, None, None, Some(serde_json::Value::Bool(true)), None)
+                        if !fields.contains_key("protocol") =>
+                    {
+                        let frame = match (fields.get("code"), text("reason")?) {
+                            (None, None) => None,
+                            (Some(_), Some(reason)) => Some(WebSocketClose {
+                                code: u16::try_from(number("code")?)
+                                    .map_err(|_| "`code` must be a close code".to_owned())?,
+                                reason,
+                            }),
+                            _ => {
+                                return Err(
+                                    "a websocket close names both `code` and `reason`, or neither"
+                                        .into(),
+                                );
+                            }
+                        };
+                        WebSocketAnswer::Closed(frame)
+                    }
+                    (None, None, None, None, Some(failure)) => {
+                        WebSocketAnswer::Failed(read_socket_failure(&failure)?)
+                    }
+                    _ => {
+                        return Err(
+                            "a websocket record needs exactly one of `opened` (true), `text`, `binary_hex`, `closed` (true), and `failure`"
+                                .into(),
+                        );
+                    }
+                };
+                Ok(Some(InputRecord::WebSocket {
+                    at_ms: number("at_ms")?,
+                    path,
+                    processor,
+                    connection: number("connection")?,
+                    answer,
                 }))
             }
             Some("close") => {
@@ -1321,6 +1532,9 @@ mod live {
         namespaces: Vec<(String, String)>,
         /// Each bound invoked service's URI and component SHA-256, sorted.
         services: Vec<(String, String)>,
+        /// Each bound Event I/O Processor's URI and component SHA-256,
+        /// sorted; a log without any omits them.
+        processors: Vec<(String, String)>,
         /// The advertised `BasicHTTP` base (`--http-listen`); every
         /// session's location, so replay advertises the same one.
         http_public_url: Option<String>,
@@ -1348,6 +1562,16 @@ mod live {
                         .finish()
                 })
                 .collect();
+            let processors: Vec<String> = self
+                .processors
+                .iter()
+                .map(|(uri, sha256)| {
+                    Object::new()
+                        .string("uri", uri)
+                        .string("processor_component_sha256", sha256)
+                        .finish()
+                })
+                .collect();
             let header = Object::record("header")
                 .string("format", LOG_FORMAT)
                 .string("ir_sha256", &self.ir_sha256)
@@ -1361,6 +1585,11 @@ mod live {
                 .string("clock", self.clock)
                 .raw("namespaces", &format!("[{}]", namespaces.join(",")))
                 .raw("services", &format!("[{}]", services.join(",")));
+            let header = if processors.is_empty() {
+                header
+            } else {
+                header.raw("processors", &format!("[{}]", processors.join(",")))
+            };
             match &self.http_public_url {
                 Some(url) => header.string("http_public_url", url),
                 None => header.null("http_public_url"),
@@ -1387,6 +1616,14 @@ mod live {
             }
             if header.get("services") != Some(&listed(&self.services, "service_component_sha256")) {
                 return Some("set of invoked service components");
+            }
+            let processors = listed(&self.processors, "processor_component_sha256");
+            if header
+                .get("processors")
+                .unwrap_or(&serde_json::Value::Array(Vec::new()))
+                != &processors
+            {
+                return Some("set of Event I/O Processor components");
             }
             None
         }
@@ -1924,6 +2161,7 @@ mod live {
                     && self.listener.is_none()
                     && !self.session.communication_pending()
                     && !self.session.awaiting_http_responses()
+                    && !self.session.connected()
                 {
                     return Ok(End::Closed("eof", EXIT_CLOSED));
                 }
@@ -2043,6 +2281,7 @@ mod live {
                     InputRecord::HttpResponse { .. } | InputRecord::HttpResponsePart { .. } => {
                         "http-response"
                     }
+                    InputRecord::WebSocket { .. } => "websocket",
                     InputRecord::OutboundHttp { .. } => "outbound",
                     InputRecord::Start { .. } => "start",
                 };
@@ -2053,6 +2292,7 @@ mod live {
                         | InputRecord::CommunicationErrors { .. }
                         | InputRecord::HttpResponse { .. }
                         | InputRecord::HttpResponsePart { .. }
+                        | InputRecord::WebSocket { .. }
                 );
                 let mut applied = self.session.apply(record);
                 if settles && records.peek() == Some(&&InputRecord::Idle) {
@@ -2166,6 +2406,8 @@ mod live {
             &args.namespaces.repository,
         )?;
         args.services.check(&services.packages)?;
+        let processors = crate::processors::load(&args.processors.packages)?;
+        args.processors.check(&processors)?;
         let data_models = crate::datamodels::resolve(
             &source,
             loaded.children(),
@@ -2226,6 +2468,7 @@ mod live {
             clock: args.clock.as_str(),
             namespaces,
             services: args.services.identity(&services)?,
+            processors: args.processors.identity(),
             http_public_url: None,
         };
         let replay = args
@@ -2240,23 +2483,39 @@ mod live {
             identity.http_public_url.clone_from(&log.http_public_url);
         }
         // The service components load once the replay log matched the run's
-        // identity. An invoked service's HTTP responses are recorded inputs:
-        // a run that records performs its requests, and a replay answers
-        // them from its log without the network.
-        let (service_components, service_imports) =
-            args.services
-                .components(&services, &values, args.replay.is_none())?;
+        // identity. An invoked service's HTTP responses and WebSocket answers
+        // are recorded inputs: a run that records performs its requests and
+        // connections, and a replay answers them from its log without the
+        // network.
+        let websocket = if args.replay.is_none() {
+            Some(args.processors.websocket_client()?)
+        } else {
+            None
+        };
+        let (service_components, service_imports) = args.services.components(
+            &services,
+            &values,
+            args.replay.is_none(),
+            websocket.as_ref(),
+        )?;
         crate::extensions::write_notes(&crate::services::summary(
             &services.packages,
             Some(&args.services),
             Some(&service_imports),
         ));
+        // A processor instance's requests and connections are recorded
+        // inputs too: a replay answers them from its log.
+        let processor_components = args
+            .processors
+            .components(&processors, websocket.as_ref())?;
+        crate::extensions::write_notes(&crate::processors::summary(&processors));
         crate::snapshot::host::bind_documents(&mut loaded, &packages, &args.services, &services)?;
         let host = args.components.session_host(identity.fuel)?;
         let extensions = crate::snapshot::host::extensions(&args.namespaces, &packages)?;
         let host = host
             .with_extension_components(extensions)?
             .with_service_components(service_components)?
+            .with_processor_components(processor_components)?
             .with_data_model_components(args.data_models.components(&data_models)?)?;
         let messages = mpsc::channel();
         // A replay reproduces the recorded network without touching it: the

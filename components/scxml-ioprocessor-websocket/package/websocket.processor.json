@@ -1,0 +1,10 @@
+{
+  "format": "stateforward.scxml.processor-package/v1",
+  "processor-uri": "https://github.com/stateforward/scxml.rs/processors/websocket",
+  "aliases": ["websocket"],
+  "package-version": "0.2.0",
+  "processor-artifact": "scxml_ioprocessor_websocket.virtualized.wasm",
+  "wit-world": "stateforward:scxml/event-processor",
+  "wit-version": "0.2.0",
+  "origins": []
+}

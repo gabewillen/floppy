@@ -52,7 +52,8 @@ use boa_engine::builtins::error::Error;
 use boa_engine::context::ContextBuilder;
 use boa_engine::native_function::NativeFunction;
 use boa_engine::object::FunctionObjectBuilder;
-use boa_engine::object::builtins::JsArray;
+use boa_engine::object::IntegrityLevel;
+use boa_engine::object::builtins::{JsArray, JsWeakMap};
 use boa_engine::property::{Attribute, PropertyDescriptor, PropertyKey};
 use boa_engine::{Context, JsObject, JsResult, JsString, JsValue, Script, Source};
 use scxml_types::{DataValue, Event, FiniteNumber};
@@ -435,6 +436,9 @@ fn helpers_source() -> String {
     }},
     guard,
     unwrap,
+    guards,
+    targets,
+    handler,
   ];
 }})"#
     )
@@ -463,6 +467,13 @@ struct Helpers {
     /// `(value) => target`: the object behind a read-only proxy, else the
     /// value itself.
     unwrap: JsObject,
+    /// `guard`'s own state, for [`Session::guard_fresh`]: each guarded
+    /// object's proxy, each proxy's object, the proxies' handler, and the
+    /// `Proxy` intrinsic.
+    guards: JsWeakMap,
+    targets: JsWeakMap,
+    handler: JsObject,
+    proxy: JsObject,
 }
 
 impl Helpers {
@@ -470,6 +481,7 @@ impl Helpers {
         // `Proxy` is gone from the global object (BOOTSTRAP); the adapter
         // takes the intrinsic.
         let proxy = context.intrinsics().constructors().proxy().constructor();
+        let proxy_constructor = proxy.clone();
         let list = context
             .eval(Source::from_bytes(&helpers_source()))
             .ok()
@@ -484,24 +496,46 @@ impl Helpers {
             .as_object()
             .ok_or(DataModelError::Execution)?;
         let mut next = 0_u32;
-        let mut take = |context: &mut Context| {
-            let helper = list
+        let mut entry = |context: &mut Context| {
+            let value = list
                 .get(next, context)
                 .ok()
-                .and_then(|value| value.as_callable())
-                .ok_or(DataModelError::Execution);
+                .and_then(|value| value.as_object());
             next += 1;
-            helper
+            value.ok_or(DataModelError::Execution)
         };
+        let mut take = |context: &mut Context| {
+            Some(entry(context)?)
+                .filter(JsObject::is_callable)
+                .ok_or(DataModelError::Execution)
+        };
+        let set_event = take(context)?;
+        let get_event = take(context)?;
+        let deep_freeze = take(context)?;
+        let log_text = take(context)?;
+        let constant = take(context)?;
+        let array_copy = take(context)?;
+        let guard = take(context)?;
+        let unwrap = take(context)?;
+        let mut weak_map = |context: &mut Context| {
+            JsWeakMap::from_object(entry(context)?).map_err(|_| DataModelError::Execution)
+        };
+        let guards = weak_map(context)?;
+        let targets = weak_map(context)?;
+        let handler = entry(context)?;
         Ok(Self {
-            set_event: take(context)?,
-            get_event: take(context)?,
-            deep_freeze: take(context)?,
-            log_text: take(context)?,
-            constant: take(context)?,
-            array_copy: take(context)?,
-            guard: take(context)?,
-            unwrap: take(context)?,
+            set_event,
+            get_event,
+            deep_freeze,
+            log_text,
+            constant,
+            array_copy,
+            guard,
+            unwrap,
+            guards,
+            targets,
+            handler,
+            proxy: proxy_constructor,
         })
     }
 }
@@ -817,7 +851,7 @@ impl Session {
                             let builder = self.dom_build_open.clone();
                             self.eval_adapter_with(&source, &builder)?
                         };
-                        let value = self.call(&self.helpers.guard.clone(), &[value])?;
+                        let value = self.guard_fresh(value)?;
                         self.event = Some((source, value.clone()));
                         value
                     }
@@ -827,6 +861,94 @@ impl Session {
         };
         self.call(&self.helpers.set_event.clone(), &[value])
             .map(drop)
+    }
+
+    /// `guard` (the helper) natively, for a value [`Self::bind_event`] just
+    /// built (directly, or by evaluating its source): the same proxies, in
+    /// the same maps, with the same properties redefined and the same
+    /// objects frozen, without interpreting the helper's loops for every
+    /// property of a large event. Such a value's objects are fresh ordinary
+    /// objects and arrays with data properties only; a value holding any
+    /// other object is passed to the helper itself.
+    fn guard_fresh(&mut self, root: JsValue) -> Result<JsValue, DataModelError> {
+        let Some(root_object) = root.as_object() else {
+            return Ok(root);
+        };
+        let context = &mut self.context;
+        let error = |_| DataModelError::Execution;
+        // Each reachable object, once, with its object-valued properties.
+        let mut order: Vec<(JsObject, Vec<(PropertyKey, JsObject)>)> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        let mut stack = vec![root_object.clone()];
+        while let Some(object) = stack.pop() {
+            if !seen.insert(object.clone()) {
+                continue;
+            }
+            if !(object.is_ordinary() || object.is_array()) {
+                return self.call(&self.helpers.guard.clone(), &[root]);
+            }
+            if self.helpers.targets.has(&object, context).map_err(error)? {
+                continue;
+            }
+            let mut children = Vec::new();
+            for key in object.own_property_keys(context).map_err(error)? {
+                if let Some(child) = object.get(key.clone(), context).map_err(error)?.as_object() {
+                    stack.push(child.clone());
+                    children.push((key, child));
+                }
+            }
+            order.push((object, children));
+        }
+        let mut proxies = std::collections::HashMap::new();
+        for (object, _) in &order {
+            if !object
+                .test_integrity_level(IntegrityLevel::Frozen, context)
+                .map_err(error)?
+            {
+                let proxy = self
+                    .helpers
+                    .proxy
+                    .construct(
+                        &[object.clone().into(), self.helpers.handler.clone().into()],
+                        None,
+                        context,
+                    )
+                    .map_err(error)?;
+                self.helpers
+                    .guards
+                    .set(object, proxy.clone().into(), context)
+                    .map_err(error)?;
+                self.helpers
+                    .targets
+                    .set(&proxy, object.clone().into(), context)
+                    .map_err(error)?;
+                proxies.insert(object.clone(), proxy);
+            }
+        }
+        for (object, children) in &order {
+            if !proxies.contains_key(object) {
+                continue;
+            }
+            for (key, child) in children {
+                if let Some(proxy) = proxies.get(child) {
+                    object
+                        .define_property_or_throw(
+                            key.clone(),
+                            PropertyDescriptor::builder().value(proxy.clone()),
+                            context,
+                        )
+                        .map_err(error)?;
+                }
+            }
+        }
+        for (object, _) in &order {
+            if proxies.contains_key(object) {
+                object
+                    .set_integrity_level(IntegrityLevel::Frozen, context)
+                    .map_err(error)?;
+            }
+        }
+        Ok(proxies.remove(&root_object).map_or(root, JsValue::from))
     }
 
     /// The `_event` object of `event` built directly, as its source

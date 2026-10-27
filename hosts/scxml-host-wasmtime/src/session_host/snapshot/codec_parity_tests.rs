@@ -487,7 +487,8 @@ impl Records {
             delay_ms: 100,
             message: wit::SendMessage::Empty,
         };
-        let post = wit::BasichttpSend {
+        let post = wit::ProcessorSend {
+            processor_type: "basichttp".into(),
             send_id: "post".into(),
             event_name: Some("posted".into()),
             target: Some("http://example.test/sessions/peer/basichttp".into()),
@@ -505,7 +506,7 @@ impl Records {
                 deadline_ms: 450,
             },
             host_io::PendingSend {
-                request: host_io::DelayedSend::Basichttp(post.clone()),
+                request: host_io::DelayedSend::Processor(post.clone()),
                 deadline_ms: 500,
             },
         ];
@@ -515,7 +516,7 @@ impl Records {
                 deadline_ms: 450,
             },
             codec::stateforward::scxml::io_processor_api::PendingSend {
-                request: codec::stateforward::scxml::io_processor_api::DelayedSend::Basichttp(post),
+                request: codec::stateforward::scxml::io_processor_api::DelayedSend::Processor(post),
                 deadline_ms: 500,
             },
         ];

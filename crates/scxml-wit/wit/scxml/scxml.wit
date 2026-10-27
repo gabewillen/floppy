@@ -137,15 +137,23 @@ interface types {
     /// Message body the processor renders `_event.raw` from.
     message: send-message,
   }
-  /// One evaluated `<send>` addressed to the `BasicHTTP` Event I/O
-  /// Processor (SCXML C.2). The machine evaluates every expression; the
-  /// processor never sees one.
-  record basichttp-send {
+  /// One evaluated `<send>` addressed to an Event I/O Processor other than
+  /// the SCXML one (SCXML 6.2), such as `BasicHTTP` (SCXML C.2) or a
+  /// processor a package binds. The machine evaluates every expression; the
+  /// processor never sees one, and the host routes the send by its
+  /// `processor-type`.
+  record processor-send {
+    /// Evaluated `type`/`typeexpr`, exactly as written (at most 4096 bytes):
+    /// a processor's type URI or one of its aliases. A type no processor
+    /// answers is refused by the host with `invalid-input` (SCXML 6.2.5:
+    /// `error.execution`).
+    processor-type: string,
     /// The send's id (a valid SCXML name of at most 1024 bytes): the
     /// authored `id`, else the one the machine generated for this execution
-    /// (SCXML 3.14, 6.2.4). It never enters the HTTP message. The host keeps
-    /// it with the request, so an `error.communication` it delivers after
-    /// the `<send>` returned carries it as `send-id` (SCXML 5.10.1).
+    /// (SCXML 3.14, 6.2.4). It never enters the processor's message. The
+    /// host keeps it with the request, so an `error.communication` it
+    /// delivers after the `<send>` returned carries it as `send-id` (SCXML
+    /// 5.10.1).
     send-id: string,
     /// Evaluated `event`/`eventexpr` (at most 1024 bytes).
     event-name: option<string>,
@@ -154,7 +162,7 @@ interface types {
     /// `namelist` entries then `<param>` children, in document order (at
     /// most 256), as data-model form values.
     params: list<named-value>,
-    /// Evaluated `<content>`; mutually exclusive with `fields`.
+    /// Evaluated `<content>`; mutually exclusive with `params`.
     content: option<data-value>,
     /// Delay in whole milliseconds.
     delay-ms: u64,
@@ -565,7 +573,7 @@ interface execution-host {
 /// through these functions are committed by the host when the call returns;
 /// the machine never asks the host to roll them back.
 interface machine-capability-types {
-  use types.{invoke-request, basichttp-send, data-value, assign-placement, assign-source, event, send-request, executable-content-extension, extension-outcome, component-error, trace-context, script-reference, named-value, send-target, data-initializer, inline-body, foreach-result};
+  use types.{invoke-request, processor-send, data-value, assign-placement, assign-source, event, send-request, executable-content-extension, extension-outcome, component-error, trace-context, script-reference, named-value, send-target, data-initializer, inline-body, foreach-result};
 
   /// One entry of the machine's execution trace reported to the host.
   variant observation {
@@ -1000,16 +1008,18 @@ interface machine-capability-types {
     /// Errors: `invalid-input` and `payload-too-large` become SCXML
     /// `error.execution`; every other error fails the session.
     send: func(request: send-request) -> result<send-disposition, component-error>;
-    /// Sends one `<send>` through the `BasicHTTP` Event I/O Processor: at
-    /// once when `delay-ms` is 0, else the host has the processor `check` it
-    /// and schedules it through the SCXML Event I/O Processor's
-    /// `schedule-basichttp` (disposition `scheduled`), and posts it when it
-    /// falls due; a due send that cannot be dispatched raises
+    /// Sends one `<send>` whose type is not the SCXML Event I/O Processor's
+    /// through the processor its `processor-type` names: at once when
+    /// `delay-ms` is 0, else the host has the processor check it and
+    /// schedules it through the SCXML Event I/O Processor's
+    /// `schedule-processor` (disposition `scheduled`), and dispatches it when
+    /// it falls due; a due send that cannot be dispatched raises
     /// `error.communication` with its send id through
     /// `session.communication-error` (SCXML 6.2, 6.2.4, C.2).
-    /// Errors: `invalid-input` and `payload-too-large` become SCXML
-    /// `error.execution`; every other error fails the session.
-    send-basichttp: func(request: basichttp-send) -> result<send-disposition, component-error>;
+    /// Errors: `invalid-input` (a type no processor answers included) and
+    /// `payload-too-large` become SCXML `error.execution`; every other error
+    /// fails the session.
+    send-processor: func(request: processor-send) -> result<send-disposition, component-error>;
     /// Executes `<log>` with the data model's rendered text
     /// (`evaluate-log`; empty when `<log>` has no `expr`).
     log: func(label: option<string>, text: string, context: option<trace-context>) -> result<_, component-error>;
@@ -1100,7 +1110,7 @@ interface telemetry {
     encode,
     diff,
     communication-error,
-    schedule-basichttp,
+    schedule-processor,
   }
   /// Closed outcome label: `rejected` for caller or input failures, `failed`
   /// for execution or platform failures.
@@ -1356,8 +1366,9 @@ interface data-model-api {
   /// model's literal text (empty for no value).
   /// Errors: as `evaluate-value`.
   evaluate-log: func(expression: string, event: option<event>) -> result<string, component-error>;
-  /// Evaluates one `BasicHTTP` form value (SCXML C.2): a `location` (when
-  /// `location` is true) or a value expression. ECMAScript returns the
+  /// Evaluates one `<param>` or `namelist` value of a send to an Event I/O
+  /// Processor other than the SCXML one (SCXML 6.2, C.2): a `location`
+  /// (when `location` is true) or a value expression. ECMAScript returns the
   /// portable value; `XPath` returns its string-value (a location must
   /// select nodes).
   /// Errors: as `evaluate-location`.
@@ -1491,16 +1502,16 @@ interface data-model-api {
 /// delayed send of a session; the host dispatches a due `BasicHTTP` send
 /// through the `BasicHTTP` processor.
 interface io-processor-api {
-  use types.{event, send-request, basichttp-send, component-error, trace-context, send-target, sender, routed-event};
+  use types.{event, send-request, processor-send, component-error, trace-context, send-target, sender, routed-event};
 
   /// One delayed send held on the clock, by the Event I/O Processor that
   /// dispatches it when its delay elapses.
   variant delayed-send {
     /// A send of this processor, routed by `route-due`.
     scxml(send-request),
-    /// A send of the `BasicHTTP` Event I/O Processor, which the host
-    /// dispatches through that processor.
-    basichttp(basichttp-send),
+    /// A send of another Event I/O Processor, which the host dispatches
+    /// through the processor its `processor-type` names.
+    processor(processor-send),
   }
 
   /// What the host must do with one accepted immediate or delayed send.
@@ -1601,10 +1612,10 @@ interface io-processor-api {
   /// that finished or was cancelled since scheduling yields
   /// `undeliverable`. Pure and total.
   route-due: func(request: send-request, sender: sender) -> due-route;
-  /// Schedules one delayed `BasicHTTP` send on the clock under its
-  /// `send-id` for `delay-ms` (SCXML 6.2). The host first has the
-  /// `BasicHTTP` processor `check` it, so every failure that processor
-  /// reports before it would post is reported at the `<send>`; the send is
+  /// Schedules one delayed send of another Event I/O Processor on the
+  /// clock under its `send-id` for `delay-ms` (SCXML 6.2). The host first
+  /// has that processor check it, so every failure the processor reports
+  /// before it would send is reported at the `<send>`; the send is
   /// dispatched only when it falls due (`drain-due`).
   ///
   /// Preconditions: `delay-ms` > 0; `send-id` at most 256 bytes; the
@@ -1614,7 +1625,7 @@ interface io-processor-api {
   /// the clock's 4194304-byte aggregate retained-payload bound);
   /// `duplicate-id` for a live send id; `capacity-exhausted` when the clock
   /// holds 1024 timers. Nothing is scheduled on failure.
-  schedule-basichttp: func(request: basichttp-send) -> result<_, component-error>;
+  schedule-processor: func(request: processor-send) -> result<_, component-error>;
   /// Cancels a pending delayed send (of either processor); an absent id
   /// succeeds without effect.
   /// Errors: `invalid-input` for a malformed id (empty or over 256 bytes) or
@@ -1679,6 +1690,64 @@ interface invoked-service-api {
   /// Errors: any error rejects the start (the invoking session raises
   /// `error.execution`).
   invoke: async func(request: invoke-request, events: stream<event>) -> result<tuple<stream<event>, future<result<option<data-value>, component-error>>>, component-error>;
+}
+
+/// One Event I/O Processor other than the SCXML one (SCXML 6.2): the
+/// component a processor package binds to its type URI, which carries the
+/// `<send>`s of that type to the outside world and turns what comes back
+/// into external events.
+///
+/// The host instantiates the component once per session, in a store of
+/// its own, on that session's first `<send>` of its type, and calls `open`
+/// once as a subtask of the session. Then, for every `<send>` of its type,
+/// the host calls `send` (or `check` when the send is delayed, and `send`
+/// when it falls due) as another subtask, and waits until the instance has
+/// nothing left to run before the session goes on. Every event the instance
+/// returns on `open`'s stream joins the session's external queue (the host
+/// sets the event type to `external` and `origin-type` to the processor's
+/// type URI; the processor sets `origin`, SCXML 5.10.1). When the session
+/// ends the host cancels every subtask and drops the store, which closes
+/// the instance's connections.
+///
+/// Bounds (bundled hosts): each event within the `types.event` bounds; at
+/// most the host's per-input fuel between two inputs it delivers (a send,
+/// a due timer, an HTTP response, or a WebSocket message).
+interface event-processor-api {
+  use types.{processor-send, event, component-error, trace-context};
+  /// What one instance is opened with.
+  record processor-start {
+    /// The processor's type URI, as its package binds it.
+    type-uri: string,
+    /// The `_sessionid` of the session the instance serves.
+    session-id: string,
+    /// Optional trace carrier; never changes semantics.
+    trace-context: option<trace-context>,
+  }
+  /// Opens the instance for its session.
+  ///
+  /// `ok` returns the stream of the events the instance delivers to the
+  /// session, and a future that resolves when the instance can send no
+  /// more: from then on every `send` of its type raises
+  /// `error.communication` in the session, and `some` error raises one
+  /// `error.communication` without a send id when it resolves.
+  /// Errors: any error, or a trap, rejects the first `<send>` (the session
+  /// raises `error.communication` with its send id), and every later one.
+  open: async func(start: processor-start) -> result<tuple<stream<event>, future<option<component-error>>>, component-error>;
+  /// Checks one send exactly as `send` would before sending it, without
+  /// sending it: the host checks a delayed `<send>` when it is evaluated
+  /// (SCXML 6.2) and sends it when it falls due.
+  /// Errors: as `send`'s validation errors.
+  check: async func(request: processor-send) -> result<_, component-error>;
+  /// Sends one `<send>` of the processor's type (`request.processor-type`
+  /// is the type URI or one of its aliases; `delay-ms` is 0).
+  ///
+  /// A call that resolves before the instance is idle decides the `<send>`:
+  /// `ok` accepts it; `invalid-input` and `payload-too-large` raise
+  /// `error.execution`, and `unavailable` raises `error.communication`
+  /// (SCXML 6.2, 5.10.1). A call still pending then accepts the `<send>`,
+  /// and an error it resolves with later raises `error.communication` with
+  /// its send id.
+  send: async func(request: processor-send) -> result<_, component-error>;
 }
 
 /// Executable behavior for one extension namespace.
@@ -1797,6 +1866,79 @@ interface outbound-http {
   /// received, within its bound, until it ends or the invocation is
   /// cancelled.
   send: async func(request: http-request) -> result<tuple<u16, stream<u8>, future<result<_, component-error>>>, component-error>;
+}
+
+/// Outbound WebSocket connections (RFC 6455) a host may grant to Event I/O
+/// Processor and invoked-service components.
+///
+/// Deny by default, as `outbound-http`: a host that grants nothing refuses
+/// every connection with `unavailable`. A granting host connects only to the
+/// `ws` and `wss` origins its embedder allowlists and the component's
+/// package declares, follows no redirect, and adds no ambient credentials,
+/// cookies, or proxy. A header or URL part may be an `env` reference, as in
+/// `outbound-http`, so a service sends a credential it never sees. The host
+/// owns the socket and TLS: the component only exchanges messages.
+/// `connect` suspends only the calling task. The host bounds the time to
+/// connect, and closes every connection of an instance when the instance
+/// ends (its session ends, or its invocation is cancelled). The URL,
+/// headers, and messages are component payload: hosts never put them into
+/// telemetry. The capability works only while an Event I/O Processor
+/// instance or an invocation runs; elsewhere every call fails with
+/// `unavailable`.
+interface outbound-websocket {
+  use types.{component-error};
+  use outbound-http.{text-part};
+  /// One WebSocket message: a text frame (UTF-8) or a binary frame. Bound:
+  /// at most 1048576 bytes.
+  variant message {
+    /// A text message.
+    text(string),
+    /// A binary message.
+    binary(list<u8>),
+  }
+  /// One handshake header field. Bounds as `outbound-http.http-header`;
+  /// never `host`, `connection`, `upgrade`, or a `sec-websocket-*` field.
+  record websocket-header {
+    name: string,
+    value: list<text-part>,
+  }
+  /// One connection request. `url` begins with a literal `ws://` or
+  /// `wss://`, or with a reference whose value is a `ws`, `wss`, `http`, or
+  /// `https` URL, which supplies the origin as for a request (an `http`
+  /// value names the `ws` URL of the same form). Bounds: `url`, once
+  /// substituted, is an absolute URL without userinfo or fragment, at most
+  /// 16384 bytes; at most 64 headers; at most 16 `protocols`, each an RFC
+  /// 9110 token of at most 256 bytes.
+  record websocket-request {
+    url: list<text-part>,
+    headers: list<websocket-header>,
+    /// Subprotocols offered (`Sec-WebSocket-Protocol`), in preference order.
+    protocols: list<string>,
+  }
+  /// How the peer closed the connection: its close code and reason (at
+  /// most 123 bytes).
+  record close-frame {
+    code: u16,
+    reason: string,
+  }
+  /// Opens one connection and exchanges messages over it.
+  ///
+  /// `outgoing` carries the messages to send, in order; when the component
+  /// ends it, the host closes the connection with code 1000. `ok` once the
+  /// opening handshake has completed: the subprotocol the server selected,
+  /// the messages the peer sends, in order, and a future that resolves when
+  /// the connection has closed: `ok(some(frame))` for the peer's close
+  /// frame (its answer, after the component's own close), `ok(none)` when
+  /// it closed without one, `err` with
+  /// `unavailable` when the connection was lost or `payload-too-large`
+  /// when a message passed its bound. Each message reaches the component as
+  /// an input of its instance, at the session's logical time it arrived (a
+  /// live session records each one).
+  /// Errors: `invalid-input` for a request outside the bounds above;
+  /// `unavailable` when the host offers no outbound WebSocket, the URL is
+  /// not admitted, or the handshake failed (connect, TLS, status, timeout);
+  /// `capacity-exhausted` past 16 connections of one instance.
+  connect: async func(request: websocket-request, outgoing: stream<message>) -> result<tuple<option<string>, stream<message>, future<result<option<close-frame>, component-error>>>, component-error>;
 }
 
 /// Resolves repository packages for the CLI: an extension namespace URI or
@@ -2407,8 +2549,19 @@ world io-processor {
 world invoked-service {
   import wasi:clocks/monotonic-clock@0.3.0;
   import outbound-http;
+  import outbound-websocket;
   import telemetry;
   export invoked-service-api;
+}
+/// An Event I/O Processor component (SCXML 6.1): the host binds it to an
+/// exact `<send type>` URI and opens one instance per session on that
+/// session's first send of the type. It reaches the network only through
+/// the requests and connections the host admits to its package's origins.
+world event-processor {
+  import outbound-http;
+  import outbound-websocket;
+  import telemetry;
+  export event-processor-api;
 }
 /// An extension component. It imports only what it uses, and no I/O (see
 /// `executable-content-extension-api`); importing `session-snapshot-host`

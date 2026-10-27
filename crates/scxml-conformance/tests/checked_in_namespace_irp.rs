@@ -29,8 +29,8 @@ const SUITES: [(&str, usize, usize, [&str; 2]); 2] = [
         8,
         8,
         [
-            "48fe9e0598c1a9954aa404262971d8e97bf81c973af165c9fd2bdc6c3c503368",
-            "9b39466f5cf66c280884bb6992b6d7101fdb7ac3c3dd84e25b349108faec1703",
+            "bb387f2cf47f7074d0450c98d7e1e48b2e6c92ff339a4de9611580fe24eb230d",
+            "534291dde9250eb39e5a6f3d5181a7d4b9206541f0f4d9a01852ac05b3c4ee63",
         ],
     ),
     (
@@ -38,8 +38,8 @@ const SUITES: [(&str, usize, usize, [&str; 2]); 2] = [
         31,
         16,
         [
-            "5443dbe3728c943a186506b6300e548b5ab5a688d186b4cb52407cca3ce4b719",
-            "193bf55ad7ba553dd841031eeebc89c2264c879002ef3d7fe4db0f1a2bccd1e6",
+            "dbd8610a84d5c27ac4356c75ca66b777ad09b0cfcfd7b61312d113768589a3d4",
+            "ebd9878dfcb8d5c2a2ad66bf37cfa0f37ef68243d83abef375f10506e88c2d0c",
         ],
     ),
 ];

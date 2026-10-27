@@ -67,6 +67,7 @@ mod graph;
 mod invoke_types;
 mod lowering;
 pub mod package_validator;
+mod processor_package;
 mod refine;
 mod request;
 mod schema;
@@ -108,6 +109,11 @@ pub use graph::{
 };
 pub use lowering::bounds as lowering_bounds;
 pub use package_validator::{PackageValidator, PackageValidatorFailure};
+pub use processor_package::{
+    MAX_PROCESSOR_ALIAS_BYTES, MAX_PROCESSOR_ALIASES, PROCESSOR_PACKAGE_FIELDS,
+    PROCESSOR_PACKAGE_FORMAT, ProcessorPackageManifest, SUPPORTED_PROCESSOR_WIT_VERSION,
+    SUPPORTED_PROCESSOR_WIT_WORLD, is_processor_alias,
+};
 pub use request::{
     ComponentRequestBoundary, MAX_COMPONENT_METADATA_BYTES, MAX_COMPONENT_PACKAGE_COUNT,
     MAX_COMPONENT_REQUEST_BYTES, MAX_COMPONENT_SCHEMA_BYTES, MAX_COMPONENT_SCHEMA_COUNT,

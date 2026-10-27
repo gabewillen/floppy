@@ -330,6 +330,10 @@ pub enum InputRecord {
         /// The request's number within its invocation, from 0 in the order
         /// the invocation made them.
         request: u64,
+        /// The type URI of the Event I/O Processor whose instance in the
+        /// session at `path` made the request; `None` for the invoked
+        /// service at `path`.
+        processor: Option<String>,
         /// The response, or the transport's failure.
         response: Result<crate::ExtensionHttpResponse, crate::ExtensionHttpFailure>,
     },
@@ -346,8 +350,33 @@ pub enum InputRecord {
         path: Vec<String>,
         /// The request's number within its invocation.
         request: u64,
+        /// The processor whose instance made the request, as
+        /// [`InputRecord::HttpResponse`]'s.
+        processor: Option<String>,
         /// The part, or the transport's failure, which ends the response.
         part: Result<crate::ExtensionHttpPart, crate::ExtensionHttpFailure>,
+    },
+    /// [`LiveSession::deliver_http_responses`] of one answer of a WebSocket
+    /// connection an Event I/O Processor instance or an invoked service
+    /// opened (`outbound-websocket.connect`), delivered at `at_ms`: its opening,
+    /// one message the peer sent, its close, or its failure. A replay
+    /// delivers it from the record instead of the network.
+    WebSocket {
+        /// The logical time.
+        at_ms: u64,
+        /// The invoke ids from the root to the session whose instance opened
+        /// the connection, or to the invoked service that opened it. Replay
+        /// delivers only to that instance or invocation; any other diverges.
+        path: Vec<String>,
+        /// The type URI of the Event I/O Processor whose instance in the
+        /// session at `path` opened the connection; `None` for the invoked
+        /// service at `path`.
+        processor: Option<String>,
+        /// The connection's number within its instance or invocation, from
+        /// 0 in the order it opened them.
+        connection: u64,
+        /// The answer.
+        answer: crate::WebSocketAnswer,
     },
 }
 
@@ -1024,14 +1053,18 @@ impl LiveSession {
                 at_ms,
                 path,
                 request,
+                processor,
                 response,
             } => self
                 .replay_http_response(
                     *at_ms,
                     &super::RecordedResponse {
                         path: path.clone(),
+                        processor: processor.clone(),
                         request: *request,
-                        answer: crate::ExtensionHttpAnswer::Response(response.clone()),
+                        answer: crate::service::Answer::Http(crate::ExtensionHttpAnswer::Response(
+                            response.clone(),
+                        )),
                     },
                 )
                 .map(Applied::Call),
@@ -1039,14 +1072,35 @@ impl LiveSession {
                 at_ms,
                 path,
                 request,
+                processor,
                 part,
             } => self
                 .replay_http_response(
                     *at_ms,
                     &super::RecordedResponse {
                         path: path.clone(),
+                        processor: processor.clone(),
                         request: *request,
-                        answer: crate::ExtensionHttpAnswer::Part(part.clone()),
+                        answer: crate::service::Answer::Http(crate::ExtensionHttpAnswer::Part(
+                            part.clone(),
+                        )),
+                    },
+                )
+                .map(Applied::Call),
+            InputRecord::WebSocket {
+                at_ms,
+                path,
+                processor,
+                connection,
+                answer,
+            } => self
+                .replay_http_response(
+                    *at_ms,
+                    &super::RecordedResponse {
+                        path: path.clone(),
+                        processor: processor.clone(),
+                        request: *connection,
+                        answer: crate::service::Answer::Socket(answer.clone()),
                     },
                 )
                 .map(Applied::Call),
@@ -1382,18 +1436,39 @@ impl LiveSession {
             },
         );
         for response in delivered {
-            self.record(match response.answer {
-                crate::ExtensionHttpAnswer::Response(outcome) => InputRecord::HttpResponse {
+            let super::RecordedResponse {
+                path,
+                processor,
+                request,
+                answer,
+            } = response;
+            self.record(match (answer, processor) {
+                (
+                    crate::service::Answer::Http(crate::ExtensionHttpAnswer::Response(outcome)),
+                    processor,
+                ) => InputRecord::HttpResponse {
                     at_ms,
-                    path: response.path,
-                    request: response.request,
+                    path,
+                    request,
+                    processor,
                     response: outcome,
                 },
-                crate::ExtensionHttpAnswer::Part(part) => InputRecord::HttpResponsePart {
+                (
+                    crate::service::Answer::Http(crate::ExtensionHttpAnswer::Part(part)),
+                    processor,
+                ) => InputRecord::HttpResponsePart {
                     at_ms,
-                    path: response.path,
-                    request: response.request,
+                    path,
+                    request,
+                    processor,
                     part,
+                },
+                (crate::service::Answer::Socket(answer), processor) => InputRecord::WebSocket {
+                    at_ms,
+                    path,
+                    processor,
+                    connection: request,
+                    answer,
                 },
             });
         }
@@ -1442,6 +1517,17 @@ impl LiveSession {
     #[must_use]
     pub fn awaiting_http_responses(&self) -> bool {
         self.status == LiveStatus::Running && self.engine.awaiting_http_responses()
+    }
+
+    /// Whether an Event I/O Processor instance or an invoked service of the
+    /// session holds an open WebSocket connection or a request in flight, so
+    /// a message may still arrive ([`Self::deliver_http_responses`] delivers
+    /// it): an embedder keeps its loop alive while one does. Unlike
+    /// [`Self::awaiting_http_responses`], an open connection never holds
+    /// the clock: its messages arrive whenever the peer sends them.
+    #[must_use]
+    pub fn connected(&self) -> bool {
+        self.status == LiveStatus::Running && self.engine.connected()
     }
 
     /// Takes every output streamed since the last call, in order.

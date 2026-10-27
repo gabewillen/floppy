@@ -2,6 +2,7 @@
 //! without running user code and writes exactly the text `JSON.stringify`
 //! writes for every JSON tree.
 
+use boa_engine::{JsString, JsValue};
 use scxml_types::DataValue;
 
 use super::{Engine, Session};
@@ -243,4 +244,77 @@ fn an_event_is_built_as_its_source_evaluates() {
             .expect("the operation runs");
         assert_eq!(same, Some(true));
     }
+}
+
+/// Whether `a` and `b` are the same sealed tree: [`SAME_TREE`]'s checks,
+/// and at every object both are read-only proxies (`unwrap` gives a frozen
+/// target that is not the object itself) whose every change throws a
+/// `TypeError`, or neither is.
+const SAME_GUARDED: &str = "(function (a, b, unwrap) { \
+     const sealed = (value) => { \
+         const target = unwrap(value); \
+         if (target === value || !Object.isFrozen(target)) return false; \
+         try { value.added = 1; return false; } catch (error) { if (!(error instanceof TypeError)) return false; } \
+         try { delete value[Reflect.ownKeys(target)[0] ?? 'x']; return Reflect.ownKeys(target).length === 0; } \
+         catch (error) { return error instanceof TypeError; } \
+     }; \
+     const same = (a, b) => { \
+         if (a === null || typeof a !== 'object' || b === null || typeof b !== 'object') return Object.is(a, b); \
+         if (!sealed(a) || !sealed(b)) return false; \
+         if (Array.isArray(a) !== Array.isArray(b) || Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false; \
+         const keys = Reflect.ownKeys(a), other = Reflect.ownKeys(b); \
+         if (keys.length !== other.length) return false; \
+         return keys.every((key, i) => { \
+             if (key !== other[i]) return false; \
+             const x = Object.getOwnPropertyDescriptor(a, key), y = Object.getOwnPropertyDescriptor(b, key); \
+             return x.writable === y.writable && x.enumerable === y.enumerable \
+                 && x.configurable === y.configurable && same(x.value, y.value); \
+         }); \
+     }; \
+     return same(a, b); \
+ })";
+
+#[test]
+fn a_fresh_value_is_guarded_natively_as_the_helper_guards_it() {
+    for json in [
+        "{}",
+        "[]",
+        r#"{"a":1,"b":[true,null,"x"],"c":{"d":-0,"e":[[],[{}]]}}"#,
+        r#"[1,[2,[3]],{"k":"v"},[]]"#,
+        r#"{"z":"last","2":"two","1":"one","a":{"n":[0.5,1.5]}}"#,
+    ] {
+        let engine = Engine::default();
+        engine
+            .start(&system(), Vec::new())
+            .expect("the realm starts");
+        let same = engine
+            .run(&mut NoHost, None, move |session: &mut Session| {
+                let helper = session.json_to_value(json).expect("built directly");
+                let helper = session.call(&session.helpers.guard.clone(), &[helper])?;
+                let native = session.json_to_value(json).expect("built directly");
+                let native = session.guard_fresh(native)?;
+                let unwrap = session.helpers.unwrap.clone();
+                session
+                    .call_source(SAME_GUARDED, &[helper, native, unwrap.into()])
+                    .map_err(|_| crate::DataModelError::Execution)
+                    .map(|same| same.as_boolean())
+            })
+            .expect("the operation runs");
+        assert_eq!(same, Some(true), "{json}");
+    }
+}
+
+#[test]
+fn a_primitive_is_its_own_guarded_value() {
+    let engine = Engine::default();
+    engine
+        .start(&system(), Vec::new())
+        .expect("the realm starts");
+    let same = engine
+        .run(&mut NoHost, None, |session: &mut Session| {
+            let value = session.guard_fresh(JsValue::from(JsString::from("words")))?;
+            Ok(value.as_string().map(|text| text.to_std_string_escaped()))
+        })
+        .expect("the operation runs");
+    assert_eq!(same.as_deref(), Some("words"));
 }

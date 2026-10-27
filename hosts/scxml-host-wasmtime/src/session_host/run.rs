@@ -90,6 +90,12 @@ pub(crate) struct RunShared {
     /// them), so a session's links can ask another session whether it
     /// accepts an event (`accepts-event-data`) while its own call runs.
     machines: RefCell<BTreeMap<SessionKey, Weak<RefCell<MachineHandle>>>>,
+    /// The last run-unique id handed to an invoked service's invocation or
+    /// a processor instance: the key its settled requests carry.
+    last_instance: std::cell::Cell<u64>,
+    /// The session and processor type URI of each processor instance, by
+    /// its run-unique id, while it is open.
+    pub(crate) processor_owners: RefCell<BTreeMap<u64, (SessionKey, String)>>,
 }
 
 /// One session's (or invoked service's) identity and completion.
@@ -262,7 +268,16 @@ impl RunShared {
             sessions: RefCell::new(SessionTable::default()),
             deferred: RefCell::new(None),
             machines: RefCell::new(BTreeMap::new()),
+            last_instance: std::cell::Cell::new(0),
+            processor_owners: RefCell::new(BTreeMap::new()),
         }
+    }
+
+    /// The next run-unique id of an invocation or processor instance.
+    pub(crate) fn next_instance(&self) -> u64 {
+        let next = self.last_instance.get().saturating_add(1);
+        self.last_instance.set(next);
+        next
     }
 
     /// Records that a command ran on the session `key` inside another
@@ -809,10 +824,9 @@ pub(crate) struct RunSessions {
     shared: Rc<RunShared>,
     core: Rc<HostCore>,
     root_id: String,
-    /// How the run carries out its invoked services' requests.
-    requests: crate::service::RequestMode,
-    /// The last run-unique invocation id handed out.
-    last_invocation: u64,
+    /// How the run carries out its invoked services' requests and
+    /// connections.
+    network: crate::service::NetworkModes,
 }
 
 /// A machine call addressed an invoked service: a host defect.
@@ -939,6 +953,15 @@ impl RunSessions {
         })
     }
 
+    /// Whether an invoked service holds an open connection or a request in
+    /// flight (or one awaited from the record).
+    fn services_connected(&self) -> bool {
+        self.handles.values().any(|handle| match handle {
+            SessionHandle::Service(service) => service.connected(),
+            SessionHandle::Machine(_) => false,
+        })
+    }
+
     /// Whether `key` is an invoked service.
     fn is_service(&self, key: SessionKey) -> bool {
         matches!(self.handles.get(&key), Some(SessionHandle::Service(_)))
@@ -992,7 +1015,7 @@ impl RunSessions {
     ) -> Result<(), RunFailure> {
         let span = scxml_telemetry::observe(scxml_telemetry::Module::HostWasmtime, operation);
         let now = self.now;
-        let requests = self.requests.clone();
+        let requests = self.network.http.clone();
         let step = match self.handles.get_mut(&key) {
             Some(SessionHandle::Service(service)) => input(service, now, &requests),
             Some(SessionHandle::Machine(_)) | None => {
@@ -1028,13 +1051,11 @@ impl RunSessions {
         execution_context: &Context,
         bindings: Option<&super::DocumentBindings>,
     ) -> Result<(), ComponentError> {
-        self.last_invocation = self.last_invocation.saturating_add(1);
-        let http_offered = !matches!(self.requests, crate::service::RequestMode::None);
         let started = self.core.start_service(
             request,
             self.now,
-            self.last_invocation,
-            http_offered,
+            self.shared.next_instance(),
+            &self.network,
             execution_context,
             bindings,
         );
@@ -1056,7 +1077,7 @@ impl RunSessions {
                 return Err(fatal(&self.shared, RunFailure::Host(error)));
             }
         };
-        let step = handle.settle(Some(report), self.now, &self.requests);
+        let step = handle.settle(Some(report), self.now, &self.network.http);
         if matches!(step.state, crate::service::ReportState::Rejected) {
             self.drop_sessions(child);
             return Err(invalid_input("the invoked service rejected its start"));
@@ -1101,6 +1122,41 @@ impl RunSessions {
     /// fails the run. A finished invoked session runs nothing (the rest of
     /// a due batch drained before it finished, or was ended).
     fn command(
+        &mut self,
+        key: SessionKey,
+        call: impl FnOnce(&mut MachineHandle) -> MachineResult,
+    ) -> Result<(), RunFailure> {
+        self.command_once(key, call)?;
+        self.raise_owed(key)
+    }
+
+    /// Raises, one command each, every `error.communication` owed to a
+    /// processor `<send>` of the session `key` (SCXML 6.2.4: an accepted
+    /// send whose processor failed it later, or whose instance ended), then
+    /// closes its processor instances once it finished.
+    fn raise_owed(&mut self, key: SessionKey) -> Result<(), RunFailure> {
+        loop {
+            let finished = self.is_finished(key);
+            let owed = match self.handles.get(&key) {
+                Some(SessionHandle::Machine(handle)) => {
+                    let mut handle = handle.try_borrow_mut().map_err(|_| session_busy())?;
+                    let links = handle.links_mut()?;
+                    if finished {
+                        links.close_processors();
+                    }
+                    links.take_owed()
+                }
+                Some(SessionHandle::Service(_)) | None => None,
+            };
+            let Some(send_id) = owed else {
+                return Ok(());
+            };
+            self.command_once(key, |handle| handle.communication_error(Some(&send_id)))?;
+        }
+    }
+
+    /// One command of [`Self::command`], without the owed errors it leaves.
+    fn command_once(
         &mut self,
         key: SessionKey,
         call: impl FnOnce(&mut MachineHandle) -> MachineResult,
@@ -1629,13 +1685,15 @@ impl Sessions for RunSessions {
         };
         let due = match due {
             DelayedSend::Scxml(request) => request,
-            // SCXML 6.2: the `BasicHTTP` processor posts it now; a loopback
-            // POST may reach any session of the run.
-            DelayedSend::Basichttp(send) => {
+            // SCXML 6.2: the processor its type names sends it now; a
+            // loopback `BasicHTTP` POST may reach any session of the run.
+            DelayedSend::Processor(send) => {
                 return self.with_invoked_sessions(invoked_sessions, |sessions| {
-                    sessions
+                    let route = sessions
                         .session_links(session)?
-                        .dispatch_due_basichttp(send)
+                        .dispatch_due_processor(send)?;
+                    sessions.raise_owed(session)?;
+                    Ok(route)
                 });
             }
         };
@@ -1877,8 +1935,10 @@ impl RunEngine {
                 shared: Rc::clone(shared),
                 core: Rc::clone(core),
                 root_id: root.session_id.to_owned(),
-                requests: shared.http.service_requests(core.service_http.as_ref()),
-                last_invocation: 0,
+                network: crate::service::NetworkModes {
+                    http: shared.http.service_requests(core.service_http.as_ref()),
+                    websocket: shared.http.socket_mode(core.service_websocket.as_ref()),
+                },
             },
             scheduler: Scheduler::with_limits(core.invoke_limits),
             deferred_guard: DeferredGuard(Rc::clone(shared)),
@@ -2062,8 +2122,10 @@ impl RunEngine {
     }
 
     /// Hands each settled request of an invoked service to its invocation,
-    /// when it is still in the run and waits for it (one boundary span
-    /// each); a response no live invocation waits for is dropped. Returns
+    /// and each settled request or connection answer of a processor
+    /// instance to its instance, when it is still in the run and waits for
+    /// it (one boundary span each); an answer nothing live waits for is
+    /// dropped. Returns
     /// what each delivered response was, for the record: the invoke ids
     /// from the root to its invocation, its request id, and its outcome.
     /// The caller drains afterwards: what the invocations returned is
@@ -2078,6 +2140,27 @@ impl RunEngine {
     ) -> Result<Vec<super::RecordedResponse>, RunFailure> {
         let mut delivered = Vec::new();
         for item in settled {
+            let owner = self
+                .shared
+                .processor_owners
+                .borrow()
+                .get(&item.invocation)
+                .cloned();
+            if let Some((key, uri)) = owner {
+                let Some(path) = self.session_path(key) else {
+                    continue;
+                };
+                let answer = item.answer.clone();
+                if self.processor_respond(key, &uri, item.request, item.answer)? {
+                    delivered.push(super::RecordedResponse {
+                        path,
+                        processor: Some(uri),
+                        request: item.request,
+                        answer,
+                    });
+                }
+                continue;
+            }
             let Some(key) = self.sessions.service_key(item.invocation) else {
                 continue;
             };
@@ -2104,6 +2187,7 @@ impl RunEngine {
             if answered {
                 delivered.push(super::RecordedResponse {
                     path,
+                    processor: None,
                     request,
                     answer,
                 });
@@ -2112,9 +2196,51 @@ impl RunEngine {
         Ok(delivered)
     }
 
-    /// Delivers one recorded answer to the invoked service at `path` (a
-    /// replay); `false` when no live invocation of that lineage waits for
-    /// that request.
+    /// Hands one answer to the instance of the processor bound to `uri` in
+    /// the machine session `key` as one host call: what it returns joins the
+    /// session's external queue, and each `error.communication` it owes is
+    /// raised. `false` when no open instance waits for it.
+    fn processor_respond(
+        &mut self,
+        key: SessionKey,
+        uri: &str,
+        request: u64,
+        answer: crate::service::Answer,
+    ) -> Result<bool, RunFailure> {
+        let span = scxml_telemetry::observe(
+            scxml_telemetry::Module::HostWasmtime,
+            answer_operation(&answer),
+        );
+        if !matches!(
+            self.sessions.handles.get(&key),
+            Some(SessionHandle::Machine(_))
+        ) || self.sessions.is_finished(key)
+        {
+            span.event(scxml_telemetry::SignalEvent::InputRejected);
+            return Ok(false);
+        }
+        let answered = self.sessions.with_invoked_sessions(
+            self.scheduler.invoked_sessions_mut(),
+            |sessions| {
+                let answered = sessions
+                    .session_links(key)?
+                    .processor_respond(uri, request, answer);
+                sessions.raise_owed(key)?;
+                Ok(answered)
+            },
+        )?;
+        span.event(if answered {
+            scxml_telemetry::SignalEvent::TransformationCompleted
+        } else {
+            scxml_telemetry::SignalEvent::InputRejected
+        });
+        Ok(answered)
+    }
+
+    /// Delivers one recorded answer to the invoked service at `path`, or to
+    /// the instance of the recorded processor in the session at `path` (a
+    /// replay); `false` when nothing of that lineage waits for that request
+    /// or connection.
     ///
     /// # Errors
     ///
@@ -2123,6 +2249,18 @@ impl RunEngine {
         &mut self,
         response: &super::RecordedResponse,
     ) -> Result<bool, RunFailure> {
+        if let Some(uri) = &response.processor {
+            let Some(key) = self.sessions.handles.keys().copied().find(|key| {
+                !self.sessions.is_service(*key)
+                    && self
+                        .scheduler
+                        .invoked_sessions()
+                        .has_path(*key, &response.path)
+            }) else {
+                return Ok(false);
+            };
+            return self.processor_respond(key, uri, response.request, response.answer.clone());
+        }
         let Some(key) = self.sessions.handles.keys().copied().find(|key| {
             self.sessions.is_service(*key)
                 && self
@@ -2146,11 +2284,30 @@ impl RunEngine {
         Ok(answered)
     }
 
+    /// Whether one of the run's processor instances or invoked services
+    /// holds an open connection or a request in flight: a message may still
+    /// arrive.
+    pub(crate) fn connected(&self) -> bool {
+        self.sessions.services_connected() || self.any_links(SessionLinks::processors_connected)
+    }
+
+    /// Whether `test` holds for the links of one of the run's machine
+    /// sessions.
+    fn any_links(&self, test: impl Fn(&SessionLinks) -> bool) -> bool {
+        self.sessions.handles.values().any(|handle| match handle {
+            SessionHandle::Machine(handle) => handle
+                .try_borrow_mut()
+                .is_ok_and(|mut handle| handle.links_mut().is_ok_and(|links| test(links))),
+            SessionHandle::Service(_) => false,
+        })
+    }
+
     /// Whether the run waits for the response of an invoked service's
     /// request: one in flight (or awaited from the record), or one settled
     /// and not yet delivered.
     pub(crate) fn awaiting_http_responses(&self) -> bool {
         self.sessions.services_awaiting()
+            || self.any_links(SessionLinks::processors_awaiting)
             || self
                 .shared
                 .http
@@ -2381,15 +2538,18 @@ pub(crate) fn fatal(shared: &RunShared, failure: RunFailure) -> ComponentError {
     crate::component::component_error(code, "session host failure")
 }
 
-/// The operation that delivers `answer`: a `fetch`'s response, or a part of
-/// a `send`'s.
-const fn answer_operation(answer: &crate::ExtensionHttpAnswer) -> scxml_telemetry::Operation {
+/// The operation that delivers `answer`: a `fetch`'s response, a part of a
+/// `send`'s, or a connection's answer.
+const fn answer_operation(answer: &crate::service::Answer) -> scxml_telemetry::Operation {
     match answer {
-        crate::ExtensionHttpAnswer::Response(_) => {
+        crate::service::Answer::Http(crate::ExtensionHttpAnswer::Response(_)) => {
             scxml_telemetry::Operation::HostWasmtimeServiceHttpFetch
         }
-        crate::ExtensionHttpAnswer::Part(_) => {
+        crate::service::Answer::Http(crate::ExtensionHttpAnswer::Part(_)) => {
             scxml_telemetry::Operation::HostWasmtimeServiceHttpSend
+        }
+        crate::service::Answer::Socket(_) => {
+            scxml_telemetry::Operation::HostWasmtimeProcessorWebsocket
         }
     }
 }
