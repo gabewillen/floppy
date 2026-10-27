@@ -9,6 +9,6 @@
 {"label":"double.participants","parent":"session.floppy","session":"session.floppy.cognition","text":"[]","type":"log"}
 {"label":"floppy.output","parent":"session","session":"session.floppy","text":"{\"turn\":1,\"output\":[{\"data\":{\"parts\":[{\"words\":\"reply 1\"}]},\"event\":\"bot.ability.communication.respond\",\"target\":\"session.floppy.communication\"}]}","type":"log"}
 {"label":"bot.processing.completed","session":"session","text":"{\"focus_candidates\":[],\"output\":[{\"data\":{\"parts\":[{\"words\":\"reply 1\"}]},\"event\":\"bot.ability.communication.respond\",\"target\":\"session.floppy.communication\"}],\"turn\":1}","type":"log"}
-{"label":"speech.encode","parent":"session.floppy.communication.speaking.vocal","session":"session.floppy.communication.speaking.vocal.speech","text":"encode reply 1 -> media/speaking-1.pcm","type":"log"}
+{"label":"speech.encode","parent":"session.floppy.communication.speaking.vocal","session":"session.floppy.communication.speaking.vocal.applying.0","text":"encode reply 1 -> media/speaking-1.pcm","type":"log"}
 {"label":"bot.ability.communication.failed","session":"session","text":"{\"message\":\"unconfigured\"}","type":"log"}
 {"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"gemma-4-26b-a4b","type":"log"}

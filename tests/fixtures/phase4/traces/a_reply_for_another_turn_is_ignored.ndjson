@@ -10,7 +10,7 @@
 {"label":"floppy.stale","parent":"session","session":"session.floppy","text":"bot.ability.cognition.output for turn 101 (current 1)","type":"log"}
 {"label":"floppy.output","parent":"session","session":"session.floppy","text":"{\"turn\":1,\"output\":[{\"data\":{\"parts\":[{\"words\":\"fresh 1\"}]},\"event\":\"bot.ability.communication.respond\",\"target\":\"session.floppy.communication\"}]}","type":"log"}
 {"label":"bot.processing.completed","session":"session","text":"{\"focus_candidates\":[],\"output\":[{\"data\":{\"parts\":[{\"words\":\"fresh 1\"}]},\"event\":\"bot.ability.communication.respond\",\"target\":\"session.floppy.communication\"}],\"turn\":1}","type":"log"}
-{"label":"speech.encode","parent":"session.floppy.communication.speaking.vocal","session":"session.floppy.communication.speaking.vocal.speech","text":"encode fresh 1 -> media/speaking-1.pcm","type":"log"}
+{"label":"speech.encode","parent":"session.floppy.communication.speaking.vocal","session":"session.floppy.communication.speaking.vocal.applying.0","text":"encode fresh 1 -> media/speaking-1.pcm","type":"log"}
 {"label":"floppy.say","parent":"session.floppy.communication","session":"session.floppy.communication.speaking","text":"fresh 1","type":"log"}
 {"label":"environment.sound","session":"session","text":"{\"audio\":\"media/speaking-1.0.pcm\",\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"source\":\"speaking\"}","type":"log"}
 {"label":"bot.ability.speaking.output","session":"session","text":"{\"channels\":1,\"media_type\":\"audio/pcm\",\"outcome\":\"completed\",\"sample_rate_hz\":24000,\"spoken\":\"fresh 1\",\"text\":\"fresh 1\",\"unspoken\":\"\",\"voice_id\":null}","type":"log"}

@@ -5,7 +5,7 @@
   <invoke id="vocal" type="scxml" src="../../../vocal.scx">
     <param name="model" expr="'tts-1'"/>
     <param name="voice" expr="'alloy'"/>
-    <param name="output" expr="'media/reply.mp3'"/>
+    <param name="output_prefix" expr="'media/reply-'"/>
     <param name="media_type" expr="'audio/mpeg'"/>
   </invoke>
   <state id="boot">
@@ -19,10 +19,10 @@
     <onentry>
       <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal"><content expr='{"parts": [{"words": "Hello there."}]}'/></send>
     </onentry>
-    <transition event="bot.ability.vocal.speech.encoding.chunk" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply.0.mp3\",\"channels\":null,\"duration\":null,\"media_type\":\"audio/mpeg\",\"sample_rate_hz\":null,\"sequence\":0}"' target="step2"/>
+    <transition event="bot.ability.vocal.speech.encoding.chunk" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-1.0.mpeg\",\"channels\":null,\"duration\":null,\"media_type\":\"audio/mpeg\",\"sample_rate_hz\":null,\"sequence\":0}"' target="step2"/>
   </state>
   <state id="step2">
-    <transition event="bot.ability.vocal.speech.encoding.output" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply.mp3\",\"channels\":null,\"duration\":null,\"media_type\":\"audio/mpeg\",\"sample_rate_hz\":null}"' target="step3"/>
+    <transition event="bot.ability.vocal.speech.encoding.output" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-1.mpeg\",\"channels\":null,\"duration\":null,\"media_type\":\"audio/mpeg\",\"sample_rate_hz\":null}"' target="step3"/>
   </state>
   <state id="step3">
     <transition target="pass"/>

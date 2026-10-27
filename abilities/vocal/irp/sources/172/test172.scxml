@@ -5,7 +5,7 @@
   <invoke id="vocal" type="scxml" src="../../../vocal.scx">
     <param name="model" expr="'tts-1'"/>
     <param name="voice" expr="'alloy'"/>
-    <param name="output" expr="'media/reply.pcm'"/>
+    <param name="output_prefix" expr="'media/reply-'"/>
   </invoke>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
@@ -18,13 +18,13 @@
     <onentry>
       <send event="bot.ability.vocal.speech.encoding.input" target="#_vocal"><content expr='{"parts": [{"words": "Hello."}, {"expression": {"pause": "short"}}]}'/></send>
     </onentry>
-    <transition event="bot.ability.vocal.speech.encoding.chunk" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply.0.pcm\",\"channels\":1,\"duration\":0.1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"sequence\":0}"' target="step2"/>
+    <transition event="bot.ability.vocal.speech.encoding.chunk" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-1.0.pcm\",\"channels\":1,\"duration\":0.1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"sequence\":0}"' target="step2"/>
   </state>
   <state id="step2">
-    <transition event="bot.ability.vocal.speech.encoding.chunk" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply.1.pcm\",\"channels\":1,\"duration\":0.4,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"sequence\":1}"' target="step3"/>
+    <transition event="bot.ability.vocal.speech.encoding.chunk" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-1.1.pcm\",\"channels\":1,\"duration\":0.4,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"sequence\":1}"' target="step3"/>
   </state>
   <state id="step3">
-    <transition event="bot.ability.vocal.speech.encoding.output" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply.pcm\",\"channels\":1,\"duration\":0.5,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000}"' target="step4"/>
+    <transition event="bot.ability.vocal.speech.encoding.output" cond='JSON.stringify(_event.data) === "{\"audio\":\"media/reply-1.pcm\",\"channels\":1,\"duration\":0.5,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000}"' target="step4"/>
   </state>
   <state id="step4">
     <transition target="pass"/>
