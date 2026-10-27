@@ -99,6 +99,10 @@ opentelemetry_sdk = { version = "0.33.0", default-features = false, features = [
 # `component-model-async` is the Component Model async ABI (WASI 0.3) that
 # invoked services export and `outbound-http.fetch` uses.
 wasmtime = { version = "49.0.2", default-features = false, features = ["call-hook", "component-model", "component-model-async", "cranelift", "parallel-compilation", "runtime", "std"] }
+# `scxml-host-wasmtime` `wizer` feature only: build-time pre-initialization
+# of a component (the ECMAScript data model's realm), the Wizer release of
+# the pinned Wasmtime.
+wasmtime-wizer = { version = "49.0.2", default-features = false, features = ["component-model"] }
 # `scxml-host-wasmtime` only: `p3` for the WASI 0.3 `wasi:clocks` bindings
 # the invoked-service world imports (the host implements them on the
 # session's logical clock), and `p2` for the WASI 0.2 interfaces a

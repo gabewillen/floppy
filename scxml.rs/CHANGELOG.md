@@ -693,6 +693,28 @@ hard cutover.
 
 ### Changed
 
+- `ExtensionHttpClient` keeps connections alive and pools them per origin
+  for invoked services' requests, which each opened a new connection (TCP
+  and TLS handshakes) before: consecutive requests to one origin reuse one
+  connection and its TLS session. A pooled connection is bound to the
+  cancellation of whichever request holds it, so leaving the invoking
+  state still closes the request's connection at once (SCXML 6.4), and a
+  later cancel of a finished request leaves the connection it returned to
+  the pool open. Over a simulated 50 ms round trip, ten sequential HTTPS
+  requests take 52 ms each after the first instead of 200 ms.
+- The released ECMAScript data-model component is pre-initialized with
+  Wizer at build time: `scripts/verify-wasm-capabilities.sh` runs its
+  `wizer-initialize` export once with the Wasmtime host's new build-time
+  `wizer` tool (`scxml-host-wasmtime` `wizer` feature,
+  `wizen_component`), which creates the Boa realm (bootstrap, built-in
+  guard, DOM builder, helpers, natives, captured built-ins), and records
+  the memory it leaves as the component's initial memory, the export
+  removed. Each instance's first `initialize` adds the system variables
+  to that realm instead of building and parsing it again, so an invoked
+  ECMAScript session starts in about 4.0 ms instead of 47.9 ms (a chain of
+  100 invoked sessions under the Wasmtime session host, release; a session
+  with the null data model takes 1.1 ms). The component's world is
+  unchanged; it is about 1.1 MB larger.
 - The ECMAScript data model builds a JSON data value (an event's data, an
   invoke's donedata, a `<param>`) and an event's `_event` object directly
   instead of parsing their source text: an 11 KB object binds in about a

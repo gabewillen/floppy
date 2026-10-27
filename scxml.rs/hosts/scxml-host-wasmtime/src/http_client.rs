@@ -277,11 +277,15 @@ pub struct ExtensionHttpConfig {
 /// given (an absolute `http`/`https` URL without userinfo; anything else is
 /// refused). No redirect is followed (a 3xx is the response), and no cookie,
 /// credential, or environment proxy is used. TLS
-/// is rustls verified against the operating system's trust store. Each
+/// is rustls verified against the operating system's trust store.
+/// Connections are kept alive and pooled per origin (ureq's pool), so
+/// consecutive requests to one origin reuse one connection and its TLS
+/// session instead of opening a new one each. Each
 /// request runs on its invocation's transport thread with no time limit of
 /// its own: the invocation bounds it, since leaving the invoking state
-/// cancels the invocation and closes the connection (SCXML 6.4), and an
-/// unreachable host fails when the operating system gives up connecting.
+/// cancels the invocation and closes the connection the request holds
+/// (SCXML 6.4), and an unreachable host fails when the operating system
+/// gives up connecting.
 /// The response head is bounded by [`MAX_RESPONSE_HEAD_BYTES`] and the body
 /// by [`crate::MAX_EXTENSION_HTTP_RESPONSE_BODY_BYTES`]. The
 /// caller's `service-http-request` span covers the request; nothing about
@@ -313,65 +317,51 @@ impl ExtensionHttpClient {
             .root_certs(ureq::tls::RootCerts::PlatformVerifier)
             .unversioned_rustls_crypto_provider(Arc::new(rustls::crypto::ring::default_provider()))
             .build();
-        let agent = ureq::Agent::config_builder()
+        let config = ureq::Agent::config_builder()
             .http_status_as_error(false)
             .max_redirects(0)
             .proxy(None)
             .max_response_header_size(MAX_RESPONSE_HEAD_BYTES)
             .user_agent("scxml-extension")
             .tls_config(tls)
-            .build()
-            .new_agent();
+            .build();
+        let agent = ureq::Agent::with_parts(
+            config,
+            ureq::unversioned::transport::Connector::chain(
+                cancellable::Connector,
+                ureq::unversioned::transport::RustlsConnector::default(),
+            ),
+            ureq::unversioned::resolver::DefaultResolver::default(),
+        );
         Self { agent }
     }
 }
 
-impl ExtensionHttpClient {
-    /// [`crate::ExtensionHttp::fetch`] on a connection of its own that
-    /// `cancel` closes: once the request is cancelled, a connection not yet
-    /// open is never used, and an open one is shut down, so the call stops
-    /// waiting for the response at once and answers
+/// Whether the request this transport thread performs was already
+/// cancelled (nothing is sent for it).
+fn already_cancelled() -> bool {
+    crate::service::request_cancel().is_some_and(|cancel| cancel.is_cancelled())
+}
+
+impl crate::ExtensionHttp for ExtensionHttpClient {
+    /// An invoked service's request runs on a transport thread that holds
+    /// its invocation's cancellation (SCXML 6.4), and the connection it
+    /// holds, new or pooled, is the one that cancel closes: once the
+    /// request is cancelled, a connection not yet open is never used, and
+    /// the one in use is shut down, so the call stops waiting for the
+    /// response at once and answers
     /// [`crate::ExtensionHttpFailure::Transport`]. (Resolving the host and
     /// opening the TCP connection are not interrupted; they end when the
     /// operating system answers or gives up, and nothing is sent after a
     /// cancel.)
-    pub(crate) fn fetch_cancellable(
-        &self,
-        request: &crate::ExtensionHttpRequest,
-        cancel: &Arc<crate::service::CancelSignal>,
-    ) -> Result<crate::ExtensionHttpResponse, crate::ExtensionHttpFailure> {
-        if cancel.is_cancelled() {
-            return Err(crate::ExtensionHttpFailure::Transport);
-        }
-        perform(&self.cancellable_agent(cancel), request)
-    }
-
-    /// An agent of its own: its one connection is the one `cancel` closes,
-    /// and it is never pooled for another request.
-    fn cancellable_agent(&self, cancel: &Arc<crate::service::CancelSignal>) -> ureq::Agent {
-        ureq::Agent::with_parts(
-            self.agent.config().clone(),
-            ureq::unversioned::transport::Connector::chain(
-                cancellable::Connector::new(Arc::clone(cancel)),
-                ureq::unversioned::transport::RustlsConnector::default(),
-            ),
-            ureq::unversioned::resolver::DefaultResolver::default(),
-        )
-    }
-}
-
-impl crate::ExtensionHttp for ExtensionHttpClient {
     fn fetch(
         &self,
         request: &crate::ExtensionHttpRequest,
     ) -> Result<crate::ExtensionHttpResponse, crate::ExtensionHttpFailure> {
-        // An invoked service's request runs on a transport thread that holds
-        // its invocation's cancellation (SCXML 6.4): it gets a connection of
-        // its own that the cancel closes.
-        match crate::service::request_cancel() {
-            Some(cancel) => self.fetch_cancellable(request, &cancel),
-            None => perform(&self.agent, request),
+        if already_cancelled() {
+            return Err(crate::ExtensionHttpFailure::Transport);
         }
+        perform(&self.agent, request)
     }
 
     /// Hands each read of the body to `part` as it arrives (at most 64 KiB
@@ -383,13 +373,10 @@ impl crate::ExtensionHttp for ExtensionHttpClient {
         request: &crate::ExtensionHttpRequest,
         part: &mut dyn FnMut(Result<crate::ExtensionHttpPart, crate::ExtensionHttpFailure>),
     ) {
-        match crate::service::request_cancel() {
-            Some(cancel) if cancel.is_cancelled() => {
-                part(Err(crate::ExtensionHttpFailure::Transport));
-            }
-            Some(cancel) => stream(&self.cancellable_agent(&cancel), request, part),
-            None => stream(&self.agent, request, part),
+        if already_cancelled() {
+            return part(Err(crate::ExtensionHttpFailure::Transport));
         }
+        stream(&self.agent, request, part);
     }
 }
 
@@ -485,13 +472,14 @@ fn perform(
     }
 }
 
-/// The TCP connector of [`ExtensionHttpClient::fetch_cancellable`]: it
-/// opens the request's connection like ureq's own TCP connector and
-/// registers its shutdown with the request's cancellation.
+/// The TCP connector of [`ExtensionHttpClient`]: it opens a connection
+/// like ureq's own TCP connector, and each connection registers its
+/// shutdown with the cancellation of the request using it, which a pooled
+/// connection changes with each request that takes it.
 mod cancellable {
     use std::io::{Read, Write};
     use std::net::{Shutdown, TcpStream};
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex, PoisonError};
 
     use ureq::unversioned::transport::{
         Buffers, ConnectionDetails, LazyBuffers, NextTimeout, Transport,
@@ -506,22 +494,10 @@ mod cancellable {
         ))
     }
 
-    /// Opens one TCP connection whose shutdown the cancellation owns.
-    pub(super) struct Connector {
-        cancel: Arc<CancelSignal>,
-    }
-
-    impl std::fmt::Debug for Connector {
-        fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            formatter.debug_struct("Connector").finish_non_exhaustive()
-        }
-    }
-
-    impl Connector {
-        pub(super) const fn new(cancel: Arc<CancelSignal>) -> Self {
-            Self { cancel }
-        }
-    }
+    /// Opens one TCP connection whose shutdown the cancellation of the
+    /// request using it owns.
+    #[derive(Debug)]
+    pub(super) struct Connector;
 
     impl ureq::unversioned::transport::Connector<()> for Connector {
         type Out = Connection;
@@ -531,7 +507,7 @@ mod cancellable {
             details: &ConnectionDetails,
             _chained: Option<()>,
         ) -> Result<Option<Self::Out>, ureq::Error> {
-            if self.cancel.is_cancelled() {
+            if super::already_cancelled() {
                 return Err(cancelled());
             }
             let timeout = details.timeout.not_zero().map(|after| *after);
@@ -562,16 +538,7 @@ mod cancellable {
             if details.config.no_delay() {
                 stream.set_nodelay(true)?;
             }
-            let shutdown = stream.try_clone()?;
-            // Runs at once when the request was cancelled while connecting.
-            self.cancel.on_cancel(move || {
-                // Already closed is as good as closed.
-                let _ = shutdown.shutdown(Shutdown::Both);
-            });
-            if self.cancel.is_cancelled() {
-                return Err(cancelled());
-            }
-            Ok(Some(Connection {
+            let mut connection = Connection {
                 stream,
                 buffers: LazyBuffers::new(
                     details.config.input_buffer_size(),
@@ -579,17 +546,84 @@ mod cancellable {
                 ),
                 read_timeout: None,
                 write_timeout: None,
-            }))
+                bound: None,
+            };
+            // Fails when the request was cancelled while connecting.
+            connection.bind()?;
+            Ok(Some(connection))
         }
     }
 
+    /// The cancellation a connection is bound to, and the clone of its
+    /// socket that the cancellation shuts down while the binding holds it.
+    struct Binding {
+        cancel: Arc<CancelSignal>,
+        armed: Arc<Mutex<Option<TcpStream>>>,
+    }
+
     /// One cancellable TCP connection (ureq's `TcpTransport`, whose socket
-    /// the cancellation can shut down from another thread).
+    /// the cancellation of the request using it can shut down from another
+    /// thread).
     pub(super) struct Connection {
         stream: TcpStream,
         buffers: LazyBuffers,
         read_timeout: Option<std::time::Duration>,
         write_timeout: Option<std::time::Duration>,
+        bound: Option<Binding>,
+    }
+
+    impl Connection {
+        /// Binds the connection to the cancellation of the request this
+        /// thread performs, which a cancel then shuts down (at once when it
+        /// was already cancelled, which fails).
+        fn bind(&mut self) -> Result<(), ureq::Error> {
+            let current = crate::service::request_cancel();
+            let same = match (&self.bound, &current) {
+                (Some(bound), Some(cancel)) => Arc::ptr_eq(&bound.cancel, cancel),
+                (None, None) => true,
+                _ => false,
+            };
+            if !same {
+                self.release();
+                if let Some(cancel) = current {
+                    let armed = Arc::new(Mutex::new(Some(self.stream.try_clone()?)));
+                    let shutdown = Arc::clone(&armed);
+                    cancel.on_cancel(move || {
+                        let held = shutdown
+                            .lock()
+                            .unwrap_or_else(PoisonError::into_inner)
+                            .take();
+                        if let Some(stream) = held {
+                            // Already closed is as good as closed.
+                            let _ = stream.shutdown(Shutdown::Both);
+                        }
+                    });
+                    self.bound = Some(Binding { cancel, armed });
+                }
+            }
+            match &self.bound {
+                Some(bound) if bound.cancel.is_cancelled() => Err(cancelled()),
+                _ => Ok(()),
+            }
+        }
+
+        /// Unbinds the connection: a later cancel of the request that used
+        /// it no longer shuts it down.
+        fn release(&mut self) {
+            if let Some(bound) = self.bound.take() {
+                bound
+                    .armed
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .take();
+            }
+        }
+    }
+
+    impl Drop for Connection {
+        fn drop(&mut self) {
+            self.release();
+        }
     }
 
     impl std::fmt::Debug for Connection {
@@ -609,6 +643,19 @@ mod cancellable {
         }
     }
 
+    /// Whether nothing waits on an idle `stream`: no unexpected byte, no
+    /// close, and no error.
+    fn probe(stream: &TcpStream) -> std::io::Result<bool> {
+        stream.set_nonblocking(true)?;
+        let mut byte = [0_u8; 1];
+        let open = match (&*stream).read(&mut byte) {
+            Err(error) => error.kind() == std::io::ErrorKind::WouldBlock,
+            Ok(_) => false,
+        };
+        stream.set_nonblocking(false)?;
+        Ok(open)
+    }
+
     impl Transport for Connection {
         fn buffers(&mut self) -> &mut dyn Buffers {
             &mut self.buffers
@@ -619,6 +666,7 @@ mod cancellable {
             amount: usize,
             timeout: NextTimeout,
         ) -> Result<(), ureq::Error> {
+            self.bind()?;
             let next = timeout.not_zero().map(|after| *after);
             if next != self.write_timeout {
                 self.stream.set_write_timeout(next)?;
@@ -635,6 +683,7 @@ mod cancellable {
         }
 
         fn await_input(&mut self, timeout: NextTimeout) -> Result<bool, ureq::Error> {
+            self.bind()?;
             let next = timeout.not_zero().map(|after| *after);
             if next != self.read_timeout {
                 self.stream.set_read_timeout(next)?;
@@ -649,9 +698,13 @@ mod cancellable {
             Ok(amount > 0)
         }
 
+        /// Asked when the connection returns to the pool and when it is
+        /// taken from it: the request it served is done with it, so it is
+        /// unbound, and it is open while no byte and no close waits on its
+        /// socket (ureq's own probe).
         fn is_open(&mut self) -> bool {
-            // Never pooled: the agent owning it serves one request.
-            false
+            self.release();
+            probe(&self.stream).unwrap_or(false)
         }
     }
 }
@@ -777,5 +830,214 @@ mod tests {
             NetworkClient::new(config).err(),
             Some(HttpClientError::TimeoutInvalid)
         );
+    }
+
+    /// A loopback server that accepts one connection only and answers each
+    /// request on it with `200` and `ok`, keeping it alive; the request
+    /// whose path is `/hang` gets no answer. It reports each request's path
+    /// and ends when the client closes the connection.
+    fn one_connection_server() -> (
+        u16,
+        std::sync::mpsc::Receiver<String>,
+        std::thread::JoinHandle<()>,
+    ) {
+        use std::io::{BufRead as _, Write as _};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a loopback port binds");
+        let port = listener.local_addr().expect("an address").port();
+        let (paths_tx, paths) = std::sync::mpsc::channel();
+        let server = std::thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("the client connects");
+            let mut reader = std::io::BufReader::new(stream.try_clone().expect("a clone"));
+            let mut writer = stream;
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                    return;
+                }
+                let path = line.split(' ').nth(1).unwrap_or_default().to_owned();
+                loop {
+                    let mut header = String::new();
+                    if reader.read_line(&mut header).unwrap_or(0) == 0 {
+                        return;
+                    }
+                    if header == "\r\n" {
+                        break;
+                    }
+                }
+                let hang = path == "/hang";
+                if paths_tx.send(path).is_err() {
+                    return;
+                }
+                if !hang
+                    && writer
+                        .write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\nok")
+                        .is_err()
+                {
+                    return;
+                }
+            }
+        });
+        (port, paths, server)
+    }
+
+    /// Fetches `path` from `port` on a transport thread of its own whose
+    /// request has `cancel`.
+    fn fetch_on_thread(
+        client: &Arc<ExtensionHttpClient>,
+        port: u16,
+        path: &str,
+        cancel: &Arc<crate::service::CancelSignal>,
+    ) -> std::thread::JoinHandle<Result<crate::ExtensionHttpResponse, crate::ExtensionHttpFailure>>
+    {
+        let client = Arc::clone(client);
+        let cancel = Arc::clone(cancel);
+        let request = crate::ExtensionHttpRequest {
+            method: crate::ExtensionHttpMethod::Get,
+            url: format!("http://127.0.0.1:{port}{path}"),
+            headers: Vec::new(),
+            body: Vec::new(),
+        };
+        std::thread::spawn(move || {
+            crate::service::set_request_cancel(Some(cancel));
+            crate::ExtensionHttp::fetch(&*client, &request)
+        })
+    }
+
+    #[test]
+    fn consecutive_service_requests_reuse_one_connection() {
+        let (port, paths, server) = one_connection_server();
+        let client = Arc::new(ExtensionHttpClient::new());
+        for path in ["/a", "/b", "/c"] {
+            let cancel = Arc::new(crate::service::CancelSignal::default());
+            let response = fetch_on_thread(&client, port, path, &cancel)
+                .join()
+                .expect("the request thread ends")
+                .expect("a response on the one connection");
+            assert_eq!(
+                (response.status, response.body.as_slice()),
+                (200, &b"ok"[..])
+            );
+            assert_eq!(paths.recv().expect("the request arrived"), path);
+        }
+        drop(client);
+        server.join().expect("the server ends");
+    }
+
+    #[test]
+    fn cancelling_a_finished_request_leaves_its_pooled_connection_open() {
+        let (port, paths, server) = one_connection_server();
+        let client = Arc::new(ExtensionHttpClient::new());
+        let first = Arc::new(crate::service::CancelSignal::default());
+        fetch_on_thread(&client, port, "/a", &first)
+            .join()
+            .expect("the request thread ends")
+            .expect("a response");
+        // The first request's invocation ends after its answer.
+        first.cancel();
+        let second = Arc::new(crate::service::CancelSignal::default());
+        let response = fetch_on_thread(&client, port, "/b", &second)
+            .join()
+            .expect("the request thread ends")
+            .expect("the pooled connection still answers");
+        assert_eq!(response.status, 200);
+        assert_eq!(paths.iter().take(2).collect::<Vec<_>>(), ["/a", "/b"]);
+        drop(client);
+        server.join().expect("the server ends");
+    }
+
+    #[test]
+    fn cancelling_a_request_closes_the_pooled_connection_it_holds() {
+        let (port, paths, server) = one_connection_server();
+        let client = Arc::new(ExtensionHttpClient::new());
+        let first = Arc::new(crate::service::CancelSignal::default());
+        fetch_on_thread(&client, port, "/a", &first)
+            .join()
+            .expect("the request thread ends")
+            .expect("a response");
+        let second = Arc::new(crate::service::CancelSignal::default());
+        let waiting = fetch_on_thread(&client, port, "/hang", &second);
+        assert_eq!(paths.recv().expect("the first request arrived"), "/a");
+        assert_eq!(
+            paths
+                .recv_timeout(Duration::from_secs(10))
+                .expect("the second request arrived on the pooled connection"),
+            "/hang"
+        );
+        let cancelled = std::time::Instant::now();
+        second.cancel();
+        assert_eq!(
+            waiting.join().expect("the request thread ends"),
+            Err(crate::ExtensionHttpFailure::Transport)
+        );
+        assert!(cancelled.elapsed() < Duration::from_secs(2));
+        // The closed connection is never pooled: the server sees it end.
+        server.join().expect("the server ends");
+        drop(client);
+    }
+
+    #[test]
+    fn an_already_cancelled_request_sends_nothing() {
+        let (port, paths, server) = one_connection_server();
+        let client = Arc::new(ExtensionHttpClient::new());
+        let cancel = Arc::new(crate::service::CancelSignal::default());
+        cancel.cancel();
+        assert_eq!(
+            fetch_on_thread(&client, port, "/a", &cancel)
+                .join()
+                .expect("the request thread ends"),
+            Err(crate::ExtensionHttpFailure::Transport)
+        );
+        let live = Arc::new(crate::service::CancelSignal::default());
+        fetch_on_thread(&client, port, "/b", &live)
+            .join()
+            .expect("the request thread ends")
+            .expect("a response");
+        assert_eq!(paths.recv().expect("one request arrived"), "/b");
+        drop(client);
+        server.join().expect("the server ends");
+    }
+
+    /// Times `SCXML_HTTP_PROBE_COUNT` (default 10) sequential GETs of
+    /// `SCXML_HTTP_PROBE_URL`, each on a transport thread of its own that
+    /// holds a cancellation, as an invoked service's requests run.
+    #[test]
+    #[ignore = "a live probe: set SCXML_HTTP_PROBE_URL"]
+    fn probe_request_latency() {
+        let url = std::env::var("SCXML_HTTP_PROBE_URL").expect("SCXML_HTTP_PROBE_URL");
+        let count = std::env::var("SCXML_HTTP_PROBE_COUNT")
+            .ok()
+            .and_then(|count| count.parse().ok())
+            .unwrap_or(10_usize);
+        let client = Arc::new(ExtensionHttpClient::new());
+        let mut times = Vec::new();
+        for _ in 0..count {
+            let client = Arc::clone(&client);
+            let request = crate::ExtensionHttpRequest {
+                method: crate::ExtensionHttpMethod::Get,
+                url: url.clone(),
+                headers: Vec::new(),
+                body: Vec::new(),
+            };
+            let started = std::time::Instant::now();
+            let status = std::thread::spawn(move || {
+                crate::service::set_request_cancel(Some(Arc::new(
+                    crate::service::CancelSignal::default(),
+                )));
+                crate::ExtensionHttp::fetch(&*client, &request)
+                    .expect("a response")
+                    .status
+            })
+            .join()
+            .expect("the request thread ends");
+            times.push(started.elapsed());
+            eprintln!(
+                "request {}: {status} in {:?}",
+                times.len(),
+                started.elapsed()
+            );
+        }
+        let rest = times.get(1..).unwrap_or_default();
+        let mean = rest.iter().sum::<Duration>() / u32::try_from(rest.len().max(1)).unwrap_or(1);
+        eprintln!("first {:?}, mean of the rest {mean:?}", times.first());
     }
 }
