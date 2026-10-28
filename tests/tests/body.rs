@@ -228,7 +228,12 @@ fn settle(run: &Run) {
 }
 
 /// Sends the run the event `name` with `data` once the bot has settled.
+/// Right after a turn completes, its reply can still be starting, so the
+/// run is read until it is quiet first.
 fn event(run: &mut Run, name: &str, data: &Json) {
+    if run.last_is(label_is("bot.processing.completed")) {
+        run.quiesce(Duration::from_millis(500));
+    }
     settle(run);
     run.event(name, data);
 }
@@ -1220,19 +1225,15 @@ fn an_ignore_selection_goes_to_the_cognition_and_ends_the_turn() {
 }
 
 #[test]
-fn an_offer_over_the_budget_is_dropped_from_the_turn() {
+fn an_offer_past_32_kib_reaches_the_turn() {
     let body = layout(&Cognition::Double("'huge'"), &[]);
     let mut run = start(&body);
     activated(&mut run);
     event(&mut run, "bot.input", &input("reply", "x"));
     let records = run.until(WAIT, label_is("bot.processing.completed"));
-    // The double's offer is over 32 KiB even without its descriptions, so
-    // the body drops it whole (decision D242) and the turn goes on with
-    // the others' offers.
-    assert_eq!(
-        only(&records, &["floppy.offers.dropped"]),
-        pairs(&[("floppy.offers.dropped", "cognition")])
-    );
+    // The double's offer is over 32 KiB even without its descriptions; the
+    // choices have no size bound (SCXML sets none on an event), so it is
+    // offered whole beside the others' offers.
     let choices = last_json(&records, "floppy.choices");
     let events: Vec<&str> = choices
         .as_array()
@@ -1240,15 +1241,14 @@ fn an_offer_over_the_budget_is_dropped_from_the_turn() {
         .iter()
         .filter_map(|choice| choice["event"].as_str())
         .collect();
-    assert!(
-        !events.contains(&"bot.ability.cognition.ignore") && !events.contains(&"double.huge"),
-        "{events:?}"
-    );
-    assert!(
-        events.contains(&"bot.ability.communication.respond"),
-        "{events:?}"
-    );
-    close(run, "an_offer_over_the_budget_is_dropped_from_the_turn");
+    for offered in [
+        "bot.ability.cognition.ignore",
+        "double.huge",
+        "bot.ability.communication.respond",
+    ] {
+        assert!(events.contains(&offered), "{offered}: {events:?}");
+    }
+    close(run, "an_offer_past_32_kib_reaches_the_turn");
 }
 
 #[test]
@@ -1329,9 +1329,6 @@ fn the_listenings_products_are_turn_stimuli() {
     let silence = json!({"audio": "media/silence.wav", "media_type": "audio/wav"});
     event(&mut run, "environment.sound", &silence);
     run.until(WAIT, label_is("bot.processing.completed"));
-    // The reply can start just after the turn completes: read the run until
-    // it is quiet, so the ring waits for it to finish.
-    run.quiesce(Duration::from_millis(500));
     // Labelled non-speech: a turn whose stimulus is the environment.sound.
     let ring = json!({"audio": "media/ring.wav", "kind": "phone.ringing"});
     event(&mut run, "environment.sound", &ring);

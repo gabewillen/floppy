@@ -1450,11 +1450,11 @@ fn a_damaged_voice_row_matches_no_one() {
     );
 }
 
-/// Decision D205: identification reads one compact row per person, so
-/// two hundred people at 256 dimensions fit the 64 KiB value bound, and
-/// each voice still finds its own person among them.
+/// Decision D205: identification reads one compact row per person, and
+/// each voice still finds its own person among 256 at 256 dimensions,
+/// whose rows pass 64 KiB (no value has a size bound, decision D271).
 #[test]
-fn identification_holds_two_hundred_people_at_256_dimensions() {
+fn identification_holds_256_people_at_256_dimensions() {
     let person = |n: usize| -> Vec<f64> {
         (0..256)
             .map(|d| {
@@ -1468,15 +1468,15 @@ fn identification_holds_two_hundred_people_at_256_dimensions() {
             })
             .collect()
     };
-    let voices: Vec<Json> = (0..170)
+    let voices: Vec<Json> = (0..256)
         .map(|n| json!([format!("person-{}", n + 1), voice(&person(n))]))
         .collect();
     let text = Json::Array(voices.clone()).to_string();
-    assert!(text.len() < 64 * 1024, "{} bytes", text.len());
-    for n in [0, 41, 169] {
+    assert!(text.len() > 64 * 1024, "{} bytes", text.len());
+    for n in [0, 41, 255] {
         let input = json!({"source_ids": [person(n)], "target_ids": []});
         assert_eq!(
-            people_of(&input, &Json::Array(voices.clone()), 170.0)["input"]["source_ids"],
+            people_of(&input, &Json::Array(voices.clone()), 256.0)["input"]["source_ids"],
             json!([format!("person-{}", n + 1)]),
             "{n}"
         );

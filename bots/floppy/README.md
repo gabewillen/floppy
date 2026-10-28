@@ -38,7 +38,7 @@ one of the turn's focus candidates, plus
 what each ability offers, read from its live session that turn
 (`<decision:offers>`, decision D242), and the focused device's
 events, each tagged with the session id of its offerer as `target`, made
-model-facing and held to 32 KiB, `<processing:collect_offered_events>`);
+model-facing, `<processing:collect_offered_events>`);
 nothing the bot selects clears the focus: it stays on a device until the
 bot focuses another (decision D155).
 Each stage of the cognition sends its own selections,
@@ -248,7 +248,7 @@ an earlier turn, `floppy.diagnostic` why activation failed, and
 - `cargo test -p floppy-tests --test body`: the lifecycle and turn matrix
   against a cognition double (`tests/fixtures/phase4/cognition_double.scx`),
   and the choices (the offers tagged with their sessions, focus grounding,
-  the body's guards on its own events, ignore, the 32 KiB budget).
+  the body's guards on its own events, ignore, an offer past 32 KiB).
 - `cargo test -p floppy-tests --test listening`: the listening under a
   harness, with the speech service decoding against a fake backend
   (`tests/tests/support/hearing.rs`): decoded speech, labelled non-speech,

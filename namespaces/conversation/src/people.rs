@@ -7,9 +7,8 @@
 //! each component quantized to a signed byte (`round(component * 127)`)
 //! and written as `i8:` and the bytes' standard base64. A 256-dimensional
 //! voice is 347 characters, where its JSON text is about 5 KiB, so reading
-//! one representative per person holds about 170 people at 256 dimensions
-//! under the extension boundary's 64 KiB value bound (the memory ability's
-//! output, which carries them to the conversation, holds about 100).
+//! one representative per person is about 350 bytes a person, and nothing
+//! that carries them has a size bound (decision D271).
 //! Quantizing keeps a
 //! 256-dimensional voice's cosine with the voice it came from above 0.999
 //! (each component moves by at most 1/254), so a match moves by about a

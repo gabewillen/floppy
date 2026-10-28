@@ -110,10 +110,11 @@ Last updated: 2026-10-26.
   `a_voice_heard_before_a_restart_is_recognized_after_it`). The body
   passes its database through the listening. The bot's own voice is still
   learned again each run.
-- **The prompt fits a generate call (2026-10-26, D255):** the cognition's
-  prompt budget (`MAX_PROJECTION_BYTES`) is 49152, down from 262144, so
+- **The prompt fits a generate call (2026-10-26, D255; reverted by D271):** the cognition's
+  prompt budget (`MAX_PROJECTION_BYTES`) was 49152, down from 262144, so
   the system channel, the schema and the prompt fit the 65536-byte event
-  value a generate call's `messages` is; recalled turns, episodes and
+  value a generate call's `messages` was; D271 restores 262144 now that
+  events have no size bound; recalled turns, episodes and
   directives are trimmed on wasm instead of failing the turn with
   `error.execution` (reasoning case 141 fails at the old budget). The
   cognition namespace IRP's manifest names the new budget, but its prepared
@@ -163,7 +164,7 @@ Last updated: 2026-10-26.
   offer moves its guard into a transient state or an `<if>`
   (communication's `admitting_response`). Effort is declared in
   `offerable`; `<decision:choice>` takes no `effort`. Each ability's
-  offers are bounded alone (32 KiB, `floppy.offers.dropped`), and the
+  offers have no size bound (D271), and the
   firmware is started once its session answers a snapshot
   (`firmware_check_ms`).
 - **Effort ceilings (2026-10-24, D206, #50):** each tier of a turn is
@@ -195,7 +196,7 @@ Last updated: 2026-10-26.
   re-pointing everything keyed on the newer one. Each step is one guarded
   transaction after a five-second pause, and input leaves rest at once,
   cancelling the consolidation between two steps. Identification reads
-  one representative a person (about 100 people at 256 dimensions), and
+  one representative a person (256 people at 256 dimensions proven, D271), and
   new people are numbered from `bot_sequence`. Episodes from short-term
   turns are a seam (reflection already records each turn's, D97).
 - **Voices are people in long-term memory (2026-10-23, D204, #49):** the
@@ -1109,12 +1110,6 @@ The remaining phases run as one ultracode run with these grants:
 
 What is still to build, each item with its issue where one exists.
 
-- **The recall budget on wasm (D117).** `<cognition:model_facing_content>`
-  trims `prior_episodes` and `standing_directives` to the prompt budget,
-  newest first, but on wasm the data model's 64 KiB value bound refuses a
-  prompt before it is big enough to trim, so the trimming is proven only
-  natively (`namespaces/cognition/src/tests.rs`). Lower the budget, or
-  raise the bound in scxml.rs.
 - **Learning** (#14, #16): drafts staged before they are installed, an
   end-to-end test of a learned behavior on a later real turn, examples
   and byte budgets for reflection's select and builder prompts, and a

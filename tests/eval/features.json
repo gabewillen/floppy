@@ -82,10 +82,6 @@
    "evidence": [
     {
      "label": "floppy.choices"
-    },
-    {
-     "label": "floppy.offers.dropped",
-     "absent": true
     }
    ],
    "tests": [

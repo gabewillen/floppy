@@ -193,7 +193,7 @@ fn model_facing_schema_writes_canonical_json_whose_length_is_what_the_bound_meas
     let Data::JsonArray(text) = assigned(&host, "offers") else {
         panic!("a JSON array");
     };
-    let (expected, over) = model_facing_choices(&verbose_offers(), DEFAULT_BOUND).unwrap();
+    let (expected, over) = model_facing_choices(&verbose_offers(), usize::MAX).unwrap();
     assert_eq!((text.as_str(), over), (expected.as_str(), false));
     assert_eq!(text, canonical_json(&serde_json::from_str(&text).unwrap()));
     // The bound is inclusive: exactly the compacted length keeps descriptions.
@@ -1107,8 +1107,8 @@ fn an_element_the_namespace_does_not_declare_is_not_handled() {
 #[test]
 fn every_element_keeps_a_declared_effort_and_the_dispatch_tool_never_shows_it() {
     let heavy = json!({"event": "bot.ability.persona.revise", "schema": {"type": "object", "title": "t"}, "effort": 2});
-    let (compacted, over) = model_facing_choices(&json!([heavy.clone()]), DEFAULT_BOUND)
-        .expect("an effort is a member");
+    let (compacted, over) =
+        model_facing_choices(&json!([heavy.clone()]), usize::MAX).expect("an effort is a member");
     assert!(!over);
     let compacted: Json = serde_json::from_str(&compacted).expect("canonical JSON");
     assert_eq!(
@@ -1120,7 +1120,7 @@ fn every_element_keeps_a_declared_effort_and_the_dispatch_tool_never_shows_it() 
         &json!([]),
         &json!({"persona": [heavy.clone()]}),
         None,
-        DEFAULT_BOUND,
+        usize::MAX,
     )
     .expect("an offer's effort is kept");
     let collected: Json = serde_json::from_str(&collected.choices).expect("canonical JSON");
@@ -1134,7 +1134,7 @@ fn every_element_keeps_a_declared_effort_and_the_dispatch_tool_never_shows_it() 
     for effort in [json!(-1), json!(1.5), json!(1001), json!("2"), json!(null)] {
         let entry = json!([{"event": "e", "schema": {}, "effort": effort}]);
         assert!(
-            model_facing_choices(&entry, DEFAULT_BOUND).is_err(),
+            model_facing_choices(&entry, usize::MAX).is_err(),
             "{effort} is refused"
         );
         assert!(dispatch_tool(&entry, None).is_err(), "{effort} is refused");

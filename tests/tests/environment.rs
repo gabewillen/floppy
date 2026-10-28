@@ -392,20 +392,21 @@ fn seed_memory(memory: &Path, statements: &Json) {
 }
 
 /// Decision D205: identification reads one compact representative a
-/// person, so memory holding 96 people at 256 dimensions (D204 read every
-/// voice heard and failed at about a dozen) still identifies each, and a
-/// new voice is numbered from the people sequence, after them.
+/// person, so memory holding 256 people at 256 dimensions (D204 read every
+/// voice heard and failed at about a dozen; the events that carry them have
+/// no size bound, decision D271) still identifies each, and a new voice is
+/// numbered from the people sequence, after them.
 #[test]
-fn a_voice_is_identified_among_ninety_six_people() {
+fn a_voice_is_identified_among_two_hundred_fifty_six_people() {
     let dir = layout(&[]);
     let memory = unique_scratch("people");
-    let insert_people = "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 96) INSERT INTO bot_person (person_id) SELECT 'person-' || i FROM n";
+    let insert_people = "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 256) INSERT INTO bot_person (person_id) SELECT 'person-' || i FROM n";
     let mut statements = vec![
         json!({"sql": insert_people}),
-        json!({"sql": "INSERT INTO bot_sequence (name, value) VALUES ('person', 96)"}),
+        json!({"sql": "INSERT INTO bot_sequence (name, value) VALUES ('person', 256)"}),
     ];
-    for batch in 0..4 {
-        let people: Vec<usize> = (batch * 24..batch * 24 + 24).collect();
+    for batch in 0..8 {
+        let people: Vec<usize> = (batch * 32..batch * 32 + 32).collect();
         let values = vec!["(?, 'voice', ?, 1, ?, ?)"; people.len()].join(", ");
         let parameters: Vec<Json> = people
             .iter()
@@ -467,17 +468,17 @@ fn a_voice_is_identified_among_ninety_six_people() {
             .collect()
     };
     let first = person_of(near(0));
-    let late = person_of(near(79));
-    let last = person_of(near(95));
+    let late = person_of(near(200));
+    let last = person_of(near(255));
     let newcomer = person_of(vec![0.0625; 256]);
     drop(run.close(WAIT));
     assert_eq!(
         [first, late, last, newcomer],
         [
             json!(["person-1"]),
-            json!(["person-80"]),
-            json!(["person-96"]),
-            json!(["person-97"]),
+            json!(["person-201"]),
+            json!(["person-256"]),
+            json!(["person-257"]),
         ]
     );
 }

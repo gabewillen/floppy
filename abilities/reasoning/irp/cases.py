@@ -69,7 +69,7 @@ S.statement(1, "Each `bot.ability.processing.input` (turn, stimulus, focus, focu
 S.statement(2, "With no choices it fails the turn without a model call: reason `the reasoning has no choices to select from`.")
 S.statement(3, "With choices it makes one generate call offering the dispatch tool, which allows only the offered events (with their targets); the events of its dispatch calls, in order, are returned as the model gave them with `handled: true`, each `{event, data, reason, target}`, `bot.ability.cognition.ignore` selections included; an empty selection is handled with nothing selected.")
 S.statement(4, "A generate call that fails fails the turn with reason `the reasoning failed (<code>)`, the generate service's failure code: `status` for an error status, `truncated` for a reply cut short, `malformed` for an answer that is no chat completion. A selection the dispatch tool refuses (`schema-mismatch`, or `not-json`) is repaired first (decision D142): the call is made again with the rejection as the prompt's feedback, at most twice, and the same rejection twice running, or one once the repairs are spent, fails the turn with reason `Selection rejected: <message>` (the rejection's message, else its code).")
-S.statement(5, "A prompt over the projection budgets (49152 encoded bytes, 4096 nodes, 4096 collection items, 65536 characters per scalar) fails the turn without a model call, its reason the budget's message (for example `prompt projection collection item budget exceeded`); recalled turns over the bytes the stimulus leaves are trimmed to the newest that fit, and the turn is reasoned.")
+S.statement(5, "A prompt over the projection budgets (262144 encoded bytes, 4096 nodes, 4096 collection items, 65536 characters per scalar) fails the turn without a model call, its reason the budget's message (for example `prompt projection collection item budget exceeded`); recalled turns over the bytes the stimulus leaves are trimmed to the newest that fit, and the turn is reasoned.")
 S.statement(6, "Each selection is sent, in order, to the session its target names (`#_scxml_` + target) before the turn ends; a selection without its data is refused by the dispatch tool, whose every branch requires it (decision D231, where D113 sent it with `{}`); a send that fails fails the turn with reason `the reasoning could not run (<error>)`.")
 S.statement(7, "With a database it recalls prior episodes, standing directives and the bot's active learned behaviors (named in the system channel's self block, decision D154) before the model call and writes nothing (reflection stores the turn's episode, decision D97), and the turn is handled as without one; a memory that fails fails the turn with reason `Reasoning memory recall failed: ...` without a model call.")
 
@@ -167,14 +167,14 @@ S.case(140, 5, "a stimulus with over 4096 collection items fails the turn withou
        + [("stimulus", "({event: 'bot.input', source: 'gabe', data: {items: Array.from({length: 4097}, (_, i) => i)}})")],
        backend=selection(SAY))
 # A stimulus whose items render to about 37 KiB (from about 6 KiB of
-# input) and turns of 30 KiB: the prompt would pass a generate call's
-# 64 KiB, though the input is under the event bound.
+# input) and turns of 30 KiB: the prompt would pass a model context of
+# 16384 tokens at 3 bytes a token (a 48 KiB fitted budget).
 LONG_STIMULUS = ("stimulus", "({event: 'bot.input', source: 'gabe', data: {items: Array.from({length: 1600}, () => 'a')}})")
 LONG_TURNS = ("recent", "Array.from({length: 4}, (_, i) => ({at: '2026-07-07T12:00:00Z', direction: 'heard',"
                         " text: 'turn-' + i + '-' + 'w'.repeat(7500)}))")
-S.case(141, 5, "recalled turns that would carry the prompt past a generate call's bound are trimmed, and the turn is reasoned.",
+S.case(141, 5, "recalled turns that would carry the prompt past its fitted budget are trimmed, and the turn is reasoned.",
        [SAID, expect(DONE, "_event.data.handled === true && _event.data.selected.length === 1")],
-       params=[p for p in turn() if p[0] != "stimulus"] + [LONG_STIMULUS, LONG_TURNS], backend=selection(SAY))
+       params=[p for p in turn() if p[0] != "stimulus"] + [LONG_STIMULUS, LONG_TURNS, ("max_context_tokens", "16384")], backend=selection(SAY))
 S.case(150, 6, "a focus_device and a device action are sent to their target, in order, before the turn ends.",
        [expect(FOCUS, "_event.data.device === 'lamp'"), expect(LAMP),
         expect(DONE, "_event.data.handled === true && _event.data.selected.length === 2"

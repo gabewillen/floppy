@@ -98,7 +98,7 @@
     <!-- The embeddings' kind consolidated (faces are D188's seam). -->
     <data id="kind" expr="'voice'"/>
     <!-- The voices one fold step reads (a voice's JSON text is about 5 KiB
-         at 256 dimensions, under the sql service's 88 KiB result). -->
+         at 256 dimensions). -->
     <data id="fold_batch" expr="8"/>
     <!-- The relationship context references one merge re-points (the
          transaction's 64 statements less the merge's own). -->

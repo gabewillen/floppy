@@ -191,8 +191,7 @@
 //! The audio a decoding reads ([`MAX_AUDIO_BYTES`], inside the host's
 //! request-body bound), the words an encoding sends (all its parts' words
 //! joined, [`MAX_TEXT_BYTES`]), the PCM a reply with pauses joins
-//! ([`MAX_ASSEMBLED_BYTES`]), the text a decoding returns ([`MAX_DECODED_TEXT_BYTES`], under the
-//! session's event bound), a reference ([`MAX_REFERENCE_BYTES`]), and the
+//! ([`MAX_ASSEMBLED_BYTES`]), a reference ([`MAX_REFERENCE_BYTES`]), and the
 //! model name ([`MAX_MODEL_BYTES`]) are bounded on wasm builds only
 //! ([`scxml_types::wasm_bound`]); the encoded audio of each request is
 //! bounded by the host's response-body bound. The parts ([`MAX_PARTS`])
@@ -301,9 +300,6 @@ pub const EXPRESSION_FIELDS: [&str; 11] = [
 /// What a part's words must not hold: the characters of stage directions
 /// and markup, which a voice would read aloud.
 pub const UNSPOKEN_CHARS: [char; 9] = ['*', '<', '>', '[', ']', '{', '}', '(', ')'];
-/// Upper bound on the text a decoding returns (wasm builds only): under
-/// the session's 96 KiB event bound, leaving room for the envelope.
-pub const MAX_DECODED_TEXT_BYTES: usize = wasm_bound(64 * 1024);
 /// Upper bound on a media reference's bytes (wasm builds only).
 pub const MAX_REFERENCE_BYTES: usize = wasm_bound(1024);
 /// Upper bound on the model name's bytes (wasm builds only).
@@ -1376,9 +1372,6 @@ pub fn decoding_outcome(
                 _ => return Err(FailureCode::Malformed),
             }
         };
-        if exceeds_wasm_bound(text.len(), MAX_DECODED_TEXT_BYTES) {
-            return Err(FailureCode::Malformed);
-        }
         Ok(text)
     });
     match text {

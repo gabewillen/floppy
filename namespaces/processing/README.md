@@ -14,7 +14,7 @@ model; it never sends, and it does no I/O.
 
 | Element | Writes |
 | --- | --- |
-| `<processing:model_facing_schema location bound? overlocation?>` | the choices in place without `$schema`, `title` and `examples`, over the bound (D35) without descriptions, still over `[]` (`location`), and whether that happened (`overlocation`) |
+| `<processing:model_facing_schema location bound? overlocation?>` | the choices in place without `$schema`, `title` and `examples`, over the bound, when one is named, without descriptions, still over `[]` (`location`), and whether that happened (`overlocation`) |
 | `<processing:collect_offered_events location choices offers? devices? focus? bound? overlocation? sizelocation?>` | the turn's choices, each tagged with its offering session's id as `target`: the document's own with its `_sessionid`, each child's offers with `<_sessionid>.<invoke id>`, the focused device's events with its id (`location`), their size (`sizelocation`) and whether they are over the bound (`overlocation`) |
 | `<processing:send location choices max?>` | the `dispatch` tool's schema, `max` its `events`' `maxItems` (`location`) |
 | `<processing:selection_confidence location selections>` | the least normalized confidence of the selections, or `null` (`location`) |

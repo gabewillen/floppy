@@ -135,17 +135,6 @@
       "features": [
         "cognition"
       ]
-    },
-    {
-      "check": "not_logged",
-      "by": [
-        0,
-        3
-      ],
-      "label": "floppy.offers.dropped",
-      "features": [
-        "offers"
-      ]
     }
   ]
 }

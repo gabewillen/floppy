@@ -42,14 +42,14 @@
 //! future at once with the done data `{"seed": TEXT-OR-NULL, "wrote":
 //! BYTES-OR-NULL}` (the invoking session receives it as `done.invoke.<id>`),
 //! and returns no event. An invalid parameter, or a failed filesystem call
-//! (a missing seed, a seed that is not UTF-8 within [`MAX_SEED_BYTES`]),
+//! (a missing seed, a seed that is not UTF-8),
 //! rejects the start: the `<invoke>` raises `error.execution`.
 //!
 //! # Bounds
 //!
-//! The name's bytes ([`MAX_FILE_NAME_BYTES`], the example's bound) and the
-//! seed's bytes ([`MAX_SEED_BYTES`], under the session's event bound) are
-//! bounded on wasm builds only ([`scxml_types::wasm_bound`]).
+//! The name's bytes ([`MAX_FILE_NAME_BYTES`], the example's bound) are
+//! bounded on wasm builds only ([`scxml_types::wasm_bound`]); the seed has
+//! no byte bound (the done data that carries it has none).
 //!
 //! # Telemetry
 //!
@@ -85,9 +85,6 @@ pub const DIRECTORY: &str = "/behaviors";
 /// Upper bound on a file name's bytes (wasm builds only).
 pub const MAX_FILE_NAME_BYTES: usize = wasm_bound(255);
 
-/// Upper bound on the bytes read from a seed (wasm builds only).
-pub const MAX_SEED_BYTES: usize = wasm_bound(64 * 1024);
-
 /// Why the service rejected its start.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FilesError {
@@ -95,8 +92,7 @@ pub enum FilesError {
     InvalidName,
     /// `text` is not text, or `name` and `text` are not both given.
     InvalidText,
-    /// A filesystem call failed, or the seed is not UTF-8 within
-    /// [`MAX_SEED_BYTES`].
+    /// A filesystem call failed, or the seed is not UTF-8.
     Filesystem,
 }
 
@@ -322,15 +318,9 @@ mod guest {
     }
 
     fn read(name: &str) -> Result<String, ComponentError> {
-        let file = std::fs::File::open(super::path(name)).map_err(|_| filesystem())?;
-        let limit = u64::try_from(super::MAX_SEED_BYTES).unwrap_or(u64::MAX);
+        let mut file = std::fs::File::open(super::path(name)).map_err(|_| filesystem())?;
         let mut bytes = Vec::new();
-        file.take(limit.saturating_add(1))
-            .read_to_end(&mut bytes)
-            .map_err(|_| filesystem())?;
-        if scxml_types::exceeds_wasm_bound(bytes.len(), super::MAX_SEED_BYTES) {
-            return Err(filesystem());
-        }
+        file.read_to_end(&mut bytes).map_err(|_| filesystem())?;
         String::from_utf8(bytes).map_err(|_| filesystem())
     }
 

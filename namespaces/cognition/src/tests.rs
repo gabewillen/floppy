@@ -501,7 +501,7 @@ fn turns(count: usize, size: usize) -> Vec<Json> {
 #[test]
 fn recalled_episodes_over_the_budget_are_trimmed_to_the_newest_not_failed() {
     let episodes: Vec<Json> = (0..6)
-        .map(|index| json!({"stimulus_name": format!("episode-{index}-{}", "x".repeat(10_000)), "output": []}))
+        .map(|index| json!({"stimulus_name": format!("episode-{index}-{}", "x".repeat(60_000)), "output": []}))
         .collect();
     let directives: Vec<Json> = (0..3)
         .map(|index| json!({"text": format!("directive-{index}")}))
@@ -558,8 +558,8 @@ fn a_recalled_episode_carries_the_words_its_stimulus_carried() {
 
 #[test]
 fn recent_turns_claim_the_budget_first_and_keep_the_newest_uncounted() {
-    let mut input = recalling("now", &[], &[json!({"text": "d".repeat(10_000)})]);
-    input["recent"] = Json::Array(turns(8, 8_000));
+    let mut input = recalling("now", &[], &[json!({"text": "d".repeat(50_000)})]);
+    input["recent"] = Json::Array(turns(8, 40_000));
     let rendered = prompt(&input);
     assert!(rendered.len() <= MAX_PROJECTION_BYTES);
     let kept: Vec<usize> = (0..8)
@@ -580,14 +580,14 @@ fn recent_turns_claim_the_budget_first_and_keep_the_newest_uncounted() {
 #[test]
 fn recalled_items_trim_to_what_the_instructions_and_the_tool_leave() {
     let directives: Vec<Json> = (0..40)
-        .map(|index| json!({"text": format!("memory-{index}-{}", "m".repeat(1_000))}))
+        .map(|index| json!({"text": format!("memory-{index}-{}", "m".repeat(5_000))}))
         .collect();
     let mut input = recalling("incoming speech", &[], &directives);
-    input["instructions"] = json!("i".repeat(12_000));
-    input["schema"] = json!({"pad": "q".repeat(4_000)});
+    input["instructions"] = json!("i".repeat(60_000));
+    input["schema"] = json!({"pad": "q".repeat(20_000)});
     let tool = input["schema"].to_string().len();
     let rendered = prompt(&input);
-    assert!(12_000 + rendered.len() + tool <= MAX_PROJECTION_BYTES);
+    assert!(60_000 + rendered.len() + tool <= MAX_PROJECTION_BYTES);
     assert!(rendered.contains("incoming speech"));
     let kept: Vec<usize> = (0..40)
         .filter(|index| rendered.contains(&format!("memory-{index}-")))
@@ -624,9 +624,9 @@ fn a_recalled_item_over_a_scalar_budget_is_omitted_not_failed() {
 
 #[test]
 fn every_recalled_item_left_out_leaves_the_field_empty_with_its_count() {
-    let mut input = recalling("now", &[], &[json!({"text": "y".repeat(6_000)})]);
-    input["instructions"] = json!("i".repeat(12_000));
-    input["schema"] = json!({"pad": "q".repeat(32_000)});
+    let mut input = recalling("now", &[], &[json!({"text": "y".repeat(30_000)})]);
+    input["instructions"] = json!("i".repeat(60_000));
+    input["schema"] = json!({"pad": "q".repeat(180_000)});
     let rendered = prompt(&input);
     assert!(rendered.contains("<standing_directives count=\"0\" omitted=\"1\" />"));
 }
@@ -634,19 +634,19 @@ fn every_recalled_item_left_out_leaves_the_field_empty_with_its_count() {
 #[test]
 fn a_recalled_part_whose_frame_does_not_fit_is_left_out() {
     let mut input = recalling("now", &[], &[json!({"text": "small"})]);
-    input["instructions"] = json!("i".repeat(12_000));
+    input["instructions"] = json!("i".repeat(60_000));
     let stimulus = prompt(&recalling("now", &[], &[])).len();
     // Room for the stimulus and its newline, not for the recalled frame.
-    let pad = MAX_PROJECTION_BYTES - 12_000 - stimulus - 1 - "{\"pad\":\"\"}".len();
+    let pad = MAX_PROJECTION_BYTES - 60_000 - stimulus - 1 - "{\"pad\":\"\"}".len();
     input["schema"] = json!({"pad": "q".repeat(pad)});
     assert_eq!(prompt(&input).len(), stimulus);
 }
 
 #[test]
 fn recalled_items_never_hide_a_stimulus_that_alone_overflows() {
-    let mut input = recalling(&"s".repeat(4_000), &[], &[json!({"text": "small"})]);
-    input["instructions"] = json!("i".repeat(12_000));
-    input["schema"] = json!({"pad": "q".repeat(34_000)});
+    let mut input = recalling(&"s".repeat(20_000), &[], &[json!({"text": "small"})]);
+    input["instructions"] = json!("i".repeat(60_000));
+    input["schema"] = json!({"pad": "q".repeat(190_000)});
     assert_eq!(
         failed(&input),
         "prompt projection encoded byte budget exceeded"
@@ -667,16 +667,16 @@ fn trimmed_projections_fit_every_budget_they_admit() {
     for pad in (MAX_PROJECTION_BYTES - 3_000..MAX_PROJECTION_BYTES - 150).step_by(7) {
         let mut input = recalling("now", &episodes, &directives);
         input["recent"] = Json::Array(turns(3, 200));
-        input["instructions"] = json!("i".repeat(12_000));
+        input["instructions"] = json!("i".repeat(60_000));
         input["feedback"] = json!("repair");
-        input["schema"] = json!({"pad": "q".repeat(pad - 12_000 - 10)});
+        input["schema"] = json!({"pad": "q".repeat(pad - 60_000 - 10)});
         let tool = input["schema"].to_string().len();
         match projected(&input) {
             (Data::Null, _, Data::String(rendered)) => {
                 assert!(!overflowed, "{pad}");
                 fitted += 1;
                 assert!(
-                    12_000 + rendered.len() + tool <= MAX_PROJECTION_BYTES,
+                    60_000 + rendered.len() + tool <= MAX_PROJECTION_BYTES,
                     "{pad}"
                 );
             }

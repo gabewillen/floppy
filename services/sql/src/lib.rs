@@ -131,9 +131,9 @@
 //! The statements per transaction ([`MAX_STATEMENTS`]), each statement's SQL
 //! bytes ([`MAX_SQL_BYTES`]) and parameters ([`MAX_PARAMETERS`]), the
 //! database path ([`MAX_DATABASE_PATH_BYTES`]), the rows returned
-//! ([`MAX_ROWS`]), and the encoded result ([`MAX_RESULT_BYTES`], under the
-//! session's 96 KiB event bound) are bounded on wasm builds only
-//! ([`scxml_types::wasm_bound`]). A result over its bound fails the
+//! ([`MAX_ROWS`]) are bounded on wasm builds only
+//! ([`scxml_types::wasm_bound`]); the encoded result has no byte bound (the
+//! event that carries it has none). Rows over their bound fail the
 //! transaction rather than returning part of it.
 //!
 //! # Telemetry
@@ -197,9 +197,6 @@ pub const MAX_DATABASE_PATH_BYTES: usize = wasm_bound(1024);
 /// Upper bound on the rows one transaction returns, all statements
 /// together (wasm builds only).
 pub const MAX_ROWS: usize = wasm_bound(1024);
-/// Upper bound on the encoded result's bytes (wasm builds only): under the
-/// session's 96 KiB event bound, leaving room for the event's envelope.
-pub const MAX_RESULT_BYTES: usize = wasm_bound(88 * 1024);
 /// Upper bound on a failure message's bytes.
 const MAX_MESSAGE_BYTES: usize = 512;
 /// How long a transaction waits for another connection's lock before it
@@ -752,13 +749,7 @@ fn execute(connection: &Connection, statements: &[Statement]) -> Result<Json, Fa
     }
     let mut output = Map::new();
     output.insert("results".into(), Json::Array(results));
-    let output = Json::Object(output);
-    if exceeds_wasm_bound(canonical_json(&output).len(), MAX_RESULT_BYTES) {
-        return Err(Failed::bound(
-            "the sql transaction's result exceeds its bound",
-        ));
-    }
-    Ok(output)
+    Ok(Json::Object(output))
 }
 
 /// One cell as JSON.

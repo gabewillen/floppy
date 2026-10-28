@@ -51,7 +51,7 @@
     </test>
   </assert>
   <assert id="reasoning-5" specnum="5" specid="#reasoning-5">
-    <![CDATA[A prompt over the projection budgets (49152 encoded bytes, 4096 nodes, 4096 collection items, 65536 characters per scalar) fails the turn without a model call, its reason the budget's message (for example `prompt projection collection item budget exceeded`); recalled turns over the bytes the stimulus leaves are trimmed to the newest that fit, and the turn is reasoned.]]>
+    <![CDATA[A prompt over the projection budgets (262144 encoded bytes, 4096 nodes, 4096 collection items, 65536 characters per scalar) fails the turn without a model call, its reason the budget's message (for example `prompt projection collection item budget exceeded`); recalled turns over the bytes the stimulus leaves are trimmed to the newest that fit, and the turn is reasoned.]]>
     <test id="140" conformance="mandatory" manual="false">
       <start uri="140/test140.scxml"/>
     </test>
