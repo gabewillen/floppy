@@ -18,26 +18,26 @@
                                             reasoning, acknowledging } }
                                -> idle
 
-  Stages: each stage is an SCXML child invoked per turn inside its substate
+  Stages: each stage is an SCXML child invoked once, in turns, and held
+  for the cognition's lifetime, as mosfet.py's Cognition holds its stages
   (abilities/autonomy/autonomy.scx, abilities/intuition/intuition.scx,
-  abilities/reasoning/reasoning.scx, in sibling directories) with the turn as <param>s; it answers through its top-level
-  final state's <donedata>, received here as done.invoke.<stage> (the
-  invoke ids are the stage names; the substates are running_<stage>):
-  {turn, handled, selected?, acted?, reason?, confidence_tuner?, failed?}. Leaving a stage's
-  substate cancels it (SCXML 6.4). Handled ends the turn with the stage's
+  abilities/reasoning/reasoning.scx, in sibling directories; the invoke
+  ids are the stage names, the substates running_<stage>). Each running
+  substate sends its stage the turn as an event and takes the stage's
+  answer for the turn in hand: {turn, handled, selected?, acted?, reason?,
+  confidence_tuner?, failed?}. Leaving a running substate sends its stage
+  bot.ability.processing.cancel, which ends a turn still in flight there.
+  Handled ends the turn with the stage's
   selections as the output; unhandled goes on to the next stage. Reflex is
   one stage of two layers: the bot's behaviors (autonomy: it gets the stimulus and the
   memory, runs the learned behaviors the stimulus triggers, and always
   passes the turn on without a memory), then the decision layer (the
   decision service over what they left unhandled,
-  abilities/intuition/intuition.scx, the invoke "decision"). The decision
-  layer is the exception to the per-turn children: it is invoked once, in
-  turns, and held for the cognition's lifetime, as mosfet.py's Cognition
-  holds its Decision (decision D268); running_decision sends it the turn
-  as bot.ability.intuition.input and takes bot.ability.intuition.output
-  for the turn in hand, and leaving running_decision sends it
-  bot.ability.processing.cancel, which ends a decision still in flight.
-  The tiers intuition and reasoning are held likewise (decision D269):
+  abilities/intuition/intuition.scx, the invoke "decision"). Autonomy
+  takes bot.ability.autonomy.input {turn, input, stimulus} and answers
+  bot.ability.autonomy.output (decision D272). The decision layer takes
+  bot.ability.intuition.input and answers bot.ability.intuition.output
+  (decision D268). The tiers intuition and reasoning (decision D269):
   each is reasoning.scx invoked once in turns (intuition with the tier
   intuition and intuition_model), sent the turn as
   bot.ability.processing.input, answering bot.ability.processing.output
@@ -225,8 +225,9 @@
   error.execution in its sender, so conds only correlate (the turn and
   the hop timer, decision D81). A child that fails after it started
   raises error.communication.<invokeid>, so each region takes only its
-  own child's failure by name. The stages' donedata is not checked by scxml.rs, so the
-  done.invoke conds also check its turn and shape.
+  own child's failure by name. The stages' answers carry the turn, so
+  their conds also check it, and a late answer for an earlier turn is
+  dropped.
 
   Rest (decisions D195 and D205): every entry into idle starts in awake,
   which arms awake.after for rest_after_ms (the bounds' rest_after_ms
@@ -388,6 +389,11 @@
     <assign location="recent_turns" expr="_event.data.turns"/>
   </transition>
   <state id="turns" initial="idle">
+  <!-- Autonomy, held for the cognition's lifetime (mosfet.py's Cognition
+       holds its Autonomy): each turn is a bot.ability.autonomy.input. -->
+  <invoke id="autonomy" type="scxml" src="../autonomy/autonomy.scx">
+    <param name="memory" expr="memory"/>
+  </invoke>
   <!-- The decision layer, held for the cognition's lifetime (mosfet.py's
        Cognition holds its Decision): each turn that reaches it is a
        bot.ability.intuition.input. -->
@@ -523,30 +529,34 @@
         <send idlocation="ceiling_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="ceilingDelay()">
           <param name="turn" expr="turn"/>
         </send>
+        <send event="bot.ability.autonomy.input" target="#_autonomy">
+          <param name="turn" expr="turn"/>
+          <param name="input" expr="processingInput()"/>
+          <param name="stimulus" expr="stimulus"/>
+        </send>
       </onentry>
+      <!-- Leaving the turn's autonomy unanswered (cancelled or timed out)
+           ends it; once answered, autonomy is idle and drops this. -->
       <onexit>
         <cancel sendidexpr="hop_timer"/>
         <cancel sendidexpr="ceiling_timer"/>
+        <send event="bot.ability.processing.cancel" target="#_autonomy">
+          <content expr="({})"/>
+        </send>
       </onexit>
-      <invoke id="autonomy" type="scxml" src="../autonomy/autonomy.scx">
-        <param name="turn" expr="turn"/>
-        <param name="input" expr="processingInput()"/>
-        <param name="stimulus" expr="stimulus"/>
-        <param name="memory" expr="memory"/>
-      </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="../schemas/bot.ability.cognition.cancel.json"
                   cond="isCurrentTurn(_event)" target="cancelling_autonomy"/>
-      <transition event="done.invoke.autonomy" cond="isHandled(_event)" target="completing">
+      <transition event="bot.ability.autonomy.output" event:schema="../schemas/bot.ability.autonomy.output.json" cond="isHandled(_event)" target="completing">
         <log label="cognition.stage" expr="'autonomy handled'"/>
         <assign location="selected" expr="handledOutput(_event)"/>
       </transition>
-      <transition event="done.invoke.autonomy" cond="isUnhandled(_event)" target="after_autonomy">
+      <transition event="bot.ability.autonomy.output" event:schema="../schemas/bot.ability.autonomy.output.json" cond="isUnhandled(_event)" target="after_autonomy">
         <log label="cognition.stage" expr="stageLog('autonomy unhandled', _event)"/>
         <assign location="declined" expr="declinedCandidates(_event)"/>
         <assign location="acted_percepts" expr="perceptsAfter(_event)"/>
         <assign location="acted" expr="actedAfter(_event)"/>
       </transition>
-      <transition event="done.invoke.autonomy" cond="matchesStageOutput(_event)" target="failing">
+      <transition event="bot.ability.autonomy.output" event:schema="../schemas/bot.ability.autonomy.output.json" cond="matchesStageOutput(_event)" target="failing">
         <assign location="failure" expr="stageFailure(_event)"/>
         <assign location="step" expr="failedStep(failure)"/>
       </transition>
