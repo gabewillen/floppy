@@ -582,7 +582,7 @@
           <param name="choices" expr="tier_choices"/>
           <param name="held" expr="tier_held"/>
           <param name="environment" expr="environment"/>
-          <param name="recent" expr="fittedRecent([stimulus, tier_choices, tier_held, environment])"/>
+          <param name="recent" expr="recent_turns"/>
           <param name="confidence_tuner" expr="confidence_tuner"/>
           <param name="decision_timeout_ms" expr="decision_timeout_ms"/>
           <param name="hand_ons" expr="handOns()"/>
@@ -662,7 +662,7 @@
           <param name="environment" expr="environment"/>
           <param name="acted" expr="actedFact()"/>
           <param name="self" expr="selfFact()"/>
-          <param name="recent" expr="fittedRecent([stimulus, intuitionChoices(), tier_held, environment, actedFact(), selfFact()])"/>
+          <param name="recent" expr="recent_turns"/>
           <param name="max_context_tokens" expr="contextTokens()"/>
           <param name="completion_reserve_tokens" expr="reserveTokens()"/>
           <param name="bytes_per_token" expr="intuition_bytes_per_token"/>
@@ -732,7 +732,7 @@
           <param name="environment" expr="environment"/>
           <param name="acted" expr="actedFact()"/>
           <param name="self" expr="selfFact()"/>
-          <param name="recent" expr="fittedRecent([stimulus, tier_choices, environment, actedFact(), selfFact()])"/>
+          <param name="recent" expr="recent_turns"/>
           <param name="max_context_tokens" expr="contextTokens()"/>
           <param name="completion_reserve_tokens" expr="reserveTokens()"/>
           <param name="bytes_per_token" expr="bytes_per_token"/>

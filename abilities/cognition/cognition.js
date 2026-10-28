@@ -358,29 +358,3 @@ function turnLesson() {
 function lessonStimulus(_event) {
   return ({event: 'bot.ability.learning.output', data: {lesson: _event.data.lesson, lesson_turn: _event.data.lesson_turn, learned: _event.data.learned, behavior: _event.data.behavior}, source: 'learning'});
 }
-
-// The newest recent turns that fit, with `others` (the stage input's other
-// values), inside 40960 bytes of event data, the oldest dropped first: a
-// long-lived stage takes its turn as an event, which scxml.rs bounds, and
-// the stage would trim the oldest from its prompt anyway.
-function fittedRecent(others) {
-  function bytes(value) {
-    var text = JSON.stringify(value);
-    var count = 0;
-    for (var i = 0; i < text.length; i++) {
-      var code = text.charCodeAt(i);
-      count += code < 0x80 ? 1 : code < 0x800 ? 2 : code >= 0xd800 && code < 0xdc00 ? 4 : code >= 0xdc00 && code < 0xe000 ? 0 : 3;
-    }
-    return count;
-  }
-  var room = 40960 - bytes(others);
-  var kept = [];
-  for (var i = recent_turns.length - 1; i >= 0; i--) {
-    room -= bytes(recent_turns[i]) + 1;
-    if (room < 0) {
-      break;
-    }
-    kept.unshift(recent_turns[i]);
-  }
-  return kept;
-}

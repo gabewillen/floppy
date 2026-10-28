@@ -287,14 +287,14 @@ S.case(232, 14, "the bounds raise the decision layer's ceiling: its low-confiden
        params=[SLOW, ("bounds", "({decision_effort_ceiling: 1})")], backend=[DECIDE_LOW, REASONED_IGNORE],
        clock="logical")
 
-S.statement(15, "Each long-lived stage takes its turn as an event, which scxml.rs bounds, so the recent turns a stage is sent are the newest that fit, with the rest of its input, inside 40960 bytes (`fittedRecent`), the oldest dropped first (decision D269): a turn whose recent turns and stimulus together pass the bound is still answered.")
+S.statement(15, "Each long-lived stage takes its turn as an event, which has no size bound (SCXML sets none), so every recent turn is sent with the rest of the input (decision D269): a turn whose recent turns and stimulus together pass 64 KiB is answered.")
 
 # Computed in the send, since a literal of their size passes the
 # ECMAScript data model's expression bound.
 LONG_RECENT = ("({turns: Array.from({length: 5}, (_, i) => ({id: 'turn-' + i, direction: 'heard',"
-               " text: 'w'.repeat(7800), conversation: 'conversation-1', at: '2026-07-07T12:00:00Z'}))})")
+               " text: 'w'.repeat(11000), conversation: 'conversation-1', at: '2026-07-07T12:00:00Z'}))})")
 LONG_TEXT = "x" * 12000
-S.case(240, 15, "recent turns of 39 KB and a stimulus of 12 KB are fitted: the turn is answered.",
+S.case(240, 15, "recent turns of 55 KB and a stimulus of 12 KB, 67 KB together, reach the stage: the turn is answered.",
        [READY, send("bot.ability.memory.stm.recent_turns.output", LONG_RECENT),
         send(INPUT, turn(1, {"text": LONG_TEXT}).replace(js(LONG_TEXT), "'x'.repeat(12000)")), output(1, IGNORED)],
        params=[SLOW], backend=[DECIDE_IGNORE], clock="logical")
