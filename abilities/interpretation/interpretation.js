@@ -199,9 +199,10 @@ function openingFrames() {
 
 // HearingSpeech, SpeechEnded (the frame just heard)
 
-// Streamed when Listening owns no decoder.
+// Streamed when Listening owns no decoder (a transcribed turn has its
+// words).
 function streamsFrame() {
-  return audible && !speech_decoder && !diarizer && hasSampleRate(detection.sensed.sound);
+  return audible && turn === null && !speech_decoder && !diarizer && hasSampleRate(detection.sensed.sound);
 }
 
 function streamsPcmFrame() {
@@ -242,7 +243,38 @@ function opensWav() {
 }
 
 function readsNoUtterance() {
-  return !diarizer && !speech_decoder;
+  return turn === null && !diarizer && !speech_decoder;
+}
+
+// A turn the transcription heard (its words are given).
+function isTurn() {
+  return turn !== null;
+}
+
+// The turn's loudest scored sound and its voice spans, as a detection.
+function turnDetection() {
+  return ({sensed: turn.sensed, voice_detection: turn.voice_detection});
+}
+
+// The turn's loudest scored sound, placed on the joined utterance's
+// timeline when it names no sample rate (a WAV file's rate is in its
+// header): the product then comes from the utterance, as a decoded one
+// comes from its frame's PCM.
+function turnSensed(joined) {
+  if (hasSampleRate(open_sensed.sound)) {
+    return open_sensed;
+  }
+  var sensed = JSON.parse(JSON.stringify(open_sensed));
+  sensed.sound.audio = joined.audio;
+  ['media_type', 'sample_rate_hz', 'channels'].forEach(function (field) {
+    sensed.sound[field] = joined[field];
+  });
+  return sensed;
+}
+
+// The turn's words, as the decoder would have answered them.
+function transcribedWords() {
+  return ({text: turn.text});
 }
 
 function utteranceOutput() {
@@ -482,6 +514,9 @@ function isDecoding() {
 // heard that are not the bot's own as its source_ids.
 function decodedProduct() {
   var product = speechProduct(completion.text, 'text/plain', completion.sensed, completion.voice_detection, sourceIds(completion.recognitions));
+  if (turn !== null && turn.confidence !== null) {
+    product.confidence = turn.confidence;
+  }
   if (affect !== null) {
     product.affect = affect;
   }

@@ -43,7 +43,8 @@
 //! # Parameters (`<param>`)
 //!
 //! * `operation` (required): `decode` (speech to text), `encode`
-//!   (text to speech), or one of the voice operations `detect`, `diarize`,
+//!   (text to speech), `stream` (speech to words while the person talks,
+//!   [`stream`]), or one of the voice operations `detect`, `diarize`,
 //!   `identify`, `classify`, `normalize`, `append`, and `clip` ([`voice`] documents
 //!   their parameters, requests, and results).
 //! * `model` (required for decode and encode, optional for the backend
@@ -65,6 +66,10 @@
 //!   `provider` (optional, `elevenlabs` or `gemini`: the backend of that
 //!   name instead of the `OpenAI`-compatible API; Gemini encodes
 //!   only `audio/pcm` and `audio/wav`).
+//! * stream: `language` (optional, a non-empty string, `en` without it)
+//!   and `chunk_seconds` (optional, one of the server's decoding chunks
+//!   [`stream::CHUNKS`], `0.56` without it), and nothing else: its audio
+//!   arrives as events ([`stream`]).
 //!
 //! A parameter whose value is `null` is not given. Any other parameter, a
 //! parameter given twice, one the operation does
@@ -218,6 +223,7 @@ use std::io::Read as _;
 pub mod chunks;
 pub mod drafting;
 pub mod gemini;
+pub mod stream;
 pub mod voice;
 
 use scxml_event_schema::canonical_json;
@@ -533,6 +539,8 @@ pub enum Operation {
     Append(voice::Appending),
     /// `clip` (a voice segment from a span).
     Clip(voice::Clipping),
+    /// `stream` (a streaming hearing session, [`stream`]).
+    Stream(stream::Streaming),
 }
 
 impl Operation {
@@ -549,6 +557,7 @@ impl Operation {
             Self::Normalize(_) => "Sound normalization",
             Self::Append(_) => "Open speech",
             Self::Clip(_) => "Voice segment clipping",
+            Self::Stream(_) => "Speech streaming",
         }
     }
 
@@ -761,6 +770,24 @@ fn is_media_type(text: &str) -> bool {
             .is_some_and(|(kind, subtype)| name(kind) && name(subtype))
 }
 
+/// A `stream` invocation of its `language` and `chunk_seconds`.
+fn stream_operation(
+    language: Option<&Data>,
+    chunk_seconds: Option<&Data>,
+) -> Result<Operation, &'static str> {
+    let language = match language {
+        None => None,
+        Some(Data::String(language)) => Some(language.as_str()),
+        Some(_) => return Err("speech stream language must be a string"),
+    };
+    let chunk_seconds = match chunk_seconds {
+        None => None,
+        Some(Data::Number(seconds)) => Some(seconds.get()),
+        Some(_) => return Err("speech stream chunk_seconds must be a number"),
+    };
+    stream::streaming(language, chunk_seconds).map(Operation::Stream)
+}
+
 /// Parses one voice operation's parameters.
 type VoiceParser = fn(&voice::Given<'_>) -> Result<Operation, &'static str>;
 
@@ -771,6 +798,10 @@ type VoiceParser = fn(&voice::Given<'_>) -> Result<Operation, &'static str>;
 ///
 /// A static detail for an unknown or repeated parameter, one the operation
 /// does not take, a missing or malformed one, or one outside its bound.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one slot per parameter of every operation"
+)]
 pub fn parse_parameters<'a>(
     parameters: impl IntoIterator<Item = (&'a str, &'a Data)>,
 ) -> Result<Operation, &'static str> {
@@ -782,6 +813,8 @@ pub fn parse_parameters<'a>(
     let mut voice = None;
     let mut output = None;
     let mut provider = None;
+    let mut language = None;
+    let mut chunk_seconds = None;
     let mut given = voice::Given::default();
     for (name, value) in parameters {
         // A null value is a parameter not given (an invoker passes its
@@ -798,6 +831,8 @@ pub fn parse_parameters<'a>(
             "voice" => &mut voice,
             "output" => &mut output,
             "provider" => &mut provider,
+            "language" => &mut language,
+            "chunk_seconds" => &mut chunk_seconds,
             "sample_rate_hz" => &mut given.sample_rate_hz,
             "channels" => &mut given.channels,
             "frames" => &mut given.frames,
@@ -812,6 +847,23 @@ pub fn parse_parameters<'a>(
         }
     }
     let operation = operation.ok_or("speech requires an operation parameter")?;
+    if matches!(operation, Data::String(name) if name == "stream") {
+        if model.is_some()
+            || audio.is_some()
+            || media_type.is_some()
+            || parts.is_some()
+            || voice.is_some()
+            || output.is_some()
+            || provider.is_some()
+            || !given.names().is_empty()
+        {
+            return Err("speech stream takes language and chunk_seconds only");
+        }
+        return stream_operation(language, chunk_seconds);
+    }
+    if language.is_some() || chunk_seconds.is_some() {
+        return Err("speech takes language and chunk_seconds only to stream");
+    }
     let model = model
         .map(|model| {
             text_parameter(model, "speech model must be a non-empty string")
@@ -871,7 +923,7 @@ pub fn parse_parameters<'a>(
             encoding(model, parts, voice, output, media_type, provider).map(Operation::Encode)
         }
         _ => Err(
-            "speech operation must be decode, encode, detect, diarize, identify, classify, normalize, append, or clip",
+            "speech operation must be decode, encode, stream, detect, diarize, identify, classify, normalize, append, or clip",
         ),
     }
 }
@@ -1614,6 +1666,9 @@ mod guest {
 
     use exports::stateforward::scxml::invoked_service_api::Guest;
     use stateforward::scxml::outbound_http::{self, BodyPart, HttpHeader, HttpRequest, TextPart};
+    use stateforward::scxml::outbound_websocket::{
+        self, Message, WebsocketHeader, WebsocketRequest,
+    };
     use stateforward::scxml::telemetry::{self, Operation as Op, Outcome, SignalEvent};
     use stateforward::scxml::types::{
         ComponentError, DataValue, ErrorCode, ErrorVersion, Event, EventType, InvokeRequest,
@@ -1803,8 +1858,198 @@ mod guest {
                 }
                 return encode(&operation, encoding, base_url, api_key, returned).await;
             }
+            Operation::Stream(streaming) => {
+                let events = events?;
+                return stream(streaming, base_url, api_key, events, returned).await;
+            }
             _ => return Some(run_voice(&operation, base_url, api_key).await),
         }))
+    }
+
+    /// The next item of a stream, with the stream handed back, so a read
+    /// can wait beside another without being cancelled.
+    type Next<T> = std::pin::Pin<
+        Box<dyn std::future::Future<Output = (Option<T>, wit_bindgen::StreamReader<T>)>>,
+    >;
+
+    fn next_event(mut reader: wit_bindgen::StreamReader<Event>) -> Next<Event> {
+        Box::pin(async move { (reader.next().await, reader) })
+    }
+
+    fn next_message(mut reader: wit_bindgen::StreamReader<Message>) -> Next<Message> {
+        Box::pin(async move { (reader.next().await, reader) })
+    }
+
+    /// What woke a streaming session.
+    enum Woke {
+        /// An event from the invoking session (none: it stopped sending).
+        Session(Option<Event>, wit_bindgen::StreamReader<Event>),
+        /// A message from the server (none: the connection ended).
+        Server(Option<Message>, wit_bindgen::StreamReader<Message>),
+    }
+
+    /// The most audio held before the server is ready: 2 s at 16 kHz
+    /// (mosfet.py's `MAX_UNREADY_SECONDS`); the oldest is let go.
+    const MAX_UNREADY_BYTES: usize = 2 * 2 * 16_000;
+
+    /// A streaming hearing session ([`super::stream`]): `None` when the
+    /// invoking session stopped reading or sending, else how it was lost.
+    async fn stream(
+        streaming: &super::stream::Streaming,
+        base_url: u32,
+        api_key: Option<u32>,
+        events: wit_bindgen::StreamReader<Event>,
+        returned: &mut wit_bindgen::StreamWriter<Event>,
+    ) -> Option<super::Finished> {
+        use super::stream::{AUDIO_EVENT, Decoder, Lost, PRODUCING_EVENT, Producing, READY_EVENT};
+        let lost = |lost: Lost| {
+            Some(super::Finished::event(Returned {
+                name: super::stream::FAILED_EVENT,
+                data: lost.data(),
+            }))
+        };
+        let request = WebsocketRequest {
+            url: vec![
+                TextPart::Reference(base_url),
+                TextPart::Literal(super::stream::stream_path(streaming)),
+            ],
+            headers: super::bearer(api_key)
+                .map(|(name, value)| WebsocketHeader {
+                    name,
+                    value: text_parts(&value),
+                })
+                .into_iter()
+                .collect(),
+            protocols: Vec::new(),
+        };
+        let (mut outgoing, outgoing_reader) = wit_stream::new::<Message>();
+        let Ok((_, incoming, end)) = outbound_websocket::connect(request, outgoing_reader).await
+        else {
+            return lost(Lost::Unavailable);
+        };
+        let mut decoder = Decoder::default();
+        let mut producing = Producing::default();
+        let mut ready = false;
+        let mut unready: std::collections::VecDeque<Vec<u8>> = std::collections::VecDeque::new();
+        let mut held = 0_usize;
+        let mut from_session = Some(next_event(events));
+        let mut from_server = Some(next_message(incoming));
+        loop {
+            let woke = std::future::poll_fn(|cx| {
+                if let Some(next) = from_session.as_mut()
+                    && let std::task::Poll::Ready((item, reader)) = next.as_mut().poll(cx)
+                {
+                    from_session = None;
+                    return std::task::Poll::Ready(Woke::Session(item, reader));
+                }
+                if let Some(next) = from_server.as_mut()
+                    && let std::task::Poll::Ready((item, reader)) = next.as_mut().poll(cx)
+                {
+                    from_server = None;
+                    return std::task::Poll::Ready(Woke::Server(item, reader));
+                }
+                std::task::Poll::Pending
+            })
+            .await;
+            match woke {
+                Woke::Session(None, _) => {
+                    // The invoking session stopped sending: say so, and close.
+                    let _ = outgoing
+                        .write_one(Message::Text("{\"type\":\"end\"}".into()))
+                        .await;
+                    return None;
+                }
+                Woke::Session(Some(sent), reader) => {
+                    from_session = Some(next_event(reader));
+                    let Ok(scxml_types::DataValue::JsonObject(object)) = native_value(sent.data)
+                    else {
+                        continue;
+                    };
+                    let data =
+                        serde_json::from_str::<serde_json::Value>(&object).unwrap_or_default();
+                    let message = match sent.name.as_str() {
+                        AUDIO_EVENT => match heard_audio(&data) {
+                            Some(pcm) if ready => Message::Binary(pcm),
+                            Some(pcm) => {
+                                held += pcm.len();
+                                unready.push_back(pcm);
+                                while held > MAX_UNREADY_BYTES {
+                                    held -= unready.pop_front().map_or(held, |old| old.len());
+                                }
+                                continue;
+                            }
+                            None => continue,
+                        },
+                        PRODUCING_EVENT => match producing.change(&data) {
+                            Some(text) => Message::Text(text),
+                            None => continue,
+                        },
+                        _ => continue,
+                    };
+                    if outgoing.write_one(message).await.is_some() {
+                        return lost(Lost::Unavailable);
+                    }
+                }
+                Woke::Server(Some(Message::Text(text)), reader) => {
+                    from_server = Some(next_message(reader));
+                    let heard = match decoder.decode(&text) {
+                        Ok(Some(heard)) => heard,
+                        Ok(None) => continue,
+                        Err(failure) => return lost(failure),
+                    };
+                    let became_ready = heard.name == READY_EVENT && !ready;
+                    let reply = Returned {
+                        name: heard.name,
+                        data: heard.data,
+                    };
+                    if returned.write_one(event(&reply)).await.is_some() {
+                        return None;
+                    }
+                    if became_ready {
+                        ready = true;
+                        held = 0;
+                        while let Some(pcm) = unready.pop_front() {
+                            if outgoing.write_one(Message::Binary(pcm)).await.is_some() {
+                                return lost(Lost::Unavailable);
+                            }
+                        }
+                    }
+                }
+                Woke::Server(Some(Message::Binary(_)), _) => {
+                    return lost(Lost::InvalidResponse);
+                }
+                Woke::Server(None, _) => {
+                    let code = match end.await {
+                        Ok(Some(frame)) => Some(frame.code),
+                        _ => None,
+                    };
+                    return lost(Lost::closed(code));
+                }
+            }
+        }
+    }
+
+    /// One [`super::stream::AUDIO_EVENT`]'s sound as the session sends it,
+    /// `None` when it cannot be read or is not 16-bit PCM.
+    fn heard_audio(data: &serde_json::Value) -> Option<Vec<u8>> {
+        let path = super::media_path(data.get("audio")?.as_str()?).ok()?;
+        let audio = super::read_audio(&path).ok()?;
+        let rate = data
+            .get("sample_rate_hz")
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|rate| u32::try_from(rate).ok());
+        let channels = data
+            .get("channels")
+            .and_then(serde_json::Value::as_u64)
+            .and_then(|channels| u16::try_from(channels).ok());
+        let pcm = super::stream::pcm(&audio, rate, channels).ok()?;
+        // With an `output`, the PCM sent is also written there, so the
+        // invoking session keeps the turn's sounds in one format.
+        if let Some(output) = data.get("output") {
+            let path = super::media_path(output.as_str()?).ok()?;
+            super::write_audio(&path, &pcm).ok()?;
+        }
+        Some(pcm)
     }
 
     /// Bytes of one read of a streamed answer's body.
@@ -2176,11 +2421,12 @@ mod guest {
             ),
             ComponentError,
         > {
-            // Only a drafted encoding reads events; any other drops its
-            // input stream.
+            // Only a drafted encoding and a stream read events; any other
+            // drops its input stream.
             let (operation, endpoint) = observed(Op::Start, || plan(request))?;
             let events = match &operation {
                 Operation::Encode(encoding) if encoding.drafted => Some(events),
+                Operation::Stream(_) => Some(events),
                 _ => None,
             };
             let (mut returned, returned_reader) = wit_stream::new::<Event>();
@@ -2197,11 +2443,10 @@ mod guest {
                 };
                 telemetry::event(
                     Op::Send,
-                    if finished
-                        .event
-                        .as_ref()
-                        .is_some_and(|reply| reply.name == super::FAILED_EVENT)
-                    {
+                    if finished.event.as_ref().is_some_and(|reply| {
+                        reply.name == super::FAILED_EVENT
+                            || reply.name == super::stream::FAILED_EVENT
+                    }) {
                         SignalEvent::InputRejected
                     } else {
                         SignalEvent::TransformationCompleted

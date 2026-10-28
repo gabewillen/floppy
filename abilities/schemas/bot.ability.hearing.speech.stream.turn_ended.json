@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.hearing.speech.stream.turn_ended",
+  "description": "The hearing model perceives that the speaker's turn has ended.",
+  "properties": {
+    "at_seconds": {
+      "description": "When the turn ended, in session seconds.",
+      "examples": [
+        2.6
+      ],
+      "minimum": 0.0,
+      "type": "number",
+      "title": "At Seconds"
+    },
+    "probability": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number",
+          "maximum": 1.0
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "How sure the hearing model is the turn ended, when it says.",
+      "examples": [
+        0.9
+      ],
+      "title": "Probability"
+    },
+    "text": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The words of the whole turn, when the hearing model gives them.",
+      "examples": [
+        "hello there"
+      ],
+      "title": "Text"
+    }
+  },
+  "required": [
+    "at_seconds"
+  ],
+  "type": "object",
+  "additionalProperties": false,
+  "examples": [
+    {
+      "at_seconds": 2.6,
+      "probability": 0.9,
+      "text": "hello there"
+    }
+  ]
+}

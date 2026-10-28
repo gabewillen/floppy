@@ -1,0 +1,242 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  floppy's Transcription: the listening's streaming hearing path
+  (mosfet.py's Transcription, a sibling of the Interpretation). Where the
+  interpretation detects voice in each sound and decodes each utterance
+  once it has ended, the transcription streams what the ear hears to a
+  streaming hearing session (the speech service's operation stream,
+  mosfet.py's hearing.speech.stream), so voice detection, the words and
+  the end of the turn are heard while the person talks. The listening
+  (abilities/listening/listening.scx) invokes it as its child
+  "transcription" and hands it each scored sound while it streams.
+
+    initializing -> Streaming | unavailable
+    Streaming { Opening -ready-> Hearing } -lost-> Reconnecting -backoff-> Streaming
+    Streaming.Opening -lost before the first ready-> unavailable (final)
+
+  Configuration (as <data>): enabled (true; the listening's <param>:
+  false ends it in unavailable at once, so the listening hears through the
+  interpretation), language "en" and chunk_seconds 0.56
+  (mosfet.py's speech_server defaults), product_threshold_db 3 dB (the
+  interpretation's), open_timeout_ms 30 s (mosfet.py's stage timeout),
+  the backoff first_backoff_ms 1 s doubled up to last_backoff_ms 30 s
+  (mosfet.py's speech_server backoff), and max_turn_frames 1500, the most
+  sounds a turn keeps for identifying who spoke (older ones are let go,
+  as mosfet.py's max_turn lets older audio go).
+
+  Session: Streaming invokes the speech service (operation stream,
+  env:baseurl FLOPPY_SPEECH_BASE_URL and env:apikey
+  FLOPPY_SPEECH_API_KEY, as speech decoding binds them) and keeps it
+  while it is active. Opening waits for the session's
+  bot.ability.hearing.speech.stream.ready, bounded by open_timeout_ms;
+  scored sounds that arrive meanwhile are held by <event:defer/> and
+  streamed once it is ready. The first ready sends bot.ability.ready to
+  the listening (decision D242). A session lost before its first ready (no
+  base URL, a backend that does not stream, a server that cannot be
+  reached, or the open timeout) ends the transcription in its final state
+  unavailable, logged (transcription), and the listening hears through the
+  interpretation instead for the rest of the run. A session lost later
+  (its failed {kind}, its end, an error, or bot.ability.failed) is logged
+  and Reconnecting waits the backoff, then opens a new one; the turn it
+  was hearing is lost, and sounds heard while reconnecting are not
+  streamed (mosfet.py drops them as unavailable). A ready resets the
+  backoff.
+
+  Hearing: each scored sound (bot.ability.listening.sensitivity.output)
+  is streamed as bot.ability.hearing.speech.stream.audio {audio,
+  media_type, sample_rate_hz, channels, output}, after
+  bot.ability.hearing.speech.stream.producing {producing} when the
+  bot's own mouth started or stopped producing (sent only on change).
+  The bot's own voice arriving as predicted (producing, with a
+  perceived_level_db below product_threshold_db) is not streamed
+  (mosfet.py W3-11; the interpretation's gate). Each streamed sound joins
+  the turn: the 16 kHz PCM the session wrote for it to output
+  (floppy-heard-N.pcm beside the sound, a ring of twice max_turn_frames
+  files; the frame the interpretation joins into the utterance), the
+  loudest scored sound, and the ordered union of the
+  participants stamped on it (each {ref, role} once, at most 32). The
+  session's transcript {text, confidence} joins the turn's words, and
+  voice_started and voice_ended {at_seconds} its voice spans.
+
+  Turns: the session's turn_ended {text} (the hearing model's own
+  end-of-turn perception) ends the turn. A turn with words goes to the
+  listening as bot.ability.listening.transcription.turn {text,
+  confidence, frames, sensed, voice_detection, participants}: its words
+  (turn_ended's text, else its transcripts joined), the lowest
+  transcript confidence, its sounds, its loudest scored sound, its voice
+  spans in seconds from the turn's start (the previous turn's end), and
+  its participants. The listening hands it to the interpretation, which
+  joins the frames and identifies who spoke and hears the tone, as it
+  does for an utterance it decoded, and hands on one speech product. A
+  turn without words is let go. What is heard from then on is the next
+  turn's.
+
+  Not yet: the overlap fact (another voice sustained while the bot
+  produces; the session's overlap is dropped), and one session per sound
+  source (one session hears every source).
+
+  Readiness: see Session. Contracts: the events it takes reference
+  abilities/schemas/ by event:schema; the session's are also checked by
+  cond.
+
+  Bindings: the speech service package (operation stream), and the
+  WebSocket connection the run gives invoked services.
+-->
+<scxml xmlns="http://www.w3.org/2005/07/scxml"
+       xmlns:env="https://github.com/stateforward/scxml.rs/namespaces/env"
+       xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
+       version="1.0" datamodel="ecmascript" name="transcription" initial="initializing">
+  <datamodel>
+    <!-- Configuration: whether it streams at all (the listening's
+         <param>; false: the listening hears through the interpretation). -->
+    <data id="enabled" expr="true"/>
+    <data id="language" expr="'en'"/>
+    <data id="chunk_seconds" expr="0.56"/>
+    <data id="product_threshold_db" expr="3.0"/>
+    <data id="open_timeout_ms" expr="30000"/>
+    <data id="first_backoff_ms" expr="1000"/>
+    <data id="last_backoff_ms" expr="30000"/>
+    <data id="max_turn_frames" expr="1500"/>
+    <!-- The session: whether one was ever ready, the next backoff, and
+         what it was last told about the bot's mouth (null: nothing). -->
+    <data id="announced" expr="false"/>
+    <data id="backoff_ms" expr="1000"/>
+    <data id="producing_told" expr="null"/>
+    <!-- How many sounds were streamed: names the PCM each is written to. -->
+    <data id="heard_count" expr="0"/>
+    <!-- The turn being heard. -->
+    <data id="frames" expr="[]"/>
+    <data id="loudest" expr="null"/>
+    <data id="participants" expr="[]"/>
+    <data id="transcripts" expr="[]"/>
+    <data id="spans" expr="[]"/>
+    <data id="turn_started_at" expr="0"/>
+    <data id="turn" expr="null"/>
+  </datamodel>
+  <script src="transcription.js"/>
+
+  <state id="initializing">
+    <transition cond="enabled" target="Streaming"/>
+    <transition target="unavailable"/>
+  </state>
+
+  <state id="Streaming" initial="Opening">
+    <invoke id="stream" type="https://github.com/stateforward/floppy/services/speech"
+            env:baseurl="FLOPPY_SPEECH_BASE_URL" env:apikey="FLOPPY_SPEECH_API_KEY">
+      <param name="operation" expr="'stream'"/>
+      <param name="language" expr="language"/>
+      <param name="chunk_seconds" expr="chunk_seconds"/>
+    </invoke>
+    <onentry>
+      <assign location="producing_told" expr="null"/>
+    </onentry>
+
+    <!-- The session is lost: before its first ready, the stream is not
+         to be had; after it, a new session is opened. -->
+    <transition event="bot.ability.hearing.speech.stream.failed done.invoke.stream bot.ability.failed error.*"
+                cond="!announced" target="unavailable">
+      <log label="transcription" expr="unavailableLog(_event)"/>
+    </transition>
+    <transition event="bot.ability.hearing.speech.stream.failed done.invoke.stream bot.ability.failed error.*"
+                target="Reconnecting">
+      <log label="transcription" expr="lostLog(_event)"/>
+    </transition>
+
+    <state id="Opening">
+      <onentry>
+        <send id="open-timer" event="Opening.after" delayexpr="delay(open_timeout_ms)"/>
+      </onentry>
+      <onexit>
+        <cancel sendid="open-timer"/>
+      </onexit>
+      <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json">
+        <event:defer/>
+      </transition>
+      <transition event="bot.ability.hearing.speech.stream.ready" event:schema="../schemas/bot.ability.hearing.speech.stream.ready.json" target="Hearing">
+        <assign location="backoff_ms" expr="first_backoff_ms"/>
+        <if cond="!announced">
+          <assign location="announced" expr="true"/>
+          <send event="bot.ability.ready" target="#_parent"/>
+        </if>
+      </transition>
+      <transition event="Opening.after" cond="!announced" target="unavailable">
+        <log label="transcription" expr="'the streaming session did not open in time'"/>
+      </transition>
+      <transition event="Opening.after" target="Reconnecting">
+        <log label="transcription" expr="'the streaming session did not open in time'"/>
+      </transition>
+    </state>
+
+    <state id="Hearing">
+      <!-- The bot's own voice arriving as predicted is not streamed. -->
+      <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json"
+                  cond="isPredictedOwnVoice(_event.data)"/>
+      <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json">
+        <if cond="isProducingChange(_event.data)">
+          <assign location="producing_told" expr="_event.data.producing === true"/>
+          <send event="bot.ability.hearing.speech.stream.producing" target="#_stream">
+            <param name="producing" expr="producing_told"/>
+          </send>
+        </if>
+        <send event="bot.ability.hearing.speech.stream.audio" target="#_stream">
+          <content expr="streamedAudio(_event.data.sound)"/>
+        </send>
+        <assign location="frames" expr="framesWith(_event.data.sound)"/>
+        <assign location="heard_count" expr="heard_count + 1"/>
+        <if cond="isLouder(_event.data)">
+          <assign location="loudest" expr="_event.data"/>
+        </if>
+        <foreach array="soundParticipants(_event.data)" item="participant">
+          <if cond="isNewParticipant(participant)">
+            <assign location="participants[participants.length]" expr="participant"/>
+          </if>
+        </foreach>
+      </transition>
+      <transition event="bot.ability.hearing.speech.stream.transcript" event:schema="../schemas/bot.ability.hearing.speech.stream.transcript.json" cond="isTranscript(_event)">
+        <assign location="transcripts[transcripts.length]" expr="heardTranscript(_event)"/>
+      </transition>
+      <transition event="bot.ability.hearing.speech.stream.voice_started" event:schema="../schemas/bot.ability.hearing.speech.stream.voice_started.json" cond="isAt(_event)">
+        <assign location="spans" expr="spansStarted(_event.data.at_seconds)"/>
+      </transition>
+      <transition event="bot.ability.hearing.speech.stream.voice_ended" event:schema="../schemas/bot.ability.hearing.speech.stream.voice_ended.json" cond="isAt(_event)">
+        <assign location="spans" expr="spansEnded(_event.data.at_seconds)"/>
+      </transition>
+      <!-- The hearing model's end of the turn: a turn with words goes on. -->
+      <transition event="bot.ability.hearing.speech.stream.turn_ended" event:schema="../schemas/bot.ability.hearing.speech.stream.turn_ended.json" cond="isAt(_event)">
+        <assign location="turn" expr="endedTurn(_event)"/>
+        <if cond="hasWords(turn)">
+          <send event="bot.ability.listening.transcription.turn" target="#_parent">
+            <content expr="turn"/>
+          </send>
+        </if>
+        <assign location="turn_started_at" expr="_event.data.at_seconds"/>
+        <assign location="frames" expr="[]"/>
+        <assign location="loudest" expr="null"/>
+        <assign location="participants" expr="[]"/>
+        <assign location="transcripts" expr="[]"/>
+        <assign location="spans" expr="openSpans()"/>
+        <assign location="turn" expr="null"/>
+      </transition>
+    </state>
+  </state>
+
+  <!-- The turn being heard is lost; sounds wait for no session. -->
+  <state id="Reconnecting">
+    <onentry>
+      <assign location="frames" expr="[]"/>
+      <assign location="loudest" expr="null"/>
+      <assign location="participants" expr="[]"/>
+      <assign location="transcripts" expr="[]"/>
+      <assign location="spans" expr="[]"/>
+      <assign location="turn_started_at" expr="0"/>
+      <send id="backoff-timer" event="Reconnecting.after" delayexpr="delay(backoff_ms)"/>
+    </onentry>
+    <onexit>
+      <cancel sendid="backoff-timer"/>
+      <assign location="backoff_ms" expr="nextBackoff()"/>
+    </onexit>
+    <transition event="Reconnecting.after" target="Streaming"/>
+  </state>
+
+  <final id="unavailable"/>
+</scxml>

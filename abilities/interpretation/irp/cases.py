@@ -34,8 +34,8 @@ STREAMING = config(speech_decoder="false", sound_classifier="false")
 DIARIZING = config(speech_decoder="false", diarizer="true")
 VOICES = config(diarizer="true", voice_classifier="true")
 
-VOICED = {"path": "/vad", "status": 200, "body": {"segments": [{"start": 0.5, "end": 0.6}]}}
-SILENT = {"path": "/vad", "status": 200, "body": {"segments": []}}
+VOICED = {"path": "/vad", "audible": True, "status": 200, "body": {"segments": [{"start": 0.5, "end": 0.6}]}}
+SILENT = {"path": "/vad", "audible": False, "status": 200, "body": {"segments": []}}
 DIARIZED = {"path": "/audio/diarization", "status": 200,
             "body": {"task": "diarize", "duration": 0.2, "num_speakers": 1,
                      "segments": [{"id": 0, "speaker": "SPEAKER_00", "label": "SPEAKER_00", "start": 0.0, "end": 0.1}]}}
@@ -236,7 +236,9 @@ S.statement(13, "With speech decoding, diarization and voice identification (the
 S.statement(15, "Identification is mosfet.py's (decision D253): the interpretation's voice registry matches each embedding to an id, or mints one (32 hex digits), so an embedding never leaves the interpretation: a voice heard again, at least `match_policy.threshold` (0.50) alike and clear of the next by its margin (0.05), is named by the same ref, and a voice unlike every id by a new one.")
 S.statement(14, "The bot's own voice is heard from speaking's copy of a completed utterance, `bot.ability.speaking.efference` with `audio` (its PCM, `media_type` `audio/pcm` with a sample rate), taken while voice identification is configured and the own voice is unknown: its voice is detected, and when at least `min_voice_seconds` (1 s) lies from its first voice to its last, that span is identified and enrolled as an own id; a copy with less voice is logged `interpretation.unidentified`, a copy without audio is nothing, and without voice identification the copy is ignored. A decoded voice recognized as the own id is not a source id.")
 
-LONG_VOICED = {"path": "/vad", "status": 200, "body": {"segments": [{"start": 0.5, "end": 0.55}, {"start": 1.0, "end": 2.1}]}}
+# The copy's voice detection is asked while a sound's is asked ahead, so
+# a case that teaches the bot's voice answers both alike.
+LONG_VOICED = {"path": "/vad", "audible": True, "status": 200, "body": {"segments": [{"start": 0.5, "end": 0.55}, {"start": 1.0, "end": 2.1}]}}
 
 
 def own_copy(audio="media/said.pcm"):
@@ -267,10 +269,10 @@ S.case(222, 15, "a voice unlike every id is named by a new ref.",
        backend=[VOICED, SILENT, DIARIZED, decoded("hello"), EMBEDDED, VOICED, SILENT, DIARIZED, decoded("again"), OTHER_EMBEDDED])
 S.case(230, 14, "decoded speech in the bot's own voice, learned from speaking's copy, has no source id.",
        [READY, own_copy()] + utterance() + [heard("hello", 0)],
-       params=VOICES, backend=[LONG_VOICED, EMBEDDED, VOICED, SILENT, DIARIZED, decoded("hello"), EMBEDDED])
+       params=VOICES, backend=[LONG_VOICED, EMBEDDED, LONG_VOICED, SILENT, DIARIZED, decoded("hello"), EMBEDDED])
 S.case(231, 14, "another voice is a source id even once the bot's own voice is known.",
        [READY, own_copy()] + utterance() + [heard("hello", 1)],
-       params=VOICES, backend=[LONG_VOICED, EMBEDDED, VOICED, SILENT, DIARIZED, decoded("hello"), OTHER_EMBEDDED])
+       params=VOICES, backend=[LONG_VOICED, EMBEDDED, LONG_VOICED, SILENT, DIARIZED, decoded("hello"), OTHER_EMBEDDED])
 S.case(232, 14, "a copy with too little voice teaches nothing: the bot's voice stays a source id.",
        [READY, own_copy()] + utterance() + [heard("hello", 1)],
        params=VOICES, backend=[VOICED, VOICED, SILENT, DIARIZED, decoded("hello"), EMBEDDED],

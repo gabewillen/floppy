@@ -811,7 +811,9 @@ fn start_hearing(
     words: &str,
 ) -> (Run, support::hearing::Backend) {
     use support::hearing;
-    let backend = hearing::Backend::start();
+    // A backend that does not stream: the listening hears through the
+    // interpretation, whose voice detection these tests watch.
+    let backend = hearing::Backend::start_without_stream();
     let mut args = hearing::granted(
         test,
         &backend,

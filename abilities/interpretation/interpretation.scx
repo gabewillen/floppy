@@ -21,6 +21,8 @@
       Idle -bot.ability.speaking.efference {audio}-> Working.DetectingOwnVoice
         -> IdentifyingOwnVoice -> Idle
       Idle -voices to remember-> Working.Remembering -> Idle
+      Idle -bot.ability.listening.transcription.turn-> Working.SpeechEnded
+        -> DecodingSpeech { Detected | Diarized } -> HandingOff
       Working -bot.ability.listening.stage.failed-> Idle }
 
   Configuration (as <data>): the voice activity
@@ -149,6 +151,17 @@
     ability, as Working, so sounds wait behind it; a failure is logged
     (memory) and those writes are dropped. The bot's own voice is not
     remembered: it is learned again each run.
+  * A transcribed turn (bot.ability.listening.transcription.turn {text,
+    confidence, frames, sensed, voice_detection, participants}, from the
+    listening while its transcription streams; abilities/transcription/
+    transcription.scx) is taken by Idle as an utterance already ended:
+    its frames are the open speech, its loudest scored sound the one the
+    product is compared with and carries, its voice spans the product's,
+    and its participants the active ones. SpeechEnded joins it as any
+    utterance, and DecodingSpeech hears its voices and tone with its words
+    given (no decoding is asked), so it is handed off as decoded speech
+    is, with the turn's confidence. Turns that arrive while Working are
+    held by <event:defer/> as sounds are.
   * DecodingSpeech asks abilities/speech_decoding/speech_decoding.scx (the speech
     service) to decode the utterance: decoding rewrites the observation into
     words. With diarization, the decoder is asked on entering DecodingSpeech
@@ -298,6 +311,9 @@
     <data id="active_participants" expr="[]"/>
     <data id="open_wav" expr="false"/>
     <data id="utterance" expr="null"/>
+    <!-- The turn the transcription heard, whose words are given (null:
+         the utterance is decoded). -->
+    <data id="turn" expr="null"/>
     <!-- HandingOff's working values. -->
     <data id="audible" expr="false"/>
     <data id="product" expr="null"/>
@@ -366,6 +382,7 @@
         <assign location="active_source_ids" expr="[]"/>
         <assign location="active_participants" expr="[]"/>
         <assign location="utterance" expr="null"/>
+        <assign location="turn" expr="null"/>
         <assign location="affect" expr="null"/>
         <assign location="stage" expr="null"/>
       </onentry>
@@ -376,6 +393,19 @@
       <transition event="bot.ability.speaking.efference" event:schema="../schemas/bot.ability.speaking.efference.json"
                   cond="learnsOwnVoice(_event)" target="DetectingOwnVoice">
         <assign location="utterance" expr="ownUtterance(_event)"/>
+      </transition>
+      <!-- A turn the transcription heard, words and all: its sounds are
+           the utterance, and who spoke is found as for decoded speech. -->
+      <transition event="bot.ability.listening.transcription.turn" event:schema="../schemas/bot.ability.listening.transcription.turn.json"
+                  target="SpeechEnded">
+        <assign location="turn" expr="_event.data"/>
+        <assign location="sensed" expr="_event.data.sensed"/>
+        <assign location="serial" expr="nextSerial()"/>
+        <assign location="media_dir" expr="soundMediaDir()"/>
+        <assign location="detection" expr="turnDetection()"/>
+        <assign location="open_sensed" expr="_event.data.sensed"/>
+        <assign location="open_frames" expr="_event.data.frames"/>
+        <assign location="active_participants" expr="_event.data.participants"/>
       </transition>
       <!-- The bot's own voice arriving as predicted opens no utterance. -->
       <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json"
@@ -402,6 +432,9 @@
             <content expr="detectionInput(_event.data.sound, requested.serial)"/>
           </send>
         </if>
+        <event:defer/>
+      </transition>
+      <transition event="bot.ability.listening.transcription.turn" event:schema="../schemas/bot.ability.listening.transcription.turn.json">
         <event:defer/>
       </transition>
       <!-- The answer for the sound ahead, kept until the sound is taken. -->
@@ -617,6 +650,17 @@
             <content expr="childFailure(_event)"/>
           </send>
         </transition>
+        <!-- A transcribed turn's words are given: its voices are found. -->
+        <transition event="done.invoke.open_speech" cond="isTurn() &amp;&amp; isUtteranceToDiarize(_event)" target="Diarizing">
+          <assign location="utterance" expr="_event.data"/>
+          <assign location="open_sensed" expr="turnSensed(_event.data)"/>
+          <assign location="completion" expr="null"/>
+        </transition>
+        <transition event="done.invoke.open_speech" cond="isTurn() &amp;&amp; hasAudio(_event)" target="DecodingSpeech">
+          <assign location="utterance" expr="_event.data"/>
+          <assign location="open_sensed" expr="turnSensed(_event.data)"/>
+          <assign location="completion" expr="null"/>
+        </transition>
         <transition event="done.invoke.open_speech" cond="isUtteranceToDiarize(_event) &amp;&amp; speech_decoder" target="Diarizing">
           <assign location="utterance" expr="_event.data"/>
           <assign location="completion" expr="null"/>
@@ -779,9 +823,14 @@
           <send id="speech-decoding-timer" event="bot.ability.listening.stage.failed" delayexpr="stageDelay()">
             <content expr="stageTimeout()"/>
           </send>
-          <send event="bot.ability.hearing.speech.decoding.input" target="#_speech_decoding">
-            <content expr="decodingInput()"/>
-          </send>
+          <!-- A transcribed turn's words are given, not decoded. -->
+          <if cond="isTurn()">
+            <assign location="result" expr="transcribedWords()"/>
+          <else/>
+            <send event="bot.ability.hearing.speech.decoding.input" target="#_speech_decoding">
+              <content expr="decodingInput()"/>
+            </send>
+          </if>
         </onentry>
         <onexit>
           <cancel sendid="speech-decoding-timer"/>

@@ -235,7 +235,7 @@ pub(crate) struct Given<'a> {
 
 impl Given<'_> {
     /// The names of the parameters given, in a fixed order.
-    fn names(&self) -> Vec<&'static str> {
+    pub(crate) fn names(&self) -> Vec<&'static str> {
         let mut names = Vec::new();
         for (name, given) in [
             ("audio", self.audio.is_some()),

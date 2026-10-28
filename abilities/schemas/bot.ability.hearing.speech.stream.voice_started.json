@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.hearing.speech.stream.voice_started",
+  "description": "The hearing model heard a voice start.",
+  "properties": {
+    "at_seconds": {
+      "description": "When the voice started, in session seconds.",
+      "examples": [
+        1.5
+      ],
+      "minimum": 0.0,
+      "type": "number",
+      "title": "At Seconds"
+    }
+  },
+  "required": [
+    "at_seconds"
+  ],
+  "type": "object",
+  "additionalProperties": false,
+  "examples": [
+    {
+      "at_seconds": 1.5
+    }
+  ]
+}

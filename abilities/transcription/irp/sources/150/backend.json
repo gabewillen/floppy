@@ -1,0 +1,50 @@
+{
+  "clock": "wall",
+  "answers": [],
+  "websocket": [
+    [
+      [
+        {
+          "type": "ready"
+        }
+      ],
+      [
+        {
+          "type": "error",
+          "message": "gone"
+        }
+      ]
+    ],
+    [
+      [
+        {
+          "type": "ready"
+        }
+      ],
+      [
+        {
+          "type": "speech_start",
+          "t": 0.0
+        },
+        {
+          "type": "speech_end",
+          "t": 0.1
+        },
+        {
+          "type": "final",
+          "text": "again",
+          "confidence": 0.9,
+          "words": [],
+          "t": 0.1
+        },
+        {
+          "type": "turn_end",
+          "reason": "eot",
+          "p": 0.9,
+          "text": "again",
+          "t": 0.1
+        }
+      ]
+    ]
+  ]
+}
