@@ -40,14 +40,14 @@ function silenceDelay() {
   return silence_ms + 'ms';
 }
 
-// seeding: the seed answered the turn with at least
-// one selection (an empty one is unhandled).
+// seeding and candidate: the seed or candidate answered the turn with at
+// least one selection (an empty one is unhandled).
 function isBehaviorHandled(event) {
   return unhandledReason(event.data) === null;
 }
 
-// Why the seed finished without handling the turn, the reason the
-// candidates runner logs for a learned candidate.
+// Why the seed finished without handling the turn, the reason
+// candidateAdvanceLog gives for a learned candidate.
 function seedAdvanceLog(event) {
   return 'SpeechHeard (' + unhandledReason(event.data) + ')';
 }
@@ -121,25 +121,95 @@ function hasNoMatch() {
 
 // running
 
-// The matched rows as the runner's candidates, [{name, source}].
+// The matched rows as the candidates, [{name, source}] in inventory order.
 function candidateRows() {
   return rows.map(function (row) { return {name: row.values[0], source: row.values[1]}; });
 }
 
-function isRunHandled(event) {
-  return event.data.handled === true;
+// candidate: the first of the candidates left.
+
+function candidateName() {
+  return candidates[0].name;
 }
 
-function isRunRejected(event) {
-  return event.data.rejection !== null;
+// The path of the candidate's program (its source).
+function candidateSource() {
+  return candidates[0].source;
 }
 
-function triedWithRun(event) {
-  return tried.concat(event.data.tried);
+function triedWithCandidate() {
+  return tried.concat([candidateName()]);
 }
 
-function runFailedLog(event) {
-  return rows[0].values[0] + ' (' + event.name + ')';
+// Why a candidate that finished did not handle the turn.
+function candidateAdvanceLog(event) {
+  return candidateName() + ' (' + unhandledReason(event.data) + ')';
+}
+
+function candidateSilentLog() {
+  return candidateName() + ' after ' + silence_ms + ' ms';
+}
+
+function candidateFailedLog(event) {
+  return candidateName() + ' (' + event.name + ')';
+}
+
+// dispatching and recorded_failure
+
+// The data a selection is sent with: its data object, else {} (no data,
+// null, or a non-object).
+function selectionData(s) {
+  return s.data !== null && typeof s.data === 'object' && !Array.isArray(s.data) ? s.data : ({});
+}
+
+// A dispatch that failed, with the error and what the candidate selected
+// (an error.execution is most often data its target's schema refuses,
+// decision D221).
+function dispatchFailure(_event) {
+  return 'Autonomy behavior dispatch failed: ' + _event.name + ' (selected ' + (Array.isArray(answer) && answer.length > 0 ? answer.map(selectionText).join(', ') : 'nothing') + ')';
+}
+
+function selectionText(s) {
+  var selection = Object(s);
+  return String(selection.event) + (typeof selection.target === 'string' ? ' to ' + selection.target : ' with no target');
+}
+
+function isRejected() {
+  return rejection !== null;
+}
+
+function candidateRejectedLog() {
+  return candidateName() + ' (' + rejection + ')';
+}
+
+// using and recording_failure
+
+// The handled candidate's use.
+function usedPersistenceStatements() {
+  return [{sql: used_sql, parameters: [candidateName()]}];
+}
+
+// The candidate's failure.
+function failedPersistenceStatements() {
+  return [{sql: failed_sql, parameters: [candidateName()]}];
+}
+
+function usageFailedReason(detail) {
+  return 'Autonomy behavior usage failed: ' + detail;
+}
+
+function usageTimedOutReason() {
+  return 'Autonomy behavior usage timed out after ' + memory_timeout_ms + ' ms';
+}
+
+// advancing
+
+function hasRest() {
+  return candidates.length > 1;
+}
+
+function restCandidates() {
+  return candidates.slice(1);
 }
 
 // percept_handled

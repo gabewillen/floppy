@@ -243,7 +243,6 @@
    "what": "A learned turn behavior handles the real input it was learned for, and leaves the rest to reasoning.",
    "parts": [
     "abilities/autonomy",
-    "abilities/candidates_runner",
     "abilities/behaviors",
     "namespaces/autonomy",
     "namespaces/behavior"

@@ -120,7 +120,6 @@ turn-taking; decision D270). From the lab, `http://192.168.2.2:8090/v1` serves t
 | `abilities/intuition/intuition.scx` | `decision_timeout_ms` | `20000` | the decision layer's decision when its invoker passes no bound |
 | `abilities/autonomy/autonomy.scx` | `silence_ms` | `1000` | a behavior's answer |
 | `abilities/autonomy/autonomy.scx` | `memory_timeout_ms` | `10000` | one memory transaction |
-| `abilities/candidates_runner/candidates_runner.scx` | `memory_timeout_ms` | `10000` | one candidate's memory transaction (autonomy passes its own) |
 | `abilities/conversation/conversation.scx` | `memory_timeout_ms` | `5000` | each of the conversation's memory operations, the recall before the turns and the remember after them |
 | `abilities/communication/communication.scx` | `response_timeout_ms` | `36000` | speaking going quiet on one response, re-armed by each of its progress events (speaking's 30 s synthesis bound plus 6 s; decisions D98, D179) |
 | `abilities/communication/communication.scx` | `encoding_timeout_ms` | `30000` | speaking's speech synthesis (communication passes its own; decision D98) |

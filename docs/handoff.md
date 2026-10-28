@@ -1253,7 +1253,7 @@ Q11 is closed: D243 removed `<decision:pin>`.
    events from `devices` and `focus`, tagged with its snapshot's `id` and
    sorted by its reference among the children's invoke ids.
 4. Reflection's trailing self-send is `bot.ability.reflection.selected`;
-   the candidates runner raises
+   autonomy's `dispatching` raises
    `bot.ability.autonomy.candidate.dispatch.succeeded` after its sends,
    and an `error.*` before it fails the candidate (`Autonomy behavior
    dispatch failed: <error>`).
@@ -1262,7 +1262,7 @@ Q11 is closed: D243 removed `<decision:pin>`.
 6. `<processing:selection_confidence>` reads a number in (0, 1] as a
    probability; the data model cannot tell 1 from 1.0, so 1 is certainty
    (100).
-7. Autonomy and the candidates runner take no `choices`; the turn
+7. Autonomy takes no `choices`; the turn
    behavior contract asks a behavior to name each selection's `target`.
 8. The body's `bot.focus_device` guard holds whenever the turn has focus
    candidates.
