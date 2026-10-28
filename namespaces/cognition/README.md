@@ -21,7 +21,7 @@ the recent turns (short-term memory's, kept from the newest and uncounted, so
 each turn's prompt opens as the last one did) claim the bytes first, then the
 episodes and directives (floppy's recalled memory until associative memory
 exists, decision D97), each into the bytes the system channel, the schema,
-the situation, the stimulus and the feedback leave of the prompt's 49152
+the situation, the stimulus and the feedback leave of the prompt's 262144
 (or of a fitted `budget`, less the system channel and the schema); an item
 that does not fit is left out, `count` (where the field has one) is how many
 were kept, and `omitted="<n>"` follows when any was left out, and a part
@@ -29,12 +29,9 @@ whose frame does not fit is left out whole. The stimulus is never cut: over
 a fitted budget it still renders whole and the fit is `overflow`. Object
 members render in the data model's order (sorted keys). A conversation
 output's messages render without `provenance`, `source_ids` and
-`target_ids`, fields a model never sees. On wasm, every value crossing the
-data model's boundary is bounded at 65536 bytes (scxml.rs's ECMAScript data
-model, `MAX_VALUE_BYTES`), so a prompt that would be trimmed is refused by
-the assignment first (`error.execution`); the trimming is tested natively
-([`src/tests.rs`](src/tests.rs)), and the bound is open work in
-[the handoff](../../docs/handoff.md#open-work).
+`target_ids`, fields a model never sees. No value crossing the data
+model's boundary has a size bound (scxml.rs sets none, decision D271), so
+a prompt is trimmed on wasm as natively ([`src/tests.rs`](src/tests.rs)).
 
 The exact semantics and failures are in [`src/lib.rs`](src/lib.rs); the
 structure is in [`package/cognition.xsd`](package/cognition.xsd), whose digest the
@@ -58,7 +55,7 @@ through the pipeline of scxml.rs's namespace suites.
 - <a id="cognition-1"></a>**cognition-1**. Each element (attention_bias_for_turn, model_facing_content, within_ceiling, model_facing_data) takes exactly its declared attributes, the required ones present and none empty, and no content, and the namespace has no other element: a malformed element raises `error.execution` and assigns nothing (its schema, [`package/cognition.xsd`](package/cognition.xsd), rejects it before any run under `scx validate`).
 - <a id="cognition-2"></a>**cognition-2**. `<cognition:attention_bias_for_turn>` writes the focus (the given focus when it is a configured device, else null) as the first candidate, then the stimulus's device (a bot.input's data.target_device, which the environment stamps on a device's input) when it is configured and not a candidate already; devices that are not an array raise `error.execution` and assign nothing.
 - <a id="cognition-3"></a>**cognition-3**. `<cognition:model_facing_content>` writes the model-facing content of a turn, each block indented two spaces per level and the blocks joined by newlines, most stable first: the recent turns (a cognition:recalled holding an uncounted recent of memory:turn lines), the situation (the environment block, then a cognition:acted of what earlier stages already did), the recalled episodes and directives (a cognition:recalled), the stimulus, when given, as the root element of its own block (tagged by its payload's type, stamped stimulus:event, then stimulus:id, stimulus:source and stimulus:target when set), then the feedback; systemlocation receives the instructions then the self block (a persona element), and failurelocation null.
-- <a id="cognition-4"></a>**cognition-4**. Over one of the projection budgets (49152 encoded bytes, 4096 nodes, 4096 collection items, 65536 characters per scalar, and 65536 characters for the system channel, the situation and the feedback; the system channel and the schema reserved first from the prompt's 49152 bytes), failurelocation receives the exceeded budget's message and location null; without failurelocation the element raises error.execution and assigns nothing. Recalled memory never fails the projection: it keeps its newest items that fit, or is left out when its frame does not fit. With a budget (a fitted request size in bytes), fitlocation receives fit when the content fits whole beside the system channel and the schema, cut when recalled memory was trimmed to fit, and overflow when it is still over.
+- <a id="cognition-4"></a>**cognition-4**. Over one of the projection budgets (262144 encoded bytes, 4096 nodes, 4096 collection items, 65536 characters per scalar, and 65536 characters for the system channel, the situation and the feedback; the system channel and the schema reserved first from the prompt's 262144 bytes), failurelocation receives the exceeded budget's message and location null; without failurelocation the element raises error.execution and assigns nothing. Recalled memory never fails the projection: it keeps its newest items that fit, or is left out when its frame does not fit. With a budget (a fitted request size in bytes), fitlocation receives fit when the content fits whole beside the system channel and the schema, cut when recalled memory was trimmed to fit, and overflow when it is still over.
 - <a id="cognition-5"></a>**cognition-5**. A stimulus that is neither an object with an event nor null, or recent turns, episodes or directives that are neither an array nor null, raise error.execution and assign nothing.
 - <a id="cognition-6"></a>**cognition-6**. The actions held from a tier (`held`, an array of `{event, description?}`) render after the acted fact in the situation as a held element with their count and one event element each, named by its event and holding its description; nothing renders when none is `held`, and a held that is neither an array nor null raises error.execution and assigns nothing.
 - <a id="cognition-7"></a>**cognition-7**. `<cognition:within_ceiling>` writes to location the choices whose effort (0 when a choice declares none) is at most the ceiling, in order and without their effort, and to heldlocation, first, one {event, description?} per event only choices over the ceiling offer; without a ceiling, or with null, every choice is offered and nothing is held, and a ceiling that is not a whole number raises error.execution and assigns nothing.

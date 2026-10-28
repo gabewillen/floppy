@@ -45,10 +45,9 @@ People (decisions D194 and D205): a person's representative voice is one
 compact text per person, `i8:` and the base64 of its unit vector's
 components each quantized to a signed byte (347 characters at 256
 dimensions, where the voice's JSON text is about 5 KiB), so the
-conversation's identification reads one short row per person: the
-element holds about 170 people at 256 dimensions under the 64 KiB value
-bound, and the memory ability's output carries about 100 of them; a
-match moves by about a thousandth for it. The consolidation
+conversation's identification reads one short row per person, and
+nothing that carries them has a size bound (D271); a match moves by about
+a thousandth for it. The consolidation
 ([`abilities/consolidation/consolidation.scx`](../../abilities/consolidation/consolidation.scx))
 folds the voices heard since into it and merges two people whose
 representatives are one person's.

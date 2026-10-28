@@ -11,7 +11,7 @@
                    place for a model: $schema, title and examples dropped
                    from every schema (property names kept); over bound
                    bytes, descriptions dropped too; still over, [].
-                   bound (optional): a decimal integer, default 32768.
+                   bound (optional): a decimal integer; without it, no bound.
                    overlocation (optional): receives whether the choices
                    were still over the bound.
   processing:collect_offered_events
@@ -25,7 +25,7 @@
                    choices (required), offers (optional): expressions.
                    devices, focus (optional, together): expressions of the
                    device reads and the focused device's reference.
-                   bound (optional): a decimal integer, default 32768.
+                   bound (optional): a decimal integer; without it, no bound.
                    overlocation, sizelocation (optional): receive whether
                    the choices are over the bound, and their size in bytes.
   processing:send  location (required): receives the dispatch

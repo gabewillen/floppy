@@ -140,8 +140,8 @@
     whose ref is the id's, so a voice is recognized across restarts.
     Recalling, before Interpretation is ready, asks the bot's memory
     (abilities/memory/memory.scx, decision D266) with one read, the representatives of the
-    96 people seen most recently (one compact row a person; about 100 fit
-    the memory ability's output, decision D205), as ids weighted by their representative's
+    1024 people seen most recently (one compact row a person, decision
+    D205; the sql service's row bound on wasm, decision D271), as ids weighted by their representative's
     weight; a failure is logged (memory) and the registry starts empty. A
     minted id is remembered as a new person with the print as heard their
     first voice and its compact text (i8:, the conversation namespace's
@@ -282,7 +282,7 @@
          the state that sent it (decision D266). -->
     <data id="memory_requests" expr="({})"/>
     <data id="statements" expr="[]"/>
-    <data id="voice_select" expr="'SELECT person_id, centroid, weight FROM bot_person_centroid WHERE kind = ?1 ORDER BY updated_at DESC, person_id LIMIT 96'"/>
+    <data id="voice_select" expr="'SELECT person_id, centroid, weight FROM bot_person_centroid WHERE kind = ?1 ORDER BY updated_at DESC, person_id LIMIT 1024'"/>
     <data id="person_insert" expr="'INSERT INTO bot_person (person_id) VALUES (?1)'"/>
     <data id="voice_insert" expr="'INSERT INTO bot_person_embedding (person_id, kind, embedding) SELECT CAST(?1 AS TEXT), CAST(?2 AS TEXT), CAST(?3 AS TEXT) WHERE EXISTS (SELECT 1 FROM bot_person WHERE person_id = ?1)'"/>
     <data id="representative_insert" expr="'INSERT INTO bot_person_centroid (person_id, kind, centroid, weight, first_seq, through_seq) SELECT CAST(?1 AS TEXT), CAST(?2 AS TEXT), CAST(?3 AS TEXT), 1, MIN(seq), MIN(seq) FROM bot_person_embedding WHERE person_id = ?1 AND kind = ?2'"/>

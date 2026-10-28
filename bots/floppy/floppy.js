@@ -283,10 +283,6 @@ function nextTurn() {
   return turn + 1;
 }
 
-function choicesFit() {
-  return !choices_over;
-}
-
 function cognitionInput() {
   return {turn: turn, stimulus: stimulus, focus: focus, focus_candidates: focus_candidates, participants: participants, choices: choices, environment: environmentField()};
 }
@@ -325,10 +321,6 @@ function environmentField() {
 function executionFailure(_event) {
   var reason = Object(_event.data).message;
   return {message: 'the turn\'s input could not be sent: ' + (typeof reason === 'string' ? reason : _event.name), turn: turn};
-}
-
-function choicesOverFailure() {
-  return {message: 'the turn\'s choices are ' + choices_size + ' bytes, over 32768', turn: turn};
 }
 
 // A reply or timer for the current turn.

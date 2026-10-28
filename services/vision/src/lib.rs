@@ -116,7 +116,7 @@
 //! The file's bytes ([`MAX_IMAGE_BYTES`], 4 MiB), the decoded pixels
 //! ([`MAX_PIXELS`]), and a reference ([`MAX_REFERENCE_BYTES`]) are bounded
 //! on wasm builds only ([`scxml_types::wasm_bound`]). The done data is at most
-//! [`FRAME_SIZE`]² numbers, under the session's event bound.
+//! [`FRAME_SIZE`]² numbers.
 //!
 //! # Telemetry
 //!

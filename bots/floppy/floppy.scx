@@ -194,11 +194,8 @@
   accepts, read this turn with <device:snapshot> (decision D109), each
   {event, schema: {type: object}} with the device's id (the device's own
   event:schema decides its data on delivery). Every schema is made
-  model-facing ($schema, title and examples dropped); when the choices are
-  still over 32 KiB (phase 4 spike (b): a relayed list of 48264 B, with its
-  raw message, is over the 96 KiB event bound, so its send raises
-  error.execution in the sender) every description is dropped too, and if
-  they are still over the turn fails without reaching the cognition.
+  model-facing ($schema, title and examples dropped); the choices have no
+  size bound (SCXML sets none on an event).
 
   Dispatch: the cognition's stages send their own selections, each to the
   session its target names (#_scxml_ + target, decision D104):
@@ -227,8 +224,7 @@
   floppy.output the turn's selected events (one record per completed turn),
   floppy.choices each turn's choices, floppy.focus each focus change,
   floppy.held the number held after each arrival during a turn,
-  floppy.released what was still held when the bot left active, and
-  floppy.offers.dropped each ability whose offer was over 32 KiB.
+  floppy.released what was still held when the bot left active.
 
   Contracts: every event the body takes references its one schema file by
   event:schema: its own events in schemas/, and the abilities' events it
@@ -384,12 +380,9 @@
          sent (the <foreach> item). -->
     <data id="body_choices" expr="[]"/>
     <data id="choices" expr="[]"/>
-    <data id="choices_over" expr="false"/>
-    <data id="choices_size" expr="0"/>
     <!-- This turn's reads of what each ability offers (<decision:offers>,
          decision D242): ability to its model-facing choices. -->
     <data id="read_offers" expr="({})"/>
-    <data id="offers_over" expr="false"/>
     <data id="selections" expr="[]"/>
     <data id="s" expr="null"/>
     <data id="degraded_reason" expr="null"/>
@@ -798,9 +791,7 @@
           <!-- What each ability offers, read from its live session
                (decision D242), each in its own block so a read that fails
                leaves the others (SCXML 4.9), and made model-facing
-               ($schema, title and examples dropped; over 32 KiB
-               descriptions dropped too; still over, the ability's offer is
-               empty and logged). The persona's is never read: only
+               ($schema, title and examples dropped). The persona's is never read: only
                reflection, composed with the same persona, may select a
                revision. -->
           <onentry>
@@ -809,61 +800,42 @@
           <onentry>
             <assign location="read_offers.cognition" expr="[]"/>
             <decision:offers location="read_offers.cognition" target="'#_cognition'"/>
-            <processing:model_facing_schema location="read_offers.cognition" bound="32768" overlocation="offers_over"/>
-            <if cond="offers_over">
-              <log label="floppy.offers.dropped" expr="'cognition'"/>
-            </if>
+            <processing:model_facing_schema location="read_offers.cognition"/>
           </onentry>
           <onentry>
             <assign location="read_offers.communication" expr="[]"/>
             <decision:offers location="read_offers.communication" target="'#_communication'"/>
-            <processing:model_facing_schema location="read_offers.communication" bound="32768" overlocation="offers_over"/>
-            <if cond="offers_over">
-              <log label="floppy.offers.dropped" expr="'communication'"/>
-            </if>
+            <processing:model_facing_schema location="read_offers.communication"/>
           </onentry>
           <onentry>
             <assign location="read_offers.identity" expr="[]"/>
             <decision:offers location="read_offers.identity" target="'#_identity'"/>
-            <processing:model_facing_schema location="read_offers.identity" bound="32768" overlocation="offers_over"/>
-            <if cond="offers_over">
-              <log label="floppy.offers.dropped" expr="'identity'"/>
-            </if>
+            <processing:model_facing_schema location="read_offers.identity"/>
           </onentry>
           <onentry>
             <if cond="seeing_enabled">
               <assign location="read_offers.seeing" expr="[]"/>
               <decision:offers location="read_offers.seeing" target="'#_seeing'"/>
-              <processing:model_facing_schema location="read_offers.seeing" bound="32768" overlocation="offers_over"/>
-              <if cond="offers_over">
-                <log label="floppy.offers.dropped" expr="'seeing'"/>
-              </if>
+              <processing:model_facing_schema location="read_offers.seeing"/>
             </if>
           </onentry>
           <onentry>
             <if cond="hasFirmware()">
               <assign location="read_offers.firmware" expr="[]"/>
               <decision:offers location="read_offers.firmware" target="firmwareTarget()" undeclared="all"/>
-              <processing:model_facing_schema location="read_offers.firmware" bound="32768" overlocation="offers_over"/>
-              <if cond="offers_over">
-                <log label="floppy.offers.dropped" expr="'firmware'"/>
-              </if>
+              <processing:model_facing_schema location="read_offers.firmware"/>
             </if>
           </onentry>
           <onentry>
             <decision:choice location="body_choices" events="bot.focus_device"/>
-            <!-- bound: 32 KiB, the failure message below names it. -->
             <processing:collect_offered_events location="choices" choices="body_choices" offers="turnOffers()"
-                                               devices="device_snapshots" focus="focused_device"
-                                               bound="32768" overlocation="choices_over" sizelocation="choices_size"/>
+                                               devices="device_snapshots" focus="focused_device"/>
             <log label="floppy.choices" expr="choices"/>
             <!-- The timer before the turn's input (deciding, below): a
                  send that fails raises error.execution. -->
-            <if cond="choicesFit()">
-              <send id="processing-timer" event="bot.processing.timed_out" delayexpr="delay(processing_timeout_ms)">
-                <param name="turn" expr="turn"/>
-              </send>
-            </if>
+            <send id="processing-timer" event="bot.processing.timed_out" delayexpr="delay(processing_timeout_ms)">
+              <param name="turn" expr="turn"/>
+            </send>
           </onentry>
           <onexit>
             <cancel sendid="processing-timer"/>
@@ -897,13 +869,11 @@
           </state>
           <state id="reading_turns">
             <onentry>
-              <if cond="choicesFit()">
-                <send event="bot.ability.memory.stm.recent_turns" target="#_stm">
-                  <content expr="emptyData()"/>
-                </send>
-                <assign location="turn_reads" expr="turnReadAsked()"/>
-                <send id="reading-turns-after" event="reading_turns.after" delayexpr="delay(reading_turns_timeout_ms)"/>
-              </if>
+              <send event="bot.ability.memory.stm.recent_turns" target="#_stm">
+                <content expr="emptyData()"/>
+              </send>
+              <assign location="turn_reads" expr="turnReadAsked()"/>
+              <send id="reading-turns-after" event="reading_turns.after" delayexpr="delay(reading_turns_timeout_ms)"/>
             </onentry>
             <onexit>
               <cancel sendid="reading-turns-after"/>
@@ -933,12 +903,6 @@
           <transition event="error.execution" target="turn_ended">
             <send event="bot.processing.failed" target="#_parent">
               <content expr="executionFailure(_event)"/>
-            </send>
-          </transition>
-          <!-- The choices do not fit: the turn fails before the cognition. -->
-          <transition cond="choices_over" target="turn_ended">
-            <send event="bot.processing.failed" target="#_parent">
-              <content expr="choicesOverFailure()"/>
             </send>
           </transition>
           <!-- The turn's output: its stages have sent their selections; the

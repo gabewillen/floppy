@@ -10,8 +10,8 @@
   bot.ability.cognition.ignore, whose schema carries $schema, title,
   examples and a description (which the body compacts), or, when mode is
   'huge', also double.huge, whose schema (cognition_huge.json beside it,
-  which tests/tests/body.rs copies) is over 32 KiB, so the body drops the
-  double's whole offer.
+  which tests/tests/body.rs copies) is over 32 KiB, which the body offers
+  whole.
 
   Each turn's behavior is the name of the bot.input observation the turn
   carries (stimulus.data.observation.event), or, for a conversation

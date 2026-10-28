@@ -62,12 +62,11 @@
   transaction. Each is bounded by memory_timeout_ms; a failure or timeout
   answers bot.ability.conversation.failed {stage: "memory", message} and
   commits nothing (numbers taken stay taken, as a sequence's do). Reading
-  one compact row per person, identification holds about 100 people at
-  256 dimensions: the memory ability's output event carries a result of
-  about 43 KB and not one of about 47 KB (measured; a row is about 430
-  bytes with its columns), and past it the identification times out at
-  the memory stage. The namespace element's 64 KiB value bound (about 170
-  people) and the sql service's 88 KiB result bound are above it.
+  one compact row per person (about 430 bytes with its columns), and the
+  events that carry them have no size bound (decision D271), so
+  identification holds as many people as the sql service returns rows
+  (1024 on wasm; tests/tests/environment.rs identifies among 256 at 256
+  dimensions).
   Without a memory there are no people: an embedding is its own
   participant (D79). Faces and the bot's own voice are not built.
 

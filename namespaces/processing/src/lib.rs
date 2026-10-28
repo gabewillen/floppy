@@ -46,8 +46,8 @@
 //! `properties`, `patternProperties`, `$defs` and `definitions` are names,
 //! not keywords) and copying `enum`, `const`, `required` and `default`
 //! verbatim. If the result is over `bound` bytes (optional, a decimal
-//! integer, default [`DEFAULT_BOUND`]: the canonical JSON's UTF-8 length,
-//! which is at least `JSON.stringify`'s length), every `description` is
+//! integer, without which nothing is bounded: the canonical JSON's UTF-8
+//! length, which is at least `JSON.stringify`'s length), every `description` is
 //! dropped too, the entries' and the schemas'. If it is still over,
 //! `location` receives `[]`. `overlocation` (optional) receives `true` when
 //! that happened and `false` otherwise, so the document can log it. It is
@@ -71,8 +71,8 @@
 //! names no member offers no device. The document's own come first, then
 //! the offers and the focused device in name order (invoke id or device
 //! reference). They are compacted as `<processing:model_facing_schema>`
-//! does, with descriptions when that fits `bound` (default
-//! [`DEFAULT_BOUND`]) and without otherwise; unlike it, a list still over
+//! does, with descriptions when that fits `bound` (none when it is
+//! absent) and without otherwise; unlike it, a list still over
 //! the bound is kept (the document logs it and fails the turn) and
 //! `overlocation` (optional) receives `true`. `sizelocation` (optional)
 //! receives the assigned list's size in bytes. `overlocation` and
@@ -126,8 +126,8 @@
 //!
 //! # Bounds
 //!
-//! Choices are bounded by the offer bound each element names (decision
-//! D35); the data model bounds the values it hands this component.
+//! Choices are bounded only by a `bound` an element names; without one they
+//! have no size bound (SCXML sets none on a value or an event).
 //!
 //! # Telemetry
 //!
@@ -159,10 +159,6 @@ pub const NAMESPACE_NAME: &str = "processing";
 /// repository's latest release (decision D19); the manifest and schema name
 /// it too.
 pub const NAMESPACE_URI: &str = "https://github.com/stateforward/floppy/namespaces/processing";
-
-/// The offer bound when an element names none: 32 KiB, the largest choice
-/// list phase 4 spike (b) relays through two sessions safely (decision D35).
-pub const DEFAULT_BOUND: usize = 32_768;
 
 /// The greatest effort a choice entry may carry (decision D206), as
 /// `<decision:choice>` declares it.
@@ -392,7 +388,7 @@ fn model_facing_schema<H: ProcessingHost>(
     )?;
     let bound = decimal(
         bound,
-        DEFAULT_BOUND,
+        usize::MAX,
         "processing:model_facing_schema bound is not a decimal integer",
     )?;
     let over_location = optional(
@@ -555,7 +551,7 @@ fn collect_offered_events<H: ProcessingHost>(
     }
     let bound = decimal(
         bound,
-        DEFAULT_BOUND,
+        usize::MAX,
         "processing:collect_offered_events bound is not a decimal integer",
     )?;
     let over_location = optional(

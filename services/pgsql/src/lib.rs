@@ -148,9 +148,6 @@ pub const MAX_DATABASE_BYTES: usize = wasm_bound(1024);
 /// Upper bound on the rows one transaction returns, all statements
 /// together (wasm builds only).
 pub const MAX_ROWS: usize = wasm_bound(1024);
-/// Upper bound on the encoded result's bytes (wasm builds only): under the
-/// session's 96 KiB event bound, leaving room for the event's envelope.
-pub const MAX_RESULT_BYTES: usize = wasm_bound(88 * 1024);
 /// Upper bound on one server message's bytes (every build): a larger one
 /// fails the transaction rather than being read.
 pub const MAX_MESSAGE_BYTES: usize = 1024 * 1024;
@@ -978,14 +975,7 @@ fn execute<S: Read + Write>(
     }
     let mut output = Map::new();
     output.insert("results".into(), Json::Array(results));
-    let output = Json::Object(output);
-    if exceeds_wasm_bound(canonical_json(&output).len(), MAX_RESULT_BYTES) {
-        return Err(Failed::new(
-            "bound",
-            "the pgsql transaction's result exceeds its bound",
-        ));
-    }
-    Ok(output)
+    Ok(Json::Object(output))
 }
 
 /// Starts a session on `stream`, a connection to `database`, runs
