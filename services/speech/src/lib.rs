@@ -2043,7 +2043,14 @@ mod guest {
             .get("channels")
             .and_then(serde_json::Value::as_u64)
             .and_then(|channels| u16::try_from(channels).ok());
-        super::stream::pcm(&audio, rate, channels).ok()
+        let pcm = super::stream::pcm(&audio, rate, channels).ok()?;
+        // With an `output`, the PCM sent is also written there, so the
+        // invoking session keeps the turn's sounds in one format.
+        if let Some(output) = data.get("output") {
+            let path = super::media_path(output.as_str()?).ok()?;
+            super::write_audio(&path, &pcm).ok()?;
+        }
+        Some(pcm)
     }
 
     /// Bytes of one read of a streamed answer's body.

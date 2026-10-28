@@ -65,9 +65,9 @@ invoking state) closes the answer's connection mid-stream.
 the `baseurl` slot's `https` URL names its `wss` form, and the key goes as
 `authorization: Bearer <apikey>`, a reference the component never reads.
 The invoking session sends it `bot.ability.hearing.speech.stream.audio
-{audio, media_type?, sample_rate_hz?, channels?}` for each sound heard (by
-reference; sent on as 16 kHz mono 16-bit PCM, held until the server is
-ready, at most 2 s of it) and `bot.ability.hearing.speech.stream.producing
+{audio, media_type?, sample_rate_hz?, channels?, output?}` for each sound
+heard (by reference; sent on as 16 kHz mono 16-bit PCM, also written to
+`output` when given, held until the server is ready, at most 2 s of it) and `bot.ability.hearing.speech.stream.producing
 {producing}` when the bot's own mouth starts or stops (sent on as
 `{"type":"agent","speaking":B}` only on change). Each server frame is one
 returned event; times are seconds of the audio the session sent. Closing

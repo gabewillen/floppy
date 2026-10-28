@@ -10,11 +10,12 @@
 //! ready, the service returns [`READY_EVENT`] `{}` and reads the events the
 //! invoking session sends it:
 //!
-//! * [`AUDIO_EVENT`] `{audio, media_type?, sample_rate_hz?, channels?}`:
-//!   a sound heard (by reference, as `environment.sound` carries it: a WAV
-//!   file, or raw signed 16-bit PCM at the rate and channels given), sent
-//!   on as one binary message of 16 kHz mono signed 16-bit little-endian
-//!   PCM ([`pcm`]);
+//! * [`AUDIO_EVENT`] `{audio, media_type?, sample_rate_hz?, channels?,
+//!   output?}`: a sound heard (by reference, as `environment.sound` carries
+//!   it: a WAV file, or raw signed 16-bit PCM at the rate and channels
+//!   given), sent on as one binary message of 16 kHz mono signed 16-bit
+//!   little-endian PCM ([`pcm`]), also written to `output` (a media
+//!   reference) when one is given;
 //! * [`PRODUCING_EVENT`] `{producing}`: whether the bot's own mouth is
 //!   producing now, sent on as `{"type":"agent","speaking":B}` when it
 //!   changes ([`Producing`]).
