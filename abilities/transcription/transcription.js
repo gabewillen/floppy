@@ -72,11 +72,24 @@ function heardFrame(sound) {
     sample_rate_hz: 16000, channels: 1});
 }
 
-// The turn's sounds (the PCM the session wrote), the oldest let go past
-// max_turn_frames.
+// The turn's sounds (the PCM the session wrote): until its voice starts
+// only the last lead_frames (what is heard before the voice is not the
+// turn's), then the oldest let go past max_turn_frames.
 function framesWith(sound) {
   var kept = frames.concat([heardFrame(sound)]);
-  return kept.length > max_turn_frames ? kept.slice(kept.length - max_turn_frames) : kept;
+  var most = spans.length > 0 ? max_turn_frames : lead_frames;
+  return kept.length > most ? kept.slice(kept.length - most) : kept;
+}
+
+// Where the turn's kept sounds start on the session's timeline: past the
+// sounds let go, each taken as an equal share of the turn's time (the
+// sounds are streamed in equal steps).
+function framesStartAt(ended) {
+  var heard = heard_count - turn_heard_from;
+  if (heard <= frames.length) {
+    return turn_started_at;
+  }
+  return turn_started_at + (heard - frames.length) * (ended - turn_started_at) / heard;
 }
 
 // The first scored sound, or the first with a level, or a louder one.
@@ -133,7 +146,8 @@ function openSpans() {
 
 // The turn the session said has ended: its words (turn_ended's text, else
 // its transcripts joined), their lowest confidence, its sounds, its
-// loudest scored sound, its voice spans in seconds from its start, and
+// loudest scored sound, its voice spans in seconds from its first kept
+// sound, and
 // its participants.
 function endedTurn(_event) {
   var ended = _event.data.at_seconds;
@@ -142,10 +156,11 @@ function endedTurn(_event) {
     .filter(function (words) { return words !== ''; }).join(' ');
   var confidences = transcripts.map(function (heard) { return heard.confidence; })
     .filter(function (confidence) { return confidence !== null; });
+  var origin = framesStartAt(ended);
   var segments = [];
   spans.forEach(function (span) {
-    var start = Math.max(0, span.start - turn_started_at);
-    var end = Math.max(0, (span.end === null ? ended : span.end) - turn_started_at);
+    var start = Math.max(0, span.start - origin);
+    var end = Math.max(0, (span.end === null ? ended : span.end) - origin);
     if (end > start) {
       segments.push({start_seconds: start, end_seconds: end});
     }
