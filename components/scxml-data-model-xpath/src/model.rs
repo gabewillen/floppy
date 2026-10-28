@@ -314,9 +314,7 @@ impl XPathDataModel {
     ///
     /// # Errors
     ///
-    /// As [`Self::evaluate_condition`]; additionally
-    /// [`DataModelError::Execution`] when a node-set's markup exceeds
-    /// [`MAX_VALUE_BYTES`].
+    /// As [`Self::evaluate_condition`].
     pub fn evaluate_value<H: ExecutionHost + ?Sized>(
         &mut self,
         expression: &str,
@@ -339,8 +337,7 @@ impl XPathDataModel {
     ///
     /// As [`Self::evaluate_condition`]; additionally
     /// [`DataModelError::Execution`] when the location selects no nodes (it
-    /// does not exist, SCXML 5.9/6.2.5) or its markup exceeds
-    /// [`MAX_VALUE_BYTES`].
+    /// does not exist, SCXML 5.9/6.2.5).
     pub fn evaluate_location<H: ExecutionHost + ?Sized>(
         &mut self,
         location: &str,
@@ -365,8 +362,7 @@ impl XPathDataModel {
     ///
     /// # Errors
     ///
-    /// As [`Self::evaluate_condition`]; additionally
-    /// [`DataModelError::Execution`] for a string over [`MAX_VALUE_BYTES`].
+    /// As [`Self::evaluate_condition`].
     pub fn evaluate_string<H: ExecutionHost + ?Sized>(
         &mut self,
         expression: &str,
@@ -378,9 +374,7 @@ impl XPathDataModel {
             Operation::XpathDataModelEvaluateValue,
         );
         let result = self.evaluate_with(expression, event, host, |store, value| {
-            let text = value.to_string(store).map_err(map_xpath_error)?;
-            bounded_value(&text)?;
-            Ok(text)
+            value.to_string(store).map_err(map_xpath_error)
         });
         finish(&span, &result);
         result
@@ -398,7 +392,7 @@ impl XPathDataModel {
     ///
     /// As [`Self::evaluate_condition`]; additionally
     /// [`DataModelError::Execution`] when the result is not a node-set (not a
-    /// legal iteration collection) or an item exceeds [`MAX_VALUE_BYTES`].
+    /// legal iteration collection).
     pub fn evaluate_items<H: ExecutionHost + ?Sized>(
         &mut self,
         expression: &str,
@@ -419,7 +413,6 @@ impl XPathDataModel {
                     .map(|node| {
                         let mut out = String::new();
                         push_node_markup(store, *node, &mut out)?;
-                        bounded_value(&out)?;
                         Ok((node.id(), DataValue::Xml(out)))
                     })
                     .collect::<Result<Vec<_>, _>>()
@@ -730,20 +723,12 @@ impl State {
     fn new(system: SystemContext) -> Result<Self, DataModelError> {
         if system.session_id.is_empty()
             || system.machine_name.as_ref().is_some_and(String::is_empty)
-            || system.session_id.len() > MAX_VALUE_BYTES
-            || system
-                .machine_name
-                .as_ref()
-                .is_some_and(|name| name.len() > MAX_VALUE_BYTES)
         {
             return Err(DataModelError::InvalidInput);
         }
         let DataValue::JsonObject(processors) = &system.io_processors else {
             return Err(DataModelError::InvalidInput);
         };
-        if processors.len() > MAX_VALUE_BYTES {
-            return Err(DataModelError::InvalidInput);
-        }
         let parsed: serde_json::Value =
             serde_json::from_str(processors).map_err(|_| DataModelError::InvalidInput)?;
         // Canonical JSON only: compact, recursively sorted keys.
@@ -1194,15 +1179,11 @@ fn to_data_value(store: &Store, value: Value) -> Result<DataValue, DataModelErro
             Ok(number) => DataValue::Number(number),
             Err(_) => DataValue::String(number_to_string(value)),
         },
-        Value::String(value) => {
-            bounded_value(&value)?;
-            DataValue::String(value)
-        }
+        Value::String(value) => DataValue::String(value),
         Value::NodeSet(set) => {
             let mut out = String::new();
             for node in set.nodes() {
                 push_node_markup(store, *node, &mut out)?;
-                bounded_value(&out)?;
             }
             DataValue::Xml(out)
         }
@@ -1424,9 +1405,6 @@ fn new_element(store: &mut Store, name: &str) -> Result<NodeId, DataModelError> 
 
 /// A detached element holding `text` (no child when empty).
 fn text_element(store: &mut Store, name: &str, text: &str) -> Result<NodeId, DataModelError> {
-    if text.len() > MAX_VALUE_BYTES {
-        return Err(DataModelError::InvalidInput);
-    }
     let element = new_element(store, name)?;
     if !text.is_empty() {
         let child = store.create_text(text).map_err(map_xpath_error)?;
@@ -1481,21 +1459,14 @@ fn validate_variable_name(name: &str) -> Result<(), DataModelError> {
 
 fn validate_value(value: &DataValue) -> Result<(), DataModelError> {
     match value {
-        DataValue::String(text) | DataValue::Xml(text) => bounded_value(text),
         DataValue::JsonArray(_) | DataValue::JsonObject(_) => Err(DataModelError::UnsupportedValue),
         DataValue::Absent
         | DataValue::Undefined
         | DataValue::Null
         | DataValue::Bool(_)
+        | DataValue::String(_)
+        | DataValue::Xml(_)
         | DataValue::Number(_) => Ok(()),
-    }
-}
-
-fn bounded_value(text: &str) -> Result<(), DataModelError> {
-    if text.len() <= MAX_VALUE_BYTES {
-        Ok(())
-    } else {
-        Err(DataModelError::Execution)
     }
 }
 

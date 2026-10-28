@@ -112,9 +112,6 @@ const MAX_ALLOWLIST_ENTRY_BYTES = 2_048;
 const MAX_ENV_SLOT_BYTES = 64;
 const MAX_WASI_DIRS = 32;
 const MAX_WASI_GUEST_PATH_BYTES = 1_024;
-const MAX_EVENT_METADATA_BYTES = 16_384;
-const MAX_EVENT_DATA_BYTES = 65_536;
-const MAX_EVENT_BYTES = 96 * 1024;
 const MAX_NAME_BYTES = 1_024;
 const NANOS_PER_MS = 1_000_000n;
 const TRANSPORT_HEADERS = new Set(['host', 'content-length', 'transfer-encoding', 'connection']);
@@ -664,35 +661,25 @@ function reportingTraps(instantiate, onTrap) {
 const transportFailed = () => unavailable('the HTTP transport failed');
 const tooLarge = () => failure('payload-too-large', 'the response body exceeds its byte bound');
 
-/** The UTF-8 bytes one event counts toward its bounds, or undefined past one (`Event::validate`'s). */
+/**
+ * The UTF-8 bytes of one event, or undefined for an empty or over-bound
+ * name. Its data, raw message, and metadata have no byte bound (SCXML sets none).
+ */
 function eventBytes(event) {
   let total = byteLength(event.name);
   if (event.name === '' || total > MAX_NAME_BYTES) return undefined;
-  for (const value of [event.origin, event.originType]) {
-    if (value === undefined) continue;
-    const bytes = byteLength(value);
-    if (bytes > MAX_EVENT_METADATA_BYTES) return undefined;
-    total += bytes;
+  for (const value of [event.origin, event.originType, event.sendId, event.invokeId, event.raw]) {
+    if (value !== undefined) total += byteLength(value);
   }
-  for (const value of [event.sendId, event.invokeId]) if (value !== undefined) total += byteLength(value);
   const { data } = event;
   if (data.tag === 'boolean') total += 1;
   else if (data.tag === 'number') total += 8;
-  else if (typeof data.val === 'string') {
-    const bytes = byteLength(data.val);
-    if (bytes > MAX_EVENT_DATA_BYTES) return undefined;
-    total += bytes;
-  }
-  if (event.raw !== undefined) {
-    const bytes = byteLength(event.raw);
-    if (bytes > MAX_EVENT_DATA_BYTES) return undefined;
-    total += bytes;
-  }
+  else if (typeof data.val === 'string') total += byteLength(data.val);
   const context = event.traceContext;
   if (context !== undefined) {
     for (const value of [context.traceparent, context.tracestate, context.baggage]) if (value !== undefined) total += byteLength(value);
   }
-  return total > MAX_EVENT_BYTES ? undefined : total;
+  return total;
 }
 
 /**

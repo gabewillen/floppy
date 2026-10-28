@@ -32,8 +32,7 @@
 //!   (the adapter's text lookup), and only a document does: a node inside it
 //!   has no portable value.
 //! * Building and every accessor are iterative (no native recursion), and
-//!   the node count is bounded by the parser over a value of at most
-//!   [`crate::MAX_VALUE_BYTES`].
+//!   the node count is at most linear in the value's length.
 //! * [`DOM_INSTALL`] evaluates, once per context on first use, to
 //!   `[build, text, build_open]` that the adapter keeps in its own closures:
 //!   none is a global (SCXML 1.0 section 5.10 reserves platform-specific variables

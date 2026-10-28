@@ -43,15 +43,6 @@
 
 use std::fmt;
 
-/// Maximum UTF-8 bytes accepted for one event metadata value (origin,
-/// origin-type); the portable event contract's bound.
-pub const MAX_METADATA_BYTES: usize = scxml_types::MAX_EVENT_METADATA_BYTES;
-/// Maximum UTF-8 bytes accepted for one text, JSON, or XML data value and
-/// for `_event.raw`; the portable event contract's bound.
-pub const MAX_DATA_VALUE_BYTES: usize = scxml_types::MAX_EVENT_DATA_BYTES;
-/// Maximum aggregate UTF-8 bytes accepted for one event; the portable event
-/// contract's bound.
-pub const MAX_EVENT_BYTES: usize = scxml_types::MAX_EVENT_BYTES;
 /// Maximum `<param>`/`namelist` entries accepted by `start-invoked`; the
 /// WIT `named-value` list bound.
 pub const MAX_INVOCATION_PARAMETERS: usize = scxml_types::MAX_SEND_MESSAGE_PARAMS;
@@ -164,8 +155,6 @@ pub enum MachineBoundaryError {
     InvalidValue(MachineInputKind),
     /// One value exceeded its class-specific UTF-8 byte limit.
     ValueTooLarge(MachineInputKind),
-    /// Checked aggregate byte accounting overflowed or exceeded its limit.
-    AggregateTooLarge(MachineInputKind),
 }
 
 impl MachineBoundaryError {
@@ -205,17 +194,6 @@ impl MachineBoundaryError {
             Self::ValueTooLarge(MachineInputKind::Event) => {
                 "machine event input exceeds its UTF-8 byte limit"
             }
-            Self::AggregateTooLarge(MachineInputKind::Event) => {
-                "machine event aggregate exceeds its byte limit"
-            }
-            Self::AggregateTooLarge(
-                MachineInputKind::Name
-                | MachineInputKind::Metadata
-                | MachineInputKind::Text
-                | MachineInputKind::Json
-                | MachineInputKind::Xml
-                | MachineInputKind::Raw,
-            ) => "machine input byte accounting overflowed",
         }
     }
 }
@@ -230,24 +208,10 @@ impl std::error::Error for MachineBoundaryError {}
 
 #[derive(Clone, Copy)]
 #[cfg(any(target_arch = "wasm32", test))]
-enum BoundaryData<'a> {
-    Empty,
-    Text(&'a str),
-    Json(&'a str),
-    Xml(&'a str),
-}
-
-#[derive(Clone, Copy)]
-#[cfg(any(target_arch = "wasm32", test))]
 struct BoundaryEvent<'a> {
     name: &'a str,
     send_id: Option<&'a str>,
-    origin: Option<&'a str>,
-    origin_type: Option<&'a str>,
     invoke_id: Option<&'a str>,
-    data: BoundaryData<'a>,
-    raw: Option<&'a str>,
-    trace_bytes: usize,
 }
 
 #[cfg(any(target_arch = "wasm32", test))]
@@ -263,64 +227,17 @@ fn checked_value_bytes(
     }
 }
 
+/// Checks an event's names. Its data, `raw`, and metadata have no byte
+/// bound (SCXML sets none).
 #[cfg(any(target_arch = "wasm32", test))]
-fn checked_add(
-    total: usize,
-    bytes: usize,
-    maximum: usize,
-    kind: MachineInputKind,
-) -> Result<usize, MachineBoundaryError> {
-    total
-        .checked_add(bytes)
-        .filter(|value| *value <= maximum)
-        .ok_or(MachineBoundaryError::AggregateTooLarge(kind))
-}
-
-#[cfg(any(target_arch = "wasm32", test))]
-fn validate_event_boundary(event: BoundaryEvent<'_>) -> Result<usize, MachineBoundaryError> {
-    let mut total = checked_value_bytes(
-        event.name,
-        scxml_types::MAX_NAME_BYTES,
-        MachineInputKind::Name,
-    )?;
-    for value in [event.origin, event.origin_type].into_iter().flatten() {
-        let bytes = checked_value_bytes(value, MAX_METADATA_BYTES, MachineInputKind::Metadata)?;
-        total = checked_add(total, bytes, MAX_EVENT_BYTES, MachineInputKind::Event)?;
+fn validate_event_boundary(event: BoundaryEvent<'_>) -> Result<(), MachineBoundaryError> {
+    for value in [Some(event.name), event.send_id, event.invoke_id]
+        .into_iter()
+        .flatten()
+    {
+        checked_value_bytes(value, scxml_types::MAX_NAME_BYTES, MachineInputKind::Name)?;
     }
-    if let Some(value) = event.send_id {
-        let bytes =
-            checked_value_bytes(value, scxml_types::MAX_NAME_BYTES, MachineInputKind::Name)?;
-        total = checked_add(total, bytes, MAX_EVENT_BYTES, MachineInputKind::Event)?;
-    }
-    if let Some(value) = event.invoke_id {
-        let bytes =
-            checked_value_bytes(value, scxml_types::MAX_NAME_BYTES, MachineInputKind::Name)?;
-        total = checked_add(total, bytes, MAX_EVENT_BYTES, MachineInputKind::Event)?;
-    }
-    if let Some(value) = event.raw {
-        // SCXML 6.2 `_event.raw` is retained processor message text. It
-        // shares the portable event contract's data bound
-        // (`scxml_types::Event::validate`) and still counts against the
-        // aggregate event budget.
-        let bytes = checked_value_bytes(value, MAX_DATA_VALUE_BYTES, MachineInputKind::Raw)?;
-        total = checked_add(total, bytes, MAX_EVENT_BYTES, MachineInputKind::Event)?;
-    }
-    let (value, kind) = match event.data {
-        BoundaryData::Empty => (None, MachineInputKind::Text),
-        BoundaryData::Text(value) => (Some(value), MachineInputKind::Text),
-        BoundaryData::Json(value) => (Some(value), MachineInputKind::Json),
-        BoundaryData::Xml(value) => (Some(value), MachineInputKind::Xml),
-    };
-    if let Some(value) = value {
-        let bytes = checked_value_bytes(value, MAX_DATA_VALUE_BYTES, kind)?;
-        total = checked_add(total, bytes, MAX_EVENT_BYTES, MachineInputKind::Event)?;
-    }
-    checked_add(
-        total,
-        event.trace_bytes,
-        MAX_EVENT_BYTES,
-        MachineInputKind::Event,
-    )
+    Ok(())
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -723,11 +640,10 @@ mod guest {
     use std::cell::{Cell, RefCell};
 
     use super::{
-        BoundaryData, BoundaryEvent, Engine, IrLoadError, LastCall, LifecycleRejection,
-        MachineBoundaryError, MachineInputKind, SessionCommand, SessionLifecycle, SessionStart,
-        Stability, check_sent_provenance, checked_add, checked_value_bytes,
-        child_event_trace_context, gate_session, gate_snapshot, telemetry_traceparent,
-        validate_event_boundary,
+        BoundaryEvent, Engine, IrLoadError, LastCall, LifecycleRejection, MachineBoundaryError,
+        MachineInputKind, SessionCommand, SessionLifecycle, SessionStart, Stability,
+        check_sent_provenance, checked_value_bytes, child_event_trace_context, gate_session,
+        gate_snapshot, telemetry_traceparent, validate_event_boundary,
     };
     use scxml_compiler_core::XmlNodeIr;
     use scxml_engine::interpret::{
@@ -2531,29 +2447,6 @@ mod guest {
     }
 
     fn canonical_wit_value(value: WitDataValue) -> Result<WitDataValue, ComponentError> {
-        let boundary = match &value {
-            WitDataValue::Absent
-            | WitDataValue::Undefined
-            | WitDataValue::Null
-            | WitDataValue::Boolean(_)
-            | WitDataValue::Number(_) => BoundaryData::Empty,
-            WitDataValue::Text(value) => BoundaryData::Text(value),
-            WitDataValue::JsonArray(value) | WitDataValue::JsonObject(value) => {
-                BoundaryData::Json(value)
-            }
-            WitDataValue::Xml(value) => BoundaryData::Xml(value),
-        };
-        if let BoundaryData::Text(value) | BoundaryData::Json(value) | BoundaryData::Xml(value) =
-            boundary
-        {
-            let kind = match boundary {
-                BoundaryData::Text(_) | BoundaryData::Empty => MachineInputKind::Text,
-                BoundaryData::Json(_) => MachineInputKind::Json,
-                BoundaryData::Xml(_) => MachineInputKind::Xml,
-            };
-            checked_value_bytes(value, super::MAX_DATA_VALUE_BYTES, kind)
-                .map_err(boundary_error)?;
-        }
         to_native_value(value).map(from_native_value)
     }
 
@@ -2653,70 +2546,38 @@ mod guest {
         total
     }
 
-    fn trace_bytes(event: &WitEvent) -> Result<usize, MachineBoundaryError> {
+    fn check_trace_bytes(event: &WitEvent) -> Result<(), MachineBoundaryError> {
         let Some(context) = event.trace_context.as_ref() else {
-            return Ok(0);
+            return Ok(());
         };
-        let mut total = checked_value_bytes(
+        checked_value_bytes(
             &context.traceparent,
             scxml_types::TRACEPARENT_BYTES,
             MachineInputKind::Metadata,
         )?;
         if let Some(value) = context.tracestate.as_deref() {
-            let bytes = checked_value_bytes(
+            checked_value_bytes(
                 value,
                 scxml_types::MAX_TRACESTATE_BYTES,
                 MachineInputKind::Metadata,
             )?;
-            total = checked_add(
-                total,
-                bytes,
-                super::MAX_EVENT_BYTES,
-                MachineInputKind::Event,
-            )?;
         }
         if let Some(value) = context.baggage.as_deref() {
-            let bytes = checked_value_bytes(
+            checked_value_bytes(
                 value,
                 scxml_types::MAX_BAGGAGE_BYTES,
                 MachineInputKind::Metadata,
             )?;
-            total = checked_add(
-                total,
-                bytes,
-                super::MAX_EVENT_BYTES,
-                MachineInputKind::Event,
-            )?;
         }
-        Ok(total)
+        Ok(())
     }
 
-    fn validate_wit_event(event: &WitEvent) -> Result<usize, MachineBoundaryError> {
-        wit_boundary_event(event).and_then(validate_event_boundary)
-    }
-
-    fn wit_boundary_event(event: &WitEvent) -> Result<BoundaryEvent<'_>, MachineBoundaryError> {
-        let data = match &event.data {
-            WitDataValue::Absent
-            | WitDataValue::Undefined
-            | WitDataValue::Null
-            | WitDataValue::Boolean(_)
-            | WitDataValue::Number(_) => BoundaryData::Empty,
-            WitDataValue::Text(value) => BoundaryData::Text(value),
-            WitDataValue::JsonArray(value) | WitDataValue::JsonObject(value) => {
-                BoundaryData::Json(value)
-            }
-            WitDataValue::Xml(value) => BoundaryData::Xml(value),
-        };
-        Ok(BoundaryEvent {
+    fn validate_wit_event(event: &WitEvent) -> Result<(), MachineBoundaryError> {
+        check_trace_bytes(event)?;
+        validate_event_boundary(BoundaryEvent {
             name: &event.name,
             send_id: event.send_id.as_deref(),
-            origin: event.origin.as_deref(),
-            origin_type: event.origin_type.as_deref(),
             invoke_id: event.invoke_id.as_deref(),
-            data,
-            raw: event.raw.as_deref(),
-            trace_bytes: trace_bytes(event)?,
         })
     }
 
@@ -3233,9 +3094,7 @@ mod tests {
                 "`invoke-id` at most {} bytes each",
                 scxml_types::MAX_NAME_BYTES
             ),
-            format!("`origin-type` at most {MAX_METADATA_BYTES} bytes each"),
-            format!("`raw` at most {MAX_DATA_VALUE_BYTES} bytes each"),
-            format!("context, at most {MAX_EVENT_BYTES} bytes"),
+            "`origin`, `origin-type`, `data`, and `raw` have no byte bound".to_owned(),
             format!(
                 "or over {} bytes) starts in `failed` with `invalid-input`",
                 scxml_types::MAX_NAME_BYTES
@@ -3250,104 +3109,23 @@ mod tests {
     }
 
     #[test]
-    fn event_boundary_enforces_value_and_aggregate_byte_limits() {
+    fn event_boundary_bounds_names_only() {
         let oversized_send_id = "s".repeat(scxml_types::MAX_NAME_BYTES + 1);
         let invalid_send_id = BoundaryEvent {
             name: "event",
             send_id: Some(&oversized_send_id),
-            origin: None,
-            origin_type: None,
             invoke_id: None,
-            data: BoundaryData::Empty,
-            raw: None,
-            trace_bytes: 0,
         };
         assert_eq!(
             validate_event_boundary(invalid_send_id),
             Err(MachineBoundaryError::ValueTooLarge(MachineInputKind::Name))
         );
-
-        let oversized_text = "x".repeat(MAX_DATA_VALUE_BYTES + 1);
-        let oversized = BoundaryEvent {
-            name: "event",
-            send_id: None,
-            origin: None,
-            origin_type: None,
-            invoke_id: None,
-            data: BoundaryData::Text(&oversized_text),
-            raw: None,
-            trace_bytes: 0,
-        };
         assert_eq!(
-            validate_event_boundary(oversized),
-            Err(MachineBoundaryError::ValueTooLarge(MachineInputKind::Text))
-        );
-
-        let metadata = "m".repeat(MAX_METADATA_BYTES);
-        let data = "d".repeat(MAX_DATA_VALUE_BYTES);
-        let aggregate = BoundaryEvent {
-            name: "event",
-            send_id: None,
-            origin: Some(&metadata),
-            origin_type: Some(&metadata),
-            invoke_id: None,
-            data: BoundaryData::Xml(&data),
-            raw: None,
-            trace_bytes: 0,
-        };
-        assert_eq!(
-            validate_event_boundary(aggregate),
-            Err(MachineBoundaryError::AggregateTooLarge(
-                MachineInputKind::Event
-            ))
-        );
-    }
-
-    #[test]
-    fn event_boundary_bounds_raw_field() {
-        let oversized_raw = "r".repeat(MAX_DATA_VALUE_BYTES + 1);
-        let oversized = BoundaryEvent {
-            name: "event",
-            send_id: None,
-            origin: None,
-            origin_type: None,
-            invoke_id: None,
-            data: BoundaryData::Empty,
-            raw: Some(&oversized_raw),
-            trace_bytes: 0,
-        };
-        assert_eq!(
-            validate_event_boundary(oversized),
-            Err(MachineBoundaryError::ValueTooLarge(MachineInputKind::Raw))
-        );
-        let at_limit = "r".repeat(MAX_DATA_VALUE_BYTES);
-        assert!(
             validate_event_boundary(BoundaryEvent {
-                raw: Some(&at_limit),
-                ..oversized
-            })
-            .is_ok(),
-            "raw at the shared portable data bound must be accepted"
-        );
-
-        // A within-limit raw still counts against the aggregate event budget.
-        let metadata = "m".repeat(MAX_METADATA_BYTES);
-        let data = "d".repeat(MAX_DATA_VALUE_BYTES);
-        let aggregate = BoundaryEvent {
-            name: "event",
-            send_id: None,
-            origin: Some(&metadata),
-            origin_type: None,
-            invoke_id: None,
-            data: BoundaryData::Json(&data),
-            raw: Some(&metadata),
-            trace_bytes: 0,
-        };
-        assert_eq!(
-            validate_event_boundary(aggregate),
-            Err(MachineBoundaryError::AggregateTooLarge(
-                MachineInputKind::Event
-            ))
+                send_id: None,
+                ..invalid_send_id
+            }),
+            Ok(())
         );
     }
 

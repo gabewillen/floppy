@@ -71,8 +71,6 @@ pub const MAX_BODY_BYTES: usize = 65_536;
 pub const MAX_PARAMS: usize = 256;
 /// Maximum bytes of one parameter name or event name.
 pub const MAX_NAME_BYTES: usize = 1_024;
-/// Maximum bytes of the raw event text (`_event.raw`).
-pub const MAX_RAW_BYTES: usize = scxml_types::MAX_EVENT_DATA_BYTES;
 
 /// One HTTP header field. Names compare ASCII case-insensitively.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -703,9 +701,6 @@ fn params_object(params: Vec<(String, String)>) -> Result<DataValue, Rejection> 
     }
     let text = serde_json::to_string(&serde_json::Value::Object(object))
         .map_err(|_| Rejection::InvalidMessage)?;
-    if text.len() > scxml_types::MAX_EVENT_DATA_BYTES {
-        return Err(Rejection::PayloadTooLarge);
-    }
     DataValue::canonical_json_object(&text).map_err(|_| Rejection::InvalidMessage)
 }
 
@@ -761,19 +756,12 @@ fn decode_request(request: &HttpRequest) -> Result<Event, Rejection> {
         .or_else(|| header_value(&request.headers, EVENT_NAME_PARAMETER).map(str::to_owned))
         .unwrap_or_else(|| DEFAULT_EVENT_NAME.to_owned());
     let name = EventName::new(name).map_err(|_| Rejection::InvalidMessage)?;
-    let raw = render_raw(request, body)?;
+    let raw = render_raw(request, body);
     let mut event = Event::external(name);
     event.data = data;
     event.raw = Some(raw);
     event.origin_type = Some(BASICHTTP_EVENT_PROCESSOR_URI.to_owned());
-    event.validate().map_err(|error| match error {
-        scxml_types::EventError::ValueTooLarge | scxml_types::EventError::AggregateTooLarge => {
-            Rejection::PayloadTooLarge
-        }
-        scxml_types::EventError::InvalidValue | scxml_types::EventError::InvalidTraceContext => {
-            Rejection::InvalidMessage
-        }
-    })?;
+    event.validate().map_err(|_| Rejection::InvalidMessage)?;
     Ok(event)
 }
 
@@ -877,33 +865,21 @@ fn xml_document(body: &str) -> bool {
 }
 
 /// `_event.raw`: request line, header fields, blank line, body.
-fn render_raw(request: &HttpRequest, body: &str) -> Result<String, Rejection> {
+fn render_raw(request: &HttpRequest, body: &str) -> String {
     let mut raw = String::new();
-    let mut push = |text: &str| {
-        if raw
-            .len()
-            .checked_add(text.len())
-            .is_some_and(|total| total <= MAX_RAW_BYTES)
-        {
-            raw.push_str(text);
-            Ok(())
-        } else {
-            Err(Rejection::PayloadTooLarge)
-        }
-    };
-    push(&request.method)?;
-    push(" ")?;
-    push(&request.uri)?;
-    push(" HTTP/1.1\r\n")?;
+    raw.push_str(&request.method);
+    raw.push(' ');
+    raw.push_str(&request.uri);
+    raw.push_str(" HTTP/1.1\r\n");
     for header in &request.headers {
-        push(&header.name)?;
-        push(": ")?;
-        push(&header.value)?;
-        push("\r\n")?;
+        raw.push_str(&header.name);
+        raw.push_str(": ");
+        raw.push_str(&header.value);
+        raw.push_str("\r\n");
     }
-    push("\r\n")?;
-    push(body)?;
-    Ok(raw)
+    raw.push_str("\r\n");
+    raw.push_str(body);
+    raw
 }
 
 #[cfg(test)]

@@ -1213,8 +1213,7 @@ impl Session {
     }
 
     /// The portable value of `value`, without lossy coercion and without
-    /// running user code: a primitive (a finite number, a string of at most
-    /// [`MAX_VALUE_BYTES`]), the absent marker, an XML document (its XML
+    /// running user code: a primitive (a finite number, a string), the absent marker, an XML document (its XML
     /// text, B.2.1), or a JSON tree ([`Self::json_text`]).
     ///
     /// # Errors
@@ -1241,7 +1240,6 @@ impl Session {
             let v = v
                 .to_std_string()
                 .map_err(|_| DataModelError::UnsupportedValue)?;
-            bounded(&v, MAX_VALUE_BYTES)?;
             return Ok(DataValue::String(v));
         }
         let object = value.as_object().ok_or(DataModelError::UnsupportedValue)?;
@@ -1251,7 +1249,6 @@ impl Session {
             return Ok(DataValue::Absent);
         }
         if let Some(xml) = self.xml_of(value)? {
-            bounded(&xml, MAX_VALUE_BYTES)?;
             if !dom::is_markup(&xml) {
                 return Err(DataModelError::UnsupportedValue);
             }
