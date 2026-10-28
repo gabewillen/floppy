@@ -414,6 +414,11 @@ impl Run {
         panic!("no expected record within {limit:?}; got {records:?}");
     }
 
+    /// Whether the last record read holds for `matches`.
+    pub fn last_is(&self, matches: impl Fn(&Json) -> bool) -> bool {
+        self.journal.borrow().last().is_some_and(matches)
+    }
+
     /// Reads records until none arrives for `quiet`, so a record the run
     /// emits just after the last one a test waited for is counted too.
     pub fn quiesce(&self, quiet: Duration) {
