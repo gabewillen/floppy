@@ -837,6 +837,8 @@ fn without_firmware_src_the_body_shows_no_firmware() {
     assert_eq!(environment["self"].get("firmware"), None, "{environment}");
     let choices = &only(&records, &["double.choices"])[0].1;
     assert!(!choices.contains(".firmware"), "{choices}");
+    // The reply is said and recorded before the trace is closed.
+    run.until(WAIT, label_is("stm.turn.recorded"));
     close(run, "without_firmware_src_the_body_shows_no_firmware");
 }
 
@@ -1325,9 +1327,9 @@ fn the_listenings_products_are_turn_stimuli() {
         ])
     );
     assert_eq!(
-        backend.decoded(),
+        backend.heard(),
         vec!["reply to me"],
-        "only the speech is decoded"
+        "only the speech is heard"
     );
 }
 

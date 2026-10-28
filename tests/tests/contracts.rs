@@ -603,10 +603,11 @@ fn every_event_name_is_a_listed_name_or_a_marked_floppy_name() {
         floppy,
         BTreeSet::from([
             "bot.ability.learning.lesson".to_owned(),
+            "bot.ability.listening.transcription.turn".to_owned(),
             "bot.ability.migration.output".to_owned(),
             "bot.ability.ready".to_owned()
         ]),
-        "the floppy-only events: an ability's readiness, the migration ability's output and the learning's lesson"
+        "the floppy-only events: an ability's readiness, the migration ability's output, the learning's lesson and the transcription's turn"
     );
     for event in schemas.keys() {
         assert!(

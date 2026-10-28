@@ -347,6 +347,23 @@ impl Backend {
             .map(|request| request["heard"].as_str().unwrap_or_default().to_owned())
             .collect()
     }
+
+    /// The words the backend heard either way: each streaming session's
+    /// turns, then the texts it was asked to transcribe.
+    pub fn heard(&self) -> Vec<String> {
+        self.streams()
+            .iter()
+            .flat_map(|stream| {
+                stream["heard"]
+                    .as_array()
+                    .cloned()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .filter_map(|text| text.as_str().map(str::to_owned))
+            })
+            .chain(self.decoded())
+            .collect()
+    }
 }
 
 /// The answer to one request: its status and JSON body, or `None` to

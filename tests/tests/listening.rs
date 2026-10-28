@@ -74,7 +74,10 @@ fn layout(edits: &[(&str, &[(&str, &str)])]) -> PathBuf {
     // interpretation's defaults, are on only where a test turns them on,
     // and so is the transcription's streaming, the listening's default:
     // the interpretation hears every sound.
-    rewrite(&dir.join("listening/listening.scx"), &[("streams", "false")]);
+    rewrite(
+        &dir.join("listening/listening.scx"),
+        &[("streams", "false")],
+    );
     rewrite(
         &dir.join("interpretation/interpretation.scx"),
         &[
@@ -179,6 +182,17 @@ fn spelled_seconds(text: &str) -> f64 {
     (text.len() * hearing::SAMPLES_PER_CHAR) as f64 / 16_000.0
 }
 
+/// When the streaming session says a turn spelled as `text` ended: its
+/// samples and the silence that ended it over the rate, as the fake
+/// backend counts them.
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "test texts are a few characters"
+)]
+fn streamed_seconds(text: &str) -> f64 {
+    (text.len() * hearing::SAMPLES_PER_CHAR + hearing::stream::ENDING_SAMPLES) as f64 / 16_000.0
+}
+
 #[test]
 fn a_heard_utterance_is_decoded_into_a_speech_product() {
     let harness = layout(&[]);
@@ -222,15 +236,13 @@ fn a_heard_utterance_is_decoded_into_a_speech_product() {
     assert!(texts(&finished.all, "harness.failed").is_empty());
 }
 
-/// With the affect classifier, decoded speech carries the tone the
-/// backend heard in its voice (mosfet.py's `SpeechData.affect`), its
-/// segment sent as mono PCM at its own rate.
 /// The transcription's speech product of a turn that `sound` opened and
 /// the streaming session heard as `text`, over `seconds` of voice and the
 /// silence that ended it.
 fn streamed_speech(text: &str, sound: &Json, seconds: f64) -> Json {
     let mut product = speech(text, sound);
-    product["voice_detection"] = json!({"segments": [{"start_seconds": 0, "end_seconds": seconds}]});
+    product["voice_detection"] =
+        json!({"segments": [{"start_seconds": 0, "end_seconds": seconds}]});
     product["confidence"] = json!(hearing::stream::CONFIDENCE);
     product
 }
@@ -263,10 +275,20 @@ fn a_streamed_turn_is_handed_on_as_its_words() {
         "GET /v1/audio/stream?sample_rate=16000&language=en&chunk=0.56&turns=1 HTTP/1.1"
     );
     assert_eq!(streams[0]["heard"], json!(["what is the weather"]));
-    assert_eq!(streams[0]["agent"], json!([false]), "told once that the bot is not producing");
-    assert!(backend.received_at("/vad").is_empty(), "nothing is voice-detected afterwards");
-    assert!(backend.decoded().is_empty(), "nothing is decoded afterwards");
-    let seconds = spelled_seconds("what is the weather") + 0.1;
+    assert_eq!(
+        streams[0]["agent"],
+        json!([false]),
+        "told once that the bot is not producing"
+    );
+    assert!(
+        backend.received_at("/vad").is_empty(),
+        "nothing is voice-detected afterwards"
+    );
+    assert!(
+        backend.decoded().is_empty(),
+        "nothing is decoded afterwards"
+    );
+    let seconds = streamed_seconds("what is the weather");
     assert_eq!(
         json_texts(&finished.all, "harness.speech"),
         vec![streamed_speech("what is the weather", &voiced, seconds)]
@@ -296,7 +318,10 @@ fn without_a_streaming_session_the_utterance_is_decoded() {
     assert_eq!(backend.streams().len(), 1, "the session was asked for once");
     assert_eq!(
         texts(&finished.all, "transcription"),
-        vec!["no streaming session (unavailable): the listening hears through the interpretation".to_owned()]
+        vec![
+            "no streaming session (unavailable): the listening hears through the interpretation"
+                .to_owned()
+        ]
     );
     assert_eq!(backend.decoded(), vec!["what is the weather".to_owned()]);
     assert_eq!(
@@ -305,6 +330,9 @@ fn without_a_streaming_session_the_utterance_is_decoded() {
     );
 }
 
+/// With the affect classifier, decoded speech carries the tone the
+/// backend heard in its voice (mosfet.py's `SpeechData.affect`), its
+/// segment sent as mono PCM at its own rate.
 #[test]
 fn decoded_speech_carries_the_tone_of_its_voice() {
     let harness = layout(&[(

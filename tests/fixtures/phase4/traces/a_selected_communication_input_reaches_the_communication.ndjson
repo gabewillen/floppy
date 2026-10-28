@@ -1,6 +1,7 @@
 {"label":"identity.name","parent":"session.floppy","session":"session.floppy.identity","text":"recalled null","type":"log"}
 {"label":"persona.description","parent":"session.floppy","session":"session.floppy.persona","text":"recalled null","type":"log"}
 {"label":"bot.activated","session":"session","text":"{}","type":"log"}
+{"label":"transcription","parent":"session.floppy.listening","session":"session.floppy.listening.transcription","text":"the streaming session did not open in time","type":"log"}
 {"label":"environment.sound","session":"session","text":"{\"audio\":\"media/admit.wav\",\"media_type\":\"audio/wav\"}","type":"log"}
 {"label":"environment.sound","session":"session","text":"{\"audio\":\"media/silence.wav\",\"media_type\":\"audio/wav\"}","type":"log"}
 {"label":"listening.affect","parent":"session.floppy.listening.interpretation","session":"session.floppy.listening.interpretation.speech_voice_affect","text":"skipped: no segment of at least 0.3 s","type":"log"}

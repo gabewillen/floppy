@@ -33,7 +33,13 @@ pub fn accept_key(key: &str) -> String {
 /// SHA-1 (FIPS 180-4), for the handshake only.
 #[expect(clippy::many_single_char_names, reason = "the standard's names")]
 fn sha1(message: &[u8]) -> [u8; 20] {
-    let mut state: [u32; 5] = [0x6745_2301, 0xEFCD_AB89, 0x98BA_DCFE, 0x1032_5476, 0xC3D2_E1F0];
+    let mut state: [u32; 5] = [
+        0x6745_2301,
+        0xEFCD_AB89,
+        0x98BA_DCFE,
+        0x1032_5476,
+        0xC3D2_E1F0,
+    ];
     let mut padded = message.to_vec();
     padded.push(0x80);
     while padded.len() % 64 != 56 {
@@ -93,7 +99,9 @@ fn base64(bytes: &[u8]) -> String {
             });
         for index in 0..4 {
             if index <= chunk.len() {
-                text.push(char::from(ALPHABET[((value >> (18 - 6 * index)) & 63) as usize]));
+                text.push(char::from(
+                    ALPHABET[((value >> (18 - 6 * index)) & 63) as usize],
+                ));
             } else {
                 text.push('=');
             }
@@ -142,7 +150,11 @@ pub fn write_frame(stream: &mut TcpStream, opcode: u8, payload: &[u8]) -> bool {
         length @ 0..=125 => frame.push(u8::try_from(length).expect("a short length")),
         length @ 126..=0xffff => {
             frame.push(126);
-            frame.extend_from_slice(&u16::try_from(length).expect("a medium length").to_be_bytes());
+            frame.extend_from_slice(
+                &u16::try_from(length)
+                    .expect("a medium length")
+                    .to_be_bytes(),
+            );
         }
         length => {
             frame.push(127);
@@ -166,12 +178,7 @@ fn seconds(samples: usize) -> f64 {
 /// `path` with the WebSocket `key`; `record` is its request record, which
 /// gains `heard` (each turn's text), `agent` (each `speaking` told) and
 /// `ended` (whether the client said `end`), and `log` the backend's.
-pub fn serve(
-    mut stream: TcpStream,
-    key: &str,
-    record: Json,
-    log: &std::sync::Mutex<Vec<Request>>,
-) {
+pub fn serve(mut stream: TcpStream, key: &str, record: Json, log: &std::sync::Mutex<Vec<Request>>) {
     let index = {
         let mut log = log.lock().expect("the log lock");
         log.push(record);
@@ -208,7 +215,10 @@ pub fn serve(
                     heard += 1;
                     if sample != 0 {
                         if voice.is_empty()
-                            && !say(&mut stream, &json!({"type": "speech_start", "t": seconds(heard - 1)}))
+                            && !say(
+                                &mut stream,
+                                &json!({"type": "speech_start", "t": seconds(heard - 1)}),
+                            )
                         {
                             return;
                         }
