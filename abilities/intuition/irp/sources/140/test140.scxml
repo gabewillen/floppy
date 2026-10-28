@@ -2,19 +2,16 @@
 <!-- intuition-5: an event several sessions offer names no target, so it reaches none and is not acted; the turn is still handled. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
-  <invoke id="intuition" type="scxml" src="../../../intuition.scx">
-    <param name="turn" expr="8"/>
-    <param name="stimulus" expr='{"event": "bot.input", "data": {"observation": {"event": "text", "data": "hello"}}, "source": "body"}'/>
-    <param name="focus" expr="null"/>
-    <param name="choices" expr='[{"event": "tool.go", "schema": {}, "target": "a"}, {"event": "tool.go", "schema": {}, "target": "b"}]'/>
-    <param name="decision_timeout_ms" expr="150000"/>
-  </invoke>
+  <invoke id="intuition" type="scxml" src="../../../intuition.scx"/>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.intuition" cond="_event.data.turn === 8 &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.reason === &quot;none&quot; &amp;&amp; typeof _event.data.confidence_tuner === 'object' &amp;&amp; Array.isArray(_event.data.acted) &amp;&amp; typeof _event.data.bytes_per_token === 'number' &amp;&amp; _event.data.selected.length === 1 &amp;&amp; _event.data.selected[0].target === undefined &amp;&amp; JSON.stringify(_event.data.acted) === &quot;[]&quot;" target="step1"/>
+    <onentry>
+      <send event="bot.ability.intuition.input" target="#_intuition"><content expr='{"turn": 8, "stimulus": {"event": "bot.input", "data": {"observation": {"event": "text", "data": "hello"}}, "source": "body"}, "focus": null, "focus_candidates": [], "choices": [{"event": "tool.go", "schema": {}, "target": "a"}, {"event": "tool.go", "schema": {}, "target": "b"}], "held": [], "environment": null, "recent": [], "confidence_tuner": {"mean": 70, "var": 100, "n": 0}, "decision_timeout_ms": 150000, "hand_ons": ["reasoning"], "max_context_tokens": null, "bytes_per_token": 3}'/></send>
+    </onentry>
+    <transition event="bot.ability.intuition.output" cond="_event.data.turn === 8 &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.reason === &quot;none&quot; &amp;&amp; typeof _event.data.confidence_tuner === 'object' &amp;&amp; Array.isArray(_event.data.acted) &amp;&amp; typeof _event.data.bytes_per_token === 'number' &amp;&amp; _event.data.selected.length === 1 &amp;&amp; _event.data.selected[0].target === undefined &amp;&amp; JSON.stringify(_event.data.acted) === &quot;[]&quot;" target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

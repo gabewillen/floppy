@@ -55,12 +55,14 @@ function isReply(_event, child) {
 
 // A failure of a stage that fails the interpretation's work.
 function isStageReply(_event) {
-  return ['voice_detection', 'voice_diarization', 'voice_identification', 'speech_decoding']
+  return ['voice_detection', 'speech_voice_detection', 'voice_diarization', 'voice_identification', 'speech_decoding']
     .some(function (child) { return isReply(_event, child); });
 }
 
 function stageReplyFailure(_event) {
-  return ({stage: _event.data.id.slice(0, _event.data.id.lastIndexOf('.')), message: _event.data.message});
+  // The sound asked ahead was asked of the voice detection too.
+  var child = _event.data.id.slice(0, _event.data.id.lastIndexOf('.'));
+  return ({stage: child === 'speech_voice_detection' ? 'voice_detection' : child, message: _event.data.message});
 }
 
 function hasAudio(_event) {
@@ -129,8 +131,14 @@ function soundOutput() {
   return media_dir + 'floppy-sound-' + serial + '.pcm';
 }
 
-// The request for the sound in hand to the voice detection.
-function detectionInput(sound) {
+// The request for the sound in hand to the voice detection, or with
+// ahead (the serial it will have) for a sound that has not been taken yet.
+function detectionInput(sound, ahead) {
+  if (ahead !== undefined) {
+    return ({id: 'speech_voice_detection.' + ahead, audio: sound.audio, media_type: orNull(sound.media_type),
+      sample_rate_hz: orNull(sound.sample_rate_hz), channels: orNull(sound.channels),
+      output: sound.audio.slice(0, sound.audio.lastIndexOf('/') + 1) + 'floppy-sound-' + ahead + '.pcm'});
+  }
   return ({id: requestId('voice_detection'), audio: sound.audio, media_type: orNull(sound.media_type),
     sample_rate_hz: orNull(sound.sample_rate_hz), channels: orNull(sound.channels), output: soundOutput()});
 }

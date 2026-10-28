@@ -31,8 +31,14 @@
   passes the turn on without a memory), then the decision layer (the
   decision service over what they left unhandled,
   abilities/intuition/intuition.scx, the invoke "decision"). The decision
-  layer's confidence tuner state ({mean, var, n}) is
-  passed in by <param> and kept from the donedata.
+  layer is the exception to the per-turn children: it is invoked once, in
+  turns, and held for the cognition's lifetime, as mosfet.py's Cognition
+  holds its Decision (decision D268); running_decision sends it the turn
+  as bot.ability.intuition.input and takes bot.ability.intuition.output
+  for the turn in hand, and leaving running_decision sends it
+  bot.ability.processing.cancel, which ends a decision still in flight.
+  Its confidence tuner state ({mean, var, n}) and bytes_per_token travel
+  in each input and are kept from its output.
 
   Intuition (the chat tier, decision D144): when the body gives an
   intuition_model (null composes none), abilities/reasoning/reasoning.scx
@@ -259,6 +265,10 @@
     <data id="reflection_model" expr="null"/>
     <!-- The address of the bot's memory (decision D266), for autonomy, reasoning, reflection and routines (null: no memory). -->
     <data id="memory" expr="null"/>
+    <!-- The address of the bot's Embedding ability (decision D266's
+         pattern), for reasoning and reflection (null: none, so episodes
+         are recalled by recency alone). -->
+    <data id="embedding" expr="null"/>
     <!-- A stage's inactivity bound and its backstop (decision D101). -->
     <data id="child_operation_timeout_ms" expr="30000"/>
     <data id="child_operation_ceiling_ms" expr="240000"/>
@@ -372,6 +382,10 @@
     <assign location="recent_turns" expr="_event.data.turns"/>
   </transition>
   <state id="turns" initial="idle">
+  <!-- The decision layer, held for the cognition's lifetime (mosfet.py's
+       Cognition holds its Decision): each turn that reaches it is a
+       bot.ability.intuition.input. -->
+  <invoke id="decision" type="scxml" src="../intuition/intuition.scx"/>
   <!-- Waits for the body's turn, awake and then at rest. -->
   <state id="idle" initial="awake">
     <onentry>
@@ -540,36 +554,41 @@
         <send idlocation="ceiling_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="ceilingDelay()">
           <param name="turn" expr="turn"/>
         </send>
+        <send event="bot.ability.intuition.input" target="#_decision">
+          <param name="turn" expr="turn"/>
+          <param name="stimulus" expr="stimulus"/>
+          <param name="focus" expr="focus"/>
+          <param name="focus_candidates" expr="focus_candidates"/>
+          <param name="choices" expr="tier_choices"/>
+          <param name="held" expr="tier_held"/>
+          <param name="environment" expr="environment"/>
+          <param name="recent" expr="recent_turns"/>
+          <param name="confidence_tuner" expr="confidence_tuner"/>
+          <param name="decision_timeout_ms" expr="decision_timeout_ms"/>
+          <param name="hand_ons" expr="handOns()"/>
+          <param name="max_context_tokens" expr="contextTokens()"/>
+          <param name="bytes_per_token" expr="decision_bytes_per_token"/>
+        </send>
       </onentry>
+      <!-- Leaving the turn's decision unanswered (cancelled or timed out)
+           ends it; once answered, the decision is idle and drops this. -->
       <onexit>
         <cancel sendidexpr="hop_timer"/>
         <cancel sendidexpr="ceiling_timer"/>
+        <send event="bot.ability.processing.cancel" target="#_decision">
+          <content expr="({})"/>
+        </send>
       </onexit>
-      <invoke id="decision" type="scxml" src="../intuition/intuition.scx">
-        <param name="turn" expr="turn"/>
-        <param name="stimulus" expr="stimulus"/>
-        <param name="focus" expr="focus"/>
-        <param name="focus_candidates" expr="focus_candidates"/>
-        <param name="choices" expr="tier_choices"/>
-        <param name="held" expr="tier_held"/>
-        <param name="environment" expr="environment"/>
-        <param name="recent" expr="recent_turns"/>
-        <param name="confidence_tuner" expr="confidence_tuner"/>
-        <param name="decision_timeout_ms" expr="decision_timeout_ms"/>
-        <param name="hand_ons" expr="handOns()"/>
-        <param name="max_context_tokens" expr="contextTokens()"/>
-        <param name="bytes_per_token" expr="decision_bytes_per_token"/>
-      </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="../schemas/bot.ability.cognition.cancel.json"
                   cond="isCurrentTurn(_event)" target="cancelling_decision"/>
-      <transition event="done.invoke.decision" cond="isHandled(_event)" target="completing">
+      <transition event="bot.ability.intuition.output" event:schema="../schemas/bot.ability.intuition.output.json" cond="isHandled(_event)" target="completing">
         <assign location="confidence_tuner" expr="decisionTuner(_event)"/>
         <assign location="decision_bytes_per_token" expr="decisionBytesPerTokenAfter(_event)"/>
         <log label="cognition.tuner" expr="tunerLog()"/>
         <log label="cognition.stage" expr="stageLog('decision handled', _event)"/>
         <assign location="selected" expr="handledOutput(_event)"/>
       </transition>
-      <transition event="done.invoke.decision" cond="isUnhandled(_event)" target="after_decision">
+      <transition event="bot.ability.intuition.output" event:schema="../schemas/bot.ability.intuition.output.json" cond="isUnhandled(_event)" target="after_decision">
         <assign location="confidence_tuner" expr="decisionTuner(_event)"/>
         <assign location="decision_bytes_per_token" expr="decisionBytesPerTokenAfter(_event)"/>
         <log label="cognition.tuner" expr="tunerLog()"/>
@@ -579,7 +598,7 @@
         <assign location="acted" expr="actedAfter(_event)"/>
       </transition>
       <!-- A failing decision layer hands the same turn on (decision D140). -->
-      <transition event="done.invoke.decision" cond="matchesStageOutput(_event)" target="after_decision">
+      <transition event="bot.ability.intuition.output" event:schema="../schemas/bot.ability.intuition.output.json" cond="matchesStageOutput(_event)" target="after_decision">
         <assign location="confidence_tuner" expr="decisionTuner(_event)"/>
         <assign location="decision_bytes_per_token" expr="decisionBytesPerTokenAfter(_event)"/>
         <log label="cognition.tuner" expr="tunerLog()"/>
@@ -635,6 +654,7 @@
         <param name="bytes_per_token" expr="intuition_bytes_per_token"/>
         <param name="model" expr="intuition_model"/>
         <param name="memory" expr="memory"/>
+        <param name="embedding" expr="embedding"/>
       </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="../schemas/bot.ability.cognition.cancel.json"
                   cond="isCurrentTurn(_event)" target="cancelling_intuition"/>
@@ -698,6 +718,7 @@
         <param name="bytes_per_token" expr="bytes_per_token"/>
         <param name="model" expr="model"/>
         <param name="memory" expr="memory"/>
+        <param name="embedding" expr="embedding"/>
       </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="../schemas/bot.ability.cognition.cancel.json"
                   cond="isCurrentTurn(_event)" target="cancelling_reasoning"/>
@@ -831,6 +852,7 @@
     <state id="reflection_running">
       <invoke id="reflection" type="scxml" src="../reflection/reflection.scx">
         <param name="memory" expr="memory"/>
+        <param name="embedding" expr="embedding"/>
         <param name="model" expr="model"/>
         <param name="reflection_model" expr="reflection_model"/>
         <param name="bounds" expr="bounds"/>

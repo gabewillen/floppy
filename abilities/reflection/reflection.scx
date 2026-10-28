@@ -166,6 +166,11 @@
     <!-- The id of each request this document last sent the memory, by
          the state that sent it (decision D266). -->
     <data id="memory_requests" expr="({})"/>
+    <!-- The address of the bot's Embedding ability (null: none, so each
+         episode is stored without a vector) and the id of each request
+         this document last sent it, by the state that sent it. -->
+    <data id="embedding" expr="null"/>
+    <data id="embedding_requests" expr="({})"/>
     <data id="model" expr="'gemma-4-26b-a4b'"/>
     <!-- The model this document's calls use on FLOPPY_REFLECTION_BASE_URL
          (decision D260): null keeps them on model and FLOPPY_BASE_URL. -->
@@ -584,30 +589,24 @@
       <assign location="episode" expr="cognitiveEpisode(behavior)"/>
       <assign location="vector" expr="null"/>
     </onentry>
-    <!-- The request goes once the embedding has started (the next
-         macrostep). An episode without words has nothing to embed. -->
+    <!-- An episode without words, or a bot without an Embedding
+         ability, has nothing to embed. -->
     <state id="storing_embedding">
       <onentry>
-        <if cond="hasEpisodeWords()">
-          <send event="bot.ability.embedding.input">
+        <if cond="hasEpisodeWords() &amp;&amp; embedding !== null">
+          <send event="bot.ability.embedding.input" targetexpr="embedding" idlocation="embedding_requests.storing_embedding">
             <content expr="episodeEmbeddingInput()"/>
           </send>
         </if>
       </onentry>
-      <transition cond="hasNoEpisodeWords()" target="storing_episode"/>
-      <invoke id="embedding" type="scxml" src="../embedding/embedding.scx"/>
-      <transition event="bot.ability.embedding.input" event:schema="../schemas/bot.ability.embedding.input.json">
-        <send event="bot.ability.embedding.input" target="#_embedding">
-          <content expr="_event.data"/>
-        </send>
-      </transition>
-      <transition event="bot.ability.embedding.output" event:schema="../schemas/bot.ability.embedding.output.json"
+      <transition cond="hasNoEpisodeWords() || embedding === null" target="storing_episode"/>
+      <transition event="bot.ability.embedding.output" cond="isEmbeddingReply('storing_embedding')" event:schema="../schemas/bot.ability.embedding.output.json"
                   target="storing_episode">
         <assign location="vector" expr="compactVector(_event.data.vectors[0].values)"/>
       </transition>
       <!-- An episode that cannot be embedded is still stored, found by
            recency alone. -->
-      <transition event="bot.ability.embedding.failed" event:schema="../schemas/bot.ability.embedding.failed.json"
+      <transition event="bot.ability.embedding.failed" cond="isEmbeddingReply('storing_embedding')" event:schema="../schemas/bot.ability.embedding.failed.json"
                   target="storing_episode">
         <log label="reflection.embedding" expr="_event.data.kind"/>
       </transition>

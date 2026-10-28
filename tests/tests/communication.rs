@@ -195,6 +195,7 @@ fn layout(speaking: &Speaking, edits: &[(&str, &[(&str, &str)])]) -> PathBuf {
         "identity",
         "memory",
         "stm",
+        "embedding",
         "persona",
         "seeing",
     ] {

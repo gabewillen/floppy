@@ -194,7 +194,9 @@ and each turn's cue reasoning recalls with, through
 `FLOPPY_EMBEDDING_BASE_URL` with `FLOPPY_EMBEDDING_API_KEY` (an
 `OpenAI`-compatible `/embeddings`, `embeddinggemma-2` at 256 dimensions,
 which `https://api.willen.dev/v1` serves). Without it floppy recalls its
-newest episodes, as before.
+newest episodes, as before. The body invokes the Embedding ability once,
+beside the memory, and the cognition's reasoning and reflection send it
+requests by its address (decision D267).
 
 Sight (D185 to D189): the body's `seeing_enabled` `<data>` (`false` by
 default; the environment's `<invoke>` may pass it as a `<param>`) turns the

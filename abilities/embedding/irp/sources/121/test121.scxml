@@ -12,9 +12,9 @@
   </state>
   <state id="step0">
     <onentry>
-      <send event="bot.ability.embedding.input" target="#_embedding"><content expr='{"role": "query", "items": [{"parts": [{"kind": "text", "text": "one"}]}, {"parts": [{"kind": "text", "text": "two"}]}]}'/></send>
+      <send event="bot.ability.embedding.input" target="#_embedding"><content expr='{"id": "embedding-1", "role": "query", "items": [{"parts": [{"kind": "text", "text": "one"}]}, {"parts": [{"kind": "text", "text": "two"}]}]}'/></send>
     </onentry>
-    <transition event="bot.ability.embedding.failed" cond='_event.data.kind === "invalid_response" &amp;&amp; _event.data.message === "The embedder failed (malformed)."' target="step1"/>
+    <transition event="bot.ability.embedding.failed" cond='_event.data.id === "embedding-1" &amp;&amp; _event.data.kind === "invalid_response" &amp;&amp; _event.data.message === "The embedder failed (malformed)."' target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

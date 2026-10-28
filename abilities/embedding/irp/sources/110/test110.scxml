@@ -12,13 +12,13 @@
   </state>
   <state id="step0">
     <onentry>
-      <send event="bot.ability.embedding.input" target="#_embedding"><content expr='{"role": "query", "items": [{"parts": [{"kind": "text", "text": "first"}]}]}'/></send>
-      <send event="bot.ability.embedding.input" target="#_embedding"><content expr='{"role": "document", "items": [{"parts": [{"kind": "text", "text": "second"}]}]}'/></send>
+      <send event="bot.ability.embedding.input" target="#_embedding"><content expr='{"id": "first", "role": "query", "items": [{"parts": [{"kind": "text", "text": "first"}]}]}'/></send>
+      <send event="bot.ability.embedding.input" target="#_embedding"><content expr='{"id": "second", "role": "document", "items": [{"parts": [{"kind": "text", "text": "second"}]}]}'/></send>
     </onentry>
-    <transition event="bot.ability.embedding.output" cond='_event.data.role === "query" &amp;&amp; _event.data.space.model === "embeddinggemma-2" &amp;&amp; _event.data.space.dimensions === 2 &amp;&amp; JSON.stringify(_event.data.vectors.map(function (v) { return v.values; })) === "[[1,0]]"' target="step1"/>
+    <transition event="bot.ability.embedding.output" cond='_event.data.id === "first" &amp;&amp; _event.data.role === "query" &amp;&amp; _event.data.space.model === "embeddinggemma-2" &amp;&amp; _event.data.space.dimensions === 2 &amp;&amp; JSON.stringify(_event.data.vectors.map(function (v) { return v.values; })) === "[[1,0]]"' target="step1"/>
   </state>
   <state id="step1">
-    <transition event="bot.ability.embedding.output" cond='_event.data.role === "document" &amp;&amp; _event.data.space.model === "embeddinggemma-2" &amp;&amp; _event.data.space.dimensions === 2 &amp;&amp; JSON.stringify(_event.data.vectors.map(function (v) { return v.values; })) === "[[0,1]]"' target="step2"/>
+    <transition event="bot.ability.embedding.output" cond='_event.data.id === "second" &amp;&amp; _event.data.role === "document" &amp;&amp; _event.data.space.model === "embeddinggemma-2" &amp;&amp; _event.data.space.dimensions === 2 &amp;&amp; JSON.stringify(_event.data.vectors.map(function (v) { return v.values; })) === "[[0,1]]"' target="step2"/>
   </state>
   <state id="step2">
     <transition target="pass"/>

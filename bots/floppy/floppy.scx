@@ -273,7 +273,11 @@
   the persona the descriptions the bot wrote of itself, the listening the
   voices it has heard (decision D258), and the conversation its
   relationship memories. A run without the grant is refused before it
-  starts.
+  starts. Beside it live holds the bot's one Embedding ability, <invoke
+  id="embedding"> (abilities/embedding/embedding.scx, mosfet.py's
+  Embedding), whose address the body passes to the cognition as <param
+  name="embedding"> for reasoning, which embeds each turn's cue, and
+  reflection, which embeds each episode it stores (decision D256).
 -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml"
        xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition"
@@ -404,16 +408,19 @@
       <!-- Every reboot and deactivate clears the focus. -->
       <assign location="focused_device" expr="null"/>
     </onexit>
-    <!-- The bot's memory, before the abilities that send it requests. -->
+    <!-- The bot's memory and its embedding, before the abilities that
+         send them requests. -->
     <invoke id="memory" type="scxml" src="../../abilities/memory/memory.scx">
       <param name="database" expr="database"/>
     </invoke>
+    <invoke id="embedding" type="scxml" src="../../abilities/embedding/embedding.scx"/>
     <invoke id="cognition" type="scxml" src="../../abilities/cognition/cognition.scx">
       <param name="model" expr="model"/>
       <param name="intuition_model" expr="intuition_model"/>
       <param name="reflection_model" expr="reflection_model"/>
       <param name="bounds" expr="bounds"/>
       <param name="memory" expr="memoryAddress()"/>
+      <param name="embedding" expr="embeddingAddress()"/>
     </invoke>
     <invoke id="communication" type="scxml" src="../../abilities/communication/communication.scx">
       <param name="memory" expr="memoryAddress()"/>

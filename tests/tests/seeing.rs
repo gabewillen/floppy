@@ -108,6 +108,7 @@ fn layout(seeing: &Seeing, data: &[(&str, &str)]) -> PathBuf {
         "identity",
         "memory",
         "stm",
+        "embedding",
         "persona",
         "seeing",
     ] {

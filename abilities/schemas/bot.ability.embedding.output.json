@@ -5,6 +5,7 @@
   "description": "One embedding result (mosfet.py's Embedding OutputData): a unit vector per requested item, in input order, in one declared space.",
   "examples": [
     {
+      "id": "embedding-1",
       "space": {
         "model": "embeddinggemma-2",
         "dimensions": 2
@@ -21,6 +22,12 @@
     }
   ],
   "properties": {
+    "id": {
+      "description": "The requester's id for this request, echoed by the reply.",
+      "title": "Id",
+      "type": "string",
+      "minLength": 1
+    },
     "space": {
       "additionalProperties": false,
       "description": "The vector space a vector belongs to. Vectors from different spaces must never be compared.",
@@ -95,6 +102,7 @@
     }
   },
   "required": [
+    "id",
     "space",
     "role",
     "vectors"
