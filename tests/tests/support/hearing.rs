@@ -17,6 +17,13 @@
 //! transcription or embedding of text starting with `hang` is never
 //! answered (the interpretation's stage timer fails a transcription, and its
 //! identification deadline identifies nobody). Every request is recorded; nothing reaches the network.
+//!
+//! It also serves the streaming hearing session, the WebSocket
+//! `GET /v1/audio/stream` ([`stream`]), unless it was started with
+//! [`Backend::start_without_stream`], when that path answers 404 as a
+//! backend that does not stream does.
+
+pub mod stream;
 
 use std::io::{BufRead as _, BufReader, Read as _, Write as _};
 use std::net::TcpListener;
@@ -48,6 +55,9 @@ pub struct Backend {
     pub base_url: String,
     received: Arc<Mutex<Vec<Request>>>,
 }
+
+/// The streaming path, under the base URL.
+const STREAM_PATH: &str = "/v1/audio/stream";
 
 /// `text` spelled as voiced samples.
 pub fn voiced(text: &str) -> Vec<i16> {
@@ -270,6 +280,16 @@ fn form(body: &[u8], content_type: &str) -> (Json, Vec<u8>) {
 impl Backend {
     /// Starts the backend.
     pub fn start() -> Self {
+        Self::serving(true)
+    }
+
+    /// Starts the backend without the streaming session: its path answers
+    /// 404.
+    pub fn start_without_stream() -> Self {
+        Self::serving(false)
+    }
+
+    fn serving(streams: bool) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("the mock binds a loopback port");
         let base_url = format!(
             "http://{}/v1",
@@ -281,7 +301,7 @@ impl Backend {
             for stream in listener.incoming() {
                 let Ok(stream) = stream else { continue };
                 let log = Arc::clone(&log);
-                std::thread::spawn(move || answer(stream, &log));
+                std::thread::spawn(move || answer(stream, &log, streams));
             }
         });
         Self { base_url, received }
@@ -298,6 +318,20 @@ impl Backend {
         self.received()
             .into_iter()
             .filter(|request| request["request_line"] == line)
+            .collect()
+    }
+
+    /// The streaming sessions opened so far, in order: each one's request
+    /// record, with the turns it heard (`heard`), the `speaking` it was
+    /// told (`agent`), and whether it was told to end (`ended`).
+    pub fn streams(&self) -> Vec<Request> {
+        self.received()
+            .into_iter()
+            .filter(|request| {
+                request["request_line"]
+                    .as_str()
+                    .is_some_and(|line| line.starts_with(&format!("GET {STREAM_PATH}")))
+            })
             .collect()
     }
 
@@ -424,7 +458,7 @@ fn transcribed(text: &str, ok: Json) -> Option<(&'static str, Json)> {
     }
 }
 
-fn answer(mut stream: std::net::TcpStream, log: &Mutex<Vec<Request>>) {
+fn answer(mut stream: std::net::TcpStream, log: &Mutex<Vec<Request>>, streams: bool) {
     let Ok(clone) = stream.try_clone() else {
         return;
     };
@@ -449,6 +483,27 @@ fn answer(mut stream: std::net::TcpStream, log: &Mutex<Vec<Request>>) {
             .find(|(name, _)| name == wanted)
             .map(|(_, value)| value.clone())
     };
+    let path = request_line
+        .split_whitespace()
+        .nth(1)
+        .unwrap_or_default()
+        .to_owned();
+    let keyed = header("authorization").as_deref() == Some(&format!("Bearer {FAKE_KEY}"))
+        || header("x-goog-api-key").as_deref() == Some(FAKE_KEY);
+    if path.starts_with(STREAM_PATH) {
+        let record = json!({"request_line": request_line.trim_end(), "keyed": keyed});
+        match header("sec-websocket-key") {
+            Some(key) if streams => stream::serve(stream, &key, record, log),
+            _ => {
+                log.lock().expect("the log lock").push(record);
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 404 Not Found\r\ncontent-type: application/json\r\ncontent-length: 22\r\nconnection: close\r\n\r\n{{\"detail\":\"Not Found\"}}"
+                );
+            }
+        }
+        return;
+    }
     let length = header("content-length")
         .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or(0);
@@ -456,15 +511,9 @@ fn answer(mut stream: std::net::TcpStream, log: &Mutex<Vec<Request>>) {
     if reader.read_exact(&mut body).is_err() {
         return;
     }
-    let path = request_line
-        .split_whitespace()
-        .nth(1)
-        .unwrap_or_default()
-        .to_owned();
     let mut record = json!({
         "request_line": request_line.trim_end(),
-        "keyed": header("authorization").as_deref() == Some(&format!("Bearer {FAKE_KEY}"))
-            || header("x-goog-api-key").as_deref() == Some(FAKE_KEY),
+        "keyed": keyed,
     });
     let reply = answered(
         &path,

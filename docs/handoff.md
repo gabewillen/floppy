@@ -1122,10 +1122,17 @@ What is still to build, each item with its issue where one exists.
   spoken while the reply is generated with an `abandoned` outcome (they
   wait until something produces them, D202; how a draft is correlated
   with its final respond, since an SCXML `<send>` takes no id from an
-  expression, and the draft timeout), streaming decoding with an end of
-  turn, a live run against a streaming backend (none has been measured),
+  expression, and the draft timeout; drafts are D262), a live run against
+  a streaming backend (none has been measured; the cloud proxy does not
+  carry WebSocket upgrades, so measure on a workstation with
+  `scripts/talk.py`),
   and a `spoken` that knows the reply's total length while it still
   streams (D203 counts the share of the audio received).
+- **Streamed hearing** (D264): the transcription streams scored sounds
+  to the speech service's `stream` session and hands each turn with words
+  to the interpretation through the listening. Still open: the overlap
+  fact (the session's `overlap` is dropped), one session per sound
+  source, and speaking over the backend's `/v1/audio/speech` WebSocket.
 - **Voicing**: voice catalogs, voice design and the bot's own voice;
   `bot.ability.speaking.output`'s `voice_id` is null until then (D179).
 - **Graph memory and embeddings** ([plan](plans/graph-memory.md)):

@@ -1,0 +1,1266 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.listening.transcription.turn",
+  "description": "[floppy name] A turn the transcription heard end, with its words, handed to the interpretation to identify who spoke and hear its tone (mosfet.py's Transcription finishes its turns itself).",
+  "properties": {
+    "text": {
+      "description": "The turn's words: the hearing model's turn text, else its transcripts joined.",
+      "examples": [
+        "What time does the shop open tomorrow?"
+      ],
+      "minLength": 1,
+      "title": "Text",
+      "type": "string"
+    },
+    "confidence": {
+      "anyOf": [
+        {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The lowest confidence of the turn's transcripts, or null when none gave one.",
+      "examples": [
+        0.93
+      ],
+      "title": "Confidence"
+    },
+    "frames": {
+      "description": "The turn's sounds, in the order they were heard (at most 1500; older ones are let go).",
+      "items": {
+        "description": "One sound the turn heard, exactly as it was received.",
+        "examples": [
+          {
+            "audio": "media/audio-1",
+            "channels": 1,
+            "kind": "phone.call",
+            "media_type": "audio/pcm",
+            "sample_rate_hz": 48000
+          }
+        ],
+        "properties": {
+          "audio": {
+            "description": "Reference (a URI reference) to the audio this stimulus carries; floppy passes media by reference, never as bytes [floppy field].",
+            "examples": [
+              "media/audio-1"
+            ],
+            "format": "uri-reference",
+            "minLength": 1,
+            "title": "Audio",
+            "type": "string"
+          },
+          "media_type": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional media type or codec label, such as audio/pcm or audio/opus.",
+            "examples": [
+              "audio/pcm",
+              "audio/opus"
+            ],
+            "title": "Media Type"
+          },
+          "sample_rate_hz": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional sample rate for raw or decoded audio, measured in hertz.",
+            "examples": [
+              48000
+            ],
+            "title": "Sample Rate Hz"
+          },
+          "channels": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional number of audio channels represented by the chunk.",
+            "examples": [
+              1,
+              2
+            ],
+            "title": "Channels"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional low-cardinality acoustic provenance hint. Prefer domain-qualified labels when the source is clear (for example phone.ringing, phone.call, ambient, knock) so models do not confuse bare tokens like ring. Not a linguistic interpretation.",
+            "examples": [
+              "phone.ringing",
+              "phone.call",
+              "ambient",
+              "knock"
+            ],
+            "title": "Kind"
+          },
+          "amplitude_db": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional loudness of this sound at its source, in dB SPL measured one metre away. A shout and a whisper leave the same mouth, so loudness belongs to the sound rather than to the thing that made it. How far it carries is the environment's to work out; omitting this means the sound reaches every listener regardless of distance.",
+            "examples": [
+              60.0,
+              25.0
+            ],
+            "title": "Amplitude Db"
+          },
+          "received_level_db": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional loudness of this sound in dB SPL where the recipient of this event is, which is a different quantity from amplitude_db: the same shout is one level at the mouth and another at the far side of the room. The environment fills this in per recipient, so an emitter never sets it. None means the environment had nothing to measure \u2014 the sound carried no amplitude, or nobody said where it or the listener was \u2014 not that the sound was silent.",
+            "examples": [
+              54.0,
+              6.0
+            ],
+            "title": "Received Level Db"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Optional acoustic source: the transducer this sound came off, as its emitter stamps it (speaking stamps its mouth, \"speaking\", the mouth its efference copy names). An SCXML event relayed through the body keeps only its data, so the source travels in the sound itself [floppy field]. Listening scores an arrival against an efference copy only when this is the producing mouth; a sound without one is never the bot's own.",
+            "examples": [
+              "speaking"
+            ],
+            "title": "Source"
+          },
+          "participants": {
+            "default": [],
+            "description": "Who produced this stimulus, stamped by the device that emitted it. Empty when the device knows no one (ambient sound, an unattended camera).",
+            "examples": [
+              [
+                {
+                  "ref": "person-42",
+                  "role": "source"
+                }
+              ]
+            ],
+            "items": {
+              "additionalProperties": false,
+              "description": "Someone who took part in a stimulus: an opaque, producer-stable identity reference and the role it played (source: who produced it; target: who it was addressed to).",
+              "examples": [
+                {
+                  "ref": "+15555550100",
+                  "role": "source"
+                },
+                {
+                  "ref": "person-42",
+                  "role": "target"
+                },
+                {
+                  "own": true,
+                  "ref": "voice:3f2a9c",
+                  "role": "source"
+                }
+              ],
+              "properties": {
+                "ref": {
+                  "description": "Opaque, producer-stable identity such as a phone number, an app person id, or a chat handle. Never a display name chosen by the bot.",
+                  "examples": [
+                    "+15555550100",
+                    "person-42",
+                    "caller"
+                  ],
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "title": "Ref",
+                  "type": "string"
+                },
+                "role": {
+                  "description": "source: who produced the stimulus (speaker, sender). target: who it was addressed to.",
+                  "enum": [
+                    "source",
+                    "target"
+                  ],
+                  "examples": [
+                    "source",
+                    "target"
+                  ],
+                  "title": "Role",
+                  "type": "string"
+                },
+                "own": {
+                  "default": false,
+                  "description": "True when the producer knows this participant is the bot itself, for example the bot's own voice heard back or the voice it spoke with. Stamped only by that producer; never inferred.",
+                  "examples": [
+                    false,
+                    true
+                  ],
+                  "title": "Own",
+                  "type": "boolean"
+                },
+                "resembles": {
+                  "default": [],
+                  "description": "For an identity its producer made just now (nobody it knew): the known identities it resembles, best first, at most 3. Stamped only by that producer; never a link.",
+                  "examples": [
+                    [
+                      {
+                        "ref": "voice:7b1e04",
+                        "similarity": 0.42
+                      }
+                    ]
+                  ],
+                  "items": {
+                    "additionalProperties": false,
+                    "description": "A known identity this new one resembles: its ref and how similar the two are (-1..1). Perception data only: it links nothing, and it is never a print.",
+                    "examples": [
+                      {
+                        "ref": "voice:7b1e04",
+                        "similarity": 0.42
+                      }
+                    ],
+                    "properties": {
+                      "ref": {
+                        "description": "The ref of the known identity, as its producer stamps it.",
+                        "examples": [
+                          "voice:7b1e04"
+                        ],
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "title": "Ref",
+                        "type": "string"
+                      },
+                      "similarity": {
+                        "description": "How similar the two are, -1..1; higher is more alike.",
+                        "examples": [
+                          0.42
+                        ],
+                        "maximum": 1.0,
+                        "minimum": -1.0,
+                        "title": "Similarity",
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "ref",
+                      "similarity"
+                    ],
+                    "type": "object"
+                  },
+                  "maxItems": 3,
+                  "title": "Resembles",
+                  "type": "array"
+                }
+              },
+              "required": [
+                "ref",
+                "role"
+              ],
+              "title": "Participant",
+              "type": "object"
+            },
+            "maxItems": 32,
+            "title": "Participants",
+            "type": "array"
+          }
+        },
+        "required": [
+          "audio"
+        ],
+        "title": "SoundData",
+        "type": "object"
+      },
+      "maxItems": 1500,
+      "minItems": 1,
+      "title": "Frames",
+      "type": "array"
+    },
+    "sensed": {
+      "description": "The turn's loudest scored sound (the first with a level, else the first): the level the product is compared with, and the sound whose format and parent it carries.",
+      "properties": {
+        "sound": {
+          "description": "The sound exactly as it was received. Never altered here.",
+          "examples": [
+            {
+              "audio": "media/audio-1",
+              "channels": 1,
+              "kind": "phone.call",
+              "media_type": "audio/pcm",
+              "sample_rate_hz": 48000
+            }
+          ],
+          "properties": {
+            "audio": {
+              "description": "Reference (a URI reference) to the audio this stimulus carries; floppy passes media by reference, never as bytes [floppy field].",
+              "examples": [
+                "media/audio-1"
+              ],
+              "format": "uri-reference",
+              "minLength": 1,
+              "title": "Audio",
+              "type": "string"
+            },
+            "media_type": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Optional media type or codec label, such as audio/pcm or audio/opus.",
+              "examples": [
+                "audio/pcm",
+                "audio/opus"
+              ],
+              "title": "Media Type"
+            },
+            "sample_rate_hz": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Optional sample rate for raw or decoded audio, measured in hertz.",
+              "examples": [
+                48000
+              ],
+              "title": "Sample Rate Hz"
+            },
+            "channels": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Optional number of audio channels represented by the chunk.",
+              "examples": [
+                1,
+                2
+              ],
+              "title": "Channels"
+            },
+            "kind": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Optional low-cardinality acoustic provenance hint. Prefer domain-qualified labels when the source is clear (for example phone.ringing, phone.call, ambient, knock) so models do not confuse bare tokens like ring. Not a linguistic interpretation.",
+              "examples": [
+                "phone.ringing",
+                "phone.call",
+                "ambient",
+                "knock"
+              ],
+              "title": "Kind"
+            },
+            "amplitude_db": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Optional loudness of this sound at its source, in dB SPL measured one metre away. A shout and a whisper leave the same mouth, so loudness belongs to the sound rather than to the thing that made it. How far it carries is the environment's to work out; omitting this means the sound reaches every listener regardless of distance.",
+              "examples": [
+                60.0,
+                25.0
+              ],
+              "title": "Amplitude Db"
+            },
+            "received_level_db": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Optional loudness of this sound in dB SPL where the recipient of this event is, which is a different quantity from amplitude_db: the same shout is one level at the mouth and another at the far side of the room. The environment fills this in per recipient, so an emitter never sets it. None means the environment had nothing to measure \u2014 the sound carried no amplitude, or nobody said where it or the listener was \u2014 not that the sound was silent.",
+              "examples": [
+                54.0,
+                6.0
+              ],
+              "title": "Received Level Db"
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "Optional acoustic source: the transducer this sound came off, as its emitter stamps it (speaking stamps its mouth, \"speaking\", the mouth its efference copy names). An SCXML event relayed through the body keeps only its data, so the source travels in the sound itself [floppy field]. Listening scores an arrival against an efference copy only when this is the producing mouth; a sound without one is never the bot's own.",
+              "examples": [
+                "speaking"
+              ],
+              "title": "Source"
+            },
+            "participants": {
+              "default": [],
+              "description": "Who produced this stimulus, stamped by the device that emitted it. Empty when the device knows no one (ambient sound, an unattended camera).",
+              "examples": [
+                [
+                  {
+                    "ref": "person-42",
+                    "role": "source"
+                  }
+                ]
+              ],
+              "items": {
+                "additionalProperties": false,
+                "description": "Someone who took part in a stimulus: an opaque, producer-stable identity reference and the role it played (source: who produced it; target: who it was addressed to).",
+                "examples": [
+                  {
+                    "ref": "+15555550100",
+                    "role": "source"
+                  },
+                  {
+                    "ref": "person-42",
+                    "role": "target"
+                  },
+                  {
+                    "own": true,
+                    "ref": "voice:3f2a9c",
+                    "role": "source"
+                  }
+                ],
+                "properties": {
+                  "ref": {
+                    "description": "Opaque, producer-stable identity such as a phone number, an app person id, or a chat handle. Never a display name chosen by the bot.",
+                    "examples": [
+                      "+15555550100",
+                      "person-42",
+                      "caller"
+                    ],
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Ref",
+                    "type": "string"
+                  },
+                  "role": {
+                    "description": "source: who produced the stimulus (speaker, sender). target: who it was addressed to.",
+                    "enum": [
+                      "source",
+                      "target"
+                    ],
+                    "examples": [
+                      "source",
+                      "target"
+                    ],
+                    "title": "Role",
+                    "type": "string"
+                  },
+                  "own": {
+                    "default": false,
+                    "description": "True when the producer knows this participant is the bot itself, for example the bot's own voice heard back or the voice it spoke with. Stamped only by that producer; never inferred.",
+                    "examples": [
+                      false,
+                      true
+                    ],
+                    "title": "Own",
+                    "type": "boolean"
+                  },
+                  "resembles": {
+                    "default": [],
+                    "description": "For an identity its producer made just now (nobody it knew): the known identities it resembles, best first, at most 3. Stamped only by that producer; never a link.",
+                    "examples": [
+                      [
+                        {
+                          "ref": "voice:7b1e04",
+                          "similarity": 0.42
+                        }
+                      ]
+                    ],
+                    "items": {
+                      "additionalProperties": false,
+                      "description": "A known identity this new one resembles: its ref and how similar the two are (-1..1). Perception data only: it links nothing, and it is never a print.",
+                      "examples": [
+                        {
+                          "ref": "voice:7b1e04",
+                          "similarity": 0.42
+                        }
+                      ],
+                      "properties": {
+                        "ref": {
+                          "description": "The ref of the known identity, as its producer stamps it.",
+                          "examples": [
+                            "voice:7b1e04"
+                          ],
+                          "maxLength": 200,
+                          "minLength": 1,
+                          "title": "Ref",
+                          "type": "string"
+                        },
+                        "similarity": {
+                          "description": "How similar the two are, -1..1; higher is more alike.",
+                          "examples": [
+                            0.42
+                          ],
+                          "maximum": 1.0,
+                          "minimum": -1.0,
+                          "title": "Similarity",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "ref",
+                        "similarity"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 3,
+                    "title": "Resembles",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "ref",
+                  "role"
+                ],
+                "title": "Participant",
+                "type": "object"
+              },
+              "maxItems": 32,
+              "title": "Participants",
+              "type": "array"
+            }
+          },
+          "required": [
+            "audio"
+          ],
+          "title": "SoundData",
+          "type": "object"
+        },
+        "parent": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "event": {
+                  "description": "Canonical HSM event name that emitted this upstream payload.",
+                  "examples": [
+                    "environment.sound",
+                    "bot.ability.listening.speech.output"
+                  ],
+                  "minLength": 1,
+                  "title": "Event",
+                  "type": "string"
+                },
+                "data": {
+                  "description": "Complete typed payload emitted by the upstream event.",
+                  "examples": [
+                    {
+                      "audio": "media/audio-1",
+                      "channels": 1,
+                      "kind": "phone.call",
+                      "media_type": "audio/pcm",
+                      "sample_rate_hz": 48000
+                    }
+                  ],
+                  "properties": {
+                    "audio": {
+                      "description": "Reference (a URI reference) to the audio this stimulus carries; floppy passes media by reference, never as bytes [floppy field].",
+                      "examples": [
+                        "media/audio-1"
+                      ],
+                      "format": "uri-reference",
+                      "minLength": 1,
+                      "title": "Audio",
+                      "type": "string"
+                    },
+                    "media_type": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Optional media type or codec label, such as audio/pcm or audio/opus.",
+                      "examples": [
+                        "audio/pcm",
+                        "audio/opus"
+                      ],
+                      "title": "Media Type"
+                    },
+                    "sample_rate_hz": {
+                      "anyOf": [
+                        {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Optional sample rate for raw or decoded audio, measured in hertz.",
+                      "examples": [
+                        48000
+                      ],
+                      "title": "Sample Rate Hz"
+                    },
+                    "channels": {
+                      "anyOf": [
+                        {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Optional number of audio channels represented by the chunk.",
+                      "examples": [
+                        1,
+                        2
+                      ],
+                      "title": "Channels"
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Optional low-cardinality acoustic provenance hint. Prefer domain-qualified labels when the source is clear (for example phone.ringing, phone.call, ambient, knock) so models do not confuse bare tokens like ring. Not a linguistic interpretation.",
+                      "examples": [
+                        "phone.ringing",
+                        "phone.call",
+                        "ambient",
+                        "knock"
+                      ],
+                      "title": "Kind"
+                    },
+                    "amplitude_db": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Optional loudness of this sound at its source, in dB SPL measured one metre away. A shout and a whisper leave the same mouth, so loudness belongs to the sound rather than to the thing that made it. How far it carries is the environment's to work out; omitting this means the sound reaches every listener regardless of distance.",
+                      "examples": [
+                        60.0,
+                        25.0
+                      ],
+                      "title": "Amplitude Db"
+                    },
+                    "received_level_db": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Optional loudness of this sound in dB SPL where the recipient of this event is, which is a different quantity from amplitude_db: the same shout is one level at the mouth and another at the far side of the room. The environment fills this in per recipient, so an emitter never sets it. None means the environment had nothing to measure \u2014 the sound carried no amplitude, or nobody said where it or the listener was \u2014 not that the sound was silent.",
+                      "examples": [
+                        54.0,
+                        6.0
+                      ],
+                      "title": "Received Level Db"
+                    },
+                    "source": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Optional acoustic source: the transducer this sound came off, as its emitter stamps it (speaking stamps its mouth, \"speaking\", the mouth its efference copy names). An SCXML event relayed through the body keeps only its data, so the source travels in the sound itself [floppy field]. Listening scores an arrival against an efference copy only when this is the producing mouth; a sound without one is never the bot's own.",
+                      "examples": [
+                        "speaking"
+                      ],
+                      "title": "Source"
+                    },
+                    "participants": {
+                      "default": [],
+                      "description": "Who produced this stimulus, stamped by the device that emitted it. Empty when the device knows no one (ambient sound, an unattended camera).",
+                      "examples": [
+                        [
+                          {
+                            "ref": "person-42",
+                            "role": "source"
+                          }
+                        ]
+                      ],
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "Someone who took part in a stimulus: an opaque, producer-stable identity reference and the role it played (source: who produced it; target: who it was addressed to).",
+                        "examples": [
+                          {
+                            "ref": "+15555550100",
+                            "role": "source"
+                          },
+                          {
+                            "ref": "person-42",
+                            "role": "target"
+                          },
+                          {
+                            "own": true,
+                            "ref": "voice:3f2a9c",
+                            "role": "source"
+                          }
+                        ],
+                        "properties": {
+                          "ref": {
+                            "description": "Opaque, producer-stable identity such as a phone number, an app person id, or a chat handle. Never a display name chosen by the bot.",
+                            "examples": [
+                              "+15555550100",
+                              "person-42",
+                              "caller"
+                            ],
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "title": "Ref",
+                            "type": "string"
+                          },
+                          "role": {
+                            "description": "source: who produced the stimulus (speaker, sender). target: who it was addressed to.",
+                            "enum": [
+                              "source",
+                              "target"
+                            ],
+                            "examples": [
+                              "source",
+                              "target"
+                            ],
+                            "title": "Role",
+                            "type": "string"
+                          },
+                          "own": {
+                            "default": false,
+                            "description": "True when the producer knows this participant is the bot itself, for example the bot's own voice heard back or the voice it spoke with. Stamped only by that producer; never inferred.",
+                            "examples": [
+                              false,
+                              true
+                            ],
+                            "title": "Own",
+                            "type": "boolean"
+                          },
+                          "resembles": {
+                            "default": [],
+                            "description": "For an identity its producer made just now (nobody it knew): the known identities it resembles, best first, at most 3. Stamped only by that producer; never a link.",
+                            "examples": [
+                              [
+                                {
+                                  "ref": "voice:7b1e04",
+                                  "similarity": 0.42
+                                }
+                              ]
+                            ],
+                            "items": {
+                              "additionalProperties": false,
+                              "description": "A known identity this new one resembles: its ref and how similar the two are (-1..1). Perception data only: it links nothing, and it is never a print.",
+                              "examples": [
+                                {
+                                  "ref": "voice:7b1e04",
+                                  "similarity": 0.42
+                                }
+                              ],
+                              "properties": {
+                                "ref": {
+                                  "description": "The ref of the known identity, as its producer stamps it.",
+                                  "examples": [
+                                    "voice:7b1e04"
+                                  ],
+                                  "maxLength": 200,
+                                  "minLength": 1,
+                                  "title": "Ref",
+                                  "type": "string"
+                                },
+                                "similarity": {
+                                  "description": "How similar the two are, -1..1; higher is more alike.",
+                                  "examples": [
+                                    0.42
+                                  ],
+                                  "maximum": 1.0,
+                                  "minimum": -1.0,
+                                  "title": "Similarity",
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "ref",
+                                "similarity"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 3,
+                            "title": "Resembles",
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "ref",
+                          "role"
+                        ],
+                        "title": "Participant",
+                        "type": "object"
+                      },
+                      "maxItems": 32,
+                      "title": "Participants",
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "audio"
+                  ],
+                  "title": "SoundData",
+                  "type": "object"
+                },
+                "id": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Upstream HSM event correlation id, when the emitter stamped one.",
+                  "examples": [
+                    "turn-123"
+                  ],
+                  "title": "Id"
+                },
+                "source": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Upstream HSM event source identity, when stamped by its producer.",
+                  "examples": [
+                    "phone-1"
+                  ],
+                  "title": "Source"
+                },
+                "target": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Upstream HSM event target identity, when stamped for delivery.",
+                  "examples": [
+                    "listening-1"
+                  ],
+                  "title": "Target"
+                }
+              },
+              "required": [
+                "event",
+                "data"
+              ],
+              "title": "StimulusData[SoundData]",
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The exact environment.sound event and payload that produced this scored sound. This is domain provenance, not telemetry metadata or an actor lookup."
+        },
+        "perceived_level_db": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Level in dB of the part of this arrival that nothing predicted \u2014 what perception is actually left with. With nothing predicting it, that is the whole sound, so this is the level it arrived at. Fully predicted, nothing is left and this is 0.0. Predicted but off by some margin, that margin is what survives. None means there was no level to work from, which is not the same as silence: an unmeasurable arrival cannot be shown to be quiet and must be treated as heard.",
+          "examples": [
+            76.5,
+            0.0,
+            12.0
+          ],
+          "title": "Perceived Level Db"
+        },
+        "producing": {
+          "default": false,
+          "description": "Whether the body was producing sound when this arrived: a mouth had been commanded and its efference window was still open. A fact about the moment, not about where the sound came from; somebody else's voice arriving while the bot talks is producing too.",
+          "examples": [
+            false,
+            true
+          ],
+          "title": "Producing",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "sound"
+      ],
+      "type": "object"
+    },
+    "voice_detection": {
+      "description": "Voice spans from VoiceDetection relative to the start of this observation.",
+      "examples": [
+        {
+          "segments": [
+            {
+              "confidence": 0.92,
+              "end_seconds": 0.7,
+              "start_seconds": 0.0
+            }
+          ]
+        },
+        {
+          "segments": []
+        }
+      ],
+      "properties": {
+        "segments": {
+          "default": [],
+          "description": "Voice spans in the inspected audio, ordered by ascending start_seconds. Empty means no voice.",
+          "examples": [
+            [
+              {
+                "confidence": 0.92,
+                "end_seconds": 0.7,
+                "start_seconds": 0.0
+              }
+            ],
+            []
+          ],
+          "items": {
+            "description": "One voice span in the inspected audio, measured from the start of that input.",
+            "examples": [
+              {
+                "confidence": 0.92,
+                "end_seconds": 0.7,
+                "start_seconds": 0.0
+              }
+            ],
+            "properties": {
+              "start_seconds": {
+                "description": "Inclusive start of this voice span, in seconds from the beginning of the inspected audio input.",
+                "examples": [
+                  0.0
+                ],
+                "minimum": 0.0,
+                "title": "Start Seconds",
+                "type": "number"
+              },
+              "end_seconds": {
+                "description": "Exclusive end of this voice span, in seconds from the beginning of the inspected audio input.",
+                "examples": [
+                  0.7
+                ],
+                "minimum": 0.0,
+                "title": "End Seconds",
+                "type": "number"
+              },
+              "confidence": {
+                "anyOf": [
+                  {
+                    "maximum": 1.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "description": "Optional provider confidence for this span, normalized from 0.0 to 1.0 when available.",
+                "examples": [
+                  0.92
+                ],
+                "title": "Confidence"
+              }
+            },
+            "required": [
+              "start_seconds",
+              "end_seconds"
+            ],
+            "title": "VoiceDetectionSegment",
+            "type": "object"
+          },
+          "title": "Segments",
+          "type": "array"
+        }
+      },
+      "title": "ApplyData",
+      "type": "object"
+    },
+    "participants": {
+      "default": [],
+      "description": "Who produced the sound this speech was decoded from, copied from the admitted environment.sound chunks. Listening never works out who someone is; it only carries what the device stamped.",
+      "examples": [
+        [],
+        [
+          {
+            "ref": "person-42",
+            "role": "source"
+          }
+        ]
+      ],
+      "items": {
+        "additionalProperties": false,
+        "description": "Someone who took part in a stimulus: an opaque, producer-stable identity reference and the role it played (source: who produced it; target: who it was addressed to).",
+        "examples": [
+          {
+            "ref": "+15555550100",
+            "role": "source"
+          },
+          {
+            "ref": "person-42",
+            "role": "target"
+          },
+          {
+            "own": true,
+            "ref": "voice:3f2a9c",
+            "role": "source"
+          }
+        ],
+        "properties": {
+          "ref": {
+            "description": "Opaque, producer-stable identity such as a phone number, an app person id, or a chat handle. Never a display name chosen by the bot.",
+            "examples": [
+              "+15555550100",
+              "person-42",
+              "caller"
+            ],
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Ref",
+            "type": "string"
+          },
+          "role": {
+            "description": "source: who produced the stimulus (speaker, sender). target: who it was addressed to.",
+            "enum": [
+              "source",
+              "target"
+            ],
+            "examples": [
+              "source",
+              "target"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "own": {
+            "default": false,
+            "description": "True when the producer knows this participant is the bot itself, for example the bot's own voice heard back or the voice it spoke with. Stamped only by that producer; never inferred.",
+            "examples": [
+              false,
+              true
+            ],
+            "title": "Own",
+            "type": "boolean"
+          },
+          "resembles": {
+            "default": [],
+            "description": "For an identity its producer made just now (nobody it knew): the known identities it resembles, best first, at most 3. Stamped only by that producer; never a link.",
+            "examples": [
+              [
+                {
+                  "ref": "voice:7b1e04",
+                  "similarity": 0.42
+                }
+              ]
+            ],
+            "items": {
+              "additionalProperties": false,
+              "description": "A known identity this new one resembles: its ref and how similar the two are (-1..1). Perception data only: it links nothing, and it is never a print.",
+              "examples": [
+                {
+                  "ref": "voice:7b1e04",
+                  "similarity": 0.42
+                }
+              ],
+              "properties": {
+                "ref": {
+                  "description": "The ref of the known identity, as its producer stamps it.",
+                  "examples": [
+                    "voice:7b1e04"
+                  ],
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "title": "Ref",
+                  "type": "string"
+                },
+                "similarity": {
+                  "description": "How similar the two are, -1..1; higher is more alike.",
+                  "examples": [
+                    0.42
+                  ],
+                  "maximum": 1.0,
+                  "minimum": -1.0,
+                  "title": "Similarity",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "ref",
+                "similarity"
+              ],
+              "type": "object"
+            },
+            "maxItems": 3,
+            "title": "Resembles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ref",
+          "role"
+        ],
+        "title": "Participant",
+        "type": "object"
+      },
+      "maxItems": 32,
+      "title": "Participants",
+      "type": "array"
+    }
+  },
+  "required": [
+    "text",
+    "confidence",
+    "frames",
+    "sensed",
+    "voice_detection",
+    "participants"
+  ],
+  "type": "object",
+  "examples": [
+    {
+      "text": "What time does the shop open tomorrow?",
+      "confidence": 0.93,
+      "frames": [
+        {
+          "audio": "media/audio-1",
+          "media_type": "audio/pcm",
+          "sample_rate_hz": 16000,
+          "channels": 1
+        }
+      ],
+      "sensed": {
+        "sound": {
+          "audio": "media/audio-1",
+          "media_type": "audio/pcm",
+          "sample_rate_hz": 16000,
+          "channels": 1
+        },
+        "parent": null,
+        "perceived_level_db": 42.0,
+        "producing": false
+      },
+      "voice_detection": {
+        "segments": [
+          {
+            "start_seconds": 0.1,
+            "end_seconds": 2.4
+          }
+        ]
+      },
+      "participants": []
+    }
+  ]
+}

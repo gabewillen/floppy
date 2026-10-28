@@ -12,7 +12,7 @@ through `scx run` with the real invoked services (a case's
 
 ## Statements
 
-- <a id="listening-1"></a>**listening-1**. It waits for both children, the sensitivity and the interpretation (each ready when it sends `bot.ability.ready`), then sends `bot.ability.ready` to its parent (decision D242), with no data: it offers nothing.
+- <a id="listening-1"></a>**listening-1**. It waits for its children, the sensitivity, the interpretation and the transcription (each ready when it sends `bot.ability.ready`, the transcription also when it ends without a streaming session), then sends `bot.ability.ready` to its parent (decision D242), with no data: it offers nothing.
 - <a id="listening-2"></a>**listening-2**. Each `environment.sound` is scored by the sensitivity (`bot.ability.listening.sensitivity.score` `{stimulus: {event: "environment.sound", data: <the sound>}}`) and the score goes on to the interpretation; the interpretation's speech product is handed to the parent as `bot.ability.cognition.input` `{stimulus: {event: "bot.ability.listening.speech.output", data: <the product>, source: "listening"}}`, the product's parent the sound's envelope.
 - <a id="listening-3"></a>**listening-3**. A sound is scored at its `received_level_db`: a product the interpretation finds below its threshold is dropped, a louder one handed on.
 - <a id="listening-4"></a>**listening-4**. The interpretation's own `bot.ability.cognition.input` (labelled non-speech) and its `bot.ability.listening.failed` `{stage, message}` go on to the parent unchanged.
@@ -20,3 +20,4 @@ through `scx run` with the real invoked services (a case's
 - <a id="listening-6"></a>**listening-6**. Sounds that arrive before the children are ready, or while one is being scored, are held (`<event:defer/>`) and taken in order.
 - <a id="listening-7"></a>**listening-7**. Scoring is bounded by `sensitivity_timeout_ms` (30 s): its timer answers `bot.ability.listening.failed` `{stage: "sensitivity", message: "Listening sensitivity timed out."}` and returns to `Listening`.
 - <a id="listening-8"></a>**listening-8**. A sound its schema refuses (no audio reference) is never routed here: the send raises `error.execution` in the sender.
+- <a id="listening-9"></a>**listening-9**. While the transcription's streaming session is ready, each scored sound goes to the transcription instead of the interpretation, and the transcription's `bot.ability.listening.transcription.turn` goes on to the interpretation, which identifies who spoke with the turn's words (its decoder is not invoked) and hands on the speech product.

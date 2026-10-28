@@ -1013,10 +1013,11 @@ pub fn copy_ability(name: &str, abilities: &Path) -> PathBuf {
 
 /// The listening's abilities (abilities/listening/, its children, its
 /// hearing leaves, and the memory the interpretation remembers voices in).
-pub const LISTENING: [&str; 10] = [
+pub const LISTENING: [&str; 11] = [
     "listening",
     "sensitivity",
     "interpretation",
+    "transcription",
     "voice_detection",
     "voice_diarization",
     "voice_identification",

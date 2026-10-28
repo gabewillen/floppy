@@ -41,6 +41,10 @@ step is one of
 
 and the case passes when every expect was met in order. Any other event
 the harness receives (error.* included) fails it, logging the event.
+A case's `websocket=[session, ...]` (written into its backend.json)
+scripts the fake backend's WebSocket sessions, each connection taking the
+next (the last repeats): a session is a list of rounds of frames, the
+first sent once it opens, round n once its n-th binary frame arrives.
 A case's `logs={label: [text, ...]}` (written as irp/sources/<id>/logs.json)
 also requires the run's logs of each label to be exactly those texts, in
 order.
@@ -163,10 +167,10 @@ class Suite:
         self.statements.append((f"{self.name}-{number}", text))
 
     def case(self, test_id, number, comment, steps, data=(), params=(), ignore=(), backend=None, clock=None,
-             stream=False, logs=None):
+             stream=False, logs=None, websocket=None):
         self.cases.append(dict(id=test_id, assertion=f"{self.name}-{number}", comment=comment, steps=steps,
                                data=data, params=params, ignore=ignore, backend=backend, clock=clock,
-                               stream=stream, logs=logs))
+                               stream=stream, logs=logs, websocket=websocket))
 
     # ------------------------------------------------------------ writing
     def document(self, case):
@@ -316,11 +320,13 @@ class Suite:
             with open(os.path.join(directory, f"test{case['id']}.scxml"), "w") as out:
                 out.write(document)
             script = os.path.join(directory, "backend.json")
-            if case["backend"] is not None or case["clock"]:
+            if case["backend"] is not None or case["clock"] or case["websocket"] is not None:
                 with open(script, "w") as out:
                     script = {"clock": case["clock"] or "wall", "answers": case["backend"] or []}
                     if case["stream"]:
                         script["stream"] = True
+                    if case["websocket"] is not None:
+                        script["websocket"] = case["websocket"]
                     json.dump(script, out, indent=2)
                     out.write("\n")
             elif os.path.exists(script):

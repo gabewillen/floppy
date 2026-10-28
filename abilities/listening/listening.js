@@ -21,7 +21,12 @@ function childEndedLog(_event) {
 // initializing
 
 function everyChildReady(ready) {
-  return ready.sensitivity === true && ready.interpretation === true;
+  return ready.sensitivity === true && ready.interpretation === true && ready.transcription === true;
+}
+
+// The transcription's streaming session is ready.
+function isTranscription(_event) {
+  return _event.invokeid === 'transcription';
 }
 
 function childCouldNotStartLog(_event) {

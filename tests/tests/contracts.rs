@@ -94,7 +94,7 @@ const BODY_EVENTS: [&str; 12] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 112] = [
+const ABILITY_EVENTS: [&str; 113] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -187,6 +187,8 @@ const ABILITY_EVENTS: [&str; 112] = [
     "bot.ability.listening.sensitivity.score",
     "bot.ability.listening.sensitivity.output",
     "bot.ability.listening.sensitivity.failed",
+    // The transcription's turns, handed to the interpretation (D264).
+    "bot.ability.listening.transcription.turn",
     // Phase 6: visual classification and reading.
     "bot.ability.vision.classification.input",
     "bot.ability.vision.classification.output",
