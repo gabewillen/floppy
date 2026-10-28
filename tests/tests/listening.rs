@@ -36,8 +36,10 @@ use serde_json::{Value as Json, json};
 use support::hearing::{self, Backend, silent_wav, spoken_wav};
 use support::{Finished, Run, logs, trace, unique_scratch, workspace};
 
-/// Bounded wait for any one expected record (scx startup included).
-const WAIT: Duration = Duration::from_secs(60);
+/// Bounded wait for any one expected record (scx startup included: the
+/// long-lived stages and the streaming session start with the listening, as
+/// body.rs and environment.rs allow).
+const WAIT: Duration = Duration::from_secs(300);
 
 fn copy_dir(from: &Path, to: &Path) {
     std::fs::create_dir_all(to).expect("the directory is creatable");
