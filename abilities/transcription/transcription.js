@@ -51,9 +51,10 @@ function isProducingChange(scored) {
   return producing_told !== (scored.producing === true);
 }
 
-// The sound as the session reads it: by reference, with its format.
+// The sound as the session reads it: by reference, with its format, and
+// where the session writes the 16 kHz PCM it sends (heardFrame()).
 function streamedAudio(sound) {
-  var audio = ({audio: sound.audio});
+  var audio = ({audio: sound.audio, output: heardFrame(sound).audio});
   ['media_type', 'sample_rate_hz', 'channels'].forEach(function (field) {
     if (sound[field] != null) {
       audio[field] = sound[field];
@@ -62,9 +63,19 @@ function streamedAudio(sound) {
   return audio;
 }
 
-// The turn's sounds, the oldest let go past max_turn_frames.
+// The PCM the session wrote for the sound heard as number heard_count,
+// beside the sound: a ring of twice max_turn_frames files, so a turn's
+// sounds are never overwritten while it is handed on.
+function heardFrame(sound) {
+  var dir = sound.audio.slice(0, sound.audio.lastIndexOf('/') + 1);
+  return ({audio: dir + 'floppy-heard-' + (heard_count % (2 * max_turn_frames)) + '.pcm', media_type: 'audio/pcm',
+    sample_rate_hz: 16000, channels: 1});
+}
+
+// The turn's sounds (the PCM the session wrote), the oldest let go past
+// max_turn_frames.
 function framesWith(sound) {
-  var kept = frames.concat([sound]);
+  var kept = frames.concat([heardFrame(sound)]);
   return kept.length > max_turn_frames ? kept.slice(kept.length - max_turn_frames) : kept;
 }
 

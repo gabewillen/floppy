@@ -582,10 +582,12 @@
         <!-- A transcribed turn's words are given: its voices are found. -->
         <transition event="done.invoke.open_speech" cond="isTurn() &amp;&amp; isUtteranceToDiarize(_event)" target="Transcribed Diarizing">
           <assign location="utterance" expr="_event.data"/>
+          <assign location="open_sensed" expr="turnSensed(_event.data)"/>
           <assign location="completion" expr="null"/>
         </transition>
         <transition event="done.invoke.open_speech" cond="isTurn() &amp;&amp; hasAudio(_event)" target="Transcribed Detected">
           <assign location="utterance" expr="_event.data"/>
+          <assign location="open_sensed" expr="turnSensed(_event.data)"/>
           <assign location="completion" expr="null"/>
         </transition>
         <transition event="done.invoke.open_speech" cond="isUtteranceToDiarize(_event) &amp;&amp; speech_decoder" target="Diarizing">

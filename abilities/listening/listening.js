@@ -21,7 +21,13 @@ function childEndedLog(_event) {
 // initializing
 
 function everyChildReady(ready) {
-  return ready.sensitivity === true && ready.interpretation === true && ready.transcription === true;
+  return ready.sensitivity === true && ready.interpretation === true;
+}
+
+// A scored sound for the transcription: while it streams, unless the
+// sound is labelled with a kind (the interpretation classifies it).
+function streamsSound(scored) {
+  return transcribing && scored.sound.kind == null;
 }
 
 // The transcription's streaming session is ready.

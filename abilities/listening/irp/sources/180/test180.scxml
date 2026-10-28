@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- listening-9: a streamed turn is handed on as its words, without decoding. -->
+<!-- listening-9: a sound scored while the streaming session opens is held for it; the streamed turn is handed on as its words, without decoding. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="listening" type="scxml" src="../../../listening.scx">

@@ -31,9 +31,11 @@ def scored(name, level=10, **extra):
     return send(SCORED, js(data))
 
 
-def turn(text, audio="voiced.wav", extra=""):
+def turn(text, audio="voiced.wav", extra="", heard=0):
+    frame = "_event.data.frames[0]"
     return expect(TURN, f"_event.data.text === {js(text)} && _event.data.confidence === 0.9"
-                        f" && _event.data.frames.length === 1 && _event.data.frames[0].audio === 'media/{audio}'"
+                        f" && _event.data.frames.length === 1 && {frame}.audio === 'media/floppy-heard-{heard}.pcm'"
+                        f" && {frame}.media_type === 'audio/pcm' && {frame}.sample_rate_hz === 16000 && {frame}.channels === 1"
                         f" && _event.data.sensed.sound.audio === 'media/{audio}' && _event.data.participants.length === 0" + extra)
 
 
@@ -62,7 +64,7 @@ S.case(120, 3, "the bot's own voice arriving as predicted is not streamed; the n
        backend=[], websocket=[[[READY_FRAME], said("cut in")]])
 
 S.case(130, 4, "a turn without words is let go; the next turn has only its own sounds.",
-       [READY, scored("voiced.wav"), wait("500ms"), scored("voiced2.wav"), turn("second", audio="voiced2.wav")],
+       [READY, scored("voiced.wav"), wait("500ms"), scored("voiced2.wav"), turn("second", audio="voiced2.wav", heard=1)],
        backend=[], websocket=[[[READY_FRAME], [{"type": "turn_end", "reason": "eot", "p": 0.9, "text": "", "t": 0.1}],
                                said("second", 0.1, 0.2)]])
 
@@ -75,7 +77,7 @@ S.case(142, 5, "a session that does not open within open_timeout_ms ends the tra
        logs={"transcription": ["the streaming session did not open in time"]})
 
 S.case(150, 6, "a session lost after it was ready is reopened after the backoff, with no second ready; the lost turn's sound is not handed on.",
-       [READY, scored("voiced.wav"), wait("1s"), scored("voiced2.wav"), turn("again", audio="voiced2.wav")],
+       [READY, scored("voiced.wav"), wait("1s"), scored("voiced2.wav"), turn("again", audio="voiced2.wav", heard=1)],
        params=[("first_backoff_ms", "10")], backend=[],
        websocket=[[[READY_FRAME], [{"type": "error", "message": "gone"}]], [[READY_FRAME], said("again")]],
        logs={"transcription": ["the streaming session was lost (unavailable); reconnecting in 10 ms"]})

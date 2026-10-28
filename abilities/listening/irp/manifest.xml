@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/listening/irp/sources">
   <assert id="listening-1" specnum="1" specid="#listening-1">
-    <![CDATA[It waits for its children, the sensitivity, the interpretation and the transcription (each ready when it sends `bot.ability.ready`, the transcription also when it ends without a streaming session), then sends `bot.ability.ready` to its parent (decision D242), with no data: it offers nothing.]]>
+    <![CDATA[It waits for its children the sensitivity and the interpretation (each ready when it sends `bot.ability.ready`; the transcription, invoked beside them, is not waited for), then sends `bot.ability.ready` to its parent (decision D242), with no data: it offers nothing.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -63,7 +63,7 @@
     </test>
   </assert>
   <assert id="listening-9" specnum="9" specid="#listening-9">
-    <![CDATA[While the transcription's streaming session is ready, each scored sound goes to the transcription instead of the interpretation, and the transcription's `bot.ability.listening.transcription.turn` goes on to the interpretation, which identifies who spoke with the turn's words (its decoder is not invoked) and hands on the speech product.]]>
+    <![CDATA[While the transcription's streaming session may still open, each scored sound is held, and goes on in order once it is ready or ended; while it is ready, each scored sound goes to the transcription instead of the interpretation, and the transcription's `bot.ability.listening.transcription.turn` goes on to the interpretation, which identifies who spoke with the turn's words (its decoder is not invoked) and hands on the speech product.]]>
     <test id="180" conformance="mandatory" manual="false">
       <start uri="180/test180.scxml"/>
     </test>

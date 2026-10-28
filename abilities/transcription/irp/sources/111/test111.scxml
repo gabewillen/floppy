@@ -14,7 +14,7 @@
     <transition event="bot.ability.ready" target="step1"/>
   </state>
   <state id="step1">
-    <transition event="bot.ability.listening.transcription.turn" cond="_event.data.text === &quot;early&quot; &amp;&amp; _event.data.confidence === 0.9 &amp;&amp; _event.data.frames.length === 1 &amp;&amp; _event.data.frames[0].audio === 'media/voiced.wav' &amp;&amp; _event.data.sensed.sound.audio === 'media/voiced.wav' &amp;&amp; _event.data.participants.length === 0" target="step2"/>
+    <transition event="bot.ability.listening.transcription.turn" cond="_event.data.text === &quot;early&quot; &amp;&amp; _event.data.confidence === 0.9 &amp;&amp; _event.data.frames.length === 1 &amp;&amp; _event.data.frames[0].audio === 'media/floppy-heard-0.pcm' &amp;&amp; _event.data.frames[0].media_type === 'audio/pcm' &amp;&amp; _event.data.frames[0].sample_rate_hz === 16000 &amp;&amp; _event.data.frames[0].channels === 1 &amp;&amp; _event.data.sensed.sound.audio === 'media/voiced.wav' &amp;&amp; _event.data.participants.length === 0" target="step2"/>
   </state>
   <state id="step2">
     <transition target="pass"/>

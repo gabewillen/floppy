@@ -246,6 +246,22 @@ function turnDetection() {
   return ({sensed: turn.sensed, voice_detection: turn.voice_detection});
 }
 
+// The turn's loudest scored sound, placed on the joined utterance's
+// timeline when it names no sample rate (a WAV file's rate is in its
+// header): the product then comes from the utterance, as a decoded one
+// comes from its frame's PCM.
+function turnSensed(joined) {
+  if (hasSampleRate(open_sensed.sound)) {
+    return open_sensed;
+  }
+  var sensed = JSON.parse(JSON.stringify(open_sensed));
+  sensed.sound.audio = joined.audio;
+  ['media_type', 'sample_rate_hz', 'channels'].forEach(function (field) {
+    sensed.sound[field] = joined[field];
+  });
+  return sensed;
+}
+
 // The turn's words, as the decoder would have answered them.
 function transcribedWords() {
   return ({text: turn.text});

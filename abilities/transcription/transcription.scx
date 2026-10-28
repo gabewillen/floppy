@@ -44,14 +44,16 @@
 
   Hearing: each scored sound (bot.ability.listening.sensitivity.output)
   is streamed as bot.ability.hearing.speech.stream.audio {audio,
-  media_type, sample_rate_hz, channels}, after
+  media_type, sample_rate_hz, channels, output}, after
   bot.ability.hearing.speech.stream.producing {producing} when the
   bot's own mouth started or stopped producing (sent only on change).
   The bot's own voice arriving as predicted (producing, with a
   perceived_level_db below product_threshold_db) is not streamed
   (mosfet.py W3-11; the interpretation's gate). Each streamed sound joins
-  the turn: its sound (the frame the interpretation joins into the
-  utterance), the loudest scored sound, and the ordered union of the
+  the turn: the 16 kHz PCM the session wrote for it to output
+  (floppy-heard-N.pcm beside the sound, a ring of twice max_turn_frames
+  files; the frame the interpretation joins into the utterance), the
+  loudest scored sound, and the ordered union of the
   participants stamped on it (each {ref, role} once, at most 32). The
   session's transcript {text, confidence} joins the turn's words, and
   voice_started and voice_ended {at_seconds} its voice spans.
@@ -101,6 +103,8 @@
     <data id="announced" expr="false"/>
     <data id="backoff_ms" expr="1000"/>
     <data id="producing_told" expr="null"/>
+    <!-- How many sounds were streamed: names the PCM each is written to. -->
+    <data id="heard_count" expr="0"/>
     <!-- The turn being heard. -->
     <data id="frames" expr="[]"/>
     <data id="loudest" expr="null"/>
@@ -179,6 +183,7 @@
           <content expr="streamedAudio(_event.data.sound)"/>
         </send>
         <assign location="frames" expr="framesWith(_event.data.sound)"/>
+        <assign location="heard_count" expr="heard_count + 1"/>
         <if cond="isLouder(_event.data)">
           <assign location="loudest" expr="_event.data"/>
         </if>
