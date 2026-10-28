@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.hearing.speech.stream.partial",
+  "description": "The words of the utterance being heard, so far.",
+  "properties": {
+    "text": {
+      "description": "The words heard so far in the current utterance (cumulative).",
+      "examples": [
+        "hello th"
+      ],
+      "type": "string",
+      "title": "Text"
+    }
+  },
+  "required": [
+    "text"
+  ],
+  "type": "object",
+  "additionalProperties": false,
+  "examples": [
+    {
+      "text": "hello th"
+    }
+  ]
+}

@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.hearing.speech.stream.audio",
+  "description": "A sound heard, streamed to the session: by reference, as environment.sound carries it [floppy: audio by reference, where mosfet.py's AudioData carries the PCM].",
+  "properties": {
+    "audio": {
+      "description": "Reference (a URI reference) to the sound's audio: a WAV file, or raw signed 16-bit PCM at sample_rate_hz and channels [floppy field].",
+      "examples": [
+        "media/live-1.pcm"
+      ],
+      "format": "uri-reference",
+      "minLength": 1,
+      "type": "string",
+      "title": "Audio"
+    },
+    "media_type": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional media type of the audio.",
+      "examples": [
+        "audio/pcm"
+      ],
+      "title": "Media Type"
+    },
+    "sample_rate_hz": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Sample rate of raw audio in hertz.",
+      "examples": [
+        24000
+      ],
+      "title": "Sample Rate Hz"
+    },
+    "channels": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Channel count of raw audio.",
+      "examples": [
+        1
+      ],
+      "title": "Channels"
+    }
+  },
+  "required": [
+    "audio"
+  ],
+  "type": "object",
+  "additionalProperties": false,
+  "examples": [
+    {
+      "audio": "media/live-1.pcm",
+      "media_type": "audio/pcm",
+      "sample_rate_hz": 24000,
+      "channels": 1
+    }
+  ]
+}

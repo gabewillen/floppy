@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.hearing.speech.stream.voice_ended",
+  "description": "The hearing model heard a voice stop.",
+  "properties": {
+    "at_seconds": {
+      "description": "When the voice stopped, in session seconds.",
+      "examples": [
+        2.4
+      ],
+      "minimum": 0.0,
+      "type": "number",
+      "title": "At Seconds"
+    }
+  },
+  "required": [
+    "at_seconds"
+  ],
+  "type": "object",
+  "additionalProperties": false,
+  "examples": [
+    {
+      "at_seconds": 2.4
+    }
+  ]
+}
