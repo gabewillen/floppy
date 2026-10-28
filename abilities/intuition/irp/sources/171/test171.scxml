@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- intuition-8: a cancelled turn is never answered; the next turn is. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="intuition" type="scxml" src="../../../intuition.scx"/>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <onentry>
+      <send event="bot.ability.intuition.input" target="#_intuition"><content expr='{"turn": 1, "stimulus": {"event": "bot.input", "data": {"observation": {"event": "text", "data": "hello"}}, "source": "body"}, "focus": null, "focus_candidates": [], "choices": [{"event": "bot.say", "schema": {}, "target": "session"}], "held": [], "environment": null, "recent": [], "confidence_tuner": {"mean": 70, "var": 100, "n": 0}, "decision_timeout_ms": 150000, "hand_ons": ["reasoning"], "max_context_tokens": null, "bytes_per_token": 3}'/></send>
+      <send event="bot.ability.processing.cancel" target="#_intuition"><content expr="{}"/></send>
+      <send event="bot.ability.intuition.input" target="#_intuition"><content expr='{"turn": 2, "stimulus": {"event": "bot.input", "data": {"observation": {"event": "text", "data": "hello"}}, "source": "body"}, "focus": null, "focus_candidates": [], "choices": [{"event": "bot.say", "schema": {}, "target": "session"}], "held": [], "environment": null, "recent": [], "confidence_tuner": {"mean": 70, "var": 100, "n": 0}, "decision_timeout_ms": 150000, "hand_ons": ["reasoning"], "max_context_tokens": null, "bytes_per_token": 3}'/></send>
+    </onentry>
+    <transition event="bot.say" target="step1"/>
+  </state>
+  <state id="step1">
+    <transition event="bot.ability.intuition.output" cond="_event.data.turn === 2 &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.reason === &quot;none&quot; &amp;&amp; typeof _event.data.confidence_tuner === 'object' &amp;&amp; Array.isArray(_event.data.acted) &amp;&amp; typeof _event.data.bytes_per_token === 'number' &amp;&amp; _event.data.confidence_tuner.n === 1" target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

@@ -4,13 +4,18 @@
   that answers in words is the hand_ons tier intuition, decisions D140 and
   D144): the fast System 1 pick, made by the decision service (never by a
   free-text model) over the turn's choices, with a self-tuning confidence
-  gate. The cognition (abilities/cognition/cognition.scx) invokes it once
-  per turn after autonomy left the turn unhandled.
+  gate. The cognition (abilities/cognition/cognition.scx) invokes it once,
+  as the child "decision", and holds it for its lifetime (mosfet.py's
+  Cognition holds its Decision): each turn autonomy left unhandled is a
+  bot.ability.intuition.input, answered by one bot.ability.intuition.output,
+  and a turn the cognition leaves (cancelled or timed out) is a
+  bot.ability.processing.cancel, which ends the turn's decision unanswered.
 
-    deciding (an invoked decision service) -> done
+    idle -bot.ability.intuition.input-> deciding (an invoked decision service)
+         -> done -> idle
 
   Processor (the decision service's choice): the turn's choices,
-  the <param> choices (the
+  the input's choices (the
   body's assembled snapshot choices: its own enabled event:schema
   transitions and what each ability offers that turn, tagged with the offering
   ability as target), within the decision layer's effort ceiling (the
@@ -19,16 +24,16 @@
   bot.ability.reasoning.input. Its state is {turn: T}, T the model-facing
   text of the stimulus (<cognition:model_facing_content>, decision
   D150: what reasoning reads, never the raw envelope), after the recent
-  turns of the bot's conversations (the <param> recent) and the environment
-  block (the <param> environment), the situation reasoning reads too
+  turns of the bot's conversations (the input's recent) and the environment
+  block (the input's environment), the situation reasoning reads too
   (decision D254), and after the <held>
-  block of the actions over the ceiling (the <param> held, decision
+  block of the actions over the ceiling (the input's held, decision
   D206), which the decision cannot choose and only a pass hands on; the
   stimulus goes too, but only to ground each event's required data from its
   data's value, else the schema's enum; an event it cannot fill is not
   offered, so a reply that needs free text goes on to a later tier (user
   answer, 2026-10-08). The service adds one pass criterion per tier of
-  hand_ons (the <param>; reasoning alone until the cognition composes a
+  hand_ons (in the input; reasoning alone until the cognition composes a
   chat tier, decision D150). When a pass wins (declined) or nothing could be filled
   (no-candidates) the product is empty: the turn escalates with the
   reason empty_product, a pass naming its tier as hand_to, and
@@ -37,16 +42,16 @@
   (decision.selected, decision D150).
 
   Context fit (decision D150): with a
-  max_context_tokens <param>, the service cuts the decision's instructions
+  max_context_tokens in the input, the service cuts the decision's instructions
   to fit floor(max_context_tokens * bytes_per_token) bytes of request; its
   done data reports the request's bytes and the tokens the backend counted,
   and the stage keeps the fewest bytes a token any answer showed in
-  bytes_per_token (a <param>, 3 to start), which goes back in <donedata> for
+  bytes_per_token (in the input, 3 to start), which goes back in the output for
   the cognition to keep across turns.
 
   Confidence (0-100 scale): the tuner state
-  {mean, var, n}, the confidence_tuner datum, comes in as a <param> and
-  goes back in <donedata>, so it lives in the cognition across turns. The
+  {mean, var, n}, the confidence_tuner datum, comes in with the input and
+  goes back in the output, so it lives in the cognition across turns. The
   turn's confidence is its selection's probability normalized to a whole
   0-100 number (<processing:selection_confidence>). <intuition:observe>
   observes it first (a null confidence is not observed), then
@@ -60,7 +65,7 @@
   target} (escalation reason none). A low-confidence product
   (low_confidence), or one holding bot.ability.reasoning.input
   (deliberative_input), is unhandled and escalates. The decision timer is
-  deciding.after (decision_timeout_ms, a <param> the cognition sets from
+  deciding.after (decision_timeout_ms, which the cognition sets from
   its bounds).
 
   Dispatch (decision D113): the stage sends, before it
@@ -69,13 +74,17 @@
   (it goes to the cognition, which only logs it), and of an escalating
   product only the environment actions, never the ignore or the deliberate
   handoff, sent before the next tier runs. What it sent is acted in every
-  <donedata> ([] when nothing), so the cognition knows it as a fact of the
+  the output ([] when nothing), so the cognition knows it as a fact of the
   turn. The decision service has checked the
   selection's data against its event's schema (the pinned focus device
   among them), so nothing is refused at the send, and there is no re-ask
   with a rejection as feedback.
 
-  Output: <donedata>, received by the cognition as done.invoke.intuition:
+  Input: bot.ability.intuition.input {turn, stimulus, focus,
+  focus_candidates, choices, held, environment, recent, confidence_tuner,
+  decision_timeout_ms, hand_ons, max_context_tokens, bytes_per_token}.
+
+  Output: bot.ability.intuition.output, to the cognition:
 
     {turn, handled: true, selected: [{event, data, target}], acted, reason: "none", confidence_tuner, bytes_per_token}
     {turn, handled: false, reason, hand_to?, acted, confidence_tuner, bytes_per_token}  (escalate)
@@ -103,9 +112,9 @@
        xmlns:cognition="https://github.com/stateforward/floppy/namespaces/cognition"
        xmlns:intuition="https://github.com/stateforward/floppy/namespaces/intuition"
        xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
-       version="1.0" datamodel="ecmascript" name="intuition" initial="deciding">
+       version="1.0" datamodel="ecmascript" name="intuition" initial="idle">
   <datamodel>
-    <!-- The turn, from the cognition's <param>s. -->
+    <!-- The turn, from the cognition's bot.ability.intuition.input. -->
     <data id="turn" expr="0"/>
     <data id="stimulus" expr="null"/>
     <data id="focus" expr="null"/>
@@ -133,6 +142,10 @@
     <data id="confidence" expr="null"/>
     <data id="escalate" expr="false"/>
     <data id="decision_timer" expr="null"/>
+    <!-- The decision service call's generated invoke id: a cancelled
+         call's late events (still delivered, SCXML 6.4) are not the next
+         turn's. -->
+    <data id="decision" expr="null"/>
     <data id="result" expr="null"/>
     <data id="failed_code" expr="null"/>
     <!-- What the stage sent, and the selection being sent (the <foreach>
@@ -142,6 +155,33 @@
   </datamodel>
   <script src="intuition.js"/>
 
+  <!-- Between turns: each bot.ability.intuition.input is one turn. -->
+  <state id="idle">
+    <transition event="bot.ability.intuition.input" event:schema="../schemas/bot.ability.intuition.input.json"
+                target="deciding">
+      <assign location="turn" expr="_event.data.turn"/>
+      <assign location="stimulus" expr="_event.data.stimulus"/>
+      <assign location="focus" expr="_event.data.focus"/>
+      <assign location="focus_candidates" expr="_event.data.focus_candidates"/>
+      <assign location="choices" expr="_event.data.choices"/>
+      <assign location="held" expr="_event.data.held"/>
+      <assign location="environment" expr="_event.data.environment"/>
+      <assign location="recent" expr="_event.data.recent"/>
+      <assign location="confidence_tuner" expr="_event.data.confidence_tuner"/>
+      <assign location="decision_timeout_ms" expr="_event.data.decision_timeout_ms"/>
+      <assign location="hand_ons" expr="_event.data.hand_ons"/>
+      <assign location="max_context_tokens" expr="_event.data.max_context_tokens"/>
+      <assign location="bytes_per_token" expr="_event.data.bytes_per_token"/>
+      <assign location="stimulus_content" expr="null"/>
+      <assign location="confidence" expr="null"/>
+      <assign location="escalate" expr="false"/>
+      <assign location="result" expr="null"/>
+      <assign location="failed_code" expr="null"/>
+      <assign location="acted" expr="[]"/>
+    </transition>
+  </state>
+
+  <!-- One turn's decision; leaving this state cancels its call. -->
   <state id="deciding">
     <onentry>
       <send idlocation="decision_timer" event="deciding.after" delayexpr="decisionTimeoutDelay()"/>
@@ -152,7 +192,7 @@
     <onexit>
       <cancel sendidexpr="decision_timer"/>
     </onexit>
-    <invoke id="decision" type="https://github.com/stateforward/floppy/services/decision"
+    <invoke idlocation="decision" type="https://github.com/stateforward/floppy/services/decision"
             env:apikey="TYPESAFE_API_KEY" env:baseurl="TYPESAFE_BASE_URL">
       <param name="choices" expr="choices"/>
       <param name="state" expr="decisionState()"/>
@@ -165,7 +205,13 @@
     <!-- The decision service's own events: the stage answers once the
          service has ended. The chosen event, with its confidence: observe
          it, then escalate when it is below the updated threshold. -->
-    <transition event="decision.selected" cond="hasSelections(_event)">
+    <transition event="bot.ability.intuition.input" event:schema="../schemas/bot.ability.intuition.input.json">
+      <event:defer/>
+    </transition>
+    <!-- The cognition left the turn (cancelled or timed out). -->
+    <transition event="bot.ability.processing.cancel" event:schema="../schemas/bot.ability.processing.cancel.json"
+                target="idle"/>
+    <transition event="decision.selected" cond="isCurrent(_event) &amp;&amp; hasSelections(_event)">
       <processing:selection_confidence location="confidence" selections="_event.data.selections"/>
       <intuition:observe location="confidence_tuner" confidence="confidence"/>
       <intuition:escalate location="escalate" confidence="confidence" tuner="confidence_tuner"/>
@@ -185,22 +231,22 @@
         </send>
       </foreach>
     </transition>
-    <transition event="decision.abstain" cond="isAbstainReason(_event)">
+    <transition event="decision.abstain" cond="isCurrent(_event) &amp;&amp; isAbstainReason(_event)">
       <log label="intuition" expr="abstainedLog(_event)"/>
       <assign location="result" expr="abstainedResult(_event)"/>
     </transition>
-    <transition event="decision.failed">
+    <transition event="decision.failed" cond="isCurrent(_event)">
       <assign location="failed_code" expr="failedCode(_event)"/>
       <assign location="result" expr="decisionFailedResult()"/>
     </transition>
     <!-- The service's done data: the request's bytes and the tokens the
          backend counted teach the bytes a token. -->
-    <transition event="done.invoke.decision" cond="hasResult()" target="done">
+    <transition event="done.invoke" cond="isCurrent(_event) &amp;&amp; hasResult()" target="done">
       <assign location="bytes_per_token" expr="learnedBytesPerToken(_event)"/>
       <assign location="result.bytes_per_token" expr="bytes_per_token"/>
     </transition>
     <!-- The service ended without an answer: the timer decides. -->
-    <transition event="done.invoke.decision"/>
+    <transition event="done.invoke" cond="isCurrent(_event)"/>
     <transition event="deciding.after" cond="hasResult()" target="done"/>
     <transition event="deciding.after" target="done">
       <assign location="result" expr="timedOutResult()"/>
@@ -212,9 +258,13 @@
     </transition>
   </state>
 
-  <final id="done">
-    <donedata>
-      <content expr="result"/>
-    </donedata>
-  </final>
+  <!-- The turn's answer to the cognition, then the next turn. -->
+  <state id="done">
+    <onentry>
+      <send event="bot.ability.intuition.output" target="#_parent">
+        <content expr="result"/>
+      </send>
+    </onentry>
+    <transition target="idle"/>
+  </state>
 </scxml>

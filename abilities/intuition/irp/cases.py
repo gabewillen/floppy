@@ -3,7 +3,8 @@
 import json
 
 S = suite
-DONE = "done.invoke.intuition"
+INPUT = "bot.ability.intuition.input"
+DONE = "bot.ability.intuition.output"
 SYSTEM_ONE = "/v1/systemone"
 PASS = "__reasoning__"
 IGNORE = "bot.ability.cognition.ignore"
@@ -35,17 +36,20 @@ def decided(probabilities, members=None, input_tokens=1):
 
 def run(choices, turn=1, stimulus=STIMULUS, tuner=None, focus_candidates=None, timeout_ms=SLOW,
         hand_ons=None, max_context_tokens=None):
-    params = [("turn", js(turn)), ("stimulus", js(stimulus)), ("focus", "null"), ("choices", js(choices))]
-    if focus_candidates is not None:
-        params.append(("focus_candidates", js(focus_candidates)))
-    if tuner is not None:
-        params.append(("confidence_tuner", js(tuner)))
-    if hand_ons is not None:
-        params.append(("hand_ons", js(hand_ons)))
-    if max_context_tokens is not None:
-        params.append(("max_context_tokens", js(max_context_tokens)))
-    params.append(("decision_timeout_ms", js(timeout_ms)))
-    return params
+    """The turn's bot.ability.intuition.input, the cognition's defaults
+    where a case names none."""
+    return send(INPUT, js({"turn": turn, "stimulus": stimulus, "focus": None,
+                           "focus_candidates": focus_candidates if focus_candidates is not None else [],
+                           "choices": choices, "held": [], "environment": None, "recent": [],
+                           "confidence_tuner": tuner if tuner is not None else {"mean": 70, "var": 100, "n": 0},
+                           "decision_timeout_ms": timeout_ms,
+                           "hand_ons": hand_ons if hand_ons is not None else ["reasoning"],
+                           "max_context_tokens": max_context_tokens, "bytes_per_token": 3}))
+
+
+def case(test_id, number, comment, steps, params, **kwargs):
+    """A case whose turn is the input `params` (run's), sent first."""
+    S.case(test_id, number, comment, [params] + steps, **kwargs)
 
 
 def done(turn, handled, reason, extra=None):
@@ -79,102 +83,113 @@ def tuner(n):
     return f"_event.data.confidence_tuner.n === {n}"
 
 
-S.statement(1, "It asks the decision service for a choice over the `choices` <param> with the stimulus's model-facing text as its state, so the service leaves out `bot.ability.reasoning.input` and takes the stimulus's object data as evidence: each event's required data is filled from it. The service returns only the chosen event. A confident product is handled: it sends its selection to its target and ends with donedata `{turn, handled: true, selected: [{event, data, target}], acted, reason: \"none\", confidence_tuner, bytes_per_token}`, `acted` what it sent.")
-S.statement(2, "The turn's confidence is its selection's probability as a whole number on the 0-100 scale. The `confidence_tuner` <param> `{mean, var, n}` observes it (`<intuition:observe>`) and comes back updated in every donedata; the turn is low-confidence when the confidence is below the updated threshold (`<intuition:escalate>`: the floor 35 during the warmup of 8 observations, then `max(17.5, mean - std)`).")
-S.statement(3, "A low-confidence product is unhandled and escalates: it sends its environment actions (dispatched before the next tier runs), never the ignore or the deliberate handoff, and ends with `{turn, handled: false, reason: \"low_confidence\", acted, confidence_tuner, bytes_per_token}`, `acted` what it sent.")
-S.statement(4, "When the service abstains (a pass criterion wins, or no event could be offered) the product is empty: `{turn, handled: false, reason: \"empty_product\", acted: [], confidence_tuner, bytes_per_token}` with no `selected`, and the tuner observes nothing. The service offers one pass per tier of the `hand_ons` <param> (`[\"reasoning\"]` by default), and a pass names its tier as `hand_to`.")
+S.statement(1, "Each `bot.ability.intuition.input` is one turn: it asks the decision service for a choice over its `choices` with the stimulus's model-facing text as its state, so the service leaves out `bot.ability.reasoning.input` and takes the stimulus's object data as evidence: each event's required data is filled from it. The service returns only the chosen event. A confident product is handled: it sends its selection to its target and answers `bot.ability.intuition.output` `{turn, handled: true, selected: [{event, data, target}], acted, reason: \"none\", confidence_tuner, bytes_per_token}`, `acted` what it sent.")
+S.statement(2, "The turn's confidence is its selection's probability as a whole number on the 0-100 scale. The input's `confidence_tuner` `{mean, var, n}` observes it (`<intuition:observe>`) and comes back updated in every output; the turn is low-confidence when the confidence is below the updated threshold (`<intuition:escalate>`: the floor 35 during the warmup of 8 observations, then `max(17.5, mean - std)`).")
+S.statement(3, "A low-confidence product is unhandled and escalates: it sends its environment actions (dispatched before the next tier runs), never the ignore or the deliberate handoff, and answers `{turn, handled: false, reason: \"low_confidence\", acted, confidence_tuner, bytes_per_token}`, `acted` what it sent.")
+S.statement(4, "When the service abstains (a pass criterion wins, or no event could be offered) the product is empty: `{turn, handled: false, reason: \"empty_product\", acted: [], confidence_tuner, bytes_per_token}` with no `selected`, and the tuner observes nothing. The service offers one pass per tier of the input's `hand_ons` (`[\"reasoning\"]` by default), and a pass names its tier as `hand_to`.")
 S.statement(5, "Each selection is sent to its target, the one session the choices tag its event with (the decision service's single offerer): the ignore goes to the session that offers it, and an event several sessions offer names no target, so it reaches none and is not acted.")
 S.statement(6, "A failed decision (`decision.failed {code}`) fails the stage with reason `the decision failed (<code>)`; one that cannot start (`error.*`) with `the decision could not run (<event>)`; and no answer within `decision_timeout_ms` with `the decision timed out after <n> ms`; each `{turn, handled: false, failed: true, reason, acted: [], confidence_tuner, bytes_per_token}`.")
-S.statement(7, "The stage answers once the decision service has ended. Its done data's `request_bytes` over the backend's counted `usage.input_tokens` teaches `bytes_per_token` (the <param>, 3 to start), which keeps the fewest bytes a token any answer showed and comes back in every donedata; with a `max_context_tokens` <param> the request is fitted to it and still sent.")
+S.statement(7, "The stage answers once the decision service has ended. Its done data's `request_bytes` over the backend's counted `usage.input_tokens` teaches `bytes_per_token` (the input's, 3 to start), which keeps the fewest bytes a token any answer showed and comes back in every output; with a `max_context_tokens` in the input the request is fitted to it and still sent.")
 
-S.case(100, 1, "a confident selection is sent and handled, its data the service's.",
+case(100, 1, "a confident selection is sent and handled, its data the service's.",
        [sent("bot.say", {}), done(1, True, "none", f"{selected(('bot.say', {}))} && {acted(('bot.say', {}))} && {tuner(1)}")],
        params=run([SAY]), backend=decided({"bot.say": 0.9, PASS: 0.1}))
-S.case(101, 1, "a required member is filled from the stimulus data.",
+case(101, 1, "a required member is filled from the stimulus data.",
        [sent("bot.say", {"text": "hi"}), done(2, True, "none", selected(("bot.say", {"text": "hi"})))],
        params=run([{"event": "bot.say", "schema": {"type": "object", "required": ["text"],
                                                     "properties": {"text": {"type": "string"}}}, "target": HARNESS}],
                   turn=2, stimulus={"event": "bot.input", "data": {"text": "hi"}, "source": "body"}),
        backend=decided({"bot.say": 0.9, PASS: 0.1}, {"bot.say::text": "hi"}))
-S.case(102, 1, "the deliberate handoff is never offered to the service.",
+case(102, 1, "the deliberate handoff is never offered to the service.",
        [sent("bot.say"), done(3, True, "none", selected(("bot.say", {})))],
        params=run([HANDOFF_CHOICE, SAY], turn=3), backend=decided({"bot.say": 0.9, PASS: 0.1}))
-S.case(103, 1, "only the chosen event is selected and sent, however probable another.",
+case(103, 1, "only the chosen event is selected and sent, however probable another.",
        [sent("bot.say"), done(4, True, "none", f"{selected(('bot.say', {}))} && {acted(('bot.say', {}))}")],
        params=run([SAY, IGNORE_CHOICE], turn=4), backend=decided({"bot.say": 0.5, IGNORE: 0.45, PASS: 0.05}))
 
-S.case(110, 2, "the confidence is the selection's probability, observed by the tuner: 38 clears the warmup floor.",
+case(110, 2, "the confidence is the selection's probability, observed by the tuner: 38 clears the warmup floor.",
        [sent("bot.say"),
         done(1, True, "none", f"{selected(('bot.say', {}))} && {tuner(1)}"
                               " && _event.data.confidence_tuner.mean === 38")],
        params=run([SAY, IGNORE_CHOICE]), backend=decided({"bot.say": 0.38, IGNORE: 0.31, PASS: 0.31}))
-S.case(111, 2, "past the warmup, the threshold follows the tuner's mean: 70 is low against a mean of 90.",
+case(111, 2, "past the warmup, the threshold follows the tuner's mean: 70 is low against a mean of 90.",
        [sent("bot.say"), done(1, False, "low_confidence", f"_event.data.selected === undefined && {tuner(21)}")],
        params=run([SAY], tuner={"mean": 90, "var": 100, "n": 20}), backend=decided({"bot.say": 0.7, PASS: 0.3}))
-S.case(112, 2, "past the warmup, 80 clears a mean of 90.",
+case(112, 2, "past the warmup, 80 clears a mean of 90.",
        [sent("bot.say"), done(1, True, "none", f"{selected(('bot.say', {}))} && {tuner(21)}")],
        params=run([SAY], tuner={"mean": 90, "var": 100, "n": 20}), backend=decided({"bot.say": 0.8, PASS: 0.2}))
 
-S.case(120, 3, "a low-confidence product sends its environment action, then escalates with it acted.",
+case(120, 3, "a low-confidence product sends its environment action, then escalates with it acted.",
        [sent("bot.say"), done(4, False, "low_confidence", f"_event.data.selected === undefined && {acted(('bot.say', {}))} && {tuner(21)}")],
        params=run([SAY, IGNORE_CHOICE], turn=4, tuner={"mean": 90, "var": 100, "n": 20}),
        backend=decided({"bot.say": 0.7, IGNORE: 0.2, PASS: 0.1}))
-S.case(121, 3, "a low-confidence ignore is not sent: nothing is acted.",
+case(121, 3, "a low-confidence ignore is not sent: nothing is acted.",
        [done(5, False, "low_confidence", f"{acted()} && {tuner(21)}")],
        params=run([SAY, IGNORE_CHOICE], turn=5, tuner={"mean": 90, "var": 100, "n": 20}),
        backend=decided({IGNORE: 0.7, "bot.say": 0.2, PASS: 0.1}))
 
-S.case(130, 4, "the reasoning pass winning is an empty product handed to reasoning, unobserved.",
+case(130, 4, "the reasoning pass winning is an empty product handed to reasoning, unobserved.",
        [done(5, False, "empty_product", f"_event.data.selected === undefined && _event.data.failed === undefined"
                                         f" && _event.data.hand_to === 'reasoning' && {acted()} && {tuner(0)}")],
        params=run([SAY], turn=5), backend=decided({"bot.say": 0.2, PASS: 0.8}))
-S.case(131, 4, "with only the deliberate handoff offered, nothing can be offered: an empty product.",
+case(131, 4, "with only the deliberate handoff offered, nothing can be offered: an empty product.",
        [done(6, False, "empty_product", f"_event.data.selected === undefined && _event.data.hand_to === undefined && {tuner(0)}")],
        params=run([HANDOFF_CHOICE], turn=6), backend=[])
-S.case(132, 4, "an event whose required data cannot be filled is not offered.",
+case(132, 4, "an event whose required data cannot be filled is not offered.",
        [done(7, False, "empty_product", tuner(0))],
        params=run([{"event": "bot.say", "schema": {"type": "object", "required": ["text"],
                                                     "properties": {"text": {"type": "string"}}}}], turn=7),
        backend=[])
-S.case(133, 4, "with intuition among the hand_ons, its pass hands the turn to intuition.",
+case(133, 4, "with intuition among the hand_ons, its pass hands the turn to intuition.",
        [done(8, False, "empty_product", f"_event.data.hand_to === 'intuition' && {acted()} && {tuner(0)}")],
        params=run([SAY], turn=8, hand_ons=["intuition", "reasoning"]),
        backend=decided({"bot.say": 0.1, "__intuition__": 0.6, PASS: 0.3}))
 
-S.case(140, 5, "an event several sessions offer names no target, so it reaches none and is not acted; the turn is still handled.",
+case(140, 5, "an event several sessions offer names no target, so it reaches none and is not acted; the turn is still handled.",
        [done(8, True, "none", f"_event.data.selected.length === 1 && _event.data.selected[0].target === undefined && {acted()}")],
        params=run([{"event": "tool.go", "schema": {}, "target": "a"}, {"event": "tool.go", "schema": {}, "target": "b"}], turn=8),
        backend=decided({"tool.go": 0.9, PASS: 0.1}))
-S.case(141, 5, "the ignore goes to the session that offers it.",
+case(141, 5, "the ignore goes to the session that offers it.",
        [sent(IGNORE, {}), done(9, True, "none", f"{selected((IGNORE, {}))} && {acted((IGNORE, {}))}")],
        params=run([IGNORE_CHOICE], turn=9),
        backend=decided({IGNORE: 0.9, PASS: 0.1}))
-S.case(142, 5, "a focus_device is sent with its grounded device.",
+case(142, 5, "a focus_device is sent with its grounded device.",
        [sent("bot.focus_device", {"device": "kitchen"}), done(10, True, "none", selected(("bot.focus_device", {"device": "kitchen"})))],
        params=run([{"event": "bot.focus_device", "schema": {"type": "object", "required": ["device"],
                                                             "properties": {"device": {"type": "string", "enum": ["kitchen"]}}}, "target": HARNESS}],
                   turn=10, focus_candidates=["kitchen"]),
        backend=decided({"bot.focus_device": 0.9, PASS: 0.1}, {"bot.focus_device::device": "kitchen"}))
 
-S.case(150, 6, "a backend error status fails the stage with the service's code.",
+case(150, 6, "a backend error status fails the stage with the service's code.",
        [failed(11, "the decision failed (status)", f"{acted()} && {tuner(0)}")],
        params=run([SAY], turn=11), backend=[{"path": SYSTEM_ONE, "status": 500, "body": {"error": {"message": "boom"}}}])
-S.case(151, 6, "an answer that is not a system_one answer fails the stage as malformed.",
+case(151, 6, "an answer that is not a system_one answer fails the stage as malformed.",
        [failed(12, "the decision failed (malformed)")],
        params=run([SAY], turn=12), backend=[{"path": SYSTEM_ONE, "status": 200, "body": {"answers": {}}}])
-S.case(152, 6, "a decision that cannot start fails the stage.",
+case(152, 6, "a decision that cannot start fails the stage.",
        [failed(13, "the decision could not run (error.execution)")],
        params=run([{"event": "bot.say"}], turn=13), backend=[])
-S.case(153, 6, "no answer within decision_timeout_ms fails the stage.",
+case(153, 6, "no answer within decision_timeout_ms fails the stage.",
        [failed(14, "the decision timed out after 1 ms")],
        params=run([SAY], turn=14, timeout_ms=1), backend=decided({"bot.say": 0.9, PASS: 0.1}))
 
-S.case(160, 7, "an answer counting many tokens teaches fewer bytes a token.",
+case(160, 7, "an answer counting many tokens teaches fewer bytes a token.",
        [sent("bot.say"), done(15, True, "none", "_event.data.bytes_per_token > 0 && _event.data.bytes_per_token < 3")],
        params=run([SAY], turn=15), backend=decided({"bot.say": 0.9, PASS: 0.1}, input_tokens=1000000))
-S.case(161, 7, "an answer counting few tokens teaches nothing: bytes a token stay 3.",
+case(161, 7, "an answer counting few tokens teaches nothing: bytes a token stay 3.",
        [sent("bot.say"), done(16, True, "none", "_event.data.bytes_per_token === 3")],
        params=run([SAY], turn=16), backend=decided({"bot.say": 0.9, PASS: 0.1}))
-S.case(162, 7, "a request over max_context_tokens is still sent: it cannot fit, and the turn is handled.",
+case(162, 7, "a request over max_context_tokens is still sent: it cannot fit, and the turn is handled.",
        [sent("bot.say"), done(17, True, "none", selected(("bot.say", {})))],
        params=run([SAY], turn=17, max_context_tokens=1), backend=decided({"bot.say": 0.9, PASS: 0.1}))
+
+S.statement(8, "It is long-lived (mosfet.py's Cognition holds its Decision): it answers each `bot.ability.intuition.input` in turn, and a `bot.ability.processing.cancel` ends the turn's decision unanswered, so the next input is the next turn.")
+
+S.case(170, 8, "two turns are answered in order by one session, each with the tuner its input carries.",
+       [run([SAY], turn=1), sent("bot.say"), done(1, True, "none", tuner(1)),
+        run([SAY], turn=2, tuner={"mean": 90, "var": 100, "n": 1}), sent("bot.say"), done(2, True, "none", tuner(2))],
+       backend=decided({"bot.say": 0.9, PASS: 0.1}) + decided({"bot.say": 0.9, PASS: 0.1}))
+S.case(171, 8, "a cancelled turn is never answered; the next turn is.",
+       [run([SAY], turn=1), send("bot.ability.processing.cancel", js({})),
+        run([SAY], turn=2), sent("bot.say"), done(2, True, "none", tuner(1))],
+       backend=decided({"bot.say": 0.9, PASS: 0.1}) + decided({"bot.say": 0.9, PASS: 0.1}))

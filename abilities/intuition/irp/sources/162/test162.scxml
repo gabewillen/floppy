@@ -2,23 +2,19 @@
 <!-- intuition-7: a request over max_context_tokens is still sent: it cannot fit, and the turn is handled. -->
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
-  <invoke id="intuition" type="scxml" src="../../../intuition.scx">
-    <param name="turn" expr="17"/>
-    <param name="stimulus" expr='{"event": "bot.input", "data": {"observation": {"event": "text", "data": "hello"}}, "source": "body"}'/>
-    <param name="focus" expr="null"/>
-    <param name="choices" expr='[{"event": "bot.say", "schema": {}, "target": "session"}]'/>
-    <param name="max_context_tokens" expr="1"/>
-    <param name="decision_timeout_ms" expr="150000"/>
-  </invoke>
+  <invoke id="intuition" type="scxml" src="../../../intuition.scx"/>
   <state id="boot">
     <onentry><send event="harness.go"/></onentry>
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
+    <onentry>
+      <send event="bot.ability.intuition.input" target="#_intuition"><content expr='{"turn": 17, "stimulus": {"event": "bot.input", "data": {"observation": {"event": "text", "data": "hello"}}, "source": "body"}, "focus": null, "focus_candidates": [], "choices": [{"event": "bot.say", "schema": {}, "target": "session"}], "held": [], "environment": null, "recent": [], "confidence_tuner": {"mean": 70, "var": 100, "n": 0}, "decision_timeout_ms": 150000, "hand_ons": ["reasoning"], "max_context_tokens": 1, "bytes_per_token": 3}'/></send>
+    </onentry>
     <transition event="bot.say" target="step1"/>
   </state>
   <state id="step1">
-    <transition event="done.invoke.intuition" cond="_event.data.turn === 17 &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.reason === &quot;none&quot; &amp;&amp; typeof _event.data.confidence_tuner === 'object' &amp;&amp; Array.isArray(_event.data.acted) &amp;&amp; typeof _event.data.bytes_per_token === 'number' &amp;&amp; JSON.stringify(_event.data.selected) === &quot;[{\&quot;data\&quot;:{},\&quot;event\&quot;:\&quot;bot.say\&quot;,\&quot;target\&quot;:\&quot;session\&quot;}]&quot;" target="step2"/>
+    <transition event="bot.ability.intuition.output" cond="_event.data.turn === 17 &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.reason === &quot;none&quot; &amp;&amp; typeof _event.data.confidence_tuner === 'object' &amp;&amp; Array.isArray(_event.data.acted) &amp;&amp; typeof _event.data.bytes_per_token === 'number' &amp;&amp; JSON.stringify(_event.data.selected) === &quot;[{\&quot;data\&quot;:{},\&quot;event\&quot;:\&quot;bot.say\&quot;,\&quot;target\&quot;:\&quot;session\&quot;}]&quot;" target="step2"/>
   </state>
   <state id="step2">
     <transition target="pass"/>
