@@ -67,8 +67,8 @@ and bind these digests:
 | --- | --- | --- |
 | corpus digest | `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` | `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca` |
 | errata SHA-256 | `54c7f1cb44686e2bf499a0edf2596d311f4623245b2fe380abf0ac5b4663303f` | `72fe9e3ca418f55dadf64d2d6331af724cf8ebbc2a87a0180489db818aa73f2a` |
-| producer report digest | `cd3916157996341e10d4e4fe040d334c06694bd1c8d9faac454d378a564277b8` | `f99aa26a94993207dcbd865727c37f6857f10773d92695988c81ef9a599c2025` |
-| canonical artifact SHA-256 | `7ed53e7731259e9a27c6c36d0f99b1c09a819459f1074e04b499a88a14b66266` | `3168603bf04f3b2080142cd12f4df770f639f702d6f5f1b5186f4d837b23bf85` |
+| producer report digest | `cd7e244f59f8527bd8c20dd5dd448c4fe8e012fa1c0764a8462df5dfc658199e` | `3462de7f450565500d06f180dcf3123784cc5a8300fc42f684130b3a7a00d5a1` |
+| canonical artifact SHA-256 | `b0f115c839fae914d372fbf37e094a634471f6b54783c4bfa2239be0fc11a6b7` | `fc1d9b0e40a7b8b703d4e75d7825425a24d84e42cf3f0b475a9a5d3b169fd8cd` |
 
 Each repository namespace also has its own implementation report plan in
 the same format, run through the same pipeline and reported separately
@@ -235,6 +235,14 @@ sessions: `--http-listen` serves each session's location and `--http-allow`
 admits outbound origins (deny-all by default). See
 [cli.md](docs/cli.md#basichttp-over-the-network).
 
+**Event I/O Processor components.** Any other `<send type>` goes to a Wasm
+component of the `event-processor` world that a package binds to that type
+URI, under the Wasmtime session host and `scx run`. The shipped WebSocket
+processor (`<send type="websocket">`) keeps a connection per target URL,
+sends each `<send>` as a message, delivers what the peer sends as events,
+and records every answer for replay. See
+[event-io-processors.md](docs/event-io-processors.md).
+
 **Browser host.** An ES module package that runs the generic machine, the
 validator, the compiler, the three data models, both Event I/O Processors,
 the clock, and extension components in the page, with fuel-metered calls,
@@ -331,6 +339,7 @@ policy is the "Versioning policy" section of
 | [Conformance](docs/conformance.md) | the official IRP pipeline, preparation, oracles, baselines, and digests |
 | [Validator rules](docs/validator-rules.md) | every diagnostic code and its specification basis |
 | [Live sessions](docs/live-session.md) | `scx run`, its JSON protocol, record and replay, BasicHTTP networking, the host API |
+| [Event I/O Processors](docs/event-io-processors.md) | processor components and packages, the WebSocket processor, `run`'s processor flags |
 | [Session snapshots](docs/session-snapshot.md) | the snapshot and diff documents and the `snapshot` commands |
 | [Executable content extensions](docs/executable-content-extensions.md) | writing an extension component, `env` slots, loading an element from a repository |
 | [`event` vocabulary](namespaces/event/README.md) | JSON Schemas for event data (`event:schema`, `event:schemaexpr`): resolution, references, snapshots, and validator codes; deferred events (`<event:defer/>`) |
@@ -357,8 +366,9 @@ corpus and baselines.
 The full list, with evidence, is in
 [docs/limitations.md](docs/limitations.md). In short:
 
-- No Event I/O Processor other than SCXML and BasicHTTP exists; a `<send>`
-  of any other type raises `error.execution`.
+- Only the Wasmtime session host and `scx run` bind Event I/O Processor
+  components; elsewhere a `<send>` whose type is neither SCXML nor
+  BasicHTTP raises `error.execution`.
 - Five XPath IRP cases (241, 244, 307, 520, 534) pass only under documented
   upstream errata; 24 XPath cases and ECMAScript case 436 are `NotApplicable`
   because they never exercise the corpus's data model (see

@@ -15,9 +15,9 @@ use std::collections::{BTreeMap, VecDeque};
 
 use scxml_scheduler::{Checkpoint, Delivery, Invoked, SessionKey};
 use scxml_snapshot::{
-    BasicHttpMessage, Capture, ComponentIdentity, ComponentRole, DataModelCapture, Event,
-    EventType, HistoryValue, InvocationCapture, InvokedBy, MachineCapture, Options, OversizedValue,
-    Param, PendingSend, Section, SessionCapture, SnapshotError, SnapshotErrorCode, SnapshotPoint,
+    Capture, ComponentIdentity, ComponentRole, DataModelCapture, Event, EventType, HistoryValue,
+    InvocationCapture, InvokedBy, MachineCapture, Options, OversizedValue, Param, PendingSend,
+    ProcessorMessage, Section, SessionCapture, SnapshotError, SnapshotErrorCode, SnapshotPoint,
     Status as SnapshotStatus, System, TextValue, TraceContext, TraceContextPolicy,
     TransitionCapture, TransitionType, Value, Variable, VariableValue,
 };
@@ -873,17 +873,17 @@ impl Gather<'_> {
                 Ok(PendingSend {
                     sendid,
                     event: Some(self.event(&request.event)),
-                    basichttp: None,
+                    message: None,
                     target: request.target,
                     send_type: request.processor_type,
                     delay_ms: request.delay_ms,
                     deadline_ms: pending.deadline_ms,
                 })
             }
-            WitDelayedSend::Basichttp(send) => Ok(PendingSend {
+            WitDelayedSend::Processor(send) => Ok(PendingSend {
                 sendid: send.send_id,
                 event: None,
-                basichttp: Some(BasicHttpMessage {
+                message: Some(ProcessorMessage {
                     event: send.event_name,
                     params: send
                         .params
@@ -900,7 +900,7 @@ impl Gather<'_> {
                         .and_then(|context| self.carrier(context)),
                 }),
                 target: send.target,
-                send_type: None,
+                send_type: Some(send.processor_type),
                 delay_ms: send.delay_ms,
                 deadline_ms: pending.deadline_ms,
             }),

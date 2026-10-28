@@ -38,7 +38,7 @@ fn pending(sendid: &str, deadline_ms: u64) -> PendingSend {
     PendingSend {
         sendid: sendid.into(),
         event: Some(event("timeout")),
-        basichttp: None,
+        message: None,
         target: None,
         send_type: None,
         delay_ms: 100,

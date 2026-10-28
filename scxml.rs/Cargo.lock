@@ -2683,6 +2683,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "signal-hook",
+ "tungstenite",
  "ureq",
  "url",
 ]
@@ -2840,6 +2841,7 @@ dependencies = [
  "opentelemetry_sdk",
  "rayon",
  "rustls",
+ "rustls-platform-verifier",
  "scxml-compiler-core",
  "scxml-data-model-ecmascript",
  "scxml-data-model-xpath",
@@ -2857,6 +2859,7 @@ dependencies = [
  "scxml-validator-xsd",
  "serde_json",
  "sha2",
+ "tungstenite",
  "ureq",
  "url",
  "wasm-encoder 0.258.3",
@@ -2887,6 +2890,15 @@ dependencies = [
  "scxml-clock",
  "scxml-telemetry",
  "scxml-types",
+ "wit-bindgen 0.51.0",
+]
+
+[[package]]
+name = "scxml-ioprocessor-websocket"
+version = "0.2.0"
+dependencies = [
+ "scxml-types",
+ "serde_json",
  "wit-bindgen 0.51.0",
 ]
 
@@ -3225,6 +3237,17 @@ dependencies = [
  "itoa",
  "serde",
  "serde_core",
+]
+
+[[package]]
+name = "sha1"
+version = "0.10.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a978451301f4db1d02937a4ab3ccce137717b81826e79b7d49ffe3244a13c3b8"
+dependencies = [
+ "cfg-if",
+ "cpufeatures 0.2.17",
+ "digest",
 ]
 
 [[package]]
@@ -3632,6 +3655,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
+name = "tungstenite"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8628dcc84e5a09eb3d8423d6cb682965dea9133204e8fb3efee74c2a0c259442"
+dependencies = [
+ "bytes",
+ "data-encoding",
+ "http",
+ "httparse",
+ "log",
+ "rand 0.9.5",
+ "sha1",
+ "thiserror 2.0.20",
+ "utf-8",
+]
+
+[[package]]
 name = "typenum"
 version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3712,6 +3752,12 @@ dependencies = [
  "percent-encoding",
  "serde",
 ]
+
+[[package]]
+name = "utf-8"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
 
 [[package]]
 name = "utf16_iter"

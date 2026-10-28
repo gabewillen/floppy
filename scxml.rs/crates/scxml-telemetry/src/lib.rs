@@ -235,6 +235,8 @@ pub enum Operation {
     CliReadExtensionPackage,
     /// Reads and verifies the CLI's `--service-package` manifests.
     CliReadServicePackage,
+    /// Reads and verifies the CLI's `--processor-package` manifests.
+    CliReadProcessorPackage,
     /// Resolves one repository namespace's package (manifest and schema) from
     /// the cache or its repository.
     CliResolveExtensionPackage,
@@ -439,6 +441,17 @@ pub enum Operation {
     /// Performs one invoked service's admitted request through the
     /// embedder's transport.
     HostWasmtimeServiceHttpRequest,
+    /// Opens one Event I/O Processor instance for a session
+    /// (`event-processor-api.open`).
+    HostWasmtimeProcessorOpen,
+    /// Hands one `<send>` to an Event I/O Processor instance
+    /// (`event-processor-api.check` or `send`).
+    HostWasmtimeProcessorSend,
+    /// Admits one `outbound-websocket.connect` a processor instance makes.
+    HostWasmtimeProcessorWebsocketConnect,
+    /// Runs one processor instance's admitted connection through the
+    /// embedder's WebSocket transport, from its handshake to its end.
+    HostWasmtimeProcessorWebsocket,
     /// Instantiates and links one data-model component.
     HostWasmtimeDataModelInstantiate,
     /// Instantiates and links one `BasicHTTP` I/O processor component.
@@ -582,6 +595,7 @@ impl Operation {
             Self::CliReadDocument => "scxml.cli.read-document",
             Self::CliReadExtensionPackage => "scxml.cli.read-extension-package",
             Self::CliReadServicePackage => "scxml.cli.read-service-package",
+            Self::CliReadProcessorPackage => "scxml.cli.read-processor-package",
             Self::CliResolveExtensionPackage => "scxml.cli.resolve-extension-package",
             Self::CliResolveExtensionComponent => "scxml.cli.resolve-extension-component",
             Self::CliResolveServicePackage => "scxml.cli.resolve-service-package",
@@ -676,6 +690,12 @@ impl Operation {
             Self::HostWasmtimeServiceHttpFetch => "scxml.host-wasmtime.service-http-fetch",
             Self::HostWasmtimeServiceHttpSend => "scxml.host-wasmtime.service-http-send",
             Self::HostWasmtimeServiceHttpRequest => "scxml.host-wasmtime.service-http-request",
+            Self::HostWasmtimeProcessorOpen => "scxml.host-wasmtime.processor-open",
+            Self::HostWasmtimeProcessorSend => "scxml.host-wasmtime.processor-send",
+            Self::HostWasmtimeProcessorWebsocketConnect => {
+                "scxml.host-wasmtime.processor-websocket-connect"
+            }
+            Self::HostWasmtimeProcessorWebsocket => "scxml.host-wasmtime.processor-websocket",
             Self::HostWasmtimeDataModelInstantiate => "scxml.host-wasmtime.data-model-instantiate",
             Self::HostWasmtimeBasicHttpInstantiate => "scxml.host-wasmtime.basichttp-instantiate",
             Self::HostWasmtimeBasicHttpSend => "scxml.host-wasmtime.basichttp-send",

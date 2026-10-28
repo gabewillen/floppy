@@ -58,9 +58,9 @@ the canonical release of docs/conformance.md, empty filter identity) measure:
 
 | Data model | Passed / Applicable | Rejections | Not Passing | Corpus digest | Producer report digest | Artifact SHA-256 |
 | --- | ---: | ---: | ---: | --- | --- | --- |
-| ECMAScript | 8 / 8 | 8 | 0 | `915e73792e350c4840d1757bca1f29121f91053f606d96834cfef4791cfa90a9` | `526604530def8bb8601fad58c6df9801e59d0f4a20252c952b089a1647340745` | `48fe9e0598c1a9954aa404262971d8e97bf81c973af165c9fd2bdc6c3c503368` |
-| XPath | 8 / 8 | 8 | 0 | `536c72c62e8d7932706eb974c7134bb5082443807c283103f8381f04b906d267` | `156bcde901eb4470ac555e5bbec734d9bcaa9a5f96f642f59b0d6db5d1e97dfb` | `9b39466f5cf66c280884bb6992b6d7101fdb7ac3c3dd84e25b349108faec1703` |
+| ECMAScript | 8 / 8 | 8 | 0 | `915e73792e350c4840d1757bca1f29121f91053f606d96834cfef4791cfa90a9` | `dd9acbc1afce451687780da51552e61116957ec45af1faa4d774c0deec7d8d4d` | `bb387f2cf47f7074d0450c98d7e1e48b2e6c92ff339a4de9611580fe24eb230d` |
+| XPath | 8 / 8 | 8 | 0 | `536c72c62e8d7932706eb974c7134bb5082443807c283103f8381f04b906d267` | `1a2e9f17b2bcd0f3ca8c016ebb6c23ecda229f77eb808016cb6e556e51b2a000` | `534291dde9250eb39e5a6f3d5181a7d4b9206541f0f4d9a01852ac05b3c4ee63` |
 
-The report identity lists the bound package: `https://stateforward.org/scxml/example` version `0.2.0`, manifest SHA-256 `07797af2de4d273403c5ae503b6ed664d23756737f59b36d351b52ecfdb11124`, schema SHA-256 `d9e7ee300d0d715f623db98d7844a90edbc4c7e1253b3bc6b69a84e4a2500342`, component SHA-256 `7a9fb014be0a400842e1f663222fe672a87ed1c5a3a325226c3658dc7de658ce`. `crates/scxml-conformance/tests/checked_in_namespace_irp.rs` checks
+The report identity lists the bound package: `https://stateforward.org/scxml/example` version `0.2.0`, manifest SHA-256 `07797af2de4d273403c5ae503b6ed664d23756737f59b36d351b52ecfdb11124`, schema SHA-256 `d9e7ee300d0d715f623db98d7844a90edbc4c7e1253b3bc6b69a84e4a2500342`, component SHA-256 `115c43e6f23c3323cd009fbbecb2045dc9b66ed7a0eef238d6747f6355cf2612`. `crates/scxml-conformance/tests/checked_in_namespace_irp.rs` checks
 the suite and its baselines statically, and `irp_components.rs` reproduces
 both baselines through the components byte for byte.

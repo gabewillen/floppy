@@ -41,6 +41,8 @@
 //   (`withOutboundHttp({fetch})`, called like the WHATWG `fetch` with
 //   `redirect: 'manual'` and `credentials: 'omit'`); without one every
 //   request is `unavailable`.
+// * Outbound WebSocket: none; every `outbound-websocket.connect` is
+//   `unavailable`.
 // * Values and references: the page holds the values of the variables it
 //   grants (`withValues`); a service never receives one, only a reference
 //   for each `env` slot its package declares and the `<invoke>` binds to a
@@ -416,7 +418,7 @@ function plan(imports, grant) {
   let filesystem = false;
   let shim = false;
   for (const name of imports) {
-    if (['stateforward:scxml/types', 'stateforward:scxml/telemetry', 'stateforward:scxml/outbound-http'].includes(name)) continue;
+    if (['stateforward:scxml/types', 'stateforward:scxml/telemetry', 'stateforward:scxml/outbound-http', 'stateforward:scxml/outbound-websocket'].includes(name)) continue;
     // The service world's clock, run on the session's logical clock.
     if (name === 'wasi:clocks/monotonic-clock' || name === 'wasi:clocks/types') continue;
     if (name === 'wasi:clocks/wall-clock' || name.startsWith('wasi:io/') || name.startsWith('wasi:random/')) {
@@ -992,11 +994,18 @@ export class ServiceInvocation {
       fetch: (request) => this.#fetch(request),
       send: (request) => this.#send(request),
     };
+    // This host offers no outbound WebSocket: every connection is refused.
+    const outboundWebsocket = {
+      connect: async () => {
+        throw unavailable('the host offers this component no outbound WebSocket');
+      },
+    };
     const imports = {};
     for (const [name, value] of [
       ['stateforward:scxml/types', {}],
       ['stateforward:scxml/telemetry', telemetry],
       ['stateforward:scxml/outbound-http', outboundHttp],
+      ['stateforward:scxml/outbound-websocket', outboundWebsocket],
     ]) {
       imports[name] = value;
       imports[`${name}@0.2.0`] = value;

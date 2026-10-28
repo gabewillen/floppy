@@ -981,7 +981,7 @@ const fn io_operation_name(
         Operation::Encode => "encode",
         Operation::Diff => "diff",
         Operation::CommunicationError => "communication-error",
-        Operation::ScheduleBasichttp => "schedule-basichttp",
+        Operation::ScheduleProcessor => "schedule-processor",
     }
 }
 

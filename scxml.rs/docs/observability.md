@@ -132,7 +132,9 @@ invocation's due timers, `wasi:clocks/monotonic-clock`), `service-cancel`
 (per cancelled invocation), `service-http-fetch` (per `outbound-http.fetch`
 a service makes, from admission to its response), `service-http-send` (per
 `outbound-http.send` a service makes, from admission to its status, and per
-delivery of a later part of its response), `service-http-request`
+delivery of a later part of its response), a service's
+`outbound-websocket.connect` under the processors' `processor-websocket-connect`
+and `processor-websocket` spans (below), `service-http-request`
 (per admitted request the embedder's transport performs), and
 `session-http-response` (per delivery of a service's HTTP response to a
 live session), and
@@ -146,6 +148,19 @@ outcome and signal event (and, on failure, its closed error category).
 Service guest signals carry the fixed `scxml.module` value
 `invoked-service` and the guest's closed WIT operation enum. Service type
 URIs, invoke ids, events, payloads, URLs, and slot names are never attributes or metric labels; the set of labels stays closed.
+
+## Event I/O Processors
+
+Event I/O Processor components add the Wasmtime host's boundary spans
+`scxml.host-wasmtime.processor-open` (per instance opened for a session),
+`processor-send` (per `<send>` handed to an instance, through `check` or
+`send`), `processor-websocket-connect` (per `outbound-websocket.connect` an
+instance or an invoked service makes, through its admission), and `processor-websocket` (per
+admitted connection the embedder's transport runs, from its handshake to
+its end), and the CLI's `scxml.cli.read-processor-package`; each records
+only its closed outcome and signal event (and, on failure, its closed error
+category). Processor type URIs, targets, URLs, headers, and messages are
+never attributes or metric labels.
 
 ## Validation
 

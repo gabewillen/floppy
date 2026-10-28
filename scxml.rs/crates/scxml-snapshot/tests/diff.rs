@@ -259,7 +259,7 @@ fn capture(knobs: &Knobs) -> (Capture, Options) {
         .map(|index| PendingSend {
             sendid: format!("sendid_{index}"),
             event: Some(event("timeout", knobs.carrier)),
-            basichttp: None,
+            message: None,
             target: None,
             send_type: None,
             delay_ms: 100,

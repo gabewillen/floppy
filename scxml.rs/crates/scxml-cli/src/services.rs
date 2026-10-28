@@ -671,8 +671,9 @@ impl ServiceFlags {
     /// Reads, authenticates, and binds every package's service component,
     /// with the run's values for the services' `env` slots (references
     /// only), the WASI resources `--dir` and `--wasi` grant, and, when
-    /// `outbound` is true, the outbound transport each service's admitted
-    /// requests go through (none: every request is refused; a replay
+    /// `outbound` is true, the outbound HTTP transport each service's
+    /// admitted requests go through and `websocket`, the transport its
+    /// admitted connections go through (none: every one is refused; a replay
     /// answers them from its log instead). Returns the bound components and
     /// each component's imports, by service URI, for the consent listing.
     ///
@@ -686,6 +687,7 @@ impl ServiceFlags {
         resolved: &Services,
         values: &[crate::extensions::HeldValue],
         outbound: bool,
+        websocket: Option<&std::sync::Arc<dyn scxml_host_wasmtime::WebSocketTransport>>,
     ) -> Result<(scxml_host_wasmtime::ServiceComponents, Imports), Box<dyn std::error::Error>> {
         let packages = &resolved.packages;
         let mut imports = BTreeMap::new();
@@ -695,6 +697,9 @@ impl ServiceFlags {
             services = services.with_outbound_http(std::sync::Arc::new(
                 scxml_host_wasmtime::ExtensionHttpClient::new(),
             ));
+        }
+        if let Some(websocket) = websocket {
+            services = services.with_outbound_websocket(std::sync::Arc::clone(websocket));
         }
         for (uri, flags) in &self.wasi {
             services = services.with_wasi(uri, flags.host());

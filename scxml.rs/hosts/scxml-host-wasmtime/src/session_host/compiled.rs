@@ -40,9 +40,10 @@
 //!
 //! [`SessionHost`]: super::SessionHost
 
-use std::cell::OnceCell;
+use std::cell::{OnceCell, RefCell};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock, PoisonError, Weak};
+use std::thread::JoinHandle;
 
 use opentelemetry::trace::{Span as _, Status, Tracer as _};
 use opentelemetry::{KeyValue, global};
@@ -117,6 +118,17 @@ impl SharedEngine {
         &self.engine
     }
 
+    /// Whether a live host already holds `component` compiled on this
+    /// engine.
+    fn holds(&self, component: &AuthenticatedComponent) -> bool {
+        self.compiled
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&component.digest())
+            .and_then(Weak::upgrade)
+            .is_some_and(|slot| slot.component.get().is_some())
+    }
+
     /// `component` compiled on this engine: shared when any live host
     /// already compiled the same digest, else compiled now (one
     /// `component-compile` span).
@@ -189,9 +201,12 @@ impl CompiledSlot {
 }
 
 /// A component a host compiles on first use, then holds for its lifetime.
+/// A prefetched one starts compiling on its own thread when it is bound,
+/// and its first use waits for that compilation instead of starting one.
 pub(crate) struct LazyComponent {
     source: AuthenticatedComponent,
     compiled: OnceCell<Compiled>,
+    prefetch: RefCell<Option<JoinHandle<Result<Compiled, HostError>>>>,
 }
 
 impl LazyComponent {
@@ -199,7 +214,27 @@ impl LazyComponent {
         Self {
             source: source.clone(),
             compiled: OnceCell::new(),
+            prefetch: RefCell::new(None),
         }
+    }
+
+    /// A component that starts compiling now, on its own thread, unless
+    /// `shared` already holds its compilation (then it is reused on first
+    /// use, as [`Self::new`]'s is). Binding many components at once then
+    /// compiles them in parallel, and a first use after the compilation
+    /// finished does not wait for it. A thread that cannot be started
+    /// leaves the compilation to the first use.
+    pub(crate) fn prefetched(source: &AuthenticatedComponent, shared: &Arc<SharedEngine>) -> Self {
+        let lazy = Self::new(source);
+        if !shared.holds(source) {
+            let shared = Arc::clone(shared);
+            let source = source.clone();
+            let spawned = std::thread::Builder::new()
+                .name("scxml-component-compile".into())
+                .spawn(move || shared.compile(&source));
+            *lazy.prefetch.borrow_mut() = spawned.ok();
+        }
+        lazy
     }
 
     /// The compiled component, compiling (or reusing a shared compilation)
@@ -208,7 +243,22 @@ impl LazyComponent {
         if let Some(compiled) = self.compiled.get() {
             return Ok(compiled.component());
         }
-        let compiled = shared.compile(&self.source)?;
+        // A prefetch that failed (or panicked) compiles again here, so the
+        // first use reports the failure as it would without the prefetch.
+        // A pool worker never waits for one still compiling, as it never
+        // waits in `compile`: the prefetch's compilation may need this very
+        // worker, so the worker compiles (or shares) on its own instead.
+        let prefetched = self
+            .prefetch
+            .borrow_mut()
+            .take()
+            .filter(|prefetch| rayon::current_thread_index().is_none() || prefetch.is_finished())
+            .and_then(|prefetch| prefetch.join().ok())
+            .and_then(Result::ok);
+        let compiled = match prefetched {
+            Some(compiled) => compiled,
+            None => shared.compile(&self.source)?,
+        };
         Ok(self.compiled.get_or_init(|| compiled).component())
     }
 }
@@ -341,5 +391,72 @@ mod tests {
         assert_eq!(first, second);
         let held = lazy.compiled.get().expect("held after first use");
         assert_eq!(compilations(held), 1);
+    }
+
+    #[test]
+    fn a_prefetched_component_compiles_once_on_its_own_thread() {
+        let shared = SharedEngine::for_config(&private_config(263)).expect("engine");
+        let lazy = LazyComponent::prefetched(&empty_component(), &shared);
+        assert!(
+            lazy.prefetch.borrow().is_some(),
+            "binding starts the compilation"
+        );
+        assert!(lazy.compiled.get().is_none());
+        let first: *const Component = lazy.get(&shared).expect("takes the prefetch");
+        let second: *const Component = lazy.get(&shared).expect("held");
+        assert_eq!(first, second);
+        assert!(lazy.prefetch.borrow().is_none(), "the first use joined it");
+        let held = lazy.compiled.get().expect("held after first use");
+        assert_eq!(compilations(held), 1, "the first use compiled nothing more");
+        let again = shared.compile(&empty_component()).expect("shared");
+        assert!(Arc::ptr_eq(&held.slot, &again.slot));
+    }
+
+    #[test]
+    fn a_component_another_host_holds_is_not_prefetched() {
+        let shared = SharedEngine::for_config(&private_config(264)).expect("engine");
+        let component = empty_component();
+        let holder = shared.compile(&component).expect("compiles");
+        let lazy = LazyComponent::prefetched(&component, &shared);
+        assert!(lazy.prefetch.borrow().is_none(), "nothing to compile");
+        lazy.get(&shared).expect("reuses the held compilation");
+        let held = lazy.compiled.get().expect("held after first use");
+        assert!(Arc::ptr_eq(&held.slot, &holder.slot));
+        assert_eq!(compilations(held), 1);
+    }
+
+    #[test]
+    fn a_pool_worker_never_waits_for_a_prefetch() {
+        let shared = SharedEngine::for_config(&private_config(266)).expect("engine");
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .expect("pool");
+        // The pool's one worker uses a component whose prefetch is still
+        // compiling: it compiles (or shares) on its own and does not join.
+        pool.install(|| {
+            let lazy = LazyComponent::prefetched(&empty_component(), &shared);
+            lazy.get(&shared).expect("compiles on the worker");
+            assert!(lazy.compiled.get().is_some());
+            assert!(lazy.prefetch.borrow().is_none(), "the prefetch was let go");
+        });
+    }
+
+    #[test]
+    fn a_prefetch_that_fails_fails_the_first_use() {
+        const INVALID: &[u8] = b"\0asm\x0d\0\x01\0\xff";
+        let digest = crate::artifact::lower_hex(&Sha256::digest(INVALID));
+        let component = authenticate_packaged_machine(
+            INVALID,
+            TrustedComponentDigest::from_hex(&digest).expect("the digest is canonical"),
+        )
+        .expect("the digest matches");
+        let shared = SharedEngine::for_config(&private_config(265)).expect("engine");
+        let lazy = LazyComponent::prefetched(&component, &shared);
+        assert!(
+            lazy.get(&shared).is_err(),
+            "the first use reports the failure"
+        );
+        assert!(lazy.compiled.get().is_none());
     }
 }

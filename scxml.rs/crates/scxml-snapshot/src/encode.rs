@@ -264,7 +264,7 @@ fn build_session(capture: &SessionCapture, options: &Options) -> Session {
         .map(|pending| {
             let mut pending = pending.clone();
             pending.event = pending.event.as_ref().map(event);
-            if strip && let Some(message) = &mut pending.basichttp {
+            if strip && let Some(message) = &mut pending.message {
                 message.trace_context = None;
             }
             pending
