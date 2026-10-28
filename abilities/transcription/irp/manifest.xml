@@ -47,4 +47,10 @@
       <start uri="150/test150.scxml"/>
     </test>
   </assert>
+  <assert id="transcription-7" specnum="7" specid="#transcription-7">
+    <![CDATA[Until the turn's voice starts (a `voice_started`) only its last `lead_frames` sounds are kept, and its voice spans are measured from its first kept sound, each sound taken as an equal share of the turn's time; past `max_turn_frames` its oldest sounds are let go.]]>
+    <test id="160" conformance="mandatory" manual="false">
+      <start uri="160/test160.scxml"/>
+    </test>
+  </assert>
 </assertions>

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- transcription-7: sounds heard before the voice starts are let go past lead_frames; the spans start at the first kept sound. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="transcription" type="scxml" src="../../../transcription.scx">
+    <param name="lead_frames" expr="1"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <transition event="bot.ability.ready" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.listening.sensitivity.output" target="#_transcription"><content expr='{"sound": {"audio": "media/voiced.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}, "perceived_level_db": 10}'/></send>
+      <send event="bot.ability.listening.sensitivity.output" target="#_transcription"><content expr='{"sound": {"audio": "media/voiced.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}, "perceived_level_db": 10}'/></send>
+      <send event="bot.ability.listening.sensitivity.output" target="#_transcription"><content expr='{"sound": {"audio": "media/voiced2.wav", "media_type": "audio/wav", "sample_rate_hz": 16000, "channels": 1}, "perceived_level_db": 10}'/></send>
+    </onentry>
+    <transition event="bot.ability.listening.transcription.turn" cond="_event.data.text === 'late' &amp;&amp; _event.data.frames.length === 1 &amp;&amp; _event.data.frames[0].audio === 'media/floppy-heard-2.pcm' &amp;&amp; _event.data.voice_detection.segments.length === 1 &amp;&amp; Math.abs(_event.data.voice_detection.segments[0].start_seconds) &lt; 1e-9 &amp;&amp; Math.abs(_event.data.voice_detection.segments[0].end_seconds - 0.1) &lt; 1e-9" target="step2"/>
+  </state>
+  <state id="step2">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>
