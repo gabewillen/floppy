@@ -78,7 +78,13 @@
     speech decoding is configured, handed off as a silence observation
     when nothing else is, else classified. With voice: identified directly
     (voice identification without diarization), else the open-speech
-    window opens (VAD Start).
+    window opens (VAD Start). A scored sound that arrives while the
+    interpretation is busy is asked of a second voice detection,
+    speech_voice_detection, as it arrives (one sound ahead: requested,
+    {serial, sensed}), so its answer is in hand, or on its way, when the
+    sound is taken; the answer is kept in requested until then, and a
+    sound taken in its place (another serial or another sound) is asked
+    as usual.
   * HearingSpeech is the open-speech window: each scored sound goes to
     FeedingSpeech, still voiced it joins the utterance and the window stays
     open, and the first one without voice joins it and closes it
@@ -275,6 +281,9 @@
     <data id="stage" expr="null"/>
     <data id="media_dir" expr="''"/>
     <data id="serial" expr="0"/>
+    <!-- The sound whose voice detection was asked ahead {serial, sensed}
+         (sensed as JSON), with the answer {event, data} once it is in. -->
+    <data id="requested" expr="null"/>
     <!-- The current frame's detection {sensed, voice_detection}, and what
          HandingOff hands off {kind, sensed, voice_detection, ...}. -->
     <data id="detection" expr="null"/>
@@ -340,6 +349,8 @@
          Interpretation holds them); each sound, utterance or voice is a
          request to one of them. -->
     <invoke id="voice_detection" type="scxml" src="../voice_detection/voice_detection.scx"/>
+    <!-- The next sound's voice detection, asked as the sound arrives. -->
+    <invoke id="speech_voice_detection" type="scxml" src="../voice_detection/voice_detection.scx"/>
     <invoke id="sound_classification" type="scxml" src="../sound_classification/sound_classification.scx"/>
     <invoke id="voice_diarization" type="scxml" src="../voice_diarization/voice_diarization.scx"/>
     <invoke id="voice_identification" type="scxml" src="../voice_identification/voice_identification.scx"/>
@@ -382,8 +393,27 @@
     <!-- One busy region: the deferral and the stage failure policy live
          once, not on every stage. -->
     <state id="Working" initial="DetectingVoice">
+      <!-- A sound that arrives while busy waits its turn, but its voice
+           detection is asked now, one sound ahead. -->
       <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json">
+        <if cond="requested === null &amp;&amp; !isPredictedOwnVoice(_event.data)">
+          <assign location="requested" expr="({serial: nextSerial(), sensed: JSON.stringify(_event.data)})"/>
+          <send event="bot.ability.hearing.voice.detection.input" target="#_speech_voice_detection">
+            <content expr="detectionInput(_event.data.sound, requested.serial)"/>
+          </send>
+        </if>
         <event:defer/>
+      </transition>
+      <!-- The answer for the sound ahead, kept until the sound is taken. -->
+      <transition event="bot.ability.hearing.voice.detection.output" event:schema="../schemas/bot.ability.hearing.voice.detection.output.json"
+                  cond="requested !== null &amp;&amp; requested.serial !== serial &amp;&amp; _event.data.id === 'speech_voice_detection.' + requested.serial">
+        <assign location="requested.event" expr="_event.name"/>
+        <assign location="requested.data" expr="_event.data"/>
+      </transition>
+      <transition event="bot.ability.failed" event:schema="../schemas/bot.ability.failed.json"
+                  cond="requested !== null &amp;&amp; requested.serial !== serial &amp;&amp; _event.data.id === 'speech_voice_detection.' + requested.serial">
+        <assign location="requested.event" expr="_event.name"/>
+        <assign location="requested.data" expr="_event.data"/>
       </transition>
       <transition event="bot.ability.speaking.efference" event:schema="../schemas/bot.ability.speaking.efference.json"
                   cond="learnsOwnVoice(_event)">
@@ -419,16 +449,31 @@
           <send id="voice-detection-timer" event="bot.ability.listening.stage.failed" delayexpr="stageDelay()">
             <content expr="stageTimeout()"/>
           </send>
-          <send event="bot.ability.hearing.voice.detection.input" target="#_voice_detection">
-            <content expr="detectionInput(sensed.sound)"/>
-          </send>
+          <!-- The sound asked ahead takes the answer asked for it. -->
+          <if cond="requested !== null &amp;&amp; requested.serial === serial &amp;&amp; requested.sensed === JSON.stringify(sensed)">
+            <if cond="requested.event !== undefined">
+              <send eventexpr="requested.event" target="#_internal">
+                <content expr="requested.data"/>
+              </send>
+            </if>
+          <else/>
+            <if cond="requested !== null &amp;&amp; requested.serial &lt;= serial">
+              <assign location="requested" expr="null"/>
+            </if>
+            <send event="bot.ability.hearing.voice.detection.input" target="#_voice_detection">
+              <content expr="detectionInput(sensed.sound)"/>
+            </send>
+          </if>
         </onentry>
         <onexit>
+          <if cond="requested !== null &amp;&amp; requested.serial === serial">
+            <assign location="requested" expr="null"/>
+          </if>
           <cancel sendid="voice-detection-timer"/>
         </onexit>
         <transition event="bot.ability.hearing.voice.detection.output"
                     event:schema="../schemas/bot.ability.hearing.voice.detection.output.json"
-                    cond="isReply(_event, 'voice_detection')">
+                    cond="isReply(_event, 'voice_detection') || isReply(_event, 'speech_voice_detection')">
           <assign location="result" expr="_event.data"/>
           <assign location="detection" expr="detectionRecord()"/>
           <if cond="isRenormalized()">
@@ -493,16 +538,31 @@
           <send id="feeding-speech-timer" event="bot.ability.listening.stage.failed" delayexpr="stageDelay()">
             <content expr="stageTimeout()"/>
           </send>
-          <send event="bot.ability.hearing.voice.detection.input" target="#_voice_detection">
-            <content expr="detectionInput(sensed.sound)"/>
-          </send>
+          <!-- The sound asked ahead takes the answer asked for it. -->
+          <if cond="requested !== null &amp;&amp; requested.serial === serial &amp;&amp; requested.sensed === JSON.stringify(sensed)">
+            <if cond="requested.event !== undefined">
+              <send eventexpr="requested.event" target="#_internal">
+                <content expr="requested.data"/>
+              </send>
+            </if>
+          <else/>
+            <if cond="requested !== null &amp;&amp; requested.serial &lt;= serial">
+              <assign location="requested" expr="null"/>
+            </if>
+            <send event="bot.ability.hearing.voice.detection.input" target="#_voice_detection">
+              <content expr="detectionInput(sensed.sound)"/>
+            </send>
+          </if>
         </onentry>
         <onexit>
+          <if cond="requested !== null &amp;&amp; requested.serial === serial">
+            <assign location="requested" expr="null"/>
+          </if>
           <cancel sendid="feeding-speech-timer"/>
         </onexit>
         <transition event="bot.ability.hearing.voice.detection.output"
                     event:schema="../schemas/bot.ability.hearing.voice.detection.output.json"
-                    cond="isReply(_event, 'voice_detection')">
+                    cond="isReply(_event, 'voice_detection') || isReply(_event, 'speech_voice_detection')">
           <assign location="result" expr="_event.data"/>
           <assign location="detection" expr="detectionRecord()"/>
           <if cond="isRenormalized()">
