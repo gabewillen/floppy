@@ -75,10 +75,9 @@
   produces; the session's overlap is dropped), and one session per sound
   source (one session hears every source).
 
-  Readiness: see Session. Contracts: the events it takes from the
-  listening reference abilities/schemas/ by event:schema; an invoked
-  service's events are not checked against event:schema (scxml.rs checks
-  only events between SCXML sessions), so their shape is checked by cond.
+  Readiness: see Session. Contracts: the events it takes reference
+  abilities/schemas/ by event:schema; the session's are also checked by
+  cond.
 
   Bindings: the speech service package (operation stream), and the
   WebSocket connection the run gives invoked services.
@@ -153,7 +152,7 @@
       <transition event="bot.ability.listening.sensitivity.output" event:schema="../schemas/bot.ability.listening.sensitivity.output.json">
         <event:defer/>
       </transition>
-      <transition event="bot.ability.hearing.speech.stream.ready" target="Hearing">
+      <transition event="bot.ability.hearing.speech.stream.ready" event:schema="../schemas/bot.ability.hearing.speech.stream.ready.json" target="Hearing">
         <assign location="backoff_ms" expr="first_backoff_ms"/>
         <if cond="!announced">
           <assign location="announced" expr="true"/>
@@ -193,17 +192,17 @@
           </if>
         </foreach>
       </transition>
-      <transition event="bot.ability.hearing.speech.stream.transcript" cond="isTranscript(_event)">
+      <transition event="bot.ability.hearing.speech.stream.transcript" event:schema="../schemas/bot.ability.hearing.speech.stream.transcript.json" cond="isTranscript(_event)">
         <assign location="transcripts[transcripts.length]" expr="heardTranscript(_event)"/>
       </transition>
-      <transition event="bot.ability.hearing.speech.stream.voice_started" cond="isAt(_event)">
+      <transition event="bot.ability.hearing.speech.stream.voice_started" event:schema="../schemas/bot.ability.hearing.speech.stream.voice_started.json" cond="isAt(_event)">
         <assign location="spans" expr="spansStarted(_event.data.at_seconds)"/>
       </transition>
-      <transition event="bot.ability.hearing.speech.stream.voice_ended" cond="isAt(_event)">
+      <transition event="bot.ability.hearing.speech.stream.voice_ended" event:schema="../schemas/bot.ability.hearing.speech.stream.voice_ended.json" cond="isAt(_event)">
         <assign location="spans" expr="spansEnded(_event.data.at_seconds)"/>
       </transition>
       <!-- The hearing model's end of the turn: a turn with words goes on. -->
-      <transition event="bot.ability.hearing.speech.stream.turn_ended" cond="isAt(_event)">
+      <transition event="bot.ability.hearing.speech.stream.turn_ended" event:schema="../schemas/bot.ability.hearing.speech.stream.turn_ended.json" cond="isAt(_event)">
         <assign location="turn" expr="endedTurn(_event)"/>
         <if cond="hasWords(turn)">
           <send event="bot.ability.listening.transcription.turn" target="#_parent">
