@@ -65,7 +65,7 @@ SKIP = {"event": IGNORE, "data": {}, "reason": "nothing to say", "target": OWN}
 SAID = expect(RESPOND, "_event.data.parts.length === 1 && _event.data.parts[0].words === 'Hi! I am floppy.'")
 
 
-S.statement(1, "Each `bot.ability.processing.input` (turn, stimulus, focus, focus_candidates, choices, held, environment, self, acted, recent, max_context_tokens, completion_reserve_tokens and bytes_per_token; its `<param>`s are model, tier, memory and embedding) is one turn, answered by one `bot.ability.processing.output` to the parent: `{turn, handled: true, selected}` or `{turn, handled: false, failed: true, reason}`, turn the given turn.")
+S.statement(1, "Each `bot.ability.processing.input` (turn, stimulus, focus, focus_candidates, choices, held, environment, self, acted, recent, max_context_tokens, completion_reserve_tokens, bytes_per_token and reached; its `<param>`s are model, tier, memory and embedding) is one turn, answered by one `bot.ability.processing.output` to the parent: `{turn, handled: true, selected}` or `{turn, handled: false, failed: true, reason}`, turn the given turn.")
 S.statement(2, "With no choices it fails the turn without a model call: reason `the reasoning has no choices to select from`.")
 S.statement(3, "With choices it makes one generate call offering the dispatch tool, which allows only the offered events (with their targets); the events of its dispatch calls, in order, are returned as the model gave them with `handled: true`, each `{event, data, reason, target}`, `bot.ability.cognition.ignore` selections included; an empty selection is handled with nothing selected.")
 S.statement(4, "A generate call that fails fails the turn with reason `the reasoning failed (<code>)`, the generate service's failure code: `status` for an error status, `truncated` for a reply cut short, `malformed` for an answer that is no chat completion. A selection the dispatch tool refuses (`schema-mismatch`, or `not-json`) is repaired first (decision D142): the call is made again with the rejection as the prompt's feedback, at most twice, and the same rejection twice running, or one once the repairs are spent, fails the turn with reason `Selection rejected: <message>` (the rejection's message, else its code).")
@@ -82,7 +82,8 @@ S.statement(9, "As the intuition tier (the `<param>` tier `intuition`, decision 
 # defaults where a case names none).
 STATIC = ("model", "tier", "memory")
 TURN_DEFAULTS = [("held", "[]"), ("environment", "null"), ("self", "null"), ("acted", "[]"), ("recent", "[]"),
-                 ("max_context_tokens", "null"), ("completion_reserve_tokens", "0"), ("bytes_per_token", "3")]
+                 ("max_context_tokens", "null"), ("completion_reserve_tokens", "0"), ("bytes_per_token", "3"),
+                 ("reached", "true")]
 
 
 def as_input(params):
@@ -236,3 +237,29 @@ S.case(191, 10, "a cancelled turn is never answered; the next turn is.",
        [send("bot.ability.processing.cancel", js({})), as_input(turn(number=2))[1], SAID,
         expect(DONE, "_event.data.turn === 2 && _event.data.handled === true && _event.data.selected.length === 1")],
        params=turn(), backend=selection(SAY) + selection(SAY))
+
+S.statement(11, "A turn sent before it reached the tier (`reached` false; the cognition sends it as its decision layer takes the turn) is recalled and asked of the model at once, but every selection and draft it would send is withheld, in order, and it is not answered, until an input for the same turn with `reached` true and the same frame (focus, focus_candidates, choices, held, environment, self, acted and recent) reaches it: then what was withheld is sent, in order, and the turn is answered as one sent reached, with no second model call. An input for another turn, or for the same turn with another frame, before the turn reached the tier leaves it unanswered, nothing of it sent, and takes the input as a new turn; a `bot.ability.processing.cancel` ends it unanswered.")
+EARLY = ("reached", "false")
+# A second model call would be answered 500, failing the turn it asks for.
+ONCE = selection(SAY) + [{"path": CHAT, "status": 500, "body": {"error": {"message": "asked twice"}}}]
+S.case(200, 11, "a turn sent early withholds its selection until it reaches the tier, then sends it and answers once.",
+       [wait("500ms"), as_input(turn())[1], SAID,
+        expect(DONE, "_event.data.turn === 1 && _event.data.handled === true && _event.data.selected.length === 1")],
+       params=turn(extra=[EARLY]), backend=ONCE, clock="wall")
+S.case(201, 11, "a turn sent early and cancelled is never sent nor answered; the next turn is.",
+       [wait("500ms"), send("bot.ability.processing.cancel", js({})), as_input(turn(number=2))[1], SAID,
+        expect(DONE, "_event.data.turn === 2 && _event.data.handled === true && _event.data.selected.length === 1")],
+       params=turn(extra=[EARLY]), backend=selection(SAY) + selection(SAY), clock="wall")
+S.case(202, 11, "a turn sent early that reaches the tier with another acted is asked again and answered once.",
+       [wait("500ms"),
+        as_input(turn(extra=[("acted", js([{"event": LAMP, "data": {}, "reason": "dark", "target": HARNESS}]))]))[1],
+        SAID, expect(DONE, "_event.data.turn === 1 && _event.data.handled === true && _event.data.selected.length === 1")],
+       params=turn(extra=[EARLY]), backend=selection(SAY) + selection(SAY), clock="wall")
+S.case(203, 11, "a turn sent early is left unanswered when another turn reaches the tier.",
+       [wait("500ms"), as_input(turn(number=2))[1], SAID,
+        expect(DONE, "_event.data.turn === 2 && _event.data.handled === true && _event.data.selected.length === 1")],
+       params=turn(extra=[EARLY]), backend=selection(SAY) + selection(SAY), clock="wall")
+S.case(204, 11, "a turn that reaches the tier while its early model call is still answering is answered once.",
+       [as_input(turn())[1], SAID,
+        expect(DONE, "_event.data.turn === 1 && _event.data.handled === true && _event.data.selected.length === 1")],
+       params=turn(extra=[EARLY]), backend=ONCE)

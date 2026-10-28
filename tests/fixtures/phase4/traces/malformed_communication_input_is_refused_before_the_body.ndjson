@@ -1,6 +1,6 @@
-{"label":"transcription","parent":"session.floppy.listening","session":"session.floppy.listening.transcription","text":"no streaming session (Speech streaming failed: the backend is not configured.): the listening hears through the interpretation","type":"log"}
-{"label":"identity.name","parent":"session.floppy","session":"session.floppy.identity","text":"recalled null","type":"log"}
-{"label":"persona.description","parent":"session.floppy","session":"session.floppy.persona","text":"recalled null","type":"log"}
-{"label":"bot.activated","session":"session","text":"{}","type":"log"}
 {"code":"machine-invalid-input","fatal":false,"line":1,"message":"machine session failed: invalid-input","type":"error"}
+{"label":"bot.activated","session":"session","text":"{}","type":"log"}
 {"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"gemma-4-26b-a4b","type":"log"}
+{"label":"identity.name","parent":"session.floppy","session":"session.floppy.identity","text":"recalled null","type":"log"}
+{"label":"transcription","parent":"session.floppy.listening","session":"session.floppy.listening.transcription","text":"no streaming session (Speech streaming failed: the backend is not configured.): the listening hears through the interpretation","type":"log"}
+{"label":"persona.description","parent":"session.floppy","session":"session.floppy.persona","text":"recalled null","type":"log"}

@@ -298,3 +298,13 @@ S.case(240, 15, "recent turns of 55 KB and a stimulus of 12 KB, 67 KB together, 
        [READY, send("bot.ability.memory.stm.recent_turns.output", LONG_RECENT),
         send(INPUT, turn(1, {"text": LONG_TEXT}).replace(js(LONG_TEXT), "'x'.repeat(12000)")), output(1, IGNORED)],
        params=[SLOW], backend=[DECIDE_IGNORE], clock="logical")
+
+S.statement(16, "As the decision layer takes a turn, the tier it would hand the turn to (intuition when composed, else reasoning) is sent the turn too, not yet reached (`reached` false), so it recalls and asks its model meanwhile; a turn the decision layer handles leaves that tier, and nothing it selected is sent, while a turn it hands on reaches the tier and is answered by its selections.")
+S.case(250, 16, "the decision layer's ignore handles the turn; the respond reasoning selected meanwhile is never sent.",
+       [READY, send(INPUT, turn(1, choices=(IGNORE, RESPOND))), output(1, IGNORED), wait("1s"),
+        send(INPUT, turn(2)), output(2, IGNORED)],
+       params=[SLOW], backend=[DECIDE_IGNORE, REASONED_REPEAT], clock="wall")
+S.case(251, 16, "a turn the decision layer hands on is answered by the selection reasoning made meanwhile.",
+       [READY, send(INPUT, turn(1, HI, choices=(IGNORE, RESPOND))), SAID_HI,
+        output(1, f"_event.data.output.length === 1 && _event.data.output[0].event === {js(RESPOND)}")],
+       params=[SLOW], backend=[DECIDE_ABSTAIN, REASONED_REPEAT], clock="logical")

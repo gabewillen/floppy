@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/reasoning/irp/sources">
   <assert id="reasoning-1" specnum="1" specid="#reasoning-1">
-    <![CDATA[Each `bot.ability.processing.input` (turn, stimulus, focus, focus_candidates, choices, held, environment, self, acted, recent, max_context_tokens, completion_reserve_tokens and bytes_per_token; its `<param>`s are model, tier, memory and embedding) is one turn, answered by one `bot.ability.processing.output` to the parent: `{turn, handled: true, selected}` or `{turn, handled: false, failed: true, reason}`, turn the given turn.]]>
+    <![CDATA[Each `bot.ability.processing.input` (turn, stimulus, focus, focus_candidates, choices, held, environment, self, acted, recent, max_context_tokens, completion_reserve_tokens, bytes_per_token and reached; its `<param>`s are model, tier, memory and embedding) is one turn, answered by one `bot.ability.processing.output` to the parent: `{turn, handled: true, selected}` or `{turn, handled: false, failed: true, reason}`, turn the given turn.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -108,6 +108,24 @@
     </test>
     <test id="191" conformance="mandatory" manual="false">
       <start uri="191/test191.scxml"/>
+    </test>
+  </assert>
+  <assert id="reasoning-11" specnum="11" specid="#reasoning-11">
+    <![CDATA[A turn sent before it reached the tier (`reached` false; the cognition sends it as its decision layer takes the turn) is recalled and asked of the model at once, but every selection and draft it would send is withheld, in order, and it is not answered, until an input for the same turn with `reached` true and the same frame (focus, focus_candidates, choices, held, environment, self, acted and recent) reaches it: then what was withheld is sent, in order, and the turn is answered as one sent reached, with no second model call. An input for another turn, or for the same turn with another frame, before the turn reached the tier leaves it unanswered, nothing of it sent, and takes the input as a new turn; a `bot.ability.processing.cancel` ends it unanswered.]]>
+    <test id="200" conformance="mandatory" manual="false">
+      <start uri="200/test200.scxml"/>
+    </test>
+    <test id="201" conformance="mandatory" manual="false">
+      <start uri="201/test201.scxml"/>
+    </test>
+    <test id="202" conformance="mandatory" manual="false">
+      <start uri="202/test202.scxml"/>
+    </test>
+    <test id="203" conformance="mandatory" manual="false">
+      <start uri="203/test203.scxml"/>
+    </test>
+    <test id="204" conformance="mandatory" manual="false">
+      <start uri="204/test204.scxml"/>
     </test>
   </assert>
 </assertions>

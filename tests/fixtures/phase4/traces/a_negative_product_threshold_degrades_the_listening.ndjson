@@ -1,2 +1,2 @@
-{"label":"interpretation.degraded","parent":"session.listening","session":"session.listening.interpretation","text":"product_threshold_db must not be negative","type":"log"}
 {"label":"listening.degraded","parent":"session","session":"session.listening","text":"the interpretation child ended","type":"log"}
+{"label":"interpretation.degraded","parent":"session.listening","session":"session.listening.interpretation","text":"product_threshold_db must not be negative","type":"log"}

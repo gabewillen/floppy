@@ -17,7 +17,8 @@
     "recent",
     "max_context_tokens",
     "completion_reserve_tokens",
-    "bytes_per_token"
+    "bytes_per_token",
+    "reached"
   ],
   "properties": {
     "turn": {
@@ -94,6 +95,10 @@
       "type": "number",
       "exclusiveMinimum": 0,
       "description": "The fewest request bytes a token any reply showed so far."
+    },
+    "reached": {
+      "type": "boolean",
+      "description": "Whether the turn has reached this tier: false when the cognition sends it as its decision layer takes the turn, so the tier recalls and asks its model meanwhile but withholds what it sends and does not answer until the same turn reaches it with true [floppy field; mosfet.py's Cognition._reached]."
     }
   }
 }

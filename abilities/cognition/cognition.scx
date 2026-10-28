@@ -69,6 +69,21 @@
   bytes_per_token, which its donedata teaches and this document keeps
   across turns as it keeps reasoning's.
 
+  Fanout (decision D274): as running_decision sends the decision layer
+  the turn, it also sends the turn to the tier the decision layer would
+  hand it to were its pass to name none (intuition when composed and the
+  turn perceives no handed-back failure of intuition, else reasoning),
+  framed as that tier's running state frames it but with reached false, so
+  the tier recalls and asks its model while the decision layer decides.
+  The tier withholds everything it would send, and does not answer, until
+  running_intuition or running_reasoning sends it the turn with reached
+  true: with the same frame it sends what it withheld, in order, and
+  answers without a second model call; with another (the decision layer
+  acted) it asks again. A turn the decision layer handles, cancels or
+  times out sends that tier bot.ability.processing.cancel, as does
+  after_decision when the decision layer's pass skips the intuition that
+  took the turn, so nothing it selected is sent.
+
   Failures: a decision layer or an intuition that fails (its failed
   donedata, or error.communication.<stage>) hands the same turn on to the
   next stage, logged as cognition.cascaded {stage: "reflex" or
@@ -566,6 +581,48 @@
     <state id="running_decision">
       <onentry>
         <assign location="stage" expr="'decision'"/>
+        <!-- Fanned out: the tier the decision layer would hand the turn to
+             takes it now, not yet reached, so it recalls and asks its model
+             while the decision layer decides, and withholds what it sends
+             until the turn reaches it with the same frame. -->
+        <if cond="isEarlyIntuition()">
+          <cognition:within_ceiling location="tier_choices" heldlocation="tier_held" choices="choices"
+                                    ceiling="intuitionCeiling()"/>
+          <send event="bot.ability.processing.input" target="#_intuition">
+            <param name="turn" expr="turn"/>
+            <param name="stimulus" expr="stimulus"/>
+            <param name="focus" expr="focus"/>
+            <param name="focus_candidates" expr="focus_candidates"/>
+            <param name="choices" expr="intuitionChoices()"/>
+            <param name="held" expr="tier_held"/>
+            <param name="environment" expr="environment"/>
+            <param name="acted" expr="actedFact()"/>
+            <param name="self" expr="selfFact()"/>
+            <param name="recent" expr="recent_turns"/>
+            <param name="max_context_tokens" expr="contextTokens()"/>
+            <param name="completion_reserve_tokens" expr="reserveTokens()"/>
+            <param name="bytes_per_token" expr="intuition_bytes_per_token"/>
+            <param name="reached" expr="false"/>
+          </send>
+        <else/>
+          <cognition:within_ceiling location="tier_choices" choices="choices"/>
+          <send event="bot.ability.processing.input" target="#_reasoning">
+            <param name="turn" expr="turn"/>
+            <param name="stimulus" expr="stimulus"/>
+            <param name="focus" expr="focus"/>
+            <param name="focus_candidates" expr="focus_candidates"/>
+            <param name="choices" expr="tier_choices"/>
+            <param name="held" expr="[]"/>
+            <param name="environment" expr="environment"/>
+            <param name="acted" expr="actedFact()"/>
+            <param name="self" expr="selfFact()"/>
+            <param name="recent" expr="recent_turns"/>
+            <param name="max_context_tokens" expr="contextTokens()"/>
+            <param name="completion_reserve_tokens" expr="reserveTokens()"/>
+            <param name="bytes_per_token" expr="bytes_per_token"/>
+            <param name="reached" expr="false"/>
+          </send>
+        </if>
         <cognition:within_ceiling location="tier_choices" heldlocation="tier_held" choices="choices"
                                   ceiling="decisionCeiling()"/>
         <send idlocation="hop_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="hopDelay()">
@@ -601,7 +658,16 @@
       </onexit>
       <transition event="bot.ability.cognition.cancel" event:schema="../schemas/bot.ability.cognition.cancel.json"
                   cond="isCurrentTurn(_event)" target="cancelling_decision"/>
+      <!-- The streamed reply of the tier that took the turn beside the
+           decision layer waits for the tier's running state, whose
+           inactivity bound it starts (decision D101). -->
+      <transition event="generate.progress">
+        <event:defer/>
+      </transition>
       <transition event="bot.ability.intuition.output" event:schema="../schemas/bot.ability.intuition.output.json" cond="isHandled(_event)" target="completing">
+        <send event="bot.ability.processing.cancel" targetexpr="earlyTierTarget()">
+          <content expr="({})"/>
+        </send>
         <assign location="confidence_tuner" expr="decisionTuner(_event)"/>
         <assign location="decision_bytes_per_token" expr="decisionBytesPerTokenAfter(_event)"/>
         <log label="cognition.tuner" expr="tunerLog()"/>
@@ -636,7 +702,14 @@
          perceives no handed-back failure of intuition. -->
     <state id="after_decision">
       <transition cond="takesIntuition()" target="running_intuition"/>
-      <transition target="running_reasoning"/>
+      <!-- Handed past the intuition that took the turn early: it is left. -->
+      <transition target="running_reasoning">
+        <if cond="isEarlyIntuition()">
+          <send event="bot.ability.processing.cancel" target="#_intuition">
+            <content expr="({})"/>
+          </send>
+        </if>
+      </transition>
     </state>
 
     <!-- The chat tier (decision D144): reasoning's chart as intuition, on
@@ -666,6 +739,7 @@
           <param name="max_context_tokens" expr="contextTokens()"/>
           <param name="completion_reserve_tokens" expr="reserveTokens()"/>
           <param name="bytes_per_token" expr="intuition_bytes_per_token"/>
+          <param name="reached" expr="true"/>
         </send>
       </onentry>
       <!-- Leaving the turn's intuition unanswered (cancelled or timed out)
@@ -736,6 +810,7 @@
           <param name="max_context_tokens" expr="contextTokens()"/>
           <param name="completion_reserve_tokens" expr="reserveTokens()"/>
           <param name="bytes_per_token" expr="bytes_per_token"/>
+          <param name="reached" expr="true"/>
         </send>
       </onentry>
       <!-- Leaving the turn's reasoning unanswered (cancelled or timed out)
@@ -809,6 +884,13 @@
     <state id="failing">
       <onentry>
         <log label="cognition.failed" expr="failure"/>
+        <!-- Failed in the decision layer's stage: the tier that took the
+             turn early is left. -->
+        <if cond="isFailingDecision()">
+          <send event="bot.ability.processing.cancel" targetexpr="earlyTierTarget()">
+            <content expr="({})"/>
+          </send>
+        </if>
         <send event="bot.ability.failed" target="#_parent">
           <param name="message" expr="failure"/>
           <param name="turn" expr="turn"/>
@@ -843,7 +925,12 @@
         <transition target="acknowledging"/>
       </state>
       <state id="cancelling_decision">
-        <onentry><log label="cognition.cancelled" expr="'decision'"/></onentry>
+        <onentry>
+          <log label="cognition.cancelled" expr="'decision'"/>
+          <send event="bot.ability.processing.cancel" targetexpr="earlyTierTarget()">
+            <content expr="({})"/>
+          </send>
+        </onentry>
         <transition target="acknowledging"/>
       </state>
       <state id="cancelling_intuition">
