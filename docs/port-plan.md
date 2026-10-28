@@ -268,7 +268,7 @@ D33 to D43.
 | A behavior's input | `<autonomy:behavior_input_payload>` (D116) | `namespaces/autonomy` element |
 | Cognition | `abilities/cognition/cognition.scx` | ability `.scx` child |
 | Rest and consolidation (reinforcing each person's representative voice, merging duplicate people) | the cognition's `idle { awake, resting }`: on resting it invokes `abilities/consolidation/consolidation.scx` over the memory ability with `<conversation:fold_voices>`, `<conversation:people_to_merge>` and `<conversation:merged_context_refs>`; input cancels it (D195, D205) | ability `.scx` child + namespace |
-| Autonomy | `abilities/autonomy/autonomy.scx` (phase 5: the inventory's ACTIVE turn behaviors the stimulus triggers run as `<invoke srcexpr>` children of the chain `abilities/candidates_runner/candidates_runner.scx`, D93, each by its row's path, D121) | stage `.scx` child |
+| Autonomy | `abilities/autonomy/autonomy.scx` (phase 5: the inventory's ACTIVE turn behaviors the stimulus triggers run one at a time as `<invoke srcexpr>` children of its `candidate` state, D93 and D273, each by its row's path, D121) | stage `.scx` child |
 | Intuition | `abilities/intuition/intuition.scx` invoking `services/decision` | stage `.scx` child and service |
 | Reasoning | `abilities/reasoning/reasoning.scx` invoking `services/generate` | stage `.scx` child and service |
 | Communication | `abilities/communication/communication.scx` | ability `.scx` child |

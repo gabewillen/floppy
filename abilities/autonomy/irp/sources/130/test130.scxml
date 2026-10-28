@@ -6,9 +6,6 @@
     <param name="database" expr="'/memory/floppy.sqlite'"/>
   </invoke>
   <invoke id="autonomy" type="scxml" src="../../../autonomy.scx">
-    <param name="turn" expr="5"/>
-    <param name="input" expr='{"focus": null, "focus_candidates": []}'/>
-    <param name="stimulus" expr='{"event": "bot.input", "data": {"observation": {"event": "text", "data": "hello"}}, "source": "listening"}'/>
     <param name="memory" expr="'#_scxml_' + _sessionid + '.memory'"/>
   </invoke>
   <state id="boot">
@@ -16,7 +13,10 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.autonomy" cond='_event.data.turn === 5 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === "no-behaviors" &amp;&amp; JSON.stringify(_event.data.candidates) === "[]" &amp;&amp; _event.data.selected === undefined' target="step1"/>
+    <onentry>
+      <send event="bot.ability.autonomy.input" target="#_autonomy"><content expr='{"turn": 5, "input": {"focus": null, "focus_candidates": []}, "stimulus": {"event": "bot.input", "data": {"observation": {"event": "text", "data": "hello"}}, "source": "listening"}}'/></send>
+    </onentry>
+    <transition event="bot.ability.autonomy.output" cond='_event.data.turn === 5 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === "no-behaviors" &amp;&amp; JSON.stringify(_event.data.candidates) === "[]" &amp;&amp; _event.data.selected === undefined' target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

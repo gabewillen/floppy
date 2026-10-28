@@ -3,9 +3,6 @@
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="autonomy" type="scxml" src="../../../autonomy.scx">
-    <param name="turn" expr="3"/>
-    <param name="input" expr='{"focus": null, "focus_candidates": []}'/>
-    <param name="stimulus" expr='{"event": "bot.ability.listening.speech.output", "data": {"content": "what is the weather like?", "content_type": "text/plain", "voice_detection": {"segments": [{"start_seconds": 0.0, "end_seconds": 0.4, "confidence": 0.9}]}, "media_type": "audio/pcm", "sample_rate_hz": 48000, "channels": 1, "source_ids": []}, "source": "listening"}'/>
     <param name="memory" expr="null"/>
   </invoke>
   <state id="boot">
@@ -13,7 +10,10 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.autonomy" cond='_event.data.turn === 3 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === "unhandled" &amp;&amp; JSON.stringify(_event.data.candidates) === "[\"SpeechHeard\"]" &amp;&amp; _event.data.selected === undefined' target="step1"/>
+    <onentry>
+      <send event="bot.ability.autonomy.input" target="#_autonomy"><content expr='{"turn": 3, "input": {"focus": null, "focus_candidates": []}, "stimulus": {"event": "bot.ability.listening.speech.output", "data": {"content": "what is the weather like?", "content_type": "text/plain", "voice_detection": {"segments": [{"start_seconds": 0.0, "end_seconds": 0.4, "confidence": 0.9}]}, "media_type": "audio/pcm", "sample_rate_hz": 48000, "channels": 1, "source_ids": []}, "source": "listening"}}'/></send>
+    </onentry>
+    <transition event="bot.ability.autonomy.output" cond='_event.data.turn === 3 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === "unhandled" &amp;&amp; JSON.stringify(_event.data.candidates) === "[\"SpeechHeard\"]" &amp;&amp; _event.data.selected === undefined' target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

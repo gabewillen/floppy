@@ -3,9 +3,6 @@
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="autonomy" type="scxml" src="../../../autonomy.scx">
-    <param name="turn" expr="11"/>
-    <param name="input" expr='{"focus": null, "focus_candidates": []}'/>
-    <param name="stimulus" expr='{"event": "bot.perceived", "data": {"percepts": [{"stimulus": {"event": "bot.input", "data": {"observation": {"event": "text", "data": "hello"}}, "source": "listening"}, "source": "listening", "participants": []}, {"stimulus": {"event": "environment.sound", "data": "noise", "source": "listening"}, "source": "listening", "participants": []}]}, "source": "session.floppy"}'/>
     <param name="memory" expr="null"/>
   </invoke>
   <state id="boot">
@@ -13,7 +10,10 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.autonomy" cond='_event.data.turn === 11 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === "no-behaviors" &amp;&amp; JSON.stringify(_event.data.candidates) === "[]" &amp;&amp; _event.data.selected === undefined &amp;&amp; _event.data.acted === undefined' target="step1"/>
+    <onentry>
+      <send event="bot.ability.autonomy.input" target="#_autonomy"><content expr='{"turn": 11, "input": {"focus": null, "focus_candidates": []}, "stimulus": {"event": "bot.perceived", "data": {"percepts": [{"stimulus": {"event": "bot.input", "data": {"observation": {"event": "text", "data": "hello"}}, "source": "listening"}, "source": "listening", "participants": []}, {"stimulus": {"event": "environment.sound", "data": "noise", "source": "listening"}, "source": "listening", "participants": []}]}, "source": "session.floppy"}}'/></send>
+    </onentry>
+    <transition event="bot.ability.autonomy.output" cond='_event.data.turn === 11 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === "no-behaviors" &amp;&amp; JSON.stringify(_event.data.candidates) === "[]" &amp;&amp; _event.data.selected === undefined &amp;&amp; _event.data.acted === undefined' target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

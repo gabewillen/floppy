@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- autonomy-9: a selection is sent to its target, and the candidate answers. -->
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
+<state id="harness" initial="boot">
+  <invoke id="memory" type="scxml" src="../../../../../abilities/memory/memory.scx">
+    <param name="database" expr="'/memory/floppy.sqlite'"/>
+  </invoke>
+  <invoke id="autonomy" type="scxml" src="../../../autonomy.scx">
+    <param name="memory" expr="'#_scxml_' + _sessionid + '.memory'"/>
+  </invoke>
+  <state id="boot">
+    <onentry><send event="harness.go"/></onentry>
+    <transition event="harness.go" target="step0"/>
+  </state>
+  <state id="step0">
+    <onentry>
+      <send event="bot.ability.memory.input" target="#_memory"><content expr="{&quot;id&quot;: &quot;stored&quot;, &quot;statements&quot;: [{&quot;sql&quot;: &quot;INSERT INTO bot_behavior (name, source) VALUES (?, ?)&quot;, &quot;parameters&quot;: [&quot;Say&quot;, &quot;irp/behaviors/a04e2a201b7edd4d.scxml&quot;]}, {&quot;sql&quot;: &quot;INSERT INTO bot_behavior_trigger (behavior_name, \&quot;trigger\&quot;) VALUES (?, 'bot.input')&quot;, &quot;parameters&quot;: [&quot;Say&quot;]}]}"/></send>
+    </onentry>
+    <transition event="bot.ability.memory.output" cond="_event.data.id === 'stored'" target="step1"/>
+  </state>
+  <state id="step1">
+    <onentry>
+      <send event="bot.ability.autonomy.input" target="#_autonomy"><content expr='{"turn": 3, "input": {"focus": null, "focus_candidates": []}, "stimulus": {"event": "bot.input", "data": {"text": "hello"}, "source": "listening"}}'/></send>
+    </onentry>
+    <transition event="bot.say" cond="_event.data.text === 'hi'" target="step2"/>
+  </state>
+  <state id="step2">
+    <transition event="bot.ability.autonomy.output" cond="_event.data.turn === 3 &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.reason === &quot;behavior&quot; &amp;&amp; JSON.stringify(_event.data.candidates) === &quot;[\&quot;Say\&quot;]&quot; &amp;&amp; _event.data.selected.length === 1 &amp;&amp; _event.data.selected[0].event === 'bot.say'" target="step3"/>
+  </state>
+  <state id="step3">
+    <transition target="pass"/>
+  </state>
+  <transition event="*" target="fail"><log label="unexpected" expr="_event.name + ' ' + JSON.stringify(_event.data)"/></transition>
+</state>
+<final id="pass"><onentry><log label="Outcome" expr="'pass'"/></onentry></final>
+<final id="fail"><onentry><log label="Outcome" expr="'fail'"/></onentry></final>
+</scxml>

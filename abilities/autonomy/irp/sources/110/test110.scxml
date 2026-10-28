@@ -3,9 +3,6 @@
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="autonomy" type="scxml" src="../../../autonomy.scx">
-    <param name="turn" expr="2"/>
-    <param name="input" expr='{"focus": null, "focus_candidates": []}'/>
-    <param name="stimulus" expr='{"event": "bot.ability.listening.speech.output", "data": {"content": "what is the weather like?", "content_type": "text/plain", "voice_detection": {"segments": [{"start_seconds": 0.0, "end_seconds": 0.4, "confidence": 0.9}]}, "media_type": "audio/pcm", "sample_rate_hz": 48000, "channels": 1, "source_ids": ["caller"]}, "source": "listening"}'/>
     <param name="memory" expr="null"/>
   </invoke>
   <state id="boot">
@@ -13,7 +10,10 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.autonomy" cond="_event.data.turn === 2 &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.reason === 'behavior' &amp;&amp; JSON.stringify(_event.data.candidates) === '[&quot;SpeechHeard&quot;]' &amp;&amp; _event.data.selected.length === 1 &amp;&amp; _event.data.selected[0].event === 'bot.ability.communication.input' &amp;&amp; _event.data.selected[0].reason === 'seeded speech admit via communication' &amp;&amp; JSON.stringify(_event.data.selected[0].data.source_ids) === '[&quot;caller&quot;]' &amp;&amp; JSON.stringify(_event.data.selected[0].data.target_ids) === '[]' &amp;&amp; _event.data.selected[0].data.content === 'what is the weather like?' &amp;&amp; _event.data.selected[0].data.content_type === 'text/plain' &amp;&amp; _event.data.selected[0].data.sample_rate_hz === 48000 &amp;&amp; _event.data.selected[0].data.channels === 1 &amp;&amp; Object.keys(_event.data.selected[0].data).length === 6" target="step1"/>
+    <onentry>
+      <send event="bot.ability.autonomy.input" target="#_autonomy"><content expr='{"turn": 2, "input": {"focus": null, "focus_candidates": []}, "stimulus": {"event": "bot.ability.listening.speech.output", "data": {"content": "what is the weather like?", "content_type": "text/plain", "voice_detection": {"segments": [{"start_seconds": 0.0, "end_seconds": 0.4, "confidence": 0.9}]}, "media_type": "audio/pcm", "sample_rate_hz": 48000, "channels": 1, "source_ids": ["caller"]}, "source": "listening"}}'/></send>
+    </onentry>
+    <transition event="bot.ability.autonomy.output" cond="_event.data.turn === 2 &amp;&amp; _event.data.handled === true &amp;&amp; _event.data.reason === 'behavior' &amp;&amp; JSON.stringify(_event.data.candidates) === '[&quot;SpeechHeard&quot;]' &amp;&amp; _event.data.selected.length === 1 &amp;&amp; _event.data.selected[0].event === 'bot.ability.communication.input' &amp;&amp; _event.data.selected[0].reason === 'seeded speech admit via communication' &amp;&amp; JSON.stringify(_event.data.selected[0].data.source_ids) === '[&quot;caller&quot;]' &amp;&amp; JSON.stringify(_event.data.selected[0].data.target_ids) === '[]' &amp;&amp; _event.data.selected[0].data.content === 'what is the weather like?' &amp;&amp; _event.data.selected[0].data.content_type === 'text/plain' &amp;&amp; _event.data.selected[0].data.sample_rate_hz === 48000 &amp;&amp; _event.data.selected[0].data.channels === 1 &amp;&amp; _event.data.selected[0].data.parent.event === 'bot.ability.listening.speech.output' &amp;&amp; Object.keys(_event.data.selected[0].data).length === 7" target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>
