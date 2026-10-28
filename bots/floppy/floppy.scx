@@ -928,9 +928,8 @@
               </send>
             </onentry>
           </state>
-          <!-- The turn's input could not be sent (over the event bound, 64
-               KiB, with the percepts a turn takes, its choices and its
-               environment): the turn fails before the cognition. -->
+          <!-- The turn's input could not be sent: the turn fails before
+               the cognition. -->
           <transition event="error.execution" target="turn_ended">
             <send event="bot.processing.failed" target="#_parent">
               <content expr="executionFailure(_event)"/>

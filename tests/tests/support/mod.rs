@@ -414,6 +414,14 @@ impl Run {
         panic!("no expected record within {limit:?}; got {records:?}");
     }
 
+    /// Reads records until none arrives for `quiet`, so a record the run
+    /// emits just after the last one a test waited for is counted too.
+    pub fn quiesce(&self, quiet: Duration) {
+        while let Ok(record) = self.records.recv_timeout(quiet) {
+            self.journal.borrow_mut().push(record);
+        }
+    }
+
     /// Waits at most `limit` for the process to end on its own (its root
     /// finished, or its input ended), returning every record not yet read.
     pub fn finish(mut self, limit: Duration) -> Finished {
