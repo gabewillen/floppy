@@ -141,9 +141,11 @@ struct Answer {
 
 /// Whether a request's JSON `audio` samples hold any sound.
 fn is_audible(request: &Json) -> bool {
-    request["audio"]
-        .as_array()
-        .is_some_and(|samples| samples.iter().any(|sample| sample.as_f64().is_some_and(|value| value != 0.0)))
+    request["audio"].as_array().is_some_and(|samples| {
+        samples
+            .iter()
+            .any(|sample| sample.as_f64().is_some_and(|value| value != 0.0))
+    })
 }
 
 /// The fake backend of every service a case reaches.
@@ -264,7 +266,9 @@ fn serve(mut stream: TcpStream, state: &Arc<Script>, sessions: Option<&Sessions>
         let matching: Vec<usize> = (0..answers.len())
             .filter(|index| {
                 target.ends_with(&answers[*index].path)
-                    && answers[*index].audible.is_none_or(|wanted| wanted == audible)
+                    && answers[*index]
+                        .audible
+                        .is_none_or(|wanted| wanted == audible)
             })
             .collect();
         let chosen = matching
