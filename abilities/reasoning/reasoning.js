@@ -2,6 +2,13 @@
 // <script src="reasoning.js">, so every function here is a global of the
 // document's data model, callable from its cond and expr attributes.
 
+// applying
+
+// An event of the model call in hand, not of a cancelled one.
+function isCurrent(_event) {
+  return _event.invokeid === generate;
+}
+
 // Shared by the steps.
 
 function hasNoMemory() {
@@ -324,7 +331,7 @@ function draftTarget(_event) {
 
 // A draft the call returned for an offered event one target offers.
 function isDraft(_event) {
-  return _event.invokeid === 'generate' && draftTarget(_event) !== null;
+  return isCurrent(_event) && draftTarget(_event) !== null;
 }
 
 // The data a selection is sent with (decision D113): its data object, else {} (no data, null, or a non-object).

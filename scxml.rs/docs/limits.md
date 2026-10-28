@@ -185,8 +185,8 @@ binary, member, call, and sequence chains, at 128 units on every parse path
 (validator syntax check, compile, every runtime evaluate/execute/assign, and
 runtime-compiled strings); portable JSON values and `JSON.parse` input are
 capped at 32 nesting levels. Native builds also run every Boa parse on a
-dedicated 64 MiB-stack thread. Inputs, `ArrayBuffer` allocations, recursion,
-and the value stack are capped, and loop iterations are capped at 100 000
+dedicated 64 MiB-stack thread. Inputs, recursion, and the value stack are
+capped, and loop iterations are capped at 100 000
 *per call frame* (Boa restarts the count in every frame, so nested calls
 multiply it); a guard script
 (`components/scxml-data-model-ecmascript/src/builtin_guard.js`) replaces the
@@ -195,8 +195,11 @@ single-call amplifying built-ins (`String.prototype.repeat`, `padStart`,
 `String.raw`, array `join`/`toString`/`toLocaleString`/`concat`/`flat`/
 `flatMap`, length-driven `Array.prototype` methods, array iterators,
 `Array.from`, `Function.prototype.apply`, `Reflect.apply`/`construct`, and
-`JSON.stringify`) with versions that throw a catchable `RangeError` before Boa
-allocates, iterates, or recurses past the value or nesting bound; `Proxy`,
+`JSON.stringify` and `JSON.parse`) with versions that throw a catchable
+`RangeError` before Boa recurses past the nesting bound or reads a length
+that is not a plain data property; a result has no size bound (SCXML sets
+none), so a built-in, an `ArrayBuffer`, the JSON text of an object, and
+`log` text grow as large as memory allows; `Proxy`,
 `Promise`, `WebAssembly`, `Atomics`, and `SharedArrayBuffer` (none of them
 part of the ECMAScript 3rd edition that SCXML B.2 requires) are removed from
 the realm (using one raises `error.execution`; program text that merely
@@ -204,10 +207,7 @@ spells those names evaluates normally); `eval` and the `Function`
 constructors compile runtime strings only within the same bounds (the host
 hook ECMA-262 consults before compiling a string, `HostEnsureCanCompileStrings`,
 applies the nesting scan and the script byte bound), so no source reaches
-Boa without the nesting scan; and
-every value that leaves the data model passes a portable-value bound. Operator-level
-string concatenation and native iteration of user-defined iterables still
-allocate inside Boa before that post-evaluation bound. CPU time is bounded
+Boa without the nesting scan. CPU time is bounded
 only by fuel: under Wasmtime by the store's per-call fuel (with its memory
 limit), in the browser by build-time metering (see [Fuel](#fuel)); native (non-Wasm)
 builds have no CPU or allocation bound beyond process limits, so nested-call
@@ -265,8 +265,8 @@ one of them is treated as follows:
 - **ECMAScript bounds inside the language**: loop iterations (100,000 per
   call frame), the value stack (16,384), and the distinct state IDs one
   operation asks `In()` about (128) are bounded on wasm builds only, and
-  the guarded built-ins throw a catchable `RangeError` before passing a
-  bound; `eval` and `Function` refuse source beyond the parse bounds with a
+  the guarded built-ins throw a catchable `RangeError` before passing the
+  nesting bound; `eval` and `Function` refuse source beyond the parse bounds with a
   `TypeError`. ECMA-262 3rd edition, the edition SCXML 1.0 B.2 requires,
   grants no such latitude (its §16 lists the only permitted departures), so
   a program that reaches one of these bounds behaves differently from
@@ -374,9 +374,14 @@ These apply on every build, because they are not resource bounds:
   16 MiB over HTTPS, follows at most 5 redirects (each to `https:`), and
   shares the repository resolver's connect (10 s) and total (60 s)
   timeouts, with no retry.
-- **Format and interchange contracts**: the WIT value bounds of events and
-  data (for example 64 KiB per event payload or data value, raised as
-  `error.execution`, and 1024-byte names: a literal event name, send id,
+- **No payload bound**: SCXML sets no size on an event or a value, so
+  event data, `_event.raw`, `_event.origin` and `_event.origintype`, and
+  every text, JSON, or XML value crossing a data model's interface have no
+  byte bound on any build, nor does an ECMAScript built-in's result, an
+  `ArrayBuffer`, the JSON text of an object, or `log` text; only memory
+  (and, in a wasm build, fuel) limits them.
+- **Format and interchange contracts**: the WIT name bounds of events
+  (1024-byte names: a literal event name, send id,
   or invoke id over it, or a state or invoke id over 1,013 / 1,012 bytes,
   whose `done.state.` or `done.invoke.` event would be over it, is a
   compile error,

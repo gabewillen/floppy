@@ -1,7 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  floppy's Reasoning stage: the slow System 2 pass. The cognition (abilities/cognition/cognition.scx) invokes it once
-  per turn that its earlier stages left unhandled.
+  floppy's Reasoning stage: the slow System 2 pass. The cognition
+  (abilities/cognition/cognition.scx) invokes it once and holds it for its
+  lifetime, as mosfet.py's Cognition holds its Reasoning (decision D269):
+  each turn its earlier stages left unhandled is a
+  bot.ability.processing.input, answered by one
+  bot.ability.processing.output, and a turn the cognition leaves
+  (cancelled or timed out) is a bot.ability.processing.cancel, which ends
+  the turn in hand unanswered.
 
   Tiers (one chart that reasoning and intuition share; decision D144): the <param> tier is reasoning, or
   intuition, the chat tier the cognition invokes this chart as when the bot
@@ -10,12 +16,13 @@
   and is offered the
   deliberative handoff,
   bot.ability.reasoning.input, among its choices: selecting it sends the
-  stage's other selections, in order, and hands the turn on, its donedata
+  stage's other selections, in order, and hands the turn on, its output
   unhandled with what was sent as its acted. The handoff is never sent, and
   a tier not offered it cannot select it (the dispatch tool's schema
   refuses it). Its failures name the tier ("the intuition failed (...)").
 
-    recalling -> applying (an invoked generate service) -> done
+    idle -bot.ability.processing.input-> recalling
+         -> applying (an invoked generate service) -> done -> idle
 
   Memory: with a
   memory (the <param> memory, the address of the bot's memory), recalling
@@ -135,20 +142,24 @@
   trimmed to fit (logged cognition.fit fit, cut or overflow; the stimulus
   is never cut). Each generate.result whose usage counts the input tokens
   of a request of request_bytes teaches bytes_per_token the fewest bytes
-  a token any reply showed, and the donedata carries it back to the
-  cognition, which passes it to the next turn's reasoning.
+  a token any reply showed, and the output carries it back to the
+  cognition, which passes it in the next turn's input.
 
-  Input: the <param>s turn, stimulus, focus, focus_candidates, choices,
-  held, tier, model, memory, environment, self, recent, acted, max_context_tokens,
-  completion_reserve_tokens and bytes_per_token. Output: <donedata>, received by the cognition as
-  done.invoke.reasoning:
+  Input: bot.ability.processing.input {turn, stimulus, focus,
+  focus_candidates, choices, held, environment, self, acted, recent,
+  max_context_tokens, completion_reserve_tokens, bytes_per_token}; the
+  <param>s are tier, model, memory and embedding. A turn starts with
+  nothing of the turn before. Output: bot.ability.processing.output, to
+  the cognition:
 
     {turn, handled: true, selected: [{event, data, reason, target}], bytes_per_token}
     {turn, handled: false, reason: "handoff", acted: [{event, data, reason, target}], bytes_per_token}
     {turn, handled: false, failed: true, reason, bytes_per_token}
 
-  The cognition's hop timeout bounds the stage (leaving it cancels the model
-  call, SCXML 6.4).
+  The cognition's hop timeout bounds the stage (its cancel leaves the
+  turn, which cancels the model call, SCXML 6.4). The model call takes a
+  generated invoke id (idlocation), so a cancelled call's late events are
+  not the next turn's.
 
   Bindings: the generate service package, the processing namespace
   (<processing:send> builds the dispatch tool) and the cognition namespace
@@ -167,7 +178,7 @@
        xmlns:event="https://github.com/stateforward/scxml.rs/namespaces/event"
        xmlns:memory="https://github.com/stateforward/floppy/namespaces/memory"
        xmlns:processing="https://github.com/stateforward/floppy/namespaces/processing"
-       version="1.0" datamodel="ecmascript" name="reasoning" initial="recalling">
+       version="1.0" datamodel="ecmascript" name="reasoning" initial="idle">
   <datamodel>
     <!-- The turn, from the cognition's <param>s. -->
     <data id="turn" expr="0"/>
@@ -240,6 +251,9 @@
          items). -->
     <data id="call" expr="null"/>
     <data id="s" expr="null"/>
+    <!-- The model call's generated invoke id: a cancelled call's late
+         events (still delivered, SCXML 6.4) are not the next call's. -->
+    <data id="generate" expr="null"/>
     <!-- Memory: the address of the bot's memory (null: no memory) and the episode and
          directive select, with ?2 the context. The SQL runs on both
          engines (SQLite and Postgres); JSON rows are told by their
@@ -282,12 +296,62 @@
   </datamodel>
   <script src="reasoning.js"/>
 
+  <!-- Between turns: each bot.ability.processing.input is one turn, with
+       nothing of the turn before. -->
+  <state id="idle">
+    <transition event="bot.ability.processing.input" event:schema="../schemas/bot.ability.processing.input.json"
+                target="recalling">
+      <assign location="turn" expr="_event.data.turn"/>
+      <assign location="stimulus" expr="_event.data.stimulus"/>
+      <assign location="focus" expr="_event.data.focus"/>
+      <assign location="focus_candidates" expr="_event.data.focus_candidates"/>
+      <assign location="choices" expr="_event.data.choices"/>
+      <assign location="held" expr="_event.data.held"/>
+      <assign location="environment" expr="_event.data.environment"/>
+      <assign location="self" expr="_event.data.self"/>
+      <assign location="acted" expr="_event.data.acted"/>
+      <assign location="recent" expr="_event.data.recent"/>
+      <assign location="max_context_tokens" expr="_event.data.max_context_tokens"/>
+      <assign location="completion_reserve_tokens" expr="_event.data.completion_reserve_tokens"/>
+      <assign location="bytes_per_token" expr="_event.data.bytes_per_token"/>
+      <assign location="system" expr="null"/>
+      <assign location="schema" expr="null"/>
+      <assign location="prompt" expr="null"/>
+      <assign location="prompt_failure" expr="null"/>
+      <assign location="images" expr="[]"/>
+      <assign location="selected" expr="null"/>
+      <assign location="handed_on" expr="false"/>
+      <assign location="gen_failure" expr="null"/>
+      <assign location="rejection" expr="null"/>
+      <assign location="attempt" expr="0"/>
+      <assign location="last_rejection_key" expr="null"/>
+      <assign location="feedback" expr="null"/>
+      <assign location="budget" expr="null"/>
+      <assign location="fit" expr="null"/>
+      <assign location="result" expr="null"/>
+      <assign location="context_ref" expr="null"/>
+      <assign location="prior_episodes" expr="[]"/>
+      <assign location="standing_directives" expr="[]"/>
+      <assign location="behaviors" expr="[]"/>
+      <assign location="statements" expr="[]"/>
+      <assign location="cue" expr="null"/>
+      <assign location="found" expr="null"/>
+      <assign location="episode_ids" expr="null"/>
+    </transition>
+  </state>
+
   <!-- Recall prior episodes and standing directives, or nothing without
        a memory. -->
   <state id="recalling" initial="recalling_from">
     <onentry>
       <assign location="context_ref" expr="contextRefFromInput()"/>
     </onentry>
+    <transition event="bot.ability.processing.input" event:schema="../schemas/bot.ability.processing.input.json">
+      <event:defer/>
+    </transition>
+    <!-- The cognition left the turn (cancelled or timed out). -->
+    <transition event="bot.ability.processing.cancel" event:schema="../schemas/bot.ability.processing.cancel.json"
+                target="idle"/>
     <state id="recalling_from">
       <transition cond="hasNoMemory()" target="recalling_nothing"/>
       <transition target="recalling_embedding"/>
@@ -412,7 +476,7 @@
     <transition cond="hasNoPrompt()" target="done">
       <assign location="result" expr="projectionFailedResult()"/>
     </transition>
-    <invoke id="generate" type="https://github.com/stateforward/floppy/services/generate"
+    <invoke idlocation="generate" type="https://github.com/stateforward/floppy/services/generate"
             env:apikey="FLOPPY_API_KEY" env:baseurl="FLOPPY_BASE_URL" env:stream="FLOPPY_STREAM">
       <param name="model" expr="model"/>
       <param name="messages" expr="messages()"/>
@@ -422,16 +486,22 @@
       <param name="stream" expr="stream"/>
     </invoke>
 
+    <transition event="bot.ability.processing.input" event:schema="../schemas/bot.ability.processing.input.json">
+      <event:defer/>
+    </transition>
+    <!-- The cognition left the turn (cancelled or timed out). -->
+    <transition event="bot.ability.processing.cancel" event:schema="../schemas/bot.ability.processing.cancel.json"
+                target="idle"/>
     <!-- A streamed reply's progress goes to the cognition, which bounds this
          stage by inactivity once it streams (decision D101). -->
-    <transition event="generate.progress">
+    <transition event="generate.progress" cond="isCurrent(_event)">
       <send event="generate.progress" target="#_parent">
         <content expr="_event.data"/>
       </send>
     </transition>
     <!-- Every dispatch call's events, in order: each sent to its target
          and kept, but the deliberative handoff, which hands the turn on. -->
-    <transition event="generate.result">
+    <transition event="generate.result" cond="isCurrent(_event)">
       <assign location="bytes_per_token" expr="observedBytesPerToken(_event)"/>
       <assign location="selected" expr="[]"/>
       <foreach array="_event.data.tool_calls" item="call">
@@ -447,26 +517,26 @@
         </foreach>
       </foreach>
     </transition>
-    <transition event="generate.failed">
+    <transition event="generate.failed" cond="isCurrent(_event)">
       <assign location="gen_failure" expr="generateFailure(_event)"/>
       <assign location="rejection" expr="rejectionOf(_event)"/>
     </transition>
-    <transition event="done.invoke.generate" cond="hasSelection()" target="done">
+    <transition event="done.invoke" cond="isCurrent(_event) &amp;&amp; hasSelection()" target="done">
       <assign location="result" expr="selectedResult()"/>
     </transition>
     <!-- A rejected selection is repaired: the call is made again with the
          rejection as its feedback, unless it is the same rejection twice
          running or the repairs are spent. -->
-    <transition event="done.invoke.generate" cond="isRepairable()" target="applying">
+    <transition event="done.invoke" cond="isCurrent(_event) &amp;&amp; isRepairable()" target="applying">
       <log label="reasoning.repair" expr="repairLog()"/>
       <assign location="attempt" expr="attempt + 1"/>
       <assign location="last_rejection_key" expr="rejection.key"/>
       <assign location="feedback" expr="repairFeedback()"/>
     </transition>
-    <transition event="done.invoke.generate" cond="isRejected()" target="done">
+    <transition event="done.invoke" cond="isCurrent(_event) &amp;&amp; isRejected()" target="done">
       <assign location="result" expr="rejectedResult()"/>
     </transition>
-    <transition event="done.invoke.generate" target="done">
+    <transition event="done.invoke" cond="isCurrent(_event)" target="done">
       <assign location="result" expr="failedResult()"/>
     </transition>
     <transition event="error.*" target="done">
@@ -483,9 +553,13 @@
     </transition>
   </state>
 
-  <final id="done">
-    <donedata>
-      <content expr="withFit(result)"/>
-    </donedata>
-  </final>
+  <!-- The turn's answer to the cognition, then the next turn. -->
+  <state id="done">
+    <onentry>
+      <send event="bot.ability.processing.output" target="#_parent">
+        <content expr="withFit(result)"/>
+      </send>
+    </onentry>
+    <transition target="idle"/>
+  </state>
 </scxml>

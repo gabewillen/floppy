@@ -27,15 +27,15 @@ const SCXML_NAMESPACE: &str = "http://www.w3.org/2005/07/scxml";
 const ECMASCRIPT_CORPUS_DIGEST: &str =
     "9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca";
 const ECMASCRIPT_REPORT_DIGEST: &str =
-    "cd7e244f59f8527bd8c20dd5dd448c4fe8e012fa1c0764a8462df5dfc658199e";
+    "074f6a2997639cef9e0c7c26ad88d649e8003a0d0fa2ff5e99a1c4d37fd28573";
 const ECMASCRIPT_ARTIFACT_DIGEST: &str =
-    "b0f115c839fae914d372fbf37e094a634471f6b54783c4bfa2239be0fc11a6b7";
+    "50e93e0fc8c6828dbcd7eb8b85673ecabf82034c3843bf2615454ee951c1f98d";
 const XPATH_CORPUS_DIGEST: &str =
     "a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca";
 const XPATH_REPORT_DIGEST: &str =
-    "3462de7f450565500d06f180dcf3123784cc5a8300fc42f684130b3a7a00d5a1";
+    "ac739b4c412649e554f095d67a14152919e33124dca27434ce9de62b0697ec34";
 const XPATH_ARTIFACT_DIGEST: &str =
-    "fc1d9b0e40a7b8b703d4e75d7825425a24d84e42cf3f0b475a9a5d3b169fd8cd";
+    "7044825a083b3cc11c664b72cafd520c94d4dcb87447611e5d8fcaf773bd0a43";
 
 #[test]
 fn checked_in_official_corpus_is_complete_and_exact_namespace() {

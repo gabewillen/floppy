@@ -727,6 +727,22 @@ hard cutover.
 
 ### Changed
 
+- The conformance runner runs a suite's cases on several threads at once
+  (`RunOptions::jobs`, by default the available parallelism) when its
+  executor offers the new `CaseExecutor::factory`; `WasmExecutor` does,
+  building each thread's executor from the same authenticated release so
+  every thread shares the compiled components. Reports are unchanged
+  whatever the thread count: results keep the corpus order, and a
+  snapshot-collecting run gives each thread a fixed share so its documents
+  stay identical from run to run. The IRP baselines regenerate with only
+  the runner's source digest (and so the report digest) moved.
+
+- The `irp-components` CI job and its CONTRIBUTING.md snippet build the
+  conformance tests and `scx` in the test profile, which optimizes every
+  dependency, instead of `--release`, whose thin LTO with one codegen unit
+  relinked Wasmtime into every test binary (about 11 minutes of a cold
+  4-core build, against under 5).
+
 - The Wasmtime session host compiles each extension, service, and
   data-model package component a host or document binds on a thread of its
   own as soon as it is bound, through the process-wide compilation cache,
@@ -1281,6 +1297,34 @@ hard cutover.
   `tests/fixtures/extension-example.xsd`.
 
 ### Removed
+
+- The byte bounds SCXML does not set on events and data-model values:
+  `scxml_types::MAX_EVENT_DATA_BYTES` (64 KiB per event `data` and `raw`),
+  `MAX_EVENT_BYTES` (96 KiB per event, which counted a send between sessions
+  twice, as its data and as its percent-encoded `_event.raw`, so about
+  48 KiB was refused), and `MAX_EVENT_METADATA_BYTES` (16 KiB per `origin`
+  and `origin-type`), with `EventError::ValueTooLarge` and
+  `AggregateTooLarge`, `ForeachError::TooLarge`, and
+  `DataValueError::ValueTooLarge`; the machine boundary's
+  `MAX_METADATA_BYTES`, `MAX_DATA_VALUE_BYTES`, `MAX_EVENT_BYTES`, and
+  `MachineBoundaryError::AggregateTooLarge`; the SCXML processor's
+  `MAX_RAW_MESSAGE_BYTES` (`raw_message` is infallible) and BasicHTTP's
+  `MAX_RAW_BYTES`; the null data model's `MAX_VALUE_BYTES` and the 64 KiB
+  bound every data model put on each text, JSON, or XML value, system
+  string, and event field crossing its interface; and the session
+  snapshot's 64 KiB bound on event data and `raw` and 16 KiB bound on event
+  metadata, a pending send's `target` and `type`, and an invocation's
+  `type`. Names, trace context, and the snapshot's variable `oversized`
+  threshold keep their bounds. The `types.event` and `data-model-api` WIT
+  texts say so.
+- The ECMAScript data model's 64 KiB bound on what one built-in call makes
+  (`repeat`, `padStart`/`padEnd`, `concat`, `replace`, `String.raw`, array
+  `join`/`concat`/`flat`/`from` and length-driven methods, `apply`, and
+  `JSON.stringify`/`JSON.parse`), on the JSON text of an object, and on
+  `log` text, and its 64 KiB `ArrayBuffer` bound (`MAX_BUFFER_BYTES`); SCXML
+  sets none. The guards keep their nesting bound (32), which protects the
+  native stack, and still reject an array-like whose length is not a plain
+  data property.
 
 - The bounded logical `scxml-invoked-service` component and its 0.1.0
   `invoke-request` WIT record (`invoker-type`, text `content`; the name is

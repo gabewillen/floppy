@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.processing.output",
+  "description": "A deliberative tier's answer to one turn: handled with its selections, handed on with what it acted, or failed [floppy fields; mosfet.py's Processing output].",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "turn",
+    "handled",
+    "bytes_per_token"
+  ],
+  "properties": {
+    "turn": {
+      "description": "The body's processing turn this event belongs to, counted from 1 [floppy field].",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "handled": {
+      "type": "boolean",
+      "description": "Whether the tier handled the turn."
+    },
+    "selected": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "event"
+        ],
+        "properties": {
+          "event": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The selected event's name."
+          },
+          "data": {
+            "description": "The selected event's data."
+          },
+          "reason": {
+            "description": "Why the model selected it."
+          },
+          "target": {
+            "description": "The session id of the event's offerer."
+          }
+        }
+      },
+      "description": "A handled turn's selections, each sent to its target."
+    },
+    "acted": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "event"
+        ],
+        "properties": {
+          "event": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The selected event's name."
+          },
+          "data": {
+            "description": "The selected event's data."
+          },
+          "reason": {
+            "description": "Why the model selected it."
+          },
+          "target": {
+            "description": "The session id of the event's offerer."
+          }
+        }
+      },
+      "description": "What a turn handed on had sent."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "handoff when the turn is handed on; the failure when it failed."
+    },
+    "failed": {
+      "const": true,
+      "description": "Present when the tier failed."
+    },
+    "bytes_per_token": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "The fewest request bytes a token any reply showed so far."
+    }
+  }
+}

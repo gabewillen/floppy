@@ -41,7 +41,7 @@ use stateforward::scxml::{execution_host, telemetry};
 use super::{
     Answerer, DataModelError, EcmaScriptDataModel, ExecutionHost, ForeachItems, HostQuery,
     HostReply, MAX_AGGREGATE_BYTES, MAX_EXPRESSION_BYTES, MAX_FOREACH_ITEMS, MAX_SCRIPT_BYTES,
-    MAX_SOURCE_BYTES, MAX_VALUE_BYTES, SystemContext, VariableValue,
+    MAX_SOURCE_BYTES, SystemContext, VariableValue,
 };
 use scxml_types::{
     AssignPlacement, AssignSource, BaggagePolicy, DataInitializer, DataValue, Event, EventName,
@@ -723,12 +723,12 @@ fn validate_wit_text_len(len: usize, max: usize) -> Result<(), DataModelError> {
 
 fn validate_wit_value(value: &WitValue) -> Result<(), DataModelError> {
     match value {
-        WitValue::Text(value)
-        | WitValue::JsonArray(value)
-        | WitValue::JsonObject(value)
-        | WitValue::Xml(value) => validate_wit_text(value, MAX_VALUE_BYTES),
         WitValue::Number(value) if !value.is_finite() => Err(DataModelError::InvalidInput),
-        WitValue::Absent
+        WitValue::Text(_)
+        | WitValue::JsonArray(_)
+        | WitValue::JsonObject(_)
+        | WitValue::Xml(_)
+        | WitValue::Absent
         | WitValue::Undefined
         | WitValue::Null
         | WitValue::Boolean(_)
@@ -753,10 +753,6 @@ fn wit_value_bytes(value: &WitValue) -> usize {
 fn validate_wit_system(value: &SystemValues) -> Result<(), DataModelError> {
     if value.session_id.is_empty() || value.machine_name.as_ref().is_some_and(String::is_empty) {
         return Err(DataModelError::InvalidInput);
-    }
-    validate_wit_text(&value.session_id, MAX_VALUE_BYTES)?;
-    if let Some(name) = &value.machine_name {
-        validate_wit_text(name, MAX_VALUE_BYTES)?;
     }
     validate_wit_value(&value.io_processors)?;
     if !matches!(value.io_processors, WitValue::JsonObject(_)) {
@@ -784,12 +780,6 @@ fn validate_wit_event_fields(event: &WitEvent) -> Result<(), DataModelError> {
     validate_wit_text(&event.name, scxml_types::MAX_NAME_BYTES)?;
     if let Some(value) = event.send_id.as_deref() {
         validate_wit_text(value, scxml_types::MAX_NAME_BYTES)?;
-    }
-    if let Some(value) = event.origin.as_deref() {
-        validate_wit_text(value, MAX_VALUE_BYTES)?;
-    }
-    if let Some(value) = event.origin_type.as_deref() {
-        validate_wit_text(value, MAX_VALUE_BYTES)?;
     }
     if let Some(value) = event.invoke_id.as_deref() {
         validate_wit_text(value, scxml_types::MAX_NAME_BYTES)?;

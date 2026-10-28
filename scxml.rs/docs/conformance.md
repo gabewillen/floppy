@@ -484,6 +484,16 @@ without the `wasmtime` feature (`--no-default-features`) fails closed with
 execution path: the crate links no in-process SCXML execution, and
 `scxml_conformance::run_suite` requires an executor.
 
+Cases run on several threads at once (`RunOptions::jobs`, by default the
+available parallelism) when the executor offers a `CaseExecutor::factory`:
+each thread runs its cases through its own `WasmExecutor`, built from the
+same authenticated release and sharing its compiled components, with its own
+compiler. The report is the same whatever the thread count: results keep the
+corpus order, and every case starts a fresh root session. A collecting run
+(`--snapshot-every-checkpoint`) gives each thread a fixed share of the cases,
+since pinned telemetry IDs continue from one case to the next on one
+executor, so its documents are identical from run to run.
+
 `--canonical-baseline BASELINE.scxml-report.json` compares the run with a
 checked-in canonical report (`tests/conformance/w3c-irp/baselines`) through
 `scxml_conformance::compare_to_baseline`: the report version, suite, schema
@@ -493,7 +503,7 @@ declarations, diagnostics, configuration, terminal status, commands, and fuel)
 must be equal. Implementation identities (compiler, engine, data model,
 runner, manual oracle), the run revision, and the report digest name the
 producing toolchain and are not compared. Any mismatch exits 1 and lists every
-mismatch in sorted order on stderr. `cargo test --release -p
+mismatch in sorted order on stderr. `cargo test -p
 scxml-conformance --features wasmtime --test irp_components` runs both
 checked-in corpora this way and additionally requires the fresh canonical
 artifact to equal the checked-in baseline byte for byte (the `irp-components`
@@ -815,8 +825,8 @@ pipeline.
 
 | Data model | Corpus SHA-256 | Producer report digest | Canonical artifact SHA-256 | Passed / Applicable | Under errata | Not applicable | Failed | Unsupported | Invalid | HarnessError | Skipped |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| ECMAScript | `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` | `cd7e244f59f8527bd8c20dd5dd448c4fe8e012fa1c0764a8462df5dfc658199e` | `b0f115c839fae914d372fbf37e094a634471f6b54783c4bfa2239be0fc11a6b7` | 201 / 201 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
-| XPath | `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca` | `3462de7f450565500d06f180dcf3123784cc5a8300fc42f684130b3a7a00d5a1` | `fc1d9b0e40a7b8b703d4e75d7825425a24d84e42cf3f0b475a9a5d3b169fd8cd` | 178 / 178 | 5 | 24 | 0 | 0 | 0 | 0 | 0 |
+| ECMAScript | `9f005f20c9cbcd7188507833d8fd8a71158cc49cf70e9428fd3fc807e11396ca` | `074f6a2997639cef9e0c7c26ad88d649e8003a0d0fa2ff5e99a1c4d37fd28573` | `50e93e0fc8c6828dbcd7eb8b85673ecabf82034c3843bf2615454ee951c1f98d` | 201 / 201 | 0 | 1 | 0 | 0 | 0 | 0 | 0 |
+| XPath | `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca` | `ac739b4c412649e554f095d67a14152919e33124dca27434ce9de62b0697ec34` | `7044825a083b3cc11c664b72cafd520c94d4dcb87447611e5d8fcaf773bd0a43` | 178 / 178 | 5 | 24 | 0 | 0 | 0 | 0 | 0 |
 
 ECMAScript: 201 passed; mandatory 167 / 167, optional 34 / 34; 436 (null
 profile, `datamodel="null"`) is `NotApplicable`. XPath: 178
@@ -844,7 +854,7 @@ commands above, from a release verified by
 `scripts/verify-wasm-capabilities.sh`:
 
 ```console
-cargo run --release --locked -p scxml-conformance --features wasmtime \
+cargo run --locked -p scxml-conformance --features wasmtime \
   --example generate_irp_baselines -- \
   --components "$RELEASE" --components-manifest-sha256 "$MANIFEST_SHA256" \
   --extension-component-sha256 "$EXTENSION_SHA256"
@@ -866,9 +876,9 @@ sh scripts/verify-wasm-capabilities.sh --artifacts-dir "$RELEASE" \
 ```
 
 That build's `manifest.tsv` has SHA-256
-`ba9ec27979d6ecd7093ee49b8df15f22094057896c35dc7b33b6332011c1df9c` (machine
+`9d7d8da5a6f01b7f2852dfa196d43c6165d7d16907de7b73f6bac1cf677f18d1` (machine
 component SHA-256
-`6e9bf4e8d3b8b1da568e9ca3125a95e70c2621859d4de2e6e23af6ed445149f4`), and
+`6dc1512cf5960e71dd06663a183e3b80f62716eb2a48920e0dc36ef88db40362`), and
 its example extension component SHA-256
 `115c43e6f23c3323cd009fbbecb2045dc9b66ed7a0eef238d6747f6355cf2612`. Another
 selection, such as the default (every component), writes a different
@@ -896,7 +906,7 @@ SHA-256 of its `manifest.tsv`:
 ```console
 MANIFEST_SHA256=$(shasum -a 256 ci-release/manifest.tsv | cut -d ' ' -f 1)
 SCXML_COMPONENTS_DIR="$PWD/ci-release" SCXML_COMPONENTS_MANIFEST_SHA256="$MANIFEST_SHA256" \
-  cargo test --release --locked -p scxml-conformance --features wasmtime
+  cargo test --locked -p scxml-conformance --features wasmtime
 ```
 
 Without CI, `scripts/build-canonical-components.sh` builds the same bytes on
@@ -918,7 +928,7 @@ sh scripts/build-canonical-components.sh --artifacts-dir "$PWD/canonical-release
 
 Built from the source of the checked-in baselines on an arm64 macOS Docker
 host, the script produces manifest SHA-256
-`ba9ec27979d6ecd7093ee49b8df15f22094057896c35dc7b33b6332011c1df9c`, the
+`9d7d8da5a6f01b7f2852dfa196d43c6165d7d16907de7b73f6bac1cf677f18d1`, the
 components the baselines were generated from; the `irp-components`
 artifact of the same source must match it.
 

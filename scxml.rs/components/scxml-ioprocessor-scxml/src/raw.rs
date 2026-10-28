@@ -17,16 +17,12 @@
 //! every other UTF-8 byte is `%XX` (uppercase hex). The rendering is a pure
 //! function of its inputs, so the text is byte-deterministic.
 
-use scxml_types::{DataValue, EventName, MAX_EVENT_DATA_BYTES};
-
-use crate::ProcessorError;
+use scxml_types::{DataValue, EventName};
 
 /// Form field that carries the event name.
 pub const RAW_EVENT_NAME_FIELD: &str = "_scxmleventname";
 /// Form field that carries a `<content>` payload.
 pub const RAW_CONTENT_FIELD: &str = "_scxmlcontent";
-/// Maximum bytes of one raw message (the event data bound).
-pub const MAX_RAW_MESSAGE_BYTES: usize = MAX_EVENT_DATA_BYTES;
 
 /// The payload an SCXML Event I/O Processor message carries.
 #[derive(Clone, Copy, Debug)]
@@ -39,27 +35,24 @@ pub enum RawPayload<'a> {
     Content(&'a DataValue),
 }
 
-/// Renders the raw message text of one event this processor carries.
-///
-/// # Errors
-///
-/// [`ProcessorError::PayloadTooLarge`] when the text would exceed
-/// [`MAX_RAW_MESSAGE_BYTES`]; no partial text is returned.
-pub fn raw_message(event: &EventName, payload: RawPayload<'_>) -> Result<String, ProcessorError> {
+/// Renders the raw message text of one event this processor carries. It
+/// has no byte bound (SCXML sets none).
+#[must_use]
+pub fn raw_message(event: &EventName, payload: RawPayload<'_>) -> String {
     let mut raw = String::new();
-    append_field(&mut raw, RAW_EVENT_NAME_FIELD, event.as_str())?;
+    append_field(&mut raw, RAW_EVENT_NAME_FIELD, event.as_str());
     match payload {
         RawPayload::None => {}
         RawPayload::Params(fields) => {
             for (name, value) in fields {
-                append_field(&mut raw, name, &field_text(value))?;
+                append_field(&mut raw, name, &field_text(value));
             }
         }
         RawPayload::Content(value) => {
-            append_field(&mut raw, RAW_CONTENT_FIELD, &field_text(value))?;
+            append_field(&mut raw, RAW_CONTENT_FIELD, &field_text(value));
         }
     }
-    Ok(raw)
+    raw
 }
 
 /// Text of one field value: a string is itself; `null`, booleans, and
@@ -79,40 +72,31 @@ pub fn field_text(value: &DataValue) -> String {
     }
 }
 
-/// Appends `&name=value` (no `&` before the first field), bounded.
-fn append_field(raw: &mut String, name: &str, value: &str) -> Result<(), ProcessorError> {
+/// Appends `&name=value` (no `&` before the first field).
+fn append_field(raw: &mut String, name: &str, value: &str) {
     if !raw.is_empty() {
-        push_bounded(raw, "&")?;
+        raw.push('&');
     }
-    encode_into(raw, name)?;
-    push_bounded(raw, "=")?;
-    encode_into(raw, value)
+    encode_into(raw, name);
+    raw.push('=');
+    encode_into(raw, value);
 }
 
-fn encode_into(raw: &mut String, text: &str) -> Result<(), ProcessorError> {
+fn encode_into(raw: &mut String, text: &str) {
     const HEX: &[u8; 16] = b"0123456789ABCDEF";
     for byte in text.bytes() {
         if byte.is_ascii_alphanumeric() || matches!(byte, b'*' | b'-' | b'.' | b'_') {
-            push_bounded(raw, char::from(byte).encode_utf8(&mut [0; 4]))?;
+            raw.push(char::from(byte));
         } else if byte == b' ' {
-            push_bounded(raw, "+")?;
+            raw.push('+');
         } else {
             let high = HEX.get(usize::from(byte >> 4)).copied().unwrap_or(b'0');
             let low = HEX.get(usize::from(byte & 0x0F)).copied().unwrap_or(b'0');
-            push_bounded(raw, "%")?;
-            push_bounded(raw, char::from(high).encode_utf8(&mut [0; 4]))?;
-            push_bounded(raw, char::from(low).encode_utf8(&mut [0; 4]))?;
+            raw.push('%');
+            raw.push(char::from(high));
+            raw.push(char::from(low));
         }
     }
-    Ok(())
-}
-
-fn push_bounded(raw: &mut String, text: &str) -> Result<(), ProcessorError> {
-    if raw.len().saturating_add(text.len()) > MAX_RAW_MESSAGE_BYTES {
-        return Err(ProcessorError::PayloadTooLarge);
-    }
-    raw.push_str(text);
-    Ok(())
 }
 
 #[cfg(test)]
@@ -136,7 +120,7 @@ mod tests {
         ];
         assert_eq!(
             raw_message(&name("event1"), RawPayload::Params(&fields)),
-            Ok("_scxmleventname=event1&Var1=2&Var1=3".to_owned())
+            "_scxmleventname=event1&Var1=2&Var1=3"
         );
     }
 
@@ -152,35 +136,28 @@ mod tests {
         ];
         assert_eq!(
             raw_message(&name("e.x"), RawPayload::Params(&fields)),
-            Ok("_scxmleventname=e.x&a+b=x%26y%3Dz+%C3%A9&n=null&t=true&f=1.5&o=%7B%22k%22%3A%5B1%5D%7D&u="
-                .to_owned())
+            "_scxmleventname=e.x&a+b=x%26y%3Dz+%C3%A9&n=null&t=true&f=1.5&o=%7B%22k%22%3A%5B1%5D%7D&u="
         );
         assert_eq!(
             raw_message(
                 &name("e"),
                 RawPayload::Content(&DataValue::String("hi".into()))
             ),
-            Ok("_scxmleventname=e&_scxmlcontent=hi".to_owned())
+            "_scxmleventname=e&_scxmlcontent=hi"
         );
         assert_eq!(
             raw_message(&name("e"), RawPayload::None),
-            Ok("_scxmleventname=e".to_owned())
+            "_scxmleventname=e"
         );
     }
 
     #[test]
-    fn raw_message_bound_accepts_exactly_and_rejects_plus_one() {
-        // `_scxmleventname=e&_scxmlcontent=` is 32 bytes of framing.
+    fn raw_message_has_no_byte_bound() {
         let framing = "_scxmleventname=e&_scxmlcontent=".len();
-        let exact = DataValue::String("a".repeat(MAX_RAW_MESSAGE_BYTES - framing));
+        let large = DataValue::String("a".repeat(4 * 65_536));
         assert_eq!(
-            raw_message(&name("e"), RawPayload::Content(&exact)).map(|raw| raw.len()),
-            Ok(MAX_RAW_MESSAGE_BYTES)
-        );
-        let over = DataValue::String("a".repeat(MAX_RAW_MESSAGE_BYTES - framing + 1));
-        assert_eq!(
-            raw_message(&name("e"), RawPayload::Content(&over)),
-            Err(ProcessorError::PayloadTooLarge)
+            raw_message(&name("e"), RawPayload::Content(&large)).len(),
+            framing + 4 * 65_536
         );
     }
 }

@@ -1,5 +1,8 @@
+use std::cell::RefCell;
 use std::fmt;
+use std::num::NonZeroUsize;
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use scxml_compiler_core::{CompileInput, Compiler, MACHINE_IR_VERSION, MachineIr};
 use scxml_telemetry::{ErrorCategory, Module, Operation, SignalEvent, observe};
@@ -8,7 +11,8 @@ use scxml_validator_xsd::XsdSchemaBackend;
 
 use crate::capability;
 use crate::executor::{
-    CaseExecutor, CaseSnapshotDocument, ExecutionFailureCategory, implementation_identity,
+    CaseExecutor, CaseSnapshotDocument, ExecutionFailureCategory, ExecutorFactory,
+    implementation_identity,
 };
 use crate::external_client::{self, ExternalClientOracle};
 use crate::filter::Filters;
@@ -33,6 +37,10 @@ pub struct RunOptions {
     pub schema_mode: SchemaMode,
     /// Optional source revision recorded as report provenance.
     pub git_commit: Option<String>,
+    /// How many cases run at once when the executor offers a
+    /// [`CaseExecutor::factory`]; `None` is the available parallelism. The
+    /// report is the same whatever the value.
+    pub jobs: Option<NonZeroUsize>,
 }
 
 impl Default for RunOptions {
@@ -41,6 +49,7 @@ impl Default for RunOptions {
             filters: Filters::default(),
             schema_mode: SchemaMode::Off,
             git_commit: None,
+            jobs: None,
         }
     }
 }
@@ -150,79 +159,35 @@ pub fn run_suite_with_snapshot_sink(
 ) -> Result<RunReport, RunnerError> {
     let span = observe(Module::ConformanceRunner, Operation::RunnerRunSuite);
     let extensions = executor.extensions();
-    let validator = Validator::new(FileSchemaResolver::new(), XsdSchemaBackend)
-        .with_schema_mode(options.schema_mode);
-    let compiler = Compiler::new(validator);
-    let mut cases = Vec::new();
-    for case in &suite.cases {
-        if !options.filters.selects(&case.manifest) {
-            continue;
+    let selected = suite
+        .cases
+        .iter()
+        .filter(|case| options.filters.selects(&case.manifest))
+        .collect::<Vec<_>>();
+    let factory = executor.factory();
+    let jobs = options
+        .jobs
+        .or_else(|| std::thread::available_parallelism().ok())
+        .map_or(1, NonZeroUsize::get)
+        .min(selected.len());
+    let cases = match factory {
+        Some(factory) if jobs > 1 => run_cases_on_threads(
+            &selected,
+            suite,
+            options.schema_mode,
+            executor,
+            &factory,
+            jobs,
+            sink,
+        ),
+        _ => {
+            let compiler = case_compiler(options.schema_mode);
+            selected
+                .iter()
+                .map(|case| run_selected_case(case, suite, &extensions, &compiler, executor, sink))
+                .collect()
         }
-        // Manual cases execute through the same pipeline as every other case;
-        // the oracle decides their disposition, never the manual marker.
-        // A W3C not-applicable declaration (recorded in the prepared errata
-        // identity) removes the case from the applicable denominator; it is
-        // never executed and never counts as passing.
-        let result = if let Some(declaration) = &case.manifest.not_applicable {
-            result(
-                case,
-                Stage::Selection,
-                Disposition::NotApplicable,
-                Some(NOT_APPLICABLE_REASON_CODE),
-                Some(declaration.reason.clone()),
-                Vec::new(),
-                Vec::new(),
-                None,
-                0,
-                0,
-            )
-        } else if let Some(failure) = &case.manifest.preparation_failure {
-            result(
-                case,
-                Stage::Preparation,
-                Disposition::HarnessError,
-                Some(&failure.code),
-                Some(failure.message.clone()),
-                Vec::new(),
-                Vec::new(),
-                None,
-                0,
-                0,
-            )
-        } else if let Some(selected) = (suite.manifest.suite.kind == CorpusKind::OfficialIrp)
-            .then(|| external_client::select(case))
-            .flatten()
-        {
-            run_external_client_case(case, selected, suite, &compiler, executor, sink)
-        } else if case.source.is_none() || case.source_path.is_none() {
-            result(
-                case,
-                Stage::Preparation,
-                Disposition::HarnessError,
-                Some("prepared-source-missing"),
-                Some("selected applicable case has no prepared SCXML artifact".into()),
-                Vec::new(),
-                Vec::new(),
-                None,
-                0,
-                0,
-            )
-        } else {
-            run_case(
-                case,
-                CaseSource::Prepared,
-                &Suite {
-                    kind: suite.manifest.suite.kind,
-                    default_steps: suite.manifest.default_command_budget,
-                    extensions: &extensions,
-                },
-                &compiler,
-                executor,
-                sink,
-            )
-        };
-        cases.push(result);
-    }
+    };
     let summary = Summary::from_cases(&cases);
     let identities = executor.identities();
     let data_model = identities.data_model(&suite.manifest.suite.datamodel);
@@ -273,6 +238,197 @@ pub fn run_suite_with_snapshot_sink(
             span.fail(ErrorCategory::Report);
             Err(error)
         }
+    }
+}
+
+/// The compiler every case of a run lowers through.
+fn case_compiler(mode: SchemaMode) -> Compiler<FileSchemaResolver, XsdSchemaBackend> {
+    Compiler::new(
+        Validator::new(FileSchemaResolver::new(), XsdSchemaBackend).with_schema_mode(mode),
+    )
+}
+
+/// Runs `selected` on `jobs` threads: the calling thread with `executor`
+/// and every other thread with its own executor from `factory`, each with
+/// its own compiler. Results come back in `selected` order and `sink` sees
+/// every executed case's documents in that order once all have run.
+///
+/// Cases are handed out as threads free up, except when the executor
+/// collects snapshots: an executor's pinned telemetry IDs continue from
+/// one case to the next, so each thread then runs a fixed share (every
+/// `jobs`-th case), which keeps the documents identical from run to run.
+/// A thread whose executor cannot be made runs nothing and the calling
+/// thread runs its share.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one place hands out the cases, runs them, and puts the results back in order"
+)]
+fn run_cases_on_threads(
+    selected: &[&LoadedCase],
+    suite: &LoadedSuite,
+    schema_mode: SchemaMode,
+    executor: &dyn CaseExecutor,
+    factory: &ExecutorFactory,
+    jobs: usize,
+    sink: Option<SnapshotSink<'_>>,
+) -> Vec<CaseResult> {
+    type Ran = (usize, CaseResult, Option<Vec<CaseSnapshotDocument>>);
+    let fixed_shares = executor.collects_snapshots();
+    let collects = sink.is_some();
+    let next = AtomicUsize::new(0);
+    let run_share = |thread: usize,
+                     executor: &dyn CaseExecutor,
+                     extensions: &[crate::executor::BoundExtension],
+                     ran: &mut Vec<Ran>| {
+        let compiler = case_compiler(schema_mode);
+        let mut index = thread;
+        loop {
+            if !fixed_shares {
+                index = next.fetch_add(1, Ordering::Relaxed);
+            }
+            let Some(case) = selected.get(index) else {
+                break;
+            };
+            let collected = RefCell::new(None);
+            let collect: SnapshotSink<'_> = &|_: &str, documents: &[CaseSnapshotDocument]| {
+                *collected.borrow_mut() = Some(documents.to_vec());
+            };
+            let result = run_selected_case(
+                case,
+                suite,
+                extensions,
+                &compiler,
+                executor,
+                collects.then_some(collect),
+            );
+            ran.push((index, result, collected.into_inner()));
+            if fixed_shares {
+                index += jobs;
+            }
+        }
+    };
+    let mut ran = Vec::with_capacity(selected.len());
+    let mut unstarted = Vec::new();
+    std::thread::scope(|scope| {
+        let threads = (1..jobs)
+            .map(|thread| {
+                let run_share = &run_share;
+                scope.spawn(move || {
+                    let mut ran = Vec::new();
+                    let Some(executor) = factory() else {
+                        return Err(thread);
+                    };
+                    let extensions = executor.extensions();
+                    run_share(thread, executor.as_ref(), &extensions, &mut ran);
+                    Ok(ran)
+                })
+            })
+            .collect::<Vec<_>>();
+        let extensions = executor.extensions();
+        run_share(0, executor, &extensions, &mut ran);
+        for thread in threads {
+            match thread.join() {
+                Ok(Ok(results)) => ran.extend(results),
+                Ok(Err(thread)) => unstarted.push(thread),
+                Err(panic) => std::panic::resume_unwind(panic),
+            }
+        }
+        // Without fixed shares the calling thread already took every case
+        // a thread without an executor did not.
+        if fixed_shares {
+            let extensions = executor.extensions();
+            for thread in unstarted {
+                run_share(thread, executor, &extensions, &mut ran);
+            }
+        }
+    });
+    ran.sort_by_key(|(index, ..)| *index);
+    if let Some(sink) = sink {
+        for (index, _, documents) in &ran {
+            if let Some(documents) = documents {
+                sink(&selected[*index].manifest.id, documents);
+            }
+        }
+    }
+    ran.into_iter().map(|(_, result, _)| result).collect()
+}
+
+/// One selected case's result, through whichever pipeline its manifest
+/// entry selects.
+fn run_selected_case<R, B>(
+    case: &LoadedCase,
+    suite: &LoadedSuite,
+    extensions: &[crate::executor::BoundExtension],
+    compiler: &Compiler<R, B>,
+    executor: &dyn CaseExecutor,
+    sink: Option<SnapshotSink<'_>>,
+) -> CaseResult
+where
+    R: scxml_validator_core::SchemaResolver,
+    B: scxml_validator_core::SchemaValidator,
+{
+    // Manual cases execute through the same pipeline as every other case;
+    // the oracle decides their disposition, never the manual marker.
+    // A W3C not-applicable declaration (recorded in the prepared errata
+    // identity) removes the case from the applicable denominator; it is
+    // never executed and never counts as passing.
+    if let Some(declaration) = &case.manifest.not_applicable {
+        result(
+            case,
+            Stage::Selection,
+            Disposition::NotApplicable,
+            Some(NOT_APPLICABLE_REASON_CODE),
+            Some(declaration.reason.clone()),
+            Vec::new(),
+            Vec::new(),
+            None,
+            0,
+            0,
+        )
+    } else if let Some(failure) = &case.manifest.preparation_failure {
+        result(
+            case,
+            Stage::Preparation,
+            Disposition::HarnessError,
+            Some(&failure.code),
+            Some(failure.message.clone()),
+            Vec::new(),
+            Vec::new(),
+            None,
+            0,
+            0,
+        )
+    } else if let Some(selected) = (suite.manifest.suite.kind == CorpusKind::OfficialIrp)
+        .then(|| external_client::select(case))
+        .flatten()
+    {
+        run_external_client_case(case, selected, suite, compiler, executor, sink)
+    } else if case.source.is_none() || case.source_path.is_none() {
+        result(
+            case,
+            Stage::Preparation,
+            Disposition::HarnessError,
+            Some("prepared-source-missing"),
+            Some("selected applicable case has no prepared SCXML artifact".into()),
+            Vec::new(),
+            Vec::new(),
+            None,
+            0,
+            0,
+        )
+    } else {
+        run_case(
+            case,
+            CaseSource::Prepared,
+            &Suite {
+                kind: suite.manifest.suite.kind,
+                default_steps: suite.manifest.default_command_budget,
+                extensions,
+            },
+            compiler,
+            executor,
+            sink,
+        )
     }
 }
 

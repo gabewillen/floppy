@@ -1315,18 +1315,19 @@ fn an_invoke_src_document_checks_the_events_it_sends_itself_against_its_schema_f
     }
 }
 
-/// A `#_parent` send whose data and raw message each fit their bounds but
-/// together exceed the event bound is the child's `error.execution`; the
-/// parent never receives it and keeps running (it used to fail the parent's
-/// machine with a fatal `invalid-input`).
+/// A `#_parent` send has no payload bound (SCXML sets none): data and the
+/// raw message it renders reach the parent whatever their size (a send of
+/// about 48 KiB used to be the child's `error.execution`, its data and raw
+/// message counted together against a 96 KiB event bound).
 #[test]
-fn a_send_over_the_event_bound_is_the_senders_error_execution() {
+fn a_large_send_reaches_the_parent() {
     let child = r##"<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="c0">
           <state id="c0">
             <onentry>
               <send target="#_parent" event="small"><param name="choices" expr="'x'.repeat(40000)"/></send>
-              <send target="#_parent" event="large"><param name="choices" expr="'x'.repeat(50000)"/></send>
+              <send target="#_parent" event="large"><param name="choices" expr="'x'.repeat(60000) + 'x'.repeat(60000)"/></send>
             </onentry>
+            <transition target="cdone"/>
             <transition event="error.execution" target="cdone"><log label="child-error"/></transition>
           </state>
           <final id="cdone"/>
@@ -1335,7 +1336,7 @@ fn a_send_over_the_event_bound_is_the_senders_error_execution() {
           <state id="r0">
             <invoke id="child" type="scxml" src="child.scx"/>
             <transition event="small"><log label="small"/></transition>
-            <transition event="large"><log label="large"/></transition>
+            <transition event="large" cond="_event.data.choices.length === 120000"><log label="large"/></transition>
             <transition event="done.invoke.child" target="pass"/>
           </state>
           <final id="pass"><onentry><log label="pass"/></onentry></final>
@@ -1363,7 +1364,7 @@ fn a_send_over_the_event_bound_is_the_senders_error_execution() {
         .map(|log| log.split_once(':').map(|(_, label)| label.to_owned()))
         .collect::<Option<Vec<_>>>()
         .expect("every log is session:label");
-    assert_eq!(labels, ["child-error", "small", "pass"]);
+    assert_eq!(labels, ["small", "large", "pass"]);
 }
 
 /// Events between sessions keep the receiving document's contracts: a

@@ -16,7 +16,7 @@
 
 use scxml_types::{DataValue, Event, FormValueSource};
 
-use crate::{DataModelError, ExecutionHost, MAX_VALUE_BYTES, XPathDataModel};
+use crate::{DataModelError, ExecutionHost, XPathDataModel};
 
 /// Result of evaluating a `<foreach array>` expression (SCXML 4.6).
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -122,8 +122,8 @@ pub fn namelist_key(location: &str) -> Option<&str> {
 
 /// Builds `_event.data` from `<param>`/`namelist` entries (§C.3.7.1): one
 /// `<data id="name">` element per entry, in order, duplicates kept. `None`
-/// when a value cannot be carried (JSON arrays, malformed markup, over
-/// [`MAX_VALUE_BYTES`]) — `error.execution`.
+/// when a value cannot be carried (JSON arrays, malformed markup) —
+/// `error.execution`.
 #[must_use]
 pub fn event_payload(entries: &[(String, DataValue)]) -> Option<DataValue> {
     crate::event_data(entries).ok()
@@ -131,16 +131,11 @@ pub fn event_payload(entries: &[(String, DataValue)]) -> Option<DataValue> {
 
 /// Value of inline `<content>` or `<data>` children (SCXML 5.6, 6.2.6):
 /// markup is an XML value (a node-set); text is kept verbatim as a string.
-/// `None` when the input exceeds [`MAX_VALUE_BYTES`].
 #[must_use]
 pub fn inline_content(content: InlineContent<'_>) -> Option<DataValue> {
     match content {
-        InlineContent::Markup(markup) => {
-            (markup.len() <= MAX_VALUE_BYTES).then(|| DataValue::Xml(markup.to_owned()))
-        }
-        InlineContent::Text(text) => {
-            (text.len() <= MAX_VALUE_BYTES).then(|| DataValue::String(text.to_owned()))
-        }
+        InlineContent::Markup(markup) => Some(DataValue::Xml(markup.to_owned())),
+        InlineContent::Text(text) => Some(DataValue::String(text.to_owned())),
     }
 }
 

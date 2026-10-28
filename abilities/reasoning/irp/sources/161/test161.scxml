@@ -6,11 +6,6 @@
     <param name="database" expr="'/memory/floppy.sqlite'"/>
   </invoke>
   <invoke id="reasoning" type="scxml" src="../../../reasoning.scx">
-    <param name="turn" expr="1"/>
-    <param name="stimulus" expr='{"event": "bot.input", "data": {"observation": {"event": "text", "data": "say hi"}}, "source": "gabe"}'/>
-    <param name="focus" expr="null"/>
-    <param name="focus_candidates" expr="[]"/>
-    <param name="choices" expr="[]"/>
     <param name="model" expr="'mock-model'"/>
     <param name="memory" expr="'#_scxml_' + _sessionid + '.memory'"/>
   </invoke>
@@ -19,7 +14,10 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
-    <transition event="done.invoke.reasoning" cond='_event.data.turn === 1 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.failed === true &amp;&amp; _event.data.reason === "the reasoning has no choices to select from"' target="step1"/>
+    <onentry>
+      <send event="bot.ability.processing.input" target="#_reasoning"><content expr='({turn: 1, stimulus: {"event": "bot.input", "data": {"observation": {"event": "text", "data": "say hi"}}, "source": "gabe"}, focus: null, focus_candidates: [], choices: [], held: [], environment: null, self: null, acted: [], recent: [], max_context_tokens: null, completion_reserve_tokens: 0, bytes_per_token: 3})'/></send>
+    </onentry>
+    <transition event="bot.ability.processing.output" cond='_event.data.turn === 1 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.failed === true &amp;&amp; _event.data.reason === "the reasoning has no choices to select from"' target="step1"/>
   </state>
   <state id="step1">
     <transition target="pass"/>

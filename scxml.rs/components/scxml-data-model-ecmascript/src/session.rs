@@ -61,9 +61,8 @@ use scxml_types::{DataValue, Event, FiniteNumber};
 use crate::{
     Answerer, BOOTSTRAP, BUILTIN_GUARD, BoundedHostHooks, DataModelError, ExecutionHost, HostQuery,
     HostReply, LOG_TEXT, MAX_FOREACH_FRAMES, MAX_FOREACH_ITEMS, MAX_IN_QUERIES,
-    MAX_LOOP_ITERATIONS, MAX_NESTING_DEPTH, MAX_RECURSION_DEPTH, MAX_STACK_SIZE, MAX_VALUE_BYTES,
-    SystemContext, bounded, classify_js_error, dom, event_to_source, to_source, validate_event,
-    validate_value,
+    MAX_LOOP_ITERATIONS, MAX_NESTING_DEPTH, MAX_RECURSION_DEPTH, MAX_STACK_SIZE, SystemContext,
+    classify_js_error, dom, event_to_source, to_source, validate_event, validate_value,
 };
 
 /// Most parsed programs one realm caches.
@@ -223,7 +222,7 @@ fn random(_this: &JsValue, _arguments: &[JsValue], _context: &mut Context) -> Js
 /// argument's ECMAScript `ToString` names the state, answered by the
 /// operation's host (once per id per operation: the configuration does not
 /// change while an operation runs). An id longer than
-/// [`crate::MAX_VALUE_BYTES`] names no state. More than
+/// [`scxml_types::MAX_NAME_BYTES`] names no state. More than
 /// [`crate::MAX_IN_QUERIES`] distinct ids (a wasm build's bound), or a host
 /// failure, fails the operation.
 fn in_state(_this: &JsValue, arguments: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
@@ -233,7 +232,7 @@ fn in_state(_this: &JsValue, arguments: &[JsValue], context: &mut Context) -> Js
         .unwrap_or_default()
         .to_string(context)?
         .to_std_string_escaped();
-    if id.len() > MAX_VALUE_BYTES {
+    if id.len() > scxml_types::MAX_NAME_BYTES {
         return Ok(JsValue::from(false));
     }
     let known = OPERATION.with(|operation| {
@@ -779,9 +778,11 @@ impl Session {
         context
             .eval(Source::from_bytes(BOOTSTRAP))
             .map_err(|_| DataModelError::Execution)?;
-        // The guard takes its bounds as arguments: no bound is a global.
+        // The guard takes its bounds as arguments: no bound is a global. A
+        // result's size has none (SCXML sets none), so its size bound is
+        // infinite and only nesting is bounded.
         let bounds = [
-            JsValue::from(u32::try_from(MAX_VALUE_BYTES).map_err(|_| DataModelError::Execution)?),
+            JsValue::from(f64::INFINITY),
             JsValue::from(u32::try_from(MAX_NESTING_DEPTH).map_err(|_| DataModelError::Execution)?),
         ];
         context
@@ -1213,15 +1214,13 @@ impl Session {
     }
 
     /// The portable value of `value`, without lossy coercion and without
-    /// running user code: a primitive (a finite number, a string of at most
-    /// [`MAX_VALUE_BYTES`]), the absent marker, an XML document (its XML
-    /// text, B.2.1), or a JSON tree ([`Self::json_text`]).
+    /// running user code: a primitive (a finite number, a string), the
+    /// absent marker, an XML document (its XML text, B.2.1), or a JSON tree
+    /// ([`Self::json_text`]). No value has a byte bound (SCXML sets none).
     ///
     /// # Errors
     ///
-    /// [`DataModelError::UnsupportedValue`] for any other value;
-    /// [`DataModelError::InvalidInput`] for text longer than
-    /// [`MAX_VALUE_BYTES`].
+    /// [`DataModelError::UnsupportedValue`] for any other value.
     pub(crate) fn portable_value(&mut self, value: &JsValue) -> Result<DataValue, DataModelError> {
         if value.is_undefined() {
             return Ok(DataValue::Undefined);
@@ -1241,7 +1240,6 @@ impl Session {
             let v = v
                 .to_std_string()
                 .map_err(|_| DataModelError::UnsupportedValue)?;
-            bounded(&v, MAX_VALUE_BYTES)?;
             return Ok(DataValue::String(v));
         }
         let object = value.as_object().ok_or(DataModelError::UnsupportedValue)?;
@@ -1251,7 +1249,6 @@ impl Session {
             return Ok(DataValue::Absent);
         }
         if let Some(xml) = self.xml_of(value)? {
-            bounded(&xml, MAX_VALUE_BYTES)?;
             if !dom::is_markup(&xml) {
                 return Err(DataModelError::UnsupportedValue);
             }
@@ -1262,7 +1259,6 @@ impl Session {
         match self.json_text(&object, &mut text, &mut path) {
             Json::Done => {}
             Json::Unsupported => return Err(DataModelError::UnsupportedValue),
-            Json::TooLong => return Err(DataModelError::InvalidInput),
         }
         if object.is_array() {
             DataValue::canonical_json_array(&text).map_err(|_| DataModelError::UnsupportedValue)
@@ -1409,17 +1405,10 @@ impl Session {
             if enumerable {
                 first = false;
             }
-            if text.len() > MAX_VALUE_BYTES {
-                return Json::TooLong;
-            }
         }
         text.push(if array { ']' } else { '}' });
         path.pop();
-        if text.len() > MAX_VALUE_BYTES {
-            Json::TooLong
-        } else {
-            Json::Done
-        }
+        Json::Done
     }
 
     /// Appends the JSON text of one member value (see [`Self::json_text`]).
@@ -1469,7 +1458,6 @@ impl Session {
             .ok_or(DataModelError::UnsupportedValue)?
             .to_std_string()
             .map_err(|_| DataModelError::UnsupportedValue)?;
-        bounded(&text, MAX_VALUE_BYTES)?;
         Ok(text)
     }
 
@@ -1689,7 +1677,6 @@ impl Pristine {
 enum Json {
     Done,
     Unsupported,
-    TooLong,
 }
 
 /// The ECMAScript value of a primitive `value`: exactly the value its

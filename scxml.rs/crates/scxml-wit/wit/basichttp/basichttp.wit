@@ -162,8 +162,7 @@ interface types {
     /// string literal"; XML white space, as `XPath` 1.0 `normalize-space()`);
     /// `absent` for an empty message.
     data: data-value,
-    /// The message as received: request line, headers, blank line, body
-    /// (at most 65536 bytes).
+    /// The message as received: request line, headers, blank line, body.
     raw: string,
   }
 

@@ -37,6 +37,12 @@
   as bot.ability.intuition.input and takes bot.ability.intuition.output
   for the turn in hand, and leaving running_decision sends it
   bot.ability.processing.cancel, which ends a decision still in flight.
+  The tiers intuition and reasoning are held likewise (decision D269):
+  each is reasoning.scx invoked once in turns (intuition with the tier
+  intuition and intuition_model), sent the turn as
+  bot.ability.processing.input, answering bot.ability.processing.output
+  (taken from that invoke id for the turn in hand), and cancelled with
+  bot.ability.processing.cancel when its running state is left.
   Its confidence tuner state ({mean, var, n}) and bytes_per_token travel
   in each input and are kept from its output.
 
@@ -386,6 +392,20 @@
        Cognition holds its Decision): each turn that reaches it is a
        bot.ability.intuition.input. -->
   <invoke id="decision" type="scxml" src="../intuition/intuition.scx"/>
+  <!-- The deliberative tiers, held likewise (mosfet.py's Cognition holds
+       its Intuition and Reasoning): each turn that reaches one is a
+       bot.ability.processing.input. -->
+  <invoke id="intuition" type="scxml" src="../reasoning/reasoning.scx">
+    <param name="tier" expr="'intuition'"/>
+    <param name="model" expr="intuition_model"/>
+    <param name="memory" expr="memory"/>
+    <param name="embedding" expr="embedding"/>
+  </invoke>
+  <invoke id="reasoning" type="scxml" src="../reasoning/reasoning.scx">
+    <param name="model" expr="model"/>
+    <param name="memory" expr="memory"/>
+    <param name="embedding" expr="embedding"/>
+  </invoke>
   <!-- Waits for the body's turn, awake and then at rest. -->
   <state id="idle" initial="awake">
     <onentry>
@@ -632,52 +652,56 @@
         <send idlocation="ceiling_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="ceilingDelay()">
           <param name="turn" expr="turn"/>
         </send>
+        <send event="bot.ability.processing.input" target="#_intuition">
+          <param name="turn" expr="turn"/>
+          <param name="stimulus" expr="stimulus"/>
+          <param name="focus" expr="focus"/>
+          <param name="focus_candidates" expr="focus_candidates"/>
+          <param name="choices" expr="intuitionChoices()"/>
+          <param name="held" expr="tier_held"/>
+          <param name="environment" expr="environment"/>
+          <param name="acted" expr="actedFact()"/>
+          <param name="self" expr="selfFact()"/>
+          <param name="recent" expr="recent_turns"/>
+          <param name="max_context_tokens" expr="contextTokens()"/>
+          <param name="completion_reserve_tokens" expr="reserveTokens()"/>
+          <param name="bytes_per_token" expr="intuition_bytes_per_token"/>
+        </send>
       </onentry>
+      <!-- Leaving the turn's intuition unanswered (cancelled or timed out)
+           ends it; once answered, the intuition is idle and drops this. -->
       <onexit>
         <cancel sendidexpr="hop_timer"/>
         <cancel sendidexpr="ceiling_timer"/>
+        <send event="bot.ability.processing.cancel" target="#_intuition">
+          <content expr="({})"/>
+        </send>
       </onexit>
-      <invoke id="intuition" type="scxml" src="../reasoning/reasoning.scx">
-        <param name="tier" expr="'intuition'"/>
-        <param name="turn" expr="turn"/>
-        <param name="stimulus" expr="stimulus"/>
-        <param name="focus" expr="focus"/>
-        <param name="focus_candidates" expr="focus_candidates"/>
-        <param name="choices" expr="intuitionChoices()"/>
-        <param name="held" expr="tier_held"/>
-        <param name="environment" expr="environment"/>
-        <param name="acted" expr="actedFact()"/>
-        <param name="self" expr="selfFact()"/>
-        <param name="recent" expr="recent_turns"/>
-        <param name="max_context_tokens" expr="contextTokens()"/>
-        <param name="completion_reserve_tokens" expr="reserveTokens()"/>
-        <param name="bytes_per_token" expr="intuition_bytes_per_token"/>
-        <param name="model" expr="intuition_model"/>
-        <param name="memory" expr="memory"/>
-        <param name="embedding" expr="embedding"/>
-      </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="../schemas/bot.ability.cognition.cancel.json"
                   cond="isCurrentTurn(_event)" target="cancelling_intuition"/>
-      <transition event="generate.progress">
+      <transition event="generate.progress" cond="_event.invokeid === 'intuition'">
         <cancel sendidexpr="hop_timer"/>
         <send idlocation="hop_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="hopDelay()">
           <param name="turn" expr="turn"/>
         </send>
       </transition>
-      <transition event="done.invoke.intuition" cond="isHandled(_event)" target="completing">
+      <transition event="bot.ability.processing.output" event:schema="../schemas/bot.ability.processing.output.json"
+                  cond="_event.invokeid === 'intuition' &amp;&amp; isHandled(_event)" target="completing">
         <log label="cognition.stage" expr="'intuition handled'"/>
         <assign location="intuition_bytes_per_token" expr="intuitionBytesPerTokenAfter(_event)"/>
         <assign location="selected" expr="handledOutput(_event)"/>
       </transition>
       <!-- It selected the handoff: the turn goes on to reasoning, carrying
            what it sent first. -->
-      <transition event="done.invoke.intuition" cond="isUnhandled(_event)" target="running_reasoning">
+      <transition event="bot.ability.processing.output" event:schema="../schemas/bot.ability.processing.output.json"
+                  cond="_event.invokeid === 'intuition' &amp;&amp; isUnhandled(_event)" target="running_reasoning">
         <log label="cognition.stage" expr="stageLog('intuition unhandled', _event)"/>
         <assign location="intuition_bytes_per_token" expr="intuitionBytesPerTokenAfter(_event)"/>
         <assign location="acted" expr="actedAfter(_event)"/>
       </transition>
       <!-- A failing intuition hands the same turn on (decision D140). -->
-      <transition event="done.invoke.intuition" cond="matchesStageOutput(_event)" target="running_reasoning">
+      <transition event="bot.ability.processing.output" event:schema="../schemas/bot.ability.processing.output.json"
+                  cond="_event.invokeid === 'intuition' &amp;&amp; matchesStageOutput(_event)" target="running_reasoning">
         <log label="cognition.cascaded" expr="cascadedLog(stageFailure(_event))"/>
         <assign location="intuition_bytes_per_token" expr="intuitionBytesPerTokenAfter(_event)"/>
       </transition>
@@ -698,44 +722,49 @@
         <send idlocation="ceiling_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="ceilingDelay()">
           <param name="turn" expr="turn"/>
         </send>
+        <send event="bot.ability.processing.input" target="#_reasoning">
+          <param name="turn" expr="turn"/>
+          <param name="stimulus" expr="stimulus"/>
+          <param name="focus" expr="focus"/>
+          <param name="focus_candidates" expr="focus_candidates"/>
+          <param name="choices" expr="tier_choices"/>
+          <param name="held" expr="[]"/>
+          <param name="environment" expr="environment"/>
+          <param name="acted" expr="actedFact()"/>
+          <param name="self" expr="selfFact()"/>
+          <param name="recent" expr="recent_turns"/>
+          <param name="max_context_tokens" expr="contextTokens()"/>
+          <param name="completion_reserve_tokens" expr="reserveTokens()"/>
+          <param name="bytes_per_token" expr="bytes_per_token"/>
+        </send>
       </onentry>
+      <!-- Leaving the turn's reasoning unanswered (cancelled or timed out)
+           ends it; once answered, the reasoning is idle and drops this. -->
       <onexit>
         <cancel sendidexpr="hop_timer"/>
         <cancel sendidexpr="ceiling_timer"/>
+        <send event="bot.ability.processing.cancel" target="#_reasoning">
+          <content expr="({})"/>
+        </send>
       </onexit>
-      <invoke id="reasoning" type="scxml" src="../reasoning/reasoning.scx">
-        <param name="turn" expr="turn"/>
-        <param name="stimulus" expr="stimulus"/>
-        <param name="focus" expr="focus"/>
-        <param name="focus_candidates" expr="focus_candidates"/>
-        <param name="choices" expr="tier_choices"/>
-        <param name="environment" expr="environment"/>
-        <param name="acted" expr="actedFact()"/>
-        <param name="self" expr="selfFact()"/>
-        <param name="recent" expr="recent_turns"/>
-        <param name="max_context_tokens" expr="contextTokens()"/>
-        <param name="completion_reserve_tokens" expr="reserveTokens()"/>
-        <param name="bytes_per_token" expr="bytes_per_token"/>
-        <param name="model" expr="model"/>
-        <param name="memory" expr="memory"/>
-        <param name="embedding" expr="embedding"/>
-      </invoke>
       <transition event="bot.ability.cognition.cancel" event:schema="../schemas/bot.ability.cognition.cancel.json"
                   cond="isCurrentTurn(_event)" target="cancelling_reasoning"/>
       <!-- Reasoning's streamed reply is arriving: the inactivity bound
            starts, or starts over (decision D101). -->
-      <transition event="generate.progress">
+      <transition event="generate.progress" cond="_event.invokeid === 'reasoning'">
         <cancel sendidexpr="hop_timer"/>
         <send idlocation="hop_timer" event="bot.ability.cognition.child.hop.timed_out" delayexpr="hopDelay()">
           <param name="turn" expr="turn"/>
         </send>
       </transition>
-      <transition event="done.invoke.reasoning" cond="isHandled(_event)" target="completing">
+      <transition event="bot.ability.processing.output" event:schema="../schemas/bot.ability.processing.output.json"
+                  cond="_event.invokeid === 'reasoning' &amp;&amp; isHandled(_event)" target="completing">
         <log label="cognition.stage" expr="'reasoning handled'"/>
         <assign location="bytes_per_token" expr="bytesPerTokenAfter(_event)"/>
         <assign location="selected" expr="handledOutput(_event)"/>
       </transition>
-      <transition event="done.invoke.reasoning" cond="matchesStageOutput(_event)" target="failing">
+      <transition event="bot.ability.processing.output" event:schema="../schemas/bot.ability.processing.output.json"
+                  cond="_event.invokeid === 'reasoning' &amp;&amp; matchesStageOutput(_event)" target="failing">
         <assign location="bytes_per_token" expr="bytesPerTokenAfter(_event)"/>
         <assign location="failure" expr="stageFailure(_event)"/>
         <assign location="step" expr="failedStep(failure)"/>

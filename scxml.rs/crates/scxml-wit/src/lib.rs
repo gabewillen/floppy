@@ -374,11 +374,7 @@ mod tests {
         let ecmascript = include_str!("../../../components/scxml-data-model-ecmascript/src/lib.rs");
         let xpath = include_str!("../../../components/scxml-data-model-xpath/src/lib.rs");
         let null = include_str!("../../../components/scxml-data-model-null/src/lib.rs");
-        for name in [
-            "MAX_SOURCE_BYTES",
-            "MAX_EXPRESSION_BYTES",
-            "MAX_VALUE_BYTES",
-        ] {
+        for name in ["MAX_SOURCE_BYTES", "MAX_EXPRESSION_BYTES"] {
             let null_value = literal_usize_const(null, name);
             assert_eq!(literal_usize_const(ecmascript, name), null_value, "{name}");
             assert_eq!(literal_usize_const(xpath, name), null_value, "{name}");
@@ -391,11 +387,10 @@ mod tests {
             &docs,
             &[
                 format!(
-                    "Bundled-provider bounds: the `initialize` declarations' placeholder encoding at most {} bytes, each expression, location, or `add-attribute` name at most {} bytes, each script at most {} bytes, each text/JSON/XML value at most {} bytes; the ECMAScript provider also bounds its data locations (portable values, functions, and opaque values together) to {} and each location name to {} bytes: a call that would commit more fails and changes no data.",
+                    "Bundled-provider bounds: the `initialize` declarations' placeholder encoding at most {} bytes, each expression, location, or `add-attribute` name at most {} bytes, each script at most {} bytes; no text/JSON/XML value has a byte bound; the ECMAScript provider also bounds its data locations (portable values, functions, and opaque values together) to {} and each location name to {} bytes: a call that would commit more fails and changes no data.",
                     scxml_data_model_null::MAX_SOURCE_BYTES,
                     literal_usize_const(null, "MAX_EXPRESSION_BYTES"),
                     literal_usize_const(ecmascript, "MAX_SCRIPT_BYTES"),
-                    scxml_data_model_null::MAX_VALUE_BYTES,
                     literal_usize_const(ecmascript, "MAX_VARIABLES"),
                     scxml_types::MAX_NAME_BYTES,
                 ),

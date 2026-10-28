@@ -19,8 +19,8 @@ Last updated: 2026-10-26.
   `bot.ability.processing.cancel`). First speech on the release probe:
   13.9 / 9.1 / 9.1 s before, 12.9 / 8.9 / 8.4 s after D264. Still
   restarted per turn (`/mnt/project-files/floppy-perf/long-lived-invokes.md`):
-  cognition's autonomy, intuition and reasoning (the decision layer is
-  long-lived, D268), which build on
+  cognition's autonomy (the decision layer and the intuition and reasoning
+  tiers are long-lived, D268 and D269), which builds on
   the long-lived memory's addressing (PR #130); then the turn detector and
   the candidate loop folded into states. Embedding is long-lived beside
   the memory (D267, addressed like it).

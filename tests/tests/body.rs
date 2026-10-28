@@ -234,7 +234,11 @@ fn event(run: &mut Run, name: &str, data: &Json) {
 }
 
 /// Closes the run, once the bot has settled, and asserts its pinned trace.
+/// A reply can start just after the record a test waited for, so the run is
+/// first read until it is quiet (not before an input: that would part
+/// percepts a test sends together).
 fn close(run: Run, test: &str) -> Finished {
+    run.quiesce(Duration::from_millis(500));
     settle(&run);
     let finished = run.close(WAIT);
     trace::assert_trace(test, &finished.all, &[]);
@@ -300,6 +304,9 @@ fn an_ability_that_is_never_ready_times_the_activation_out() {
             .any(|(label, _)| label == "double.exit"),
         "{records:?}"
     );
+    // Supervision restarts the bot until it gives up; closing sooner would
+    // pin how far it got.
+    run.until(WAIT, label_is("supervision.exhausted"));
     close(
         run,
         "an_ability_that_is_never_ready_times_the_activation_out",
@@ -660,7 +667,7 @@ fn a_turn_takes_at_most_thirty_two_participants() {
 }
 
 #[test]
-fn a_turn_whose_input_is_over_the_event_bound_fails() {
+fn a_turn_whose_input_passes_64_kib_is_answered() {
     let body = layout(
         &Cognition::Double("'ready'"),
         &[("processing_timeout_ms", "1500")],
@@ -670,13 +677,13 @@ fn a_turn_whose_input_is_over_the_event_bound_fails() {
     // The percepts follow at once (see
     // a_turn_takes_at_most_thirty_two_participants).
     event(&mut run, "bot.input", &input("hang", "first"));
-    // Two percepts of 32000 bytes fit a turn's 65536, but not with the
-    // turn's choices and environment in one 64 KiB event.
+    // Two percepts of 32000 bytes, with the turn's choices and environment,
+    // pass 64 KiB in one event, which has no size bound (SCXML sets none).
     let big = "x".repeat(32000);
     event(&mut run, "bot.input", &input("reply", &big));
     event(&mut run, "bot.input", &input("reply", &big));
     let records = run.until(WAIT, |record| {
-        label_is("bot.processing.failed")(record)
+        label_is("floppy.output")(record)
             && record["text"]
                 .as_str()
                 .is_some_and(|text| text.contains(r#""turn":2"#))
@@ -685,17 +692,8 @@ fn a_turn_whose_input_is_over_the_event_bound_fails() {
         .into_iter()
         .map(|(_, text)| serde_json::from_str(&text).expect("JSON"))
         .collect();
-    assert_eq!(failed.len(), 2, "{failed:?}");
-    assert!(
-        failed[1]["message"]
-            .as_str()
-            .is_some_and(|message| message.starts_with("the turn's input could not be sent: ")),
-        "{failed:?}"
-    );
-    // The bot is not stuck: it takes the next turn.
-    event(&mut run, "bot.input", &input("reply", "next"));
-    run.until(WAIT, label_is("floppy.output"));
-    close(run, "a_turn_whose_input_is_over_the_event_bound_fails");
+    assert_eq!(failed.len(), 1, "only the hung turn fails: {failed:?}");
+    close(run, "a_turn_whose_input_passes_64_kib_is_answered");
 }
 
 #[test]
@@ -1331,6 +1329,9 @@ fn the_listenings_products_are_turn_stimuli() {
     let silence = json!({"audio": "media/silence.wav", "media_type": "audio/wav"});
     event(&mut run, "environment.sound", &silence);
     run.until(WAIT, label_is("bot.processing.completed"));
+    // The reply can start just after the turn completes: read the run until
+    // it is quiet, so the ring waits for it to finish.
+    run.quiesce(Duration::from_millis(500));
     // Labelled non-speech: a turn whose stimulus is the environment.sound.
     let ring = json!({"audio": "media/ring.wav", "kind": "phone.ringing"});
     event(&mut run, "environment.sound", &ring);

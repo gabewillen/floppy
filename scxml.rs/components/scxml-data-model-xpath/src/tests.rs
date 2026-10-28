@@ -221,6 +221,7 @@ fn event_is_unbound_without_an_event_and_complete_with_one() {
 
 #[test]
 fn event_data_follows_the_cr_interpretation_order() {
+    const LARGE: usize = 4 * 65_536;
     // SCXML 1.0 CR 2014-03-13 §C.3.7.1: key-value pairs become `<data id>`
     // children; "Otherwise (i.e., if the content does not consist of
     // key-value pairs), if the Processor can interpret the content is a
@@ -275,30 +276,22 @@ fn event_data_follows_the_cr_interpretation_order() {
         DataValue::JsonObject(r#"{"k":"  a  b ","list":[1,2],"n":null}"#.into()),
         "$_event/data/data[@id='k'] = '  a  b ' and $_event/data/data[@id='list'] = '[1,2]' and count($_event/data/data[@id='n']/node()) = 0",
     );
-    // Content is inserted as text nodes, never re-parsed as markup, so a
-    // payload at the event-data bound whose escaped markup would exceed
-    // one value's bound still binds.
+    // Content is inserted as text nodes, never re-parsed as markup, and has
+    // no byte bound (SCXML sets none), so a large payload whose escaped
+    // markup is larger still binds.
     check(
-        DataValue::String("<".repeat(scxml_types::MAX_EVENT_DATA_BYTES)),
-        &format!(
-            "string-length($_event/data) = {}",
-            scxml_types::MAX_EVENT_DATA_BYTES
-        ),
+        DataValue::String("<".repeat(LARGE)),
+        &format!("string-length($_event/data) = {LARGE}"),
     );
     check(
-        DataValue::JsonObject(format!(
-            r#"{{"k":"{}"}}"#,
-            "&".repeat(scxml_types::MAX_EVENT_DATA_BYTES - 8)
-        )),
-        &format!(
-            "string-length($_event/data/data[@id='k']) = {}",
-            scxml_types::MAX_EVENT_DATA_BYTES - 8
-        ),
+        DataValue::JsonObject(format!(r#"{{"k":"{}"}}"#, "&".repeat(LARGE - 8))),
+        &format!("string-length($_event/data/data[@id='k']) = {}", LARGE - 8),
     );
 }
 
 #[test]
 fn every_event_data_format_is_handled() {
+    const LARGE: usize = 4 * 65_536;
     // SCXML 1.0 C.1: error.communication is for data "the receiving
     // Processor cannot handle". SCXML 1.0 CR 2014-03-13 §C.3.7.1 ends its
     // interpretation order in "Otherwise, the Processor MUST treat the
@@ -314,7 +307,7 @@ fn every_event_data_format_is_handled() {
         DataValue::Xml("<open>  x".into()),
         DataValue::JsonArray("[1,[2,{\"k\":3}]]".into()),
         DataValue::JsonObject(r#"{"k":[1,2],"o":{"p":null}}"#.into()),
-        DataValue::String("<".repeat(scxml_types::MAX_EVENT_DATA_BYTES)),
+        DataValue::String("<".repeat(LARGE)),
     ] {
         assert!(accepts_event_data(&data), "{data:?}");
     }

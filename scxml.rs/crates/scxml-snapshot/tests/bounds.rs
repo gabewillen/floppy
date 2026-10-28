@@ -20,7 +20,6 @@ use sha2::Digest as _;
 /// Largest JSON integer a document may hold (2^53 − 1).
 const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
 const NAME: usize = scxml_types::MAX_NAME_BYTES;
-const METADATA: usize = scxml_types::MAX_EVENT_METADATA_BYTES;
 
 fn digest(fill: char) -> String {
     std::iter::repeat_n(fill, 64).collect()
@@ -456,26 +455,22 @@ fn event_bounds() {
     assert_bound("event name", NAME, &format!("{at}/name"), &|d, n| {
         first_event(d).name = "e".repeat(n);
     });
-    for key in ["origin", "origintype", "sendid", "invokeid"] {
-        assert_bound(key, METADATA, &format!("{at}/{key}"), &|d, n| {
-            let text = Some("m".repeat(n));
-            let event = first_event(d);
-            match key {
-                "origin" => event.origin = text,
-                "origintype" => event.origintype = text,
-                "sendid" => event.sendid = text,
-                _ => event.invokeid = text,
-            }
-        });
-    }
-    assert_bound("raw", MAX_VALUE_BYTES, &format!("{at}/raw"), &|d, n| {
-        first_event(d).raw = Some("r".repeat(n));
-    });
-    assert_bound(
-        "event data",
-        MAX_VALUE_BYTES,
-        &format!("{at}/data/value"),
-        &|d, n| first_event(d).data = Value::Text("t".repeat(n)),
+    // Event metadata, raw, and data have no byte bound (SCXML sets none).
+    let large = 4 * 65_536;
+    assert_eq!(
+        bound_pointers(
+            &|d, n| {
+                let event = first_event(d);
+                event.origin = Some("m".repeat(n));
+                event.origintype = Some("m".repeat(n));
+                event.sendid = Some("m".repeat(n));
+                event.invokeid = Some("m".repeat(n));
+                event.raw = Some("r".repeat(n));
+                event.data = Value::Text("t".repeat(n));
+            },
+            large
+        ),
+        Vec::<String>::new()
     );
     assert_bound(
         "traceparent",
@@ -505,25 +500,19 @@ fn pending_send_bounds() {
         "/snapshot/root/pending_sends",
         &|d, n| *pending(d) = ids("sendid_", n).iter().map(|id| send(id)).collect(),
     );
-    assert_bound(
-        "target",
-        METADATA,
-        "/snapshot/root/pending_sends/0/target",
-        &|d, n| {
-            let mut entry = send("sendid_0");
-            entry.target = Some("t".repeat(n));
-            *pending(d) = vec![entry];
-        },
-    );
-    assert_bound(
-        "type",
-        METADATA,
-        "/snapshot/root/pending_sends/0/type",
-        &|d, n| {
-            let mut entry = send("sendid_0");
-            entry.send_type = Some("t".repeat(n));
-            *pending(d) = vec![entry];
-        },
+    let large = 4 * 65_536;
+    assert_eq!(
+        bound_pointers(
+            &|d, n| {
+                let mut entry = send("sendid_0");
+                entry.target = Some("t".repeat(n));
+                entry.send_type = Some("t".repeat(n));
+                *pending(d) = vec![entry];
+            },
+            large
+        ),
+        Vec::<String>::new(),
+        "a pending send's target and type have no byte bound"
     );
     assert_bound(
         "processor message event",
@@ -700,15 +689,17 @@ fn invocation_bounds() {
             root(d).invocations = Some(children);
         },
     );
-    assert_bound(
-        "invocation type",
-        METADATA,
-        "/snapshot/root/invocations/0/type",
-        &|d, n| {
-            let mut invocation = child(d, 0);
-            invocation.invoke_type = "t".repeat(n);
-            root(d).invocations = Some(vec![invocation]);
-        },
+    assert_eq!(
+        bound_pointers(
+            &|d, n| {
+                let mut invocation = child(d, 0);
+                invocation.invoke_type = "t".repeat(n);
+                root(d).invocations = Some(vec![invocation]);
+            },
+            4 * 65_536
+        ),
+        Vec::<String>::new(),
+        "an invocation type has no byte bound"
     );
 }
 

@@ -137,4 +137,10 @@
       <start uri="232/test232.scxml"/>
     </test>
   </assert>
+  <assert id="cognition-15" specnum="15" specid="#cognition-15">
+    <![CDATA[Each long-lived stage takes its turn as an event, which has no size bound (SCXML sets none), so every recent turn is sent with the rest of the input (decision D269): a turn whose recent turns and stimulus together pass 64 KiB is answered.]]>
+    <test id="240" conformance="mandatory" manual="false">
+      <start uri="240/test240.scxml"/>
+    </test>
+  </assert>
 </assertions>

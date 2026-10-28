@@ -1,7 +1,8 @@
 # The reasoning's statements and cases (tests/irp/harness.py writes them).
 
 S = suite
-DONE = "done.invoke.reasoning"
+INPUT = "bot.ability.processing.input"
+DONE = "bot.ability.processing.output"
 CHAT = "/chat/completions"
 IGNORE = "bot.ability.cognition.ignore"
 RESPOND = "bot.ability.communication.respond"
@@ -64,7 +65,7 @@ SKIP = {"event": IGNORE, "data": {}, "reason": "nothing to say", "target": OWN}
 SAID = expect(RESPOND, "_event.data.parts.length === 1 && _event.data.parts[0].words === 'Hi! I am floppy.'")
 
 
-S.statement(1, "It runs one turn (the `<param>`s turn, stimulus, focus, focus_candidates, choices, model and memory) and ends: its `<donedata>`, received as `done.invoke.reasoning`, is `{turn, handled: true, selected}` or `{turn, handled: false, failed: true, reason}`, turn the given turn.")
+S.statement(1, "Each `bot.ability.processing.input` (turn, stimulus, focus, focus_candidates, choices, held, environment, self, acted, recent, max_context_tokens, completion_reserve_tokens and bytes_per_token; its `<param>`s are model, tier, memory and embedding) is one turn, answered by one `bot.ability.processing.output` to the parent: `{turn, handled: true, selected}` or `{turn, handled: false, failed: true, reason}`, turn the given turn.")
 S.statement(2, "With no choices it fails the turn without a model call: reason `the reasoning has no choices to select from`.")
 S.statement(3, "With choices it makes one generate call offering the dispatch tool, which allows only the offered events (with their targets); the events of its dispatch calls, in order, are returned as the model gave them with `handled: true`, each `{event, data, reason, target}`, `bot.ability.cognition.ignore` selections included; an empty selection is handled with nothing selected.")
 S.statement(4, "A generate call that fails fails the turn with reason `the reasoning failed (<code>)`, the generate service's failure code: `status` for an error status, `truncated` for a reply cut short, `malformed` for an answer that is no chat completion. A selection the dispatch tool refuses (`schema-mismatch`, or `not-json`) is repaired first (decision D142): the call is made again with the rejection as the prompt's feedback, at most twice, and the same rejection twice running, or one once the repairs are spent, fails the turn with reason `Selection rejected: <message>` (the rejection's message, else its code).")
@@ -76,8 +77,33 @@ S.statement(8, "Its model call streams its reply when the run's `FLOPPY_STREAM` 
 
 S.statement(9, "As the intuition tier (the `<param>` tier `intuition`, decision D144) it may select the deliberative handoff, `bot.ability.reasoning.input`, among its choices: the handoff is never sent, the other selections are sent in order, and it ends `{turn, handled: false, reason: \"handoff\", acted}`, acted what was sent; a selection without the handoff is handled as reasoning's is, and its failures name the tier (`the intuition failed (<code>)`).")
 
+# The <param>s the cognition invokes the stage with; every other name is
+# the turn's, sent as its bot.ability.processing.input (the cognition's
+# defaults where a case names none).
+STATIC = ("model", "tier", "memory")
+TURN_DEFAULTS = [("held", "[]"), ("environment", "null"), ("self", "null"), ("acted", "[]"), ("recent", "[]"),
+                 ("max_context_tokens", "null"), ("completion_reserve_tokens", "0"), ("bytes_per_token", "3")]
+
+
+def as_input(params):
+    """The stage's <param>s of `params`, and the input step of the rest."""
+    given = dict((name, expr) for name, expr in params if name not in STATIC)
+    for name, expr in TURN_DEFAULTS:
+        given.setdefault(name, expr)
+    return ([p for p in params if p[0] in STATIC],
+            send(INPUT, "({" + ", ".join(f"{name}: {expr}" for name, expr in given.items()) + "})"))
+
+
+_original_case = S.case
+
+
+def _turn_case(test_id, number, comment, steps, params=(), **kwargs):
+    static, step = as_input(params)
+    return _original_case(test_id, number, comment, [step] + list(steps), params=static, **kwargs)
+
+
 # Every other case drops the streamed reply's progress (statement 8).
-_case = S.case
+_case = _turn_case
 
 
 def _case_dropping_progress(*args, ignore=(), **kwargs):
@@ -140,12 +166,12 @@ S.case(140, 5, "a stimulus with over 4096 collection items fails the turn withou
        params=[p for p in turn() if p[0] != "stimulus"]
        + [("stimulus", "({event: 'bot.input', source: 'gabe', data: {items: Array.from({length: 4097}, (_, i) => i)}})")],
        backend=selection(SAY))
-# A stimulus whose items render to about 30 KiB (from about 6 KiB of
-# params) and turns of 40 KiB: the prompt would pass a generate call's
-# 64 KiB, though every param is under it.
-LONG_STIMULUS = ("stimulus", "({event: 'bot.input', source: 'gabe', data: {items: Array.from({length: 1300}, () => 'a')}})")
+# A stimulus whose items render to about 37 KiB (from about 6 KiB of
+# input) and turns of 30 KiB: the prompt would pass a generate call's
+# 64 KiB, though the input is under the event bound.
+LONG_STIMULUS = ("stimulus", "({event: 'bot.input', source: 'gabe', data: {items: Array.from({length: 1600}, () => 'a')}})")
 LONG_TURNS = ("recent", "Array.from({length: 4}, (_, i) => ({at: '2026-07-07T12:00:00Z', direction: 'heard',"
-                        " text: 'turn-' + i + '-' + 'w'.repeat(10000)}))")
+                        " text: 'turn-' + i + '-' + 'w'.repeat(7500)}))")
 S.case(141, 5, "recalled turns that would carry the prompt past a generate call's bound are trimmed, and the turn is reasoned.",
        [SAID, expect(DONE, "_event.data.handled === true && _event.data.selected.length === 1")],
        params=[p for p in turn() if p[0] != "stimulus"] + [LONG_STIMULUS, LONG_TURNS], backend=selection(SAY))
@@ -199,3 +225,14 @@ S.case(182, 9, "an intuition whose model answers 500 fails as the intuition.",
        [failed("the intuition failed (status)")],
        params=turn(choices=INTUITION_CHOICES, extra=[INTUITION]),
        backend=[{"path": CHAT, "status": 500, "body": {"error": {"message": "boom"}}}])
+
+S.statement(10, "It is long-lived (mosfet.py's Cognition holds its Reasoning and Intuition): it answers each input in turn with nothing of the turn before, and a `bot.ability.processing.cancel` ends the turn in hand unanswered, so the next input is the next turn.")
+S.case(190, 10, "two turns are answered in order by one session.",
+       [SAID, expect(DONE, "_event.data.turn === 1 && _event.data.handled === true && _event.data.selected.length === 1"),
+        as_input(turn(number=2))[1], SAID,
+        expect(DONE, "_event.data.turn === 2 && _event.data.handled === true && _event.data.selected.length === 1")],
+       params=turn(), backend=selection(SAY) + selection(SAY))
+S.case(191, 10, "a cancelled turn is never answered; the next turn is.",
+       [send("bot.ability.processing.cancel", js({})), as_input(turn(number=2))[1], SAID,
+        expect(DONE, "_event.data.turn === 2 && _event.data.handled === true && _event.data.selected.length === 1")],
+       params=turn(), backend=selection(SAY) + selection(SAY))

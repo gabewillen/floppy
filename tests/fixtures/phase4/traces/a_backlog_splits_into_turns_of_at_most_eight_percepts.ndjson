@@ -48,4 +48,9 @@
 {"label":"environment.sound","session":"session","text":"{\"audio\":\"media/speaking-2.0.pcm\",\"channels\":1,\"media_type\":\"audio/pcm\",\"sample_rate_hz\":24000,\"source\":\"speaking\"}","type":"log"}
 {"label":"interpretation.unidentified","parent":"session.floppy.listening","session":"session.floppy.listening.interpretation","text":"the bot's own voice could not be detected: Voice detection failed: the backend is not configured.","type":"log"}
 {"label":"stm.turn.recorded","parent":"session.floppy","session":"session.floppy.stm","text":"said cut=false","type":"log"}
+{"label":"bot.ability.speaking.output","session":"session","text":"{\"channels\":1,\"media_type\":\"audio/pcm\",\"outcome\":\"completed\",\"sample_rate_hz\":24000,\"spoken\":\"reply 3\",\"text\":\"reply 3\",\"unspoken\":\"\",\"voice_id\":null}","type":"log"}
+{"label":"conversation","parent":"session.floppy.communication","session":"session.floppy.communication.conversation","text":"outbound 1","type":"log"}
+{"label":"communication.exchange","parent":"session.floppy","session":"session.floppy.communication","text":"2","type":"log"}
+{"label":"interpretation.unidentified","parent":"session.floppy.listening","session":"session.floppy.listening.interpretation","text":"the bot's own voice could not be detected: Voice detection failed: the backend is not configured.","type":"log"}
+{"label":"stm.turn.recorded","parent":"session.floppy","session":"session.floppy.stm","text":"said cut=false","type":"log"}
 {"label":"double.exit","parent":"session.floppy","session":"session.floppy.cognition","text":"gemma-4-26b-a4b","type":"log"}

@@ -252,6 +252,9 @@ pub struct BoundExtension {
     pub identity: scxml_reporting::ConformanceExtensionIdentity,
 }
 
+/// Makes [`CaseExecutor`]s for other threads ([`CaseExecutor::factory`]).
+pub type ExecutorFactory = std::sync::Arc<dyn Fn() -> Option<Box<dyn CaseExecutor>> + Send + Sync>;
+
 /// One execution path for compiled conformance cases.
 ///
 /// See the module documentation for the pre/postconditions every
@@ -274,6 +277,15 @@ pub trait CaseExecutor {
     /// extension namespace stays `Unsupported`. Default: none.
     fn extensions(&self) -> Vec<BoundExtension> {
         Vec::new()
+    }
+
+    /// Makes executors equal to this one (same identities, extensions, and
+    /// snapshot collection), each for use on the thread that called it, so
+    /// the runner can run cases on several threads; `None` from the
+    /// factory means it could not make one. Default: none, so every case
+    /// runs on the calling thread.
+    fn factory(&self) -> Option<ExecutorFactory> {
+        None
     }
 
     /// Runs `ir` as the root session with the scripted external `events`.

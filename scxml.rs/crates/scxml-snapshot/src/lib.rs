@@ -92,7 +92,9 @@ pub const MAX_TRANSITIONS: usize = 10_000;
 pub const MAX_CONFIGURATION_STATES: usize = 10_000;
 /// Most user variables per session (the data models' variable bound).
 pub const MAX_VARIABLES: usize = 256;
-/// Largest text, JSON, or XML value, in bytes.
+/// Longest variable text a snapshot writes inline; a longer one is
+/// [`VariableValue::Oversized`]. Event data and other values have no byte
+/// bound (SCXML sets none).
 pub const MAX_VALUE_BYTES: usize = 65_536;
 /// Largest authored `cond` text, in bytes.
 pub const MAX_COND_BYTES: usize = 16_384;
@@ -1008,11 +1010,9 @@ mod tests {
     #[allow(clippy::too_many_lines, reason = "one flat table of schema locations")]
     fn expressible_bounds() -> Vec<(String, usize)> {
         let name = scxml_types::MAX_NAME_BYTES;
-        let metadata = scxml_types::MAX_EVENT_METADATA_BYTES;
         let mut bounds: Vec<(String, usize)> = [
             ("/$defs/name/maxLength", name),
             ("/$defs/id/maxLength", name),
-            ("/$defs/valueText/maxLength", MAX_VALUE_BYTES),
             (
                 "/$defs/variableValue/oneOf/1/properties/text/maxLength",
                 MAX_VALUE_BYTES,
@@ -1030,11 +1030,6 @@ mod tests {
                 MAX_SESSION_ID_BYTES,
             ),
             ("/$defs/event/properties/name/maxLength", name),
-            ("/$defs/event/properties/origin/maxLength", metadata),
-            ("/$defs/event/properties/origintype/maxLength", metadata),
-            ("/$defs/event/properties/sendid/maxLength", metadata),
-            ("/$defs/event/properties/invokeid/maxLength", metadata),
-            ("/$defs/event/properties/raw/maxLength", MAX_VALUE_BYTES),
             (
                 "/$defs/traceContext/properties/tracestate/maxLength",
                 scxml_types::MAX_TRACESTATE_BYTES,
@@ -1043,8 +1038,6 @@ mod tests {
                 "/$defs/traceContext/properties/baggage/maxLength",
                 scxml_types::MAX_BAGGAGE_BYTES,
             ),
-            ("/$defs/pendingSend/properties/target/maxLength", metadata),
-            ("/$defs/pendingSend/properties/type/maxLength", metadata),
             (
                 "/$defs/processorMessage/properties/event/maxLength",
                 scxml_types::MAX_PROCESSOR_SEND_EVENT_NAME_BYTES,
@@ -1083,7 +1076,6 @@ mod tests {
                 "/$defs/historyValue/properties/value/maxItems",
                 MAX_CONFIGURATION_STATES,
             ),
-            ("/$defs/invocation/properties/type/maxLength", metadata),
             (
                 "/$defs/session/properties/invocations/maxItems",
                 MAX_INVOKED_SESSIONS,

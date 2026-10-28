@@ -77,7 +77,6 @@ fn documented_wit_bounds_match_enforced_constants() {
         format!("Parameter name: 1..={MAX_NAME_BYTES} bytes"),
         format!("(at most {MAX_PARAMS})"),
         format!("(at most {MAX_URI_BYTES} bytes)"),
-        format!("body (at most {MAX_RAW_BYTES} bytes)"),
     ] {
         assert!(
             docs.contains(&phrase),
