@@ -3,7 +3,7 @@
      numbered statement of README.md ("Statements"). -->
 <assertions baseuri="https://github.com/stateforward/floppy/tree/main/abilities/reasoning/irp/sources">
   <assert id="reasoning-1" specnum="1" specid="#reasoning-1">
-    <![CDATA[It runs one turn (the `<param>`s turn, stimulus, focus, focus_candidates, choices, model and memory) and ends: its `<donedata>`, received as `done.invoke.reasoning`, is `{turn, handled: true, selected}` or `{turn, handled: false, failed: true, reason}`, turn the given turn.]]>
+    <![CDATA[Each `bot.ability.processing.input` (turn, stimulus, focus, focus_candidates, choices, held, environment, self, acted, recent, max_context_tokens, completion_reserve_tokens and bytes_per_token; its `<param>`s are model, tier, memory and embedding) is one turn, answered by one `bot.ability.processing.output` to the parent: `{turn, handled: true, selected}` or `{turn, handled: false, failed: true, reason}`, turn the given turn.]]>
     <test id="100" conformance="mandatory" manual="false">
       <start uri="100/test100.scxml"/>
     </test>
@@ -99,6 +99,15 @@
     </test>
     <test id="182" conformance="mandatory" manual="false">
       <start uri="182/test182.scxml"/>
+    </test>
+  </assert>
+  <assert id="reasoning-10" specnum="10" specid="#reasoning-10">
+    <![CDATA[It is long-lived (mosfet.py's Cognition holds its Reasoning and Intuition): it answers each input in turn with nothing of the turn before, and a `bot.ability.processing.cancel` ends the turn in hand unanswered, so the next input is the next turn.]]>
+    <test id="190" conformance="mandatory" manual="false">
+      <start uri="190/test190.scxml"/>
+    </test>
+    <test id="191" conformance="mandatory" manual="false">
+      <start uri="191/test191.scxml"/>
     </test>
   </assert>
 </assertions>

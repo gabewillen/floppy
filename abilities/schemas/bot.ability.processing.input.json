@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "bot.ability.processing.input",
+  "description": "One turn the cognition hands a long-lived deliberative tier, reasoning or intuition (abilities/reasoning/reasoning.scx) [floppy fields; mosfet.py's Processing input].",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "turn",
+    "stimulus",
+    "focus",
+    "focus_candidates",
+    "choices",
+    "held",
+    "environment",
+    "self",
+    "acted",
+    "recent",
+    "max_context_tokens",
+    "completion_reserve_tokens",
+    "bytes_per_token"
+  ],
+  "properties": {
+    "turn": {
+      "description": "The body's processing turn this event belongs to, counted from 1 [floppy field].",
+      "minimum": 1,
+      "type": "integer"
+    },
+    "stimulus": {
+      "description": "The turn's stimulus envelope."
+    },
+    "focus": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Instance name the bot is looking at, if any."
+    },
+    "focus_candidates": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Instance names that may become focus for this turn."
+    },
+    "choices": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "The turn's choices within the tier's effort ceiling: {event, schema, description?, target?} each."
+    },
+    "held": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "The actions held from this tier, over its effort ceiling: {event, description?} each."
+    },
+    "environment": {
+      "description": "The bot's environment, or null."
+    },
+    "self": {
+      "description": "What the bot knows of itself, or null."
+    },
+    "acted": {
+      "description": "What earlier stages already did on the turn."
+    },
+    "recent": {
+      "type": "array",
+      "description": "The recent turns of the bot's conversations."
+    },
+    "max_context_tokens": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 1
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "The model's context window in tokens, or null to fit nothing."
+    },
+    "completion_reserve_tokens": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The tokens reserved for the model's reply."
+    },
+    "bytes_per_token": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "The fewest request bytes a token any reply showed so far."
+    }
+  }
+}

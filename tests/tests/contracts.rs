@@ -94,7 +94,7 @@ const BODY_EVENTS: [&str; 12] = [
 ];
 
 /// The abilities' events (`abilities/schemas/`).
-const ABILITY_EVENTS: [&str; 126] = [
+const ABILITY_EVENTS: [&str; 128] = [
     "bot.ability.failed",
     "bot.reboot",
     "bot.ability.cognition.input",
@@ -109,6 +109,9 @@ const ABILITY_EVENTS: [&str; 126] = [
     "bot.ability.processing.cancelled",
     // Speaking's cancel of an utterance its long-lived vocal is encoding.
     "bot.ability.processing.cancel",
+    // A deliberative tier's turn and its answer (decision D269).
+    "bot.ability.processing.input",
+    "bot.ability.processing.output",
     "bot.ability.autonomy.input",
     "bot.ability.autonomy.output",
     "bot.ability.intuition.input",
@@ -250,7 +253,7 @@ const ABILITY_EVENTS: [&str; 126] = [
 /// The correlated events of one processing turn: each requires `turn`.
 /// Tool events (the ones a model chooses, such as
 /// `bot.ability.cognition.ignore`) never do: their data is the model's.
-const CORRELATED: [&str; 19] = [
+const CORRELATED: [&str; 21] = [
     "bot.processing.completed",
     "bot.processing.failed",
     "bot.processing.timed_out",
@@ -262,6 +265,8 @@ const CORRELATED: [&str; 19] = [
     "bot.ability.cognition.step.failed",
     "bot.ability.cognition.step.timed_out",
     "bot.ability.processing.cancelled",
+    "bot.ability.processing.input",
+    "bot.ability.processing.output",
     "bot.ability.autonomy.input",
     "bot.ability.autonomy.output",
     "bot.ability.intuition.input",

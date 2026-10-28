@@ -3,11 +3,6 @@
 <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" datamodel="ecmascript" initial="harness">
 <state id="harness" initial="boot">
   <invoke id="reasoning" type="scxml" src="../../../reasoning.scx">
-    <param name="turn" expr="1"/>
-    <param name="stimulus" expr='{"event": "bot.input", "data": {"observation": {"event": "text", "data": "say hi"}}, "source": "gabe"}'/>
-    <param name="focus" expr="null"/>
-    <param name="focus_candidates" expr="[]"/>
-    <param name="choices" expr='[{"event": "bot.ability.cognition.ignore", "schema": {"type": "object", "properties": {}, "additionalProperties": false}, "description": "Ignore the stimulus.", "target": "session.reasoning"}, {"event": "bot.ability.communication.respond", "schema": {"type": "object", "properties": {"parts": {"type": "array", "minItems": 1, "maxItems": 64, "items": {"type": "object", "properties": {"words": {"type": "string", "minLength": 1}}, "additionalProperties": false}}}, "required": ["parts"], "additionalProperties": false}, "description": "Say something.", "target": "session"}, {"event": "bot.focus_device", "schema": {"type": "object", "properties": {"device": {"type": "string", "minLength": 1}}, "required": ["device"], "additionalProperties": false}, "description": "Look at a device.", "target": "session"}, {"event": "lamp.on", "schema": {"type": "object", "properties": {}, "additionalProperties": false}, "description": "Turn the lamp on.", "target": "session"}, {"event": "bot.ability.reasoning.input", "schema": {"type": "object", "properties": {}, "additionalProperties": false}, "description": "Hand this turn to reasoning.", "target": "session.reasoning"}]'/>
     <param name="model" expr="'mock-model'"/>
     <param name="tier" expr="'intuition'"/>
   </invoke>
@@ -16,10 +11,13 @@
     <transition event="harness.go" target="step0"/>
   </state>
   <state id="step0">
+    <onentry>
+      <send event="bot.ability.processing.input" target="#_reasoning"><content expr='({turn: 1, stimulus: {"event": "bot.input", "data": {"observation": {"event": "text", "data": "say hi"}}, "source": "gabe"}, focus: null, focus_candidates: [], choices: [{"event": "bot.ability.cognition.ignore", "schema": {"type": "object", "properties": {}, "additionalProperties": false}, "description": "Ignore the stimulus.", "target": "session.reasoning"}, {"event": "bot.ability.communication.respond", "schema": {"type": "object", "properties": {"parts": {"type": "array", "minItems": 1, "maxItems": 64, "items": {"type": "object", "properties": {"words": {"type": "string", "minLength": 1}}, "additionalProperties": false}}}, "required": ["parts"], "additionalProperties": false}, "description": "Say something.", "target": "session"}, {"event": "bot.focus_device", "schema": {"type": "object", "properties": {"device": {"type": "string", "minLength": 1}}, "required": ["device"], "additionalProperties": false}, "description": "Look at a device.", "target": "session"}, {"event": "lamp.on", "schema": {"type": "object", "properties": {}, "additionalProperties": false}, "description": "Turn the lamp on.", "target": "session"}, {"event": "bot.ability.reasoning.input", "schema": {"type": "object", "properties": {}, "additionalProperties": false}, "description": "Hand this turn to reasoning.", "target": "session.reasoning"}], held: [], environment: null, self: null, acted: [], recent: [], max_context_tokens: null, completion_reserve_tokens: 0, bytes_per_token: 3})'/></send>
+    </onentry>
     <transition event="bot.ability.communication.respond" cond="_event.data.parts.length === 1 &amp;&amp; _event.data.parts[0].words === 'Hi! I am floppy.'" target="step1"/>
   </state>
   <state id="step1">
-    <transition event="done.invoke.reasoning" cond="_event.data.turn === 1 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === 'handoff' &amp;&amp; _event.data.failed === undefined &amp;&amp; _event.data.acted.length === 1 &amp;&amp; _event.data.acted[0].event === 'bot.ability.communication.respond'" target="step2"/>
+    <transition event="bot.ability.processing.output" cond="_event.data.turn === 1 &amp;&amp; _event.data.handled === false &amp;&amp; _event.data.reason === 'handoff' &amp;&amp; _event.data.failed === undefined &amp;&amp; _event.data.acted.length === 1 &amp;&amp; _event.data.acted[0].event === 'bot.ability.communication.respond'" target="step2"/>
   </state>
   <state id="step2">
     <transition target="pass"/>
