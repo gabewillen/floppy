@@ -344,7 +344,10 @@ fn answered(
             record["model"] = request["model"].clone();
             record["samples"] = json!(samples.len());
             #[expect(clippy::cast_possible_truncation, reason = "samples in [-1, 1]")]
-            let pcm: Vec<i16> = samples.iter().map(|sample| (sample * 32768.0).round() as i16).collect();
+            let pcm: Vec<i16> = samples
+                .iter()
+                .map(|sample| (sample * 32768.0).round() as i16)
+                .collect();
             record["heard"] = json!(spelled(&pcm));
             let segments: Vec<Json> = runs(samples.iter().map(|sample| sample.abs() > 1e-4))
                 .into_iter()
@@ -480,7 +483,11 @@ fn answer(mut stream: std::net::TcpStream, log: &Mutex<Vec<Request>>) {
     // Voice detection of text starting with `slow` answers once the next
     // sound's voice detection has been asked (at most 10 s), and says
     // whether it was (`overlapped`).
-    if path == "/v1/vad" && record["heard"].as_str().is_some_and(|heard| heard.starts_with("slow")) {
+    if path == "/v1/vad"
+        && record["heard"]
+            .as_str()
+            .is_some_and(|heard| heard.starts_with("slow"))
+    {
         let asked = log.lock().expect("the log lock").len();
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
         let mut overlapped = false;

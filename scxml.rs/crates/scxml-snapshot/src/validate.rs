@@ -6,12 +6,13 @@ use scxml_types::{EventName, InvokeId, SendId, SessionId, StateId};
 
 use crate::encode::{MACHINE_IR_VERSION, sha256_hex};
 use crate::{
-    BasicHttpMessage, Children, ComponentRole, Document, Event, EventSchema, MAX_BASICHTTP_PARAMS,
-    MAX_COND_BYTES, MAX_CONFIGURATION_STATES, MAX_DOCUMENT_BYTES, MAX_EVENT_SCHEMA_BYTES,
-    MAX_INVOKE_DEPTH, MAX_INVOKED_SESSIONS, MAX_PENDING_SENDS, MAX_POINTER_BYTES,
+    Children, ComponentRole, Document, Event, EventSchema, MAX_COND_BYTES,
+    MAX_CONFIGURATION_STATES, MAX_DOCUMENT_BYTES, MAX_EVENT_SCHEMA_BYTES, MAX_INVOKE_DEPTH,
+    MAX_INVOKED_SESSIONS, MAX_PENDING_SENDS, MAX_POINTER_BYTES, MAX_PROCESSOR_SEND_PARAMS,
     MAX_QUEUE_ENTRIES, MAX_SESSION_ID_BYTES, MAX_TRANSITIONS, MAX_TYPEOF_BYTES, MAX_VALUE_BYTES,
-    MAX_VARIABLES, SESSION_SNAPSHOT_VERSION, Section, Session, SnapshotError, SnapshotErrorCode,
-    SnapshotPoint, Status, TraceContext, TraceContextPolicy, Value, VariableValue,
+    MAX_VARIABLES, ProcessorMessage, SESSION_SNAPSHOT_VERSION, Section, Session, SnapshotError,
+    SnapshotErrorCode, SnapshotPoint, Status, TraceContext, TraceContextPolicy, Value,
+    VariableValue,
 };
 
 /// Largest JSON integer the document may hold (2^53 − 1).
@@ -651,12 +652,12 @@ impl Passes {
                     if !ids.insert(send.sendid.as_str()) {
                         self.fail(SnapshotErrorCode::Inconsistent, &entry.with_key("sendid"));
                     }
-                    match (&send.event, &send.basichttp) {
+                    match (&send.event, &send.message) {
                         (Some(event), None) => {
                             self.event(event, &entry.with_key("event"), context);
                         }
                         (None, Some(message)) => {
-                            self.basichttp(message, &entry.with_key("basichttp"), context);
+                            self.message(message, &entry.with_key("message"), context);
                         }
                         _ => self.fail(SnapshotErrorCode::Inconsistent, &entry),
                     }
@@ -813,17 +814,17 @@ impl Passes {
         }
     }
 
-    /// One pending `BasicHTTP` message: the WIT `basichttp-send` bounds.
-    fn basichttp(&mut self, message: &BasicHttpMessage, pointer: &Pointer, context: &Context<'_>) {
+    /// One pending processor message: the WIT `processor-send` bounds.
+    fn message(&mut self, message: &ProcessorMessage, pointer: &Pointer, context: &Context<'_>) {
         if let Some(name) = &message.event {
             self.text(
                 name,
-                scxml_types::MAX_BASICHTTP_EVENT_NAME_BYTES,
+                scxml_types::MAX_PROCESSOR_SEND_EVENT_NAME_BYTES,
                 &pointer.with_key("event"),
             );
         }
         let params = pointer.with_key("params");
-        self.count(message.params.len(), MAX_BASICHTTP_PARAMS, &params);
+        self.count(message.params.len(), MAX_PROCESSOR_SEND_PARAMS, &params);
         for (index, param) in message.params.iter().enumerate() {
             let entry = params.with_index(index);
             let name = entry.with_key("name");

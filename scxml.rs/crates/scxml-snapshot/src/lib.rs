@@ -568,8 +568,9 @@ pub struct Queues {
 }
 
 /// One pending delayed send (SCXML 6.2, 6.3, C.1, C.2): exactly one of
-/// `event` (a send of the SCXML Event I/O Processor) and `basichttp` (a send
-/// of the `BasicHTTP` Event I/O Processor).
+/// `event` (a send of the SCXML Event I/O Processor) and `message` (a send
+/// of another Event I/O Processor, such as `BasicHTTP`, which `type`
+/// names).
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PendingSend {
@@ -578,9 +579,9 @@ pub struct PendingSend {
     /// The event an SCXML Event I/O Processor send delivers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub event: Option<Event>,
-    /// The message a `BasicHTTP` Event I/O Processor send posts.
+    /// The message another Event I/O Processor's send carries.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub basichttp: Option<BasicHttpMessage>,
+    pub message: Option<ProcessorMessage>,
     /// Authored target, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target: Option<String>,
@@ -593,16 +594,17 @@ pub struct PendingSend {
     pub deadline_ms: u64,
 }
 
-/// The message of one pending `BasicHTTP` send (SCXML C.2), as the machine
-/// evaluated it at the `<send>` (SCXML 6.2).
+/// The message of one pending send of an Event I/O Processor other than the
+/// SCXML one (SCXML 6.2, C.2), as the machine evaluated it at the `<send>`.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct BasicHttpMessage {
-    /// The evaluated `event`/`eventexpr`, posted as `_scxmleventname`.
+pub struct ProcessorMessage {
+    /// The evaluated `event`/`eventexpr` (a `BasicHTTP` send posts it as
+    /// `_scxmleventname`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub event: Option<String>,
     /// `namelist` entries then `<param>` children, in document order (at
-    /// most [`MAX_BASICHTTP_PARAMS`]).
+    /// most [`MAX_PROCESSOR_SEND_PARAMS`]).
     pub params: Vec<Param>,
     /// The evaluated `<content>`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -612,7 +614,7 @@ pub struct BasicHttpMessage {
     pub trace_context: Option<TraceContext>,
 }
 
-/// One `BasicHTTP` POST parameter.
+/// One parameter of a pending processor send.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Param {
@@ -622,9 +624,9 @@ pub struct Param {
     pub value: Value,
 }
 
-/// Maximum parameters of one pending `BasicHTTP` send (the WIT
-/// `basichttp-send.params` bound).
-pub const MAX_BASICHTTP_PARAMS: usize = scxml_types::MAX_BASICHTTP_PARAMS;
+/// Maximum parameters of one pending processor send (the WIT
+/// `processor-send.params` bound).
+pub const MAX_PROCESSOR_SEND_PARAMS: usize = scxml_types::MAX_PROCESSOR_SEND_PARAMS;
 
 /// SCXML 3.5 transition `type`.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -1044,15 +1046,15 @@ mod tests {
             ("/$defs/pendingSend/properties/target/maxLength", metadata),
             ("/$defs/pendingSend/properties/type/maxLength", metadata),
             (
-                "/$defs/basichttpMessage/properties/event/maxLength",
-                scxml_types::MAX_BASICHTTP_EVENT_NAME_BYTES,
+                "/$defs/processorMessage/properties/event/maxLength",
+                scxml_types::MAX_PROCESSOR_SEND_EVENT_NAME_BYTES,
             ),
             (
-                "/$defs/basichttpMessage/properties/params/maxItems",
-                MAX_BASICHTTP_PARAMS,
+                "/$defs/processorMessage/properties/params/maxItems",
+                MAX_PROCESSOR_SEND_PARAMS,
             ),
             (
-                "/$defs/basichttpMessage/properties/params/items/properties/name/maxLength",
+                "/$defs/processorMessage/properties/params/items/properties/name/maxLength",
                 name,
             ),
             (

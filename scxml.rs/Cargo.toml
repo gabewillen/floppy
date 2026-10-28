@@ -26,6 +26,7 @@ members = [
     "components/scxml-data-model-xpath",
     "components/scxml-ioprocessor-scxml",
     "components/scxml-ioprocessor-basichttp",
+    "components/scxml-ioprocessor-websocket",
     "components/scxml-service-example",
     "components/scxml-service-files",
     "components/scxml-extension-example",
@@ -62,6 +63,7 @@ default-members = [
     "components/scxml-data-model-xpath",
     "components/scxml-ioprocessor-scxml",
     "components/scxml-ioprocessor-basichttp",
+    "components/scxml-ioprocessor-websocket",
     "components/scxml-service-example",
     "components/scxml-service-files",
     "components/scxml-extension-example",
@@ -148,6 +150,10 @@ rustls = { version = "0.23.22", default-features = false, features = ["ring", "s
 # (dot segments, `%2e%2e`, and backslashes resolve exactly as a browser's
 # fetch resolves them).
 url = { version = "2.5.8", default-features = false, features = ["std"] }
+# The WebSocket client of processor instances (`outbound-websocket`): the
+# protocol only, over the host's own TCP and rustls streams.
+tungstenite = { version = "0.28", default-features = false, features = ["handshake"] }
+rustls-platform-verifier = "0.7.1"
 # `http` feature only: the built-in BasicHTTP listener's request-head parser
 # (the one ureq's protocol layer already uses).
 httparse = { version = "1.10.1", default-features = false, features = ["std"] }

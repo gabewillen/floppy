@@ -168,7 +168,8 @@ pub use artifact::{
     ArtifactKind, AuthenticatedComponent, ComponentSource, TrustedComponentDigest,
     TrustedManifestDigest, authenticate_component, authenticate_data_model_component,
     authenticate_extension_component, authenticate_package_validator_component,
-    authenticate_packaged_machine, authenticate_service_component,
+    authenticate_packaged_machine, authenticate_processor_component,
+    authenticate_service_component,
 };
 #[cfg(feature = "wasmtime")]
 mod extension;
@@ -193,6 +194,14 @@ pub use outbound_http::{
 mod service;
 #[cfg(feature = "wasmtime")]
 pub use service::{ServiceComponents, ServicePackage};
+#[cfg(feature = "wasmtime")]
+mod processor;
+#[cfg(feature = "wasmtime")]
+pub use processor::{
+    MAX_WEBSOCKET_MESSAGE_BYTES, ProcessorComponents, ProcessorPackage, WebSocketAnswer,
+    WebSocketClose, WebSocketFailure, WebSocketMessage, WebSocketOutgoing, WebSocketRequest,
+    WebSocketTransport,
+};
 #[cfg(feature = "wasmtime")]
 mod wasi;
 #[cfg(feature = "wasmtime")]
@@ -242,6 +251,12 @@ pub use http_client::{
     DEFAULT_CONNECT_TIMEOUT, DEFAULT_MAX_IN_FLIGHT, DEFAULT_TOTAL_TIMEOUT, ExtensionHttpClient,
     ExtensionHttpConfig, HttpClientConfig, HttpClientError, MAX_IN_FLIGHT, MAX_RESPONSE_HEAD_BYTES,
     NetworkClient,
+};
+#[cfg(feature = "http")]
+mod websocket_client;
+#[cfg(feature = "http")]
+pub use websocket_client::{
+    DEFAULT_WEBSOCKET_CONNECT_TIMEOUT, WebSocketClient, WebSocketClientConfig, WebSocketClientError,
 };
 #[cfg(feature = "http")]
 mod resolver;

@@ -12,6 +12,7 @@ and calls its one export, a WASI 0.3 / Component Model async function:
 world invoked-service {
   import wasi:clocks/monotonic-clock@0.3.0;
   import outbound-http;
+  import outbound-websocket;
   import telemetry;
   export invoked-service-api;
 }
@@ -153,6 +154,50 @@ GETs the same URL through `outbound-http.send` and returns `echo.received`
 carrying the byte count of each body read as it arrives, then
 `echo.fetched`.
 
+## Outbound WebSocket
+
+`outbound-websocket.connect` (the interface Event I/O Processors use too;
+[event-io-processors.md](event-io-processors.md)) opens one connection: the
+service hands it a `stream<message>` of what to send, and once the opening
+handshake has completed it gets the subprotocol the server selected, a
+`stream<message>` of what the peer sends, and a future that resolves when
+the connection has closed (`ok(some(frame))` for the peer's close frame,
+which answers the service's own close when the service ended its stream
+(that closes with code 1000), `ok(none)` when it closed without one, `err`
+when the connection was lost or a message passed its 1 MiB bound). A service streams audio in, or text out, while its other tasks go
+on: `connect` suspends only the calling task.
+
+The host admits a connection as an `outbound-http` `GET` of the same URL
+and headers. A URL that begins with a literal `ws://` or `wss://` is
+admitted by its `http://` or `https://` form against `http-origins`
+(`wss://api.example.com/v1/stream` by `https://api.example.com`). A URL
+that begins with a reference is admitted to the origin its value supplies,
+as for a request: a `ws` or `wss` value by its `http` form, and an `http`
+or `https` value names the `ws` or `wss` URL of the same form, so a service
+whose base URL slot holds `https://api.example.com/v1` connects to
+`wss://api.example.com/v1/audio/stream` with that reference and the
+literal `/audio/stream`. A header may carry a reference
+(`authorization: Bearer <reference>`), so the service sends a credential it
+never sees. Then:
+
+- in a live session, the connection runs on a thread of its own through
+  the embedder's transport (`ServiceComponents::with_outbound_websocket`;
+  `scx run` uses its WebSocket client, through `--websocket-proxy` when
+  given). Its opening, each message, and its end are external inputs
+  (`LiveSession::deliver_http_responses`), delivered as they arrive; an
+  open connection never holds a logical clock, and
+  `LiveSession::connected` says that a message may still arrive;
+- a batch run (`snapshot run`), or a run without a transport, refuses every
+  connection with `unavailable`.
+
+At most 16 connections of one invocation are open at once. Cancelling the
+invocation closes them. The echo example's `connect` event opens a
+connection to the URL its string data names, with `authorization: Bearer
+<token>` when the `token` slot is bound; `message` sends its string data;
+`close` closes it; and the service returns `echo.opened`, `echo.message`
+(each message's text, or a binary message's byte count), and `echo.closed`
+(the peer's close code, if any).
+
 ## Record and replay
 
 A service's HTTP responses are recorded inputs: `--record` writes one
@@ -161,7 +206,9 @@ lineage of invoke ids, the request's number within the invocation, and the
 status and body or the transport failure) and one `http-response-part`
 record per delivered part of a `send`'s response (the same fields, then its
 `status`, its body bytes, its `end`, or the failure that ended it), and
-`--replay` delivers each from the log without the network ([live-session.md](live-session.md#replay-log)).
+one `websocket` record per answer of a connection (its opening, a message,
+its end, or its failure; with no `processor`), and `--replay` delivers each
+from the log without the network ([live-session.md](live-session.md#replay-log)).
 Timers run on the logical clock, so a run with services, including services
 that import WASI interfaces, records and replays. What a service reads
 through its WASI resources (a preopened directory, a socket) is not
@@ -181,7 +228,7 @@ binds a namespace ([executable-content-extensions.md](executable-content-extensi
 | `service-artifact` | the component, relative to the manifest |
 | `schema-artifact`, `schema-sha256` | an optional schema and its SHA-256 (both a string or both `null`) |
 | `wit-world`, `wit-version` | `stateforward:scxml/invoked-service`, `0.2.0` |
-| `http-origins` | the origins or URL prefixes its `outbound-http` requests may reach (binding consents to them) |
+| `http-origins` | the origins or URL prefixes its `outbound-http` requests and `outbound-websocket` connections may reach (binding consents to them) |
 | `env-slots` | the `env` slots an `<invoke>` of it may bind |
 | `validator-artifact`, `validator-sha256` | optional: a package validator component and its SHA-256 (both present or both absent; [validator-rules.md](validator-rules.md#package-validators)) |
 
@@ -299,8 +346,10 @@ the variable whose value the host binds, in the host's `env` vocabulary
 - The host binds each slot whose variable the run holds a value for to a
   fresh opaque reference, numbered per invocation, in
   `invoke-request.references`. A service's references live for the whole
-  invocation, only inside its own `outbound-http` requests, which the host admits only to an
-  origin the package declares or one a reference's value supplies entirely.
+  invocation, only inside its own `outbound-http` requests and
+  `outbound-websocket` connections, which the host admits only to an origin
+  the package declares or (for a request) one a reference's value supplies
+  entirely.
   No other invocation or element ever receives them, and they end when the
   invocation's store is dropped.
 - Every value is granted to exact package URIs (`EnvVariable`; the CLI
