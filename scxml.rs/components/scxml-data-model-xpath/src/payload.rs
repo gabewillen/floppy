@@ -7,7 +7,7 @@
 use scxml_types::DataValue;
 use scxml_xpath::{NodeKind, NodeRef, Store, number_to_string};
 
-use crate::{DataModelError, MAX_VALUE_BYTES};
+use crate::DataModelError;
 
 /// Builds an SCXML `XPath` `_event.data` payload from `<param>` and
 /// `namelist` entries (SCXML 1.0 CR 2014-03-13 §C.3.7.1): one
@@ -19,7 +19,7 @@ use crate::{DataModelError, MAX_VALUE_BYTES};
 /// [`DataModelError::UnsupportedValue`] for JSON arrays, which no `XPath`
 /// expression evaluates to (a received array is still handled as
 /// `_event.data`, [`accepts_event_data`]), and [`DataModelError::InvalidInput`] for
-/// malformed markup or a payload over [`MAX_VALUE_BYTES`].
+/// malformed markup.
 pub fn event_data(entries: &[(String, DataValue)]) -> Result<DataValue, DataModelError> {
     let mut out = String::new();
     for (name, value) in entries {
@@ -28,9 +28,6 @@ pub fn event_data(entries: &[(String, DataValue)]) -> Result<DataValue, DataMode
         out.push_str("\">");
         push_value_markup(&mut out, value)?;
         out.push_str("</data>");
-        if out.len() > MAX_VALUE_BYTES {
-            return Err(DataModelError::InvalidInput);
-        }
     }
     // The concatenation of well-formed pieces is well-formed; parse it
     // once so a caller-supplied XML value can never smuggle markup.
@@ -123,12 +120,11 @@ pub fn namelist_name(location: &str) -> Option<&str> {
 #[must_use]
 pub fn markup_value(text: &str) -> DataValue {
     let mut store = Store::new();
-    let is_markup = text.len() <= MAX_VALUE_BYTES
-        && store.parse_fragment(text).is_ok_and(|nodes| {
-            nodes
-                .iter()
-                .any(|node| store.kind(NodeRef::node(*node)) == Ok(NodeKind::Element))
-        });
+    let is_markup = store.parse_fragment(text).is_ok_and(|nodes| {
+        nodes
+            .iter()
+            .any(|node| store.kind(NodeRef::node(*node)) == Ok(NodeKind::Element))
+    });
     if is_markup {
         DataValue::Xml(text.to_owned())
     } else {
@@ -189,9 +185,6 @@ fn push_json_members(
             serde_json::Value::Array(_) => return Err(DataModelError::UnsupportedValue),
         }
         out.push_str("</data>");
-        if out.len() > MAX_VALUE_BYTES {
-            return Err(DataModelError::InvalidInput);
-        }
     }
     Ok(())
 }

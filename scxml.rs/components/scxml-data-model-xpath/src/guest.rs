@@ -36,8 +36,7 @@ use scxml_types::{
 
 use super::{
     DATA_MODEL_NAME, DataModelError, ExecutionHost, ForeachItems, MAX_EXPRESSION_BYTES,
-    MAX_SCRIPT_BYTES, MAX_SOURCE_BYTES, MAX_VALUE_BYTES, SyntaxKind, SystemContext, VariableMarkup,
-    XPathDataModel,
+    MAX_SCRIPT_BYTES, MAX_SOURCE_BYTES, SyntaxKind, SystemContext, VariableMarkup, XPathDataModel,
 };
 
 /// Most fragments one `check-effects` request may carry (WIT contract bound).
@@ -605,22 +604,10 @@ fn from_wit_value(value: WitValue) -> Result<DataValue, DataModelError> {
         WitValue::Number(value) => FiniteNumber::new(value)
             .map(DataValue::Number)
             .map_err(|_| DataModelError::InvalidInput),
-        WitValue::Text(value) => {
-            bounded(&value, MAX_VALUE_BYTES)?;
-            Ok(DataValue::String(value))
-        }
-        WitValue::JsonArray(value) => {
-            bounded(&value, MAX_VALUE_BYTES)?;
-            Ok(DataValue::JsonArray(value))
-        }
-        WitValue::JsonObject(value) => {
-            bounded(&value, MAX_VALUE_BYTES)?;
-            Ok(DataValue::JsonObject(value))
-        }
-        WitValue::Xml(value) => {
-            bounded(&value, MAX_VALUE_BYTES)?;
-            Ok(DataValue::Xml(value))
-        }
+        WitValue::Text(value) => Ok(DataValue::String(value)),
+        WitValue::JsonArray(value) => Ok(DataValue::JsonArray(value)),
+        WitValue::JsonObject(value) => Ok(DataValue::JsonObject(value)),
+        WitValue::Xml(value) => Ok(DataValue::Xml(value)),
     }
 }
 

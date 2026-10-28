@@ -67,10 +67,9 @@ interface types {
   /// One SCXML event.
   ///
   /// Bounds (enforced by every bundled provider): `name`, `send-id`, and
-  /// `invoke-id` at most 1024 bytes each and valid SCXML names; `origin` and
-  /// `origin-type` at most 16384 bytes each; text, JSON, and XML `data` and
-  /// `raw` at most 65536 bytes each; the whole event, including its trace
-  /// context, at most 98304 bytes. JSON data MUST already be canonical.
+  /// `invoke-id` at most 1024 bytes each and valid SCXML names; `origin`,
+  /// `origin-type`, `data`, and `raw` have no byte bound (SCXML sets none).
+  /// JSON data MUST already be canonical.
   record event {
     /// Event name used for transition matching.
     name: string,
@@ -1156,7 +1155,7 @@ interface telemetry {
 /// `initialize` fail with `unavailable`. A failed call changes no data.
 /// Bundled-provider bounds: the `initialize` declarations' placeholder
 /// encoding at most 65536 bytes, each expression, location, or `add-attribute` name at most 16384 bytes, each
-/// script at most 65536 bytes, each text/JSON/XML value at most 65536 bytes; the
+/// script at most 65536 bytes; no text/JSON/XML value has a byte bound; the
 /// ECMAScript provider also bounds its data locations (portable values,
 /// functions, and opaque values together) to 256 and each location name to
 /// 1024 bytes: a call that would commit more fails and changes no data. The XPath

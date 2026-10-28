@@ -187,12 +187,6 @@ pub const MAX_BAGGAGE_BYTES: usize = 8_192;
 pub const MAX_BAGGAGE_MEMBERS: usize = 64;
 /// Maximum UTF-8 bytes accepted by SCXML name and identifier value types.
 pub const MAX_NAME_BYTES: usize = 1_024;
-/// Maximum UTF-8 bytes accepted for one event metadata string.
-pub const MAX_EVENT_METADATA_BYTES: usize = 16_384;
-/// Maximum UTF-8 bytes accepted for one event text, JSON, or XML payload.
-pub const MAX_EVENT_DATA_BYTES: usize = 65_536;
-/// Maximum aggregate bytes accepted for one native event.
-pub const MAX_EVENT_BYTES: usize = 96 * 1_024;
 
 /// Version-independent format tag that opens every delayed-send wire record.
 ///
@@ -621,17 +615,13 @@ pub struct Event {
     /// Raw I/O-processor message text the event was constructed from, when
     /// the delivering processor retains one (SCXML 6.2 `_event.raw`);
     /// `None` for internal, platform, and processor events without a raw
-    /// message. Bounded by event validation.
+    /// message. Like `data`, it has no byte bound (SCXML sets none).
     pub raw: Option<String>,
 }
 
 /// Failure to validate an event before it crosses a component or host boundary.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EventError {
-    /// One string or payload exceeded its class-specific byte bound.
-    ValueTooLarge,
-    /// Aggregate retained event bytes overflowed or exceeded [`MAX_EVENT_BYTES`].
-    AggregateTooLarge,
     /// A publicly constructible field was malformed or noncanonical.
     InvalidValue,
     /// Distributed trace metadata was malformed or noncanonical.
@@ -641,8 +631,6 @@ pub enum EventError {
 impl fmt::Display for EventError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
-            Self::ValueTooLarge => "event value exceeds its byte bound",
-            Self::AggregateTooLarge => "event aggregate exceeds its byte bound",
             Self::InvalidValue => "event contains an invalid or noncanonical value",
             Self::InvalidTraceContext => "event trace context is invalid",
         })
@@ -686,54 +674,18 @@ impl Event {
         }
     }
 
-    /// Validates all retained fields and checked aggregate byte bounds.
+    /// Validates all retained fields: the trace context and canonical JSON
+    /// data. No field has a byte bound (SCXML sets none).
     ///
     /// # Errors
     ///
-    /// Returns a typed failure for an oversized, malformed, or noncanonical
-    /// event. Validation borrows the event and does not clone its fields.
+    /// Returns a typed failure for a malformed or noncanonical event.
+    /// Validation borrows the event and does not clone its fields.
     pub fn validate(&self) -> Result<(), EventError> {
-        let mut total = self.name.as_str().len();
-        for value in [self.origin.as_deref(), self.origin_type.as_deref()]
-            .into_iter()
-            .flatten()
-        {
-            total = add_event_bytes(total, bounded_event_bytes(value, MAX_EVENT_METADATA_BYTES)?)?;
-        }
-        for bytes in [
-            self.send_id.as_ref().map(SendId::as_str),
-            self.invoke_id.as_ref().map(InvokeId::as_str),
-        ]
-        .into_iter()
-        .flatten()
-        .map(str::len)
-        {
-            total = add_event_bytes(total, bytes)?;
-        }
-        let data_bytes = match &self.data {
-            DataValue::Absent | DataValue::Undefined | DataValue::Null => 0,
-            DataValue::Bool(_) => 1,
-            DataValue::Number(_) => 8,
-            DataValue::String(value)
-            | DataValue::JsonArray(value)
-            | DataValue::JsonObject(value)
-            | DataValue::Xml(value) => bounded_event_bytes(value, MAX_EVENT_DATA_BYTES)?,
-        };
-        total = add_event_bytes(total, data_bytes)?;
-        if let Some(raw) = self.raw.as_deref() {
-            total = add_event_bytes(total, bounded_event_bytes(raw, MAX_EVENT_DATA_BYTES)?)?;
-        }
         if let Some(context) = self.trace_context.as_ref() {
             context
                 .validate()
                 .map_err(|_| EventError::InvalidTraceContext)?;
-            total = add_event_bytes(total, context.traceparent.len())?;
-            for value in [context.tracestate.as_deref(), context.baggage.as_deref()]
-                .into_iter()
-                .flatten()
-            {
-                total = add_event_bytes(total, value.len())?;
-            }
         }
         match &self.data {
             DataValue::JsonArray(value) => match DataValue::canonical_json_array(value) {
@@ -754,19 +706,6 @@ impl Event {
         }
         Ok(())
     }
-}
-
-fn bounded_event_bytes(value: &str, maximum: usize) -> Result<usize, EventError> {
-    (value.len() <= maximum)
-        .then_some(value.len())
-        .ok_or(EventError::ValueTooLarge)
-}
-
-fn add_event_bytes(total: usize, bytes: usize) -> Result<usize, EventError> {
-    total
-        .checked_add(bytes)
-        .filter(|value| *value <= MAX_EVENT_BYTES)
-        .ok_or(EventError::AggregateTooLarge)
 }
 
 /// Maximum UTF-8 bytes accepted for one `<send>` delay designation.
@@ -871,8 +810,6 @@ pub enum ForeachError {
     /// The array expression did not evaluate to a JSON array value; the
     /// variant carries the closed kind that was found instead.
     NotArray(DataValueKind),
-    /// The array snapshot exceeded [`MAX_EVENT_DATA_BYTES`].
-    TooLarge,
     /// The array snapshot was not valid JSON array text.
     InvalidJson,
     /// An element was a number that cannot be represented as a finite value.
@@ -930,7 +867,6 @@ impl fmt::Display for ForeachError {
                 "foreach array expression must evaluate to an array, got {}",
                 kind.as_str()
             ),
-            Self::TooLarge => formatter.write_str("foreach array snapshot exceeds its byte bound"),
             Self::InvalidJson => formatter.write_str("foreach array snapshot is not a JSON array"),
             Self::NonFiniteElement => formatter.write_str("foreach array element is not finite"),
             Self::InvalidElement => {
@@ -955,9 +891,9 @@ impl std::error::Error for ForeachError {}
 ///
 /// # Errors
 ///
-/// Returns [`ForeachError`] when the value is not an array, exceeds
-/// [`MAX_EVENT_DATA_BYTES`], is not JSON array text, or contains an element
-/// that cannot be represented canonically.
+/// Returns [`ForeachError`] when the value is not an array, is not JSON
+/// array text, or contains an element that cannot be represented
+/// canonically.
 pub fn foreach_array_elements(array: &DataValue) -> Result<Vec<DataValue>, ForeachError> {
     let source = match array {
         DataValue::JsonArray(source) => source,
@@ -970,9 +906,6 @@ pub fn foreach_array_elements(array: &DataValue) -> Result<Vec<DataValue>, Forea
         DataValue::JsonObject(_) => return Err(ForeachError::NotArray(DataValueKind::Object)),
         DataValue::Xml(_) => return Err(ForeachError::NotArray(DataValueKind::Xml)),
     };
-    if source.len() > MAX_EVENT_DATA_BYTES {
-        return Err(ForeachError::TooLarge);
-    }
     let parsed: serde_json::Value =
         serde_json::from_str(source).map_err(|_| ForeachError::InvalidJson)?;
     let serde_json::Value::Array(items) = parsed else {
@@ -1532,7 +1465,6 @@ impl WireReader<'_> {
 
 fn map_event_codec_error(error: EventError) -> SendCodecError {
     match error {
-        EventError::ValueTooLarge | EventError::AggregateTooLarge => SendCodecError::TooLarge,
         EventError::InvalidValue | EventError::InvalidTraceContext => SendCodecError::Invalid,
     }
 }
@@ -1866,8 +1798,6 @@ impl DataValue {
 pub enum DataValueError {
     /// Input was not valid JSON or had the wrong top-level shape.
     InvalidJson,
-    /// JSON input exceeded [`MAX_EVENT_DATA_BYTES`] before parsing.
-    ValueTooLarge,
     /// ECMAScript number was NaN or infinite.
     NonFiniteNumber,
 }
@@ -1876,7 +1806,6 @@ impl fmt::Display for DataValueError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
             Self::InvalidJson => "data value is not canonicalizable JSON of the required shape",
-            Self::ValueTooLarge => "data value exceeds its byte bound",
             Self::NonFiniteNumber => "data-model numbers must be finite",
         })
     }
@@ -1891,9 +1820,6 @@ enum JsonShape {
 }
 
 fn canonical_json(value: &str, shape: JsonShape) -> Result<String, DataValueError> {
-    if value.len() > MAX_EVENT_DATA_BYTES {
-        return Err(DataValueError::ValueTooLarge);
-    }
     let parsed: serde_json::Value =
         serde_json::from_str(value).map_err(|_| DataValueError::InvalidJson)?;
     let shape_matches = matches!(
@@ -1904,11 +1830,7 @@ fn canonical_json(value: &str, shape: JsonShape) -> Result<String, DataValueErro
     if !shape_matches {
         return Err(DataValueError::InvalidJson);
     }
-    let canonical = serde_json::to_string(&parsed).map_err(|_| DataValueError::InvalidJson)?;
-    if canonical.len() > MAX_EVENT_DATA_BYTES {
-        return Err(DataValueError::ValueTooLarge);
-    }
-    Ok(canonical)
+    serde_json::to_string(&parsed).map_err(|_| DataValueError::InvalidJson)
 }
 
 fn write_data_value(bytes: &mut Vec<u8>, value: &DataValue) -> Result<(), SendCodecError> {
@@ -2412,30 +2334,22 @@ mod tests {
     }
 
     #[test]
-    fn event_and_json_bounds_are_checked_before_canonicalization() {
-        let json_at_limit = format!("[\"{}\"]", "x".repeat(MAX_EVENT_DATA_BYTES - 4));
-        assert_eq!(json_at_limit.len(), MAX_EVENT_DATA_BYTES);
-        assert!(DataValue::canonical_json_array(&json_at_limit).is_ok());
-        let json_over_limit = format!("[\"{}\"]", "x".repeat(MAX_EVENT_DATA_BYTES - 3));
+    fn event_data_raw_and_metadata_have_no_byte_bound() {
+        // SCXML sets no payload size, so neither do events or JSON values.
+        let large = 4 * 65_536;
+        let json = format!("[\"{}\"]", "x".repeat(large));
         assert_eq!(
-            DataValue::canonical_json_array(&json_over_limit),
-            Err(DataValueError::ValueTooLarge)
+            DataValue::canonical_json_array(&json),
+            Ok(DataValue::JsonArray(json.clone()))
         );
 
-        let mut bounded =
-            Event::external(EventName::new("bounded").expect("event name fixture must be valid"));
-        bounded.data = DataValue::String("x".repeat(MAX_EVENT_DATA_BYTES));
-        assert_eq!(bounded.validate(), Ok(()));
-
-        bounded.data = DataValue::String("x".repeat(MAX_EVENT_DATA_BYTES + 1));
-        assert_eq!(bounded.validate(), Err(EventError::ValueTooLarge));
-
-        let mut aggregate =
-            Event::external(EventName::new("aggregate").expect("event name fixture must be valid"));
-        aggregate.origin = Some("o".repeat(MAX_EVENT_METADATA_BYTES));
-        aggregate.origin_type = Some("t".repeat(MAX_EVENT_METADATA_BYTES));
-        aggregate.data = DataValue::String("d".repeat(MAX_EVENT_DATA_BYTES));
-        assert_eq!(aggregate.validate(), Err(EventError::AggregateTooLarge));
+        let mut event =
+            Event::external(EventName::new("large").expect("event name fixture must be valid"));
+        event.origin = Some("o".repeat(large));
+        event.origin_type = Some("t".repeat(large));
+        event.data = DataValue::String("d".repeat(large));
+        event.raw = Some("r".repeat(large));
+        assert_eq!(event.validate(), Ok(()));
     }
 
     #[test]
@@ -2611,10 +2525,10 @@ mod tests {
             foreach_array_elements(&DataValue::JsonArray("[1,".into())),
             Err(ForeachError::InvalidJson)
         );
-        let oversized = format!("[{}]", "1,".repeat(MAX_EVENT_DATA_BYTES / 2) + "1");
+        let large = format!("[{}]", "1,".repeat(65_536) + "1");
         assert_eq!(
-            foreach_array_elements(&DataValue::JsonArray(oversized)),
-            Err(ForeachError::TooLarge)
+            foreach_array_elements(&DataValue::JsonArray(large)).map(|items| items.len()),
+            Ok(65_537)
         );
         assert_eq!(
             ForeachError::NotArray(DataValueKind::Xml).to_string(),

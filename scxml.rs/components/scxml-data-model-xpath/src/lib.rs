@@ -105,9 +105,9 @@ pub const MAX_EXPRESSION_BYTES: usize = scxml_types::wasm_bound(16_384);
 /// the bound still applies before a non-empty script is rejected)
 /// (wasm builds only; unbounded natively, see [`scxml_types::wasm_bound`]).
 pub const MAX_SCRIPT_BYTES: usize = scxml_types::wasm_bound(65_536);
-/// Maximum bytes in one string, XML value, system identifier, or event field
-/// (every build: the WIT value bound, "each text/JSON/XML value at most 65536
-/// bytes").
+/// Longest variable markup a data-model snapshot carries; longer markup is
+/// [`VariableMarkup::Oversized`] (the WIT `variable-value` contract). No
+/// value has a byte bound (SCXML sets none).
 pub const MAX_VALUE_BYTES: usize = 65_536;
 /// Maximum variables retained by one instance (every build: the WIT
 /// contract's `The XPath provider bounds declared variables to 256`, quoted

@@ -374,9 +374,13 @@ These apply on every build, because they are not resource bounds:
   16 MiB over HTTPS, follows at most 5 redirects (each to `https:`), and
   shares the repository resolver's connect (10 s) and total (60 s)
   timeouts, with no retry.
-- **Format and interchange contracts**: the WIT value bounds of events and
-  data (for example 64 KiB per event payload or data value, raised as
-  `error.execution`, and 1024-byte names: a literal event name, send id,
+- **No payload bound**: SCXML sets no size on an event or a value, so
+  event data, `_event.raw`, `_event.origin` and `_event.origintype`, and
+  every text, JSON, or XML value crossing a data model's interface have no
+  byte bound on any build; only memory (and, in a wasm build, fuel) limits
+  them.
+- **Format and interchange contracts**: the WIT name bounds of events
+  (1024-byte names: a literal event name, send id,
   or invoke id over it, or a state or invoke id over 1,013 / 1,012 bytes,
   whose `done.state.` or `done.invoke.` event would be over it, is a
   compile error,

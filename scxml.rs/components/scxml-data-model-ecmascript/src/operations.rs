@@ -16,7 +16,7 @@ use scxml_telemetry::{Module, Operation, observe};
 use scxml_types::{DataInitializer, DataValue, Event, FiniteNumber, FormValueSource};
 
 use crate::session::Copied;
-use crate::{DataModelError, EcmaScriptDataModel, ExecutionHost, MAX_VALUE_BYTES};
+use crate::{DataModelError, EcmaScriptDataModel, ExecutionHost};
 
 /// Result of evaluating a `<foreach array>` expression (SCXML 4.6).
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -254,32 +254,27 @@ pub fn namelist_key(location: &str) -> Option<&str> {
 /// Builds `_event.data` from `<param>`/`namelist` entries (SCXML
 /// 6.2.4-6.2.5): one object member per entry (a later duplicate name
 /// replaces an earlier one), as canonical JSON. `None` when a value has no
-/// JSON representation (`undefined`, absent, XML) or the object exceeds
-/// [`MAX_VALUE_BYTES`] (`error.execution`).
+/// JSON representation (`undefined`, absent, XML) (`error.execution`).
 #[must_use]
 pub fn event_payload(entries: &[(String, DataValue)]) -> Option<DataValue> {
     let mut data = serde_json::Map::new();
     for (name, value) in entries {
         data.insert(name.clone(), value_to_json(value)?);
     }
-    let encoded = serde_json::to_string(&serde_json::Value::Object(data)).ok()?;
-    (encoded.len() <= MAX_VALUE_BYTES).then_some(DataValue::JsonObject(encoded))
+    serde_json::to_string(&serde_json::Value::Object(data))
+        .ok()
+        .map(DataValue::JsonObject)
 }
 
 /// Value of inline `<content>` or `<data>` children (SCXML 5.6, 6.2.6):
 /// markup is an XML value (a DOM, B.2.1; official 561); text is
 /// whitespace-normalized and read as JSON when it parses, else kept as a
-/// string. `None` when the input exceeds [`MAX_VALUE_BYTES`].
+/// string.
 #[must_use]
 pub fn inline_content(content: InlineContent<'_>) -> Option<DataValue> {
     match content {
-        InlineContent::Markup(markup) => {
-            (markup.len() <= MAX_VALUE_BYTES).then(|| DataValue::Xml(markup.to_owned()))
-        }
+        InlineContent::Markup(markup) => Some(DataValue::Xml(markup.to_owned())),
         InlineContent::Text(text) => {
-            if text.len() > MAX_VALUE_BYTES {
-                return None;
-            }
             let normalized = normalize_whitespace(text);
             Some(
                 match serde_json::from_str::<serde_json::Value>(&normalized) {

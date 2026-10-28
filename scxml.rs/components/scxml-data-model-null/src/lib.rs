@@ -21,8 +21,6 @@ pub const MAX_SOURCE_BYTES: usize = 65_536;
 /// Maximum expression or assignment-location bytes (wasm builds only;
 /// unbounded natively, see [`scxml_types::wasm_bound`]).
 pub const MAX_EXPRESSION_BYTES: usize = scxml_types::wasm_bound(16_384);
-/// Maximum bytes in one WIT string or data value.
-pub const MAX_VALUE_BYTES: usize = 65_536;
 /// Maximum aggregate bytes accepted at one WIT ingress boundary (wasm builds
 /// only; unbounded natively, see [`scxml_types::wasm_bound`]).
 pub const MAX_AGGREGATE_BYTES: usize = scxml_types::wasm_bound(1_048_576);
@@ -35,7 +33,7 @@ pub const MAX_AGGREGATE_BYTES: usize = scxml_types::wasm_bound(1_048_576);
 mod guest {
     use std::cell::RefCell;
 
-    use super::{MAX_AGGREGATE_BYTES, MAX_EXPRESSION_BYTES, MAX_SOURCE_BYTES, MAX_VALUE_BYTES};
+    use super::{MAX_AGGREGATE_BYTES, MAX_EXPRESSION_BYTES, MAX_SOURCE_BYTES};
 
     wit_bindgen::generate!({
         world: "data-model",
@@ -495,12 +493,6 @@ mod guest {
             scxml_types::SendId::new(value.to_owned())
                 .map_err(|_| error(ErrorCode::InvalidInput, "send id is invalid"))?;
         }
-        if let Some(value) = event.origin.as_deref() {
-            bounded(value, MAX_VALUE_BYTES)?;
-        }
-        if let Some(value) = event.origin_type.as_deref() {
-            bounded(value, MAX_VALUE_BYTES)?;
-        }
         if let Some(value) = event.invoke_id.as_deref() {
             bounded(value, scxml_types::MAX_NAME_BYTES)?;
             scxml_types::InvokeId::new(value.to_owned())
@@ -564,10 +556,6 @@ mod guest {
         {
             return Err(error(ErrorCode::InvalidInput, "system value is invalid"));
         }
-        bounded(&value.session_id, MAX_VALUE_BYTES)?;
-        if let Some(name) = &value.machine_name {
-            bounded(name, MAX_VALUE_BYTES)?;
-        }
         validate_value(&value.io_processors)?;
         if !matches!(value.io_processors, DataValue::JsonObject(_)) {
             return Err(error(ErrorCode::InvalidInput, "system value is invalid"));
@@ -581,9 +569,7 @@ mod guest {
 
     fn validate_value(value: &DataValue) -> Result<(), ComponentError> {
         match value {
-            DataValue::Text(value) | DataValue::Xml(value) => bounded(value, MAX_VALUE_BYTES),
             DataValue::JsonArray(value) => {
-                bounded(value, MAX_VALUE_BYTES)?;
                 if scxml_types::DataValue::canonical_json_array(value)
                     == Ok(scxml_types::DataValue::JsonArray(value.clone()))
                 {
@@ -593,7 +579,6 @@ mod guest {
                 }
             }
             DataValue::JsonObject(value) => {
-                bounded(value, MAX_VALUE_BYTES)?;
                 if scxml_types::DataValue::canonical_json_object(value)
                     == Ok(scxml_types::DataValue::JsonObject(value.clone()))
                 {
@@ -609,7 +594,9 @@ mod guest {
             | DataValue::Undefined
             | DataValue::Null
             | DataValue::Boolean(_)
-            | DataValue::Number(_) => Ok(()),
+            | DataValue::Number(_)
+            | DataValue::Text(_)
+            | DataValue::Xml(_) => Ok(()),
         }
     }
 

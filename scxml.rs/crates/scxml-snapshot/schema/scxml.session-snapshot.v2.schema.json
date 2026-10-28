@@ -86,8 +86,7 @@
       "maxLength": 1024
     },
     "valueText": {
-      "type": "string",
-      "maxLength": 65536
+      "type": "string"
     },
     "section": {
       "enum": [
@@ -380,27 +379,22 @@
           ]
         },
         "origin": {
-          "type": "string",
-          "maxLength": 16384
+          "type": "string"
         },
         "origintype": {
-          "type": "string",
-          "maxLength": 16384
+          "type": "string"
         },
         "sendid": {
-          "type": "string",
-          "maxLength": 16384
+          "type": "string"
         },
         "invokeid": {
-          "type": "string",
-          "maxLength": 16384
+          "type": "string"
         },
         "data": {
           "$ref": "#/$defs/value"
         },
         "raw": {
-          "type": "string",
-          "maxLength": 65536
+          "type": "string"
         },
         "trace_context": {
           "$ref": "#/$defs/traceContext"
@@ -450,12 +444,10 @@
           "$ref": "#/$defs/processorMessage"
         },
         "target": {
-          "type": "string",
-          "maxLength": 16384
+          "type": "string"
         },
         "type": {
-          "type": "string",
-          "maxLength": 16384
+          "type": "string"
         },
         "delay_ms": {
           "$ref": "#/$defs/uint"
@@ -1018,8 +1010,7 @@
         },
         "type": {
           "type": "string",
-          "minLength": 1,
-          "maxLength": 16384
+          "minLength": 1
         },
         "state": {
           "$ref": "#/$defs/name"

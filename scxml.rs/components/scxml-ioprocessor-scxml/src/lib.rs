@@ -969,10 +969,8 @@ impl ScxmlIoProcessor {
     /// As [`Self::plan`], plus [`ProcessorError::InvalidTarget`] for an
     /// `#_internal` or malformed target, [`ProcessorError::UnreachableTarget`]
     /// for a session address nobody answers, and
-    /// [`ProcessorError::PayloadTooLarge`] for a raw message over its bound
-    /// or a stamped event over the `types.event` bounds, and
-    /// [`ProcessorError::InvalidSend`] for a stamped event that is otherwise
-    /// not a valid `types.event`.
+    /// [`ProcessorError::InvalidSend`] for a stamped event that is not a
+    /// valid `types.event`.
     pub fn dispatch(
         &self,
         mut request: SendRequest,
@@ -1011,19 +1009,13 @@ impl ScxmlIoProcessor {
                 scxml_types::SendMessage::Params(_) => RawPayload::Params(&fields),
                 scxml_types::SendMessage::Content => RawPayload::Content(&request.event.data),
             };
-            let raw = raw_message(&request.event.name, raw_payload)?;
-            request.event.raw = Some(raw);
-            // The stamped event must fit the `types.event` bounds every
-            // receiving session's boundary enforces (its data and raw
-            // message are each bounded, but not their sum): one that does
-            // not is the sender's error.execution, not the receiver's
-            // failure (SCXML 6.2: the message is discarded).
-            request.event.validate().map_err(|error| match error {
-                scxml_types::EventError::ValueTooLarge
-                | scxml_types::EventError::AggregateTooLarge => ProcessorError::PayloadTooLarge,
-                scxml_types::EventError::InvalidValue
-                | scxml_types::EventError::InvalidTraceContext => ProcessorError::InvalidSend,
-            })?;
+            request.event.raw = Some(raw_message(&request.event.name, raw_payload));
+            // An invalid stamped event is the sender's error.execution, not
+            // the receiver's failure (SCXML 6.2: the message is discarded).
+            request
+                .event
+                .validate()
+                .map_err(|_| ProcessorError::InvalidSend)?;
             if let Some(scheduled) = self.plan(&request)? {
                 return Ok(Dispatch::Scheduled(scheduled));
             }
@@ -1288,10 +1280,7 @@ impl std::error::Error for ProcessorError {}
 
 mod raw;
 
-pub use raw::{
-    MAX_RAW_MESSAGE_BYTES, RAW_CONTENT_FIELD, RAW_EVENT_NAME_FIELD, RawPayload, field_text,
-    raw_message,
-};
+pub use raw::{RAW_CONTENT_FIELD, RAW_EVENT_NAME_FIELD, RawPayload, field_text, raw_message};
 
 #[cfg(test)]
 mod tests {
@@ -1599,12 +1588,9 @@ mod tests {
     }
 
     #[test]
-    fn an_event_its_raw_message_takes_over_the_event_bound_is_not_dispatched() {
-        // The data and the raw message it renders are each under the
-        // event-data bound (64 KiB), but together over the event bound
-        // (96 KiB), which every receiving session's boundary enforces: the
-        // sender's processor rejects it, so the sender raises
-        // error.execution, instead of the receiver failing on it.
+    fn an_event_and_its_raw_message_have_no_byte_bound() {
+        // SCXML sets no payload size: data and the raw message it renders
+        // reach the target whatever their size.
         let none = |_: &str| false;
         let child = SessionAddress {
             session_id: "child",
@@ -1629,25 +1615,20 @@ mod tests {
             request
         };
         assert!(matches!(
-            ScxmlIoProcessor.dispatch(request(40_000), &child),
+            ScxmlIoProcessor.dispatch(request(200_000), &child),
             Ok(Dispatch::Parent(_))
         ));
-        assert_eq!(
-            ScxmlIoProcessor.dispatch(request(50_000), &child),
-            Err(ProcessorError::PayloadTooLarge)
-        );
         let root = SessionAddress {
             session_id: "root",
             parent_session_id: None,
             is_live_invocation: &none,
             invocation_of_session: &|_| None,
         };
-        let mut local = request(50_000);
+        let mut local = request(200_000);
         local.target = None;
-        assert_eq!(
-            ScxmlIoProcessor.dispatch(local, &root),
-            Err(ProcessorError::PayloadTooLarge),
-            "the sender's own queue has the same bound"
+        assert!(
+            ScxmlIoProcessor.dispatch(local, &root).is_ok(),
+            "the sender's own queue has no bound either"
         );
     }
 

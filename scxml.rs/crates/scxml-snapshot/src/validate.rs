@@ -17,8 +17,6 @@ use crate::{
 
 /// Largest JSON integer the document may hold (2^53 − 1).
 const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
-/// Largest event metadata string (`origin`, `origintype`, `sendid`, …).
-const MAX_METADATA_BYTES: usize = scxml_types::MAX_EVENT_METADATA_BYTES;
 
 /// An RFC 6901 pointer built only from fixed keys and indices.
 #[derive(Clone, Debug, Default)]
@@ -429,11 +427,6 @@ impl Passes {
                     &pointer.with_key("type"),
                 );
             }
-            self.text(
-                &invocation.invoke_type,
-                MAX_METADATA_BYTES,
-                &pointer.with_key("type"),
-            );
             let child = &invocation.session;
             let child_pointer = pointer.with_key("session");
             self.session(child, &child_pointer, context);
@@ -589,7 +582,18 @@ impl Passes {
                         self.fail(SnapshotErrorCode::Inconsistent, &entry.with_key("name"));
                     }
                     match &variable.value {
-                        VariableValue::Value(value) => self.value(value, &entry.with_key("value")),
+                        VariableValue::Value(value) => {
+                            let pointer = entry.with_key("value");
+                            self.value(value, &pointer);
+                            // A longer variable is written as its size only.
+                            if let Value::Text(text)
+                            | Value::Xml(text)
+                            | Value::JsonArray(text)
+                            | Value::JsonObject(text) = value
+                            {
+                                self.text(text, MAX_VALUE_BYTES, &pointer.with_key("value"));
+                            }
+                        }
                         VariableValue::Text(text) => {
                             let value = entry.with_key("value");
                             self.text(&text.kind, MAX_TYPEOF_BYTES, &value.with_key("typeof"));
@@ -660,11 +664,6 @@ impl Passes {
                             self.message(message, &entry.with_key("message"), context);
                         }
                         _ => self.fail(SnapshotErrorCode::Inconsistent, &entry),
-                    }
-                    for (text, key) in [(&send.target, "target"), (&send.send_type, "type")] {
-                        if let Some(text) = text {
-                            self.text(text, MAX_METADATA_BYTES, &entry.with_key(key));
-                        }
                     }
                     self.integer(send.delay_ms, &entry.with_key("delay_ms"));
                     self.integer(send.deadline_ms, &entry.with_key("deadline_ms"));
@@ -769,19 +768,6 @@ impl Passes {
         if EventName::new(event.name.as_str()).is_err() {
             self.name(&name);
         }
-        for (text, key) in [
-            (&event.origin, "origin"),
-            (&event.origintype, "origintype"),
-            (&event.sendid, "sendid"),
-            (&event.invokeid, "invokeid"),
-        ] {
-            if let Some(text) = text {
-                self.text(text, MAX_METADATA_BYTES, &pointer.with_key(key));
-            }
-        }
-        if let Some(raw) = &event.raw {
-            self.text(raw, MAX_VALUE_BYTES, &pointer.with_key("raw"));
-        }
         self.value(&event.data, &pointer.with_key("data"));
         if let Some(carrier) = &event.trace_context {
             self.carrier(carrier, &pointer.with_key("trace_context"), context);
@@ -845,27 +831,27 @@ impl Passes {
     fn value(&mut self, value: &Value, pointer: &Pointer) {
         let inner = pointer.with_key("value");
         match value {
-            Value::Absent | Value::Undefined | Value::Null | Value::Boolean(_) => {}
+            Value::Absent
+            | Value::Undefined
+            | Value::Null
+            | Value::Boolean(_)
+            | Value::Text(_)
+            | Value::Xml(_) => {}
             Value::Number(text) => {
                 if !is_canonical_number(text) {
                     self.fail(SnapshotErrorCode::NonCanonical, &inner);
                 }
             }
-            Value::Text(text) | Value::Xml(text) => self.text(text, MAX_VALUE_BYTES, &inner),
             Value::JsonArray(text) => {
-                self.text(text, MAX_VALUE_BYTES, &inner);
-                if text.len() <= MAX_VALUE_BYTES
-                    && scxml_types::DataValue::canonical_json_array(text)
-                        != Ok(scxml_types::DataValue::JsonArray(text.clone()))
+                if scxml_types::DataValue::canonical_json_array(text)
+                    != Ok(scxml_types::DataValue::JsonArray(text.clone()))
                 {
                     self.fail(SnapshotErrorCode::NonCanonical, &inner);
                 }
             }
             Value::JsonObject(text) => {
-                self.text(text, MAX_VALUE_BYTES, &inner);
-                if text.len() <= MAX_VALUE_BYTES
-                    && scxml_types::DataValue::canonical_json_object(text)
-                        != Ok(scxml_types::DataValue::JsonObject(text.clone()))
+                if scxml_types::DataValue::canonical_json_object(text)
+                    != Ok(scxml_types::DataValue::JsonObject(text.clone()))
                 {
                     self.fail(SnapshotErrorCode::NonCanonical, &inner);
                 }

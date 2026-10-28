@@ -1282,6 +1282,26 @@ hard cutover.
 
 ### Removed
 
+- The byte bounds SCXML does not set on events and data-model values:
+  `scxml_types::MAX_EVENT_DATA_BYTES` (64 KiB per event `data` and `raw`),
+  `MAX_EVENT_BYTES` (96 KiB per event, which counted a send between sessions
+  twice, as its data and as its percent-encoded `_event.raw`, so about
+  48 KiB was refused), and `MAX_EVENT_METADATA_BYTES` (16 KiB per `origin`
+  and `origin-type`), with `EventError::ValueTooLarge` and
+  `AggregateTooLarge`, `ForeachError::TooLarge`, and
+  `DataValueError::ValueTooLarge`; the machine boundary's
+  `MAX_METADATA_BYTES`, `MAX_DATA_VALUE_BYTES`, `MAX_EVENT_BYTES`, and
+  `MachineBoundaryError::AggregateTooLarge`; the SCXML processor's
+  `MAX_RAW_MESSAGE_BYTES` (`raw_message` is infallible) and BasicHTTP's
+  `MAX_RAW_BYTES`; the null data model's `MAX_VALUE_BYTES` and the 64 KiB
+  bound every data model put on each text, JSON, or XML value, system
+  string, and event field crossing its interface; and the session
+  snapshot's 64 KiB bound on event data and `raw` and 16 KiB bound on event
+  metadata, a pending send's `target` and `type`, and an invocation's
+  `type`. Names, trace context, and the snapshot's variable `oversized`
+  threshold keep their bounds. The `types.event` and `data-model-api` WIT
+  texts say so.
+
 - The bounded logical `scxml-invoked-service` component and its 0.1.0
   `invoke-request` WIT record (`invoker-type`, text `content`; the name is
   now the invoked-service request), `ArtifactKind::InvokedService`, the
