@@ -7,7 +7,7 @@ use scxml_types::{
 };
 
 use super::{
-    BasicHttpSend, CapabilityErrorKind, FailureCategory, Interpreter, SendDisposition, SendTarget,
+    CapabilityErrorKind, FailureCategory, Interpreter, ProcessorSend, SendDisposition, SendTarget,
     SessionCapabilities, inline_body, normalize_whitespace, recover,
 };
 use crate::{EffectFailure, Engine, PlatformError};
@@ -159,16 +159,13 @@ impl<C: SessionCapabilities> Interpreter<'_, C> {
         // error.execution on the internal event queue."
         let processor_type =
             self.literal_or_text(send.type_value.as_ref(), send.typeexpr.as_ref(), event)?;
-        match processor_type.as_deref().map(classify_processor_type) {
-            Some(ProcessorKind::BasicHttp) => {
-                return self.send_basichttp(engine, send, event, send_id);
-            }
-            // An unknown processor identifier is invalid (SCXML 6.2,
-            // official case 199).
-            Some(ProcessorKind::Unknown) => {
-                return Err(EffectFailure::Block(PlatformError::Execution));
-            }
-            Some(ProcessorKind::Scxml) | None => {}
+        // Any other type goes to the processor the host binds to it; a type
+        // no processor answers is invalid (SCXML 6.2, official case 199),
+        // which the host reports as `invalid-input` (`error.execution`).
+        if let Some(other) = processor_type.as_deref()
+            && classify_processor_type(other) != ProcessorKind::Scxml
+        {
+            return self.send_processor(engine, send, event, send_id, other.to_owned());
         }
         // The SCXML processor requires an event name; a non-string or
         // invalid `eventexpr` is illegal (SCXML 6.2.3).
@@ -368,23 +365,27 @@ impl<C: SessionCapabilities> Interpreter<'_, C> {
         Ok((value, SendMessage::Content))
     }
 
-    /// Applies one `<send>` addressed to the `BasicHTTP` Event I/O
-    /// Processor (SCXML C.2): the interpreter evaluates every expression,
-    /// the processor encodes and posts. An invalid request raises
+    /// Applies one `<send>` addressed to an Event I/O Processor other than
+    /// the SCXML one, such as `BasicHTTP` (SCXML C.2) or a processor a
+    /// package binds: the interpreter evaluates every expression, the host
+    /// routes the request by `processor_type` and the processor encodes and
+    /// sends it. An invalid request (or a type no processor answers) raises
     /// `error.execution`, an undeliverable one `error.communication`
-    /// (official case 577). The request
-    /// carries the send's id (generated when the author gave none), so a
-    /// failure the host learns of only after this `<send>` returned still
-    /// names it as `_event.sendid` (SCXML 5.10.1).
-    fn send_basichttp(
+    /// (official case 577). The request carries the send's id (generated
+    /// when the author gave none), so a failure the host learns of only
+    /// after this `<send>` returned still names it as `_event.sendid`
+    /// (SCXML 5.10.1).
+    fn send_processor(
         &mut self,
         engine: &mut Engine,
         send: &SendIr,
         event: Option<&Event>,
         send_id: &mut Option<SendId>,
+        processor_type: String,
     ) -> Result<(), EffectFailure<C::Error>> {
-        // SCXML C.2: the event name is optional (the receiver then uses
-        // `HTTP.POST`); a non-string `eventexpr` is illegal (SCXML 6.2).
+        // The event name is optional (SCXML C.2: a `BasicHTTP` receiver
+        // then uses `HTTP.POST`); a non-string `eventexpr` is illegal
+        // (SCXML 6.2).
         let event_name =
             self.literal_or_text(send.event.as_ref(), send.eventexpr.as_ref(), event)?;
         let target = self.literal_or_text(send.target.as_ref(), send.targetexpr.as_ref(), event)?;
@@ -450,7 +451,8 @@ impl<C: SessionCapabilities> Interpreter<'_, C> {
             Some(id) => id.clone(),
             None => send_id.insert(self.generated_send_id()?).clone(),
         };
-        let request = BasicHttpSend {
+        let request = ProcessorSend {
+            processor_type,
             send_id,
             event_name,
             target,
@@ -459,7 +461,7 @@ impl<C: SessionCapabilities> Interpreter<'_, C> {
             delay_ms,
             trace_context: self.outbound.clone(),
         };
-        match self.caps.send_basichttp(request) {
+        match self.caps.send_processor(request) {
             Ok(SendDisposition::EnqueueExternal(event)) => engine
                 .enqueue_external(*event)
                 .map_err(|cause| self.engine_fatal(cause, "engine-enqueue-external")),

@@ -140,17 +140,21 @@ pub enum SendTarget {
     Invalid,
 }
 
-/// One evaluated `<send>` for the `BasicHTTP` Event I/O Processor (WIT
-/// `basichttp-send`, SCXML C.2).
+/// One evaluated `<send>` for an Event I/O Processor other than the SCXML
+/// one, such as `BasicHTTP` (SCXML C.2) or a processor a package binds (WIT
+/// `processor-send`).
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct BasicHttpSend {
+pub struct ProcessorSend {
+    /// Evaluated `type`/`typeexpr`, exactly as written; the host routes the
+    /// send by it.
+    pub processor_type: String,
     /// The send's id: the authored `id`, else the platform-generated one
-    /// (SCXML 3.14, 6.2.4). It never enters the HTTP message; the host
+    /// (SCXML 3.14, 6.2.4). It never enters the message; the host
     /// keeps it so a failure it learns of after the `<send>` returned
     /// carries it as `_event.sendid` (SCXML 5.10.1).
     pub send_id: SendId,
-    /// Evaluated `event`/`eventexpr`; absent lets the receiver use
-    /// `HTTP.POST`.
+    /// Evaluated `event`/`eventexpr`; optional (a `BasicHTTP` receiver
+    /// then uses `HTTP.POST`).
     pub event_name: Option<String>,
     /// Evaluated `target`/`targetexpr`.
     pub target: Option<String>,
@@ -528,20 +532,21 @@ pub trait SessionCapabilities {
     /// everything else fails the session.
     fn send(&mut self, request: SendRequest) -> Result<SendDisposition, Self::Error>;
 
-    /// Sends one `<send>` through the `BasicHTTP` Event I/O Processor (WIT
-    /// `send-basichttp`): at once when its delay is 0; otherwise the
+    /// Sends one `<send>` through the Event I/O Processor its type names
+    /// (WIT `send-processor`): at once when its delay is 0; otherwise the
     /// processor checks it and the host schedules it
-    /// ([`SendDisposition::Scheduled`]) and posts it when it falls due, and
-    /// a due send that cannot be dispatched raises `error.communication`
-    /// with its send id (SCXML 6.2, 6.2.4, C.2).
+    /// ([`SendDisposition::Scheduled`]) and dispatches it when it falls
+    /// due, and a due send that cannot be dispatched raises
+    /// `error.communication` with its send id (SCXML 6.2, 6.2.4, C.2).
     ///
     /// # Errors
     ///
-    /// [`CapabilityErrorKind::InvalidInput`],
+    /// [`CapabilityErrorKind::InvalidInput`] (a type no processor answers
+    /// included),
     /// [`CapabilityErrorKind::PayloadTooLarge`], and
     /// [`CapabilityErrorKind::CapacityExhausted`] are `error.execution`;
     /// everything else fails the session.
-    fn send_basichttp(&mut self, request: BasicHttpSend) -> Result<SendDisposition, Self::Error>;
+    fn send_processor(&mut self, request: ProcessorSend) -> Result<SendDisposition, Self::Error>;
 
     /// Cancels one pending delayed send (SCXML 6.3); an unknown id succeeds.
     ///

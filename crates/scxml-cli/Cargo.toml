@@ -61,6 +61,10 @@ path = "src/main.rs"
 [build-dependencies]
 sha2.workspace = true
 
+[dev-dependencies]
+# The loopback WebSocket echo server of the processor tests (live_run).
+tungstenite.workspace = true
+
 [target.'cfg(unix)'.dependencies]
 signal-hook = { workspace = true, optional = true }
 

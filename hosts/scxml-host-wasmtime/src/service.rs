@@ -47,6 +47,14 @@
 //!   a live session performs it on a transport thread and delivers the
 //!   response later as a recorded external input (`LiveSession::deliver_http_responses`),
 //!   which a replay delivers from its record instead.
+//! * **Outbound WebSocket** — `outbound-websocket.connect` is admitted as an
+//!   `outbound-http` `GET` of the same URL (a `ws` URL by its `http` form)
+//!   and headers. A live session runs the connection on a thread of its own
+//!   through the embedder's transport ([`ServiceComponents::with_outbound_websocket`])
+//!   and delivers each answer (its opening, a message, its end) as a
+//!   recorded external input; a replay delivers them from its record, and a
+//!   batch run refuses the connection. Cancelling the invocation closes its
+//!   connections.
 //! * **Bounds** — the invocation runs at most the configured fuel
 //!   ([`ServiceComponents::with_call_fuel`]) between two inputs, and returns
 //!   at most 1024 events of at most 4 MiB in all per input (amplification
@@ -58,7 +66,7 @@
 //!   the host fills `invoke-request.references` with an opaque reference
 //!   when it holds a value for the variable granted to the service's type
 //!   URI; the references live for the whole invocation, only inside its own
-//!   admitted `outbound-http` requests.
+//!   admitted `outbound-http` requests and `outbound-websocket` connections.
 //!
 //! Telemetry: one boundary span per start, event, due timers, cancel, and
 //! `outbound-http` request (`scxml.host-wasmtime.service-*`) with closed
@@ -109,6 +117,23 @@ pub(crate) mod service_bindings {
 }
 
 pub use service_bindings::stateforward::scxml::outbound_http;
+
+pub(crate) mod processor_bindings {
+    wasmtime::component::bindgen!({
+        path: "../../crates/scxml-wit/wit/scxml",
+        world: "event-processor",
+        with: {
+            "stateforward:scxml/types": crate::bindings::stateforward::scxml::types,
+            "stateforward:scxml/telemetry": crate::bindings::stateforward::scxml::telemetry,
+            "stateforward:scxml/outbound-http": crate::service::service_bindings::stateforward::scxml::outbound_http,
+            "stateforward:scxml/outbound-websocket": crate::service::service_bindings::stateforward::scxml::outbound_websocket,
+        },
+        require_store_data_send: true,
+    });
+}
+
+use processor_bindings::exports::stateforward::scxml::event_processor_api::ProcessorStart;
+use service_bindings::stateforward::scxml::outbound_websocket;
 use wasmtime_wasi::p3::bindings::clocks::{monotonic_clock, types as clock_types};
 
 /// Maximum service type URIs one session host binds.
@@ -166,6 +191,7 @@ struct ServiceBinding {
 pub struct ServiceComponents {
     bindings: Vec<ServiceBinding>,
     http: Option<Arc<dyn ExtensionHttp>>,
+    websocket: Option<Arc<dyn crate::WebSocketTransport>>,
     values: crate::ExtensionEnvironment,
     wasi: BTreeMap<String, crate::WasiOptions>,
     call_fuel: u64,
@@ -185,18 +211,21 @@ pub(crate) struct ServiceParts {
         crate::wasi::WasiPlan,
     )>,
     pub(crate) http: Option<Arc<dyn ExtensionHttp>>,
+    pub(crate) websocket: Option<Arc<dyn crate::WebSocketTransport>>,
     pub(crate) values: crate::ExtensionEnvironment,
     pub(crate) call_fuel: u64,
 }
 
 impl ServiceComponents {
-    /// No bindings, no outbound HTTP, no values, no WASI resource, and
+    /// No bindings, no outbound HTTP or WebSocket, no values, no WASI
+    /// resource, and
     /// [`crate::DEFAULT_EXTENSION_CALL_FUEL`] between two inputs.
     #[must_use]
     pub fn new() -> Self {
         Self {
             bindings: Vec::new(),
             http: None,
+            websocket: None,
             values: crate::ExtensionEnvironment::none(),
             wasi: BTreeMap::new(),
             call_fuel: crate::DEFAULT_EXTENSION_CALL_FUEL,
@@ -236,6 +265,24 @@ impl ServiceComponents {
     #[must_use]
     pub fn with_outbound_http(mut self, transport: Arc<dyn ExtensionHttp>) -> Self {
         self.http = Some(transport);
+        self
+    }
+
+    /// The transport admitted `outbound-websocket` connections go through.
+    /// Without one (the default) every connection is refused with
+    /// `unavailable`; with one, the host admits only the origins each
+    /// service's package declares (a `ws` URL by its `http` form), or the
+    /// origin a reference's value supplies entirely. A live session runs
+    /// each admitted connection on a thread of its own and delivers what the
+    /// peer sends as external inputs of the invocation; cancelling the
+    /// invocation closes its connections. A batch run refuses every
+    /// connection.
+    #[must_use]
+    pub fn with_outbound_websocket(
+        mut self,
+        transport: Arc<dyn crate::WebSocketTransport>,
+    ) -> Self {
+        self.websocket = Some(transport);
         self
     }
 
@@ -334,6 +381,7 @@ impl ServiceComponents {
         Ok(ServiceParts {
             bindings,
             http: self.http,
+            websocket: self.websocket,
             values: self.values,
             call_fuel: self.call_fuel,
         })
@@ -353,10 +401,48 @@ pub(crate) fn service_linker(
     )?;
     telemetry::add_to_linker::<_, HasSelf<ServiceStoreData>>(&mut linker, |state| state)?;
     outbound_http::add_to_linker::<_, HasSelf<ServiceStoreData>>(&mut linker, |state| state)?;
+    outbound_websocket::add_to_linker::<_, HasSelf<ServiceStoreData>>(&mut linker, |state| state)?;
     clock_types::add_to_linker::<_, LogicalClock>(&mut linker, |state| state)?;
     monotonic_clock::add_to_linker::<_, LogicalClock>(&mut linker, |state| state)?;
     wasi.add_to_linker(&mut linker)?;
     Ok(linker)
+}
+
+/// The linker of every processor instance's store: exactly the
+/// `event-processor` world's imports (no WASI).
+pub(crate) fn processor_linker(
+    engine: &wasmtime::Engine,
+) -> Result<Linker<ServiceStoreData>, HostError> {
+    let mut linker = Linker::<ServiceStoreData>::new(engine);
+    crate::bindings::stateforward::scxml::types::add_to_linker::<_, HasSelf<ServiceStoreData>>(
+        &mut linker,
+        |state| state,
+    )?;
+    telemetry::add_to_linker::<_, HasSelf<ServiceStoreData>>(&mut linker, |state| state)?;
+    outbound_http::add_to_linker::<_, HasSelf<ServiceStoreData>>(&mut linker, |state| state)?;
+    outbound_websocket::add_to_linker::<_, HasSelf<ServiceStoreData>>(&mut linker, |state| state)?;
+    Ok(linker)
+}
+
+/// One bound processor's component, pre-instantiated against its linker.
+pub(crate) type ProcessorPre = processor_bindings::EventProcessorPre<ServiceStoreData>;
+
+/// Pre-instantiates one bound processor's component against its linker.
+pub(crate) fn processor_pre(
+    linker: &Linker<ServiceStoreData>,
+    component: &wasmtime::component::Component,
+) -> Result<ProcessorPre, HostError> {
+    let pre = linker.instantiate_pre(component)?;
+    Ok(processor_bindings::EventProcessorPre::new(pre)?)
+}
+
+/// The run-wide facts one processor instance is opened with.
+pub(crate) struct ProcessorRuntime<'a> {
+    pub(crate) pre: &'a ProcessorPre,
+    pub(crate) config: &'a WasmtimeHostConfig,
+    pub(crate) providers: &'a TelemetryProviders,
+    pub(crate) package: &'a crate::ProcessorPackage,
+    pub(crate) call_fuel: u64,
 }
 
 /// One bound service's component, pre-instantiated against its linker.
@@ -381,6 +467,8 @@ pub(crate) struct ServiceRuntime<'a> {
     pub(crate) wasi: &'a crate::wasi::WasiPlan,
     /// Whether the run offers outbound HTTP to services.
     pub(crate) http_offered: bool,
+    /// How the run carries out services' connections.
+    pub(crate) websocket: SocketMode,
     /// The values `env` slots may reference.
     pub(crate) values: &'a crate::ExtensionEnvironment,
     pub(crate) call_fuel: u64,
@@ -502,6 +590,151 @@ impl Pending {
     }
 }
 
+/// Maximum bytes of the messages one connection holds for its instance
+/// before the instance reads them; past it the connection fails with
+/// `payload-too-large`. An amplification guard (every build).
+const MAX_QUEUED_SOCKET_BYTES: usize = 8 * crate::MAX_WEBSOCKET_MESSAGE_BYTES;
+/// Maximum connections of one instance open at once; one more is answered
+/// `capacity-exhausted`.
+const MAX_SOCKETS: usize = 16;
+
+/// How the host calls an instance for one `<send>`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum SendCall {
+    /// `event-processor-api.check` (a delayed `<send>` when evaluated).
+    Check,
+    /// `event-processor-api.send`.
+    Send,
+}
+
+/// One connection the instance holds (`outbound-websocket.connect`).
+#[derive(Default)]
+struct Socket {
+    /// The handshake's outcome, until `connect` takes it.
+    opened: Option<Result<Option<String>, ComponentError>>,
+    /// Whether the handshake completed.
+    open: bool,
+    /// Messages received and not yet read.
+    incoming: VecDeque<outbound_websocket::Message>,
+    queued_bytes: usize,
+    /// How the connection ended, once it did.
+    end: Option<Result<Option<outbound_websocket::CloseFrame>, ComponentError>>,
+    /// The instance dropped the incoming stream.
+    incoming_closed: bool,
+    /// The instance took the end, or dropped the future.
+    end_closed: bool,
+    waker: Option<Waker>,
+    incoming_waker: Option<Waker>,
+    end_waker: Option<Waker>,
+}
+
+/// The `outbound-websocket` error one transport failure becomes.
+fn socket_error(failure: crate::WebSocketFailure) -> ComponentError {
+    match failure {
+        crate::WebSocketFailure::NotAllowed => component_error(
+            ErrorCode::Unavailable,
+            "the transport refused the connection target",
+        ),
+        crate::WebSocketFailure::Handshake => {
+            component_error(ErrorCode::Unavailable, "the WebSocket handshake failed")
+        }
+        crate::WebSocketFailure::Transport => {
+            component_error(ErrorCode::Unavailable, "the WebSocket connection was lost")
+        }
+        crate::WebSocketFailure::MessageTooLarge => component_error(
+            ErrorCode::PayloadTooLarge,
+            "a WebSocket message exceeds its byte bound",
+        ),
+    }
+}
+
+impl Socket {
+    /// Whether nothing of this connection is left for the instance.
+    const fn settled(&self) -> bool {
+        self.end.is_some() && self.incoming_closed && self.end_closed
+    }
+
+    /// Ends the connection with `end` (the first end wins).
+    fn finish(&mut self, end: Result<Option<outbound_websocket::CloseFrame>, ComponentError>) {
+        if self.end.is_some() {
+            return;
+        }
+        if !self.open && self.opened.is_none() {
+            self.opened = Some(Err(match &end {
+                Ok(_) => component_error(ErrorCode::Unavailable, "the WebSocket handshake failed"),
+                Err(error) => error.clone(),
+            }));
+        }
+        self.end = Some(end);
+        Io::wake(&mut self.waker);
+        Io::wake(&mut self.incoming_waker);
+        Io::wake(&mut self.end_waker);
+    }
+
+    /// Takes one answer of the transport, within its bounds: an answer out
+    /// of order fails the connection with `unavailable`, and messages held
+    /// past [`MAX_QUEUED_SOCKET_BYTES`] with `payload-too-large`. Returns
+    /// whether the host should close the connection.
+    fn take(&mut self, answer: crate::WebSocketAnswer) -> bool {
+        if self.end.is_some() {
+            return false;
+        }
+        match answer {
+            crate::WebSocketAnswer::Opened(protocol) if !self.open => {
+                self.open = true;
+                self.opened = Some(Ok(protocol));
+                Io::wake(&mut self.waker);
+                false
+            }
+            crate::WebSocketAnswer::Message(message)
+                if self.open && message.len() <= crate::MAX_WEBSOCKET_MESSAGE_BYTES =>
+            {
+                if self.incoming_closed {
+                    return false;
+                }
+                self.queued_bytes = self.queued_bytes.saturating_add(message.len());
+                if self.queued_bytes > MAX_QUEUED_SOCKET_BYTES {
+                    self.incoming.clear();
+                    self.finish(Err(component_error(
+                        ErrorCode::PayloadTooLarge,
+                        "the connection holds more unread messages than it may",
+                    )));
+                    return true;
+                }
+                self.incoming.push_back(match message {
+                    crate::WebSocketMessage::Text(text) => outbound_websocket::Message::Text(text),
+                    crate::WebSocketMessage::Binary(bytes) => {
+                        outbound_websocket::Message::Binary(bytes)
+                    }
+                });
+                Io::wake(&mut self.incoming_waker);
+                false
+            }
+            crate::WebSocketAnswer::Message(_) if self.open => {
+                self.finish(Err(socket_error(crate::WebSocketFailure::MessageTooLarge)));
+                true
+            }
+            crate::WebSocketAnswer::Closed(frame) if self.open => {
+                self.finish(Ok(frame.map(|frame| outbound_websocket::CloseFrame {
+                    code: frame.code,
+                    reason: frame.reason,
+                })));
+                false
+            }
+            crate::WebSocketAnswer::Failed(failure) => {
+                self.finish(Err(socket_error(failure)));
+                false
+            }
+            crate::WebSocketAnswer::Opened(_)
+            | crate::WebSocketAnswer::Message(_)
+            | crate::WebSocketAnswer::Closed(_) => {
+                self.finish(Err(socket_error(crate::WebSocketFailure::Transport)));
+                true
+            }
+        }
+    }
+}
+
 /// The state shared by one invocation's host functions, its streams, and
 /// its thread.
 #[derive(Default)]
@@ -530,6 +763,20 @@ struct Io {
     /// The pump refuels the store at its next poll.
     refuel: bool,
     pump_waker: Option<Waker>,
+    /// A processor instance's sends not yet called, in order.
+    sends: VecDeque<(
+        u64,
+        crate::bindings::stateforward::scxml::types::ProcessorSend,
+        SendCall,
+    )>,
+    /// What each processor call resolved with since the last report.
+    send_outcomes: Vec<SendOutcome>,
+    /// Connections admitted since the last report.
+    socket_requests: Vec<(u64, crate::WebSocketRequest)>,
+    sockets: BTreeMap<u64, Socket>,
+    next_socket: u64,
+    /// What the instance handed its connections since the last report.
+    socket_out: Vec<(u64, crate::WebSocketOutgoing)>,
     /// The invoke type, stamped as `origin-type`.
     type_uri: String,
     /// The carrier stamped on returned events that carry none.
@@ -726,6 +973,11 @@ pub(crate) struct ServiceStoreData {
     references: Vec<(u32, String)>,
     /// Whether the run offers outbound HTTP to services.
     http_offered: bool,
+    /// Whether the run offers outbound WebSocket to this instance.
+    websocket_offered: bool,
+    /// The guest telemetry module label (`invoked-service` or
+    /// `event-processor`).
+    guest_module: &'static str,
     /// The invocation's WASI context (reachable only through the interfaces
     /// its plan linked).
     wasi: crate::wasi::WasiState,
@@ -1083,6 +1335,502 @@ impl<D> wasmtime::component::FutureProducer<D> for BodyEnd {
     }
 }
 
+impl outbound_websocket::Host for ServiceStoreData {}
+
+/// A WebSocket URL read as an `outbound-http` URL: its parts, the references
+/// to substitute, and whether the connection is secure.
+type SocketUrl = (Vec<outbound_http::TextPart>, Vec<(u32, String)>, bool);
+
+/// The URL text parts of a WebSocket request as an `outbound-http` URL, so
+/// the request is checked and admitted exactly as an HTTP request to the
+/// same origin. A leading literal `ws://` or `wss://` reads as `http://` or
+/// `https://`. A leading reference supplies the origin as it does for a
+/// request when its value is a `ws://`, `wss://`, `http://`, or `https://`
+/// URL: a `ws` value is admitted by its `http` form (through a fresh
+/// reference, so the same reference elsewhere keeps its value), and an
+/// `http` value names the `ws` URL of the same form. Returns the parts, the
+/// references to substitute, and whether the connection is secure.
+fn socket_url_as_http(
+    mut url: Vec<outbound_http::TextPart>,
+    references: &[(u32, String)],
+) -> Result<SocketUrl, ComponentError> {
+    let refused = || {
+        component_error(
+            ErrorCode::InvalidInput,
+            "a WebSocket URL must start with ws:// or wss://, or a reference to a ws, wss, http, or https URL",
+        )
+    };
+    let mut references = references.to_vec();
+    let secure = match url.first_mut() {
+        Some(outbound_http::TextPart::Literal(first)) => {
+            let (secure, rest) = if let Some(rest) = strip_scheme(first, "wss://") {
+                (true, rest)
+            } else if let Some(rest) = strip_scheme(first, "ws://") {
+                (false, rest)
+            } else {
+                return Err(refused());
+            };
+            *first = format!("{}{rest}", if secure { "https://" } else { "http://" });
+            secure
+        }
+        Some(outbound_http::TextPart::Reference(reference)) => {
+            let value = references
+                .iter()
+                .find(|(id, _)| id == reference)
+                .map(|(_, value)| value.clone())
+                .ok_or_else(refused)?;
+            if strip_scheme(&value, "https://").is_some() {
+                true
+            } else if strip_scheme(&value, "http://").is_some() {
+                false
+            } else {
+                let (secure, rest) = if let Some(rest) = strip_scheme(&value, "wss://") {
+                    (true, rest)
+                } else if let Some(rest) = strip_scheme(&value, "ws://") {
+                    (false, rest)
+                } else {
+                    return Err(refused());
+                };
+                let fresh = references
+                    .iter()
+                    .map(|(id, _)| *id)
+                    .max()
+                    .map_or(0, |id| id.saturating_add(1));
+                references.push((
+                    fresh,
+                    format!("{}{rest}", if secure { "https://" } else { "http://" }),
+                ));
+                *reference = fresh;
+                secure
+            }
+        }
+        None => return Err(refused()),
+    };
+    Ok((url, references, secure))
+}
+
+/// `text` after `scheme`, compared ASCII case-insensitively.
+fn strip_scheme(text: &str, scheme: &str) -> Option<String> {
+    text.get(..scheme.len())
+        .filter(|prefix| prefix.eq_ignore_ascii_case(scheme))
+        .and_then(|_| text.get(scheme.len()..))
+        .map(str::to_owned)
+}
+
+/// Whether `name` is a handshake header the host owns.
+fn reserved_socket_header(name: &str) -> bool {
+    ["host", "connection", "upgrade"]
+        .iter()
+        .any(|reserved| name.eq_ignore_ascii_case(reserved))
+        || name
+            .get(..14)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("sec-websocket-"))
+}
+
+/// Whether `protocol` is an RFC 9110 token of at most 256 bytes.
+fn is_protocol_token(protocol: &str) -> bool {
+    !protocol.is_empty()
+        && protocol.len() <= 256
+        && protocol
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&byte))
+}
+
+/// Checks and admits one connection request as an `outbound-http` `GET`
+/// of the same URL and headers ([`crate::outbound_http::admit_request`]):
+/// the canonical request the transport opens.
+fn admit_socket_request(
+    request: outbound_websocket::WebsocketRequest,
+    references: &[(u32, String)],
+    allow: &crate::HttpAllowlist,
+    offered: bool,
+) -> Result<crate::WebSocketRequest, (ComponentError, ErrorCategory)> {
+    let invalid = |detail: &'static str| {
+        (
+            component_error(ErrorCode::InvalidInput, detail),
+            ErrorCategory::InvalidInput,
+        )
+    };
+    if request
+        .headers
+        .iter()
+        .any(|header| reserved_socket_header(&header.name))
+    {
+        return Err(invalid(
+            "a WebSocket request names a handshake header the host owns",
+        ));
+    }
+    if request.protocols.len() > 16 || !request.protocols.iter().all(|p| is_protocol_token(p)) {
+        return Err(invalid("a WebSocket request offers an invalid subprotocol"));
+    }
+    let (url, references, secure) = socket_url_as_http(request.url, references)
+        .map_err(|error| (error, ErrorCategory::InvalidInput))?;
+    let admitted = crate::outbound_http::admit_request(
+        outbound_http::HttpRequest {
+            method: "GET".into(),
+            url,
+            headers: request
+                .headers
+                .into_iter()
+                .map(|header| outbound_http::HttpHeader {
+                    name: header.name,
+                    value: header.value,
+                })
+                .collect(),
+            body: Vec::new(),
+        },
+        &references,
+        allow,
+        offered,
+        |_| {},
+    )?;
+    let url = admitted
+        .url
+        .strip_prefix(if secure { "https://" } else { "http://" })
+        .map(|rest| format!("{}{rest}", if secure { "wss://" } else { "ws://" }))
+        .ok_or_else(|| invalid("a WebSocket URL must stay a ws:// or wss:// URL"))?;
+    Ok(crate::WebSocketRequest {
+        url,
+        headers: admitted.headers,
+        protocols: request.protocols,
+    })
+}
+
+/// The open connection handed back by `connect`.
+type Connected = (
+    Option<String>,
+    StreamReader<outbound_websocket::Message>,
+    wasmtime::component::FutureReader<
+        Result<Option<outbound_websocket::CloseFrame>, ComponentError>,
+    >,
+);
+
+impl<U> outbound_websocket::HostWithStore<U> for HasSelf<ServiceStoreData> {
+    async fn connect(
+        accessor: &Accessor<U, Self>,
+        request: outbound_websocket::WebsocketRequest,
+        mut outgoing: StreamReader<outbound_websocket::Message>,
+    ) -> Result<Connected, ComponentError> {
+        // The span covers admission (and ends before the first await); the
+        // transport's own span covers the connection (`processor-websocket`).
+        let admission = {
+            let span = scxml_telemetry::observe(
+                Module::HostWasmtime,
+                Operation::HostWasmtimeProcessorWebsocketConnect,
+            );
+            let admitted = accessor.with(|mut access| {
+                let data = access.get();
+                admit_socket_request(
+                    request,
+                    &data.references,
+                    &data.allow,
+                    data.websocket_offered,
+                )
+                .map(|admitted| (admitted, Arc::clone(&data.io)))
+            });
+            let admitted = admitted.and_then(|(admitted, io)| {
+                let mut state = lock(&io);
+                if state
+                    .sockets
+                    .values()
+                    .filter(|socket| socket.end.is_none())
+                    .count()
+                    >= MAX_SOCKETS
+                {
+                    return Err((
+                        component_error(
+                            ErrorCode::CapacityExhausted,
+                            "the instance has as many connections open as it may",
+                        ),
+                        ErrorCategory::Budget,
+                    ));
+                }
+                let id = state.next_socket;
+                state.next_socket = id.saturating_add(1);
+                state.socket_requests.push((id, admitted));
+                state.sockets.insert(id, Socket::default());
+                drop(state);
+                Ok((id, io))
+            });
+            match admitted {
+                Ok(admitted) => {
+                    span.event(SignalEvent::TransformationCompleted);
+                    Ok(admitted)
+                }
+                Err((error, category)) => {
+                    span.event(SignalEvent::InputRejected);
+                    span.fail(category);
+                    Err(error)
+                }
+            }
+        };
+        let (id, io) = match admission {
+            Ok(admitted) => admitted,
+            Err(error) => {
+                let _ = outgoing.close_with(accessor);
+                return Err(error);
+            }
+        };
+        let opened = std::future::poll_fn(|cx| {
+            let mut state = lock(&io);
+            let Some(socket) = state.sockets.get_mut(&id) else {
+                return Poll::Ready(Err(socket_error(crate::WebSocketFailure::Transport)));
+            };
+            match socket.opened.take() {
+                Some(Ok(protocol)) => Poll::Ready(Ok(protocol)),
+                Some(Err(error)) => {
+                    state.sockets.remove(&id);
+                    Poll::Ready(Err(error))
+                }
+                None => {
+                    socket.waker = Some(cx.waker().clone());
+                    Poll::Pending
+                }
+            }
+        })
+        .await;
+        let protocol = match opened {
+            Ok(protocol) => protocol,
+            Err(error) => {
+                let _ = outgoing.close_with(accessor);
+                return Err(error);
+            }
+        };
+        let piped = accessor.with(|mut access| -> wasmtime::Result<_> {
+            outgoing.pipe(&mut access, SocketSink::new(&io, id))?;
+            let incoming = StreamReader::new(&mut access, SocketIncoming::new(&io, id))?;
+            let end = wasmtime::component::FutureReader::new(&mut access, SocketEnd::new(&io, id))?;
+            Ok((incoming, end))
+        });
+        piped
+            .map(|(incoming, end)| (protocol, incoming, end))
+            .map_err(|_| {
+                let mut state = lock(&io);
+                state.socket_out.push((id, crate::WebSocketOutgoing::Close));
+                state.sockets.remove(&id);
+                component_error(ErrorCode::Platform, "the connection could not be opened")
+            })
+    }
+}
+
+/// The messages the peer sends on one connection, in order, until it ends.
+struct SocketIncoming {
+    io: SharedIo,
+    id: u64,
+}
+
+impl SocketIncoming {
+    fn new(io: &SharedIo, id: u64) -> Self {
+        Self {
+            io: Arc::clone(io),
+            id,
+        }
+    }
+}
+
+impl Drop for SocketIncoming {
+    /// Incoming messages the instance dropped are no longer kept.
+    fn drop(&mut self) {
+        let mut state = lock(&self.io);
+        if let Some(socket) = state.sockets.get_mut(&self.id) {
+            socket.incoming_closed = true;
+            socket.incoming.clear();
+            socket.queued_bytes = 0;
+            if socket.settled() {
+                state.sockets.remove(&self.id);
+            }
+        }
+    }
+}
+
+impl<D> StreamProducer<D> for SocketIncoming {
+    type Item = outbound_websocket::Message;
+    type Buffer = VecBuffer<outbound_websocket::Message>;
+
+    fn poll_produce<'a>(
+        self: Pin<&mut Self>,
+        cx: &mut TaskContext<'_>,
+        _store: StoreContextMut<'a, D>,
+        mut destination: Destination<'a, Self::Item, Self::Buffer>,
+        finish: bool,
+    ) -> Poll<wasmtime::Result<StreamResult>> {
+        let mut state = lock(&self.io);
+        let Some(socket) = state.sockets.get_mut(&self.id) else {
+            return Poll::Ready(Ok(StreamResult::Dropped));
+        };
+        if !socket.incoming.is_empty() {
+            let messages: Vec<_> = socket.incoming.drain(..).collect();
+            socket.queued_bytes = 0;
+            destination.set_buffer(messages.into());
+            return Poll::Ready(Ok(StreamResult::Completed));
+        }
+        if socket.end.is_some() {
+            return Poll::Ready(Ok(StreamResult::Dropped));
+        }
+        if finish {
+            return Poll::Ready(Ok(StreamResult::Cancelled));
+        }
+        socket.incoming_waker = Some(cx.waker().clone());
+        Poll::Pending
+    }
+}
+
+/// The future of one connection's end.
+struct SocketEnd {
+    io: SharedIo,
+    id: u64,
+}
+
+impl SocketEnd {
+    fn new(io: &SharedIo, id: u64) -> Self {
+        Self {
+            io: Arc::clone(io),
+            id,
+        }
+    }
+}
+
+impl Drop for SocketEnd {
+    fn drop(&mut self) {
+        let mut state = lock(&self.io);
+        if let Some(socket) = state.sockets.get_mut(&self.id) {
+            socket.end_closed = true;
+            if socket.settled() {
+                state.sockets.remove(&self.id);
+            }
+        }
+    }
+}
+
+impl<D> wasmtime::component::FutureProducer<D> for SocketEnd {
+    type Item = Result<Option<outbound_websocket::CloseFrame>, ComponentError>;
+
+    fn poll_produce(
+        self: Pin<&mut Self>,
+        cx: &mut TaskContext<'_>,
+        _store: StoreContextMut<D>,
+        finish: bool,
+    ) -> Poll<wasmtime::Result<Option<Self::Item>>> {
+        let mut state = lock(&self.io);
+        let Some(socket) = state.sockets.get_mut(&self.id) else {
+            return Poll::Ready(Ok(Some(Err(socket_error(
+                crate::WebSocketFailure::Transport,
+            )))));
+        };
+        if let Some(end) = socket.end.clone() {
+            return Poll::Ready(Ok(Some(end)));
+        }
+        if finish {
+            return Poll::Ready(Ok(None));
+        }
+        socket.end_waker = Some(cx.waker().clone());
+        Poll::Pending
+    }
+}
+
+/// The messages the instance sends on one connection: each joins the
+/// report, and the session hands it to the connection. Its end closes the
+/// connection.
+struct SocketSink {
+    io: SharedIo,
+    id: u64,
+}
+
+impl SocketSink {
+    fn new(io: &SharedIo, id: u64) -> Self {
+        Self {
+            io: Arc::clone(io),
+            id,
+        }
+    }
+}
+
+impl Drop for SocketSink {
+    /// The instance ended its outgoing stream: close the connection.
+    fn drop(&mut self) {
+        let mut state = lock(&self.io);
+        if state
+            .sockets
+            .get(&self.id)
+            .is_some_and(|socket| socket.end.is_none())
+        {
+            state
+                .socket_out
+                .push((self.id, crate::WebSocketOutgoing::Close));
+        }
+    }
+}
+
+impl<D> StreamConsumer<D> for SocketSink {
+    type Item = outbound_websocket::Message;
+
+    fn poll_consume(
+        self: Pin<&mut Self>,
+        _cx: &mut TaskContext<'_>,
+        mut store: StoreContextMut<D>,
+        mut source: Source<'_, Self::Item>,
+        _finish: bool,
+    ) -> Poll<wasmtime::Result<StreamResult>> {
+        let remaining = source.remaining(&mut store);
+        let mut messages: Vec<outbound_websocket::Message> =
+            Vec::with_capacity(remaining.clamp(1, 64));
+        source.read(&mut store, &mut messages)?;
+        let mut state = lock(&self.io);
+        let id = self.id;
+        let Some(socket) = state.sockets.get_mut(&id) else {
+            return Poll::Ready(Ok(StreamResult::Dropped));
+        };
+        if socket.end.is_some() {
+            return Poll::Ready(Ok(StreamResult::Dropped));
+        }
+        let mut out = Vec::with_capacity(messages.len());
+        for message in messages {
+            let message = match message {
+                outbound_websocket::Message::Text(text) => crate::WebSocketMessage::Text(text),
+                outbound_websocket::Message::Binary(bytes) => {
+                    crate::WebSocketMessage::Binary(bytes)
+                }
+            };
+            if message.len() > crate::MAX_WEBSOCKET_MESSAGE_BYTES {
+                socket.finish(Err(socket_error(crate::WebSocketFailure::MessageTooLarge)));
+                state.socket_out.extend(out);
+                state.socket_out.push((id, crate::WebSocketOutgoing::Close));
+                return Poll::Ready(Ok(StreamResult::Dropped));
+            }
+            out.push((id, crate::WebSocketOutgoing::Message(message)));
+        }
+        state.socket_out.extend(out);
+        Poll::Ready(Ok(StreamResult::Completed))
+    }
+}
+
+/// What one processor call resolved with, by its call id.
+type SendOutcome = (u64, Result<(), ComponentError>);
+
+/// The future that resolves when a processor instance can send no more.
+struct Closed(SharedIo);
+
+impl<D> FutureConsumer<D> for Closed {
+    type Item = Option<ComponentError>;
+
+    fn poll_consume(
+        self: Pin<&mut Self>,
+        _cx: &mut TaskContext<'_>,
+        mut store: StoreContextMut<D>,
+        mut source: Source<'_, Self::Item>,
+        _finish: bool,
+    ) -> Poll<wasmtime::Result<()>> {
+        let mut value: Option<Self::Item> = None;
+        source.read(&mut store, &mut value)?;
+        let mut io = lock(&self.0);
+        if let Some(value) = value {
+            io.done = Some(value.map_or(Ok(None), Err));
+        }
+        Io::wake(&mut io.pump_waker);
+        Poll::Ready(Ok(()))
+    }
+}
+
 impl telemetry::Host for ServiceStoreData {
     fn start(
         &mut self,
@@ -1097,7 +1845,7 @@ impl telemetry::Host for ServiceStoreData {
         let started = self.guest_spans.start(
             &self.providers,
             "scxml-component-guest",
-            "invoked-service",
+            self.guest_module,
             crate::component::operation_name(operation),
             &parent,
         );
@@ -1121,7 +1869,7 @@ impl telemetry::Host for ServiceStoreData {
         let recorded = record_guest_signal(
             &self.providers,
             &self.execution_context,
-            "invoked-service",
+            self.guest_module,
             GuestSignal {
                 operation: crate::component::operation_name(operation),
                 outcome: Some(crate::component::outcome_name(outcome)),
@@ -1141,7 +1889,7 @@ impl telemetry::Host for ServiceStoreData {
         let recorded = record_guest_signal(
             &self.providers,
             &self.execution_context,
-            "invoked-service",
+            self.guest_module,
             GuestSignal {
                 operation: crate::component::operation_name(operation),
                 outcome: None,
@@ -1168,6 +1916,14 @@ enum Input {
     Answer(u64, crate::ExtensionHttpAnswer),
     /// The request `id` fails at once (no transport).
     Refused(u64, ComponentError),
+    /// One `<send>` for a processor instance, called as the call says.
+    Send(
+        u64,
+        Box<crate::bindings::stateforward::scxml::types::ProcessorSend>,
+        SendCall,
+    ),
+    /// What the transport answered the connection `id`.
+    Socket(u64, crate::WebSocketAnswer),
 }
 
 /// One input with the session's logical time it is applied at.
@@ -1185,8 +1941,29 @@ pub(crate) struct Report {
     pub(crate) requests: Vec<(u64, ExtensionHttpRequest, RequestKind)>,
     /// Its earliest timer, in logical ms.
     pub(crate) next_deadline: Option<u64>,
+    /// What each processor call resolved with, in order.
+    pub(crate) sends: Vec<SendOutcome>,
+    /// The connections it opened, admitted, in order.
+    pub(crate) sockets: Vec<(u64, crate::WebSocketRequest)>,
+    /// What it handed its connections, in order.
+    pub(crate) socket_out: Vec<(u64, crate::WebSocketOutgoing)>,
     /// How it stands.
     pub(crate) state: ReportState,
+}
+
+impl Report {
+    /// A report of nothing but `state`.
+    fn only(state: ReportState) -> Self {
+        Self {
+            events: Vec::new(),
+            requests: Vec::new(),
+            next_deadline: None,
+            sends: Vec::new(),
+            sockets: Vec::new(),
+            socket_out: Vec::new(),
+            state,
+        }
+    }
 }
 
 /// How an invocation stands after an input.
@@ -1243,13 +2020,87 @@ pub(crate) fn block_on<F: std::future::Future>(future: F) -> F::Output {
     }
 }
 
+/// What the thread instantiates and starts: an invoked service and its
+/// `invoke`, or a processor instance and its `open`.
+enum Guest {
+    Service {
+        pre: service_bindings::InvokedServicePre<ServiceStoreData>,
+        request: InvokeRequest,
+    },
+    Processor {
+        pre: ProcessorPre,
+        start: ProcessorStart,
+    },
+}
+
 /// Everything the invocation's thread owns.
 struct Invocation {
     store: wasmtime::Store<ServiceStoreData>,
-    pre: service_bindings::InvokedServicePre<ServiceStoreData>,
-    request: InvokeRequest,
+    guest: Guest,
     io: SharedIo,
     call_fuel: u64,
+}
+
+/// What a processor instance's pump does next.
+enum PumpStep {
+    /// The instance can send no more, or returned an invalid event.
+    End,
+    /// A call trapped.
+    Trapped,
+    /// Refuel for the input just delivered.
+    Refuel,
+    /// Start these calls.
+    Calls(
+        Vec<(
+            u64,
+            crate::bindings::stateforward::scxml::types::ProcessorSend,
+            SendCall,
+        )>,
+    ),
+}
+
+/// One processor call in flight.
+type Call<'a> = (
+    u64,
+    Pin<Box<dyn std::future::Future<Output = wasmtime::Result<Result<(), ComponentError>>> + 'a>>,
+);
+
+/// Waits for the pump's next step: polls the calls in flight (recording
+/// what each resolved with), then reports the instance's end, a refuel, or
+/// new calls, in that order.
+async fn pump_step(io: &SharedIo, calls: &mut Vec<Call<'_>>) -> PumpStep {
+    std::future::poll_fn(|cx| {
+        let mut settled = Vec::new();
+        let mut trapped = false;
+        calls.retain_mut(|(id, call)| match call.as_mut().poll(cx) {
+            Poll::Ready(Ok(outcome)) => {
+                settled.push((*id, outcome));
+                false
+            }
+            Poll::Ready(Err(_)) => {
+                trapped = true;
+                false
+            }
+            Poll::Pending => true,
+        });
+        let mut state = lock(io);
+        state.send_outcomes.extend(settled);
+        if trapped {
+            return Poll::Ready(PumpStep::Trapped);
+        }
+        if state.done.is_some() || state.invalid {
+            return Poll::Ready(PumpStep::End);
+        }
+        if std::mem::take(&mut state.refuel) {
+            return Poll::Ready(PumpStep::Refuel);
+        }
+        if !state.sends.is_empty() {
+            return Poll::Ready(PumpStep::Calls(state.sends.drain(..).collect()));
+        }
+        state.pump_waker = Some(cx.waker().clone());
+        Poll::Pending
+    })
+    .await
 }
 
 /// The body of one invocation's thread: instantiate, call `invoke`, then
@@ -1267,68 +2118,129 @@ fn run_invocation(
 ) {
     let Invocation {
         mut store,
-        pre,
-        request,
+        guest,
         io,
         call_fuel,
     } = invocation;
     let rejected = |reports: &mpsc::Sender<Report>| {
-        let _ = reports.send(Report {
-            events: Vec::new(),
-            requests: Vec::new(),
-            next_deadline: None,
-            state: ReportState::Rejected,
-        });
+        let _ = reports.send(Report::only(ReportState::Rejected));
     };
     if store.set_fuel(call_fuel).is_err() {
         rejected(reports);
         return;
     }
-    let Ok(guest) = block_on(pre.instantiate_async(&mut store)) else {
-        rejected(reports);
-        return;
-    };
-    let pump_io = Arc::clone(&io);
-    let future = store.run_concurrent(async move |accessor| -> wasmtime::Result<bool> {
-        let events = accessor
-            .with(|mut access| StreamReader::new(&mut access, Inbox(Arc::clone(&pump_io))))?;
-        let invoked = guest
-            .stateforward_scxml_invoked_service_api()
-            .call_invoke(accessor, request, events)
-            .await?;
-        let Ok((returned, completion)) = invoked else {
-            return Ok(false);
-        };
-        accessor.with(|mut access| -> wasmtime::Result<()> {
-            returned.pipe(&mut access, Outbox(Arc::clone(&pump_io)))?;
-            completion.pipe(&mut access, Completion(Arc::clone(&pump_io)))
-        })?;
-        lock(&pump_io).started = true;
-        // Pump: refuel at every input, until the future resolves or a
-        // returned event breaks its bounds.
-        loop {
-            let refuel = std::future::poll_fn(|cx| {
-                let mut state = lock(&pump_io);
-                if state.done.is_some() || state.invalid {
-                    return Poll::Ready(false);
+    match guest {
+        Guest::Service { pre, request } => {
+            let Ok(guest) = block_on(pre.instantiate_async(&mut store)) else {
+                rejected(reports);
+                return;
+            };
+            let pump_io = Arc::clone(&io);
+            let future = store.run_concurrent(async move |accessor| -> wasmtime::Result<bool> {
+                let events = accessor.with(|mut access| {
+                    StreamReader::new(&mut access, Inbox(Arc::clone(&pump_io)))
+                })?;
+                let invoked = guest
+                    .stateforward_scxml_invoked_service_api()
+                    .call_invoke(accessor, request, events)
+                    .await?;
+                let Ok((returned, completion)) = invoked else {
+                    return Ok(false);
+                };
+                accessor.with(|mut access| -> wasmtime::Result<()> {
+                    returned.pipe(&mut access, Outbox(Arc::clone(&pump_io)))?;
+                    completion.pipe(&mut access, Completion(Arc::clone(&pump_io)))
+                })?;
+                lock(&pump_io).started = true;
+                // Pump: refuel at every input, until the future resolves or a
+                // returned event breaks its bounds.
+                loop {
+                    let refuel = std::future::poll_fn(|cx| {
+                        let mut state = lock(&pump_io);
+                        if state.done.is_some() || state.invalid {
+                            return Poll::Ready(false);
+                        }
+                        if std::mem::take(&mut state.refuel) {
+                            return Poll::Ready(true);
+                        }
+                        state.pump_waker = Some(cx.waker().clone());
+                        Poll::Pending
+                    })
+                    .await;
+                    if !refuel {
+                        return Ok(true);
+                    }
+                    accessor.with(|mut access| {
+                        use wasmtime::AsContextMut as _;
+                        access.data_mut().limits.restart();
+                        access.as_context_mut().set_fuel(call_fuel)
+                    })?;
                 }
-                if std::mem::take(&mut state.refuel) {
-                    return Poll::Ready(true);
-                }
-                state.pump_waker = Some(cx.waker().clone());
-                Poll::Pending
-            })
-            .await;
-            if !refuel {
-                return Ok(true);
-            }
-            accessor.with(|mut access| {
-                use wasmtime::AsContextMut as _;
-                access.data_mut().limits.restart();
-                access.as_context_mut().set_fuel(call_fuel)
-            })?;
+            });
+            drive(future, &io, deliveries, reports);
         }
-    });
+        Guest::Processor { pre, start } => {
+            let Ok(guest) = block_on(pre.instantiate_async(&mut store)) else {
+                rejected(reports);
+                return;
+            };
+            let pump_io = Arc::clone(&io);
+            let future = store.run_concurrent(async move |accessor| -> wasmtime::Result<bool> {
+                let api = guest.stateforward_scxml_event_processor_api();
+                let opened = api.call_open(accessor, start).await?;
+                let Ok((returned, closed)) = opened else {
+                    return Ok(false);
+                };
+                accessor.with(|mut access| -> wasmtime::Result<()> {
+                    returned.pipe(&mut access, Outbox(Arc::clone(&pump_io)))?;
+                    closed.pipe(&mut access, Closed(Arc::clone(&pump_io)))
+                })?;
+                lock(&pump_io).started = true;
+                // Pump: refuel at every input and start each send as a
+                // subtask of its own, until the instance can send no more.
+                let mut calls: Vec<Call<'_>> = Vec::new();
+                loop {
+                    match pump_step(&pump_io, &mut calls).await {
+                        PumpStep::End => return Ok(true),
+                        PumpStep::Trapped => {
+                            return Err(wasmtime::Error::msg("a processor call trapped"));
+                        }
+                        PumpStep::Refuel => accessor.with(|mut access| {
+                            use wasmtime::AsContextMut as _;
+                            access.data_mut().limits.restart();
+                            access.as_context_mut().set_fuel(call_fuel)
+                        })?,
+                        PumpStep::Calls(sends) => {
+                            for (id, request, call) in sends {
+                                let call: Pin<Box<dyn std::future::Future<Output = _>>> = match call
+                                {
+                                    SendCall::Check => Box::pin(api.call_check(accessor, request)),
+                                    SendCall::Send => Box::pin(api.call_send(accessor, request)),
+                                };
+                                calls.push((id, call));
+                            }
+                        }
+                    }
+                }
+            });
+            drive(future, &io, deliveries, reports);
+        }
+    }
+}
+
+/// Polls one started guest's event loop on this thread: reports once it
+/// has nothing left to run (or ended), then applies the next delivery,
+/// until it ends or the session cancels it (drops its sender).
+#[allow(
+    clippy::too_many_lines,
+    reason = "one loop: poll, report, then apply the next delivery by its kind"
+)]
+fn drive(
+    future: impl std::future::Future<Output = wasmtime::Result<wasmtime::Result<bool>>>,
+    io: &SharedIo,
+    deliveries: &mpsc::Receiver<Delivery>,
+    reports: &mpsc::Sender<Report>,
+) {
     let waker = Arc::new(ThreadWaker {
         thread: std::thread::current(),
         woken: AtomicBool::new(false),
@@ -1343,10 +2255,13 @@ fn run_invocation(
             // Woken while it ran: more is ready to run.
             continue;
         }
-        let mut state = lock(&io);
+        let mut state = lock(io);
         let events = std::mem::take(&mut state.returned);
         state.returned_bytes = 0;
         let requests = std::mem::take(&mut state.requests);
+        let sends = std::mem::take(&mut state.send_outcomes);
+        let sockets = std::mem::take(&mut state.socket_requests);
+        let socket_out = std::mem::take(&mut state.socket_out);
         let next_deadline = state.next_deadline();
         let report_state = match polled {
             Poll::Ready(Ok(Ok(true))) => match (state.invalid, state.done.take()) {
@@ -1365,6 +2280,9 @@ fn run_invocation(
                 events,
                 requests,
                 next_deadline,
+                sends,
+                sockets,
+                socket_out,
                 state: report_state,
             })
             .is_err()
@@ -1379,7 +2297,7 @@ fn run_invocation(
         let Ok(delivery) = deliveries.recv() else {
             return;
         };
-        let mut state = lock(&io);
+        let mut state = lock(io);
         state.now_ms = delivery.now_ms;
         state.refuel = true;
         match delivery.input {
@@ -1426,6 +2344,18 @@ fn run_invocation(
                     Io::wake(&mut pending.waker);
                     Io::wake(&mut pending.body_waker);
                     Io::wake(&mut pending.end_waker);
+                }
+            }
+            Input::Send(id, request, call) => state.sends.push_back((id, *request, call)),
+            Input::Socket(id, answer) => {
+                if let Some(socket) = state.sockets.get_mut(&id) {
+                    let close = socket.take(answer);
+                    if socket.settled() {
+                        state.sockets.remove(&id);
+                    }
+                    if close {
+                        state.socket_out.push((id, crate::WebSocketOutgoing::Close));
+                    }
                 }
             }
         }
@@ -1516,8 +2446,19 @@ pub(crate) struct Settled {
     /// Its id within that invocation.
     pub(crate) request: u64,
     /// What the transport answered: a `fetch`'s response, or one part of
-    /// a `send`'s (consecutive body parts waiting for delivery are joined).
-    pub(crate) answer: crate::ExtensionHttpAnswer,
+    /// a `send`'s (consecutive body parts waiting for delivery are joined),
+    /// or one answer of a connection (`request` is then its number).
+    pub(crate) answer: Answer,
+}
+
+/// What a transport answered one request or connection of an invocation or
+/// processor instance.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum Answer {
+    /// An `outbound-http` request's answer.
+    Http(crate::ExtensionHttpAnswer),
+    /// An `outbound-websocket` connection's answer.
+    Socket(crate::WebSocketAnswer),
 }
 
 /// The settled requests of one live run, shared by the session thread and
@@ -1565,10 +2506,15 @@ impl HttpResponses {
         });
         if let (
             Some(Settled {
-                answer: crate::ExtensionHttpAnswer::Part(Ok(crate::ExtensionHttpPart::Body(queued))),
+                answer:
+                    Answer::Http(crate::ExtensionHttpAnswer::Part(Ok(crate::ExtensionHttpPart::Body(
+                        queued,
+                    )))),
                 ..
             }),
-            crate::ExtensionHttpAnswer::Part(Ok(crate::ExtensionHttpPart::Body(bytes))),
+            Answer::Http(crate::ExtensionHttpAnswer::Part(Ok(crate::ExtensionHttpPart::Body(
+                bytes,
+            )))),
         ) = (last, &settled.answer)
         {
             queued.extend_from_slice(bytes);
@@ -1602,11 +2548,51 @@ pub(crate) enum RequestMode {
     None,
 }
 
+impl RequestMode {
+    /// Whether requests leave the invocation (or come from the record).
+    pub(crate) const fn offered(&self) -> bool {
+        !matches!(self, Self::None)
+    }
+}
+
+/// How a run carries out the connections its processor instances open.
+#[derive(Clone)]
+pub(crate) enum SocketMode {
+    /// A live session: each connection runs on a thread of its own, and
+    /// its answers join `responses` for delivery.
+    Threaded {
+        transport: Arc<dyn crate::WebSocketTransport>,
+        responses: Arc<HttpResponses>,
+    },
+    /// A replaying live session: the answers come from the record.
+    Recorded,
+    /// No outbound WebSocket (a batch run, or no transport): connections
+    /// are refused before they leave the instance.
+    None,
+}
+
+impl SocketMode {
+    /// Whether connections leave the instance (or come from the record).
+    pub(crate) const fn offered(&self) -> bool {
+        !matches!(self, Self::None)
+    }
+}
+
+/// How a run carries out the requests and connections of its processor
+/// instances, or of its invoked services.
+#[derive(Clone)]
+pub(crate) struct NetworkModes {
+    pub(crate) http: RequestMode,
+    pub(crate) websocket: SocketMode,
+}
+
 /// What one input left of an invocation, for the run to apply in order: the
 /// events it returned, then how it stands.
 pub(crate) struct ServiceStep {
     /// Validated, stamped events for the invoking session, in order.
     pub(crate) events: Vec<WitEvent>,
+    /// What each processor call resolved with, in order.
+    pub(crate) sends: Vec<SendOutcome>,
     /// How the input left the invocation.
     pub(crate) state: ReportState,
 }
@@ -1624,6 +2610,16 @@ pub(crate) struct ServiceHandle {
     in_flight: BTreeMap<u64, Arc<CancelSignal>>,
     /// Its requests waiting for a recorded response (replay), by id.
     awaiting_record: std::collections::BTreeSet<u64>,
+    /// Its connections running on transport threads, by id: what the
+    /// instance hands each one. Dropping a sender closes its connection.
+    sockets: BTreeMap<u64, mpsc::Sender<crate::WebSocketOutgoing>>,
+    /// Its connections whose answers come without a sender: answered from
+    /// the record (replay), or closed by the instance and awaiting their end.
+    awaiting_sockets: std::collections::BTreeSet<u64>,
+    /// How the run carries out its connections.
+    socket_mode: SocketMode,
+    /// The number of its next processor call.
+    next_call: u64,
     /// Its run-unique id, the key its settled requests carry.
     invocation: u64,
 }
@@ -1636,6 +2632,9 @@ impl Drop for ServiceHandle {
         self.deliveries = None;
         for cancel in std::mem::take(&mut self.in_flight).into_values() {
             cancel.cancel();
+        }
+        for sender in std::mem::take(&mut self.sockets).into_values() {
+            let _ = sender.send(crate::WebSocketOutgoing::Close);
         }
     }
 }
@@ -1702,6 +2701,8 @@ impl ServiceHandle {
                     .map_err(|_| HostError::from(ArtifactError::NamespaceBinding))?,
                 references,
                 http_offered: runtime.http_offered,
+                websocket_offered: runtime.websocket.offered(),
+                guest_module: "invoked-service",
                 wasi,
                 _store_lease: runtime.providers.acquire_store()?,
             },
@@ -1709,16 +2710,112 @@ impl ServiceHandle {
         store.limiter(|state| &mut state.limits);
         let invocation_state = Invocation {
             store,
-            pre: runtime.pre.clone(),
-            request,
+            guest: Guest::Service {
+                pre: runtime.pre.clone(),
+                request,
+            },
             io,
             call_fuel: runtime.call_fuel,
         };
+        Self::spawn(
+            invocation_state,
+            invocation,
+            "scxml-invoked-service",
+            runtime.websocket.clone(),
+        )
+        .map(Ok)
+    }
+
+    /// Opens one instance of the processor `runtime` binds for the session
+    /// `session_id`: its store and its thread, which instantiates the
+    /// component and calls `open`. Returns the handle and the open's report.
+    ///
+    /// # Errors
+    ///
+    /// A host failure (a thread that cannot start) as [`HostError`].
+    pub(crate) fn open_processor(
+        runtime: &ProcessorRuntime<'_>,
+        session_id: &str,
+        modes: &NetworkModes,
+        now_ms: u64,
+        invocation: u64,
+        execution_context: &Context,
+        trace_context: Option<WitTraceContext>,
+    ) -> Result<(Self, Report), HostError> {
+        let wasi = crate::wasi::WasiPlan::new(&[], &crate::WasiOptions::default())?.context()?;
+        let store_config = &runtime.config.store;
+        let limits = wasmtime::StoreLimitsBuilder::new()
+            .memory_size(store_config.memory_bytes)
+            .table_elements(store_config.table_elements)
+            .instances(store_config.instances)
+            .tables(store_config.tables)
+            .memories(store_config.memories)
+            .trap_on_grow_failure(true)
+            .build();
+        let io: SharedIo = Arc::new(Mutex::new(Io {
+            now_ms,
+            type_uri: runtime.package.processor_uri.clone(),
+            carrier: trace_context.clone(),
+            ..Io::default()
+        }));
+        let mut store = wasmtime::Store::new(
+            runtime.pre.engine(),
+            ServiceStoreData {
+                limits: crate::memory_growth::MeteredLimits::metered(
+                    limits,
+                    None,
+                    runtime.call_fuel,
+                ),
+                providers: runtime.providers.clone(),
+                execution_context: execution_context.clone(),
+                guest_spans: crate::guest_spans::GuestSpanTable::new(),
+                io: Arc::clone(&io),
+                // Validated when the package was bound.
+                allow: crate::HttpAllowlist::new(&runtime.package.origins)
+                    .map_err(|_| HostError::from(ArtifactError::NamespaceBinding))?,
+                references: Vec::new(),
+                http_offered: modes.http.offered(),
+                websocket_offered: modes.websocket.offered(),
+                guest_module: "event-processor",
+                wasi,
+                _store_lease: runtime.providers.acquire_store()?,
+            },
+        );
+        store.limiter(|state| &mut state.limits);
+        let invocation_state = Invocation {
+            store,
+            guest: Guest::Processor {
+                pre: runtime.pre.clone(),
+                start: ProcessorStart {
+                    type_uri: runtime.package.processor_uri.clone(),
+                    session_id: session_id.to_owned(),
+                    trace_context,
+                },
+            },
+            io,
+            call_fuel: runtime.call_fuel,
+        };
+        Self::spawn(
+            invocation_state,
+            invocation,
+            "scxml-event-processor",
+            modes.websocket.clone(),
+        )
+    }
+
+    /// Starts the thread of one invocation or processor instance and waits
+    /// for its first report.
+    fn spawn(
+        invocation_state: Invocation,
+        invocation: u64,
+        name: &str,
+        socket_mode: SocketMode,
+    ) -> Result<(Self, Report), HostError> {
         let (deliveries, delivered) = mpsc::channel();
         let (reported, reports) = mpsc::channel();
         let parent = Context::current();
         std::thread::Builder::new()
-            .name("scxml-invoked-service".into())
+            .name(name.into())
             .spawn(move || {
                 let _parent = parent.attach();
                 run_invocation(invocation_state, &delivered, &reported);
@@ -1731,20 +2828,37 @@ impl ServiceHandle {
             ended: false,
             in_flight: BTreeMap::new(),
             awaiting_record: std::collections::BTreeSet::new(),
+            sockets: BTreeMap::new(),
+            awaiting_sockets: std::collections::BTreeSet::new(),
+            socket_mode,
+            next_call: 0,
             invocation,
         };
         let report = handle.receive();
-        Ok(Ok((handle, report)))
+        Ok((handle, report))
+    }
+
+    /// Hands a processor instance one `<send>`, called as `call`, and
+    /// waits until it is idle: the call's number and what the input left.
+    pub(crate) fn call(
+        &mut self,
+        request: crate::bindings::stateforward::scxml::types::ProcessorSend,
+        call: SendCall,
+        now_ms: u64,
+        mode: &RequestMode,
+    ) -> (u64, ServiceStep) {
+        let id = self.next_call;
+        self.next_call = id.saturating_add(1);
+        let report = self.deliver(now_ms, Input::Send(id, Box::new(request), call));
+        (id, self.settle(report, now_ms, mode))
     }
 
     /// The invocation's next report; a thread that ended without one failed.
     fn receive(&mut self) -> Report {
-        let report = self.reports.recv().unwrap_or(Report {
-            events: Vec::new(),
-            requests: Vec::new(),
-            next_deadline: None,
-            state: ReportState::Failed,
-        });
+        let report = self
+            .reports
+            .recv()
+            .unwrap_or_else(|_| Report::only(ReportState::Failed));
         self.next_deadline = report.next_deadline;
         if !matches!(report.state, ReportState::Running) {
             self.ended = true;
@@ -1763,12 +2877,7 @@ impl ServiceHandle {
         let sender = self.deliveries.as_ref()?;
         if sender.send(Delivery { now_ms, input }).is_err() {
             self.ended = true;
-            return Some(Report {
-                events: Vec::new(),
-                requests: Vec::new(),
-                next_deadline: None,
-                state: ReportState::Failed,
-            });
+            return Some(Report::only(ReportState::Failed));
         }
         Some(self.receive())
     }
@@ -1792,21 +2901,84 @@ impl ServiceHandle {
     pub(crate) fn respond(
         &mut self,
         request: u64,
-        answer: crate::ExtensionHttpAnswer,
+        answer: Answer,
         now_ms: u64,
         mode: &RequestMode,
     ) -> Option<ServiceStep> {
-        let known =
-            self.in_flight.contains_key(&request) || self.awaiting_record.contains(&request);
-        if !known || self.ended {
+        if self.ended {
             return None;
         }
-        if answer.is_final() {
-            self.in_flight.remove(&request);
-            self.awaiting_record.remove(&request);
-        }
-        let report = self.deliver(now_ms, Input::Answer(request, answer));
+        let input = match answer {
+            Answer::Http(answer) => {
+                if !self.in_flight.contains_key(&request)
+                    && !self.awaiting_record.contains(&request)
+                {
+                    return None;
+                }
+                if answer.is_final() {
+                    self.in_flight.remove(&request);
+                    self.awaiting_record.remove(&request);
+                }
+                Input::Answer(request, answer)
+            }
+            Answer::Socket(answer) => {
+                if !self.sockets.contains_key(&request) && !self.awaiting_sockets.contains(&request)
+                {
+                    return None;
+                }
+                if answer.is_final() {
+                    self.sockets.remove(&request);
+                    self.awaiting_sockets.remove(&request);
+                }
+                Input::Socket(request, answer)
+            }
+        };
+        let report = self.deliver(now_ms, input);
         Some(self.settle(report, now_ms, mode))
+    }
+
+    /// Hands the connections the instance opened to the transport (or the
+    /// record), and what it sent to the connections running.
+    fn connect(
+        &mut self,
+        sockets: Vec<(u64, crate::WebSocketRequest)>,
+        socket_out: Vec<(u64, crate::WebSocketOutgoing)>,
+    ) {
+        for (id, request) in sockets {
+            match &self.socket_mode {
+                SocketMode::Threaded {
+                    transport,
+                    responses,
+                } => {
+                    let (sender, outgoing) = mpsc::channel();
+                    self.sockets.insert(id, sender);
+                    spawn_socket(
+                        Arc::clone(transport),
+                        responses,
+                        self.invocation,
+                        (id, request),
+                        outgoing,
+                    );
+                }
+                SocketMode::Recorded => {
+                    self.awaiting_sockets.insert(id);
+                }
+                // Unreachable by construction: the instance refuses every
+                // connection when none is offered.
+                SocketMode::None => {}
+            }
+        }
+        for (id, out) in socket_out {
+            let close = out == crate::WebSocketOutgoing::Close;
+            if let Some(sender) = self.sockets.get(&id)
+                && (sender.send(out).is_err() || close)
+            {
+                // Nothing more is sent on it; the connection's own end (or
+                // its thread's) follows as an answer, still awaited.
+                self.sockets.remove(&id);
+                self.awaiting_sockets.insert(id);
+            }
+        }
     }
 
     /// Settles one report: the start's, or an input's. Its requests are
@@ -1819,24 +2991,30 @@ impl ServiceHandle {
         mode: &RequestMode,
     ) -> ServiceStep {
         let mut events = Vec::new();
+        let mut sends = Vec::new();
         let mut report = report;
         loop {
             let Some(current) = report.take() else {
                 return ServiceStep {
                     events,
+                    sends,
                     state: ReportState::Running,
                 };
             };
             events.extend(current.events);
+            sends.extend(current.sends);
+            self.connect(current.sockets, current.socket_out);
             if !matches!(current.state, ReportState::Running) {
                 return ServiceStep {
                     events,
+                    sends,
                     state: current.state,
                 };
             }
             if current.requests.is_empty() {
                 return ServiceStep {
                     events,
+                    sends,
                     state: ReportState::Running,
                 };
             }
@@ -1846,7 +3024,7 @@ impl ServiceHandle {
                         transport.as_ref(),
                         current.requests,
                         now_ms,
-                        &mut events,
+                        (&mut events, &mut sends),
                     );
                 }
                 RequestMode::Threaded {
@@ -1866,6 +3044,7 @@ impl ServiceHandle {
                     }
                     return ServiceStep {
                         events,
+                        sends,
                         state: ReportState::Running,
                     };
                 }
@@ -1874,6 +3053,7 @@ impl ServiceHandle {
                         .extend(current.requests.into_iter().map(|(id, _, _)| id));
                     return ServiceStep {
                         events,
+                        sends,
                         state: ReportState::Running,
                     };
                 }
@@ -1909,7 +3089,7 @@ impl ServiceHandle {
         transport: &dyn ExtensionHttp,
         requests: Vec<(u64, ExtensionHttpRequest, RequestKind)>,
         now_ms: u64,
-        events: &mut Vec<WitEvent>,
+        (events, sends): (&mut Vec<WitEvent>, &mut Vec<SendOutcome>),
     ) -> Option<Report> {
         let mut waiting: VecDeque<_> = requests.into();
         let (id, request, kind) = waiting.pop_front()?;
@@ -1931,6 +3111,10 @@ impl ServiceHandle {
                 break;
             }
             events.append(&mut delivered.events);
+            sends.append(&mut delivered.sends);
+            let sockets = std::mem::take(&mut delivered.sockets);
+            let socket_out = std::mem::take(&mut delivered.socket_out);
+            self.connect(sockets, socket_out);
             waiting.extend(std::mem::take(&mut delivered.requests));
             next = self.deliver(now_ms, Input::Answer(id, answer));
         }
@@ -1961,6 +3145,16 @@ impl ServiceHandle {
     /// or a recorded one.
     pub(crate) fn awaiting(&self) -> bool {
         !self.ended && (!self.in_flight.is_empty() || !self.awaiting_record.is_empty())
+    }
+
+    /// Whether the instance holds an open connection or a request in
+    /// flight (or one awaited from the record).
+    pub(crate) fn connected(&self) -> bool {
+        !self.ended
+            && (!self.in_flight.is_empty()
+                || !self.awaiting_record.is_empty()
+                || !self.sockets.is_empty()
+                || !self.awaiting_sockets.is_empty())
     }
 
     /// The run-unique id its settled requests carry.
@@ -2052,7 +3246,7 @@ fn spawn_request(
                     queue.push(Settled {
                         invocation,
                         request: request_id,
-                        answer: answer.clone(),
+                        answer: Answer::Http(answer.clone()),
                     });
                     Some(answer)
                 }
@@ -2064,7 +3258,7 @@ fn spawn_request(
                         queue.push(Settled {
                             invocation,
                             request: request_id,
-                            answer,
+                            answer: Answer::Http(answer),
                         });
                     });
                     last
@@ -2078,14 +3272,79 @@ fn spawn_request(
         responses.push(Settled {
             invocation,
             request: request_id,
-            answer: match kind {
+            answer: Answer::Http(match kind {
                 RequestKind::Fetch => {
                     crate::ExtensionHttpAnswer::Response(Err(ExtensionHttpFailure::Transport))
                 }
                 RequestKind::Send => {
                     crate::ExtensionHttpAnswer::Part(Err(ExtensionHttpFailure::Transport))
                 }
-            },
+            }),
+        });
+    }
+}
+
+/// Runs one admitted connection on a transport thread of its own and
+/// queues each of its answers for delivery as it arrives; what `outgoing`
+/// yields is sent on it, and its disconnection closes it.
+fn spawn_socket(
+    transport: Arc<dyn crate::WebSocketTransport>,
+    responses: &Arc<HttpResponses>,
+    invocation: u64,
+    (socket, request): (u64, crate::WebSocketRequest),
+    outgoing: mpsc::Receiver<crate::WebSocketOutgoing>,
+) {
+    let parent = Context::current();
+    let queue = Arc::clone(responses);
+    let spawned = std::thread::Builder::new()
+        .name("scxml-event-processor-websocket".into())
+        .spawn(move || {
+            let _parent = parent.attach();
+            let span = scxml_telemetry::observe(
+                Module::HostWasmtime,
+                Operation::HostWasmtimeProcessorWebsocket,
+            );
+            let mut last = None;
+            transport.connect(&request, outgoing, &mut |answer| {
+                if last.as_ref().is_some_and(crate::WebSocketAnswer::is_final) {
+                    return;
+                }
+                last = Some(answer.clone());
+                queue.push(Settled {
+                    invocation,
+                    request: socket,
+                    answer: Answer::Socket(answer),
+                });
+            });
+            match last {
+                Some(crate::WebSocketAnswer::Closed(_)) => {
+                    span.event(SignalEvent::TransformationCompleted);
+                }
+                Some(crate::WebSocketAnswer::Failed(_)) => {
+                    span.event(SignalEvent::InputRejected);
+                    span.fail(ErrorCategory::Platform);
+                }
+                // A transport that returned without a final answer: the
+                // connection is lost.
+                _ => {
+                    queue.push(Settled {
+                        invocation,
+                        request: socket,
+                        answer: Answer::Socket(crate::WebSocketAnswer::Failed(
+                            crate::WebSocketFailure::Transport,
+                        )),
+                    });
+                    span.fail(ErrorCategory::Platform);
+                }
+            }
+        });
+    if spawned.is_err() {
+        responses.push(Settled {
+            invocation,
+            request: socket,
+            answer: Answer::Socket(crate::WebSocketAnswer::Failed(
+                crate::WebSocketFailure::Handshake,
+            )),
         });
     }
 }
@@ -2149,13 +3408,110 @@ fn bind_references(
 
 #[cfg(test)]
 mod tests {
-    use super::{CancelSignal, HttpResponses, Pending, Settled, event_bytes};
+    use super::{
+        Answer, CancelSignal, HttpResponses, Pending, Settled, admit_socket_request, event_bytes,
+        outbound_http::TextPart, outbound_websocket,
+    };
     use crate::bindings::stateforward::scxml::types::ErrorCode;
     use crate::{
         ExtensionHttpAnswer, ExtensionHttpFailure, ExtensionHttpPart, ExtensionHttpResponse,
     };
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// Admits a connection to `url` with an `authorization` header carrying
+    /// reference 1, against `origins`, with references `1` (a token) and `2`
+    /// (`base`).
+    fn admit_socket(
+        url: Vec<TextPart>,
+        origins: &[&str],
+        base: &str,
+    ) -> Result<crate::WebSocketRequest, ErrorCode> {
+        let origins: Vec<String> = origins.iter().map(|origin| (*origin).to_owned()).collect();
+        let allow = crate::HttpAllowlist::new(&origins).map_err(|_| ErrorCode::InvalidInput)?;
+        admit_socket_request(
+            outbound_websocket::WebsocketRequest {
+                url,
+                headers: vec![outbound_websocket::WebsocketHeader {
+                    name: "authorization".into(),
+                    value: vec![TextPart::Literal("Bearer ".into()), TextPart::Reference(1)],
+                }],
+                protocols: Vec::new(),
+            },
+            &[(1, "t0k".into()), (2, base.into())],
+            &allow,
+            true,
+        )
+        .map_err(|(error, _)| error.code)
+    }
+
+    #[test]
+    fn a_websocket_url_is_admitted_by_its_http_form_or_by_the_origin_a_reference_supplies() {
+        let literal = admit_socket(
+            vec![TextPart::Literal("wss://api.example.com/v1/stream".into())],
+            &["https://api.example.com"],
+            "unused",
+        )
+        .expect("a declared origin is admitted");
+        assert_eq!(literal.url, "wss://api.example.com/v1/stream");
+        assert_eq!(
+            literal.headers,
+            [("authorization".to_owned(), "Bearer t0k".to_owned())]
+        );
+        // An undeclared origin is refused.
+        assert_eq!(
+            admit_socket(
+                vec![TextPart::Literal("ws://elsewhere.example/".into())],
+                &["https://api.example.com"],
+                "unused",
+            )
+            .map(|_| ()),
+            Err(ErrorCode::Unavailable)
+        );
+        // A reference to an https base supplies the wss origin, with no
+        // declared origin.
+        for (base, expected) in [
+            (
+                "https://api.example.com/v1",
+                "wss://api.example.com/v1/stream?x=1",
+            ),
+            ("http://127.0.0.1:9/v1", "ws://127.0.0.1:9/v1/stream?x=1"),
+            (
+                "wss://api.example.com/v1",
+                "wss://api.example.com/v1/stream?x=1",
+            ),
+            ("ws://127.0.0.1:9/v1", "ws://127.0.0.1:9/v1/stream?x=1"),
+        ] {
+            let supplied = admit_socket(
+                vec![
+                    TextPart::Reference(2),
+                    TextPart::Literal("/stream?x=1".into()),
+                ],
+                &[],
+                base,
+            )
+            .expect("a reference supplies the origin");
+            assert_eq!(supplied.url, expected);
+            // The token keeps its value.
+            assert_eq!(supplied.headers[0].1, "Bearer t0k");
+        }
+        // A reference that is no URL, a literal that extends the
+        // authority, and another scheme are refused.
+        for (url, base) in [
+            (vec![TextPart::Reference(1)], "unused"),
+            (
+                vec![TextPart::Reference(2), TextPart::Literal(":8080/".into())],
+                "https://api.example.com",
+            ),
+            (
+                vec![TextPart::Literal("https://api.example.com/".into())],
+                "unused",
+            ),
+            (vec![TextPart::Reference(2)], "ftp://api.example.com"),
+        ] {
+            assert!(admit_socket(url, &[], base).is_err());
+        }
+    }
 
     #[test]
     fn a_returned_event_counts_its_retained_bytes() {
@@ -2182,15 +3538,17 @@ mod tests {
         queue.push(Settled {
             invocation: 1,
             request: 0,
-            answer: ExtensionHttpAnswer::Response(Ok(ExtensionHttpResponse {
+            answer: Answer::Http(ExtensionHttpAnswer::Response(Ok(ExtensionHttpResponse {
                 status: 200,
                 body: b"ok".to_vec(),
-            })),
+            }))),
         });
         queue.push(Settled {
             invocation: 1,
             request: 1,
-            answer: ExtensionHttpAnswer::Response(Err(ExtensionHttpFailure::Transport)),
+            answer: Answer::Http(ExtensionHttpAnswer::Response(Err(
+                ExtensionHttpFailure::Transport,
+            ))),
         });
         assert!(queue.has_settled());
         let settled: Vec<_> = std::iter::from_fn(|| queue.take_first()).collect();
@@ -2198,17 +3556,27 @@ mod tests {
         assert_eq!((settled[0].invocation, settled[0].request), (1, 0));
         assert_eq!(
             settled[1].answer,
-            ExtensionHttpAnswer::Response(Err(ExtensionHttpFailure::Transport))
+            Answer::Http(ExtensionHttpAnswer::Response(Err(
+                ExtensionHttpFailure::Transport
+            )))
         );
         assert!(!queue.has_settled());
         assert_eq!(notified.load(Ordering::Acquire), 2);
+    }
+
+    /// The HTTP answer of a settled request.
+    fn http(answer: Answer) -> ExtensionHttpAnswer {
+        match answer {
+            Answer::Http(answer) => answer,
+            Answer::Socket(answer) => panic!("a connection's answer: {answer:?}"),
+        }
     }
 
     fn part(request: u64, part: ExtensionHttpPart) -> Settled {
         Settled {
             invocation: 1,
             request,
-            answer: ExtensionHttpAnswer::Part(Ok(part)),
+            answer: Answer::Http(ExtensionHttpAnswer::Part(Ok(part))),
         }
     }
 
@@ -2221,7 +3589,7 @@ mod tests {
         queue.push(part(0, ExtensionHttpPart::Body(b"cd".to_vec())));
         queue.push(part(1, ExtensionHttpPart::Body(b"x".to_vec())));
         let answers: Vec<_> = std::iter::from_fn(|| queue.take_first())
-            .map(|settled| (settled.request, settled.answer))
+            .map(|settled| (settled.request, http(settled.answer)))
             .collect();
         assert_eq!(
             answers,

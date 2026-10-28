@@ -27,7 +27,7 @@
 //   starts an instance of its invoked-service component (src/service.js),
 //   whose returned events reach the invoking session's external queue;
 // * it links one run-wide BasicHTTP Event I/O Processor (src/basichttp.js):
-//   `send-basichttp` goes through the component, which encodes the request
+//   `send-processor` goes through the component, which encodes the request
 //   and hands it to the page's `http` capability only for URLs `http.allow`
 //   accepts (deny-all by default); `receiveHttp` injects inbound requests the
 //   component decodes;
@@ -1069,13 +1069,20 @@ function capabilityResource(links) {
     // clock by the SCXML processor until it falls due (SCXML 6.2: "It MUST
     // dispatch the message only when the delay interval elapses."); the
     // due delivery posts it (`MachineSession.#routeDue`).
-    sendBasichttp(request) {
+    // Another Event I/O Processor's send (WIT `send-processor`): only
+    // BasicHTTP, by its type URI or an alias, answers in the browser; any
+    // other type names no processor, which SCXML 6.2.5 makes
+    // error.execution (`invalid-input`).
+    sendProcessor(request) {
       return observed('capability', () => {
+        if (!run.basichttp.answers(request.processorType)) {
+          throw componentFailure('invalid-input', 'no Event I/O Processor answers the send type');
+        }
         let sent;
         try {
           if (request.delayMs > 0n) {
             run.basichttp.check(request);
-            io((processor) => processor.scheduleBasichttp(request));
+            io((processor) => processor.scheduleProcessor(request));
             return { tag: 'scheduled' };
           }
           sent = run.basichttp.send(request, links, {
@@ -2313,7 +2320,10 @@ export class MachineSession {
       }
       return route;
     }
-    if (due.tag !== 'basichttp') throw this.#fail(new ScxmlHostError('host-invariant'));
+    // Only a checked send was scheduled, so its type is BasicHTTP's.
+    if (due.tag !== 'processor' || !this.#run.basichttp.answers(due.val.processorType)) {
+      throw this.#fail(new ScxmlHostError('host-invariant'));
+    }
     const send = due.val;
     let sent;
     try {

@@ -184,12 +184,13 @@ fn pending_text(send: &PendingSend, now_ms: u64) -> String {
     text
 }
 
-/// What one pending send delivers: its event, or its `BasicHTTP` message.
+/// What one pending send delivers: its event, or another processor's
+/// message.
 fn message_text(send: &PendingSend) -> String {
-    match (&send.event, &send.basichttp) {
+    match (&send.event, &send.message) {
         (Some(event), _) => event_text(event),
         (None, Some(message)) => {
-            let mut text = String::from("basichttp");
+            let mut text = String::from("message");
             if let Some(name) = &message.event {
                 push(&mut text, format_args!(" event {}", esc(name)));
             }

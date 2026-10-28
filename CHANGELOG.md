@@ -62,6 +62,40 @@ hard cutover.
 
 ### Added
 
+- Event I/O Processor components (SCXML 6.1, 6.2): a component of the new
+  `stateforward:scxml/event-processor` world (`event-processor-api`:
+  `open`, `check`, `send`) carries the `<send>`s of the type URI a
+  `stateforward.scxml.processor-package/v1` manifest binds it to, under the
+  Wasmtime session host (`ProcessorComponents`, `ProcessorPackage`,
+  `authenticate_processor_component`,
+  `SessionHost::with_processor_components`) and `scx run`
+  (`--processor-package`, `--processor-component`,
+  `--processor-component-sha256`). The host opens one instance per session
+  and type, raises `error.execution` or `error.communication` per the
+  call's outcome (late failures carry the send id), holds delayed sends on
+  the session clock, and records every answer for replay. The new
+  `outbound-websocket` interface opens host-admitted WebSocket connections
+  (`WebSocketTransport`; `WebSocketClient` with the `http` feature, over
+  rustls with the platform verifier and an explicit `--websocket-proxy`).
+  The shipped `scxml-ioprocessor-websocket` component is the WebSocket
+  processor (`<send type="websocket">`): one connection per target URL,
+  `websocket.message` and `websocket.close` events, and an explicit close
+  (`<send event="websocket.close">`). The live-session log gains a
+  `websocket` record, `processor` on processor HTTP responses, and a
+  `processors` header field. See
+  [docs/event-io-processors.md](docs/event-io-processors.md).
+- Invoked services open WebSocket connections: the `invoked-service` world
+  imports `outbound-websocket`, admitted against the package's
+  `http-origins` or the origin a leading reference's value supplies (an
+  `https` base URL names its `wss` form), with `env` references in headers
+  (`ServiceComponents::with_outbound_websocket`; `scx run` shares the
+  processors' WebSocket client and `--websocket-proxy`). Each answer is a
+  `websocket` record without `processor`, and
+  `LiveSession::processors_connected` is now `LiveSession::connected`,
+  covering services' connections too. The echo example gains `connect`,
+  `message`, and `close` (`echo.opened`, `echo.message`, `echo.closed`).
+  The browser host refuses every service connection (`unavailable`). See
+  [docs/invoked-services.md](docs/invoked-services.md#outbound-websocket).
 - The browser host runs invoked services: `createSession({serviceComponents})`
   takes a `ServiceComponents` (`bind`, `withValues`, `withOutboundHttp`,
   `withWasi`, `withCallFuel`) of components authenticated with
@@ -693,6 +727,15 @@ hard cutover.
 
 ### Changed
 
+- The Wasmtime session host compiles each extension, service, and
+  data-model package component a host or document binds on a thread of its
+  own as soon as it is bound, through the process-wide compilation cache,
+  and its first use waits for that compilation instead of starting one
+  (it compiled on first use before). Binding many packages compiles them
+  in parallel ahead of the session's first use; a component another live
+  host holds is not compiled again, and a compilation that fails is
+  reported by the first use as before.
+
 - `ExtensionHttpClient` keeps connections alive and pools them per origin
   for invoked services' requests, which each opened a new connection (TCP
   and TLS handshakes) before: consecutive requests to one origin reuse one
@@ -1106,6 +1149,19 @@ hard cutover.
   texts.
 
 ### Renames
+
+- The machine hands every `<send>` whose type is not the SCXML Event I/O
+  Processor's to the host, not only `BasicHTTP` ones: WIT
+  `types.basichttp-send` is `types.processor-send` and carries the
+  evaluated type as `processor-type`; `machine-capability-types.send-basichttp`
+  is `send-processor`; `io-processor-api.schedule-basichttp` is
+  `schedule-processor`, and its `delayed-send` case `basichttp` is
+  `processor` (telemetry operation `schedule-processor`); a session
+  snapshot's pending send holds it as `message` (`processorMessage`, was
+  `basichttp`), named by the send's `type`. The host routes a `BasicHTTP` type
+  as before and refuses any other with `invalid-input`
+  (`error.execution`), so an unknown `<send type>` still raises
+  `error.execution` (SCXML 6.2.5), now from the host.
 
 - Diagnostic codes are grouped into families by prefix
   (`scxml_reporting::CODE_FAMILIES`; docs/validator-rules.md, "Diagnostic
@@ -1555,6 +1611,9 @@ hard cutover.
 - Extension components run only under the Wasmtime session
   host; the browser host answers executable-content extensions from the
   page's `executeExtension` callback.
+- Event I/O Processor components run only under the Wasmtime session host
+  and `scx run`; `_ioprocessors` lists none, a WebSocket close is always
+  code 1000, and session snapshots omit processor instances.
 - `event:schema` references only files by a relative URI: no
   repository-namespace resource or other absolute URI. Of the child
   documents the Wasmtime host compiles when invoked, only an `<invoke src>`

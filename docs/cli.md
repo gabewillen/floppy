@@ -425,7 +425,12 @@ delivers it from the log without the network, for services that import
 WASI interfaces too. Leaving the invoking state cancels the invocation
 (SCXML 6.4) and closes its request's connection at once: that, and the
 document's own `<send delay>` timers, bound a request; an unreachable host
-fails when the operating system gives up connecting.
+fails when the operating system gives up connecting. A service's
+`outbound-websocket` connections run the same way, through the WebSocket
+client (and `--websocket-proxy`) that processor connections use; each
+answer is a `websocket` record without `processor`, and a run with an open
+connection does not end at the end of its input
+([invoked-services.md](invoked-services.md#outbound-websocket)).
 ## `run`
 
 `run` keeps one live session of a document open through the same components
@@ -437,7 +442,11 @@ firing delayed sends until nothing is scheduled, and `--on-eof close` closes
 at once. `SIGINT` and `SIGTERM` close the session gracefully (exit 130 and
 143). The exit status is 0 when the root finishes, 1 when the session fails,
 2 for usage, compilation, and I/O failures, and 3 when the session closes
-while running.
+while running. `--processor-package`, `--processor-component`,
+`--processor-component-sha256`, and `--websocket-proxy` bind Event I/O
+Processor components ([event-io-processors.md](event-io-processors.md)); a
+session with an open processor connection does not close at the end of
+input.
 
 ## Documents loaded by URI
 
