@@ -1015,9 +1015,6 @@ pub fn copy_ability(name: &str, abilities: &Path) -> PathBuf {
     if name == "conversation" {
         copy_ability("turn_detector", abilities);
     }
-    if name == "autonomy" {
-        copy_ability("candidates_runner", abilities);
-    }
     if name == "consolidation" {
         copy_ability("memory", abilities);
     }

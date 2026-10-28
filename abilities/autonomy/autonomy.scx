@@ -9,7 +9,11 @@
   and otherwise the cascade goes on to intuition.
 
     idle -bot.ability.autonomy.input-> working {
-    percept { matching -> [seeding] -> inventory -> loading -> matched -> running }
+    percept { matching -> [seeding] -> inventory -> loading -> matched -> running {
+                running_candidate -> dispatching -> using -> percept_handled
+                running_candidate | dispatching -> recording_failure -> recorded_failure
+                recorded_failure -> failed | advancing
+                running_candidate -> advancing -> running_candidate (the next one) | percept_unhandled } }
        |  (each percept, in arrival order)
        v
     percept_handled | percept_unhandled -> next_percept -> percept (the next one)
@@ -65,13 +69,12 @@
   No match answers {turn, handled: false, candidates: [], reason:
   "no-behaviors"}.
 
-  Candidates (decision D93): running invokes the chain
-  abilities/candidates_runner/candidates_runner.scx as the child
-  "candidates", which tries them one at a time, one runner each, and
-  answers {tried, handled, selected, rejection}. Each behavior's source is
+  Candidates (decision D93): running tries them one at a time, in
+  inventory order (decision D273; they were a chain of candidates_runner
+  children before). Each behavior's source is
   the path of its SCXML document (phase 5 plan, "Turn Behavior Contract"),
   which the builder wrote beside its schema file and script (decision
-  D121), run as the runner's child "candidate" by <invoke srcexpr>, with the <param>s
+  D121), run in running_candidate as the child "candidate" by <invoke srcexpr>, with the <param>s
   turn and input
   (the stimulus's data, or {event: data} when it is not an object, plus
   focus and focus_candidates: <autonomy:behavior_input_payload>). It answers by
@@ -94,11 +97,13 @@
   with its statements. A transaction that fails or
   outlasts memory_timeout_ms is logged and the turn goes on: a failed
   load matches no inventory rows, and a failed usage or failure record
-  (the runner's) takes the same effect as a persisted one.
+  takes the same effect as a persisted one
+  (autonomy.behavior_usage.persistence_failed).
 
-  Timers: seeding and loading are entered once per percept, so each
-  cancels its own timeout on exit, and a later percept's state never takes
-  an earlier one's.
+  Timers: seeding and loading are entered once per percept, and
+  running_candidate, using and recording_failure once per candidate, so each
+  cancels its own timer on exit, and a later percept's or candidate's
+  state never takes an earlier one's.
 
   Contracts: the Memory ability's events reference abilities/schemas/ by
   event:schema. A candidate is builder output, loaded from its path with
@@ -134,8 +139,16 @@
     <data id="view" expr="null"/>
     <data id="handled" expr="[]"/>
     <data id="selected" expr="[]"/>
+    <!-- The candidates left to try ([{name, source}], the first running),
+         the handled candidate's selection being sent (the <foreach> item),
+         and why its dispatch failed (null when sent). -->
+    <data id="candidates" expr="[]"/>
+    <data id="s" expr="null"/>
+    <data id="rejection" expr="null"/>
     <!-- The turn's answer, sent to the cognition. -->
     <data id="result" expr="null"/>
+    <data id="used_sql">UPDATE bot_behavior SET used_count = CAST(CAST(used_count AS INTEGER) + 1 AS TEXT), last_used_at = replace(substr(CAST(CURRENT_TIMESTAMP AS TEXT), 1, 19), ' ', 'T') || 'Z' WHERE name = ?</data>
+    <data id="failed_sql">UPDATE bot_behavior SET failed_count = CAST(CAST(failed_count AS INTEGER) + 1 AS TEXT), last_failed_at = replace(substr(CAST(CURRENT_TIMESTAMP AS TEXT), 1, 19), ' ', 'T') || 'Z' WHERE name = ?</data>
     <data id="select_sql">SELECT b.name, b.source FROM bot_behavior AS b JOIN bot_behavior_trigger AS t ON t.behavior_name = b.name WHERE b.status = 'ACTIVE' AND b.lifetime = 'turn' AND t."trigger" = ? ORDER BY b.name</data>
   </datamodel>
   <script src="autonomy.js"/>
@@ -263,34 +276,134 @@
         <transition target="running"/>
       </state>
 
-      <!-- The candidates, one at a time, as a chain of runners. -->
-      <state id="running">
+      <!-- The candidates, one at a time (decision D93). -->
+      <state id="running" initial="running_candidate">
         <onentry>
           <autonomy:behavior_input_payload location="behavior_input" stimulus="view"
               focus="input.focus" focus_candidates="input.focus_candidates"/>
+          <assign location="candidates" expr="candidateRows()"/>
         </onentry>
-        <invoke id="candidates" type="scxml" src="../candidates_runner/candidates_runner.scx">
-          <param name="turn" expr="turn"/>
-          <param name="input" expr="behavior_input"/>
-          <param name="candidates" expr="candidateRows()"/>
-          <param name="memory" expr="memory"/>
-          <param name="silence_ms" expr="silence_ms"/>
-          <param name="memory_timeout_ms" expr="memory_timeout_ms"/>
-        </invoke>
-        <transition event="done.invoke.candidates" cond="isRunHandled(_event)" target="percept_handled">
-          <assign location="tried" expr="triedWithRun(_event)"/>
-          <assign location="answer" expr="_event.data.selected"/>
-        </transition>
-        <transition event="done.invoke.candidates" cond="isRunRejected(_event)" target="failed">
-          <assign location="tried" expr="triedWithRun(_event)"/>
-          <assign location="answer" expr="_event.data.rejection"/>
-        </transition>
-        <transition event="done.invoke.candidates" target="percept_unhandled">
-          <assign location="tried" expr="triedWithRun(_event)"/>
-        </transition>
-        <transition event="error.*" target="percept_unhandled">
-          <log label="autonomy.candidate.failed" expr="runFailedLog(_event)"/>
-        </transition>
+
+        <!-- The first candidate left. -->
+        <state id="running_candidate">
+          <onentry>
+            <assign location="tried" expr="triedWithCandidate()"/>
+            <assign location="rejection" expr="null"/>
+            <log label="autonomy.candidate" expr="candidateName()"/>
+            <send id="candidate-silence" event="bot.ability.autonomy.candidate.silent" delayexpr="silenceDelay()"/>
+          </onentry>
+          <onexit>
+            <cancel sendid="candidate-silence"/>
+          </onexit>
+          <invoke id="candidate" type="scxml" srcexpr="candidateSource()">
+            <param name="turn" expr="turn"/>
+            <param name="input" expr="behavior_input"/>
+          </invoke>
+          <transition event="done.invoke.candidate" cond="isBehaviorHandled(_event)" target="dispatching">
+            <assign location="answer" expr="_event.data.selected"/>
+          </transition>
+          <transition event="done.invoke.candidate" target="advancing">
+            <log label="autonomy.candidate.advance" expr="candidateAdvanceLog(_event)"/>
+          </transition>
+          <transition event="bot.ability.autonomy.candidate.silent" target="advancing">
+            <log label="autonomy.candidate.silent" expr="candidateSilentLog()"/>
+          </transition>
+          <!-- A source that does not load or compile fails the invocation
+               with no invokeid (SCXML 3.12.2). -->
+          <transition event="error.*" target="recording_failure">
+            <log label="autonomy.candidate.failed" expr="candidateFailedLog(_event)"/>
+          </transition>
+        </state>
+
+        <!-- The handled candidate's selections are sent before its use is
+             persisted. -->
+        <state id="dispatching">
+          <onentry>
+            <foreach array="answer" item="s">
+              <send eventexpr="s.event" targetexpr="'#_scxml_' + s.target">
+                <content expr="selectionData(s)"/>
+              </send>
+            </foreach>
+          </onentry>
+          <!-- Its own block, so it runs after a send that failed above and
+               the failure (raised first) preempts it. -->
+          <onentry>
+            <raise event="bot.ability.autonomy.candidate.dispatch.succeeded"/>
+          </onentry>
+          <transition event="bot.ability.autonomy.candidate.dispatch.succeeded" target="using"/>
+          <transition event="error.*" target="recording_failure">
+            <assign location="rejection" expr="dispatchFailure(_event)"/>
+            <log label="autonomy.candidate.failed" expr="candidateRejectedLog()"/>
+          </transition>
+        </state>
+
+        <!-- The handled candidate's use is persisted, then it handles the
+             percept. -->
+        <state id="using">
+          <onentry>
+            <send id="usage-timeout" event="bot.ability.autonomy.behavior_usage.persistence_failed" delayexpr="memoryTimeoutDelay()"/>
+            <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.usage">
+              <param name="id" expr="memory_requests.usage"/>
+              <param name="statements" expr="usedPersistenceStatements()"/>
+            </send>
+          </onentry>
+          <onexit>
+            <cancel sendid="usage-timeout"/>
+          </onexit>
+          <!-- The update's results: nothing to keep. -->
+          <transition event="bot.ability.memory.output" cond="isMemoryReply('usage')" event:schema="../schemas/bot.ability.memory.output.json" target="percept_handled"/>
+          <!-- A failed persistence takes the same effect as one persisted. -->
+          <transition event="bot.ability.failed" cond="isMemoryReply('usage')" event:schema="../schemas/bot.ability.failed.json" target="percept_handled">
+            <log label="autonomy.behavior_usage.persistence_failed" expr="usageFailedReason(_event.data.message)"/>
+          </transition>
+          <transition event="error.*" target="percept_handled">
+            <log label="autonomy.behavior_usage.persistence_failed" expr="usageFailedReason(_event.name)"/>
+          </transition>
+          <transition event="bot.ability.autonomy.behavior_usage.persistence_failed" target="percept_handled">
+            <log label="autonomy.behavior_usage.persistence_failed" expr="usageTimedOutReason()"/>
+          </transition>
+        </state>
+
+        <!-- A failed candidate's failure is persisted, then the rest run; a
+             rejected one's, then autonomy fails with the rejection. -->
+        <state id="recording_failure">
+          <onentry>
+            <send id="failure-timeout" event="bot.ability.autonomy.behavior_usage.persistence_failed" delayexpr="memoryTimeoutDelay()"/>
+            <send event="bot.ability.memory.input" targetexpr="memory" idlocation="memory_requests.failure">
+              <param name="id" expr="memory_requests.failure"/>
+              <param name="statements" expr="failedPersistenceStatements()"/>
+            </send>
+          </onentry>
+          <onexit>
+            <cancel sendid="failure-timeout"/>
+          </onexit>
+          <transition event="bot.ability.memory.output" cond="isMemoryReply('failure')" event:schema="../schemas/bot.ability.memory.output.json" target="recorded_failure"/>
+          <!-- A failed persistence takes the same effect as one persisted. -->
+          <transition event="bot.ability.failed" cond="isMemoryReply('failure')" event:schema="../schemas/bot.ability.failed.json" target="recorded_failure">
+            <log label="autonomy.behavior_usage.persistence_failed" expr="usageFailedReason(_event.data.message)"/>
+          </transition>
+          <transition event="error.*" target="recorded_failure">
+            <log label="autonomy.behavior_usage.persistence_failed" expr="usageFailedReason(_event.name)"/>
+          </transition>
+          <transition event="bot.ability.autonomy.behavior_usage.persistence_failed" target="recorded_failure">
+            <log label="autonomy.behavior_usage.persistence_failed" expr="usageTimedOutReason()"/>
+          </transition>
+        </state>
+
+        <state id="recorded_failure">
+          <transition cond="isRejected()" target="failed">
+            <assign location="answer" expr="rejection"/>
+          </transition>
+          <transition target="advancing"/>
+        </state>
+
+        <!-- The next candidate, or the percept is unhandled. -->
+        <state id="advancing">
+          <transition cond="hasRest()" target="running_candidate">
+            <assign location="candidates" expr="restCandidates()"/>
+          </transition>
+          <transition target="percept_unhandled"/>
+        </state>
       </state>
     </state>
 
