@@ -22,10 +22,13 @@
 //!   floppy `.scx` document is held to (`contracts.rs`, `defaults.rs`);
 //! * `irp/sources/<id>/backend.json` (optional) scripts the fake HTTP
 //!   backend of the services the run reaches: `{"clock": "wall" |
-//!   "logical", "answers": [{"path": SUFFIX, "status": N, "body": JSON},
-//!   ...], "stream": true?}`; with `stream` the run's `FLOPPY_STREAM` is
+//!   "logical", "answers": [{"path": SUFFIX, "status": N, "body": JSON,
+//!   "audible": BOOL?}, ...], "stream": true?}`; with `stream` the run's `FLOPPY_STREAM` is
 //!   `true` (decision D101). A request takes the first unused answer whose `path` ends its
-//!   target (the last one for a path repeats); a request no answer matches
+//!   target and, when the answer names `audible`, whose JSON body's
+//!   `audio` samples are (or are not) all silent, so voice detections
+//!   asked concurrently each take their own sound's answer (the last one
+//!   for a path repeats); a request no answer matches
 //!   is answered 404; a 200 completion answers a request that requires a
 //!   function call as that call, its content the arguments, and a streamed
 //!   request (`"stream": true`) as its server-sent-event stream
@@ -132,6 +135,15 @@ struct Answer {
     path: String,
     status: u16,
     body: String,
+    /// Whether the request's `audio` samples must hold sound (none: any).
+    audible: Option<bool>,
+}
+
+/// Whether a request's JSON `audio` samples hold any sound.
+fn is_audible(request: &Json) -> bool {
+    request["audio"]
+        .as_array()
+        .is_some_and(|samples| samples.iter().any(|sample| sample.as_f64().is_some_and(|value| value != 0.0)))
 }
 
 /// The fake backend of every service a case reaches.
@@ -248,8 +260,12 @@ fn serve(mut stream: TcpStream, state: &Arc<Script>, sessions: Option<&Sessions>
     let (status, text) = {
         let mut guard = state.lock().expect("the script lock");
         let (answers, used) = &mut *guard;
+        let audible = is_audible(&request);
         let matching: Vec<usize> = (0..answers.len())
-            .filter(|index| target.ends_with(&answers[*index].path))
+            .filter(|index| {
+                target.ends_with(&answers[*index].path)
+                    && answers[*index].audible.is_none_or(|wanted| wanted == audible)
+            })
             .collect();
         let chosen = matching
             .iter()
@@ -329,6 +345,7 @@ fn script(case: &Path) -> (bool, Vec<Answer>) {
                         Json::String(text) => text.clone(),
                         other => other.to_string(),
                     },
+                    audible: answer["audible"].as_bool(),
                 })
                 .collect()
         })

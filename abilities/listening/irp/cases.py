@@ -20,8 +20,8 @@ FAILED = "bot.ability.listening.failed"
 READY = expect("bot.ability.ready")
 PATIENT = [("sensitivity_timeout_ms", "600000")]
 
-VOICED = {"path": "/vad", "status": 200, "body": {"segments": [{"start": 0.5, "end": 0.6}]}}
-SILENT = {"path": "/vad", "status": 200, "body": {"segments": []}}
+VOICED = {"path": "/vad", "audible": True, "status": 200, "body": {"segments": [{"start": 0.5, "end": 0.6}]}}
+SILENT = {"path": "/vad", "audible": False, "status": 200, "body": {"segments": []}}
 
 
 DIARIZED = {"path": "/audio/diarization", "status": 200,
