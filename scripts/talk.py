@@ -4,10 +4,14 @@
 Runs the environment (environments/environment/environment.scx) under `scx run` and is its host:
 
 * the microphone, through ffmpeg (avfoundation), is read as 24 kHz mono
-  16-bit PCM; each utterance (cut by loudness: speech over the environment's noise
-  floor, ended by a pause) is written to the media directory and given to
-  the environment as `environment.sound`, the way the live tests give a recorded
-  one (tests/tests/floppy_live.rs, `live_listening`);
+  16-bit PCM and given to the environment as it is heard: every 100 ms of it
+  is written to the media directory and sent as one `environment.sound`
+  (`Frames`), so floppy's listening streams it while you talk and its
+  streaming hearing session hears where your turn ends; with
+  `--utterances`, each utterance instead (cut by loudness: speech over the
+  environment's noise floor, ended by a pause) with a second of silence
+  after it, the way the live tests give a recorded one
+  (tests/tests/floppy_live.rs, `live_listening`);
 * each sound floppy's mouth makes (an `environment.sound` from the bot, as
   the environment logs it) is played on the speaker with afplay, and the
   microphone is muted while it plays, so floppy does not hear itself;
@@ -24,7 +28,7 @@ for the microphone, ffplay for the speaker).
 
 Usage:
   python3 scripts/talk.py [--env-file .env] [--scx scx] [--mic :0]
-                          [--say FILE] [--name gabe] [--verbose]
+                          [--say FILE] [--name gabe] [--utterances] [--verbose]
 """
 from __future__ import annotations
 
@@ -47,6 +51,8 @@ SERVICES = "https://github.com/stateforward/floppy/services"
 RATE = 24000
 FRAME = RATE // 50  # 20 ms
 BYTES_PER_FRAME = FRAME * 2
+# What one streamed sound holds: 100 ms.
+SOUND_BYTES = RATE // 10 * 2
 
 
 def frame_db(frame: bytes) -> float:
@@ -99,6 +105,35 @@ class Utterances:
         enough = len(voiced) - 15 >= self.min_frames
         self.reset()
         return b"".join(voiced) if enough else None
+
+
+class Frames:
+    """Gives the environment audio as it is heard: one `environment.sound` per
+    100 ms, each written to the media directory. The files are reused in a ring
+    of `RING` (a minute of audio), so a long conversation leaves a minute of them."""
+
+    RING = 600
+
+    def __init__(self, environment: "Environment", media: Path, source: str, prefix: str):
+        self.environment = environment
+        self.media = media
+        self.source = source
+        self.prefix = prefix
+        self.pending = bytearray()
+        self.count = 0
+
+    def push(self, audio: bytes) -> None:
+        self.pending += audio
+        while len(self.pending) >= SOUND_BYTES:
+            sound = bytes(self.pending[:SOUND_BYTES])
+            del self.pending[:SOUND_BYTES]
+            name = f"{self.prefix}-{self.count % self.RING}.pcm"
+            self.count += 1
+            (self.media / name).write_bytes(sound)
+            self.environment.send("environment.sound", {
+                "audio": f"media/{name}", "media_type": "audio/pcm",
+                "sample_rate_hz": RATE, "channels": 1, "source": self.source,
+            })
 
 
 class Speaker:
@@ -232,6 +267,8 @@ def main() -> None:
     parser.add_argument("--mic", default=":0", help="ffmpeg avfoundation input (`ffmpeg -f avfoundation -list_devices true -i ''`), or `none` to type only")
     parser.add_argument("--say", type=Path, help="send this utterance instead of listening to the microphone")
     parser.add_argument("--name", default="gabe", help="who is talking (the sound's source and text's source_ids)")
+    parser.add_argument("--utterances", action="store_true",
+                        help="give each utterance whole, cut by loudness, instead of streaming the microphone")
     parser.add_argument("--margin-db", type=float, default=12.0, help="speech is this far over the noise floor")
     parser.add_argument("--min-db", type=float, default=-50.0, help="and at least this loud (dBFS)")
     parser.add_argument("--pause-ms", type=int, default=700, help="a pause this long ends an utterance")
@@ -243,6 +280,7 @@ def main() -> None:
     media.mkdir(parents=True, exist_ok=True)
     environment = Environment(args, media)
     speaker = Speaker(media, tail_s=0.3)
+    frames = Frames(environment, media, args.name, f"mic-{os.getpid()}")
     ready = threading.Event()
     done = threading.Event()
     count = 0
@@ -251,6 +289,11 @@ def main() -> None:
 
     def hear(pcm: bytes) -> None:
         nonlocal count
+        if not args.utterances:
+            # Streamed as it would be heard, with a second of silence after.
+            print(f"[you] ({len(pcm) / 2 / RATE:.1f} s)", flush=True)
+            frames.push(pcm + bytes(2 * RATE))
+            return
         with count_lock:
             count += 1
             name = f"heard-{os.getpid()}-{count}.pcm"
@@ -320,6 +363,11 @@ def main() -> None:
             frame = mic.stdout.read(BYTES_PER_FRAME)
             if len(frame) < BYTES_PER_FRAME:
                 sys.exit("the microphone stopped (does this terminal have microphone access?)")
+            if not args.utterances:
+                # The microphone is muted while floppy speaks: silence keeps
+                # the stream's time running.
+                frames.push(bytes(len(frame)) if speaker.busy() else frame)
+                continue
             if speaker.busy():
                 cutter.reset()
                 continue

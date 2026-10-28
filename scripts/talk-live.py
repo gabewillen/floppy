@@ -5,10 +5,11 @@ Runs the environment (environments/environment/environment.scx) the way scripts/
 with a GPT-Live session (OpenAI's Live sessions API, `gpt-live-1`, over
 its primary WebSocket) in place of the microphone and speaker:
 
-* GPT-Live's voice (24 kHz mono 16-bit PCM, streamed continuously) is cut
-  into utterances by talk.py's loudness cutter, and each is given to the
-  environment as `environment.sound` from `--name`, with a second of silence
-  after it, as talk.py gives the microphone's;
+* GPT-Live's voice (24 kHz mono 16-bit PCM, streamed continuously) is given
+  to the environment as talk.py gives the microphone: paced in real time,
+  silence between, one `environment.sound` from `--name` per 100 ms
+  (talk.Frames); with `--utterances`, it is cut into utterances by talk.py's
+  loudness cutter instead, each given with a second of silence after it;
 * each sound floppy's mouth makes is streamed back to GPT-Live as its
   input audio, paced in real time, with silence between, so GPT-Live
   hears floppy answer and carries the conversation on;
@@ -189,6 +190,8 @@ async def converse(args: argparse.Namespace, media: Path, environment: talk.Envi
         "input": [opening],
     }
     cutter = talk.Utterances(args.margin_db, args.min_db, args.pause_ms, args.min_ms)
+    frames = talk.Frames(environment, media, args.name, f"live-{os.getpid()}")
+    voice = bytearray()  # GPT-Live's audio not yet given to the environment
     pending = b""
     said = Captions(transcript, f"{args.name} (gpt-live)")
     understood = Captions(transcript, "gpt-live heard")
@@ -220,7 +223,22 @@ async def converse(args: argparse.Namespace, media: Path, environment: talk.Envi
                 next_at += CHUNK_S
                 await asyncio.sleep(max(0.0, next_at - time.monotonic()))
 
+        async def stream_voice() -> None:
+            # floppy hears GPT-Live in real time: its voice as it arrives,
+            # silence otherwise, one sound per 100 ms.
+            next_at = time.monotonic()
+            while True:
+                sound = bytes(voice[:talk.SOUND_BYTES])
+                del voice[:talk.SOUND_BYTES]
+                if sound:
+                    last_sound[0] = time.monotonic()
+                frames.push(sound + bytes(talk.SOUND_BYTES - len(sound)))
+                heard[0] = frames.count
+                next_at += 0.1
+                await asyncio.sleep(max(0.0, next_at - time.monotonic()))
+
         streamer = None
+        voicer = None if args.utterances else asyncio.create_task(stream_voice())
         deadline = time.monotonic() + args.minutes * 60
         try:
             while time.monotonic() < deadline and not ended.is_set():
@@ -230,7 +248,9 @@ async def converse(args: argparse.Namespace, media: Path, environment: talk.Envi
                     continue
                 event = json.loads(message)
                 kind = event.get("type")
-                if kind == "session.output_audio.delta":
+                if kind == "session.output_audio.delta" and not args.utterances:
+                    voice.extend(base64.b64decode(event["delta"]))
+                elif kind == "session.output_audio.delta":
                     audio = pending + base64.b64decode(event["delta"])
                     whole = len(audio) - len(audio) % talk.BYTES_PER_FRAME
                     pending = audio[whole:]
@@ -256,6 +276,8 @@ async def converse(args: argparse.Namespace, media: Path, environment: talk.Envi
             understood.flush(0)
             if streamer is not None:
                 streamer.cancel()
+            if voicer is not None:
+                voicer.cancel()
             try:
                 await ws.send(json.dumps({"type": "session.close"}))
                 async with asyncio.timeout(15):
@@ -281,6 +303,8 @@ def main() -> None:
     parser.add_argument("--minutes", type=float, default=3.0, help="how long the conversation runs")
     parser.add_argument("--nudge-s", type=float, default=30.0, help="nudge GPT-Live on after this long quiet (0: never)")
     parser.add_argument("--transcript", type=Path, help="default: media/talk-live/transcript.txt")
+    parser.add_argument("--utterances", action="store_true",
+                        help="give GPT-Live's voice as whole utterances, cut by loudness, instead of streaming it")
     parser.add_argument("--margin-db", type=float, default=12.0)
     parser.add_argument("--min-db", type=float, default=-50.0)
     parser.add_argument("--pause-ms", type=int, default=700)
@@ -318,7 +342,7 @@ def main() -> None:
             environment.process.terminate()
         if document is not None:
             document.unlink(missing_ok=True)
-    transcript.line("environment", f"done: {heard[0]} utterances from {args.name}")
+    transcript.line("environment", f"done: {heard[0]} {'utterances' if args.utterances else 'sounds'} from {args.name}")
 
 
 if __name__ == "__main__":
