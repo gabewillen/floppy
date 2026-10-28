@@ -25,17 +25,17 @@ disagree are in [spec-errata.md](spec-errata.md).
   errata SHA-256
   `54c7f1cb44686e2bf499a0edf2596d311f4623245b2fe380abf0ac5b4663303f`,
   producer report digest
-  `cd7e244f59f8527bd8c20dd5dd448c4fe8e012fa1c0764a8462df5dfc658199e`,
+  `074f6a2997639cef9e0c7c26ad88d649e8003a0d0fa2ff5e99a1c4d37fd28573`,
   and canonical artifact SHA-256
-  `b0f115c839fae914d372fbf37e094a634471f6b54783c4bfa2239be0fc11a6b7`.
+  `50e93e0fc8c6828dbcd7eb8b85673ecabf82034c3843bf2615454ee951c1f98d`.
   The XPath evidence binds corpus digest
   `a661ef4af8bc62fc064cea5e137a6b469ede4b7da80ececf932d66d37cc93bca`,
   errata SHA-256
   `72fe9e3ca418f55dadf64d2d6331af724cf8ebbc2a87a0180489db818aa73f2a`,
   producer report digest
-  `3462de7f450565500d06f180dcf3123784cc5a8300fc42f684130b3a7a00d5a1`,
+  `ac739b4c412649e554f095d67a14152919e33124dca27434ce9de62b0697ec34`,
   and canonical artifact SHA-256
-  `fc1d9b0e40a7b8b703d4e75d7825425a24d84e42cf3f0b475a9a5d3b169fd8cd`.
+  `7044825a083b3cc11c664b72cafd520c94d4dcb87447611e5d8fcaf773bd0a43`.
   The report bytes are checked in under
   [`tests/conformance/w3c-irp/baselines`](../tests/conformance/w3c-irp/baselines).
   These are measured IRP results of the shipped components under the

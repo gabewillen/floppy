@@ -58,8 +58,8 @@ pub use errata::{
 };
 pub use executor::{
     BoundExtension, CaseExecutor, CaseSnapshotDocument, ExecutionError, ExecutionFailureCategory,
-    ExecutionResult, ExecutionTrace, ExecutorIdentities, ExternalClientRun, LoadRejection,
-    LogRecord, TraceObservation, TraceRecord,
+    ExecutionResult, ExecutionTrace, ExecutorFactory, ExecutorIdentities, ExternalClientRun,
+    LoadRejection, LogRecord, TraceObservation, TraceRecord,
 };
 pub use filter::{Filters, IdRange};
 pub use manifest::{

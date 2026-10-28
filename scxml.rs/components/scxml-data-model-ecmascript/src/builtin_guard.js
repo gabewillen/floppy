@@ -17,7 +17,9 @@
 // - Bounds: result strings and array lengths <= MAX_VALUE (UTF-16 code units,
 //   which never exceed UTF-8 bytes); nesting <= MAX_NESTING; auxiliary work
 //   (template tokens, flatten steps) <= MAX_WORK. JSON.parse text is at most
-//   MAX_VALUE code units with array/object nesting <= MAX_NESTING.
+//   MAX_VALUE code units with array/object nesting <= MAX_NESTING. The adapter
+//   passes MAX_VALUE as Infinity, since SCXML sets no size: only nesting, which
+//   protects the native stack, and the length checks above stay in force.
 (function (MAX_VALUE, MAX_NESTING) {
   "use strict";
   // JSON output estimate cap: structure overhead is estimated per node, so the
